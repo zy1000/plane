@@ -30,7 +30,7 @@ export default function TestManagementHomePage() {
     const initializeEnums = async () => {
       if (workspaceSlug) {
         try {
-          const enumTypes = await getEnums(workspaceSlug as string);
+          const enumTypes = await getEnums(workspaceSlug);
           globalEnums.setEnums(enumTypes);
         } catch {}
       }
@@ -38,6 +38,7 @@ export default function TestManagementHomePage() {
     initializeEnums();
   }, [workspaceSlug]);
 
+  
   useEffect(() => {
     const repositoryIdFromUrl = searchParams.get("repositoryId");
     if (!workspaceSlug || !repositoryIdFromUrl) return;
@@ -148,7 +149,7 @@ export default function TestManagementHomePage() {
             sessionStorage.setItem("selectedRepositoryName", record.name);
             const ws = String(workspaceSlug || "");
             const pid = String(projectId || "");
-            let target = `/${ws}/projects/${pid}/testhub/cases/?repositoryId=${encodeURIComponent(String(record.id))}`;
+            const target = `/${ws}/projects/${pid}/testhub/cases/?repositoryId=${encodeURIComponent(String(record.id))}`;
             router.push(target);
           }}
           style={{ cursor: "pointer" }}
@@ -164,7 +165,7 @@ export default function TestManagementHomePage() {
       dataIndex: "project",
       key: "project",
       render: (_, record) => {
-        const p: any = record.project as any;
+        const p: any = record.project;
         if (!p) return null;
         if (typeof p === "string") return <span className="truncate">{p}</span>;
         return (
@@ -234,7 +235,7 @@ export default function TestManagementHomePage() {
       if (filterParams.name) queryParams.name__icontains = filterParams.name;
       if (filterParams.project) queryParams.project__name__icontains = filterParams.project;
       if (projectId) queryParams.project_id = projectId;
-      const response: any = await repositoryService.getRepositories(workspaceSlug as string, queryParams);
+      const response: any = await repositoryService.getRepositories(workspaceSlug, queryParams);
       const list = response?.data || [];
       setRepositories(list);
       setTotal(response.count || list.length || 0);
