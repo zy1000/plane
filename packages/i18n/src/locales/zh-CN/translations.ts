@@ -10,13 +10,14 @@ export default {
     views: "视图",
     analytics: "分析",
     work_items: "工作项",
-    cycles: "周期",
-    modules: "模块",
+    cycles: "迭代",
+    modules: "发布",
     intake: "收集",
     drafts: "草稿",
     favorites: "收藏",
     pro: "专业版",
     upgrade: "升级",
+    overview: "概览",
   },
   auth: {
     common: {
@@ -362,8 +363,8 @@ export default {
   congrats: "恭喜！",
   open_project: "打开项目",
   issues: "工作项",
-  cycles: "周期",
-  modules: "模块",
+  cycles: "迭代",
+  modules: "发布",
   pages: "页面",
   intake: "收集",
   time_tracking: "时间跟踪",
@@ -470,6 +471,9 @@ export default {
   good: "早上",
   morning: "早上",
   afternoon: "下午",
+  good_morning: "早上好",
+  good_afternoon: "下午好",
+  good_evening: "晚上好",
   evening: "晚上",
   show_all: "显示全部",
   show_less: "显示更少",
@@ -641,8 +645,8 @@ export default {
     project: "项目",
     cycle: "周期",
     cycles: "周期",
-    module: "模块",
-    modules: "模块",
+    module: "发布",
+    modules: "发布",
     labels: "标签",
     label: "标签",
     assignees: "负责人",
@@ -975,14 +979,14 @@ export default {
     remove: {
       label: "移除工作项",
       cycle: {
-        loading: "正在从周期中移除工作项",
-        success: "已成功从周期中移除工作项。",
-        failed: "无法从周期中移除工作项。请重试。",
+        loading: "正在从迭代中移除工作项",
+        success: "已成功从迭代中移除工作项。",
+        failed: "无法从迭代中移除工作项。请重试。",
       },
       module: {
-        loading: "正在从模块中移除工作项",
-        success: "已成功从模块中移除工作项。",
-        failed: "无法从模块中移除工作项。请重试。",
+        loading: "正在从发布中移除工作项",
+        success: "已成功从发布中移除工作项。",
+        failed: "无法从发布中移除工作项。请重试。",
       },
       parent: {
         label: "移除父工作项",
@@ -1931,15 +1935,15 @@ export default {
     },
   },
   project_cycles: {
-    add_cycle: "添加周期",
+    add_cycle: "添加迭代",
     more_details: "更多详情",
-    cycle: "周期",
-    update_cycle: "更新周期",
-    create_cycle: "创建周期",
-    no_matching_cycles: "没有匹配的周期",
-    remove_filters_to_see_all_cycles: "移除筛选器以查看所有周期",
-    remove_search_criteria_to_see_all_cycles: "移除搜索条件以查看所有周期",
-    only_completed_cycles_can_be_archived: "只能归档已完成的周期",
+    cycle: "迭代",
+    update_cycle: "更新迭代",
+    create_cycle: "创建迭代",
+    no_matching_cycles: "没有匹配的迭代",
+    remove_filters_to_see_all_cycles: "移除筛选器以查看所有迭代",
+    remove_search_criteria_to_see_all_cycles: "移除搜索条件以查看所有迭代",
+    only_completed_cycles_can_be_archived: "只能归档已完成的迭代",
     start_date: "开始日期",
     end_date: "结束日期",
     in_your_timezone: "在您的时区",
@@ -1947,7 +1951,7 @@ export default {
     date_range: "日期范围",
     add_date: "添加日期",
     active_cycle: {
-      label: "活动周期",
+      label: "活动迭代",
       progress: "进度",
       chart: "燃尽图",
       priority_issue: "优先工作项",
@@ -1958,10 +1962,10 @@ export default {
       labels: "标签",
     },
     upcoming_cycle: {
-      label: "即将到来的周期",
+      label: "即将到来的迭代",
     },
     completed_cycle: {
-      label: "已完成的周期",
+      label: "已完成的迭代",
     },
     status: {
       days_left: "剩余天数",
@@ -1972,68 +1976,68 @@ export default {
     },
     action: {
       restore: {
-        title: "恢复周期",
+        title: "恢复迭代",
         success: {
-          title: "周期已恢复",
-          description: "周期已被恢复。",
+          title: "迭代已恢复",
+          description: "迭代已被恢复。",
         },
         failed: {
-          title: "周期恢复失败",
-          description: "无法恢复周期。请重试。",
+          title: "迭代恢复失败",
+          description: "无法恢复迭代。请重试。",
         },
       },
       favorite: {
-        loading: "正在将周期添加到收藏",
+        loading: "正在将迭代添加到收藏",
         success: {
-          description: "周期已添加到收藏。",
+          description: "迭代已添加到收藏。",
           title: "成功！",
         },
         failed: {
-          description: "无法将周期添加到收藏。请重试。",
+          description: "无法将迭代添加到收藏。请重试。",
           title: "错误！",
         },
       },
       unfavorite: {
-        loading: "正在从收藏中移除周期",
+        loading: "正在从收藏中移除迭代",
         success: {
-          description: "周期已从收藏中移除。",
+          description: "迭代已从收藏中移除。",
           title: "成功！",
         },
         failed: {
-          description: "无法从收藏中移除周期。请重试。",
+          description: "无法从收藏中移除迭代。请重试。",
           title: "错误！",
         },
       },
       update: {
-        loading: "正在更新周期",
+        loading: "正在更新迭代",
         success: {
-          description: "周期更新成功。",
+          description: "迭代更新成功。",
           title: "成功！",
         },
         failed: {
-          description: "更新周期时出错。请重试。",
+          description: "更新迭代时出错。请重试。",
           title: "错误！",
         },
         error: {
-          already_exists: "在给定日期范围内已存在周期，如果您想创建草稿周期，可以通过移除两个日期来实现。",
+          already_exists: "在给定日期范围内已存在迭代，如果您想创建草稿迭代，可以通过移除两个日期来实现。",
         },
       },
     },
     empty_state: {
       general: {
-        title: "在周期中分组和时间框定您的工作。",
+        title: "在迭代中分组和时间框定您的工作。",
         description: "将工作按时间框分解，从项目截止日期倒推设置日期，并作为团队取得切实的进展。",
         primary_button: {
-          text: "设置您的第一个周期",
+          text: "设置您的第一个周期迭代",
           comic: {
-            title: "周期是重复的时间框。",
+            title: "迭代是重复的时间框。",
             description: "冲刺、迭代或您用于每周或每两周跟踪工作的任何其他术语都是一个周期。",
           },
         },
       },
       no_issues: {
-        title: "尚未向周期添加工作项",
-        description: "添加或创建您希望在此周期内时间框定和交付的工作项",
+        title: "尚未向迭代添加工作项",
+        description: "添加或创建您希望在此迭代内时间框定和交付的工作项",
         primary_button: {
           text: "创建新工作项",
         },
@@ -2042,16 +2046,16 @@ export default {
         },
       },
       completed_no_issues: {
-        title: "周期中没有工作项",
-        description: "周期中没有工作项。工作项已被转移或隐藏。要查看隐藏的工作项（如果有），请相应更新您的显示属性。",
+        title: "迭代中没有工作项",
+        description: "迭代中没有工作项。工作项已被转移或隐藏。要查看隐藏的工作项（如果有），请相应更新您的显示属性。",
       },
       active: {
-        title: "没有活动周期",
-        description: "活动周期包括其范围内包含今天日期的任何时期。在这里查找活动周期的进度和详细信息。",
+        title: "没有活动迭代",
+        description: "活动迭代包括其范围内包含今天日期的任何时期。在这里查找活动迭代的进度和详细信息。",
       },
       archived: {
-        title: "尚无已归档的周期",
-        description: "为了整理您的项目，归档已完成的周期。归档后可以在这里找到它们。",
+        title: "尚无已归档的迭代",
+        description: "为了整理您的项目，归档已完成的迭代。归档后可以在这里找到它们。",
       },
     },
   },
@@ -2085,28 +2089,28 @@ export default {
     },
   },
   project_module: {
-    add_module: "添加模块",
-    update_module: "更新模块",
-    create_module: "创建模块",
-    archive_module: "归档模块",
-    restore_module: "恢复模块",
-    delete_module: "删除模块",
+    add_module: "添加发布",
+    update_module: "更新发布",
+    create_module: "创建发布",
+    archive_module: "归档发布",
+    restore_module: "恢复发布",
+    delete_module: "删除发布",
     empty_state: {
       general: {
-        title: "将项目里程碑映射到模块，轻松跟踪汇总工作。",
+        title: "将项目里程碑映射到发布，轻松跟踪汇总工作。",
         description:
-          "属于逻辑层次结构父级的一组工作项形成一个模块。将其视为按项目里程碑跟踪工作的方式。它们有自己的周期和截止日期以及分析功能，帮助您了解距离里程碑的远近。",
+          "属于逻辑层次结构父级的一组工作项形成一个发布。将其视为按项目里程碑跟踪工作的方式。它们有自己的周期和截止日期以及分析功能，帮助您了解距离里程碑的远近。",
         primary_button: {
-          text: "构建您的第一个模块",
+          text: "构建您的第一个发布",
           comic: {
-            title: "模块帮助按层次结构对工作进行分组。",
+            title: "发布帮助按层次结构对工作进行分组。", 
             description: "购物车模块、底盘模块和仓库模块都是这种分组的好例子。",
           },
         },
       },
       no_issues: {
-        title: "模块中没有工作项",
-        description: "创建或添加您想作为此模块一部分完成的工作项",
+        title: "发布中没有工作项",
+        description: "创建或添加您想作为此发布一部分完成的工作项",
         primary_button: {
           text: "创建新工作项",
         },
@@ -2115,26 +2119,26 @@ export default {
         },
       },
       archived: {
-        title: "尚无已归档的模块",
+        title: "尚无已归档的发布",
         description: "为了整理您的项目，归档已完成或已取消的模块。归档后可以在这里找到它们。",
       },
       sidebar: {
-        in_active: "此模块尚未激活。",
+        in_active: "此发布尚未激活。",
         invalid_date: "日期无效。请输入有效日期。",
       },
     },
     quick_actions: {
-      archive_module: "归档模块",
-      archive_module_description: "只有已完成或已取消的\n模块可以归档。",
-      delete_module: "删除模块",
+      archive_module: "归档发布",
+      archive_module_description: "只有已完成或已取消的\n发布可以归档。",
+      delete_module: "删除发布",
     },
     toast: {
       copy: {
-        success: "模块链接已复制到剪贴板",
+        success: "发布链接已复制到剪贴板",
       },
       delete: {
-        success: "模块删除成功",
-        error: "删除模块失败",
+        success: "发布删除成功",
+        error: "删除发布失败",
       },
     },
   },

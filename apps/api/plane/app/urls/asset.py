@@ -17,7 +17,7 @@ from plane.app.views import (
     WorkspaceAssetDownloadEndpoint,
     ProjectAssetDownloadEndpoint,
 )
-
+from plane.app.views.asset.v2 import WorkspaceBulkAssetEndpoint
 
 urlpatterns = [
     path(
@@ -50,6 +50,11 @@ urlpatterns = [
     path(
         "assets/v2/workspaces/<str:slug>/<uuid:asset_id>/",
         WorkspaceFileAssetEndpoint.as_view(),
+        name="workspace-file-assets",
+    ),
+    path(
+        "assets/v2/workspaces/<str:slug>/<uuid:entity_id>/bulk/",
+        WorkspaceBulkAssetEndpoint.as_view(),
         name="workspace-file-assets",
     ),
     path(

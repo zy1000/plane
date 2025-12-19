@@ -2,6 +2,7 @@ import { API_BASE_URL } from "@plane/constants";
 import type {
   GithubRepositoriesResponse,
   ISearchIssueResponse,
+  IUserActivityResponse,
   TProjectAnalyticsCount,
   TProjectAnalyticsCountParams,
   TProjectIssuesSearchParams,
@@ -61,6 +62,13 @@ export class ProjectService extends APIService {
       });
   }
 
+  async getProjectAnalyze(workspaceSlug: string, projectId: string): Promise<any[]> {
+    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/analytics/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
   async getProjectAnalyticsCount(
     workspaceSlug: string,
     params?: TProjectAnalyticsCountParams
@@ -178,6 +186,14 @@ export class ProjectService extends APIService {
     return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/search-issues/`, {
       params,
     })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async getProjectActivity(workspaceSlug: string, params: { per_page: number; cursor?: string, project_id:string }): Promise<IUserActivityResponse> {
+    return this.get(`/api/workspaces/${workspaceSlug}/project/activity/`, { params })
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;

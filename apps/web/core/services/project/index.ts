@@ -4,3 +4,4 @@ export * from "./project-member.service";
 export * from "./project-state.service";
 export * from "./project-publish.service";
 export * from "./project-archive.service";
+export * from "./project-issue-type.service";

@@ -106,6 +106,13 @@ class IssueManager(SoftDeletionManager):
 
 
 class Issue(ProjectBaseModel):
+    class IssueTypeEnum(models.TextChoices):
+        TASK = '任务'
+        BUG = '缺陷'
+        EPIC = '史诗'
+        FEATURE = '特性'
+        STORY = '用户故事'
+
     PRIORITY_CHOICES = (
         ("urgent", "Urgent"),
         ("high", "High"),
@@ -167,6 +174,14 @@ class Issue(ProjectBaseModel):
         "db.IssueType",
         on_delete=models.SET_NULL,
         related_name="issue_type",
+        null=True,
+        blank=True,
+    )
+
+    template = models.ForeignKey(
+        "db.ProjectTemplate",
+        on_delete=models.CASCADE,
+        related_name="issues",
         null=True,
         blank=True,
     )

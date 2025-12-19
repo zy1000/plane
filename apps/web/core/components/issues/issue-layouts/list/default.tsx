@@ -50,6 +50,7 @@ export interface IList {
   handleCollapsedGroups: (value: string) => void;
   collapsedGroups: TIssueKanbanFilters;
   isEpic?: boolean;
+  projectIssueTypesMap?: Record<string, any>;
 }
 
 export const List = observer(function List(props: IList) {
@@ -162,6 +163,7 @@ export const List = observer(function List(props: IList) {
                     handleCollapsedGroups={handleCollapsedGroups}
                     collapsedGroups={collapsedGroups}
                     isEpic={isEpic}
+                    projectIssueTypesMap={props.projectIssueTypesMap}
                   />
                 ))}
               </div>

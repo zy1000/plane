@@ -1,8 +1,10 @@
+"use client";
+
 import type { FC } from "react";
 import React from "react";
-import { Link, Paperclip } from "lucide-react";
+import { Link, Paperclip, Waypoints, FlaskConical } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
-import { ViewsIcon, RelationPropertyIcon } from "@plane/propel/icons";
+import { ViewsIcon } from "@plane/propel/icons";
 // plane imports
 import type { TIssueServiceType, TWorkItemWidgets } from "@plane/types";
 // plane web imports
@@ -13,6 +15,8 @@ import { IssueLinksActionButton } from "./links";
 import { RelationActionButton } from "./relations";
 import { SubIssuesActionButton } from "./sub-issues";
 import { IssueDetailWidgetButton } from "./widget-button";
+import IssueCaseSelectionModal from "./qa-cases/IssueCaseSelectionModal";
+import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 
 type Props = {
   workspaceSlug: string;
@@ -23,10 +27,12 @@ type Props = {
   hideWidgets?: TWorkItemWidgets[];
 };
 
-export function IssueDetailWidgetActionButtons(props: Props) {
+export const IssueDetailWidgetActionButtons: FC<Props> = (props) => {
   const { workspaceSlug, projectId, issueId, disabled, issueServiceType, hideWidgets } = props;
   // translation
   const { t } = useTranslation();
+  const { fetchIssue } = useIssueDetail(issueServiceType);
+  const [isCaseModalOpen, setIsCaseModalOpen] = React.useState(false);
 
   return (
     <div className="flex items-center flex-wrap gap-2">
@@ -50,7 +56,7 @@ export function IssueDetailWidgetActionButtons(props: Props) {
           customButton={
             <IssueDetailWidgetButton
               title={t("issue.add.relation")}
-              icon={<RelationPropertyIcon className="h-3.5 w-3.5 flex-shrink-0" />}
+              icon={<Waypoints className="h-3.5 w-3.5 flex-shrink-0" strokeWidth={2} />}
               disabled={disabled}
             />
           }
@@ -71,6 +77,12 @@ export function IssueDetailWidgetActionButtons(props: Props) {
           issueServiceType={issueServiceType}
         />
       )}
+      <IssueDetailWidgetButton
+        title="添加用例"
+        icon={<FlaskConical className="h-3.5 w-3.5 flex-shrink-0" strokeWidth={2} />}
+        disabled={disabled}
+        onClick={() => setIsCaseModalOpen(true)}
+      />
       {!hideWidgets?.includes("attachments") && (
         <IssueAttachmentActionButton
           workspaceSlug={workspaceSlug}
@@ -95,6 +107,20 @@ export function IssueDetailWidgetActionButtons(props: Props) {
         workItemId={issueId}
         workspaceSlug={workspaceSlug}
       />
+      {isCaseModalOpen && (
+        <IssueCaseSelectionModal
+          open={isCaseModalOpen}
+          workspaceSlug={workspaceSlug}
+          issueId={issueId}
+          onClose={async () => {
+            setIsCaseModalOpen(false);
+            await fetchIssue(workspaceSlug, projectId, issueId);
+          }}
+          onConfirmed={async () => {
+            await fetchIssue(workspaceSlug, projectId, issueId);
+          }}
+        />
+      )}
     </div>
   );
-}
+};

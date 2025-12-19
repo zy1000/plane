@@ -14,8 +14,8 @@ export const INDIVIDUAL_WEBHOOK_OPTIONS: {
   },
   {
     key: "cycle",
-    label: "Cycles",
-    description: "Cycle created, updated, or deleted",
+    label: "Sprints",
+    description: "Sprints created, updated, or deleted",
   },
   {
     key: "issue",
@@ -24,8 +24,8 @@ export const INDIVIDUAL_WEBHOOK_OPTIONS: {
   },
   {
     key: "module",
-    label: "Modules",
-    description: "Module created, updated, or deleted",
+    label: "Releases",
+    description: "Releases created, updated, or deleted",
   },
   {
     key: "issue_comment",

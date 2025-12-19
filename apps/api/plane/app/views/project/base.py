@@ -1,11 +1,11 @@
 # Python imports
 import json
 
-
 # Django imports
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db.models import Exists, F, OuterRef, Prefetch, Q, Subquery
 from django.utils import timezone
+from rest_framework.decorators import action
 
 # Third Party imports
 from rest_framework import status
@@ -16,11 +16,12 @@ from plane.app.permissions import ROLE, ProjectMemberPermission, allow_permissio
 from plane.app.serializers import (
     DeployBoardSerializer,
     ProjectListSerializer,
-    ProjectSerializer,
+    ProjectSerializer, IssueActivitySerializer,
 )
 from plane.app.views.base import BaseAPIView, BaseViewSet
 from plane.bgtasks.recent_visited_task import recent_visited_task
 from plane.bgtasks.webhook_task import model_activity, webhook_activity
+from plane.app.views.custom.simple_api import temporary_create_issue_type
 from plane.db.models import (
     UserFavorite,
     DeployBoard,
@@ -33,9 +34,11 @@ from plane.db.models import (
     State,
     DEFAULT_STATES,
     Workspace,
-    WorkspaceMember,
+    WorkspaceMember, IssueActivity,
 )
 from plane.utils.host import base_host
+from plane.utils.paginator import CustomPaginator
+from plane.utils.response import list_response
 
 
 class ProjectViewSet(BaseViewSet):
@@ -98,10 +101,10 @@ class ProjectViewSet(BaseViewSet):
         fields = [field for field in request.GET.get("fields", "").split(",") if field]
         projects = self.get_queryset().order_by("sort_order", "name")
         if WorkspaceMember.objects.filter(
-            member=request.user,
-            workspace__slug=slug,
-            is_active=True,
-            role=ROLE.GUEST.value,
+                member=request.user,
+                workspace__slug=slug,
+                is_active=True,
+                role=ROLE.GUEST.value,
         ).exists():
             projects = projects.filter(
                 project_projectmember__member=self.request.user,
@@ -109,10 +112,10 @@ class ProjectViewSet(BaseViewSet):
             )
 
         if WorkspaceMember.objects.filter(
-            member=request.user,
-            workspace__slug=slug,
-            is_active=True,
-            role=ROLE.MEMBER.value,
+                member=request.user,
+                workspace__slug=slug,
+                is_active=True,
+                role=ROLE.MEMBER.value,
         ).exists():
             projects = projects.filter(
                 Q(
@@ -179,10 +182,10 @@ class ProjectViewSet(BaseViewSet):
         )
 
         if WorkspaceMember.objects.filter(
-            member=request.user,
-            workspace__slug=slug,
-            is_active=True,
-            role=ROLE.GUEST.value,
+                member=request.user,
+                workspace__slug=slug,
+                is_active=True,
+                role=ROLE.GUEST.value,
         ).exists():
             projects = projects.filter(
                 project_projectmember__member=self.request.user,
@@ -190,10 +193,10 @@ class ProjectViewSet(BaseViewSet):
             )
 
         if WorkspaceMember.objects.filter(
-            member=request.user,
-            workspace__slug=slug,
-            is_active=True,
-            role=ROLE.MEMBER.value,
+                member=request.user,
+                workspace__slug=slug,
+                is_active=True,
+                role=ROLE.MEMBER.value,
         ).exists():
             projects = projects.filter(
                 Q(
@@ -243,6 +246,7 @@ class ProjectViewSet(BaseViewSet):
         serializer = ProjectSerializer(data={**request.data}, context={"workspace_id": workspace.id})
         if serializer.is_valid():
             serializer.save()
+            temporary_create_issue_type(project_id=serializer.data["id"])
 
             # Add the user as Administrator to the project
             _ = ProjectMember.objects.create(
@@ -254,7 +258,7 @@ class ProjectViewSet(BaseViewSet):
             _ = IssueUserProperty.objects.create(project_id=serializer.data["id"], user=request.user)
 
             if serializer.data["project_lead"] is not None and str(serializer.data["project_lead"]) != str(
-                request.user.id
+                    request.user.id
             ):
                 ProjectMember.objects.create(
                     project_id=serializer.data["id"],
@@ -370,19 +374,19 @@ class ProjectViewSet(BaseViewSet):
 
     def destroy(self, request, slug, pk):
         if (
-            WorkspaceMember.objects.filter(
-                member=request.user,
-                workspace__slug=slug,
-                is_active=True,
-                role=ROLE.ADMIN.value,
-            ).exists()
-            or ProjectMember.objects.filter(
-                member=request.user,
-                workspace__slug=slug,
-                project_id=pk,
-                role=ROLE.ADMIN.value,
-                is_active=True,
-            ).exists()
+                WorkspaceMember.objects.filter(
+                    member=request.user,
+                    workspace__slug=slug,
+                    is_active=True,
+                    role=ROLE.ADMIN.value,
+                ).exists()
+                or ProjectMember.objects.filter(
+            member=request.user,
+            workspace__slug=slug,
+            project_id=pk,
+            role=ROLE.ADMIN.value,
+            is_active=True,
+        ).exists()
         ):
             project = Project.objects.get(pk=pk, workspace__slug=slug)
             project.delete()
@@ -563,3 +567,44 @@ class DeployBoardViewSet(BaseViewSet):
 
         serializer = DeployBoardSerializer(project_deploy_board)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class ProjectAPI(BaseViewSet):
+    model = Project
+    queryset = Project.objects.all()
+    pagination_class = CustomPaginator
+    filterset_fields = {
+        'name': ['exact', 'icontains', 'in'],
+        'id': ['exact']
+    }
+    serializer_class = ProjectListSerializer
+
+    @action(detail=False, methods=['get'], url_path='user-project')
+    def get_user_project(self, request, slug):
+        project_id = ProjectMember.objects.filter(
+            workspace__slug=slug,
+            member_id=request.user.id,
+            is_active=True,
+            member__member_workspace__workspace__slug=slug,
+            member__member_workspace__is_active=True,
+        ).values_list("project_id", flat=True)
+
+        query = Project.objects.filter(pk__in=project_id)
+        query = self.filter_queryset(query).order_by('-created_at')
+        paginator = self.pagination_class()
+        paginated_queryset = paginator.paginate_queryset(query, request)
+        serializer = self.serializer_class(instance=paginated_queryset, many=True)
+        return list_response(data=serializer.data, count=query.count())
+
+    @action(detail=False, methods=['get'], url_path='activity')
+    def get_activity(self, request, slug):
+        queryset = IssueActivity.objects.filter(project_id=request.query_params['project_id']).select_related(
+            "actor", "workspace", "issue", "project"
+        )
+
+        return self.paginate(
+            order_by=request.GET.get("order_by", "-created_at"),
+            request=request,
+            queryset=queryset,
+            on_results=lambda issue_activities: IssueActivitySerializer(issue_activities, many=True).data,
+        )

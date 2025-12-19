@@ -28,11 +28,12 @@ export interface IPartialProject {
   project_lead?: IUserLite | string | null;
   network?: number;
   // Timestamps
-  created_at?: Date;
-  updated_at?: Date;
+  created_at?: Date | string | null;
+  updated_at?: Date | string | null;
   // actor
   created_by?: string;
   updated_by?: string;
+  description_html?: string | null;
 }
 
 export interface IProject extends IPartialProject {
@@ -51,6 +52,7 @@ export interface IProject extends IPartialProject {
   is_favorite?: boolean;
   members?: string[];
   timezone?: string;
+  next_work_item_sequence?: number;
 }
 
 export type TProjectAnalyticsCountParams = {

@@ -34,10 +34,10 @@ export const CyclesList = observer(function CyclesList(props: ICyclesList) {
           </>
         ) : (
           <>
-            <ActiveCycleRoot workspaceSlug={workspaceSlug} projectId={projectId} />
+            <ActiveCycleRoot workspaceSlug={workspaceSlug} projectId={projectId} cycleIds={cycleIds} />
 
             {upcomingCycleIds && (
-              <Disclosure as="div" className="flex flex-shrink-0 flex-col" defaultOpen>
+              <Disclosure as="div" className="flex flex-shrink-0 flex-col">
                 {({ open }) => (
                   <>
                     <Disclosure.Button className="sticky top-0 z-[2] w-full flex-shrink-0 border-b border-custom-border-200 bg-custom-background-90 cursor-pointer">

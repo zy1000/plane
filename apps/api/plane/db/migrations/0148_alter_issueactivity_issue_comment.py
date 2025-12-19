@@ -7,7 +7,7 @@ import django.db.models.deletion
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('db', '0107_migrate_filters_to_rich_filters'),
+        ('db', '0147_rename_cycles_testplan_cycle'),
     ]
 
     operations = [

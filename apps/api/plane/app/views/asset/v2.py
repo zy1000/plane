@@ -223,6 +223,8 @@ class WorkspaceFileAssetEndpoint(BaseAPIView):
         # Page Description
         if entity_type == FileAsset.EntityTypeContext.PAGE_DESCRIPTION:
             return {"page_id": entity_id}
+        if entity_type == FileAsset.EntityTypeContext.CASE_ATTACHMENT:
+            return {"case_id": entity_id}
 
         # Comment Description
         if entity_type == FileAsset.EntityTypeContext.COMMENT_DESCRIPTION:
@@ -321,22 +323,22 @@ class WorkspaceFileAssetEndpoint(BaseAPIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Check if the file type is allowed
-        allowed_types = [
-            "image/jpeg",
-            "image/png",
-            "image/webp",
-            "image/jpg",
-            "image/gif",
-        ]
-        if type not in allowed_types:
-            return Response(
-                {
-                    "error": "Invalid file type. Only JPEG, PNG, WebP, JPG and GIF files are allowed.",
-                    "status": False,
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        # # Check if the file type is allowed
+        # allowed_types = [
+        #     "image/jpeg",
+        #     "image/png",
+        #     "image/webp",
+        #     "image/jpg",
+        #     "image/gif",
+        # ]
+        # if type not in allowed_types:
+        #     return Response(
+        #         {
+        #             "error": "Invalid file type. Only JPEG, PNG, WebP, JPG and GIF files are allowed.",
+        #             "status": False,
+        #         },
+        #         status=status.HTTP_400_BAD_REQUEST,
+        #     )
 
         # Get the size limit
         size_limit = min(settings.FILE_SIZE_LIMIT, size)
@@ -393,6 +395,15 @@ class WorkspaceFileAssetEndpoint(BaseAPIView):
         asset.save(update_fields=["is_uploaded", "attributes"])
         return Response(status=status.HTTP_204_NO_CONTENT)
 
+    def put(self, request, slug, asset_id):
+        # get the asset id
+        asset = FileAsset.objects.get(id=asset_id, workspace__slug=slug)
+        case_id = request.data.get('case_id')
+        asset.case_id = case_id
+        asset.save()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
     def delete(self, request, slug, asset_id):
         asset = FileAsset.objects.get(id=asset_id, workspace__slug=slug)
         asset.is_deleted = True
@@ -423,6 +434,40 @@ class WorkspaceFileAssetEndpoint(BaseAPIView):
         )
         # Redirect to the signed URL
         return HttpResponseRedirect(signed_url)
+
+class WorkspaceBulkAssetEndpoint(BaseAPIView):
+
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
+    def post(self, request, slug, entity_id):
+        asset_ids = request.data.get("asset_ids", [])
+
+        # Check if the asset ids are provided
+        if not asset_ids:
+            return Response({"error": "No asset ids provided."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # get the asset id
+        assets = FileAsset.objects.filter(id__in=asset_ids, workspace__slug=slug)
+
+        # Get the first asset
+        asset = assets.first()
+
+        if not asset:
+            return Response(
+                {"error": "The requested asset could not be found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+
+        if asset.entity_type == FileAsset.EntityTypeContext.CASE_ATTACHMENT:
+            # For some cases, the bulk api is called after the issue is deleted creating
+            # an integrity error
+            try:
+                assets.update(case_id=entity_id)
+            except IntegrityError:
+                pass
+
+
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class StaticFileAssetEndpoint(BaseAPIView):
@@ -497,6 +542,8 @@ class ProjectAssetEndpoint(BaseAPIView):
 
         if entity_type == FileAsset.EntityTypeContext.PAGE_DESCRIPTION:
             return {"page_id": entity_id}
+        if entity_type == FileAsset.EntityTypeContext.CASE_ATTACHMENT:
+            return {'case_id': entity_id}
 
         if entity_type == FileAsset.EntityTypeContext.COMMENT_DESCRIPTION:
             return {"comment_id": entity_id}

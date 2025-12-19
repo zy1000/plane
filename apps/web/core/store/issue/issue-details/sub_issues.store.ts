@@ -17,6 +17,7 @@ import { IssueService } from "@/services/issue";
 import type { IIssueDetail } from "./root.store";
 import type { IWorkItemSubIssueFiltersStore } from "./sub_issues_filter.store";
 import { WorkItemSubIssueFiltersStore } from "./sub_issues_filter.store";
+import { ProjectIssueTypeService, projectIssueTypesCache, type TIssueType } from "@/services/project";
 
 export interface IIssueSubIssuesStoreActions {
   fetchSubIssues: (workspaceSlug: string, projectId: string, parentIssueId: string) => Promise<TIssueSubIssues>;
@@ -71,6 +72,8 @@ export class IssueSubIssuesStore implements IIssueSubIssuesStore {
   serviceType;
   issueService;
 
+  private inFlightSubIssuesFetches: Map<string, Promise<TIssueSubIssues>> = new Map();
+
   constructor(rootStore: IIssueDetail, serviceType: TIssueServiceType) {
     makeObservable(this, {
       // observables
@@ -120,39 +123,54 @@ export class IssueSubIssuesStore implements IIssueSubIssuesStore {
   };
 
   fetchSubIssues = async (workspaceSlug: string, projectId: string, parentIssueId: string) => {
-    this.loader = "init-loader";
-    const response = await this.issueService.subIssues(workspaceSlug, projectId, parentIssueId);
+    const requestKey = `${workspaceSlug}_${projectId}_${parentIssueId}`;
+    const inFlight = this.inFlightSubIssuesFetches.get(requestKey);
+    if (inFlight) return inFlight;
 
-    const subIssuesStateDistribution = response?.state_distribution ?? {};
+    const requestPromise = (async () => {
+      this.loader = "init-loader";
+      try {
+        const response = await this.issueService.subIssues(workspaceSlug, projectId, parentIssueId);
 
-    const issueList = (response.sub_issues ?? []) as TIssue[];
+        const subIssuesStateDistribution = response?.state_distribution ?? {};
+        const issueList = (response.sub_issues ?? []) as TIssue[];
 
-    this.rootIssueDetailStore.rootIssueStore.issues.addIssue(issueList);
+        this.rootIssueDetailStore.rootIssueStore.issues.addIssue(issueList);
 
-    // fetch other issues states and members when sub-issues are from different project
-    if (issueList && issueList.length > 0) {
-      const otherProjectIds = uniq(
-        issueList.map((issue) => issue.project_id).filter((id) => !!id && id !== projectId)
-      ) as string[];
-      this.fetchOtherProjectProperties(workspaceSlug, otherProjectIds);
+        if (issueList && issueList.length > 0) {
+          const otherProjectIds = uniq(
+            issueList.map((issue) => issue.project_id).filter((id) => !!id && id !== projectId)
+          ) as string[];
+          this.fetchOtherProjectProperties(workspaceSlug, otherProjectIds);
+        }
+        if (issueList) {
+          this.rootIssueDetailStore.rootIssueStore.issues.updateIssue(parentIssueId, {
+            sub_issues_count: issueList.length,
+          });
+        }
+
+        runInAction(() => {
+          set(this.subIssuesStateDistribution, parentIssueId, subIssuesStateDistribution);
+          set(
+            this.subIssues,
+            parentIssueId,
+            issueList.map((issue) => issue.id)
+          );
+        });
+
+        return response;
+      } finally {
+        this.loader = undefined;
+      }
+    })();
+
+    this.inFlightSubIssuesFetches.set(requestKey, requestPromise);
+
+    try {
+      return await requestPromise;
+    } finally {
+      this.inFlightSubIssuesFetches.delete(requestKey);
     }
-    if (issueList) {
-      this.rootIssueDetailStore.rootIssueStore.issues.updateIssue(parentIssueId, {
-        sub_issues_count: issueList.length,
-      });
-    }
-
-    runInAction(() => {
-      set(this.subIssuesStateDistribution, parentIssueId, subIssuesStateDistribution);
-      set(
-        this.subIssues,
-        parentIssueId,
-        issueList.map((issue) => issue.id)
-      );
-    });
-
-    this.loader = undefined;
-    return response;
   };
 
   createSubIssues = async (workspaceSlug: string, projectId: string, parentIssueId: string, issueIds: string[]) => {
@@ -349,6 +367,24 @@ export class IssueSubIssuesStore implements IIssueSubIssuesStore {
           workspaceSlug,
           projectId
         );
+        // fetching other project issue types
+        try {
+          const cached = projectIssueTypesCache.get(projectId);
+          if (!cached) {
+            const service = new ProjectIssueTypeService();
+            const types = await service.fetchProjectIssueTypes(workspaceSlug, projectId);
+            const map = types.reduce(
+              (acc, type) => {
+                acc[type.id] = type as TIssueType;
+                return acc;
+              },
+              {} as Record<string, TIssueType>
+            );
+            projectIssueTypesCache.set(projectId, map);
+          }
+        } catch (e) {
+          // swallow
+        }
       }
     }
   };

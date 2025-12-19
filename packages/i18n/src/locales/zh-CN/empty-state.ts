@@ -41,25 +41,25 @@ export default {
       cta_primary: "创建您的第一个工作项",
     },
     cycles: {
-      title: "在周期中分组和限时您的工作。",
+      title: "在迭代中分组和限时您的工作。",
       description: "将工作分解为限时块,从项目截止日期倒推设置日期,并作为团队取得实质性进展。",
-      cta_primary: "设置您的第一个周期",
+      cta_primary: "设置您的第一个迭代",
     },
     cycle_work_items: {
-      title: "此周期中没有要显示的工作项",
-      description: "创建工作项以开始监控团队在此周期中的进度并按时实现目标。",
+      title: "此迭代中没有要显示的工作项",
+      description: "创建工作项以开始监控团队在此迭代中的进度并按时实现目标。",
       cta_primary: "创建工作项",
       cta_secondary: "添加现有工作项",
     },
     modules: {
-      title: "将项目目标映射到模块并轻松跟踪。",
+      title: "将项目目标映射到发布并轻松跟踪。",
       description:
-        "模块由相互关联的工作项组成。它们有助于监控项目阶段的进度,每个阶段都有特定的截止日期和分析,以指示您离实现这些阶段有多近。",
-      cta_primary: "设置您的第一个模块",
+        "发布由相互关联的工作项组成。它们有助于监控项目阶段的进度,每个阶段都有特定的截止日期和分析,以指示您离实现这些阶段有多近。",
+      cta_primary: "设置您的第一个发布",
     },
     module_work_items: {
-      title: "此模块中没有要显示的工作项",
-      description: "创建工作项以开始监控此模块。",
+      title: "此发布中没有要显示的工作项",
+      description: "创建工作项以开始监控此发布。",
       cta_primary: "创建工作项",
       cta_secondary: "添加现有工作项",
     },
@@ -105,12 +105,12 @@ export default {
       cta_primary: "设置自动化",
     },
     archive_cycles: {
-      title: "暂无已归档周期",
-      description: "为了整理项目,请归档已完成的周期。归档后在此处查找它们。",
+      title: "暂无已归档迭代",
+      description: "为了整理项目,请归档已完成的迭代。归档后在此处查找它们。",
     },
     archive_modules: {
-      title: "暂无已归档模块",
-      description: "为了整理项目,请归档已完成或已取消的模块。归档后在此处查找它们。",
+      title: "暂无已归档发布",
+      description: "为了整理项目,请归档已完成或已取消的发布。归档后在此处查找它们。",
     },
     home_widget_quick_links: {
       title: "为您的工作保留重要的参考、资源或文档",
@@ -148,10 +148,10 @@ export default {
       title: "创建包含工作项和受理人的项目,以开始在此处跟踪绩效、进度和团队影响。",
     },
     analytics_no_cycle: {
-      title: "创建周期以将工作组织成有时限的阶段并跟踪冲刺进度。",
+      title: "创建迭代以将工作组织成有时限的阶段并跟踪冲刺进度。",
     },
     analytics_no_module: {
-      title: "创建模块以组织工作并跟踪不同阶段的进度。",
+      title: "创建发布以组织工作并跟踪不同阶段的进度。",
     },
     analytics_no_intake: {
       title: "设置接收以管理传入请求并跟踪它们的接受和拒绝情况",

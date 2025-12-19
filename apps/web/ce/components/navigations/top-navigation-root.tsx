@@ -72,7 +72,6 @@ export const TopNavigationRoot = observer(function TopNavigationRoot() {
           />
         </Tooltip>
         <HelpMenuRoot />
-        <StarUsOnGitHubLink />
         <div className="flex items-center justify-center size-8 hover:bg-custom-background-80 rounded-md">
           <UserMenuRoot size="xs" />
         </div>

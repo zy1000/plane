@@ -29,6 +29,8 @@ import { IssueStats } from "@/plane-web/components/issues/issue-layouts/issue-st
 // types
 import { WithDisplayPropertiesHOC } from "../properties/with-display-properties-HOC";
 import type { TRenderQuickActions } from "./list-view-types";
+import { projectIssueTypesCache, type TIssueType } from "@/services/project";
+import * as LucideIcons from "lucide-react";
 
 interface IssueBlockProps {
   issueId: string;
@@ -47,6 +49,7 @@ interface IssueBlockProps {
   setIsCurrentBlockDragging: React.Dispatch<React.SetStateAction<boolean>>;
   canDrag: boolean;
   isEpic?: boolean;
+  projectIssueTypesMap?: Record<string, TIssueType>;
 }
 
 export const IssueBlock = observer(function IssueBlock(props: IssueBlockProps) {
@@ -100,6 +103,7 @@ export const IssueBlock = observer(function IssueBlock(props: IssueBlockProps) {
 
   // derived values
   const issue = issuesMap[issueId];
+  const projectIssueTypesMap = props.projectIssueTypesMap || projectIssueTypesCache.get(issue?.project_id ?? "");
   const subIssuesCount = issue?.sub_issues_count ?? 0;
   const canEditIssueProperties = canEditProperties(issue?.project_id ?? undefined);
   const isDraggingAllowed = canDrag && canEditIssueProperties;
@@ -136,19 +140,24 @@ export const IssueBlock = observer(function IssueBlock(props: IssueBlockProps) {
 
   const marginLeft = `${spacingLeft}px`;
 
-  const handleToggleExpand = (e: MouseEvent<HTMLButtonElement>) => {
+  const handleToggleExpand = async (e: MouseEvent<HTMLButtonElement>) => {
     e.stopPropagation();
     e.preventDefault();
     if (nestingLevel >= 3) {
       handleIssuePeekOverview(issue);
     } else {
-      setExpanded((prevState) => {
-        if (!prevState && workspaceSlug && issue && issue.project_id)
-          subIssuesStore.fetchSubIssues(workspaceSlug.toString(), issue.project_id, issue.id);
-        return !prevState;
-      });
+      if (isExpanded) {
+        setExpanded(false);
+        return;
+      }
+
+      if (workspaceSlug && issue && issue.project_id) {
+        await subIssuesStore.fetchSubIssues(workspaceSlug.toString(), issue.project_id, issue.id);
+      }
+      setExpanded(true);
     }
   };
+
 
   //TODO: add better logic. This is to have a min width for ID/Key based on the length of project identifier
   const keyMinWidth = displayProperties?.key ? (projectIdentifier?.length ?? 0) * 7 : 0;
@@ -228,7 +237,32 @@ export const IssueBlock = observer(function IssueBlock(props: IssueBlockProps) {
                 </Tooltip>
               )}
               {displayProperties && (displayProperties.key || displayProperties.issue_type) && (
-                <div className="flex-shrink-0" style={{ minWidth: `${keyMinWidth}px` }}>
+                <div className="flex-shrink-0  flex items-center gap-1" style={{ minWidth: `${keyMinWidth}px` }}>
+                  {projectIssueTypesMap &&
+                    issue?.type_id &&
+                    projectIssueTypesMap[issue.type_id]?.logo_props?.icon &&
+                    (() => {
+                      const { name, color, background_color } = projectIssueTypesMap[issue.type_id].logo_props!.icon!;
+                      const IconComp = (LucideIcons as any)[name] as React.FC<any> | undefined;
+                      return (
+                        <span
+                          className="inline-flex items-center justify-center rounded-sm"
+                          style={{
+                            backgroundColor: background_color || "transparent",
+                            color: color || "currentColor",
+                            width: "16px",
+                            height: "16px",
+                          }}
+                          aria-label={`Issue type: ${projectIssueTypesMap[issue.type_id].name}`}
+                        >
+                          {IconComp ? (
+                            <IconComp className="h-3.5 w-3.5" strokeWidth={2} />
+                          ) : (
+                            <span className="h-3.5 w-3.5" />
+                          )}
+                        </span>
+                      );
+                    })()}
                   {issue.project_id && (
                     <IssueIdentifier
                       issueId={issueId}

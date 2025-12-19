@@ -1,6 +1,7 @@
 # Python imports
 import copy
 import json
+import time
 
 # Django imports
 from django.contrib.postgres.aggregates import ArrayAgg
@@ -45,17 +46,20 @@ from plane.db.models import (
     FileAsset,
     IntakeIssue,
     Issue,
+    IssueActivity,
     IssueAssignee,
     IssueLabel,
     IssueLink,
+    IssuePropertyValue,
     IssueReaction,
     IssueRelation,
     IssueSubscriber,
+    IssueTypeProperty,
     IssueUserProperty,
     ModuleIssue,
     Project,
     ProjectMember,
-    UserRecentVisit,
+    UserRecentVisit, IssueType, ProjectIssueType,
 )
 from plane.utils.filters import ComplexFilterBackend, IssueFilterSet
 from plane.utils.global_paginator import paginate
@@ -69,6 +73,7 @@ from plane.utils.issue_filters import issue_filters
 from plane.utils.order_queryset import order_issue_queryset
 from plane.utils.paginator import GroupedOffsetPaginator, SubGroupedOffsetPaginator
 from plane.utils.timezone_converter import user_timezone_converter
+from plane.settings.redis import redis_instance
 
 from .. import BaseAPIView, BaseViewSet
 
@@ -291,14 +296,14 @@ class IssueViewSet(BaseViewSet):
             user_id=request.user.id,
         )
         if (
-            ProjectMember.objects.filter(
-                workspace__slug=slug,
-                project_id=project_id,
-                member=request.user,
-                role=5,
-                is_active=True,
-            ).exists()
-            and not project.guest_view_all_features
+                ProjectMember.objects.filter(
+                    workspace__slug=slug,
+                    project_id=project_id,
+                    member=request.user,
+                    role=5,
+                    is_active=True,
+                ).exists()
+                and not project.guest_view_all_features
         ):
             issue_queryset = issue_queryset.filter(created_by=request.user)
             filtered_issue_queryset = filtered_issue_queryset.filter(created_by=request.user)
@@ -387,13 +392,22 @@ class IssueViewSet(BaseViewSet):
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
     def create(self, request, slug, project_id):
         project = Project.objects.get(pk=project_id)
+        if 'dynamic_properties' in request.data:
+            dynamic_properties = request.data.pop('dynamic_properties')
+        else:
+            dynamic_properties = {}
 
+        data = dict(request.data)
+        if not data.get("type_id"):
+            data['type_id'] = str(ProjectIssueType.objects.get(project=project,issue_type__name='任务').issue_type_id)
         serializer = IssueCreateSerializer(
-            data=request.data,
+            data=data,
             context={
                 "project_id": project_id,
+                "type_id": data['type_id'],
                 "workspace_id": project.workspace_id,
                 "default_assignee_id": project.default_assignee_id,
+                'dynamic_properties': dynamic_properties
             },
         )
 
@@ -447,6 +461,7 @@ class IssueViewSet(BaseViewSet):
                     "is_draft",
                     "archived_at",
                     "deleted_at",
+                    'type_id'
                 )
                 .first()
             )
@@ -456,7 +471,7 @@ class IssueViewSet(BaseViewSet):
             model_activity.delay(
                 model_name="issue",
                 model_id=str(serializer.data["id"]),
-                requested_data=request.data,
+                requested_data=data,
                 current_instance=None,
                 actor_id=request.user.id,
                 slug=slug,
@@ -464,7 +479,7 @@ class IssueViewSet(BaseViewSet):
             )
             # updated issue description version
             issue_description_version_task.delay(
-                updated_issue=json.dumps(request.data, cls=DjangoJSONEncoder),
+                updated_issue=json.dumps(data, cls=DjangoJSONEncoder),
                 issue_id=str(serializer.data["id"]),
                 user_id=request.user.id,
                 is_creating=True,
@@ -581,15 +596,15 @@ class IssueViewSet(BaseViewSet):
         """
 
         if (
-            ProjectMember.objects.filter(
-                workspace__slug=slug,
-                project_id=project_id,
-                member=request.user,
-                role=5,
-                is_active=True,
-            ).exists()
-            and not project.guest_view_all_features
-            and not issue.created_by == request.user
+                ProjectMember.objects.filter(
+                    workspace__slug=slug,
+                    project_id=project_id,
+                    member=request.user,
+                    role=5,
+                    is_active=True,
+                ).exists()
+                and not project.guest_view_all_features
+                and not issue.created_by == request.user
         ):
             return Response(
                 {"error": "You are not allowed to view this issue"},
@@ -609,6 +624,11 @@ class IssueViewSet(BaseViewSet):
 
     @allow_permission(allowed_roles=[ROLE.ADMIN, ROLE.MEMBER], creator=True, model=Issue)
     def partial_update(self, request, slug, project_id, pk=None):
+        redis_client = redis_instance()
+        lock_id = f"{project_id}-{pk}"
+        while redis_client.set(lock_id, "true", nx=True, ex=5) is None:
+            time.sleep(0.1)
+
         queryset = self.get_queryset()
         queryset = self.apply_annotations(queryset)
 
@@ -655,46 +675,131 @@ class IssueViewSet(BaseViewSet):
         )
 
         if not issue:
+            redis_client.delete(lock_id)
             return Response({"error": "Issue not found"}, status=status.HTTP_404_NOT_FOUND)
 
         current_instance = json.dumps(IssueDetailSerializer(issue).data, cls=DjangoJSONEncoder)
 
+        # 获取当前的动态字段值
+        current_dynamic_properties = {}
+        if 'dynamic_properties' in self.request.data:
+            current_property_values = IssuePropertyValue.objects.filter(
+                issue_id=pk,
+                project_id=project_id,
+                deleted_at__isnull=True
+            ).select_related('property')
+
+            for prop_value in current_property_values:
+                current_dynamic_properties[str(prop_value.property.id)] = prop_value.value
+
         requested_data = json.dumps(self.request.data, cls=DjangoJSONEncoder)
-        serializer = IssueCreateSerializer(issue, data=request.data, partial=True, context={"project_id": project_id})
+
+        dynamic_properties = self.request.data.pop(
+            'dynamic_properties') if 'dynamic_properties' in self.request.data else {}
+        serializer = IssueCreateSerializer(issue, data=request.data, partial=True,
+                                           context={"project_id": project_id, 'dynamic_properties': dynamic_properties})
         if serializer.is_valid():
             serializer.save()
-            # Check if the update is a migration description update
-            is_migration_description_update = skip_activity and is_description_update
-            # Log all the updates
-            if not is_migration_description_update:
-                issue_activity.delay(
-                    type="issue.activity.updated",
-                    requested_data=requested_data,
-                    actor_id=str(request.user.id),
+            # 记录动态字段的变更
+            if dynamic_properties:
+                self._record_dynamic_properties_activity(
+                    current_dynamic_properties=current_dynamic_properties,
+                    new_dynamic_properties=dynamic_properties,
                     issue_id=str(pk),
                     project_id=str(project_id),
-                    current_instance=current_instance,
-                    epoch=int(timezone.now().timestamp()),
-                    notification=True,
-                    origin=base_host(request=request, is_app=True),
+                    actor_id=str(request.user.id),
+                    request=request
                 )
-                model_activity.delay(
-                    model_name="issue",
-                    model_id=str(serializer.data.get("id", None)),
-                    requested_data=request.data,
-                    current_instance=current_instance,
-                    actor_id=request.user.id,
-                    slug=slug,
-                    origin=base_host(request=request, is_app=True),
-                )
-                # updated issue description version
-                issue_description_version_task.delay(
-                    updated_issue=current_instance,
-                    issue_id=str(serializer.data.get("id", None)),
-                    user_id=request.user.id,
-                )
+
+            # # Check if the update is a migration description update
+            # is_migration_description_update = skip_activity and is_description_update
+            # # Log all the updates
+            # if not is_migration_description_update:
+            issue_activity.delay(
+                type="issue.activity.updated",
+                requested_data=requested_data,
+                actor_id=str(request.user.id),
+                issue_id=str(pk),
+                project_id=str(project_id),
+                current_instance=current_instance,
+                epoch=int(timezone.now().timestamp()),
+                notification=True,
+                origin=base_host(request=request, is_app=True),
+            )
+            model_activity.delay(
+                model_name="issue",
+                model_id=str(serializer.data.get("id", None)),
+                requested_data=request.data,
+                current_instance=current_instance,
+                actor_id=request.user.id,
+                slug=slug,
+                origin=base_host(request=request, is_app=True),
+            )
+            # updated issue description version
+            issue_description_version_task.delay(
+                updated_issue=current_instance,
+                issue_id=str(serializer.data.get("id", None)),
+                user_id=request.user.id,
+            )
+            redis_client.delete(lock_id)
             return Response(status=status.HTTP_204_NO_CONTENT)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        redis_client.delete(lock_id)
+        return Response({'error':serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+
+    def _record_dynamic_properties_activity(self, current_dynamic_properties, new_dynamic_properties, issue_id,
+                                            project_id, actor_id, request):
+        """记录动态字段变更的活动"""
+        # 获取workspace_id
+        project = Project.objects.get(pk=project_id)
+        workspace_id = project.workspace_id
+
+        # 获取所有相关的属性信息
+        property_ids = set(current_dynamic_properties.keys()) | set(new_dynamic_properties.keys())
+        properties = IssueTypeProperty.objects.filter(
+            id__in=property_ids,
+            project_id=project_id,
+            deleted_at__isnull=True
+        ).values('id', 'display_name')
+
+        property_names = {str(prop['id']): prop['display_name'] for prop in properties}
+
+        # 比较每个字段的变更
+        activities_to_create = []
+        for property_id, new_value in new_dynamic_properties.items():
+            old_value = current_dynamic_properties.get(property_id)
+            property_name = property_names.get(property_id, f"Property {property_id}")
+
+            # 处理值的格式化
+            def format_value(value):
+                if value is None or value == "":
+                    return ""
+                if isinstance(value, list):
+                    return ", ".join(str(v) for v in value) if value else ""
+                return str(value)
+
+            old_value_formatted = format_value(old_value)
+            new_value_formatted = format_value(new_value)
+
+            # 只有当值真正发生变化时才记录
+            if old_value_formatted != new_value_formatted:
+                activities_to_create.append(
+                    IssueActivity(
+                        issue_id=issue_id,
+                        actor_id=actor_id,
+                        verb="updated",
+                        old_value=old_value_formatted,
+                        new_value=new_value_formatted,
+                        field=property_name,
+                        project_id=project_id,
+                        workspace_id=workspace_id,
+                        comment=f"updated {property_name} to",
+                        epoch=int(timezone.now().timestamp()),
+                    )
+                )
+
+        # 批量创建活动记录
+        if activities_to_create:
+            IssueActivity.objects.bulk_create(activities_to_create)
 
     @allow_permission([ROLE.ADMIN], creator=True, model=Issue)
     def destroy(self, request, slug, project_id, pk=None):
@@ -1075,7 +1180,6 @@ class IssueDetailEndpoint(BaseAPIView):
             ).data,
         )
 
-
 class IssueBulkUpdateDateEndpoint(BaseAPIView):
     def validate_dates(self, current_start, current_target, new_start, new_target):
         """
@@ -1192,10 +1296,10 @@ class IssueDetailIdentifierEndpoint(BaseAPIView):
 
         # Check if the user is a member of the project
         if not ProjectMember.objects.filter(
-            workspace__slug=slug,
-            project_id=project.id,
-            member=request.user,
-            is_active=True,
+                workspace__slug=slug,
+                project_id=project.id,
+                member=request.user,
+                is_active=True,
         ).exists():
             return Response(
                 {"error": "You are not allowed to view this issue"},
@@ -1312,15 +1416,15 @@ class IssueDetailIdentifierEndpoint(BaseAPIView):
         """
 
         if (
-            ProjectMember.objects.filter(
-                workspace__slug=slug,
-                project_id=project.id,
-                member=request.user,
-                role=5,
-                is_active=True,
-            ).exists()
-            and not project.guest_view_all_features
-            and not issue.created_by == request.user
+                ProjectMember.objects.filter(
+                    workspace__slug=slug,
+                    project_id=project.id,
+                    member=request.user,
+                    role=5,
+                    is_active=True,
+                ).exists()
+                and not project.guest_view_all_features
+                and not issue.created_by == request.user
         ):
             return Response(
                 {"error": "You are not allowed to view this issue"},

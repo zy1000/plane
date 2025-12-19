@@ -18,6 +18,9 @@ from .webhook import urlpatterns as webhook_urls
 from .workspace import urlpatterns as workspace_urls
 from .timezone import urlpatterns as timezone_urls
 from .exporter import urlpatterns as exporter_urls
+from .custom import urlpatterns as custom_urls
+from .issue_type import urlpatterns as issue_type_urls
+from .qa import urlpatterns as qa_urls
 
 urlpatterns = [
     *analytic_urls,
@@ -39,5 +42,8 @@ urlpatterns = [
     *api_urls,
     *webhook_urls,
     *timezone_urls,
+    *custom_urls,
+    *issue_type_urls,
     *exporter_urls,
+    *qa_urls,
 ]

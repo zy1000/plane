@@ -41,6 +41,8 @@ import { IssueCycleSelect } from "./cycle-select";
 import { IssueLabel } from "./label";
 import { IssueModuleSelect } from "./module-select";
 import type { TIssueOperations } from "./root";
+import { projectIssueTypesCache } from "@/services/project";
+import * as LucideIcons from "lucide-react";
 
 type Props = {
   workspaceSlug: string;
@@ -69,6 +71,8 @@ export const IssueDetailsSidebar = observer(function IssueDetailsSidebar(props: 
   // derived values
   const projectDetails = getProjectById(issue.project_id);
   const stateDetails = getStateById(issue.state_id);
+
+  const projectIssueTypesMap = projectIssueTypesCache.get(issue.project_id ?? "");
 
   const minDate = issue.start_date ? getDate(issue.start_date) : null;
   minDate?.setDate(minDate.getDate());
@@ -101,6 +105,45 @@ export const IssueDetailsSidebar = observer(function IssueDetailsSidebar(props: 
                 dropdownArrowClassName="h-3.5 w-3.5 hidden group-hover:inline"
               />
             </div>
+
+            {/* type */}
+            {projectIssueTypesMap && issue?.type_id && projectIssueTypesMap[issue.type_id] && (
+              <div className="flex h-8 items-center gap-2">
+                <div className="flex w-2/5 flex-shrink-0 items-center gap-1 text-sm text-custom-text-300">
+                  <LucideIcons.Type className="h-4 w-4 flex-shrink-0" />
+                  <span>类型</span>
+                </div>
+                <div className="w-3/5 flex-grow flex items-center gap-2 rounded px-2 py-0.5 text-sm">
+                  {(() => {
+                    const issueType = projectIssueTypesMap[issue.type_id];
+                    const { name, color, background_color } = issueType.logo_props?.icon || {};
+                    const IconComp = name ? ((LucideIcons as any)[name] as React.FC<any> | undefined) : undefined;
+
+                    return (
+                      <>
+                        <span
+                          className="inline-flex items-center justify-center rounded-sm flex-shrink-0"
+                          style={{
+                            backgroundColor: background_color || "transparent",
+                            color: color || "currentColor",
+                            width: "16px",
+                            height: "16px",
+                          }}
+                          aria-label={`Issue type: ${issueType.name}`}
+                        >
+                          {IconComp ? (
+                            <IconComp className="h-3.5 w-3.5" strokeWidth={2} />
+                          ) : (
+                            <span className="h-3.5 w-3.5" />
+                          )}
+                        </span>
+                        <span className="text-custom-text-200">{issueType.name}</span>
+                      </>
+                    );
+                  })()}
+                </div>
+              </div>
+            )}
 
             <div className="flex h-8 items-center gap-2">
               <div className="flex w-2/5 flex-shrink-0 items-center gap-1 text-sm text-custom-text-300">

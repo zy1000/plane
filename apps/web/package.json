@@ -5,10 +5,10 @@
   "license": "AGPL-3.0",
   "type": "module",
   "scripts": {
-    "dev": "react-router dev --port 3000",
+    "dev": "react-router dev --port 3000 --host 0.0.0.0",
     "build": "react-router build",
     "preview": "react-router build && serve -s build/client -l 3000",
-    "start": "serve -s build/client -l 3000",
+    "start": "serve -s build/client -l 3003",
     "clean": "rm -rf .turbo && rm -rf .next && rm -rf .react-router && rm -rf node_modules && rm -rf dist && rm -rf build",
     "check:lint": "eslint . --cache --cache-location node_modules/.cache/eslint/ --max-warnings=14367",
     "check:types": "react-router typegen && tsc --noEmit",
@@ -73,13 +73,19 @@
     "swr": "catalog:",
     "tailwind-merge": "^2.0.0",
     "use-font-face-observer": "^1.2.2",
-    "uuid": "catalog:"
+    "uuid": "catalog:",
+    "dayjs": "^1.11.18",
+    "quill": "^2.0.3",
+    "react-quill": "^2.0.0",
+    "antd": "^5.27.6",
+    "@ant-design/icons": "^5.4.0"
   },
   "devDependencies": {
     "@dotenvx/dotenvx": "catalog:",
     "@plane/tailwind-config": "workspace:*",
     "@plane/typescript-config": "workspace:*",
     "@react-router/dev": "catalog:",
+    "@tailwindcss/typography": "0.5.19",
     "@types/lodash-es": "catalog:",
     "@types/node": "catalog:",
     "@types/react": "catalog:",

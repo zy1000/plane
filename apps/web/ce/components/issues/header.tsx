@@ -21,10 +21,14 @@ import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { CountChip } from "@/components/common/count-chip";
 // constants
 import { HeaderFilters } from "@/components/issues/filters";
+import { IssueService } from "@/services/issue";
+import { message } from "antd";
+import { useRef } from "react";
 // helpers
 // hooks
 import { useCommandPalette } from "@/hooks/store/use-command-palette";
 import { useIssues } from "@/hooks/store/use-issues";
+import { useLabel } from "@/hooks/store/use-label";
 import { useProject } from "@/hooks/store/use-project";
 import { useUserPermissions } from "@/hooks/store/user";
 import { useAppRouter } from "@/hooks/use-app-router";
@@ -36,10 +40,12 @@ export const IssuesHeader = observer(function IssuesHeader() {
   // router
   const router = useAppRouter();
   const { workspaceSlug, projectId } = useParams();
+  const { issues } = useIssues(EIssuesStoreType.PROJECT);
   // store hooks
   const {
     issues: { getGroupIssueCount },
   } = useIssues(EIssuesStoreType.PROJECT);
+  const { fetchProjectLabels } = useLabel();
   // i18n
   const { t } = useTranslation();
 
@@ -49,10 +55,66 @@ export const IssuesHeader = observer(function IssuesHeader() {
   const { allowPermissions } = useUserPermissions();
   const { isMobile } = usePlatformOS();
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const issueService = new IssueService();
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const res = await issueService.importIssue(workspaceSlug, projectId, formData);
+
+      // 如果有失败的记录，生成CSV并下载
+      if (res.data?.fail && res.data.fail.length > 0) {
+        message.warning(`导入完成，有 ${res.data.fail.length} 条数据导入失败，详情请查看下载的文件`);
+
+        // 创建CSV内容
+        const headers = ["用例名称", "失败原因"];
+        const csvContent = [
+          headers.join(","),
+          ...res.data.fail.map(
+            (item: any) =>
+              // 处理字段中可能包含的逗号，用引号包裹
+              `"${item.name || ""}","${item.error || ""}"`
+          ),
+        ].join("\n");
+
+        // 创建Blob并下载
+        const blob = new Blob(["\ufeff" + csvContent], { type: "text/csv;charset=utf-8;" });
+        const link = document.createElement("a");
+        const url = URL.createObjectURL(blob);
+
+        link.setAttribute("href", url);
+        link.setAttribute("download", `导入失败记录_${new Date().getTime()}.csv`);
+        link.style.visibility = "hidden";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      } else {
+        message.success("导入成功");
+      }
+      if (workspaceSlug && projectId) {
+        await fetchProjectLabels(workspaceSlug.toString(), projectId.toString());
+      }
+      await issues.fetchIssuesWithExistingPagination(workspaceSlug?.toString(), projectId?.toString(), "mutation");
+    } catch (err: any) {
+      console.error(err);
+      message.error(err?.error || "导入失败");
+    } finally {
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    }
+  };
+
   const SPACE_APP_URL = (SPACE_BASE_URL.trim() === "" ? window.location.origin : SPACE_BASE_URL) + SPACE_BASE_PATH;
   const publishedURL = `${SPACE_APP_URL}/issues/${currentProjectDetails?.anchor}`;
 
-  const issuesCount = getGroupIssueCount(undefined, undefined, false);
+  const issuesCount = issues.getGroupIssueCount(undefined, undefined, false);
   const canUserCreateIssue = allowPermissions(
     [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
     EUserPermissionsLevel.PROJECT
@@ -111,16 +173,28 @@ export const IssuesHeader = observer(function IssuesHeader() {
           />
         </div>
         {canUserCreateIssue ? (
-          <Button
-            onClick={() => {
-              toggleCreateIssueModal(true, EIssuesStoreType.PROJECT);
-            }}
-            data-ph-element={WORK_ITEM_TRACKER_ELEMENTS.HEADER_ADD_BUTTON.WORK_ITEMS}
-            size="sm"
-          >
-            <div className="block sm:hidden">{t("issue.label", { count: 1 })}</div>
-            <div className="hidden sm:block">{t("issue.add.label")}</div>
-          </Button>
+          <>
+            <Button
+              onClick={() => {
+                toggleCreateIssueModal(true, EIssuesStoreType.PROJECT);
+              }}
+              data-ph-element={WORK_ITEM_TRACKER_ELEMENTS.HEADER_ADD_BUTTON.WORK_ITEMS}
+              size="sm"
+            >
+              <div className="block sm:hidden">{t("issue.label", { count: 1 })}</div>
+              <div className="hidden sm:block">{t("issue.add.label")}</div>
+            </Button>
+            <Button onClick={() => fileInputRef.current?.click()} size="sm" variant="outline-primary">
+              导入
+            </Button>
+            <input
+              type="file"
+              ref={fileInputRef}
+              style={{ display: "none" }}
+              accept=".xlsx,.xls"
+              onChange={handleImport}
+            />
+          </>
         ) : (
           <></>
         )}

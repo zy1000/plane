@@ -7,10 +7,11 @@ type Props = {
   icon: React.ReactNode;
   title: string;
   disabled?: boolean;
+  onClick?: () => void;
 };
 
 export function IssueDetailWidgetButton(props: Props) {
-  const { icon, title, disabled = false } = props;
+  const { icon, title, disabled = false, onClick } = props;
   return (
     <div
       className={cn(
@@ -20,6 +21,7 @@ export function IssueDetailWidgetButton(props: Props) {
           "cursor-pointer text-custom-text-300 hover:bg-custom-background-80": !disabled,
         }
       )}
+      onClick={disabled ? undefined : onClick}
     >
       {icon && icon}
       <span className="text-sm font-medium">{title}</span>

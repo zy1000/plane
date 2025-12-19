@@ -20,6 +20,7 @@ interface Props {
   canDropOverIssue: boolean;
   selectionHelpers: TSelectionHelper;
   isEpic?: boolean;
+  projectIssueTypesMap?: Record<string, any>;
 }
 
 export function IssueBlocksList(props: Props) {
@@ -36,6 +37,7 @@ export function IssueBlocksList(props: Props) {
     isDragAllowed,
     canDropOverIssue,
     isEpic = false,
+    projectIssueTypesMap,
   } = props;
 
   return (
@@ -60,6 +62,7 @@ export function IssueBlocksList(props: Props) {
             isDragAllowed={isDragAllowed}
             canDropOverIssue={canDropOverIssue}
             isEpic={isEpic}
+            projectIssueTypesMap={projectIssueTypesMap}
           />
         ))}
     </div>

@@ -56,12 +56,12 @@ export const SubIssuesCollapsibleContent = observer(function SubIssuesCollapsibl
   const {
     toggleCreateIssueModal,
     toggleDeleteIssueModal,
-    subIssues: { subIssueHelpersByIssueId, setSubIssueHelpers },
+    subIssues: { subIssuesByIssueId },
   } = useIssueDetail(issueServiceType);
 
   // helpers
   const subIssueOperations = useSubIssueOperations(issueServiceType);
-  const subIssueHelpers = subIssueHelpersByIssueId(`${parentIssueId}_root`);
+  const subIssueIds = subIssuesByIssueId(parentIssueId);
 
   // handler
   const handleIssueCrudState = useCallback(
@@ -78,31 +78,10 @@ export const SubIssuesCollapsibleContent = observer(function SubIssuesCollapsibl
     [issueCrudState]
   );
 
-  const handleFetchSubIssues = useCallback(async () => {
-    if (!subIssueHelpers.issue_visibility.includes(parentIssueId)) {
-      try {
-        setSubIssueHelpers(`${parentIssueId}_root`, "preview_loader", parentIssueId);
-        await subIssueOperations.fetchSubIssues(workspaceSlug, projectId, parentIssueId);
-        setSubIssueHelpers(`${parentIssueId}_root`, "issue_visibility", parentIssueId);
-      } catch (error) {
-        console.error("Error fetching sub-work items:", error);
-      } finally {
-        setSubIssueHelpers(`${parentIssueId}_root`, "preview_loader", "");
-      }
-    }
-  }, [
-    parentIssueId,
-    projectId,
-    setSubIssueHelpers,
-    subIssueHelpers.issue_visibility,
-    subIssueOperations,
-    workspaceSlug,
-  ]);
-
   useEffect(() => {
-    handleFetchSubIssues();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [parentIssueId]);
+    if (subIssueIds) return;
+    void subIssueOperations.fetchSubIssues(workspaceSlug, projectId, parentIssueId);
+  }, [parentIssueId, projectId, subIssueIds, subIssueOperations, workspaceSlug]);
 
   // render conditions
   const shouldRenderDeleteIssueModal =
@@ -115,20 +94,18 @@ export const SubIssuesCollapsibleContent = observer(function SubIssuesCollapsibl
 
   return (
     <>
-      {subIssueHelpers.issue_visibility.includes(parentIssueId) && (
-        <SubIssuesListRoot
-          storeType={EIssuesStoreType.PROJECT}
-          workspaceSlug={workspaceSlug}
-          projectId={projectId}
-          parentIssueId={parentIssueId}
-          rootIssueId={parentIssueId}
-          spacingLeft={6}
-          canEdit={!disabled}
-          handleIssueCrudState={handleIssueCrudState}
-          subIssueOperations={subIssueOperations}
-          issueServiceType={issueServiceType}
-        />
-      )}
+      <SubIssuesListRoot
+        storeType={EIssuesStoreType.PROJECT}
+        workspaceSlug={workspaceSlug}
+        projectId={projectId}
+        parentIssueId={parentIssueId}
+        rootIssueId={parentIssueId}
+        spacingLeft={6}
+        canEdit={!disabled}
+        handleIssueCrudState={handleIssueCrudState}
+        subIssueOperations={subIssueOperations}
+        issueServiceType={issueServiceType}
+      />
 
       {shouldRenderDeleteIssueModal && (
         <DeleteIssueModal

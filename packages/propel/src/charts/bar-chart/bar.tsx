@@ -30,6 +30,8 @@ interface TBarProps extends TShapeProps {
   showTopBorderRadius?: boolean;
   showBottomBorderRadius?: boolean;
   dotted?: boolean;
+  strokeColor?: string;
+  strokeWidth?: number;
 }
 
 // Helper Functions
@@ -88,6 +90,8 @@ const CustomBar = React.memo(function CustomBar(props: TBarProps) {
     showPercentage,
     showTopBorderRadius,
     showBottomBorderRadius,
+    strokeColor,
+    strokeWidth,
   } = props;
 
   if (!height) return null;
@@ -112,6 +116,8 @@ const CustomBar = React.memo(function CustomBar(props: TBarProps) {
         className="transition-opacity duration-200"
         fill={fill}
         opacity={opacity}
+        stroke={strokeColor}
+        strokeWidth={strokeWidth ?? 0}
       />
       {showText && (
         <PercentageText x={x + width / 2} y={textY} percentage={currentBarPercentage} className={textClassName} />
@@ -167,6 +173,8 @@ const createShapeVariant =
         showPercentage={bar.showPercentage}
         showTopBorderRadius={!!showTopBorderRadius}
         showBottomBorderRadius={!!showBottomBorderRadius}
+        strokeColor={bar.strokeColor}
+        strokeWidth={bar.strokeWidth}
         {...factoryProps}
       />
     );

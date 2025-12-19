@@ -1,5 +1,5 @@
 import type { FC } from "react";
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 // plane constants
@@ -20,6 +20,7 @@ import { IssueLayoutHOC } from "../issue-layout-HOC";
 import { List } from "./default";
 // types
 import type { IQuickActionProps, TRenderQuickActions } from "./list-view-types";
+import { ProjectIssueTypeService, type TIssueType, projectIssueTypesCache } from "@/services/project";
 
 type ListStoreType =
   | EIssuesStoreType.PROJECT
@@ -128,6 +129,41 @@ export const BaseListRoot = observer(function BaseListRoot(props: IBaseListRoot)
     [fetchNextIssues]
   );
 
+  // 获取项目 issue types 并更新到缓存
+  const projectIssueTypeService = new ProjectIssueTypeService();
+  const [issueTypesMap, setIssueTypesMap] = useState<Record<string, TIssueType> | null>(null);
+
+  useEffect(() => {
+    if (!workspaceSlug || !projectId) return;
+
+    const fetchIssueTypes = async () => {
+      try {
+        const cachedTypes = projectIssueTypesCache.get(projectId.toString());
+        if (cachedTypes) {
+          setIssueTypesMap(cachedTypes);
+        } else {
+          const types = await projectIssueTypeService.fetchProjectIssueTypes(
+            workspaceSlug.toString(),
+            projectId.toString()
+          );
+          const typesMap = types.reduce(
+            (acc, type) => {
+              acc[type.id] = type;
+              return acc;
+            },
+            {} as Record<string, TIssueType>
+          );
+          projectIssueTypesCache.set(projectId.toString(), typesMap);
+          setIssueTypesMap(typesMap);
+        }
+      } catch (error) {
+        console.error("Failed to fetch issue types:", error);
+      }
+    };
+
+    fetchIssueTypes();
+  }, [workspaceSlug, projectId]);
+
   // kanbanFilters and EIssueFilterType.KANBAN_FILTERS are used because the state is shared between kanban view and list view
   const handleCollapsedGroups = useCallback(
     (value: string) => {
@@ -169,6 +205,7 @@ export const BaseListRoot = observer(function BaseListRoot(props: IBaseListRoot)
           handleCollapsedGroups={handleCollapsedGroups}
           collapsedGroups={collapsedGroups}
           isEpic={isEpic}
+          projectIssueTypesMap={issueTypesMap || undefined}
         />
       </div>
     </IssueLayoutHOC>
