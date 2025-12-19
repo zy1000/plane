@@ -38,6 +38,8 @@ import { IssueStats } from "@/plane-web/components/issues/issue-layouts/issue-st
 import type { TRenderQuickActions } from "../list/list-view-types";
 import { IssueProperties } from "../properties/all-properties";
 import { WithDisplayPropertiesHOC } from "../properties/with-display-properties-HOC";
+import { projectIssueTypesCache } from "@/services/project";
+import * as LucideIcons from "lucide-react";
 
 interface IssueBlockProps {
   issueId: string;
@@ -97,9 +99,35 @@ const KanbanIssueDetailsBlock = observer(function KanbanIssueDetailsBlock(props:
 
   useOutsideClickDetector(menuActionRef, () => setIsMenuActive(false));
 
+  const { workspaceSlug: routerWorkspaceSlug, projectId: routerProjectId } = useParams();
+  const projectId = routerProjectId?.toString();
+  const projectIssueTypesMap = projectIssueTypesCache.get(projectId ?? "");
+
   return (
     <>
-      <div className="relative">
+      <div className="relative flex items-center gap-1">
+        {/* 在标识符前显示类型图标，使用上层传入的映射 */}
+        {projectIssueTypesMap &&
+          issue?.type_id &&
+          projectIssueTypesMap[issue.type_id]?.logo_props?.icon &&
+          (() => {
+            const { name, color, background_color } = projectIssueTypesMap[issue.type_id].logo_props!.icon!;
+            const IconComp = (LucideIcons as any)[name] as React.FC<any> | undefined;
+            return (
+              <span
+                className="inline-flex items-center justify-center rounded-sm"
+                style={{
+                  backgroundColor: background_color || "transparent",
+                  color: color || "currentColor",
+                  width: "16px",
+                  height: "16px",
+                }}
+                aria-label={`Issue type: ${projectIssueTypesMap[issue.type_id].name}`}
+              >
+                {IconComp ? <IconComp className="h-3.5 w-3.5" strokeWidth={2} /> : <span className="h-3.5 w-3.5" />}
+              </span>
+            );
+          })()}
         {issue.project_id && (
           <IssueIdentifier
             issueId={issue.id}

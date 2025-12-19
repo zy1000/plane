@@ -8,7 +8,7 @@ class Migration(migrations.Migration):
     atomic = False
 
     dependencies = [
-        ('db', '0110_workspaceuserproperties_navigation_control_preference_and_more'),
+        ('db', '0150_workspaceuserproperties_navigation_control_preference_and_more'),
     ]
 
     operations = [

@@ -37,7 +37,7 @@ export const commandGroups: TCommandGroups = {
     ),
     path: (cycle: IWorkspaceDefaultSearchResult) =>
       `/${cycle?.workspace__slug}/projects/${cycle?.project_id}/cycles/${cycle?.id}`,
-    title: "Cycles",
+    title: "Sprints",
   },
   issue: {
     icon: null,
@@ -83,7 +83,7 @@ export const commandGroups: TCommandGroups = {
     ),
     path: (module: IWorkspaceDefaultSearchResult) =>
       `/${module?.workspace__slug}/projects/${module?.project_id}/modules/${module?.id}`,
-    title: "Modules",
+    title: "Releases",
   },
   page: {
     icon: <PageIcon className="h-3 w-3" />,

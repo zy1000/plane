@@ -47,6 +47,7 @@ import {
 import { IssueBlocksList } from "./blocks-list";
 import { HeaderGroupByCard } from "./headers/group-by-card";
 import type { TRenderQuickActions } from "./list-view-types";
+import type { TIssueType } from "@/services/project";
 
 interface Props {
   groupIssueIds: string[] | undefined;
@@ -72,6 +73,7 @@ interface Props {
   handleCollapsedGroups: (value: string) => void;
   collapsedGroups: TIssueKanbanFilters;
   isEpic?: boolean;
+  projectIssueTypesMap?: Record<string, TIssueType>;
 }
 
 export const ListGroup = observer(function ListGroup(props: Props) {
@@ -309,6 +311,7 @@ export const ListGroup = observer(function ListGroup(props: Props) {
               canDropOverIssue={!canOverlayBeVisible}
               selectionHelpers={selectionHelpers}
               isEpic={isEpic}
+              projectIssueTypesMap={props.projectIssueTypesMap}
             />
           )}
 

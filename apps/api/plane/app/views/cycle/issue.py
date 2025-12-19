@@ -17,12 +17,11 @@ from django.views.decorators.gzip import gzip_page
 from rest_framework import status
 from rest_framework.response import Response
 
-
 # Module imports
 from .. import BaseViewSet
 from plane.app.serializers import CycleIssueSerializer
 from plane.bgtasks.issue_activities_task import issue_activity
-from plane.db.models import Cycle, CycleIssue, Issue, FileAsset, IssueLink
+from plane.db.models import Cycle, CycleIssue, Issue, FileAsset, IssueLink, ModuleIssue
 from plane.utils.grouper import (
     issue_group_values,
     issue_on_results,
@@ -294,6 +293,11 @@ class CycleIssueViewSet(BaseViewSet):
             notification=True,
             origin=base_host(request=request, is_app=True),
         )
+        # 对应模块添加工作项
+        if cycle.module:
+            for issue_id in issues:
+                ModuleIssue.objects.get_or_create(module=cycle.module, issue_id=issue_id, workspace=cycle.workspace,
+                                           project=cycle.project)
         return Response({"message": "success"}, status=status.HTTP_201_CREATED)
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
@@ -304,6 +308,9 @@ class CycleIssueViewSet(BaseViewSet):
             project_id=project_id,
             cycle_id=cycle_id,
         )
+        cycle = cycle_issue.first()
+        if cycle.cycle.module:
+            ModuleIssue.objects.filter(module=cycle.cycle.module, issue_id=issue_id).delete(soft=False)
         issue_activity.delay(
             type="cycle.activity.deleted",
             requested_data=json.dumps(
@@ -321,4 +328,6 @@ class CycleIssueViewSet(BaseViewSet):
             origin=base_host(request=request, is_app=True),
         )
         cycle_issue.delete()
+
+
         return Response(status=status.HTTP_204_NO_CONTENT)

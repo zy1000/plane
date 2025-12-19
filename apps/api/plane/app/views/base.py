@@ -76,6 +76,7 @@ class BaseViewSet(TimezoneMixin, ReadReplicaControlMixin, ModelViewSet, BasePagi
             response = super().handle_exception(exc)
             return response
         except Exception as e:
+            print(e)
             (print(e, traceback.format_exc()) if settings.DEBUG else print("Server Error"))
             if isinstance(e, IntegrityError):
                 return Response(

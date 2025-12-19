@@ -83,7 +83,7 @@ def create_triage_state(apps, _schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('db', '0111_notification_notif_receiver_status_idx_and_more'),
+        ('db', '0151_notification_notif_receiver_status_idx_and_more'),
     ]
 
     operations = [

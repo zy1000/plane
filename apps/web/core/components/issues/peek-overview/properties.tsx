@@ -45,6 +45,8 @@ import type { TIssueOperations } from "../issue-detail";
 import { IssueCycleSelect } from "../issue-detail/cycle-select";
 import { IssueLabel } from "../issue-detail/label";
 import { IssueModuleSelect } from "../issue-detail/module-select";
+import { projectIssueTypesCache } from "@/services/project";
+import * as LucideIcons from "lucide-react";
 
 interface IPeekOverviewProperties {
   workspaceSlug: string;
@@ -72,6 +74,9 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
   const isEstimateEnabled = projectDetails?.estimate;
   const stateDetails = getStateById(issue.state_id);
 
+  // // Get project issue types map
+  const projectIssueTypesMap = projectIssueTypesCache.get(issue.project_id ?? "");
+
   const minDate = getDate(issue.start_date);
   minDate?.setDate(minDate.getDate());
 
@@ -96,6 +101,40 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
             dropdownArrowClassName="h-3.5 w-3.5 hidden group-hover:inline"
           />
         </SidebarPropertyListItem>
+
+        {/* type */}
+        {projectIssueTypesMap && issue?.type_id && projectIssueTypesMap[issue.type_id] && (
+          <SidebarPropertyListItem icon={LucideIcons.Type} label="类型">
+            <div className="flex items-center gap-2">
+              {(() => {
+                const issueType = projectIssueTypesMap[issue.type_id];
+                const { name, color, background_color } = issueType.logo_props?.icon || {};
+                const IconComp = name ? ((LucideIcons as any)[name] as React.FC<any> | undefined) : undefined;
+                return (
+                  <>
+                    <span
+                      className="inline-flex items-center justify-center rounded-sm flex-shrink-0"
+                      style={{
+                        backgroundColor: background_color || "transparent",
+                        color: color || "currentColor",
+                        width: "16px",
+                        height: "16px",
+                      }}
+                      aria-label={`Issue type: ${issueType.name}`}
+                    >
+                      {IconComp ? (
+                        <IconComp className="h-3.5 w-3.5" strokeWidth={2} />
+                      ) : (
+                        <span className="h-3.5 w-3.5" />
+                      )}
+                    </span>
+                    <span className="text-body-xs-medium">{issueType.name}</span>
+                  </>
+                );
+              })()}
+            </div>
+          </SidebarPropertyListItem>
+        )}
 
         <SidebarPropertyListItem icon={MembersPropertyIcon} label={t("common.assignees")}>
           <MemberDropdown

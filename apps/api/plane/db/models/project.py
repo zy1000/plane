@@ -14,11 +14,16 @@ from django.db import models
 from django.db.models import Q
 
 # Module imports
-from plane.db.mixins import AuditModel
+from plane.db.mixins import AuditModel, SoftDeletionManager
 
 from .base import BaseModel
 
 ROLE_CHOICES = ((20, "Admin"), (15, "Member"), (5, "Guest"))
+
+
+class SoftProjectManager(SoftDeletionManager):
+    def get_queryset(self):
+        return super().get_queryset().filter(is_template=False)
 
 
 class ROLE(Enum):
@@ -118,6 +123,15 @@ class Project(BaseModel):
     # external_id for imports
     external_source = models.CharField(max_length=255, null=True, blank=True)
     external_id = models.CharField(max_length=255, blank=True, null=True)
+
+    is_template = models.BooleanField(default=False)
+
+    objects = SoftProjectManager()
+
+    is_template = models.BooleanField(default=False)
+
+    objects = SoftProjectManager()
+    
 
     def __init__(self, *args, **kwargs):
         # Track if timezone is provided, if so, don't override it with the workspace timezone when saving
@@ -337,6 +351,17 @@ class ProjectPublicMember(ProjectBaseModel):
         verbose_name_plural = "Project Public Members"
         db_table = "project_public_members"
         ordering = ("-created_at",)
+
+
+class ProjectTemplate(models.Model):
+    id = models.AutoField(primary_key=True)
+    name = models.CharField(max_length=255, verbose_name="Project Template Name")
+    description = models.TextField(verbose_name="Project Description", blank=True)
+
+    project = models.OneToOneField(Project, null=True, on_delete=models.CASCADE, related_name="template")
+
+    class Meta:
+        db_table = "project_template"
 
 
 class ProjectUserProperty(ProjectBaseModel):

@@ -11,6 +11,7 @@ export interface IThemeStore {
   isAnySidebarDropdownOpen: boolean | undefined;
   sidebarCollapsed: boolean | undefined;
   sidebarPeek: boolean | undefined;
+  overviewPeek: boolean | undefined;
   isExtendedSidebarOpened: boolean | undefined;
   isExtendedProjectSidebarOpened: boolean | undefined;
   profileSidebarCollapsed: boolean | undefined;
@@ -23,6 +24,7 @@ export interface IThemeStore {
   toggleAnySidebarDropdown: (open?: boolean) => void;
   toggleSidebar: (collapsed?: boolean) => void;
   toggleSidebarPeek: (peek?: boolean) => void;
+  overviewSidebarPeek: (peek?: boolean) => void;
   toggleExtendedSidebar: (collapsed?: boolean) => void;
   toggleExtendedProjectSidebar: (collapsed?: boolean) => void;
   toggleProfileSidebar: (collapsed?: boolean) => void;
@@ -38,6 +40,7 @@ export class ThemeStore implements IThemeStore {
   isAnySidebarDropdownOpen: boolean | undefined = undefined;
   sidebarCollapsed: boolean | undefined = undefined;
   sidebarPeek: boolean | undefined = undefined;
+  overviewPeek: boolean | undefined = true;
   isExtendedSidebarOpened: boolean | undefined = undefined;
   isExtendedProjectSidebarOpened: boolean | undefined = undefined;
   profileSidebarCollapsed: boolean | undefined = undefined;
@@ -53,6 +56,7 @@ export class ThemeStore implements IThemeStore {
       isAnySidebarDropdownOpen: observable.ref,
       sidebarCollapsed: observable.ref,
       sidebarPeek: observable.ref,
+      overviewPeek: observable.ref,
       isExtendedSidebarOpened: observable.ref,
       isExtendedProjectSidebarOpened: observable.ref,
       profileSidebarCollapsed: observable.ref,
@@ -65,6 +69,7 @@ export class ThemeStore implements IThemeStore {
       toggleAnySidebarDropdown: action,
       toggleSidebar: action,
       toggleSidebarPeek: action,
+      overviewSidebarPeek: action,
       toggleExtendedSidebar: action,
       toggleExtendedProjectSidebar: action,
       toggleProfileSidebar: action,
@@ -106,6 +111,13 @@ export class ThemeStore implements IThemeStore {
       this.sidebarPeek = !this.sidebarPeek;
     } else {
       this.sidebarPeek = peek;
+    }
+  };
+  overviewSidebarPeek = (peek?: boolean) => {
+    if (peek === undefined) {
+      this.overviewPeek = !this.overviewPeek;
+    } else {
+      this.overviewPeek = peek;
     }
   };
 

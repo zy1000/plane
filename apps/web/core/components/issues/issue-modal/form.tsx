@@ -51,6 +51,7 @@ import { DuplicateModalRoot } from "@/plane-web/components/de-dupe/duplicate-mod
 import { IssueTypeSelect, WorkItemTemplateSelect } from "@/plane-web/components/issues/issue-modal";
 import { WorkItemModalAdditionalProperties } from "@/plane-web/components/issues/issue-modal/modal-additional-properties";
 import { useDebouncedDuplicateIssues } from "@/plane-web/hooks/use-debounced-duplicate-issues";
+import { ChevronRight } from "lucide-react";
 
 export interface IssueFormProps {
   data?: Partial<TIssue>;
@@ -75,6 +76,7 @@ export interface IssueFormProps {
   isProjectSelectionDisabled?: boolean;
   showActionButtons?: boolean;
   dataResetProperties?: any[];
+  storeType: EIssuesStoreType;
 }
 
 export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormProps) {
@@ -102,6 +104,7 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
     isProjectSelectionDisabled = false,
     showActionButtons = true,
     dataResetProperties = [],
+    storeType,
   } = props;
 
   // states
@@ -394,6 +397,7 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
                     disabled={!!data?.id || !!data?.sourceIssueId || isProjectSelectionDisabled}
                     handleFormChange={handleFormChange}
                   />
+                  <ChevronRight className="h-3 w-3 text-custom-text-400 flex-shrink-0" />
                   {projectId && (
                     <IssueTypeSelect
                       control={control}

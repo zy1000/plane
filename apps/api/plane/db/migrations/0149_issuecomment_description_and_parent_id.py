@@ -7,7 +7,7 @@ import django.db.models.deletion
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('db', '0108_alter_issueactivity_issue_comment'),
+        ('db', '0148_alter_issueactivity_issue_comment'),
     ]
 
     operations = [

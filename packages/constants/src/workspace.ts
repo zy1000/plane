@@ -37,7 +37,6 @@ export const RESTRICTED_URLS: string[] = [
   "drive",
   "channels",
   "upgrade",
-  "billing",
   "sign-in",
   "sign-up",
   "signin",

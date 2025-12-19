@@ -2,7 +2,8 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
-from django.urls import path
+from django.urls import path, include
+from rest_framework.routers import SimpleRouter
 
 from plane.app.views import (
     ProjectViewSet,
@@ -19,7 +20,11 @@ from plane.app.views import (
     ProjectArchiveUnarchiveEndpoint,
     ProjectMemberPreferenceEndpoint,
 )
+from plane.app.views.project.base import ProjectAPI
+from plane.app.views.project.template import ProjectTemplateAPIView
 
+router = SimpleRouter()
+router.register('project', ProjectAPI, basename='projects')
 
 urlpatterns = [
     path(
@@ -27,6 +32,7 @@ urlpatterns = [
         ProjectViewSet.as_view({"get": "list", "post": "create"}),
         name="project",
     ),
+    path('workspaces/<str:slug>/', include(router.urls)),
     path(
         "workspaces/<str:slug>/projects/details/",
         ProjectViewSet.as_view({"get": "list_detail"}),
@@ -129,4 +135,6 @@ urlpatterns = [
         ProjectMemberPreferenceEndpoint.as_view(),
         name="project-member-preference",
     ),
+    path('workspaces/<str:slug>/projects/template/', ProjectTemplateAPIView.as_view(), name='project-template'),
+
 ]
