@@ -132,7 +132,7 @@ export const IssueCommentReaction = observer(function IssueCommentReaction(props
           <EmojiReactionGroup
             reactions={reactions}
             onReactionClick={handleReactionClick}
-            showAddButton={!disabled}
+            showAddButton={false}
             onAddReaction={() => setIsPickerOpen(true)}
           />
         }

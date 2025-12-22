@@ -187,7 +187,10 @@ export const BaseKanBanRoot = observer(function BaseKanBanRoot(props: IBaseKanBa
         parentRef={parentRef}
         customActionButton={customActionButton}
         issue={issue}
-        handleDelete={async () => removeIssue(issue.project_id, issue.id)}
+        handleDelete={async () => {
+          await removeIssue(issue.project_id, issue.id);
+          fetchIssues("mutation", { canGroup: true, perPageCount: sub_group_by ? 10 : 30 }, viewId);
+        }}
         handleUpdate={async (data) => updateIssue && updateIssue(issue.project_id, issue.id, data)}
         handleRemoveFromView={async () => removeIssueFromView && removeIssueFromView(issue.project_id, issue.id)}
         handleArchive={async () => archiveIssue && archiveIssue(issue.project_id, issue.id)}
@@ -196,7 +199,18 @@ export const BaseKanBanRoot = observer(function BaseKanBanRoot(props: IBaseKanBa
       />
     ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [isCompletedCycle, canEditProperties, removeIssue, updateIssue, removeIssueFromView, archiveIssue, restoreIssue]
+    [
+      isCompletedCycle,
+      canEditProperties,
+      removeIssue,
+      updateIssue,
+      removeIssueFromView,
+      archiveIssue,
+      restoreIssue,
+      fetchIssues,
+      sub_group_by,
+      viewId,
+    ]
   );
 
   const handleDeleteIssue = async () => {
@@ -206,6 +220,7 @@ export const BaseKanBanRoot = observer(function BaseKanBanRoot(props: IBaseKanBa
 
     try {
       await removeIssue(draggedIssue.project_id, draggedIssueId);
+      fetchIssues("mutation", { canGroup: true, perPageCount: sub_group_by ? 10 : 30 }, viewId);
       setDeleteIssueModal(false);
       setDraggedIssueId(undefined);
     } catch (_error) {

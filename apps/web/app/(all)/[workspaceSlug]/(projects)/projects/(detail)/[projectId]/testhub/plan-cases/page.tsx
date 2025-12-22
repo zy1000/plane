@@ -70,7 +70,6 @@ export default function PlanCasesPage() {
   const [isIterationModalOpen, setIsIterationModalOpen] = useState<boolean>(false);
 
   const dropdownItems = [
-    { key: "by_work_item", label: "通过工作项规划" },
     { key: "by_iteration", label: "通过迭代规划" },
     { key: "by_release", label: "通过发布规划" },
   ];

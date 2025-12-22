@@ -191,10 +191,11 @@ type TProjectActivity = {
   workspaceSlug: string;
   projectId: string;
   disabled?: boolean;
+  description?: string;
 };
 
 export const ProjectActivity: React.FC<TProjectActivity> = observer((props) => {
-  const { workspaceSlug, projectId } = props;
+  const { workspaceSlug, projectId, description } = props;
   
   // states
   const [pageCount, setPageCount] = useState(1);
@@ -239,7 +240,7 @@ export const ProjectActivity: React.FC<TProjectActivity> = observer((props) => {
       <div className="flex h-full w-full flex-col">
         <SettingsHeading
           title={t("account_settings.activity.heading")}
-          description={t("account_settings.activity.description")}
+          description={description ?? t("account_settings.activity.description")}
         />
         <DetailedEmptyState
           title={""}
@@ -256,7 +257,7 @@ export const ProjectActivity: React.FC<TProjectActivity> = observer((props) => {
     <div className="max-h-[600px] overflow-y-auto">
       <SettingsHeading
         title={t("account_settings.activity.heading")}
-        description={t("account_settings.activity.description")}
+        description={description ?? t("account_settings.activity.description")}
       />
       <div className="w-full">{activityPages}</div>
       {isLoadMoreVisible && (

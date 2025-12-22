@@ -5,6 +5,7 @@ import { Transition } from "@headlessui/react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { PageHead } from "@/components/core/page-title";
 import { Breadcrumbs } from "@plane/ui";
+import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { Row, Col, Card, Input, Pagination, Tag, Spin, message, Button, Table, Tooltip, Radio, Select } from "antd";
 import * as LucideIcons from "lucide-react";
 import debounce from "lodash-es/debounce";
@@ -40,34 +41,14 @@ type PlanCaseRow = {
   created_by: string | number | null;
 };
 
-const BreadcrumbBack: React.FC<{ label: string; steps?: number }> = ({ label, steps = 1 }) => {
-  const router = useRouter();
-  const handleClick = React.useCallback(() => {
-    if (steps <= 1) {
-      router.back();
-      return;
-    }
-    router.back();
-    setTimeout(() => router.back(), 0);
-  }, [router, steps]);
-  return (
-    <button
-      type="button"
-      onClick={handleClick}
-      className="flex items-center gap-1 text-custom-text-300 hover:text-custom-text-100"
-    >
-      {label}
-    </button>
-  );
-};
-
 export default function TestExecutionPage() {
-  const { workspaceSlug } = useParams() as { workspaceSlug?: string };
+  const { workspaceSlug, projectId } = useParams() as { workspaceSlug?: string; projectId?: string };
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialCaseId = searchParams.get("case_id") ?? undefined;
   const planId = searchParams.get("plan_id") ?? searchParams.get("planId") ?? "";
   const reviewId = searchParams.get("review_id") ?? "";
+  const repositoryId = searchParams.get("repositoryId") ?? "";
 
   const caseService = React.useMemo(() => new CaseApiService(), []);
   const planService = React.useMemo(() => new PlanApiService(), []);
@@ -490,11 +471,25 @@ export default function TestExecutionPage() {
     const cellStyle = { padding: 12, border: "1px solid #e8e8e8" } as const;
     const resultOptions = React.useMemo(() => {
       const map = enumsData?.plan_case_result || {};
-      const options = Object.keys(map).map((key) => ({ label: <Tag color={map[key]}>{key}</Tag>, value: key }));
+      const options = Object.keys(map).map((key) => ({
+        label: (
+          <Tag color={map[key]} className="w-full m-0 text-center block py-1">
+            {key}
+          </Tag>
+        ),
+        value: key,
+      }));
       const existingValues = Object.values(execMap || {}).filter(Boolean) as string[];
       existingValues.forEach((v) => {
         if (!options.find((o) => String(o.value) === String(v))) {
-          options.push({ label: <Tag>{v}</Tag>, value: v } as any);
+          options.push({
+            label: (
+              <Tag className="w-full m-0 text-center block py-1">
+                {v}
+              </Tag>
+            ),
+            value: v,
+          } as any);
         }
       });
       return options;
@@ -517,7 +512,7 @@ export default function TestExecutionPage() {
           bordered={false}
           autoSize={{ minRows: 1 }}
           style={{ maxHeight: 300, overflow: "auto" }}
-          placeholder={placeholder || "请输入实际结果"}
+          placeholder={placeholder || "点击输入结果"}
           className="text-sm resize-none"
         />
       );
@@ -531,7 +526,7 @@ export default function TestExecutionPage() {
         {
           title: "序号",
           key: "index",
-          width: 80,
+          width: 60,
           render: (_: any, __: any, idx: number) => idx + 1,
           onHeaderCell: () => ({ style: headerStyle }),
           onCell: () => ({ style: cellStyle }),
@@ -567,17 +562,19 @@ export default function TestExecutionPage() {
           onCell: () => ({ style: cellStyle }),
         },
         {
-          title: "步骤执行结果",
+          title: "执行结果",
+          width: 90,
           key: "exec_result",
           shouldCellUpdate: (record: any, prevRecord: any) => record.execValue !== prevRecord.execValue,
           render: (_: any, record: any, idx: number) => (
             <Select
               placeholder="请选择执行结果"
-              options={resultOptions as any}
-              value={record.execValue}
+              options={resultOptions}
+              value={record.execValue || undefined}
               onChange={(v) => onChangeExec(idx, String(v))}
               variant="borderless"
-              className="w-full text-sm"
+              className="w-full text-sm [&_.ant-select-selector]:!p-0 [&_.ant-select-selection-item]:!flex [&_.ant-select-selection-item]:!justify-center"
+              popupClassName="min-w-[100px]"
               suffixIcon={null}
             />
           ),
@@ -608,9 +605,35 @@ export default function TestExecutionPage() {
     <div className="flex flex-col gap-3 p-4 w-full">
       <PageHead title="用例详情" />
       <Breadcrumbs>
-        <Breadcrumbs.Item component={<BreadcrumbBack label="测试计划" steps={2} />} />
-        <Breadcrumbs.Item component={<BreadcrumbBack label="测试计划详情" steps={1} />} />
-        <Breadcrumbs.Item component={<div className="text-custom-text-200">用例详情</div>} />
+        <Breadcrumbs.Item
+          component={
+            <BreadcrumbLink
+              href={
+                workspaceSlug && projectId
+                  ? `/${workspaceSlug}/projects/${projectId}/testhub/plans${
+                      repositoryId ? `?repositoryId=${encodeURIComponent(repositoryId)}` : ""
+                    }`
+                  : undefined
+              }
+              label="测试计划"
+            />
+          }
+        />
+        <Breadcrumbs.Item
+          component={
+            <BreadcrumbLink
+              href={
+                workspaceSlug && projectId && planId
+                  ? `/${workspaceSlug}/projects/${projectId}/testhub/plan-cases?planId=${encodeURIComponent(planId)}${
+                      repositoryId ? `&repositoryId=${encodeURIComponent(repositoryId)}` : ""
+                    }`
+                  : undefined
+              }
+              label="测试计划详情"
+            />
+          }
+        />
+        <Breadcrumbs.Item component={<BreadcrumbLink label="用例详情" isLast />} />
       </Breadcrumbs>
 
       <Transition show={mounted} enter="transition-opacity duration-200" enterFrom="opacity-0" enterTo="opacity-100">
@@ -648,7 +671,7 @@ export default function TestExecutionPage() {
                 <div className="flex flex-col gap-3">
                   <div
                     ref={leftRef}
-                    className="overflow-y-auto vertical-scrollbar scrollbar-sm flex flex-col gap-3 pr-2 pl-1 py-1 max-h-[650px]"
+                    className="overflow-y-auto vertical-scrollbar scrollbar-sm flex flex-col gap-3 pr-2 pl-1 py-1 max-h-[calc(100dvh-300px)]"
                     style={{ scrollbarGutter: "stable" }}
                   >
                     {cases.length === 0 ? (
@@ -700,7 +723,7 @@ export default function TestExecutionPage() {
 
           <Col
             flex="70%"
-            className="overflow-y-auto vertical-scrollbar scrollbar-sm max-h-[calc(100dvh-52px-12px)]"
+            className="overflow-y-auto vertical-scrollbar scrollbar-sm max-h-[calc(100dvh-130px)]"
             style={{ scrollPaddingBottom: 16 }}
             ref={rightRef}
           >

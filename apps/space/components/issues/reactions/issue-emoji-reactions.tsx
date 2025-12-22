@@ -115,11 +115,11 @@ export const IssueEmojiReactions = observer(function IssueEmojiReactions(props: 
       onChange={handleEmojiSelect}
       label={
         <EmojiReactionGroup
-          reactions={propelReactions}
-          onReactionClick={handleEmojiClick}
-          showAddButton
-          onAddReaction={() => setIsPickerOpen(true)}
-        />
+            reactions={propelReactions}
+            onReactionClick={handleEmojiClick}
+            showAddButton={false}
+            onAddReaction={() => setIsPickerOpen(true)}
+          />
       }
       placement="bottom-start"
     />
