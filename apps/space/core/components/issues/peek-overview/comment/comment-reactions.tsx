@@ -127,7 +127,7 @@ export const CommentReactions = observer(function CommentReactions(props: Props)
           <EmojiReactionGroup
             reactions={propelReactions}
             onReactionClick={handleEmojiClick}
-            showAddButton={!isInIframe}
+            showAddButton={false}
             onAddReaction={() => setIsPickerOpen(true)}
           />
         }

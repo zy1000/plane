@@ -120,7 +120,7 @@ export function CycleCreateUpdateModal(props: CycleModalProps) {
       status = res.status;
     });
 
-    return status;
+    return true;
   };
 
   const handleFormSubmit = async (formData: Partial<ICycle>) => {

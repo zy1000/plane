@@ -54,7 +54,11 @@ def _is_allowed_to_add_parent(parent_issue, sub_issue):
         return p == "特性"
     if c == "特性":
         return p == "史诗"
-    return p == "用户故事"
+    if c == '任务':
+        return p == "用户故事" or p == "任务"
+    if c == '缺陷':
+        return p == "任务" or p == "缺陷" or p == '用户故事'
+    return False
 
 
 class IssueFlatSerializer(BaseSerializer):
@@ -177,30 +181,30 @@ class IssueCreateSerializer(BaseSerializer):
 
         # Check state is from the project only else raise validation error
         if (
-            attrs.get("state")
-            and not state_manager.filter(
-                project_id=self.context.get("project_id"),
-                pk=attrs.get("state").id,
-            ).exists()
+                attrs.get("state")
+                and not state_manager.filter(
+            project_id=self.context.get("project_id"),
+            pk=attrs.get("state").id,
+        ).exists()
         ):
             raise serializers.ValidationError("State is not valid please pass a valid state_id")
 
         # Check parent issue is from workspace as it can be cross workspace
         if (
-            attrs.get("parent")
-            and not Issue.objects.filter(
-                project_id=self.context.get("project_id"),
-                pk=attrs.get("parent").id,
-            ).exists()
+                attrs.get("parent")
+                and not Issue.objects.filter(
+            project_id=self.context.get("project_id"),
+            pk=attrs.get("parent").id,
+        ).exists()
         ):
             raise serializers.ValidationError("Parent is not valid issue_id please pass a valid issue_id")
 
         if (
-            attrs.get("estimate_point")
-            and not EstimatePoint.objects.filter(
-                project_id=self.context.get("project_id"),
-                pk=attrs.get("estimate_point").id,
-            ).exists()
+                attrs.get("estimate_point")
+                and not EstimatePoint.objects.filter(
+            project_id=self.context.get("project_id"),
+            pk=attrs.get("estimate_point").id,
+        ).exists()
         ):
             raise serializers.ValidationError("Estimate point is not valid please pass a valid estimate_point_id")
 
@@ -248,13 +252,13 @@ class IssueCreateSerializer(BaseSerializer):
         else:
             # Then assign it to default assignee, if it is a valid assignee
             if (
-                default_assignee_id is not None
-                and ProjectMember.objects.filter(
-                    member_id=default_assignee_id,
-                    project_id=project_id,
-                    role__gte=15,
-                    is_active=True,
-                ).exists()
+                    default_assignee_id is not None
+                    and ProjectMember.objects.filter(
+                member_id=default_assignee_id,
+                project_id=project_id,
+                role__gte=15,
+                is_active=True,
+            ).exists()
             ):
                 try:
                     IssueAssignee.objects.create(
@@ -613,9 +617,9 @@ class IssueLinkSerializer(BaseSerializer):
 
     def update(self, instance, validated_data):
         if (
-            IssueLink.objects.filter(url=validated_data.get("url"), issue_id=instance.issue_id)
-            .exclude(pk=instance.id)
-            .exists()
+                IssueLink.objects.filter(url=validated_data.get("url"), issue_id=instance.issue_id)
+                        .exclude(pk=instance.id)
+                        .exists()
         ):
             raise serializers.ValidationError({"error": "URL already exists for this Issue"})
 
@@ -830,8 +834,9 @@ class IssueSerializer(DynamicBaseSerializer):
 
     def validate(self, data):
         if (
-            data.get("state_id")
-            and not State.objects.filter(project_id=self.context.get("project_id"), pk=data.get("state_id")).exists()
+                data.get("state_id")
+                and not State.objects.filter(project_id=self.context.get("project_id"),
+                                             pk=data.get("state_id")).exists()
         ):
             raise serializers.ValidationError("State is not valid please pass a valid state_id")
         return data

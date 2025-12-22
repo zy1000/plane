@@ -164,7 +164,22 @@ export const BaseCalendarRoot = observer(function BaseCalendarRoot(props: IBaseC
               parentRef={parentRef}
               customActionButton={customActionButton}
               issue={issue}
-              handleDelete={async () => removeIssue(issue.project_id, issue.id)}
+              handleDelete={async () => {
+                await removeIssue(issue.project_id, issue.id);
+                if (startDate && endDate && layout) {
+                  fetchIssues(
+                    "mutation",
+                    {
+                      canGroup: true,
+                      perPageCount: layout === "month" ? 4 : 30,
+                      before: endDate,
+                      after: startDate,
+                      groupedBy: EIssueGroupByToServerOptions["target_date"],
+                    },
+                    viewId
+                  );
+                }
+              }}
               handleUpdate={async (data) => updateIssue && updateIssue(issue.project_id, issue.id, data)}
               handleRemoveFromView={async () => removeIssueFromView && removeIssueFromView(issue.project_id, issue.id)}
               handleArchive={async () => archiveIssue && archiveIssue(issue.project_id, issue.id)}

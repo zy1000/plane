@@ -167,17 +167,9 @@ export const PlanCasesModal: React.FC<Props> = ({
   const columns: TableProps<TestCase>["columns"] = [
     { title: "名称", dataIndex: "name", key: "name" },
     {
-      title: "状态",
-      dataIndex: "state",
-      key: "state",
-      render: (v: number) => {
-        const label = (Enums as any)?.case_state?.[v] || "-";
-        return <Tag>{label}</Tag>;
-      },
-    },
-    {
       title: "类型",
       dataIndex: "type",
+      width: 100,
       key: "type",
       render: (v: number) => {
         const label = (Enums as any)?.case_type?.[v] || "-";
@@ -187,6 +179,7 @@ export const PlanCasesModal: React.FC<Props> = ({
     {
       title: "优先级",
       dataIndex: "priority",
+      width: 75,
       key: "priority",
       render: (v: number) => {
         const label = (Enums as any)?.case_priority?.[v] || "-";
@@ -196,6 +189,7 @@ export const PlanCasesModal: React.FC<Props> = ({
     {
       title: "更新时间",
       dataIndex: "updated_at",
+      width: 180,
       key: "updated_at",
       render: (v: string) => (v ? formatDateTime(v) : "-"),
     },
@@ -217,7 +211,7 @@ export const PlanCasesModal: React.FC<Props> = ({
             规划用例{repositoryName ? ` - ${repositoryName}` : ""}
           </h3>
           <Button
-            variant="primary"
+            variant="neutral-primary"
             onClick={() => {
               onClose();
               onClosed && onClosed();

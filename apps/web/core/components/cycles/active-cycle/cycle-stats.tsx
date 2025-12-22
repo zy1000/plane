@@ -112,7 +112,7 @@ export const ActiveCycleStats = observer(function ActiveCycleStats(props: Active
   const renderPassRate = (passRate: any) => {
     if (!passRate) return "-";
 
-    const orderKeys = ["成功", "失败", "阻塞", "未执行"];
+    const orderKeys = ["成功", "失败", "阻塞",'无效', "未执行"];
     const totalCount = orderKeys.reduce((s, k) => s + Number(passRate?.[k] || 0), 0);
     const passed = Number(passRate?.["成功"] || 0);
     const percent = totalCount > 0 ? Math.floor((passed / totalCount) * 100) : 0;
@@ -123,6 +123,7 @@ export const ActiveCycleStats = observer(function ActiveCycleStats(props: Active
       gold: "#faad14",
       blue: "#1677ff",
       gray: "#bfbfbf",
+      mediumBlue: "#3b5999",
       default: "#d9d9d9",
     };
 
@@ -130,6 +131,7 @@ export const ActiveCycleStats = observer(function ActiveCycleStats(props: Active
       成功: colorHexMap.green,
       失败: colorHexMap.red,
       阻塞: colorHexMap.gold,
+      无效: colorHexMap.mediumBlue,
       未执行: colorHexMap.gray,
     };
 

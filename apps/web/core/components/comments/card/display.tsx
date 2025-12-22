@@ -81,7 +81,7 @@ export const CommentCardDisplay = observer(function CommentCardDisplay(props: Pr
           fontSize: "small-font",
         }}
       />
-      <CommentReactions comment={comment} disabled={disabled} activityOperations={activityOperations} />
+      {/* <CommentReactions comment={comment} disabled={disabled} activityOperations={activityOperations} /> */}
     </div>
   );
 });

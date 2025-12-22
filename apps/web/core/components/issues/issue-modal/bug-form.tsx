@@ -453,19 +453,6 @@ export const BugIssueFormRoot: FC<BugIssueFormProps> = observer((props) => {
                   className="flex items-center justify-end gap-4 pb-3 pt-6 border-t-[0.5px] border-custom-border-200"
                   tabIndex={getIndex("create_more")}
                 >
-                  {!data?.id && (
-                    <div
-                      className="inline-flex items-center gap-1.5 cursor-pointer"
-                      onClick={() => onCreateMoreToggleChange(!isCreateMoreToggleEnabled)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") onCreateMoreToggleChange(!isCreateMoreToggleEnabled);
-                      }}
-                      role="button"
-                    >
-                      <ToggleSwitch value={isCreateMoreToggleEnabled} onChange={() => {}} size="sm" />
-                      <span className="text-xs">{t("create_more")}</span>
-                    </div>
-                  )}
                   <div className="flex items-center gap-2">
                     <div tabIndex={getIndex("discard_button")}>
                       <Button

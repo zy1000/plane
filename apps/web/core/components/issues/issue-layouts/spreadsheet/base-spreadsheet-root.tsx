@@ -92,7 +92,10 @@ export const BaseSpreadsheetRoot = observer(function BaseSpreadsheetRoot(props: 
         parentRef={parentRef}
         customActionButton={customActionButton}
         issue={issue}
-        handleDelete={async () => removeIssue(issue.project_id, issue.id)}
+        handleDelete={async () => {
+          await removeIssue(issue.project_id, issue.id);
+          fetchIssues("mutation", { canGroup: false, perPageCount: 100 }, viewId);
+        }}
         handleUpdate={async (data) => updateIssue && updateIssue(issue.project_id, issue.id, data)}
         handleRemoveFromView={async () => removeIssueFromView && removeIssueFromView(issue.project_id, issue.id)}
         handleArchive={async () => archiveIssue && archiveIssue(issue.project_id, issue.id)}
@@ -102,7 +105,17 @@ export const BaseSpreadsheetRoot = observer(function BaseSpreadsheetRoot(props: 
         placements={placement}
       />
     ),
-    [isCompletedCycle, canEditProperties, removeIssue, updateIssue, removeIssueFromView, archiveIssue, restoreIssue]
+    [
+      isCompletedCycle,
+      canEditProperties,
+      removeIssue,
+      updateIssue,
+      removeIssueFromView,
+      archiveIssue,
+      restoreIssue,
+      fetchIssues,
+      viewId,
+    ]
   );
 
   if (!Array.isArray(issueIds)) return null;

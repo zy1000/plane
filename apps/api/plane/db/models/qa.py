@@ -199,6 +199,7 @@ class PlanCase(BaseModel):
         FAIL = '失败', 'red'
         BLOCK = '阻塞', 'gold'
         NOT_START = '未执行', 'gray'
+        INVALID = '无效', '#3b5999'
 
     case = models.ForeignKey(TestCase, on_delete=models.CASCADE, related_name="plan_cases")
     plan = models.ForeignKey(TestPlan, on_delete=models.CASCADE, related_name="plan_cases")
@@ -218,6 +219,7 @@ class PlanCaseRecord(BaseModel):
         SUCCESS = '成功', 'green'
         FAIL = '失败', 'red'
         BLOCK = '阻塞', 'gold'
+        INVALID = '无效', '#3b5999'
 
     result = models.CharField(choices=Result.choices, default=Result.SUCCESS,
                               verbose_name="PlanCaseRecord Result")

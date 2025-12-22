@@ -1,6 +1,5 @@
 "use client";
 import React from "react";
-import { usePathname } from "next/navigation";
 import { message } from "antd";
 import { Copy } from "lucide-react";
 
@@ -9,26 +8,14 @@ type ModalHeaderProps = {
   caseId?: string;
 };
 
-export function ModalHeader({ onClose, caseId }: ModalHeaderProps) {
-  const pathname = usePathname();
+export function ModalHeader({ onClose }: ModalHeaderProps) {
   const [isCopying, setIsCopying] = React.useState(false);
-
-  const buildShareUrl = React.useCallback(() => {
-    try {
-      if (!caseId) throw new Error("缺少用例ID");
-      const origin = typeof window !== "undefined" ? window.location.origin : "";
-      const url = new URL(origin + pathname);
-      url.searchParams.set("peekCase", String(caseId));
-      return url.toString();
-    } catch (e: any) {
-      throw e;
-    }
-  }, [pathname, caseId]);
 
   const copyLink = async () => {
     setIsCopying(true);
     try {
-      const url = buildShareUrl();
+      if (typeof window === "undefined") throw new Error("复制链接失败");
+      const url = window.location.href;
       if (navigator.clipboard && navigator.clipboard.writeText) {
         await navigator.clipboard.writeText(url);
       } else {

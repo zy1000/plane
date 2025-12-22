@@ -68,22 +68,20 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
           {/* 左侧底部两个功能区域 - 无间隔，用虚线分隔 */}
           <div className="flex flex-col">
             {/* 功能区域 1 - 项目描述编辑器 */}
-            <div className="min-h-[300px] bg-white rounded-none p-4">
-              <div className="h-full">
-                <div className="mb-3 flex items-center justify-between">
-                  <h4 className="text-sm font-medium text-gray-700">项目描述</h4>
-                  {isSubmitting === "submitting" && <div className="text-xs text-gray-500">保存中...</div>}
-                </div>
-                <div className="min-h-[250px]">
-                  <ProjectDescriptionInput
-                    workspaceSlug={workspaceSlug}
-                    projectId={project.id}
-                    initialValue={project?.description_html}
-                    setIsSubmitting={setIsSubmitting}
-                    swrProjectDescription={project?.description_html}
-                    containerClassName="min-h-[250px]"
-                  />
-                </div>
+            <div className="h-[300px] bg-white rounded-none p-4 flex flex-col">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-sm font-medium text-gray-700">项目描述</h4>
+                {isSubmitting === "submitting" && <div className="text-xs text-gray-500">保存中...</div>}
+              </div>
+              <div className="flex-1 min-h-0">
+                <ProjectDescriptionInput
+                  workspaceSlug={workspaceSlug}
+                  projectId={project.id}
+                  initialValue={project?.description_html}
+                  setIsSubmitting={setIsSubmitting}
+                  swrProjectDescription={project?.description_html}
+                  containerClassName="h-full vertical-scrollbar scrollbar-sm !overflow-y-scroll"
+                />
               </div>
             </div>
 
@@ -131,7 +129,11 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
               {activeTab === "properties" ? (
                 <ProjectProperties workspaceSlug={workspaceSlug} projectId={project.id} />
               ) : (
-                <ProjectActivity workspaceSlug={workspaceSlug} projectId={project.id} />
+                <ProjectActivity
+                  workspaceSlug={workspaceSlug}
+                  projectId={project.id}
+                  description="Stay updated with the latest activity in this project."
+                />
               )}
             </div>
           </div>
