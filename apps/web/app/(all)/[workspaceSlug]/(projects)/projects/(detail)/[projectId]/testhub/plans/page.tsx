@@ -532,10 +532,10 @@ export default function TestPlanDetailPage() {
           <div className="flex-1 overflow-hidden p-0">
             <div className="flex h-[calc(100%-0px)] w-full">
               <div
-                className="relative border-r border-custom-border-200 min-w-[200px] max-w-[300px]"
+                className="relative flex flex-col h-full border-r border-custom-border-200 min-w-[200px] max-w-[300px]"
                 style={{ width: leftWidth }}
               >
-                <div className="p-2">
+                <div className="p-2 flex-shrink-0">
                   <Space>
                     <Input
                       allowClear
@@ -548,7 +548,7 @@ export default function TestPlanDetailPage() {
                     </Button>
                   </Space>
                 </div>
-                <div className="overflow-auto">
+                <div className="flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm">
                   <div
                     className={`${styles.row} flex items-center justify-between px-2 py-2 cursor-pointer ${selectedModuleId === null ? "bg-blue-50" : ""}`}
                     onClick={() => {
@@ -666,24 +666,77 @@ export default function TestPlanDetailPage() {
                   </div>
                 )}
                 {repositoryId && !loading && !error && (
-                  <Table
-                    dataSource={testPlans}
-                    columns={columns}
-                    loading={loading}
-                    rowKey="id"
-                    bordered={true}
-                    onChange={handleTableChange}
-                    pagination={{
-                      current: currentPage,
-                      pageSize: pageSize,
-                      total: total,
-                      showSizeChanger: true,
-                      showQuickJumper: true,
-                      showTotal: (t, r) => `第 ${r[0]}-${r[1]} 条，共 ${t} 条`,
-                      pageSizeOptions: ["10", "20", "50", "100"],
-                    }}
-                  />
+                  <div
+                    className={`testhub-plans-table-scroll relative max-h-[700px] overflow-y-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar]:block [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-[rgb(var(--color-scrollbar))] [&::-webkit-scrollbar-thumb]:rounded-full ${
+                      pageSize === 100 ? "testhub-plans-scrollbar-strong" : ""
+                    }`}
+                  >
+                    <Table
+                      dataSource={testPlans}
+                      columns={columns}
+                      loading={loading}
+                      rowKey="id"
+                      bordered={true}
+                      onChange={handleTableChange}
+                      pagination={{
+                        current: currentPage,
+                        pageSize: pageSize,
+                        total: total,
+                        showSizeChanger: true,
+                        showQuickJumper: true,
+                        showTotal: (t, r) => `第 ${r[0]}-${r[1]} 条，共 ${t} 条`,
+                        pageSizeOptions: ["10", "20", "50", "100"],
+                      }}
+                    />
+                  </div>
                 )}
+                <style
+                  dangerouslySetInnerHTML={{
+                    __html: `
+                      .testhub-plans-table-scroll{
+                        scrollbar-gutter: stable both-edges;
+                      }
+
+                      .testhub-plans-table-scroll .ant-table-thead > tr > th{
+                        position: sticky;
+                        top: 0;
+                        z-index: 5;
+                        background: rgb(var(--color-background-100));
+                      }
+
+                      .testhub-plans-table-scroll .ant-table-pagination{
+                        position: sticky;
+                        bottom: 0;
+                        z-index: 5;
+                        background: rgb(var(--color-background-100));
+                        margin: 0;
+                        padding: 8px 16px;
+                        border-top: 1px solid rgb(var(--color-border-200));
+                      }
+
+                      .testhub-plans-table-scroll.testhub-plans-scrollbar-strong{
+                        overflow-y: scroll;
+                        scrollbar-width: auto;
+                        scrollbar-color: rgb(var(--color-scrollbar)) transparent;
+                      }
+
+                      .testhub-plans-table-scroll.testhub-plans-scrollbar-strong::-webkit-scrollbar{
+                        width: 12px;
+                        height: 12px;
+                      }
+
+                      .testhub-plans-table-scroll.testhub-plans-scrollbar-strong::-webkit-scrollbar-thumb{
+                        background-color: rgba(var(--color-scrollbar), 0.85);
+                        border-radius: 999px;
+                        border: 3px solid rgba(var(--color-background-100), 1);
+                      }
+
+                      .testhub-plans-table-scroll.testhub-plans-scrollbar-strong::-webkit-scrollbar-track{
+                        background: transparent;
+                      }
+                    `,
+                  }}
+                />
               </div>
             </div>
           </div>

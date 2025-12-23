@@ -1095,6 +1095,8 @@ export default function TestExecutionPage() {
         modalTitle="新增缺陷"
         isDraft={false}
         initialDescriptionHtml={buildStepsHtml()}
+        data={{ project_id: projectId }}
+        isProjectSelectionDisabled={true}
         onSubmit={async (res) => {
           try {
             setIsCreateDefectOpen(false);

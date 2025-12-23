@@ -148,6 +148,14 @@ class PlanModule(BaseModel):
     is_default = models.BooleanField(default=False)
 
     class Meta:
+        constraints = [
+            # Enforce uniqueness of project and name when project is not NULL and deleted_at is NULL
+            models.UniqueConstraint(
+                fields=["repository", "name"],
+                condition=Q(repository__isnull=False, deleted_at__isnull=True),
+                name="unique_plane_module_repository_name_when_not_deleted",
+            ),
+        ]
         db_table = "test_plan_modules"
         ordering = ("created_at",)
 
@@ -199,7 +207,7 @@ class PlanCase(BaseModel):
         FAIL = '失败', 'red'
         BLOCK = '阻塞', 'gold'
         NOT_START = '未执行', 'gray'
-        INVALID = '无效', '#3b5999'
+        INVALID = '无效', 'gray'
 
     case = models.ForeignKey(TestCase, on_delete=models.CASCADE, related_name="plan_cases")
     plan = models.ForeignKey(TestPlan, on_delete=models.CASCADE, related_name="plan_cases")
@@ -219,7 +227,7 @@ class PlanCaseRecord(BaseModel):
         SUCCESS = '成功', 'green'
         FAIL = '失败', 'red'
         BLOCK = '阻塞', 'gold'
-        INVALID = '无效', '#3b5999'
+        INVALID = '无效', 'gray'
 
     result = models.CharField(choices=Result.choices, default=Result.SUCCESS,
                               verbose_name="PlanCaseRecord Result")
@@ -276,6 +284,14 @@ class CaseReviewModule(BaseModel):
     is_default = models.BooleanField(default=False)
 
     class Meta:
+        constraints = [
+            # Enforce uniqueness of project and name when project is not NULL and deleted_at is NULL
+            models.UniqueConstraint(
+                fields=["repository", "name"],
+                condition=Q(repository__isnull=False, deleted_at__isnull=True),
+                name="unique_review_module_repository_name_when_not_deleted",
+            ),
+        ]
         verbose_name = "CaseReviewModule"
         verbose_name_plural = "CaseReviewModule"
         db_table = "test_review_module"

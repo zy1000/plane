@@ -2,10 +2,9 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Modal, Button, Checkbox, Spin, Empty, Tag, message, Input, Table, Space } from "antd";
 import type { TPartialProject, TIssue, TIssuesResponse } from "@plane/types";
-import { ProjectService } from "@/services/project/project.service";
 import { IssueService } from "@/services/issue/issue.service";
-import { Logo } from "@plane/propel/emoji-icon-picker";
 import { ProjectIssueTypeService, projectIssueTypesCache, type TIssueType } from "@/services/project";
+import { CaseService } from "@/services/qa/case.service";
 import * as LucideIcons from "lucide-react";
 // 新增：复用状态下拉组件，保持与工作项详情侧栏一致的风格
 import { StateDropdown } from "@/components/dropdowns/state/dropdown";
@@ -21,6 +20,7 @@ type Props = {
   onConfirm: (issues: TIssue[]) => void;
   initialSelectedIssues?: TIssue[];
   forceTypeName?: "Requirement" | "Task" | "Bug";
+  caseId?: string;
 };
 
 export const WorkItemSelectModal: React.FC<Props> = ({
@@ -30,12 +30,13 @@ export const WorkItemSelectModal: React.FC<Props> = ({
   onConfirm,
   initialSelectedIssues,
   forceTypeName,
+  caseId,
 }) => {
   const { projectId } = useParams();
   const currentProjectId = projectId?.toString();
 
-  const projectService = useMemo(() => new ProjectService(), []);
   const issueService = useMemo(() => new IssueService(), []);
+  const caseService = useMemo(() => new CaseService(), []);
   const { fetchProjectStates, getStateById } = useProjectState();
 
   const [issues, setIssues] = useState<TIssue[]>([]);
@@ -146,13 +147,39 @@ export const WorkItemSelectModal: React.FC<Props> = ({
   }, [isOpen, workspaceSlug, currentProjectId, issueTypeService]);
 
   const displayIssues = useMemo(
-    () => displayIssuesSelector(issues, projectIssueTypesMap, forceTypeName),
-    [issues, projectIssueTypesMap, forceTypeName]
+    () => issues,
+    [issues]
   );
 
   // 渲染类型图标（参考 issue-detail.tsx 逻辑）
   const renderIssueTypeIcon = (record: TIssue) => {
-    const typeId = (record as any)?.type_id as string | undefined;
+    // 兼容 record.type 为对象的情况
+    const typeObj = (record as any)?.type;
+    const typeId = typeObj?.id || (record as any)?.type_id;
+
+    if (typeObj && typeObj.logo_props?.icon) {
+      const { name, color, background_color } = typeObj.logo_props.icon;
+      const IconComp = (LucideIcons as any)[name] as React.FC<any> | undefined;
+      return (
+        <span
+          className="inline-flex items-center justify-center rounded-sm"
+          style={{
+            backgroundColor: background_color || "transparent",
+            color: color || "currentColor",
+            width: "16px",
+            height: "16px",
+          }}
+          aria-label={`Issue type: ${typeObj.name}`}
+        >
+          {IconComp ? (
+            <IconComp className="h-3.5 w-3.5" strokeWidth={2} />
+          ) : (
+            <LucideIcons.Layers className="h-3.5 w-3.5" />
+          )}
+        </span>
+      );
+    }
+
     const map = projectIssueTypesMap;
     if (typeId && map && map[typeId]?.logo_props?.icon) {
       const { name, color, background_color } = map[typeId].logo_props!.icon!;
@@ -183,10 +210,35 @@ export const WorkItemSelectModal: React.FC<Props> = ({
   const columns = useMemo(
     () => {
       const baseList = displayIssues;
-      const uniqueStateIds = Array.from(new Set((baseList || []).map((i) => i.state_id).filter(Boolean))) as string[];
-      const uniqueTypeIds = Array.from(new Set((baseList || []).map((i) => i.type_id).filter(Boolean))) as string[];
-      // 新增：类型过滤项使用“当前项目全部类型”，而不是仅限于当前页数据出现的类型
-      const allProjectTypeIds = projectIssueTypesMap ? Object.keys(projectIssueTypesMap) : uniqueTypeIds;
+      // 构建状态过滤器选项
+      const stateMap = new Map<string, string>();
+      baseList.forEach((i: any) => {
+        const id = i.state?.id || i.state_id;
+        if (id) {
+          // 优先使用记录中的名称，其次从 store 获取，最后使用 ID
+          const name = i.state?.name || getStateById(id)?.name || id;
+          stateMap.set(id, name);
+        }
+      });
+      const stateFilters = Array.from(stateMap.entries()).map(([value, text]) => ({ text, value }));
+
+      // 构建类型过滤器选项
+      const typeMap = new Map<string, string>();
+      // 先加载所有项目类型（如果存在映射）
+      if (projectIssueTypesMap) {
+        Object.values(projectIssueTypesMap).forEach((t) => {
+          if (t.id) typeMap.set(t.id, t.name);
+        });
+      }
+      // 补充当前列表中可能存在的类型（兼容跨项目或无映射情况）
+      baseList.forEach((i: any) => {
+        const id = i.type?.id || i.type_id;
+        if (id) {
+          const name = i.type?.name || projectIssueTypesMap?.[id]?.name || id;
+          typeMap.set(id, name);
+        }
+      });
+      const typeFilters = Array.from(typeMap.entries()).map(([value, text]) => ({ text, value }));
 
       return [
         {
@@ -201,7 +253,7 @@ export const WorkItemSelectModal: React.FC<Props> = ({
           dataIndex: "state_id",
           render: (_: any, record: TIssue) => (
             <StateDropdown
-              value={record?.state_id || ""}
+              value={(record as any)?.state?.id || record?.state_id || ""}
               onChange={async (val) => {
                 try {
                   await issueService.patchIssue(workspaceSlug, record.project_id as string, record.id as string, {
@@ -223,13 +275,13 @@ export const WorkItemSelectModal: React.FC<Props> = ({
             />
           ),
           // 修复：过滤项显示状态名称而不是 id
-          filters: uniqueStateIds.map((sid) => ({
-            text: getStateById(sid)?.name ?? sid ?? "-",
-            value: sid,
-          })),
+          filters: stateFilters,
           filterMultiple: true,
           filteredValue: filters.state ?? null,
-          onFilter: (value: any, record: { state_id: any }) => (record?.state_id ?? "") === String(value),
+          onFilter: (value: any, record: any) => {
+            const id = record?.state?.id || record?.state_id;
+            return String(id) === String(value);
+          },
           width: 140,
         },
         {
@@ -237,6 +289,17 @@ export const WorkItemSelectModal: React.FC<Props> = ({
           key: "type_id",
           dataIndex: "type_id",
           render: (_: any, record: TIssue) => {
+            // 优先使用 record.type 对象
+            const typeObj = (record as any)?.type;
+            if (typeObj) {
+              return (
+                <div className="flex items-center gap-2">
+                  {renderIssueTypeIcon(record)}
+                  <span className="truncate">{typeObj.name ?? "-"}</span>
+                </div>
+              );
+            }
+            // 回退到 type_id + map
             const typeId = record?.type_id || undefined;
             const map = projectIssueTypesMap;
             const typeName = typeId && map ? map[typeId]?.name : undefined;
@@ -248,13 +311,13 @@ export const WorkItemSelectModal: React.FC<Props> = ({
             );
           },
           // 修复：类型过滤项展示“当前项目下的全部类型”
-          filters: allProjectTypeIds.map((tid) => ({
-            text: projectIssueTypesMap?.[tid]?.name ?? tid ?? "-",
-            value: tid,
-          })),
+          filters: typeFilters,
           filterMultiple: true,
           filteredValue: filters.type_id ?? null,
-          onFilter: (value: any, record: { type_id: any }) => (record?.type_id ?? "") === String(value),
+          onFilter: (value: any, record: any) => {
+            const id = record?.type?.id || record?.type_id;
+            return String(id) === String(value);
+          },
           width: 140,
         },
       ];
@@ -351,8 +414,8 @@ export const WorkItemSelectModal: React.FC<Props> = ({
     setSelectedIssuesMap(map);
   }, [isOpen, initialSelectedIssues]);
 
-  const normalizeIssues = (res: TIssuesResponse): TIssue[] => {
-    const { results } = res || {};
+  const normalizeIssues = (res: TIssuesResponse | any): TIssue[] => {
+    const results = res?.results || res?.data;
     if (!results) return [];
     if (Array.isArray(results)) return results as TIssue[];
     const out: TIssue[] = [];
@@ -391,21 +454,60 @@ export const WorkItemSelectModal: React.FC<Props> = ({
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [totalCount, setTotalCount] = useState<number | undefined>(undefined);
 
-  // 封装获取工作项（带 per_page 与首页 cursor）
-  const fetchIssuesWithPageSize = async (perPage: number) => {
+  // 封装获取工作项（带 per_page 与 page 计算 cursor）
+  const fetchIssues = async (page: number, perPage: number) => {
     if (!isOpen || !currentProjectId) return;
     setLoadingIssues(true);
     try {
-      const queries: any = { per_page: perPage, cursor: `${perPage}:0:0` };
-      const res = await issueService.getIssues(workspaceSlug, currentProjectId, queries);
+      let res;
+      // 如果有 caseId，使用 unselectIssueList 接口（后端过滤已选）
+      if (caseId) {
+        const queries: any = {
+          page,
+          per_page: perPage,
+          case_id: caseId,
+          project_id: currentProjectId,
+        };
+        if (forceTypeName) {
+          if (forceTypeName === "Requirement") {
+            queries.type_name = "史诗,特性,用户故事";
+          } else if (forceTypeName === "Task") {
+            queries.type_name = "任务";
+          } else if (forceTypeName === "Bug") {
+            queries.type_name = "缺陷";
+          }
+        }
+        res = await caseService.unselectIssueList(workspaceSlug, queries);
+        // 新接口返回结构: { results: TIssue[], count: number } (假设 list_response 格式)
+        // 或者 { data: ..., count: ... }，需根据 normalizeIssues 调整
+        // 假设 unselectIssueList 返回的是标准分页响应，normalizeIssues 可以处理
+        // 但注意：新接口参数名是 type_name，旧接口我们之前改的是 type__name / type__name__in
+      } else {
+        // 没有 caseId（如创建用例时），回退到通用 issue 列表接口
+        const offset = (page - 1) * perPage;
+        const queries: any = { per_page: perPage, cursor: `${perPage}:${offset}:0` };
+        if (forceTypeName) {
+          if (forceTypeName === "Requirement") {
+            queries.type__name__in = "史诗,特性,用户故事";
+          } else if (forceTypeName === "Task") {
+            queries.type__name = "任务";
+          } else if (forceTypeName === "Bug") {
+            queries.type__name = "缺陷";
+          }
+        }
+        res = await issueService.getIssues(workspaceSlug, currentProjectId, queries);
+      }
+
       const flat = normalizeIssues(res);
       setIssues(flat);
-      // 提取总数，若无则以当前数量兜底
-      setTotalCount((res as any)?.total_count ?? flat.length);
-      // 重置当前页到 1（与 Table 显示一致）
-      setCurrentPage(1);
+      // 提取总数
+      // 新接口可能直接返回 count，旧接口可能在 res.total_count
+      const total = (res as any)?.count ?? (res as any)?.total_count ?? flat.length;
+      setTotalCount(total);
+      // 更新当前页
+      setCurrentPage(page);
     } catch (err: any) {
-      const errorMessage = err?.error.includes("required permissions") ? "你没有权限访问该项目" : err?.error;
+      const errorMessage = err?.error?.includes("required permissions") ? "你没有权限访问该项目" : err?.error;
       message.error(`获取工作项失败：${errorMessage || "未知错误"}`);
     } finally {
       setLoadingIssues(false);
@@ -418,8 +520,8 @@ export const WorkItemSelectModal: React.FC<Props> = ({
       return;
     }
     // 加载项目变更或弹窗开启时按当前 pageSize 拉首屏数据
-    fetchIssuesWithPageSize(pageSize);
-  }, [isOpen, workspaceSlug, currentProjectId, issueService]);
+    fetchIssues(1, pageSize);
+  }, [isOpen, workspaceSlug, currentProjectId, issueService, caseService, forceTypeName, caseId]);
 
   return (
     <Modal
@@ -454,10 +556,13 @@ export const WorkItemSelectModal: React.FC<Props> = ({
               total: totalCount ?? displayIssues.length,
               showSizeChanger: true,
               showQuickJumper: true,
-              onChange: (page) => setCurrentPage(page),
+              onChange: (page) => {
+                setCurrentPage(page);
+                fetchIssues(page, pageSize);
+              },
               onShowSizeChange: (_current, size) => {
                 setPageSize(size);
-                fetchIssuesWithPageSize(size);
+                fetchIssues(1, size);
               },
               showTotal: (total, range) => `第 ${range[0]}-${range[1]} 条，共 ${total} 条`,
             }}
@@ -469,31 +574,3 @@ export const WorkItemSelectModal: React.FC<Props> = ({
   );
 };
 
-const getTypeNameById = (typeId: string | undefined, map: Record<string, TIssueType> | undefined) => {
-  if (!typeId || !map) return undefined;
-  return map[typeId]?.name;
-};
-
-const typeNameMatches = (
-  issue: TIssue,
-  map: Record<string, TIssueType> | undefined,
-  force?: "Requirement" | "Task" | "Bug"
-) => {
-  if (!force) return true;
-  const name = getTypeNameById((issue as any)?.type_id as string | undefined, map);
-  if (!name) return false;
-  if (force === "Requirement") return ["史诗", "特性", "用户故事"].includes(name);
-  if (force === "Task") return name === "任务";
-  if (force === "Bug") return name === "缺陷";
-  return false;
-};
-
-const displayIssuesSelector = (
-  issues: TIssue[],
-  projectIssueTypesMap: Record<string, TIssueType> | undefined,
-  force?: "Requirement" | "Task" | "Bug"
-) => {
-  if (!force) return issues;
-  if (!projectIssueTypesMap) return issues;
-  return (issues || []).filter((i) => typeNameMatches(i, projectIssueTypesMap, force));
-};

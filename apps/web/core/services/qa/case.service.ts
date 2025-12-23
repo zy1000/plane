@@ -267,6 +267,15 @@ export class CaseService extends APIService {
       });
   }
 
+  async unselectIssueList(workspaceSlug: string, query: any): Promise<any> {
+    return this.get(`/api/workspaces/${workspaceSlug}/test/case/unselect-issues/`, {params: query})
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+
   async getIssueCase(workspaceSlug: string, issueId: string): Promise<any> {
     return this.get(`/api/workspaces/${workspaceSlug}/test/case/issue-case/`, {params: {issue_id: issueId}})
       .then((response) => response?.data)

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Tree, Table, Row, Col, Tag, message } from "antd";
+import { Tree, Table, Row, Col, Tag, message, Tooltip } from "antd";
 import type { TreeProps } from "antd";
 import type { TableProps } from "antd";
 import { AppstoreOutlined } from "@ant-design/icons";
@@ -165,7 +165,21 @@ export const PlanCasesModal: React.FC<Props> = ({
   }, [modules]);
 
   const columns: TableProps<TestCase>["columns"] = [
-    { title: "名称", dataIndex: "name", key: "name" },
+    {
+      title: "名称",
+      dataIndex: "name",
+      key: "name",
+      width: 260,
+      ellipsis: { showTitle: false },
+      render: (v?: string) => {
+        const value = v ?? "-";
+        return (
+          <Tooltip title={value}>
+            <div className="truncate">{value}</div>
+          </Tooltip>
+        );
+      },
+    },
     {
       title: "类型",
       dataIndex: "type",
@@ -269,6 +283,7 @@ export const PlanCasesModal: React.FC<Props> = ({
                 columns={columns}
                 rowKey="id"
                 bordered={true}
+                tableLayout="fixed"
                 rowSelection={{
                   selectedRowKeys: selectedIds,
                   onChange: (keys) => setSelectedIds(keys as string[]),

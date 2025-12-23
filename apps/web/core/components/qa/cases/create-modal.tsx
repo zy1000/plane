@@ -452,6 +452,11 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
   const [projectsMap, setProjectsMap] = useState<Record<string, TPartialProject>>({});
   // key 为 projectId，value 为该项目的类型映射
   const [projectIssueTypesMaps, setProjectIssueTypesMaps] = useState<Record<string, Record<string, TIssueType>>>({});
+  const projectIdsKey = useMemo(() => {
+    const ids = Array.from(new Set(selectedIssues.map((i) => String(i.project_id)))).filter(Boolean);
+    ids.sort();
+    return ids.join(",");
+  }, [selectedIssues]);
 
   // 从弹窗确认回调中接收选中项
   const handleWorkItemConfirm = (selected: TIssue[]) => {
@@ -488,8 +493,8 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
 
   useEffect(() => {
     if (isWorkItemModalOpen) return;
-    const uniqueProjectIds = Array.from(new Set(selectedIssues.map((i) => String(i.project_id)))).filter(Boolean);
-    if (uniqueProjectIds.length === 0) return;
+    if (!projectIdsKey) return;
+    const uniqueProjectIds = projectIdsKey.split(",").filter(Boolean);
     Promise.all(
       uniqueProjectIds.map((pid) =>
         issueTypeService
@@ -504,8 +509,7 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
       });
       setProjectIssueTypesMaps((prev) => ({ ...prev, ...combined }));
     });
-    refreshSelectedIssuesDetails();
-  }, [isWorkItemModalOpen, workspaceSlug, selectedIssues, issueTypeService]);
+  }, [isWorkItemModalOpen, workspaceSlug, projectIdsKey, issueTypeService]);
   // 新增：附件选择与管理
   const [attachmentFiles, setAttachmentFiles] = useState<File[]>([]);
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
@@ -934,10 +938,12 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
         repository: repositoryId,
         remark: values?.remark || "",
         steps: Array.isArray(values?.steps)
-          ? values.steps.map((s: any) => ({
-              description: (s?.description || "").trim(),
-              result: (s?.result || "").trim(),
-            }))
+          ? values.steps
+              .map((s: any) => ({
+                description: (s?.description || "").trim(),
+                result: (s?.result || "").trim(),
+              }))
+              .filter((s: any) => Boolean(s.description || s.result))
           : [],
         // 新增：右侧与其它项的值全部带上（附件除外）
         assignee: values?.assignee || null,

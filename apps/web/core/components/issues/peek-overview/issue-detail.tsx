@@ -169,9 +169,6 @@ export const PeekOverviewIssueDetails = observer(function PeekOverviewIssueDetai
         onSubmit={async (value, isMigrationUpdate) => {
           if (!issue.id || !issue.project_id) return;
 
-          console.log("🚀 ~ PeekOverviewIssueDetails ~ issue.description_html:", issue.description_html)
-          console.log("🚀 ~ PeekOverviewIssueDetails ~ value:", value)
-          console.log("🚀 ~ PeekOverviewIssueDetails ~ issue.description_html === value:", issue.description_html === value)
           if (issue.description_html === value) return;
           if (
             (!issue.description_html || issue.description_html === "" || issue.description_html === "<p></p>") &&

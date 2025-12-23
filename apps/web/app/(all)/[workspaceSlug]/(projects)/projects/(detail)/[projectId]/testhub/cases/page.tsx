@@ -201,7 +201,7 @@ export default function TestCasesPage() {
   };
   const [searchModule, setSearchModule] = useState<string>("");
 
-  const [leftWidth, setLeftWidth] = useState<number>(280);
+  const [leftWidth, setLeftWidth] = useState<number>(250);
   const isDraggingRef = useRef<boolean>(false);
   const startXRef = useRef<number>(0);
   const startWidthRef = useRef<number>(0);
@@ -947,7 +947,7 @@ export default function TestCasesPage() {
       render: (_: any, record: any) => (
         <button
           type="button"
-          className="text-primary hover:underline"
+          className="text-primary hover:underline inline-block max-w-full"
           onClick={() => {
             if (!record || !record.id) return;
             setActiveCase(record);
@@ -956,7 +956,9 @@ export default function TestCasesPage() {
             router.push(updatedRoute);
           }}
         >
-          {record?.name}
+          <span className="block max-w-[240px] truncate" title={record?.name || ""}>
+            {record?.name}
+          </span>
         </button>
       ),
     },
@@ -1097,11 +1099,11 @@ export default function TestCasesPage() {
         <div className="flex h-full w-full flex-col">
           <Row wrap={false} className="flex-1 overflow-hidden py-4 sm:py-5 " gutter={[0, 16]}>
             <Col
-              className="relative border-r border-custom-border-200 overflow-y-auto"
+              className="relative flex flex-col h-full border-r border-custom-border-200"
               flex="0 0 auto"
               style={{ width: leftWidth, minWidth: 200, maxWidth: 300 }}
             >
-              <div className="p-2">
+              <div className="p-2 flex-shrink-0">
                 <Input
                   allowClear
                   placeholder="按模块名称搜索"
@@ -1123,17 +1125,19 @@ export default function TestCasesPage() {
               `,
                 }}
               />
-              <Tree
-                showLine={false}
-                defaultExpandAll
-                onSelect={onSelect}
-                onExpand={onExpand}
-                expandedKeys={expandedKeys}
-                autoExpandParent={autoExpandParent}
-                treeData={treeData}
-                selectedKeys={selectedModuleId ? [selectedModuleId] : ["all"]}
-                className="py-2 custom-tree-indent"
-              />
+              <div className="flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm">
+                <Tree
+                  showLine={false}
+                  defaultExpandAll
+                  onSelect={onSelect}
+                  onExpand={onExpand}
+                  expandedKeys={expandedKeys}
+                  autoExpandParent={autoExpandParent}
+                  treeData={treeData}
+                  selectedKeys={selectedModuleId ? [selectedModuleId] : ["all"]}
+                  className="py-2 custom-tree-indent"
+                />
+              </div>
             </Col>
             {/* 右侧表格 */}
             <Col flex="auto" className="h-full overflow-hidden">
@@ -1178,7 +1182,7 @@ export default function TestCasesPage() {
 
                   {repositoryId && !loading && !error && (
                     <div
-                      className={`testhub-cases-table-scroll relative h-full overflow-auto ${
+                      className={`testhub-cases-table-scroll relative max-h-[700px] overflow-y-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar]:block [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-[rgb(var(--color-scrollbar))] [&::-webkit-scrollbar-thumb]:rounded-full ${
                         pageSize === 100 ? "testhub-cases-scrollbar-strong" : ""
                       }`}
                     >
@@ -1210,7 +1214,7 @@ export default function TestCasesPage() {
 
                       {selectedCaseIds.length > 0 && (
                         <div
-                          style={{ position: "sticky", left: 12, bottom: 56, zIndex: 20, width: "fit-content" }}
+                          style={{ position: "absolute", left: 12, bottom: 56, zIndex: 20, width: "fit-content" }}
                           className="flex items-center gap-2 bg-transparent"
                         >
                           <span className="text-custom-text-300">已选择 {selectedCaseIds.length} 条</span>
@@ -1240,45 +1244,29 @@ export default function TestCasesPage() {
                 <style
                   dangerouslySetInnerHTML={{
                     __html: `
-                      .testhub-cases-table-scroll{
-                        scrollbar-gutter: stable both-edges;
+                      .testhub-cases-table-scroll .ant-table-body {
+                        overflow-y: auto !important;
                       }
-
-                      .testhub-cases-table-scroll .ant-table-thead > tr > th{
-                        position: sticky;
-                        top: 0;
-                        z-index: 5;
-                        background: rgb(var(--color-background-100));
-                      }
-
-                      .testhub-cases-table-scroll .ant-table-pagination{
-                        position: sticky;
-                        bottom: 0;
-                        z-index: 5;
-                        background: rgb(var(--color-background-100));
-                        margin: 0;
-                        padding: 8px 16px;
+                      
+                      .testhub-cases-table-scroll .ant-table-pagination {
+                        margin: 0 !important;
+                        padding: 12px 16px !important;
                         border-top: 1px solid rgb(var(--color-border-200));
                       }
 
-                      .testhub-cases-table-scroll.testhub-cases-scrollbar-strong{
-                        overflow-y: scroll;
-                        scrollbar-width: auto;
-                        scrollbar-color: rgb(var(--color-scrollbar)) transparent;
-                      }
-
-                      .testhub-cases-table-scroll.testhub-cases-scrollbar-strong::-webkit-scrollbar{
+                      .testhub-cases-table-scroll ::-webkit-scrollbar {
                         width: 12px;
                         height: 12px;
                       }
 
-                      .testhub-cases-table-scroll.testhub-cases-scrollbar-strong::-webkit-scrollbar-thumb{
+                      .testhub-cases-table-scroll ::-webkit-scrollbar-thumb {
                         background-color: rgba(var(--color-scrollbar), 0.85);
                         border-radius: 999px;
-                        border: 3px solid rgba(var(--color-background-100), 1);
+                        border: 3px solid transparent;
+                        background-clip: content-box;
                       }
 
-                      .testhub-cases-table-scroll.testhub-cases-scrollbar-strong::-webkit-scrollbar-track{
+                      .testhub-cases-table-scroll ::-webkit-scrollbar-track {
                         background: transparent;
                       }
                     `,
@@ -1290,7 +1278,6 @@ export default function TestCasesPage() {
         </div>
       </div>
 
-      {/* 新增/编辑用例弹窗（本次实现新增） */}
       {repositoryId && (
         <CreateCaseModal
           isOpen={isCreateModalOpen}

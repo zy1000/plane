@@ -372,7 +372,11 @@ export default function PlanCasesPage() {
               </div>
             )}
             {!loading && !error && (
-              <div className="px-0 py-2">
+              <div
+                className={`testhub-plan-cases-table-scroll relative px-0 max-h-[700px] overflow-y-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar]:block [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-[rgb(var(--color-scrollbar))] [&::-webkit-scrollbar-thumb]:rounded-full ${
+                  pageSize === 100 ? "testhub-plan-cases-scrollbar-strong" : ""
+                }`}
+              >
                 <Table
                   dataSource={cases}
                   columns={columns}
@@ -391,6 +395,53 @@ export default function PlanCasesPage() {
                     const nextSize = p?.pageSize || pageSize;
                     const nextPage = p?.current || 1;
                     fetchCases(nextPage, nextSize, selectedModuleId || undefined);
+                  }}
+                />
+                <style
+                  dangerouslySetInnerHTML={{
+                    __html: `
+                  .testhub-plan-cases-table-scroll{
+                    scrollbar-gutter: stable both-edges;
+                  }
+
+                  .testhub-plan-cases-table-scroll .ant-table-thead > tr > th{
+                    position: sticky;
+                    top: 0;
+                    z-index: 5;
+                    background: rgb(var(--color-background-100));
+                  }
+
+                  .testhub-plan-cases-table-scroll .ant-table-pagination{
+                    position: sticky;
+                    bottom: 0;
+                    z-index: 5;
+                    background: rgb(var(--color-background-100));
+                    margin: 0;
+                    padding: 8px 16px;
+                    border-top: 1px solid rgb(var(--color-border-200));
+                  }
+
+                  .testhub-plan-cases-table-scroll.testhub-plan-cases-scrollbar-strong{
+                    overflow-y: scroll;
+                    scrollbar-width: auto;
+                    scrollbar-color: rgb(var(--color-scrollbar)) transparent;
+                  }
+
+                  .testhub-plan-cases-table-scroll.testhub-plan-cases-scrollbar-strong::-webkit-scrollbar{
+                    width: 12px;
+                    height: 12px;
+                  }
+
+                  .testhub-plan-cases-table-scroll.testhub-plan-cases-scrollbar-strong::-webkit-scrollbar-thumb{
+                    background-color: rgba(var(--color-scrollbar), 0.85);
+                    border-radius: 999px;
+                    border: 3px solid rgba(var(--color-background-100), 1);
+                  }
+
+                  .testhub-plan-cases-table-scroll.testhub-plan-cases-scrollbar-strong::-webkit-scrollbar-track{
+                    background: transparent;
+                  }
+                `,
                   }}
                 />
               </div>

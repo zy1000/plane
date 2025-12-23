@@ -97,7 +97,7 @@ function UpdateModal({ open, onClose, caseId }: UpdateModalProps) {
     if (!name || !workspaceSlug || !caseId) return;
     try {
       // 传递 repository_id，如果 caseData 中没有，尝试使用默认值或空字符串
-      const repoId = caseData?.repository.id || "";
+      const repoId = caseData?.repository || "";
       const res = await caseService.createlabel(workspaceSlug, name, caseId, repoId);
       const newLabel = Array.isArray(res) ? res[0] : res;
       if (newLabel && newLabel.id) {
@@ -1168,6 +1168,7 @@ function UpdateModal({ open, onClose, caseId }: UpdateModalProps) {
         onConfirm={handleWorkItemConfirm}
         forceTypeName={forceTypeName}
         initialSelectedIssues={preselectedIssues}
+        caseId={String(caseId ?? "")}
       />
     </div>
   );

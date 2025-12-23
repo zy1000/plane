@@ -281,6 +281,12 @@ class IssueListSerializer(BaseSerializer):
         model = Issue
         fields = "__all__"
 
+class IssueUnselectSerializer(BaseSerializer):
+
+    class Meta:
+        model = Issue
+        fields = ['id','name','state','type']
+        depth = 1
 
 class CaseIssueSerializer(ModelSerializer):
     issues = IssueListSerializer(many=True, read_only=True)
