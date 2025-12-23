@@ -107,9 +107,9 @@ def filter_estimate_point(params, issue_filter, method, prefix=""):
             issue_filter[f"{prefix}estimate_point__in"] = estimate_points
     else:
         if (
-            params.get("estimate_point", None)
-            and len(params.get("estimate_point"))
-            and params.get("estimate_point") != "null"
+                params.get("estimate_point", None)
+                and len(params.get("estimate_point"))
+                and params.get("estimate_point") != "null"
         ):
             issue_filter[f"{prefix}estimate_point__in"] = params.get("estimate_point")
     return issue_filter
@@ -153,6 +153,7 @@ def filter_labels(params, issue_filter, method, prefix=""):
             issue_filter[f"{prefix}labels__in"] = params.get("labels")
     issue_filter[f"{prefix}label_issue__deleted_at__isnull"] = True
     return issue_filter
+
 
 def filter_work_types(params, issue_filter, method, prefix=""):
     if method == "GET":
@@ -329,6 +330,12 @@ def filter_type_id(params, issue_filter, method, prefix=""):
     return issue_filter
 
 
+def filter_type_name(params, issue_filter, method, prefix=""):
+    type_names = [item for item in params.get("type__name").split(",")]
+    issue_filter['type__name__in'] = type_names
+    return issue_filter
+
+
 def filter_project(params, issue_filter, method, prefix=""):
     if method == "GET":
         projects = [item for item in params.get("project").split(",") if item != "null"]
@@ -339,7 +346,6 @@ def filter_project(params, issue_filter, method, prefix=""):
         if params.get("project", None) and len(params.get("project")) and params.get("project") != "null":
             issue_filter[f"{prefix}project__in"] = params.get("project")
     return issue_filter
-
 
 
 def filter_cycle(params, issue_filter, method, prefix=""):
@@ -379,9 +385,9 @@ def filter_intake_status(params, issue_filter, method, prefix=""):
             issue_filter[f"{prefix}issue_intake__status__in"] = status
     else:
         if (
-            params.get("intake_status", None)
-            and len(params.get("intake_status"))
-            and params.get("intake_status") != "null"
+                params.get("intake_status", None)
+                and len(params.get("intake_status"))
+                and params.get("intake_status") != "null"
         ):
             issue_filter[f"{prefix}issue_intake__status__in"] = params.get("inbox_status")
     return issue_filter
@@ -394,9 +400,9 @@ def filter_inbox_status(params, issue_filter, method, prefix=""):
             issue_filter[f"{prefix}issue_intake__status__in"] = status
     else:
         if (
-            params.get("inbox_status", None)
-            and len(params.get("inbox_status"))
-            and params.get("inbox_status") != "null"
+                params.get("inbox_status", None)
+                and len(params.get("inbox_status"))
+                and params.get("inbox_status") != "null"
         ):
             issue_filter[f"{prefix}issue_intake__status__in"] = params.get("inbox_status")
     return issue_filter
@@ -474,7 +480,7 @@ def issue_filters(query_params, method, prefix=""):
         "type": filter_issue_state_type,
         # 新增：按 Issue.type 外键过滤
         "type_id": filter_type_id,
-        "type__name": filter_type_id,
+        "type__name": filter_type_name,
         "project": filter_project,
         "cycle": filter_cycle,
         "module": filter_module,

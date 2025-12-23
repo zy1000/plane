@@ -577,8 +577,8 @@ export default function ReviewsPage() {
     <div className={styles.container}>
       <PageHead title="评审" />
       <div className={styles.split}>
-        <div className={styles.left} style={{ width: leftWidth }}>
-          <div className={styles.leftHeader}>
+        <div className={`${styles.left} flex flex-col h-full`} style={{ width: leftWidth }}>
+          <div className={`${styles.leftHeader} flex-shrink-0`}>
             <Space>
               <Input
                 allowClear
@@ -591,7 +591,7 @@ export default function ReviewsPage() {
               </Button>
             </Space>
           </div>
-          <div className={styles.treeRoot}>
+          <div className={`${styles.treeRoot} flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm`}>
             <div
               className={`${styles.row} ${selectedModuleId === null ? styles.rowSelected : ""}`}
               onClick={() => {
@@ -681,38 +681,91 @@ export default function ReviewsPage() {
           </div>
           <div className={styles.resizer} onMouseDown={onMouseDownResize} />
         </div>
-        <div className={`${styles.right} pt-0 `}>
-          <Table
-            rowKey="id"
-            dataSource={reviews}
-            columns={columns}
-            loading={loading}
-            scroll={{ x: 1400 }}
-            onChange={(pagination, tableFilters) => {
-              const selectedStates = ((tableFilters?.state as string[]) || []).filter(Boolean);
-              const selectedModes = ((tableFilters?.mode as string[]) || []).filter(Boolean);
-              const nextPage = pagination.current || 1;
-              const nextPageSize = pagination.pageSize || pageSize;
-              const newFilters = {
-                ...filters,
-                state: selectedStates.length ? selectedStates : undefined,
-                mode: selectedModes.length ? selectedModes : undefined,
-              };
-              const filtersChanged = JSON.stringify(filters) !== JSON.stringify(newFilters);
-              if (nextPage !== currentPage) setCurrentPage(nextPage);
-              if (nextPageSize !== pageSize) setPageSize(nextPageSize);
-              if (filtersChanged) setFilters(newFilters);
-            }}
-            pagination={{
-              current: currentPage,
-              pageSize,
-              total: totalForCurrent,
-              showSizeChanger: true,
-              showQuickJumper: true,
-              showTotal: (t, r) => `第 ${r[0]}-${r[1]} 条，共 ${t} 条`,
-              pageSizeOptions: ["10", "20", "50", "100"],
-            }}
-          />
+        <div className={`${styles.right} pt-0 overflow-hidden`}>
+          <div
+            className={`testhub-reviews-table-scroll relative max-h-[700px] overflow-y-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar]:block [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-[rgb(var(--color-scrollbar))] [&::-webkit-scrollbar-thumb]:rounded-full ${
+              pageSize === 100 ? "testhub-reviews-scrollbar-strong" : ""
+            }`}
+          >
+            <Table
+              columns={columns}
+              dataSource={reviews}
+              loading={loading}
+              rowKey="id"
+              scroll={{ x: 1300 }}
+              onChange={(pagination, filtersArg) => {
+                const nextPage = pagination.current || 1;
+                const nextPageSize = pagination.pageSize || pageSize;
+                const selectedStates = (filtersArg.state as string[]) || [];
+                const selectedModes = (filtersArg.mode as string[]) || [];
+                const newFilters = {
+                  ...filters,
+                  state: selectedStates.length ? selectedStates : undefined,
+                  mode: selectedModes.length ? selectedModes : undefined,
+                };
+                const filtersChanged = JSON.stringify(filters) !== JSON.stringify(newFilters);
+                if (nextPage !== currentPage) setCurrentPage(nextPage);
+                if (nextPageSize !== pageSize) setPageSize(nextPageSize);
+                if (filtersChanged) setFilters(newFilters);
+              }}
+              pagination={{
+                current: currentPage,
+                pageSize,
+                total: totalForCurrent,
+                showSizeChanger: true,
+                showQuickJumper: true,
+                showTotal: (t, r) => `第 ${r[0]}-${r[1]} 条，共 ${t} 条`,
+                pageSizeOptions: ["10", "20", "50", "100"],
+              }}
+            />
+            <style
+              dangerouslySetInnerHTML={{
+                __html: `
+                  .testhub-reviews-table-scroll{
+                    scrollbar-gutter: stable both-edges;
+                  }
+
+                  .testhub-reviews-table-scroll .ant-table-thead > tr > th{
+                    position: sticky;
+                    top: 0;
+                    z-index: 5;
+                    background: rgb(var(--color-background-100));
+                  }
+
+                  .testhub-reviews-table-scroll .ant-table-pagination{
+                    position: sticky;
+                    bottom: 0;
+                    z-index: 5;
+                    background: rgb(var(--color-background-100));
+                    margin: 0;
+                    padding: 8px 16px;
+                    border-top: 1px solid rgb(var(--color-border-200));
+                  }
+
+                  .testhub-reviews-table-scroll.testhub-reviews-scrollbar-strong{
+                    overflow-y: scroll;
+                    scrollbar-width: auto;
+                    scrollbar-color: rgb(var(--color-scrollbar)) transparent;
+                  }
+
+                  .testhub-reviews-table-scroll.testhub-reviews-scrollbar-strong::-webkit-scrollbar{
+                    width: 12px;
+                    height: 12px;
+                  }
+
+                  .testhub-reviews-table-scroll.testhub-reviews-scrollbar-strong::-webkit-scrollbar-thumb{
+                    background-color: rgba(var(--color-scrollbar), 0.85);
+                    border-radius: 999px;
+                    border: 3px solid rgba(var(--color-background-100), 1);
+                  }
+
+                  .testhub-reviews-table-scroll.testhub-reviews-scrollbar-strong::-webkit-scrollbar-track{
+                    background: transparent;
+                  }
+                `,
+              }}
+            />
+          </div>
         </div>
         <CreateReviewModal
           open={createReviewOpen}

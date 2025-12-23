@@ -1,19 +1,20 @@
 import os
 import json
 import re
+import uuid
 from io import BytesIO
 
 from django.core.files.uploadedfile import InMemoryUploadedFile
 from openpyxl import load_workbook
 
-TABLE_FORMAT = '''<p class="editor-paragraph-block">需求：</p>
-<table>
-<tbody>
+TABLE_FORMAT = '''<p class="editor-paragraph-block" data-id="{uuid_1}">需求：</p>
+<table data-id="{uuid_2}">
+<tbody data-id="{uuid_3}">
 {table_rows}
 </tbody>
 </table>
-<p class="editor-paragraph-block">说明：</p>
-<p class="editor-paragraph-block">{description}</p>'''
+<p class="editor-paragraph-block" data-id="{uuid_4}">说明：</p>
+<p class="editor-paragraph-block" data-id="{uuid_5}">{description}</p>'''
 
 
 def build_html_table(data: dict[str, list[str]]) -> str:
@@ -28,18 +29,18 @@ def build_html_table(data: dict[str, list[str]]) -> str:
 
     # 构造第一行（表头）
     header_row = ''.join(
-        f'<td colspan="1" rowspan="1" colwidth="150" hidecontent="false"><p class="editor-paragraph-block">{key}</p></td>'
+        f'<td colspan="1" rowspan="1" colwidth="150" hidecontent="false" data-id="{str(uuid.uuid4())}"><p class="editor-paragraph-block" data-id="{str(uuid.uuid4())}">{key}</p></td>'
         for key in headers
     )
-    table_content = f'<tr>{header_row}</tr>\n'
+    table_content = f'<tr data-id="{str(uuid.uuid4())}">{header_row}</tr>\n'
 
     # 构造后续每一行数据
     for i in range(num_rows):
         row_cells = ''.join(
-            f'<td colspan="1" rowspan="1" colwidth="150" hidecontent="false"><p class="editor-paragraph-block">{data[key][i]}</p></td>'
+            f'<td colspan="1" rowspan="1" colwidth="150" hidecontent="false" data-id="{str(uuid.uuid4())}"><p class="editor-paragraph-block" data-id="{str(uuid.uuid4())}">{data[key][i]}</p></td>'
             for key in headers
         )
-        table_content += f'<tr>{row_cells}</tr>\n'
+        table_content += f'<tr data-id="{str(uuid.uuid4())}">{row_cells}</tr>\n'
 
     return table_content
 
@@ -142,11 +143,14 @@ def issue_data_build(excel_data) -> list[dict]:
     result = []
     for data in excel_data:
         data['name'] = data.pop('Description')
-        requirement = {key.replace('Type:', ''): str(value).split('\n') for key, value in data.items() if (key and key.startswith('Type:'))}
+        requirement = {key.replace('Type:', ''): str(value).split('\n') for key, value in data.items() if
+                       (key and key.startswith('Type:'))}
         note = data.get('Note')
         table_html = build_html_table(requirement)
         # 插入到主模板中
-        final_html = TABLE_FORMAT.format(table_rows=table_html, description=note)
+        final_html = TABLE_FORMAT.format(table_rows=table_html, description=note, uuid_1=str(uuid.uuid4()),
+                                         uuid_2=str(uuid.uuid4()), uuid_3=str(uuid.uuid4()), uuid_4=str(uuid.uuid4()),
+                                         uuid_5=str(uuid.uuid4()))
         data['description_html'] = final_html
         data['labels'] = data.get('Tag', '').split(',')
         result.append(data)

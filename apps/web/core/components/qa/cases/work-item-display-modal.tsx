@@ -1,8 +1,9 @@
 "use client";
 import React from "react";
-import { Table, Button, Spin } from "antd";
+import { Table, Button, Spin, Popconfirm, message } from "antd";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { Unlink } from "lucide-react";
 import type { ColumnsType } from "antd/es/table";
 import type { TBaseIssue, TIssue } from "@plane/types";
 import { CaseService } from "../../../services/qa/case.service";
@@ -103,6 +104,18 @@ export const WorkItemDisplayModal: React.FC<WorkItemDisplayModalProps> = ({
 
   const priorityOrder: Record<string, number> = { urgent: 5, high: 4, medium: 3, low: 2, none: 1 };
 
+  const handleUnlink = async (issueId: string) => {
+    if (!workspaceSlug || !caseId) return;
+    try {
+      await caseService.deleteIssueCase(String(workspaceSlug), issueId, caseId);
+      message.success("取消关联成功");
+      fetchIssues(activeType);
+    } catch (error) {
+      console.error(error);
+      message.error("取消关联失败");
+    }
+  };
+
   const columns: ColumnsType<TIssue> = React.useMemo(
     () => [
       {
@@ -189,8 +202,26 @@ export const WorkItemDisplayModal: React.FC<WorkItemDisplayModalProps> = ({
           );
         },
       },
+      {
+        title: "操作",
+        key: "action",
+        width: 100,
+        render: (_: any, record: CaseIssue) => (
+          <Popconfirm
+            title="确认取消关联?"
+            onConfirm={() => handleUnlink(record.id)}
+            okText="确认"
+            cancelText="取消"
+          >
+            <Button
+              type="text"
+              icon={<Unlink size={16} />}
+            />
+          </Popconfirm>
+        ),
+      },
     ],
-    [workspaceSlug]
+    [workspaceSlug, activeType]
   );
 
   return (

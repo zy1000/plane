@@ -70,16 +70,21 @@ export class ProjectIssueTypeService extends APIService {
   }
 
   async fetchProjectIssueTypes(workspaceSlug: string, projectId: string): Promise<TIssueType[]> {
+    const cacheKey = projectId;
+    const cached = projectIssueTypesCache.get(cacheKey);
+    if (cached && Object.keys(cached).length > 0) {
+      return Promise.resolve(Object.values(cached));
+    }
     return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/issue-types/`)
       .then((response) => {
-        response?.data.forEach((t:any) => {
+        response?.data.forEach((t: any) => {
           if (t?.id) {
-            const map = projectIssueTypesCache.get(projectId) || {};
+            const map = projectIssueTypesCache.get(cacheKey) || {};
             map[t.id] = t;
-            projectIssueTypesCache.set(projectId, map);
+            projectIssueTypesCache.set(cacheKey, map);
           }
         });
-        return response?.data
+        return response?.data;
       })
       .catch((error) => {
         throw error?.response?.data;

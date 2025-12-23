@@ -74,3 +74,4 @@ class IssueAPI(BaseViewSet):
 
         return Response(data={'total_count': total_count, 'success_count': success_count, 'fail': fail_list},
                         status=status.HTTP_200_OK)
+

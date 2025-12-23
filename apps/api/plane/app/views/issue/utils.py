@@ -45,11 +45,15 @@ def is_allowed_to_add_parent(parent_issue: Issue, sub_issue: Issue | str):
     - 其他子类型时，父必须为“用户故事”。
     """
     p = parent_issue.type.name
-    c = sub_issue.type.name if isinstance(sub_issue,Issue) else sub_issue
-    if c == '史诗':
+    c = sub_issue.type.name if isinstance(sub_issue, Issue) else sub_issue
+    if c == "史诗":
         return False
-    if c == '用户故事':
-        return p == '特性'
-    if c == '特性':
-        return p == '史诗'
-    return p == '用户故事'
+    if c == "用户故事":
+        return p == "特性"
+    if c == "特性":
+        return p == "史诗"
+    if c == '任务':
+        return p == "用户故事" or p == "任务"
+    if c == '缺陷':
+        return p == "任务" or p == "缺陷" or p == '用户故事'
+    return False

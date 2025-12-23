@@ -152,7 +152,6 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
       setCyclesLoading(true);
       setCyclesError(null);
       const data = await moduleService.getCycleList(workspaceSlug.toString(), projectId.toString(), moduleId);
-      console.log("🚀 ~ fetchCycles ~ data:", data);
 
       setCycles(Array.isArray(data) ? data : []);
     } catch (e: any) {
@@ -211,9 +210,15 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
     }
   };
 
+  const handleAssociateClose = () => {
+    setAssociateOpen(false);
+    setSelectedCycleIds([]);
+    fetchModuleStatistics();
+  };
+
   const handleAssociateConfirm = async () => {
     if (!workspaceSlug || !projectId || !moduleId || selectedCycleIds.length === 0) {
-      setAssociateOpen(false);
+      handleAssociateClose();
       return;
     }
     try {
@@ -222,8 +227,7 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
         payloads.map((p) => moduleService.associateCycle(workspaceSlug.toString(), projectId.toString(), p))
       );
       setToast({ type: TOAST_TYPE.SUCCESS, title: "关联成功", message: "已关联所选迭代" });
-      setAssociateOpen(false);
-      setSelectedCycleIds([]);
+      handleAssociateClose();
       fetchCycles();
     } catch (e: any) {
       setToast({ type: TOAST_TYPE.ERROR, title: "关联失败", message: e?.detail || e?.error || "请稍后重试" });
@@ -243,6 +247,17 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
       setToast({ type: TOAST_TYPE.ERROR, title: "操作失败", message: e?.detail || e?.error || "请稍后重试" });
     }
   };
+
+  const typeDistribution = Array.isArray(stats?.type_distribution) ? stats.type_distribution : [];
+  const showTypeDistributionTooltip = typeDistribution.some((t: any) => {
+    const total =
+      Number(t?.backlog ?? 0) +
+      Number(t?.unstarted ?? 0) +
+      Number(t?.started ?? 0) +
+      Number(t?.completed ?? 0) +
+      Number(t?.cancelled ?? 0);
+    return total > 0;
+  });
 
   return (
     <>
@@ -417,16 +432,11 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
                     ]}
                     xAxis={{
                       key: "name",
-                      label: "类型",
-                      dy: 28,
                     }}
                     yAxis={{
                       key: "count",
-                      label: "数量",
-                      offset: -60,
-                      dx: -24,
                     }}
-                    margin={{ bottom: 30 }}
+                    margin={{ left: -20, bottom: 30 }}
                     legend={{
                       align: "left",
                       verticalAlign: "bottom",
@@ -439,7 +449,7 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
                       },
                     }}
                     barSize={24}
-                    showTooltip={true}
+                    showTooltip={showTypeDistributionTooltip}
                     onBarClick={({ barKey, payload, label }) => {
                       const typeId = payload?.typeId;
                       if (!workspaceSlug || !projectId || !typeId) return;
@@ -549,7 +559,7 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
         </div>
       </div>
       <Transition.Root show={associateOpen} as={Fragment}>
-        <Dialog as="div" className="relative z-[10000]" onClose={() => setAssociateOpen(false)}>
+        <Dialog as="div" className="relative z-[10000]" onClose={handleAssociateClose}>
           <Transition.Child
             as={Fragment}
             enter="ease-out duration-300"
@@ -576,7 +586,7 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
                   <div className="px-5 py-4">
                     <div className="flex items-center justify-between">
                       <h3 className="text-lg font-medium">选择迭代</h3>
-                      <Button variant="neutral-primary" size="sm" onClick={() => setAssociateOpen(false)}>
+                      <Button variant="neutral-primary" size="sm" onClick={handleAssociateClose}>
                         关闭
                       </Button>
                     </div>
@@ -668,7 +678,7 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
                       )}
                     </div>
                     <div className="mt-4 flex justify-end gap-2">
-                      <Button variant="neutral-primary" size="sm" onClick={() => setAssociateOpen(false)}>
+                      <Button variant="neutral-primary" size="sm" onClick={handleAssociateClose}>
                         取消
                       </Button>
                       <Button size="sm" onClick={handleAssociateConfirm} disabled={selectedCycleIds.length === 0}>

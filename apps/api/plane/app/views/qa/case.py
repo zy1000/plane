@@ -8,7 +8,8 @@ from django.db.utils import IntegrityError
 from django.core.exceptions import ValidationError
 
 from plane.app.serializers.qa import CaseAttachmentSerializer, IssueListSerializer, CaseIssueSerializer, \
-    TestCaseCommentSerializer, PlanCaseRecordSerializer, CaseListSerializer, CaseLabelListSerializer
+    TestCaseCommentSerializer, PlanCaseRecordSerializer, CaseListSerializer, CaseLabelListSerializer, \
+    IssueUnselectSerializer
 from plane.app.serializers.qa.case import CaseExecuteRecordSerializer
 from plane.app.views import BaseAPIView, BaseViewSet
 from plane.utils.import_export import parser_case_file
@@ -166,6 +167,19 @@ class CaseAPI(BaseViewSet):
         paginator = self.pagination_class()
         paginated_queryset = paginator.paginate_queryset(issues, request)
         serializer = IssueListSerializer(paginated_queryset, many=True)
+        return list_response(data=serializer.data, count=issues.count())
+
+    @action(detail=False, methods=['get'], url_path='unselect-issues')
+    def unselect_issue_list(self, request, slug):
+        type_name = request.query_params.get('type_name').split(',')
+        case_id = request.query_params.get('case_id')
+        project_id = request.query_params.get('project_id')
+
+        select_issues = TestCase.objects.get(id=case_id).issues.filter(type__name__in=type_name).values_list('id', flat=True)
+        issues = Issue.objects.filter(type__name__in=type_name,project_id=project_id).select_related('type').exclude(id__in=select_issues)
+        paginator = self.pagination_class()
+        paginated_queryset = paginator.paginate_queryset(issues, request)
+        serializer = IssueUnselectSerializer(paginated_queryset, many=True)
         return list_response(data=serializer.data, count=issues.count())
 
     @action(detail=False, methods=['get'], url_path='issue-case')

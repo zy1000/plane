@@ -43,6 +43,7 @@ export const BarChart = React.memo(function BarChart<K extends string, T extends
   // states
   const [activeBar, setActiveBar] = useState<string | null>(null);
   const [activeLegend, setActiveLegend] = useState<string | null>(null);
+  const [showCursor, setShowCursor] = useState(false);
 
   // derived values
   const { stackKeys, stackLabels } = useMemo(() => {
@@ -121,6 +122,17 @@ export const BarChart = React.memo(function BarChart<K extends string, T extends
     [activeLegend, stackKeys, bars, getBarColor, data]
   );
 
+  const handleMouseMove = useCallback((state: any) => {
+    const activePayload = state?.activePayload ?? state?.activeTooltipPayload ?? [];
+    const shouldShowCursor =
+      Array.isArray(activePayload) && activePayload.some((p: any) => Number(p?.value ?? 0) > 0);
+    setShowCursor((prev) => (prev === shouldShowCursor ? prev : shouldShowCursor));
+  }, []);
+
+  const handleMouseLeave = useCallback(() => {
+    setShowCursor(false);
+  }, []);
+
   return (
     <div className={className}>
       <ResponsiveContainer width="100%" height="100%">
@@ -134,6 +146,8 @@ export const BarChart = React.memo(function BarChart<K extends string, T extends
           }}
           barSize={barSize}
           className="recharts-wrapper"
+          onMouseMove={handleMouseMove}
+          onMouseLeave={handleMouseLeave}
         >
           <CartesianGrid stroke="rgba(var(--color-border-100), 0.8)" vertical={false} />
           <XAxis
@@ -181,15 +195,21 @@ export const BarChart = React.memo(function BarChart<K extends string, T extends
           )}
           {showTooltip && (
             <Tooltip
-              cursor={{
-                fill: "currentColor",
-                className: "text-custom-background-90/80 cursor-pointer",
-              }}
+              cursor={
+                showCursor
+                  ? {
+                      fill: "currentColor",
+                      className: "text-custom-background-90/80 cursor-pointer",
+                    }
+                  : false
+              }
               wrapperStyle={{
                 pointerEvents: "auto",
               }}
               content={({ active, label, payload }) => {
                 if (customTooltipContent) return customTooltipContent({ active, label, payload });
+                const hasNonZero = Array.isArray(payload) && payload.some((p: any) => Number(p?.value ?? 0) > 0);
+                if (!hasNonZero) return null;
                 return (
                   <CustomTooltip
                     active={active}
