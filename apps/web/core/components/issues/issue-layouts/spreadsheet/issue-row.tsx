@@ -199,7 +199,9 @@ const IssueRowDetails = observer(function IssueRowDetails(props: IssueRowDetails
   const handleIssuePeekOverview = (issue: TIssue) =>
     handleRedirection(workspaceSlug?.toString(), issue, isMobile, nestingLevel);
 
-  const { subIssues: subIssuesStore, issue } = useIssueDetail();
+  const { subIssues: subIssuesStore, issue } = useIssueDetail(
+    isEpic ? EIssueServiceType.EPICS : EIssueServiceType.ISSUES
+  );
 
   const issueDetail = issue.getIssueById(issueId);
 
@@ -220,24 +222,28 @@ const IssueRowDetails = observer(function IssueRowDetails(props: IssueRowDetails
   );
   if (!issueDetail) return null;
 
-  const handleToggleExpand = (e: MouseEvent<HTMLButtonElement>) => {
+  const handleToggleExpand = async (e: MouseEvent<HTMLButtonElement>) => {
     e.stopPropagation();
     e.preventDefault();
     if (nestingLevel >= 3) {
       handleIssuePeekOverview(issueDetail);
     } else {
-      setExpanded((prevState) => {
-        if (!prevState && workspaceSlug && issueDetail && issueDetail.project_id)
-          subIssuesStore.fetchSubIssues(workspaceSlug.toString(), issueDetail.project_id, issueDetail.id);
-        return !prevState;
-      });
+      if (isExpanded) {
+        setExpanded(false);
+        return;
+      }
+
+      if (workspaceSlug && issueDetail && issueDetail.project_id) {
+        await subIssuesStore.fetchSubIssues(workspaceSlug.toString(), issueDetail.project_id, issueDetail.id);
+      }
+      setExpanded(true);
     }
   };
-    const projectIssueTypesMap = projectIssueTypesCache.get(issueDetail?.project_id ?? "");
-    const keyMinWidth = displayProperties?.key
+
+  const projectIssueTypesMap = projectIssueTypesCache.get(issueDetail?.project_id ?? "");
+  const keyMinWidth = displayProperties?.key
     ? (getProjectIdentifierById(issueDetail.project_id)?.length ?? 0 + 5) * 7
     : 0;
-
 
   const disableUserActions = !canEditProperties(issueDetail.project_id ?? undefined);
   const subIssuesCount = issueDetail?.sub_issues_count ?? 0;

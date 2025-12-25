@@ -218,6 +218,10 @@ class CycleIssueViewSet(BaseViewSet):
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
     def create(self, request, slug, project_id, cycle_id):
         issues = request.data.get("issues", [])
+        for issue_id in issues:
+            issue = Issue.objects.get(pk=issue_id)
+            if issue.type.name in ['史诗','特性']:
+                return Response(status=status.HTTP_400_BAD_REQUEST,data={'error':'史诗和特性不能添加进迭代'})
 
         if not issues:
             return Response({"error": "Issues are required"}, status=status.HTTP_400_BAD_REQUEST)

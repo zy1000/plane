@@ -243,6 +243,7 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
       });
       setToast({ type: TOAST_TYPE.SUCCESS, title: "已取消关联", message: "迭代已取消关联" });
       fetchCycles();
+      fetchModuleStatistics();
     } catch (e: any) {
       setToast({ type: TOAST_TYPE.ERROR, title: "操作失败", message: e?.detail || e?.error || "请稍后重试" });
     }

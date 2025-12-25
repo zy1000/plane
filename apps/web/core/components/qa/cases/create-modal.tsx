@@ -342,7 +342,23 @@ const QuillField: React.FC<QuillFieldProps> = ({ value, onChange, placeholder })
         const q = new Quill(container, {
           theme: "snow",
           placeholder: placeholder || undefined,
+          bounds: container,
         });
+
+        // 修复链接弹窗位置，使其左对齐且不被遮挡
+        const tooltip = (q.theme as any).tooltip;
+        const originalPosition = tooltip.position;
+        tooltip.position = function (reference: any) {
+          originalPosition.call(this, reference);
+
+          if (!reference || !this.root) return;
+
+          // reference.left 是视口坐标 (假设 container 没有 position: relative，tooltip 也是相对于 body/viewport 定位)
+          // 如果 container 有 bounds 设置，Quill 会尝试限制位置。
+          // 我们强制左对齐到选区开始位置。
+          this.root.style.left = `${reference.left}px`;
+        };
+
         quillRef.current = q;
         toolbarRef.current = (q.getModule("toolbar") as any)?.container ?? null;
 

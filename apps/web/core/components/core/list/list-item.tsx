@@ -72,17 +72,17 @@ export function ListItem(props: IListItemProps) {
         <div className={cn("relative flex w-full items-center justify-between gap-3 truncate ", itemClassName)}>
           <ControlLink
             id={id}
-            className="relative flex w-full items-center gap-3 overflow-hidden"
+            className="relative flex w-full min-w-0 items-center gap-3 overflow-hidden"
             href={itemLink}
             target="_self"
             onClick={handleControlLinkClick}
             disabled={disableLink}
             data-prevent-progress={preventDefaultProgress}
           >
-            <div className={cn("flex items-center gap-4 truncate", leftElementClassName)}>
+            <div className={cn("flex items-center gap-4 min-w-0 truncate", leftElementClassName)}>
               {prependTitleElement && <span className="flex items-center flex-shrink-0">{prependTitleElement}</span>}
               <Tooltip tooltipContent={title} position="top" isMobile={isMobile}>
-                <span className="truncate text-sm">{title}</span>
+                <span className="truncate text-sm max-w-full md:max-w-[30rem] lg:max-w-[42rem]">{title}</span>
               </Tooltip>
             </div>
             {appendTitleElement && (

@@ -141,6 +141,15 @@ export const ModuleProgressStats = observer(function ModuleProgressStats(props: 
           ))}
         </Tab.List>
         <Tab.Panels className="py-3 text-custom-text-200">
+          <Tab.Panel key={"stat-states"}>
+            <StateGroupStatComponent
+              distribution={distributionStateData}
+              handleStateGroupFiltersUpdate={handleStateGroupFiltersUpdate}
+              isEditable={isEditable}
+              selectedStateGroups={selectedStateGroups}
+              totalIssuesCount={totalIssuesCount}
+            />
+          </Tab.Panel>
           <Tab.Panel key={"stat-assignees"}>
             <AssigneeStatComponent
               distribution={distributionAssigneeData}
@@ -155,15 +164,6 @@ export const ModuleProgressStats = observer(function ModuleProgressStats(props: 
               handleLabelFiltersUpdate={handleLabelFiltersUpdate}
               isEditable={isEditable}
               selectedLabelIds={selectedLabelIds}
-            />
-          </Tab.Panel>
-          <Tab.Panel key={"stat-states"}>
-            <StateGroupStatComponent
-              distribution={distributionStateData}
-              handleStateGroupFiltersUpdate={handleStateGroupFiltersUpdate}
-              isEditable={isEditable}
-              selectedStateGroups={selectedStateGroups}
-              totalIssuesCount={totalIssuesCount}
             />
           </Tab.Panel>
         </Tab.Panels>

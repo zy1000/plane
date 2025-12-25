@@ -269,22 +269,22 @@ export default {
   general_settings: "常规设置",
   sign_out: "退出登录",
   signing_out: "正在退出登录",
-  active_cycles: "活动周期",
-  active_cycles_description: "监控各个项目的周期，跟踪高优先级工作项，并关注需要注意的周期。",
-  on_demand_snapshots_of_all_your_cycles: "所有周期的实时快照",
+  active_cycles: "活动迭代",
+  active_cycles_description: "监控各个项目的迭代，跟踪高优先级工作项，并关注需要注意的迭代。",
+  on_demand_snapshots_of_all_your_cycles: "所有迭代的实时快照",
   upgrade: "升级",
-  "10000_feet_view": "所有活动周期的全局视图。",
-  "10000_feet_view_description": "放大视角，一次性查看所有项目中正在进行的周期，而不是在每个项目中逐个查看周期。",
-  get_snapshot_of_each_active_cycle: "获取每个活动周期的快照。",
+  "10000_feet_view": "所有活动迭代的全局视图。",
+  "10000_feet_view_description": "放大视角，一次性查看所有项目中正在进行的迭代，而不是在每个项目中逐个查看迭代。",
+  get_snapshot_of_each_active_cycle: "获取每个活动迭代的快照。",
   get_snapshot_of_each_active_cycle_description:
-    "跟踪所有活动周期的高级指标，查看其进度状态，并了解与截止日期相关的范围。",
+    "跟踪所有活动迭代的高级指标，查看其进度状态，并了解与截止日期相关的范围。",
   compare_burndowns: "比较燃尽图。",
-  compare_burndowns_description: "通过查看每个周期的燃尽报告，监控每个团队的表现。",
+  compare_burndowns_description: "通过查看每个迭代的燃尽报告，监控每个团队的表现。",
   quickly_see_make_or_break_issues: "快速查看关键工作项。",
   quickly_see_make_or_break_issues_description:
-    "预览每个周期中与截止日期相关的高优先级工作项。一键查看每个周期的所有工作项。",
-  zoom_into_cycles_that_need_attention: "关注需要注意的周期。",
-  zoom_into_cycles_that_need_attention_description: "一键调查任何不符合预期的周期状态。",
+    "预览每个迭代中与截止日期相关的高优先级工作项。一键查看每个迭代的所有工作项。",
+  zoom_into_cycles_that_need_attention: "关注需要注意的迭代。",
+  zoom_into_cycles_that_need_attention_description: "一键调查任何不符合预期的迭代状态。",
   stay_ahead_of_blockers: "提前预防阻塞。",
   stay_ahead_of_blockers_description: "发现从一个项目到另一个项目的挑战，并查看从其他视图中不易发现的周期间依赖关系。",
   analytics: "分析",
@@ -371,7 +371,7 @@ export default {
   work_management: "工作管理",
   projects_and_issues: "项目和工作项",
   projects_and_issues_description: "在此项目中开启或关闭这些功能。",
-  cycles_description: "为每个项目设置时间框，并根据需要调整周期。一个周期可以是两周，下一个周期是一周。",
+  cycles_description: "为每个项目设置时间框，并根据需要调整迭代。一个迭代可以是两周，下一个迭代是一周。",
   modules_description: "将工作组织为子项目，并指定专门的负责人和受理人。",
   views_description: "保存自定义排序、筛选和显示选项，或与团队共享。",
   pages_description: "创建和编辑自由格式的内容：笔记、文档，任何内容。",
@@ -643,8 +643,8 @@ export default {
     priority: "优先级",
     team_project: "团队项目",
     project: "项目",
-    cycle: "周期",
-    cycles: "周期",
+    cycle: "迭代",
+    cycles: "迭代",
     module: "发布",
     modules: "发布",
     labels: "标签",
@@ -963,9 +963,9 @@ export default {
       press_enter: "按'Enter'添加另一个工作项",
       label: "添加工作项",
       cycle: {
-        failed: "无法将工作项添加到周期。请重试。",
-        success: "{count, plural, one {工作项} other {工作项}}已成功添加到周期。",
-        loading: "正在将{count, plural, one {工作项} other {工作项}}添加到周期",
+        failed: "无法将工作项添加到迭代。请重试。",
+        success: "{count, plural, one {工作项} other {工作项}}已成功添加到迭代。",
+        loading: "正在将{count, plural, one {工作项} other {工作项}}添加到迭代",
       },
       assignee: "添加负责人",
       start_date: "添加开始日期",
@@ -1330,8 +1330,8 @@ export default {
     work_items_closed_in: "已关闭的工作项",
     selected_projects: "已选择的项目",
     total_members: "总成员数",
-    total_cycles: "总周期数",
-    total_modules: "总模块数",
+    total_cycles: "总迭代数",
+    total_modules: "总发布数",
     pending_work_items: {
       title: "待处理工作项",
       empty_state: "同事的待处理工作项分析将显示在这里。",
@@ -1371,9 +1371,9 @@ export default {
         primary_button: {
           text: "开始您的第一个项目",
           comic: {
-            title: "分析功能在周期 + 模块中效果最佳",
+            title: "分析功能在迭代 + 发布中效果最佳",
             description:
-              "首先，将您的问题在周期中进行时间限制，如果可能的话，将跨越多个周期的问题分组到模块中。在左侧导航中查看这两个功能。",
+              "首先，将您的问题在迭代中进行时间限制，如果可能的话，将跨越多个迭代的问题分组到发布中。在左侧导航中查看这两个功能。",
           },
         },
       },
@@ -1414,8 +1414,8 @@ export default {
     },
     error: {
       permission: "您没有执行此操作的权限。",
-      cycle_delete: "删除周期失败",
-      module_delete: "删除模块失败",
+      cycle_delete: "删除迭代失败",
+      module_delete: "删除发布失败",
       issue_delete: "删除工作项失败",
     },
     state: {
@@ -1442,7 +1442,7 @@ export default {
       general: {
         title: "没有活动项目",
         description:
-          "将每个项目视为目标导向工作的父级。项目是工作项、周期和模块所在的地方，与您的同事一起帮助您实现目标。创建新项目或筛选已归档的项目。",
+          "将每个项目视为目标导向工作的父级。项目是工作项、迭代和发布所在的地方，与您的同事一起帮助您实现目标。创建新项目或筛选已归档的项目。",
         primary_button: {
           text: "开始您的第一个项目",
           comic: {
@@ -2028,10 +2028,10 @@ export default {
         title: "在迭代中分组和时间框定您的工作。",
         description: "将工作按时间框分解，从项目截止日期倒推设置日期，并作为团队取得切实的进展。",
         primary_button: {
-          text: "设置您的第一个周期迭代",
+          text: "设置您的第一个迭代",
           comic: {
             title: "迭代是重复的时间框。",
-            description: "冲刺、迭代或您用于每周或每两周跟踪工作的任何其他术语都是一个周期。",
+            description: "冲刺或您用于每周或每两周跟踪工作的任何其他术语都是一个迭代。",
           },
         },
       },
@@ -2280,13 +2280,13 @@ export default {
   active_cycle: {
     empty_state: {
       progress: {
-        title: "向周期添加工作项以查看其进度",
+        title: "向迭代添加工作项以查看其进度",
       },
       chart: {
-        title: "向周期添加工作项以查看燃尽图。",
+        title: "向迭代添加工作项以查看燃尽图。",
       },
       priority_issue: {
-        title: "一目了然地观察周期中处理的高优先级工作项。",
+        title: "一目了然地观察迭代中处理的高优先级工作项。",
       },
       assignee: {
         title: "为工作项添加负责人以查看按负责人划分的工作明细。",
@@ -2307,9 +2307,9 @@ export default {
         },
       },
       cycle: {
-        title: "此项目未启用周期功能。",
+        title: "此项目未启用迭代功能。",
         description:
-          "按时间框将工作分解，从项目截止日期倒推设置日期，并作为团队取得切实的进展。为您的项目启用周期功能以开始使用它们。",
+          "按时间框将工作分解，从项目截止日期倒推设置日期，并作为团队取得切实的进展。为您的项目启用迭代功能以开始使用它们。",
         primary_button: {
           text: "管理功能",
         },
@@ -2424,7 +2424,7 @@ export default {
     },
     member: {
       title: "成员",
-      description: "可以在项目、周期和模块内读取、写入、编辑和删除实体",
+      description: "可以在项目、迭代和发布内读取、写入、编辑和删除实体",
     },
     admin: {
       title: "管理员",
@@ -2527,12 +2527,12 @@ export default {
     },
   },
   cycle: {
-    label: "{count, plural, one {周期} other {周期}}",
-    no_cycle: "无周期",
+    label: "{count, plural, one {迭代} other {迭代}}",
+    no_cycle: "无迭代",
   },
   module: {
-    label: "{count, plural, one {模块} other {模块}}",
-    no_module: "无模块",
+    label: "{count, plural, one {发布} other {发布}}",
+    no_module: "无发布",
   },
   description_versions: {
     last_edited_by: "最后编辑者",

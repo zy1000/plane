@@ -218,7 +218,8 @@ class CaseListSerializer(ModelSerializer):
     module = CaseModuleListSerializer(read_only=True)
     assignee = UserLiteSerializer(read_only=True)
     labels = CaseLabelListSerializer(many=True, read_only=True)
-    
+    repository_name = serializers.CharField(source='repository.name', read_only=True)
+
     # 保持原有的 review 字段
     review = serializers.SerializerMethodField()
 
@@ -228,8 +229,7 @@ class CaseListSerializer(ModelSerializer):
     class Meta:
         model = TestCase
         fields = '__all__'
-        # 移除 depth = 1
-        # depth = 1
+
 
 
 class CaseModuleCreateUpdateSerializer(ModelSerializer):
