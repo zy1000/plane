@@ -32,9 +32,9 @@ export const WorkspaceEditionBadge = observer(function WorkspaceEditionBadge() {
       />
       <Tooltip tooltipContent={`Version: v${packageJson.version}`} isMobile={isMobile}>
         <Button
-          variant="tertiary"
-          size="lg"
-          onClick={() => setIsPaidPlanPurchaseModalOpen(true)}
+          tabIndex={-1}
+          variant="accent-primary"
+          className="w-fit min-w-24 cursor-pointer rounded-2xl px-2 py-1 text-center text-sm font-medium outline-none"
           aria-haspopup="dialog"
           aria-label={t("aria_labels.projects_sidebar.edition_badge")}
         >

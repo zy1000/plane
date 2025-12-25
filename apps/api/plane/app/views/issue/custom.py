@@ -33,19 +33,22 @@ class IssueAPI(BaseViewSet):
         fail_list = []
         for data in issue_data:
             try:
+                feature = None
+                if data.get('Module'):
                 # 先创建史诗工作项
-                epic = epic_dic.get('Module') or \
-                       Issue.objects.get_or_create(workspace=workspace, project_id=project_id, name=data['Module'],
-                                                   type=epic_type)[0]
-                epic_dic[epic.name] = epic
-                # 创建特性工作项
-                feature = Issue.objects.get_or_create(workspace=workspace, project_id=project_id, name=data['Sub'],
-                                                      type=feature_type)[0]
-                feature_dic[feature.name] = feature
-                if feature.parent != epic:
-                    feature.parent = epic
-                    feature.save()
-                feature_dic[feature.name] = feature
+                    epic = epic_dic.get('Module') or \
+                           Issue.objects.get_or_create(workspace=workspace, project_id=project_id, name=data['Module'],
+                                                       type=epic_type)[0]
+                    epic_dic[epic.name] = epic
+                if data.get('Sub'):
+                    # 创建特性工作项
+                    feature = Issue.objects.get_or_create(workspace=workspace, project_id=project_id, name=data['Sub'],
+                                                          type=feature_type)[0]
+                    feature_dic[feature.name] = feature
+                    if feature.parent != epic:
+                        feature.parent = epic
+                        feature.save()
+                    feature_dic[feature.name] = feature
 
                 # 创建用户故事
                 story, created = Issue.objects.get_or_create(workspace=workspace, project_id=project_id,

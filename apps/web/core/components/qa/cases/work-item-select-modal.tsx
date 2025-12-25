@@ -464,7 +464,7 @@ export const WorkItemSelectModal: React.FC<Props> = ({
       if (caseId) {
         const queries: any = {
           page,
-          per_page: perPage,
+          page_size: perPage, // CustomPaginator uses page_size
           case_id: caseId,
           project_id: currentProjectId,
         };
@@ -484,8 +484,10 @@ export const WorkItemSelectModal: React.FC<Props> = ({
         // 但注意：新接口参数名是 type_name，旧接口我们之前改的是 type__name / type__name__in
       } else {
         // 没有 caseId（如创建用例时），回退到通用 issue 列表接口
-        const offset = (page - 1) * perPage;
-        const queries: any = { per_page: perPage, cursor: `${perPage}:${offset}:0` };
+        // OffsetPaginator expects cursor to be `limit:page_index:is_prev`
+        // Backend calculates db offset as: page_index * limit
+        const pageIndex = page - 1;
+        const queries: any = { per_page: perPage, cursor: `${perPage}:${pageIndex}:0` };
         if (forceTypeName) {
           if (forceTypeName === "Requirement") {
             queries.type__name__in = "史诗,特性,用户故事";
@@ -501,8 +503,8 @@ export const WorkItemSelectModal: React.FC<Props> = ({
       const flat = normalizeIssues(res);
       setIssues(flat);
       // 提取总数
-      // 新接口可能直接返回 count，旧接口可能在 res.total_count
-      const total = (res as any)?.count ?? (res as any)?.total_count ?? flat.length;
+      // 优先使用 total_count (BasePaginator)，其次 count (list_response)，最后使用列表长度兜底
+      const total = (res as any)?.total_count ?? (res as any)?.total_results ?? (res as any)?.count ?? flat.length;
       setTotalCount(total);
       // 更新当前页
       setCurrentPage(page);
@@ -542,8 +544,9 @@ export const WorkItemSelectModal: React.FC<Props> = ({
     >
       <div style={{ display: "flex", gap: 16, height: "60vh" }}>
         {/* 右侧工作项：Table + 分页 */}
-        <div style={{ width: "100%" }}>
+        <div style={{ width: "100%", overflow: "hidden" }}>
           <Table<TIssue>
+            scroll={{ y: "calc(60vh - 100px)" }}
             size="small"
             rowKey="id"
             loading={loadingIssues}

@@ -1207,36 +1207,36 @@ export default function TestCasesPage() {
                           total: total,
                           showSizeChanger: true,
                           showQuickJumper: true,
-                          showTotal: (total, range) => `第 ${range[0]}-${range[1]} 条，共 ${total} 条`,
+                          showTotal: (total, range) => (
+                            <div className="flex items-center gap-4">
+                              {selectedCaseIds.length > 0 && (
+                                <div className="flex items-center gap-2">
+                                  <span className="text-custom-text-300">已选择 {selectedCaseIds.length} 条</span>
+                                  <Button
+                                    type="link"
+                                    size="small"
+                                    onClick={() => setIsMoveModalOpen(true)}
+                                    className="p-0 text-custom-primary-100 font-medium"
+                                  >
+                                    移动到
+                                  </Button>
+                                  <Button
+                                    type="link"
+                                    size="small"
+                                    danger
+                                    onClick={confirmDeleteCases}
+                                    className="p-0 font-medium"
+                                  >
+                                    删除
+                                  </Button>
+                                </div>
+                              )}
+                              <span>{`第 ${range[0]}-${range[1]} 条，共 ${total} 条`}</span>
+                            </div>
+                          ),
                           pageSizeOptions: ["10", "20", "50", "100"],
                         }}
                       />
-
-                      {selectedCaseIds.length > 0 && (
-                        <div
-                          style={{ position: "absolute", left: 12, bottom: 56, zIndex: 20, width: "fit-content" }}
-                          className="flex items-center gap-2 bg-transparent"
-                        >
-                          <span className="text-custom-text-300">已选择 {selectedCaseIds.length} 条</span>
-                          <Button
-                            type="link"
-                            size="small"
-                            onClick={() => setIsMoveModalOpen(true)}
-                            className="p-0 text-custom-primary-100 font-medium"
-                          >
-                            移动到
-                          </Button>
-                          <Button
-                            type="link"
-                            size="small"
-                            danger
-                            onClick={confirmDeleteCases}
-                            className="p-0 font-medium"
-                          >
-                            删除
-                          </Button>
-                        </div>
-                      )}
                     </div>
                   )}
                 </div>

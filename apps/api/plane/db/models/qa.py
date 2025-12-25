@@ -21,7 +21,7 @@ class TestCaseRepository(BaseModel):
 
 
 class CaseLabel(BaseModel):
-    name = models.CharField(max_length=255)
+    name = models.CharField(max_length=20)
     repository = models.ForeignKey(TestCaseRepository, on_delete=models.CASCADE, verbose_name="TestCaseRepository",
                                    related_name="labels")
 
@@ -51,7 +51,7 @@ class CaseModule(BaseModel):
         blank=True,
         related_name="children",
     )
-    name = models.CharField(max_length=255)
+    name = models.CharField(max_length=30)
     sort_order = models.FloatField(default=65535)
     repository = models.ForeignKey(TestCaseRepository, on_delete=models.CASCADE, verbose_name="TestCaseRepository",
                                    related_name="modules")
@@ -142,7 +142,7 @@ class TestCase(BaseModel):
 
 
 class PlanModule(BaseModel):
-    name = models.CharField(max_length=255)
+    name = models.CharField(max_length=30)
     repository = models.ForeignKey(TestCaseRepository, on_delete=models.CASCADE, verbose_name="TestCaseRepository",
                                    related_name="plan_modules")
     is_default = models.BooleanField(default=False)
@@ -278,7 +278,7 @@ class TestCaseComment(BaseModel):
 
 
 class CaseReviewModule(BaseModel):
-    name = models.CharField(max_length=255)
+    name = models.CharField(max_length=30)
     repository = models.ForeignKey(TestCaseRepository, on_delete=models.CASCADE, verbose_name="CaseReviewModule",
                                    related_name="review_modules")
     is_default = models.BooleanField(default=False)

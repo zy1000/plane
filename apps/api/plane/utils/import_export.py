@@ -144,7 +144,7 @@ def issue_data_build(excel_data) -> list[dict]:
     for data in excel_data:
         data['name'] = data.pop('Description')
         requirement = {key.replace('Type:', ''): str(value).split('\n') for key, value in data.items() if
-                       (key and key.startswith('Type:'))}
+                       (key and key.startswith('Type:') and value != '')}
         note = data.get('Note')
         table_html = build_html_table(requirement)
         # 插入到主模板中
@@ -152,7 +152,8 @@ def issue_data_build(excel_data) -> list[dict]:
                                          uuid_2=str(uuid.uuid4()), uuid_3=str(uuid.uuid4()), uuid_4=str(uuid.uuid4()),
                                          uuid_5=str(uuid.uuid4()))
         data['description_html'] = final_html
-        data['labels'] = data.get('Tag', '').split(',')
+        data['labels'] = data.get('Tag', '').split(',') if data.get('Tag', '') else []
+
         result.append(data)
     return result
 
