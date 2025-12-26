@@ -107,12 +107,22 @@ class SignInAuthEndpoint(View):
                 params={},
             )
             return HttpResponseRedirect(url)
-        except AuthenticationException:
+        except AuthenticationException as e:
             # If LDAP fails (disabled, config error, or auth failed), fall back to standard flow
-            pass
-        except Exception:
+            params = e.get_error_dict()
+            url = get_safe_redirect_url(
+                base_url=base_host(request=request, is_app=True),
+                next_path=next_path,
+                params=params,
+            )
+            return HttpResponseRedirect(url)
+        except Exception as e:
             # Catch unexpected errors to ensure fallback works
-            pass
+            url = get_safe_redirect_url(
+                base_url=base_host(request=request, is_app=True),
+                next_path=next_path,
+            )
+            return HttpResponseRedirect(url)
 
         existing_user = User.objects.filter(email=email).first().instance_owner.exists()
 
