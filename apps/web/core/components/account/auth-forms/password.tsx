@@ -84,7 +84,7 @@ export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props)
   const passwordSupport =
     mode === EAuthModes.SIGN_IN ? (
       <div className="w-full">
-        {isSMTPConfigured ? (
+        {/* {isSMTPConfigured ? (
           <Link
             data-ph-element={AUTH_TRACKER_ELEMENTS.FORGOT_PASSWORD_FROM_SIGNIN}
             href={`/accounts/forgot-password?email=${encodeURIComponent(email)}`}
@@ -94,7 +94,7 @@ export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props)
           </Link>
         ) : (
           <ForgotPasswordPopover />
-        )}
+        )} */}
       </div>
     ) : (
       passwordFormData.password.length > 0 &&
@@ -106,11 +106,12 @@ export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props)
   const isButtonDisabled = useMemo(
     () =>
       !isSubmitting &&
+      !!passwordFormData.email &&
       !!passwordFormData.password &&
       (mode === EAuthModes.SIGN_UP ? passwordFormData.password === passwordFormData.confirm_password : true)
         ? false
         : true,
-    [isSubmitting, mode, passwordFormData.confirm_password, passwordFormData.password]
+    [isSubmitting, mode, passwordFormData.confirm_password, passwordFormData.password, passwordFormData.email]
   );
 
   const password = passwordFormData?.password ?? "";
@@ -168,7 +169,6 @@ export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props)
         }}
       >
         <input type="hidden" name="csrfmiddlewaretoken" />
-        <input type="hidden" value={passwordFormData.email} name="email" />
         {nextPath && <input type="hidden" value={nextPath} name="next_path" />}
         <div className="space-y-1">
           <label htmlFor="email" className="text-13 font-medium text-tertiary">
@@ -178,7 +178,7 @@ export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props)
             <Input
               id="email"
               name="email"
-              type="email"
+              type="text"
               value={passwordFormData.email}
               onChange={(e) => handleFormChange("email", e.target.value)}
               placeholder={t("auth.common.email.placeholder")}
