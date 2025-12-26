@@ -7,6 +7,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 
 # Module imports
 from plane.authentication.provider.credentials.email import EmailProvider
+from plane.authentication.provider.credentials.ldap import LdapProvider
 from plane.authentication.utils.login import user_login
 from plane.license.models import Instance
 from plane.authentication.utils.host import base_host
@@ -67,6 +68,31 @@ class SignInAuthSpaceEndpoint(View):
                 base_url=base_host(request=request, is_space=True), next_path=next_path, params=params
             )
             return HttpResponseRedirect(url)
+
+        # Try LDAP authentication first
+        try:
+            ldap_provider = LdapProvider(
+                request=request,
+                key=email,
+                code=password,
+                is_signup=False,
+            )
+            user = ldap_provider.authenticate()
+            
+            # Login the user and record his device info
+            user_login(request=request, user=user, is_space=True)
+            
+            # redirect to referer path
+            next_path = validate_next_path(next_path=next_path)
+            url = f"{base_host(request=request, is_space=True).rstrip('/')}{next_path}"
+            if url_has_allowed_host_and_scheme(url, allowed_hosts=get_allowed_hosts()):
+                return HttpResponseRedirect(url)
+            else:
+                return HttpResponseRedirect(base_host(request=request, is_space=True))
+        except AuthenticationException:
+            pass
+        except Exception:
+            pass
 
         # Existing User
         existing_user = User.objects.filter(email=email).first()

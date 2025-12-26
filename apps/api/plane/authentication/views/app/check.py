@@ -20,6 +20,7 @@ from plane.authentication.adapter.error import (
 )
 from plane.authentication.rate_limit import AuthenticationThrottle
 from plane.license.utils.instance_value import get_configuration_value
+from plane.authentication.provider.credentials.ldap import LdapProvider
 
 
 class EmailCheckEndpoint(APIView):
@@ -89,6 +90,22 @@ class EmailCheckEndpoint(APIView):
                 },
                 status=status.HTTP_200_OK,
             )
+
+        # Check LDAP
+        try:
+            ldap_provider = LdapProvider(request=request, key=email)
+            if ldap_provider.check_exists():
+                return Response(
+                    {
+                        "existing": True,
+                        "status": "CREDENTIAL",
+                    },
+                    status=status.HTTP_200_OK,
+                )
+        except Exception:
+            # If LDAP check fails, ignore and proceed to existing: False
+            pass
+
         # Else return response
         return Response(
             {

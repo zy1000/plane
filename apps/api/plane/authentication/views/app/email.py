@@ -6,6 +6,7 @@ from django.views import View
 
 # Module imports
 from plane.authentication.provider.credentials.email import EmailProvider
+from plane.authentication.provider.credentials.ldap import LdapProvider
 from plane.authentication.utils.login import user_login
 from plane.license.models import Instance
 from plane.authentication.utils.host import base_host
@@ -77,6 +78,41 @@ class SignInAuthEndpoint(View):
                 params=params,
             )
             return HttpResponseRedirect(url)
+
+        # Try LDAP authentication first
+        try:
+            ldap_provider = LdapProvider(
+                request=request,
+                key=email,
+                code=password,
+                is_signup=False,
+                callback=post_user_auth_workflow,
+            )
+            # If successful, this will create user if needed (via base class logic) and return user
+            user = ldap_provider.authenticate()
+            
+            # Login the user and record his device info
+            user_login(request=request, user=user, is_app=True)
+            
+            # Get the redirection path
+            if next_path:
+                path = next_path
+            else:
+                path = get_redirection_path(user=user)
+
+            # Get the safe redirect URL
+            url = get_safe_redirect_url(
+                base_url=base_host(request=request, is_app=True),
+                next_path=path,
+                params={},
+            )
+            return HttpResponseRedirect(url)
+        except AuthenticationException:
+            # If LDAP fails (disabled, config error, or auth failed), fall back to standard flow
+            pass
+        except Exception:
+            # Catch unexpected errors to ensure fallback works
+            pass
 
         existing_user = User.objects.filter(email=email).first()
 

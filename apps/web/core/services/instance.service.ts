@@ -25,4 +25,28 @@ export class InstanceService extends APIService {
         throw error;
       });
   }
+
+  async getLdapConfig(): Promise<any> {
+    return this.get("/api/instances/ldap/")
+      .then((response) => response.data)
+      .catch((error) => {
+        throw error;
+      });
+  }
+
+  async updateLdapConfig(data: any): Promise<any> {
+    return this.post("/api/instances/ldap/", data)
+      .then((response) => response.data)
+      .catch((error) => {
+        throw error;
+      });
+  }
+
+  async testLdapConnection(data: any): Promise<any> {
+    return this.post("/api/instances/ldap/test/", data)
+      .then((response) => response.data)
+      .catch((error) => {
+        throw error;
+      });
+  }
 }

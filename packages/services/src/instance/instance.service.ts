@@ -107,6 +107,30 @@ export class InstanceService extends APIService {
       });
   }
 
+  async getLdapConfig(): Promise<any> {
+    return this.get("/api/instances/ldap/")
+      .then((response) => response.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async updateLdapConfig(data: any): Promise<any> {
+    return this.post("/api/instances/ldap/", data)
+      .then((response) => response.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async testLdapConnection(data: any): Promise<any> {
+    return this.post("/api/instances/ldap/test/", data)
+      .then((response) => response.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
   /**
    * Sends a test email to the specified receiver to test SMTP configuration
    * @param {string} receiverEmail Email address to send the test email to

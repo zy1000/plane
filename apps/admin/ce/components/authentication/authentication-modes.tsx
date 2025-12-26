@@ -1,6 +1,6 @@
 import { observer } from "mobx-react";
 import { useTheme } from "next-themes";
-import { KeyRound, Mails } from "lucide-react";
+import { KeyRound, Mails, BookUser } from "lucide-react";
 // types
 import type {
   TGetBaseAuthenticationModeProps,
@@ -22,6 +22,7 @@ import { GiteaConfiguration } from "@/components/authentication/gitea-config";
 import { GithubConfiguration } from "@/components/authentication/github-config";
 import { GitlabConfiguration } from "@/components/authentication/gitlab-config";
 import { GoogleConfiguration } from "@/components/authentication/google-config";
+import { LdapConfiguration } from "@/components/authentication/ldap-config";
 import { PasswordLoginConfiguration } from "@/components/authentication/password-config-switch";
 // plane admin components
 import { UpgradeButton } from "@/plane-admin/components/common";
@@ -87,6 +88,13 @@ export const getAuthenticationModes: (props: TGetBaseAuthenticationModeProps) =>
     description: "Allow members to log in or sign up to plane with their Gitea accounts.",
     icon: <img src={giteaLogo} height={20} width={20} alt="Gitea Logo" />,
     config: <GiteaConfiguration disabled={disabled} updateConfig={updateConfig} />,
+  },
+  {
+    key: "ldap",
+    name: "LDAP",
+    description: "Allow members to log in or sign up to plane with their LDAP accounts.",
+    icon: <BookUser className="h-6 w-6 p-0.5 text-custom-text-300/80" />,
+    config: <LdapConfiguration disabled={disabled} updateConfig={updateConfig} />,
   },
   {
     key: "oidc",

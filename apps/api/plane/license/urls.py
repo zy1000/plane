@@ -1,5 +1,6 @@
 from django.urls import path
 
+from plane.api.views.ldap import LdapConfigEndpoint, LdapTestConnectionEndpoint
 from plane.license.api.views import (
     EmailCredentialCheckEndpoint,
     InstanceAdminEndpoint,
@@ -40,6 +41,16 @@ urlpatterns = [
         "configurations/disable-email-feature/",
         DisableEmailFeatureEndpoint.as_view(),
         name="disable-email-configuration",
+    ),
+    path(
+        "ldap/",
+        LdapConfigEndpoint.as_view(),
+        name="ldap-config",
+    ),
+    path(
+        "ldap/test/",
+        LdapTestConnectionEndpoint.as_view(),
+        name="ldap-test",
     ),
     path(
         "admins/sign-in/",
