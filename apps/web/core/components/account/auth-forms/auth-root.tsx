@@ -46,7 +46,7 @@ export const AuthRoot = observer(function AuthRoot(props: TAuthRoot) {
   const { authMode: currentAuthMode } = props;
   // states
   const [authMode, setAuthMode] = useState<EAuthModes | undefined>(undefined);
-  const [authStep, setAuthStep] = useState<EAuthSteps>(EAuthSteps.EMAIL);
+  const [authStep, setAuthStep] = useState<EAuthSteps>(EAuthSteps.PASSWORD);
   const [email, setEmail] = useState(emailParam ? emailParam.toString() : "");
   const [errorInfo, setErrorInfo] = useState<TAuthErrorInfo | undefined>(undefined);
 

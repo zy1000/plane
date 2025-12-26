@@ -63,21 +63,21 @@ class SignInAuthEndpoint(View):
 
         # Validate email
         email = email.strip().lower()
-        try:
-            validate_email(email)
-        except ValidationError:
-            exc = AuthenticationException(
-                error_code=AUTHENTICATION_ERROR_CODES["INVALID_EMAIL_SIGN_IN"],
-                error_message="INVALID_EMAIL_SIGN_IN",
-                payload={"email": str(email)},
-            )
-            params = exc.get_error_dict()
-            url = get_safe_redirect_url(
-                base_url=base_host(request=request, is_app=True),
-                next_path=next_path,
-                params=params,
-            )
-            return HttpResponseRedirect(url)
+        # try:
+        #     validate_email(email)
+        # except ValidationError:
+        #     exc = AuthenticationException(
+        #         error_code=AUTHENTICATION_ERROR_CODES["INVALID_EMAIL_SIGN_IN"],
+        #         error_message="INVALID_EMAIL_SIGN_IN",
+        #         payload={"email": str(email)},
+        #     )
+        #     params = exc.get_error_dict()
+        #     url = get_safe_redirect_url(
+        #         base_url=base_host(request=request, is_app=True),
+        #         next_path=next_path,
+        #         params=params,
+        #     )
+        #     return HttpResponseRedirect(url)
 
         # Try LDAP authentication first
         try:
@@ -114,7 +114,7 @@ class SignInAuthEndpoint(View):
             # Catch unexpected errors to ensure fallback works
             pass
 
-        existing_user = User.objects.filter(email=email).first()
+        existing_user = User.objects.filter(email=email).first().instance_owner.exists()
 
         if not existing_user:
             exc = AuthenticationException(

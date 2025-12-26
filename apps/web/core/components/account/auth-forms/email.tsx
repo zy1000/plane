@@ -1,5 +1,5 @@
-import type { FC, FormEvent } from "react";
-import { useMemo, useRef, useState } from "react";
+import type { FormEvent } from "react";
+import { useRef, useState } from "react";
 import { observer } from "mobx-react";
 // icons
 import { CircleAlert, XCircle } from "lucide-react";
@@ -8,7 +8,7 @@ import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import type { IEmailCheckData } from "@plane/types";
 import { Input, Spinner } from "@plane/ui";
-import { cn, checkEmailValidity } from "@plane/utils";
+import { cn } from "@plane/utils";
 // helpers
 type TAuthEmailForm = {
   defaultEmail: string;
@@ -22,10 +22,7 @@ export const AuthEmailForm = observer(function AuthEmailForm(props: TAuthEmailFo
   const [email, setEmail] = useState(defaultEmail);
   // plane hooks
   const { t } = useTranslation();
-  const emailError = useMemo(
-    () => (email && !checkEmailValidity(email) ? { email: "auth.common.email.errors.invalid" } : undefined),
-    [email]
-  );
+  const emailError: { email?: string } | undefined = {email:""};
 
   const handleFormSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -43,7 +40,7 @@ export const AuthEmailForm = observer(function AuthEmailForm(props: TAuthEmailFo
   const inputRef = useRef<HTMLInputElement>(null);
 
   return (
-    <form onSubmit={handleFormSubmit} className="space-y-4">
+    <form onSubmit={handleFormSubmit} className="space-y-4" noValidate>
       <div className="space-y-1">
         <label htmlFor="email" className="text-sm text-custom-text-300 font-medium">
           {t("auth.common.email.label")}
