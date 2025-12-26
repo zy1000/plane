@@ -93,3 +93,4 @@ from .description import Description, DescriptionVersion
 
 from .issue_type import *
 from .qa import *
+from .ldap import LdapConfig
