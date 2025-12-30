@@ -95,6 +95,7 @@ class Module(ProjectBaseModel):
     archived_at = models.DateTimeField(null=True)
     logo_props = models.JSONField(default=dict)
 
+
     class Meta:
         unique_together = ["name", "project", "deleted_at"]
         constraints = [

@@ -1080,3 +1080,24 @@ class IssueDescriptionVersionDetailSerializer(BaseSerializer):
             "updated_by",
         ]
         read_only_fields = ["workspace", "project", "issue"]
+
+class IssueWithTypeSerializer(BaseSerializer):
+
+    class Meta:
+        model = Issue
+        fields = [
+            "id",
+            "name",
+            "type",
+            "priority",
+            "assignees",
+            "sequence_id",
+            "state",
+        ]
+        depth = 1
+
+class IssueAllSerializer(BaseSerializer):
+
+    class Meta:
+        model = Issue
+        fields = '__all__'

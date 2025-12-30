@@ -18,6 +18,7 @@ export default {
     pro: "专业版",
     upgrade: "升级",
     overview: "概览",
+    milestones: "里程碑",
   },
   auth: {
     common: {

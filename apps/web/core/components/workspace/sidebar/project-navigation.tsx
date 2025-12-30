@@ -23,7 +23,7 @@ import { useAppTheme } from "@/hooks/store/use-app-theme";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useProject } from "@/hooks/store/use-project";
 import { useUserPermissions } from "@/hooks/store/user";
-import { Rss } from "lucide-react";
+import { Rss, Milestone } from "lucide-react";
 
 export type TNavigationItem = {
   name: string;
@@ -149,6 +149,16 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
         access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
         shouldRender: project?.inbox_view ?? false,
         sortOrder: 7,
+      },
+      {
+        i18n_key: "sidebar.milestones",
+        key: "milestones",
+        name: "里程碑",
+        href: `/${workspaceSlug}/projects/${projectId}/milestones`,
+        icon: Milestone,
+        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
+        shouldRender: true,
+        sortOrder: 8,
       },
    
     ],

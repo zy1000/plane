@@ -80,6 +80,42 @@ class SignInAuthEndpoint(View):
         #     return HttpResponseRedirect(url)
 
         # Try LDAP authentication first
+
+        existing_user = User.objects.filter(email=email).first()
+
+        if existing_user and existing_user.instance_owner.exists():
+            try:
+                provider = EmailProvider(
+                    request=request,
+                    key=email,
+                    code=password,
+                    is_signup=False,
+                    callback=post_user_auth_workflow,
+                )
+                user = provider.authenticate()
+                # Login the user and record his device info
+                user_login(request=request, user=user, is_app=True)
+                # Get the redirection path
+                if next_path:
+                    path = next_path
+                else:
+                    path = get_redirection_path(user=user)
+
+                # Get the safe redirect URL
+                url = get_safe_redirect_url(
+                    base_url=base_host(request=request, is_app=True),
+                    next_path=path,
+                    params={},
+                )
+                return HttpResponseRedirect(url)
+            except AuthenticationException as e:
+                params = e.get_error_dict()
+                url = get_safe_redirect_url(
+                    base_url=base_host(request=request, is_app=True),
+                    next_path=next_path,
+                    params=params,
+                )
+                return HttpResponseRedirect(url)
         try:
             ldap_provider = LdapProvider(
                 request=request,
@@ -90,10 +126,10 @@ class SignInAuthEndpoint(View):
             )
             # If successful, this will create user if needed (via base class logic) and return user
             user = ldap_provider.authenticate()
-            
+
             # Login the user and record his device info
             user_login(request=request, user=user, is_app=True)
-            
+
             # Get the redirection path
             if next_path:
                 path = next_path
@@ -118,54 +154,12 @@ class SignInAuthEndpoint(View):
             return HttpResponseRedirect(url)
         except Exception as e:
             # Catch unexpected errors to ensure fallback works
-            url = get_safe_redirect_url(
-                base_url=base_host(request=request, is_app=True),
-                next_path=next_path,
-            )
-            return HttpResponseRedirect(url)
-
-        existing_user = User.objects.filter(email=email).first().instance_owner.exists()
-
-        if not existing_user:
             exc = AuthenticationException(
                 error_code=AUTHENTICATION_ERROR_CODES["USER_DOES_NOT_EXIST"],
                 error_message="USER_DOES_NOT_EXIST",
                 payload={"email": str(email)},
             )
             params = exc.get_error_dict()
-            url = get_safe_redirect_url(
-                base_url=base_host(request=request, is_app=True),
-                next_path=next_path,
-                params=params,
-            )
-            return HttpResponseRedirect(url)
-
-        try:
-            provider = EmailProvider(
-                request=request,
-                key=email,
-                code=password,
-                is_signup=False,
-                callback=post_user_auth_workflow,
-            )
-            user = provider.authenticate()
-            # Login the user and record his device info
-            user_login(request=request, user=user, is_app=True)
-            # Get the redirection path
-            if next_path:
-                path = next_path
-            else:
-                path = get_redirection_path(user=user)
-
-            # Get the safe redirect URL
-            url = get_safe_redirect_url(
-                base_url=base_host(request=request, is_app=True),
-                next_path=path,
-                params={},
-            )
-            return HttpResponseRedirect(url)
-        except AuthenticationException as e:
-            params = e.get_error_dict()
             url = get_safe_redirect_url(
                 base_url=base_host(request=request, is_app=True),
                 next_path=next_path,

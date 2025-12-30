@@ -207,6 +207,20 @@ export const coreRoutes: RouteConfigEntry[] = [
               "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/pages/(list)/page.tsx"
             ),
           ]),
+          // Milestones List
+          layout("./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/milestones/(list)/layout.tsx", [
+            route(
+              ":workspaceSlug/projects/:projectId/milestones",
+              "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/milestones/(list)/page.tsx"
+            ),
+          ]),
+          // Milestone - Work item relation
+          layout("./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/milestones/(detail)/layout.tsx", [
+            route(
+              ":workspaceSlug/projects/:projectId/milestones/:milestoneId",
+              "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/milestones/(detail)/[milestoneId]/page.tsx"
+            ),
+          ]),
           // Intake list
           layout("./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/intake/layout.tsx", [
             route(
