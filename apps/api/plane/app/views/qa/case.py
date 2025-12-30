@@ -219,7 +219,7 @@ class CaseAPI(BaseViewSet):
         issue.cases.remove(case)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-    @action(detail=False, methods=['delete'], url_path='add-issue-case')
+    @action(detail=False, methods=['post'], url_path='add-issue-case')
     def add_issue_case(self, request, slug):
         issue_id = request.data.get('issue_id')
         case_id = request.data.get('case_id')

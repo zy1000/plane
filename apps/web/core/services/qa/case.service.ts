@@ -298,7 +298,7 @@ export class CaseService extends APIService {
       });
   }
   async addIssueCase(workspaceSlug: string, issueId: string, caseId: string): Promise<any> {
-    return this.delete(`/api/workspaces/${workspaceSlug}/test/case/add-issue-case/`, {issue_id: issueId, case_id: caseId})
+    return this.post(`/api/workspaces/${workspaceSlug}/test/case/add-issue-case/`, {issue_id: issueId, case_id: caseId})
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
