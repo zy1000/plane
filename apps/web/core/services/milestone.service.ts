@@ -23,10 +23,21 @@ export class MilestoneService extends APIService {
     super(API_BASE_URL);
   }
 
-  async getMilestones(workspaceSlug: string, projectId: string,page:number,page_size:number): Promise<IMilestone[]> {
+  async getMilestones(
+    workspaceSlug: string,
+    projectId: string,
+    page: number,
+    page_size: number,
+    filters?: {
+      name__icontains?: string;
+      state__in?: string;
+    }
+  ): Promise<IMilestone[]> {
     const params = {
       page,
       page_size,
+      ...(filters?.name__icontains ? { name__icontains: filters.name__icontains } : {}),
+      ...(filters?.state__in ? { state__in: filters.state__in } : {}),
     };
     return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/milestone/`, {
       params,
