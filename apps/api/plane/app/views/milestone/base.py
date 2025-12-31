@@ -20,6 +20,10 @@ class MilestoneAPIView(BaseAPIView):
     model = Milestone
     serializer_class = MilestoneListSerializer
     pagination_class = CustomPaginator
+    filterset_fields = {
+        'name': ['exact', 'icontains'],
+        'state': ['exact', 'in'],
+    }
 
     def get_queryset(self):
         return Milestone.objects.annotate(
@@ -28,7 +32,7 @@ class MilestoneAPIView(BaseAPIView):
         )
 
     def get(self, request, slug, project_id: str):
-        queryset = self.get_queryset().filter(project_id=project_id).order_by('-created_at')
+        queryset = self.filter_queryset(self.get_queryset()).filter(project_id=project_id).order_by('-created_at')
         paginator = self.pagination_class()
         paginated_queryset = paginator.paginate_queryset(queryset, request)
         serializer = self.serializer_class(instance=paginated_queryset, many=True)
@@ -52,7 +56,7 @@ class MilestoneAPIView(BaseAPIView):
 
     def delete(self, request, slug: str, project_id: str):
         milestone_ids = request.data.pop('id')
-        self.get_queryset().filter(id=milestone_ids).delete()
+        self.get_queryset().filter(id=milestone_ids).delete(soft=False)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 

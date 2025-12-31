@@ -29,7 +29,7 @@ const milestoneService = new MilestoneService();
 const STATE_OPTIONS = [
   { label: "未开始", color: "gray" },
   { label: "进行中", color: "blue" },
-  { label: "延期", color: "yellow" },
+  { label: "延期", color: "red" },
   { label: "已完成", color: "green" },
 ];
 
@@ -154,7 +154,7 @@ export function MilestoneCreateUpdateModal(props: Props) {
 
         <div className="grid grid-cols-2 gap-3">
           <Form.Item label="开始日期" name="start_date">
-            <DatePicker className="w-full" />
+            <DatePicker className="w-full" placeholder="请选择开始日期" />
           </Form.Item>
           <Form.Item
             label="结束日期"
@@ -173,7 +173,7 @@ export function MilestoneCreateUpdateModal(props: Props) {
               }),
             ]}
           >
-            <DatePicker className="w-full" />
+            <DatePicker className="w-full" placeholder="请选择结束日期" />
           </Form.Item>
         </div>
       </Form>

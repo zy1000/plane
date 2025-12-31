@@ -3,7 +3,7 @@
 import { observer } from "mobx-react";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Button, Select, Table, Tag } from "antd";
+import { Button, Input, Popconfirm, Select, Table, Tag } from "antd";
 import type { TableProps } from "antd";
 
 // components
@@ -22,7 +22,7 @@ const OPEN_MILESTONE_MODAL_EVENT = "milestones:list:milestone-modal:open";
 const STATE_OPTIONS = [
   { label: "未开始", color: "gray" },
   { label: "进行中", color: "blue" },
-  { label: "延期", color: "yellow" },
+  { label: "延期", color: "red" },
   { label: "已完成", color: "green" },
 ];
 
@@ -36,6 +36,9 @@ function ProjectMilestonesPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [updatingStateById, setUpdatingStateById] = useState<Record<string, boolean>>({});
+  const [deletingById, setDeletingById] = useState<Record<string, boolean>>({});
+  const [nameQuery, setNameQuery] = useState("");
+  const [stateFilter, setStateFilter] = useState<string[]>([]);
   const [milestoneModalOpen, setMilestoneModalOpen] = useState(false);
   const [milestoneModalMode, setMilestoneModalMode] = useState<"create" | "edit">("create");
   const [editingMilestone, setEditingMilestone] = useState<(Partial<IMilestone> & { id?: string }) | undefined>(
@@ -46,11 +49,16 @@ function ProjectMilestonesPage() {
     if (!workspaceSlug || !projectId) return;
     setLoading(true);
     try {
+      const trimmedName = nameQuery.trim();
       const res: any = await milestoneService.getMilestones(
         workspaceSlug as string,
         projectId as string,
         page,
-        size
+        size,
+        {
+          ...(trimmedName ? { name__icontains: trimmedName } : {}),
+          ...(stateFilter.length ? { state__in: stateFilter.join(",") } : {}),
+        }
       );
       
       // Handle different possible response structures
@@ -73,7 +81,7 @@ function ProjectMilestonesPage() {
 
   useEffect(() => {
     fetchData(currentPage, pageSize);
-  }, [workspaceSlug, projectId, currentPage, pageSize]);
+  }, [workspaceSlug, projectId, currentPage, pageSize, nameQuery, stateFilter]);
 
   useEffect(() => {
     const handler = (event: Event) => {
@@ -90,15 +98,28 @@ function ProjectMilestonesPage() {
     return () => window.removeEventListener(OPEN_MILESTONE_MODAL_EVENT, handler as EventListener);
   }, []);
 
-  const handleTableChange: TableProps<IMilestone>['onChange'] = (pagination) => {
+  const handleTableChange: TableProps<IMilestone>["onChange"] = (pagination, filters) => {
     const newPage = pagination.current || 1;
     const newPageSize = pagination.pageSize || 10;
-    
-    // Only update state if values changed to avoid loop (though useEffect dep handles it)
-    if (newPage !== currentPage || newPageSize !== pageSize) {
-      setCurrentPage(newPage);
+
+    const nextStateFilter = Array.isArray(filters?.state)
+      ? (filters.state as any[]).map((v) => String(v)).sort()
+      : [];
+    const currentStateFilterSorted = [...stateFilter].sort();
+    const isStateFilterChanged =
+      nextStateFilter.length !== currentStateFilterSorted.length ||
+      nextStateFilter.some((v, i) => v !== currentStateFilterSorted[i]);
+
+    if (isStateFilterChanged) {
+      setStateFilter(nextStateFilter);
+    }
+
+    if (newPageSize !== pageSize) {
       setPageSize(newPageSize);
     }
+
+    const nextPage = isStateFilterChanged || newPageSize !== pageSize ? 1 : newPage;
+    if (nextPage !== currentPage) setCurrentPage(nextPage);
   };
 
   const updateMilestoneState = async (milestoneId: string, nextState: string) => {
@@ -127,11 +148,76 @@ function ProjectMilestonesPage() {
     }
   };
 
+  const deleteMilestone = async (milestoneId: string) => {
+    const ws = String(workspaceSlug ?? "");
+    const pid = String(projectId ?? "");
+    if (!ws || !pid || !milestoneId) return;
+
+    const isLastRowOnPage = data.length === 1;
+
+    setDeletingById((prev) => ({ ...prev, [milestoneId]: true }));
+    try {
+      await milestoneService.deleteMilestone(ws, pid, milestoneId);
+
+      if (isLastRowOnPage && currentPage > 1) {
+        setCurrentPage((prev) => Math.max(prev - 1, 1));
+      } else {
+        fetchData(currentPage, pageSize);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setDeletingById((prev) => ({ ...prev, [milestoneId]: false }));
+    }
+  };
+
   const columns: TableProps<IMilestone>['columns'] = [
     {
       title: '名称',
       dataIndex: 'name',
       key: 'name',
+      filteredValue: nameQuery ? [nameQuery] : null,
+      filterDropdown: ({ selectedKeys, setSelectedKeys, confirm, clearFilters }) => (
+        <div className="p-2 w-[260px]">
+          <Input
+            value={String(selectedKeys?.[0] ?? "")}
+            placeholder="按名称搜索"
+            allowClear
+            onChange={(e) => setSelectedKeys(e.target.value ? [e.target.value] : [])}
+            onPressEnter={() => {
+              const next = String(selectedKeys?.[0] ?? "");
+              setNameQuery(next);
+              setCurrentPage(1);
+              confirm({ closeDropdown: true });
+            }}
+          />
+          <div className="flex items-center justify-end gap-2 pt-2">
+            <Button
+              size="small"
+              onClick={() => {
+                clearFilters?.();
+                setNameQuery("");
+                setCurrentPage(1);
+                confirm({ closeDropdown: true });
+              }}
+            >
+              重置
+            </Button>
+            <Button
+              type="primary"
+              size="small"
+              onClick={() => {
+                const next = String(selectedKeys?.[0] ?? "");
+                setNameQuery(next);
+                setCurrentPage(1);
+                confirm({ closeDropdown: true });
+              }}
+            >
+              搜索
+            </Button>
+          </div>
+        </div>
+      ),
       render: (name: string, record: IMilestone) => {
         if (!record?.id) return name ?? "-";
         return (
@@ -164,6 +250,9 @@ function ProjectMilestonesPage() {
       title: '状态',
       dataIndex: 'state',
       key: 'state',
+      filters: STATE_OPTIONS.map((o) => ({ text: o.label, value: o.label })),
+      filterMultiple: true,
+      filteredValue: stateFilter.length ? stateFilter : null,
       render: (_: any, record: IMilestone) => {
         const id = String(record?.id ?? "");
         const state = record?.state ?? undefined;
@@ -214,19 +303,48 @@ function ProjectMilestonesPage() {
       key: "actions",
       render: (_: any, record: IMilestone) => {
         if (!record?.id) return "-";
+        const id = String(record.id);
+        const isDeleting = !!deletingById[id];
         return (
-          <Button
-            type="link"
-            className="!p-0"
-            onClick={(e) => {
-              e?.stopPropagation?.();
-              setMilestoneModalMode("edit");
-              setEditingMilestone(record);
-              setMilestoneModalOpen(true);
-            }}
-          >
-            编辑
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              type="link"
+              className="!p-0"
+              onClick={(e) => {
+                e?.stopPropagation?.();
+                setMilestoneModalMode("edit");
+                setEditingMilestone(record);
+                setMilestoneModalOpen(true);
+              }}
+            >
+              编辑
+            </Button>
+            <Popconfirm
+              title="确定删除该里程碑吗？"
+              okText="删除"
+              cancelText="取消"
+              okButtonProps={{ danger: true, loading: isDeleting }}
+              onConfirm={(e) => {
+                e?.stopPropagation?.();
+                return deleteMilestone(id);
+              }}
+              onCancel={(e) => {
+                e?.stopPropagation?.();
+              }}
+            >
+              <Button
+                type="link"
+                danger
+                className="!p-0"
+                loading={isDeleting}
+                onClick={(e) => {
+                  e?.stopPropagation?.();
+                }}
+              >
+                删除
+              </Button>
+            </Popconfirm>
+          </div>
         );
       },
     },
@@ -235,21 +353,23 @@ function ProjectMilestonesPage() {
   return (
     <>
       <PageHead title="Milestones" />
-      <div className="flex h-full w-full flex-col">
-        <Table
-          columns={columns}
-          dataSource={data}
-          rowKey="id"
-          loading={loading}
-          pagination={{
-            current: currentPage,
-            pageSize: pageSize,
-            total: total,
-            showSizeChanger: true,
-            showTotal: (total) => `共 ${total} 条`,
-          }}
-          onChange={handleTableChange}
-        />
+      <div className="flex h-full w-full flex-col min-h-0">
+        <div className="vertical-scrollbar scrollbar-md flex-1 min-h-0">
+          <Table
+            columns={columns}
+            dataSource={data}
+            rowKey="id"
+            loading={loading}
+            pagination={{
+              current: currentPage,
+              pageSize: pageSize,
+              total: total,
+              showSizeChanger: true,
+              showTotal: (total) => `共 ${total} 条`,
+            }}
+            onChange={handleTableChange}
+          />
+        </div>
       </div>
       <MilestoneCreateUpdateModal
         open={milestoneModalOpen}
