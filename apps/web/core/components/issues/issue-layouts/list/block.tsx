@@ -236,6 +236,25 @@ export const IssueBlock = observer(function IssueBlock(props: IssueBlockProps) {
                   </div>
                 </Tooltip>
               )}
+
+              {/* sub-issues chevron */}
+              <div className="size-4 grid place-items-center flex-shrink-0">
+                {subIssuesCount > 0 && !isEpic && (
+                  <button
+                    type="button"
+                    className="size-4 grid place-items-center rounded-sm text-custom-text-400 hover:text-custom-text-300"
+                    onClick={handleToggleExpand}
+                  >
+                    <ChevronRightIcon
+                      className={cn("size-4", {
+                        "rotate-90": isExpanded,
+                      })}
+                      strokeWidth={2.5}
+                    />
+                  </button>
+                )}
+              </div>
+
               {displayProperties && (displayProperties.key || displayProperties.issue_type) && (
                 <div className="flex-shrink-0  flex items-center gap-1" style={{ minWidth: `${keyMinWidth}px` }}>
                   {projectIssueTypesMap &&
@@ -273,24 +292,6 @@ export const IssueBlock = observer(function IssueBlock(props: IssueBlockProps) {
                   )}
                 </div>
               )}
-
-              {/* sub-issues chevron */}
-              <div className="size-4 grid place-items-center flex-shrink-0">
-                {subIssuesCount > 0 && !isEpic && (
-                  <button
-                    type="button"
-                    className="size-4 grid place-items-center rounded-sm text-custom-text-400 hover:text-custom-text-300"
-                    onClick={handleToggleExpand}
-                  >
-                    <ChevronRightIcon
-                      className={cn("size-4", {
-                        "rotate-90": isExpanded,
-                      })}
-                      strokeWidth={2.5}
-                    />
-                  </button>
-                )}
-              </div>
 
               {issue?.tempId !== undefined && (
                 <div className="absolute left-0 top-0 z-[99999] h-full w-full animate-pulse bg-custom-background-100/20" />
