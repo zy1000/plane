@@ -10,7 +10,6 @@ import {
   MembersPropertyIcon,
   PriorityPropertyIcon,
   StartDatePropertyIcon,
-  DueDatePropertyIcon,
   LabelPropertyIcon,
   UserCirclePropertyIcon,
   EstimatePropertyIcon,
@@ -18,7 +17,7 @@ import {
 } from "@plane/propel/icons";
 import { cn, getDate, renderFormattedPayloadDate, shouldHighlightIssueDueDate } from "@plane/utils";
 // components
-import { DateDropdown } from "@/components/dropdowns/date";
+import { DateRangeDropdown } from "@/components/dropdowns/date-range";
 import { EstimateDropdown } from "@/components/dropdowns/estimate";
 import { ButtonAvatars } from "@/components/dropdowns/member/avatar";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
@@ -73,12 +72,6 @@ export const IssueDetailsSidebar = observer(function IssueDetailsSidebar(props: 
   const stateDetails = getStateById(issue.state_id);
 
   const projectIssueTypesMap = projectIssueTypesCache.get(issue.project_id ?? "");
-
-  const minDate = issue.start_date ? getDate(issue.start_date) : null;
-  minDate?.setDate(minDate.getDate());
-
-  const maxDate = issue.target_date ? getDate(issue.target_date) : null;
-  maxDate?.setDate(maxDate.getDate());
 
   return (
     <>
@@ -171,6 +164,48 @@ export const IssueDetailsSidebar = observer(function IssueDetailsSidebar(props: 
 
             <div className="flex h-8 items-center gap-2">
               <div className="flex w-2/5 flex-shrink-0 items-center gap-1 text-sm text-custom-text-300">
+                <StartDatePropertyIcon className="h-4 w-4 flex-shrink-0" />
+                <span>{t("project_cycles.date_range")}</span>
+              </div>
+              <div className="flex items-center gap-2 w-3/5 flex-grow min-w-0">
+                <DateRangeDropdown
+                  value={{
+                    from: getDate(issue.start_date) || undefined,
+                    to: getDate(issue.target_date) || undefined,
+                  }}
+                  onSelect={(range) =>
+                    issueOperations.update(workspaceSlug, projectId, issueId, {
+                      start_date: range?.from ? renderFormattedPayloadDate(range.from) : null,
+                      target_date: range?.to ? renderFormattedPayloadDate(range.to) : null,
+                    })
+                  }
+                  mergeDates
+                  isClearable
+                  renderInPortal
+                  placeholder={{
+                    from: t("issue.add.start_date"),
+                    to: t("issue.add.due_date"),
+                  }}
+                  buttonVariant="transparent-with-text"
+                  disabled={!isEditable}
+                  className="flex-grow min-w-0 group"
+                  buttonContainerClassName="w-full text-left"
+                  buttonClassName={cn(
+                    "text-sm justify-between",
+                    shouldHighlightIssueDueDate(issue.target_date, stateDetails?.group)
+                      ? "text-red-500"
+                      : !issue.start_date && !issue.target_date
+                        ? "text-custom-text-400"
+                        : ""
+                  )}
+                  clearIconClassName="hidden group-hover:inline !text-custom-text-100"
+                />
+                {issue.target_date && <DateAlert date={issue.target_date} workItem={issue} projectId={projectId} />}
+              </div>
+            </div>
+
+            <div className="flex h-8 items-center gap-2">
+              <div className="flex w-2/5 flex-shrink-0 items-center gap-1 text-sm text-custom-text-300">
                 <PriorityPropertyIcon className="h-4 w-4 flex-shrink-0" />
                 <span>{t("common.priority")}</span>
               </div>
@@ -197,64 +232,6 @@ export const IssueDetailsSidebar = observer(function IssueDetailsSidebar(props: 
                 </div>
               </div>
             )}
-
-            <div className="flex h-8 items-center gap-2">
-              <div className="flex w-2/5 flex-shrink-0 items-center gap-1 text-sm text-custom-text-300">
-                <StartDatePropertyIcon className="h-4 w-4 flex-shrink-0" />
-                <span>{t("common.order_by.start_date")}</span>
-              </div>
-              <DateDropdown
-                placeholder={t("issue.add.start_date")}
-                value={issue.start_date}
-                onChange={(val) =>
-                  issueOperations.update(workspaceSlug, projectId, issueId, {
-                    start_date: val ? renderFormattedPayloadDate(val) : null,
-                  })
-                }
-                maxDate={maxDate ?? undefined}
-                disabled={!isEditable}
-                buttonVariant="transparent-with-text"
-                className="group w-3/5 flex-grow"
-                buttonContainerClassName="w-full text-left"
-                buttonClassName={`text-sm ${issue?.start_date ? "" : "text-custom-text-400"}`}
-                hideIcon
-                clearIconClassName="h-3 w-3 hidden group-hover:inline"
-                // TODO: add this logic
-                // showPlaceholderIcon
-              />
-            </div>
-
-            <div className="flex h-8 items-center gap-2">
-              <div className="flex w-2/5 flex-shrink-0 items-center gap-1 text-sm text-custom-text-300">
-                <DueDatePropertyIcon className="h-4 w-4 flex-shrink-0" />
-                <span>{t("common.order_by.due_date")}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <DateDropdown
-                  placeholder={t("issue.add.due_date")}
-                  value={issue.target_date}
-                  onChange={(val) =>
-                    issueOperations.update(workspaceSlug, projectId, issueId, {
-                      target_date: val ? renderFormattedPayloadDate(val) : null,
-                    })
-                  }
-                  minDate={minDate ?? undefined}
-                  disabled={!isEditable}
-                  buttonVariant="transparent-with-text"
-                  className="group w-3/5 flex-grow"
-                  buttonContainerClassName="w-full text-left"
-                  buttonClassName={cn("text-sm", {
-                    "text-custom-text-400": !issue.target_date,
-                    "text-red-500": shouldHighlightIssueDueDate(issue.target_date, stateDetails?.group),
-                  })}
-                  hideIcon
-                  clearIconClassName="h-3 w-3 hidden group-hover:inline !text-custom-text-100"
-                  // TODO: add this logic
-                  // showPlaceholderIcon
-                />
-                {issue.target_date && <DateAlert date={issue.target_date} workItem={issue} projectId={projectId} />}
-              </div>
-            </div>
 
             {projectId && areEstimateEnabledByProjectId(projectId) && (
               <div className="flex h-8 items-center gap-2">

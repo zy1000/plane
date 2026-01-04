@@ -1949,7 +1949,7 @@ export default {
     end_date: "结束日期",
     in_your_timezone: "在您的时区",
     transfer_work_items: "转移 {count} 工作项",
-    date_range: "日期范围",
+    date_range: "日期",
     add_date: "添加日期",
     active_cycle: {
       label: "活动迭代",
