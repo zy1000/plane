@@ -4,9 +4,12 @@
  * See the LICENSE file for details.
  */
 
+import type { FC } from "react";
+import { useState } from "react";
 import { observer } from "mobx-react";
 // i18n
 import { useTranslation } from "@plane/i18n";
+import { Button } from "@plane/propel/button";
 // ui icons
 import {
   CycleIcon,
@@ -15,7 +18,6 @@ import {
   MembersPropertyIcon,
   PriorityPropertyIcon,
   StartDatePropertyIcon,
-  DueDatePropertyIcon,
   LabelPropertyIcon,
   UserCirclePropertyIcon,
   EstimatePropertyIcon,
@@ -23,7 +25,7 @@ import {
 } from "@plane/propel/icons";
 import { cn, getDate, renderFormattedPayloadDate, shouldHighlightIssueDueDate } from "@plane/utils";
 // components
-import { DateDropdown } from "@/components/dropdowns/date";
+import { DateRangeDropdown } from "@/components/dropdowns/date-range";
 import { EstimateDropdown } from "@/components/dropdowns/estimate";
 import { ButtonAvatars } from "@/components/dropdowns/member/avatar";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
@@ -59,6 +61,7 @@ interface IPeekOverviewProperties {
 export const PeekOverviewProperties = observer(function PeekOverviewProperties(props: IPeekOverviewProperties) {
   const { workspaceSlug, projectId, issueId, issueOperations, disabled } = props;
   const { t } = useTranslation();
+  const [isMetaExpanded, setIsMetaExpanded] = useState(true);
   // store hooks
   const { getProjectById } = useProject();
   const {
@@ -76,12 +79,6 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
 
   // // Get project issue types map
   const projectIssueTypesMap = projectIssueTypesCache.get(issue.project_id ?? "");
-
-  const minDate = getDate(issue.start_date);
-  minDate?.setDate(minDate.getDate());
-
-  const maxDate = getDate(issue.target_date);
-  maxDate?.setDate(maxDate.getDate());
 
   return (
     <div>
@@ -154,6 +151,49 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
           />
         </SidebarPropertyListItem>
 
+        {/* date range */}
+        <div className="flex w-full items-center gap-3 h-8">
+          <div className="flex items-center gap-1 w-1/4 flex-shrink-0 text-sm text-custom-text-300">
+            <StartDatePropertyIcon className="h-4 w-4 flex-shrink-0" />
+            <span>{t("project_cycles.date_range")}</span>
+          </div>
+          <div className="flex items-center gap-2 w-3/4 flex-grow min-w-0">
+            <DateRangeDropdown
+              value={{
+                from: getDate(issue.start_date) || undefined,
+                to: getDate(issue.target_date) || undefined,
+              }}
+              onSelect={(range) =>
+                issueOperations.update(workspaceSlug, projectId, issueId, {
+                  start_date: range?.from ? renderFormattedPayloadDate(range.from) : null,
+                  target_date: range?.to ? renderFormattedPayloadDate(range.to) : null,
+                })
+              }
+              mergeDates
+              isClearable
+              renderInPortal
+              placeholder={{
+                from: t("issue.add.start_date"),
+                to: t("issue.add.due_date"),
+              }}
+              buttonVariant="transparent-with-text"
+              disabled={disabled}
+              className="flex-grow min-w-0 group"
+              buttonContainerClassName="w-full text-left"
+              buttonClassName={cn(
+                "text-sm justify-between",
+                shouldHighlightIssueDueDate(issue.target_date, stateDetails?.group)
+                  ? "text-red-500"
+                  : !issue.start_date && !issue.target_date
+                    ? "text-custom-text-400"
+                    : ""
+              )}
+              clearIconClassName="hidden group-hover:inline !text-custom-text-100"
+            />
+            {issue.target_date && <DateAlert date={issue.target_date} workItem={issue} projectId={projectId} />}
+          </div>
+        </div>
+
         <SidebarPropertyListItem icon={PriorityPropertyIcon} label={t("common.priority")}>
           <PriorityDropdown
             value={issue?.priority}
@@ -166,7 +206,8 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
           />
         </SidebarPropertyListItem>
 
-        {createdByDetails && (
+        {/* created by */}
+        {isMetaExpanded && createdByDetails && (
           <SidebarPropertyListItem
             icon={UserCirclePropertyIcon}
             label={t("common.created_by")}
@@ -182,51 +223,6 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
           </SidebarPropertyListItem>
         )}
 
-        <SidebarPropertyListItem icon={StartDatePropertyIcon} label={t("common.order_by.start_date")}>
-          <DateDropdown
-            value={issue.start_date}
-            onChange={(val) =>
-              issueOperations.update(workspaceSlug, projectId, issueId, {
-                start_date: val ? renderFormattedPayloadDate(val) : null,
-              })
-            }
-            placeholder={t("issue.add.start_date")}
-            buttonVariant="transparent-with-text"
-            maxDate={maxDate ?? undefined}
-            disabled={disabled}
-            className="group w-full grow"
-            buttonContainerClassName="w-full text-left h-7.5"
-            buttonClassName={`text-body-xs-medium ${issue?.start_date ? "" : "text-placeholder"}`}
-            hideIcon
-            clearIconClassName="h-3 w-3 hidden group-hover:inline"
-          />
-        </SidebarPropertyListItem>
-
-        <SidebarPropertyListItem icon={DueDatePropertyIcon} label={t("common.order_by.due_date")}>
-          <div className="flex w-full items-center gap-2">
-            <DateDropdown
-              value={issue.target_date}
-              onChange={(val) =>
-                issueOperations.update(workspaceSlug, projectId, issueId, {
-                  target_date: val ? renderFormattedPayloadDate(val) : null,
-                })
-              }
-              placeholder={t("issue.add.due_date")}
-              buttonVariant="transparent-with-text"
-              minDate={minDate ?? undefined}
-              disabled={disabled}
-              className="group w-full grow"
-              buttonContainerClassName="w-full text-left h-7.5"
-              buttonClassName={cn("text-body-xs-medium", {
-                "text-placeholder": !issue.target_date,
-                "text-danger-primary": shouldHighlightIssueDueDate(issue.target_date, stateDetails?.group),
-              })}
-              hideIcon
-              clearIconClassName="h-3 w-3 hidden group-hover:inline text-primary"
-            />
-            {issue.target_date && <DateAlert date={issue.target_date} workItem={issue} projectId={projectId} />}
-          </div>
-        </SidebarPropertyListItem>
 
         {isEstimateEnabled && (
           <SidebarPropertyListItem icon={EstimatePropertyIcon} label={t("common.estimate")}>
@@ -277,20 +273,57 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
           </SidebarPropertyListItem>
         )}
 
-        <SidebarPropertyListItem icon={ParentPropertyIcon} label={t("common.parent")}>
-          <IssueParentSelectRoot
-            className="h-7.5 w-full grow"
-            disabled={disabled}
-            issueId={issueId}
-            issueOperations={issueOperations}
-            projectId={projectId}
-            workspaceSlug={workspaceSlug}
-          />
-        </SidebarPropertyListItem>
+        {/* parent */}
+        {isMetaExpanded && (
+          <div className="flex w-full items-center gap-3 h-8">
+            <div className="flex items-center gap-1 w-1/4 flex-shrink-0 text-sm text-custom-text-300">
+              <ParentPropertyIcon className="h-4 w-4 flex-shrink-0" />
+              <p>{t("common.parent")}</p>
+            </div>
+            <IssueParentSelectRoot
+              className="w-3/4 flex-grow h-full"
+              disabled={disabled}
+              issueId={issueId}
+              issueOperations={issueOperations}
+              projectId={projectId}
+              workspaceSlug={workspaceSlug}
+            />
+          </div>
+        )}
 
-        <SidebarPropertyListItem icon={LabelPropertyIcon} label={t("common.labels")}>
-          <IssueLabel workspaceSlug={workspaceSlug} projectId={projectId} issueId={issueId} disabled={disabled} />
-        </SidebarPropertyListItem>
+        {/* label + toggle */}
+        <div className="flex w-full flex-col gap-1">
+          {isMetaExpanded && (
+            <div className="flex w-full items-center gap-3 min-h-8">
+              <div className="flex items-center gap-1 w-1/4 flex-shrink-0 text-sm text-custom-text-300">
+                <LabelPropertyIcon className="h-4 w-4 flex-shrink-0" />
+                <span>{t("common.labels")}</span>
+              </div>
+              <div className="flex w-full flex-col gap-3 truncate">
+                <IssueLabel workspaceSlug={workspaceSlug} projectId={projectId} issueId={issueId} disabled={disabled} />
+              </div>
+            </div>
+          )}
+          <div className="flex w-full items-center justify-start h-6">
+            <Button
+              variant="link-neutral"
+              size="sm"
+              className="h-6 px-0"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setIsMetaExpanded((prev) => !prev);
+              }}
+            >
+              {isMetaExpanded ? (
+                <LucideIcons.ChevronUp className="size-4" />
+              ) : (
+                <LucideIcons.ChevronDown className="size-4" />
+              )}
+              {isMetaExpanded ? <p className="text-[#a3a3a3]">收起更多</p> : <p className="text-[#a3a3a3]">展开更多</p>}
+            </Button>
+          </div>
+        </div>
 
         <IssueWorklogProperty
           workspaceSlug={workspaceSlug}
