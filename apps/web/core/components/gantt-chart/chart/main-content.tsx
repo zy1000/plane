@@ -98,6 +98,10 @@ export const GanttChartMainContent = observer(function GanttChartMainContent(pro
   const pendingBoundaryRef = useRef<"left" | "right" | null>(null);
   const ignoreBoundaryUntilRef = useRef<number>(0);
   const resizeStartRef = useRef<{ clientX: number; sidebarWidth: number; maxWidth: number } | null>(null);
+  const panStartRef = useRef<{ clientX: number; clientY: number; scrollLeft: number; scrollTop: number } | null>(null);
+  const panActiveRef = useRef(false);
+  const panButtonRef = useRef<0 | 2 | null>(null);
+  const suppressContextMenuUntilRef = useRef<number>(0);
 
   const [sidebarWidth, setSidebarWidth] = useState<number>(SIDEBAR_WIDTH);
   // chart hook
@@ -153,6 +157,80 @@ export const GanttChartMainContent = observer(function GanttChartMainContent(pro
     requestAnimationFrame(() => {
       if (scrollSyncLockRef.current === "sidebar") scrollSyncLockRef.current = null;
     });
+  };
+
+  useEffect(() => {
+    return () => {
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      panStartRef.current = null;
+      panActiveRef.current = false;
+      panButtonRef.current = null;
+    };
+  }, []);
+
+  const startPan = (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
+    if (e.button !== 0 && e.button !== 2) return;
+    if (!chartContainerRef.current) return;
+    if (resizeStartRef.current) return;
+
+    const target = e.target as HTMLElement | null;
+    if (target?.closest('[id^="gantt-block-"]')) return;
+    if (
+      target?.closest(
+        'a,button,input,textarea,select,option,[role="button"],[contenteditable="true"],[data-no-pan="true"]'
+      )
+    )
+      return;
+
+    const active = document.activeElement as HTMLElement | null;
+    if (active?.blur) active.blur();
+
+    panStartRef.current = {
+      clientX: e.clientX,
+      clientY: e.clientY,
+      scrollLeft: chartContainerRef.current.scrollLeft,
+      scrollTop: chartContainerRef.current.scrollTop,
+    };
+    panActiveRef.current = false;
+    panButtonRef.current = e.button;
+
+    const onMouseMove = (ev: MouseEvent) => {
+      const start = panStartRef.current;
+      const el = chartContainerRef.current;
+      if (!start || !el) return;
+
+      const dx = ev.clientX - start.clientX;
+      const dy = ev.clientY - start.clientY;
+
+      if (!panActiveRef.current) {
+        const threshold = 3;
+        if (Math.abs(dx) < threshold && Math.abs(dy) < threshold) return;
+        panActiveRef.current = true;
+        document.body.style.cursor = "grabbing";
+        document.body.style.userSelect = "none";
+      }
+
+      el.scrollLeft = start.scrollLeft - dx;
+      el.scrollTop = start.scrollTop - dy;
+      ev.preventDefault();
+    };
+
+    const onMouseUp = () => {
+      const wasPanning = panActiveRef.current;
+      const button = panButtonRef.current;
+      panStartRef.current = null;
+      panActiveRef.current = false;
+      panButtonRef.current = null;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      if (button === 2 && wasPanning) suppressContextMenuUntilRef.current = Date.now() + 1000;
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
+
+    window.addEventListener("mousemove", onMouseMove, { passive: false });
+    window.addEventListener("mouseup", onMouseUp);
   };
 
   const onChartScroll = (e: React.UIEvent<HTMLDivElement, UIEvent>) => {
@@ -333,6 +411,10 @@ export const GanttChartMainContent = observer(function GanttChartMainContent(pro
                   ref={chartContainerRef}
                   tabIndex={-1}
                   onScroll={onChartScroll}
+                  onMouseDown={startPan}
+                  onContextMenu={(e) => {
+                    if (panActiveRef.current || Date.now() < suppressContextMenuUntilRef.current) e.preventDefault();
+                  }}
                 >
                   <div className="relative min-h-full h-max flex-shrink-0 flex-grow">
                     <ActiveChartView />

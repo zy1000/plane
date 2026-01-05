@@ -34,6 +34,7 @@ type TIssueDefaultPropertiesProps = {
   id: string | undefined;
   projectId: string | null;
   workspaceSlug: string;
+  issueTypeId?: string | null;
   selectedParentIssue: ISearchIssueResponse | null;
   startDate: string | null;
   targetDate: string | null;
@@ -49,6 +50,7 @@ export const IssueDefaultProperties = observer(function IssueDefaultProperties(p
     id,
     projectId,
     workspaceSlug,
+    issueTypeId,
     selectedParentIssue,
     startDate,
     targetDate,
@@ -329,6 +331,7 @@ export const IssueDefaultProperties = observer(function IssueDefaultProperties(p
             }}
             projectId={projectId ?? undefined}
             issueId={isDraft ? undefined : id}
+            issueTypeId={!id ? issueTypeId : undefined}
           />
         )}
       />

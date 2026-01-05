@@ -21,6 +21,8 @@ export const useGanttResizable = (
   });
   const ganttContainerDimensions = useRef<DOMRect | undefined>();
   const currMouseEvent = useRef<MouseEvent | undefined>();
+  const dragStartClientRef = useRef<{ x: number; y: number } | null>(null);
+  const didDragRef = useRef(false);
   // states
   const { currentViewData, updateBlockPosition, setIsDragging, getUpdatedPositionAfterDrag } = useTimeLineChartStore();
   const [isMoving, setIsMoving] = useState<"left" | "right" | "move" | undefined>();
@@ -36,6 +38,8 @@ export const useGanttResizable = (
     if (e.button !== 0) return;
 
     const resizableDiv = resizableRef.current;
+    dragStartClientRef.current = { x: e.clientX, y: e.clientY };
+    didDragRef.current = false;
 
     ganttContainerDimensions.current = ganttContainerElement.getBoundingClientRect();
 
@@ -57,6 +61,14 @@ export const useGanttResizable = (
       currMouseEvent.current = e;
       setIsMoving(dragDirection);
       setIsDragging(true);
+
+      const dragStart = dragStartClientRef.current;
+      if (dragStart && !didDragRef.current) {
+        const threshold = 3;
+        const dx = e.clientX - dragStart.x;
+        const dy = e.clientY - dragStart.y;
+        if (Math.abs(dx) >= threshold || Math.abs(dy) >= threshold) didDragRef.current = true;
+      }
 
       if (!ganttContainerDimensions.current) return;
 
@@ -114,6 +126,18 @@ export const useGanttResizable = (
       ganttContainerElement.removeEventListener("scroll", handleOnScroll);
       document.removeEventListener("mouseup", handleMouseUp);
 
+      if (didDragRef.current) {
+        const preventClickOnce = (ev: MouseEvent) => {
+          ev.preventDefault();
+          ev.stopPropagation();
+          resizableDiv.removeEventListener("click", preventClickOnce, true);
+        };
+        resizableDiv.addEventListener("click", preventClickOnce, true);
+        window.setTimeout(() => {
+          resizableDiv.removeEventListener("click", preventClickOnce, true);
+        }, 0);
+      }
+
       // update half blocks only when the missing side of the block is directly dragged
       const shouldUpdateHalfBlock =
         (dragDirection === "left" && !block.start_date) || (dragDirection === "right" && !block.target_date);
@@ -130,6 +154,8 @@ export const useGanttResizable = (
       }
 
       setIsDragging(false);
+      dragStartClientRef.current = null;
+      didDragRef.current = false;
     };
 
     document.addEventListener("mousemove", handleMouseMove);

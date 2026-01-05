@@ -7,7 +7,7 @@ from rest_framework.response import Response
 
 # Module imports
 from .base import BaseAPIView
-from plane.db.models import Issue, ProjectMember, IssueRelation
+from plane.db.models import Issue, ProjectMember, IssueRelation, IssueType
 from plane.utils.issue_search import search_issues
 
 
@@ -121,10 +121,15 @@ class IssueSearchEndpoint(BaseAPIView):
     def get_parent_optional_types(self, type_name: str) -> list:
         return self.TYPE_PARENTS_MAP.get(type_name, self.TYPE_PARENTS_DEFAULT)
 
-    def filter_issues_type(self, issues: QuerySet, issue_id: str, type_filter: str) -> QuerySet:
+    def filter_issues_by_id(self, issues: QuerySet, issue_id: str, type_filter: str) -> QuerySet:
         issue = Issue.issue_objects.filter(pk=issue_id).first()
         method = self.get_child_optional_types if type_filter == 'child' else self.get_parent_optional_types
         return issues.filter(type__name__in=method(type_name=issue.type.name))
+
+    def filter_issues_by_type(self, issues: QuerySet, issue_type_id: str, type_filter: str = 'parent') -> QuerySet:
+        issue_type = IssueType.objects.get(pk=issue_type_id)
+        method = self.get_child_optional_types if type_filter == 'child' else self.get_parent_optional_types
+        return issues.filter(type__name__in=method(type_name=issue_type.name))
 
     def get(self, request, slug, project_id):
         query = request.query_params.get("search", False)
@@ -138,6 +143,9 @@ class IssueSearchEndpoint(BaseAPIView):
         issue_id = request.query_params.get("issue_id", False)
         type_name = request.query_params.get("type_name", False)
         type_filter = request.query_params.get("type_filter", False)
+        issue_type_id = request.query_params.get("issue_type_id", False)
+        
+
 
         issues = Issue.issue_objects.filter(
             workspace__slug=slug,
@@ -154,14 +162,17 @@ class IssueSearchEndpoint(BaseAPIView):
 
         if parent == "true" and issue_id:
             issues = self.search_issues_and_excluding_parent(issues, issue_id)
-            issues = self.filter_issues_type(issues, issue_id, type_filter='parent')
+            issues = self.filter_issues_by_id(issues, issue_id, type_filter='parent')
 
         if issue_relation == "true" and issue_id:
             issues = self.filter_issues_excluding_related_issues(issue_id, issues)
 
         if sub_issue == "true" and issue_id:
             issues = self.filter_root_issues_only(issue_id, issues)
-            issues = self.filter_issues_type(issues, issue_id, type_filter='child')
+            issues = self.filter_issues_by_id(issues, issue_id, type_filter='child')
+
+        if issue_type_id:
+            issues = self.filter_issues_by_type(issues, issue_type_id)
 
         if cycle == "true":
             issues = self.exclude_issues_in_cycles(issues)
@@ -173,7 +184,7 @@ class IssueSearchEndpoint(BaseAPIView):
             issues = self.filter_issues_without_target_date(issues)
 
         if type_name and type_filter:
-            issues = self.filter_issues_type(issues, type_name, type_filter)
+            issues = self.filter_issues_by_id(issues, type_name, type_filter)
 
         if ProjectMember.objects.filter(
                 project_id=project_id, member=self.request.user, is_active=True, role=5

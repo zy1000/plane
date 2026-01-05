@@ -777,8 +777,8 @@ div.web-view-spinner div.bar12 {
   background-clip: padding-box;
   background-color: rgba(96, 100, 108, 0.1);
   border-radius: 9999px;
-  min-width: 40px;
-  min-height: 40px;
+  min-width: 60px;
+  min-height: 60px;
 }
 .vertical-scrollbar:hover::-webkit-scrollbar-thumb,
 .horizontal-scrollbar:hover::-webkit-scrollbar-thumb {

@@ -153,6 +153,7 @@ export type TProjectIssuesSearchParams = {
   module?: string;
   sub_issue?: boolean;
   issue_id?: string;
+  issue_type_id?: string;
   workspace_search: boolean;
   target_date?: string;
   epic?: boolean;
