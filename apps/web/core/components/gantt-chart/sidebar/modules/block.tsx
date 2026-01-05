@@ -35,15 +35,15 @@ export const ModulesSidebarBlock = observer(function ModulesSidebarBlock(props: 
     >
       <Row
         id={`sidebar-block-${block.id}`}
-        className={cn("group w-full flex items-center gap-2 pr-4", {
+        className={cn("group min-w-full w-max flex items-center gap-2 pr-4", {
           "bg-custom-background-90": isBlockActive(block.id),
         })}
         style={{
           height: `${BLOCK_HEIGHT}px`,
         }}
       >
-        <div className="flex h-full flex-grow items-center justify-between gap-2 truncate">
-          <div className="flex-grow truncate">
+        <div className="flex h-full flex-grow items-center justify-between gap-2 whitespace-nowrap">
+          <div className="flex-none">
             <ModuleGanttSidebarBlock moduleId={block.data.id} />
           </div>
           {duration !== undefined && (

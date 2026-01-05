@@ -54,7 +54,7 @@ interface IPeekOverviewProperties {
 export const PeekOverviewProperties = observer(function PeekOverviewProperties(props: IPeekOverviewProperties) {
   const { workspaceSlug, projectId, issueId, issueOperations, disabled } = props;
   const { t } = useTranslation();
-  const [isMetaExpanded, setIsMetaExpanded] = useState(true);
+  const [isMetaExpanded, setIsMetaExpanded] = useState(false);
   // store hooks
   const { getProjectById } = useProject();
   const {
@@ -263,7 +263,7 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
           </div>
         )}
 
-        {projectDetails?.module_view && (
+        {isMetaExpanded && projectDetails?.module_view && (
           <div className="flex w-full items-center gap-3 min-h-8 h-full">
             <div className="flex items-center gap-1 w-1/4 flex-shrink-0 text-sm text-custom-text-300">
               <ModuleIcon className="h-4 w-4 flex-shrink-0" />
@@ -280,7 +280,7 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
           </div>
         )}
 
-        {projectDetails?.cycle_view && (
+        {isMetaExpanded && projectDetails?.cycle_view && (
           <div className="flex w-full items-center gap-3 h-8">
             <div className="flex items-center gap-1 w-1/4 flex-shrink-0 text-sm text-custom-text-300">
               <CycleIcon className="h-4 w-4 flex-shrink-0" />

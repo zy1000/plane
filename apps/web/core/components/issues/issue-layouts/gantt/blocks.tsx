@@ -6,7 +6,6 @@ import { Tooltip } from "@plane/propel/tooltip";
 import { ControlLink } from "@plane/ui";
 import { findTotalDaysInRange, generateWorkItemLink } from "@plane/utils";
 // components
-import { SIDEBAR_WIDTH } from "@/components/gantt-chart/constants";
 // hooks
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useIssues } from "@/hooks/store/use-issues";
@@ -69,7 +68,7 @@ export const IssueGanttBlock = observer(function IssueGanttBlock(props: Props) {
             <div className="absolute left-0 top-0 h-full w-full bg-custom-background-100/50 " />
             <div
               className="sticky w-auto overflow-hidden truncate px-2.5 py-1 text-sm text-custom-text-100 flex-1"
-              style={{ left: `${SIDEBAR_WIDTH}px` }}
+              style={{ left: "0px" }}
             >
               {issueDetails?.name}
             </div>
@@ -145,10 +144,10 @@ export const IssueGanttSidebarBlock = observer(function IssueGanttSidebarBlock(p
       id={`issue-${issueId}`}
       href={workItemLink}
       onClick={handleIssuePeekOverview}
-      className="line-clamp-1 w-full cursor-pointer text-sm text-custom-text-100"
+      className="w-max cursor-pointer text-sm text-custom-text-100"
       disabled={!!issueDetails?.tempId}
     >
-      <div className="relative flex h-full w-full cursor-pointer items-center gap-2">
+      <div className="relative flex h-full w-max cursor-pointer items-center gap-2 whitespace-nowrap">
         {projectIssueTypesMap &&
           issueDetails?.type_id &&
           projectIssueTypesMap[issueDetails.type_id]?.logo_props?.icon &&
@@ -179,7 +178,7 @@ export const IssueGanttSidebarBlock = observer(function IssueGanttSidebarBlock(p
           />
         )}
         <Tooltip tooltipContent={issueDetails?.name} isMobile={isMobile}>
-          <span className="flex-grow truncate text-sm font-medium">{issueDetails?.name}</span>
+          <span className="text-sm font-medium whitespace-nowrap">{issueDetails?.name}</span>
         </Tooltip>
       </div>
     </ControlLink>

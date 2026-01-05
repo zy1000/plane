@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { combine } from "@atlaskit/pragmatic-drag-and-drop/combine";
 import { autoScrollForElements } from "@atlaskit/pragmatic-drag-and-drop-auto-scroll/element";
 import { observer } from "mobx-react";
@@ -28,9 +28,13 @@ import { IssueBulkOperationsRoot } from "@/plane-web/components/issues/bulk-oper
 // plane web hooks
 import { useBulkOperationStatus } from "@/plane-web/hooks/use-bulk-operation-status";
 //
-import { DEFAULT_BLOCK_WIDTH, GANTT_SELECT_GROUP, HEADER_HEIGHT } from "../constants";
+import { DEFAULT_BLOCK_WIDTH, GANTT_SELECT_GROUP, HEADER_HEIGHT, SIDEBAR_WIDTH } from "../constants";
 import { getItemPositionWidth } from "../views";
 import { TimelineDragHelper } from "./timeline-drag-helper";
+
+const SIDEBAR_MIN_WIDTH = 260;
+const SIDEBAR_MAX_WIDTH = 560;
+const CHART_MIN_WIDTH = 360;
 
 type Props = {
   blockIds: string[];
@@ -85,15 +89,33 @@ export const GanttChartMainContent = observer(function GanttChartMainContent(pro
     isEpic = false,
   } = props;
   // refs
-  const ganttContainerRef = useRef<HTMLDivElement>(null);
+  const chartContainerRef = useRef<HTMLDivElement>(null);
+  const sidebarContainerRef = useRef<HTMLDivElement>(null);
+  const splitContainerRef = useRef<HTMLDivElement>(null);
+
+  const scrollSyncLockRef = useRef<"sidebar" | "chart" | null>(null);
+  const boundaryIdleTimerRef = useRef<number | null>(null);
+  const pendingBoundaryRef = useRef<"left" | "right" | null>(null);
+  const ignoreBoundaryUntilRef = useRef<number>(0);
+  const resizeStartRef = useRef<{ clientX: number; sidebarWidth: number; maxWidth: number } | null>(null);
+
+  const [sidebarWidth, setSidebarWidth] = useState<number>(SIDEBAR_WIDTH);
   // chart hook
   const { currentView, currentViewData } = useTimeLineChartStore();
   // plane web hooks
   const isBulkOperationsEnabled = useBulkOperationStatus();
 
-  // Enable Auto Scroll for Ganttlist
+  const maxSidebarWidth = (() => {
+    const containerWidth = splitContainerRef.current?.getBoundingClientRect().width;
+    if (!containerWidth) return SIDEBAR_MAX_WIDTH;
+    return Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, containerWidth - CHART_MIN_WIDTH));
+  })();
+
+  const effectiveSidebarWidth = Math.min(Math.max(sidebarWidth, SIDEBAR_MIN_WIDTH), maxSidebarWidth);
+
+  // Enable Auto Scroll for sidebar list reorder
   useEffect(() => {
-    const element = ganttContainerRef.current;
+    const element = sidebarContainerRef.current;
 
     if (!element) return;
 
@@ -104,26 +126,87 @@ export const GanttChartMainContent = observer(function GanttChartMainContent(pro
         canScroll: ({ source }) => source.data.dragInstanceId === "GANTT_REORDER",
       })
     );
-  }, [ganttContainerRef?.current]);
+  }, [sidebarContainerRef?.current]);
+
+  useEffect(() => {
+    return () => {
+      if (boundaryIdleTimerRef.current) window.clearTimeout(boundaryIdleTimerRef.current);
+    };
+  }, []);
 
   // handling scroll functionality
-  const onScroll = (e: React.UIEvent<HTMLDivElement, UIEvent>) => {
+  const syncScrollFromChart = (scrollTop: number) => {
+    if (!sidebarContainerRef.current) return;
+    if (scrollSyncLockRef.current === "sidebar") return;
+    scrollSyncLockRef.current = "chart";
+    sidebarContainerRef.current.scrollTop = scrollTop;
+    requestAnimationFrame(() => {
+      if (scrollSyncLockRef.current === "chart") scrollSyncLockRef.current = null;
+    });
+  };
+
+  const syncScrollFromSidebar = (scrollTop: number) => {
+    if (!chartContainerRef.current) return;
+    if (scrollSyncLockRef.current === "chart") return;
+    scrollSyncLockRef.current = "sidebar";
+    chartContainerRef.current.scrollTop = scrollTop;
+    requestAnimationFrame(() => {
+      if (scrollSyncLockRef.current === "sidebar") scrollSyncLockRef.current = null;
+    });
+  };
+
+  const onChartScroll = (e: React.UIEvent<HTMLDivElement, UIEvent>) => {
     const { clientWidth, scrollLeft, scrollWidth } = e.currentTarget;
 
+    syncScrollFromChart(e.currentTarget.scrollTop);
+
+    if (Date.now() < ignoreBoundaryUntilRef.current) return;
+
+    const EDGE_THRESHOLD = 8;
     const approxRangeLeft = scrollLeft;
     const approxRangeRight = scrollWidth - (scrollLeft + clientWidth);
     const calculatedRangeRight = itemsContainerWidth - (scrollLeft + clientWidth);
+    const remainingRight = Math.min(approxRangeRight, calculatedRangeRight);
 
-    if (approxRangeRight < clientWidth || calculatedRangeRight < clientWidth) {
-      updateCurrentViewRenderPayload("right", currentView);
+    const shouldExpandRight = remainingRight <= EDGE_THRESHOLD;
+    const shouldExpandLeft = approxRangeLeft <= EDGE_THRESHOLD;
+    const pendingSide: "left" | "right" | null = shouldExpandRight ? "right" : shouldExpandLeft ? "left" : null;
+
+    if (!pendingSide) {
+      pendingBoundaryRef.current = null;
+      if (boundaryIdleTimerRef.current) {
+        window.clearTimeout(boundaryIdleTimerRef.current);
+        boundaryIdleTimerRef.current = null;
+      }
+      return;
     }
-    if (approxRangeLeft < clientWidth) {
-      updateCurrentViewRenderPayload("left", currentView);
-    }
+
+    pendingBoundaryRef.current = pendingSide;
+    if (boundaryIdleTimerRef.current) window.clearTimeout(boundaryIdleTimerRef.current);
+    boundaryIdleTimerRef.current = window.setTimeout(() => {
+      const el = chartContainerRef.current;
+      const side = pendingBoundaryRef.current;
+      if (!el || !side) return;
+
+      const { clientWidth, scrollLeft, scrollWidth } = el;
+      const approxRangeLeft = scrollLeft;
+      const approxRangeRight = scrollWidth - (scrollLeft + clientWidth);
+      const calculatedRangeRight = itemsContainerWidth - (scrollLeft + clientWidth);
+      const remainingRight = Math.min(approxRangeRight, calculatedRangeRight);
+
+      const stillAtLeftEdge = approxRangeLeft <= EDGE_THRESHOLD;
+      const stillAtRightEdge = remainingRight <= EDGE_THRESHOLD;
+      const shouldExpand = side === "left" ? stillAtLeftEdge : stillAtRightEdge;
+      if (!shouldExpand) return;
+
+      ignoreBoundaryUntilRef.current = Date.now() + 150;
+      updateCurrentViewRenderPayload(side, currentView);
+    }, 120);
+
   };
 
   const handleScrollToBlock = (block: IGanttBlock) => {
-    const scrollContainer = ganttContainerRef.current as HTMLDivElement;
+    const scrollContainer = chartContainerRef.current as HTMLDivElement;
     const scrollToEndDate = !block.start_date && block.target_date;
     const scrollToDate = block.start_date ? getDate(block.start_date) : getDate(block.target_date);
     let chartData;
@@ -144,6 +227,45 @@ export const GanttChartMainContent = observer(function GanttChartMainContent(pro
     });
   };
 
+  const startResize = (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
+    if (e.button !== 0) return;
+    const containerWidth = splitContainerRef.current?.getBoundingClientRect().width;
+    const maxWidth = containerWidth ? Math.min(SIDEBAR_MAX_WIDTH, containerWidth - CHART_MIN_WIDTH) : SIDEBAR_MAX_WIDTH;
+
+    resizeStartRef.current = {
+      clientX: e.clientX,
+      sidebarWidth,
+      maxWidth,
+    };
+
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  };
+
+  useEffect(() => {
+    const onMouseMove = (e: MouseEvent) => {
+      if (!resizeStartRef.current) return;
+      const { clientX, sidebarWidth: startWidth, maxWidth } = resizeStartRef.current;
+      const delta = e.clientX - clientX;
+      const nextWidth = Math.min(Math.max(startWidth + delta, SIDEBAR_MIN_WIDTH), Math.max(SIDEBAR_MIN_WIDTH, maxWidth));
+      setSidebarWidth(nextWidth);
+    };
+
+    const onMouseUp = () => {
+      if (!resizeStartRef.current) return;
+      resizeStartRef.current = null;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
+    return () => {
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+    };
+  }, []);
+
   const CHART_VIEW_COMPONENTS: {
     [key in TGanttViews]: React.FC;
   } = {
@@ -157,9 +279,9 @@ export const GanttChartMainContent = observer(function GanttChartMainContent(pro
 
   return (
     <>
-      <TimelineDragHelper ganttContainerRef={ganttContainerRef} />
+      <TimelineDragHelper ganttContainerRef={chartContainerRef} />
       <MultipleSelectGroup
-        containerRef={ganttContainerRef}
+        containerRef={chartContainerRef}
         entities={{
           [GANTT_SELECT_GROUP]: blockIds ?? [],
         }}
@@ -168,68 +290,88 @@ export const GanttChartMainContent = observer(function GanttChartMainContent(pro
         {(helpers) => (
           <>
             <div
-              // DO NOT REMOVE THE ID
-              id="gantt-container"
-              className={cn(
-                "h-full w-full overflow-auto vertical-scrollbar horizontal-scrollbar scrollbar-lg flex border-t-[0.5px] border-custom-border-200",
-                {
-                  "mb-8": bottomSpacing,
-                }
-              )}
-              ref={ganttContainerRef}
-              onScroll={onScroll}
+              className={cn("h-full w-full flex border-t-[0.5px] border-custom-border-200", {
+                "mb-8": bottomSpacing,
+              })}
+              ref={splitContainerRef}
             >
-              <GanttChartSidebar
-                blockIds={blockIds}
-                loadMoreBlocks={loadMoreBlocks}
-                canLoadMoreBlocks={canLoadMoreBlocks}
-                ganttContainerRef={ganttContainerRef}
-                blockUpdateHandler={blockUpdateHandler}
-                enableReorder={enableReorder}
-                enableSelection={enableSelection}
-                sidebarToRender={sidebarToRender}
-                title={title}
-                quickAdd={quickAdd}
-                selectionHelpers={helpers}
-                showAllBlocks={showAllBlocks}
-                isEpic={isEpic}
+              <div
+                className="h-full flex-shrink-0 overflow-auto vertical-scrollbar horizontal-scrollbar scrollbar-lg"
+                ref={sidebarContainerRef}
+                style={{
+                  width: `${effectiveSidebarWidth}px`,
+                }}
+                onScroll={(e) => syncScrollFromSidebar(e.currentTarget.scrollTop)}
+              >
+                <GanttChartSidebar
+                  blockIds={blockIds}
+                  loadMoreBlocks={loadMoreBlocks}
+                  canLoadMoreBlocks={canLoadMoreBlocks}
+                  sidebarContainerRef={sidebarContainerRef}
+                  blockUpdateHandler={blockUpdateHandler}
+                  enableReorder={enableReorder}
+                  enableSelection={enableSelection}
+                  sidebarToRender={sidebarToRender}
+                  title={title}
+                  quickAdd={quickAdd}
+                  selectionHelpers={helpers}
+                  showAllBlocks={showAllBlocks}
+                  isEpic={isEpic}
+                />
+              </div>
+              <div
+                className="flex-shrink-0 w-1 bg-custom-border-200 hover:bg-custom-border-300 cursor-col-resize"
+                role="separator"
+                aria-orientation="vertical"
+                onMouseDown={startResize}
               />
-              <div className="relative min-h-full h-max flex-shrink-0 flex-grow">
-                <ActiveChartView />
-                {currentViewData && (
-                  <div
-                    className="relative h-full"
-                    style={{
-                      width: `${itemsContainerWidth}px`,
-                      transform: `translateY(${HEADER_HEIGHT}px)`,
-                      paddingBottom: `${HEADER_HEIGHT}px`,
-                    }}
-                  >
-                    <GanttChartRowList
-                      blockIds={blockIds}
-                      blockUpdateHandler={blockUpdateHandler}
-                      handleScrollToBlock={handleScrollToBlock}
-                      enableAddBlock={enableAddBlock}
-                      showAllBlocks={showAllBlocks}
-                      selectionHelpers={helpers}
-                      ganttContainerRef={ganttContainerRef}
-                    />
-                    <TimelineDependencyPaths isEpic={isEpic} />
-                    <TimelineDraggablePath />
-                    <GanttAdditionalLayers itemsContainerWidth={itemsContainerWidth} blockCount={blockIds.length} />
-                    <GanttChartBlocksList
-                      blockIds={blockIds}
-                      blockToRender={blockToRender}
-                      enableBlockLeftResize={enableBlockLeftResize}
-                      enableBlockRightResize={enableBlockRightResize}
-                      enableBlockMove={enableBlockMove}
-                      ganttContainerRef={ganttContainerRef}
-                      enableDependency={enableDependency}
-                      showAllBlocks={showAllBlocks}
-                      updateBlockDates={updateBlockDates}
-                    />
+              <div className="relative min-w-0 flex-grow">
+                <div
+                  // DO NOT REMOVE THE ID
+                  id="gantt-container"
+                  className="h-full w-full overflow-auto vertical-scrollbar horizontal-scrollbar scrollbar-lg"
+                  ref={chartContainerRef}
+                  tabIndex={-1}
+                  onScroll={onChartScroll}
+                >
+                  <div className="relative min-h-full h-max flex-shrink-0 flex-grow">
+                    <ActiveChartView />
+                    {currentViewData && (
+                      <div
+                        className="relative h-full"
+                        style={{
+                          width: `${itemsContainerWidth}px`,
+                          transform: `translateY(${HEADER_HEIGHT}px)`,
+                          paddingBottom: `${HEADER_HEIGHT}px`,
+                        }}
+                      >
+                        <GanttChartRowList
+                          blockIds={blockIds}
+                          blockUpdateHandler={blockUpdateHandler}
+                          handleScrollToBlock={handleScrollToBlock}
+                          enableAddBlock={enableAddBlock}
+                          showAllBlocks={showAllBlocks}
+                          selectionHelpers={helpers}
+                          ganttContainerRef={chartContainerRef}
+                        />
+                        <TimelineDependencyPaths isEpic={isEpic} />
+                        <TimelineDraggablePath />
+                        <GanttAdditionalLayers itemsContainerWidth={itemsContainerWidth} blockCount={blockIds.length} />
+                        <GanttChartBlocksList
+                          blockIds={blockIds}
+                          blockToRender={blockToRender}
+                          enableBlockLeftResize={enableBlockLeftResize}
+                          enableBlockRightResize={enableBlockRightResize}
+                          enableBlockMove={enableBlockMove}
+                          ganttContainerRef={chartContainerRef}
+                          enableDependency={enableDependency}
+                          showAllBlocks={showAllBlocks}
+                          updateBlockDates={updateBlockDates}
+                        />
+                      </div>
+                    )}
                   </div>
-                )}
+                </div>
               </div>
             </div>
             <IssueBulkOperationsRoot selectionHelpers={helpers} />

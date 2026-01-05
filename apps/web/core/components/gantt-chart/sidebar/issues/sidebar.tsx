@@ -24,17 +24,22 @@ type Props = {
   loadMoreBlocks?: () => void;
   ganttContainerRef: RefObject<HTMLDivElement>;
   blockIds: string[];
+  rootBlockIds: string[];
   enableReorder: boolean;
   enableSelection: boolean;
   showAllBlocks?: boolean;
   selectionHelpers?: TSelectionHelper;
   isEpic?: boolean;
+  expandedIssueIds: Set<string>;
+  nestingLevelById: Record<string, number>;
+  onToggleExpand: (issueId: string) => void;
 };
 
 export const IssueGanttSidebar = observer(function IssueGanttSidebar(props: Props) {
   const {
     blockUpdateHandler,
     blockIds,
+    rootBlockIds,
     enableReorder,
     enableSelection,
     loadMoreBlocks,
@@ -43,6 +48,9 @@ export const IssueGanttSidebar = observer(function IssueGanttSidebar(props: Prop
     showAllBlocks = false,
     selectionHelpers,
     isEpic = false,
+    expandedIssueIds,
+    nestingLevelById,
+    onToggleExpand,
   } = props;
 
   const { getBlockById } = useTimeLineChart(GANTT_TIMELINE_TYPE.ISSUE);
@@ -67,8 +75,17 @@ export const IssueGanttSidebar = observer(function IssueGanttSidebar(props: Prop
     droppedBlockId: string | undefined,
     dropAtEndOfList: boolean
   ) => {
-    handleOrderChange(draggingBlockId, droppedBlockId, dropAtEndOfList, blockIds, getBlockById, blockUpdateHandler);
+    handleOrderChange(
+      draggingBlockId,
+      droppedBlockId,
+      dropAtEndOfList,
+      rootBlockIds,
+      getBlockById,
+      blockUpdateHandler
+    );
   };
+
+  const lastRootBlockId = rootBlockIds[rootBlockIds.length - 1];
 
   return (
     <div>
@@ -77,9 +94,24 @@ export const IssueGanttSidebar = observer(function IssueGanttSidebar(props: Prop
           {blockIds.map((blockId, index) => {
             const block = getBlockById(blockId);
             const isBlockVisibleOnSidebar = block?.start_date && block?.target_date;
+            const nestingLevel = nestingLevelById[blockId] ?? 0;
+            const isExpanded = expandedIssueIds.has(blockId);
 
             // hide the block if it doesn't have start and target dates and showAllBlocks is false
             if (!block || (!showAllBlocks && !isBlockVisibleOnSidebar)) return;
+
+            const blockContent = (isDragging: boolean) => (
+              <IssuesSidebarBlock
+                block={block}
+                enableSelection={enableSelection}
+                isDragging={isDragging}
+                selectionHelpers={selectionHelpers}
+                isEpic={isEpic}
+                nestingLevel={nestingLevel}
+                isExpanded={isExpanded}
+                onToggleExpand={onToggleExpand}
+              />
+            );
 
             return (
               <RenderIfVisible
@@ -90,22 +122,18 @@ export const IssueGanttSidebar = observer(function IssueGanttSidebar(props: Prop
                 shouldRecordHeights={false}
                 placeholderChildren={<GanttLayoutListItemLoader />}
               >
-                <GanttDnDHOC
-                  id={block.id}
-                  isLastChild={index === blockIds.length - 1}
-                  isDragEnabled={enableReorder}
-                  onDrop={handleOnDrop}
-                >
-                  {(isDragging: boolean) => (
-                    <IssuesSidebarBlock
-                      block={block}
-                      enableSelection={enableSelection}
-                      isDragging={isDragging}
-                      selectionHelpers={selectionHelpers}
-                      isEpic={isEpic}
-                    />
-                  )}
-                </GanttDnDHOC>
+                {nestingLevel === 0 ? (
+                  <GanttDnDHOC
+                    id={block.id}
+                    isLastChild={block.id === lastRootBlockId}
+                    isDragEnabled={enableReorder}
+                    onDrop={handleOnDrop}
+                  >
+                    {blockContent}
+                  </GanttDnDHOC>
+                ) : (
+                  blockContent(false)
+                )}
               </RenderIfVisible>
             );
           })}

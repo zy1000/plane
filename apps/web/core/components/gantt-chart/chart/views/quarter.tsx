@@ -5,7 +5,7 @@ import { cn } from "@plane/utils";
 // hooks
 import { useTimeLineChartStore } from "@/hooks/use-timeline-chart";
 //
-import { HEADER_HEIGHT, SIDEBAR_WIDTH } from "../../constants";
+import { HEADER_HEIGHT } from "../../constants";
 import type { IMonthBlock, IQuarterMonthBlock } from "../../views";
 import { groupMonthsToQuarters } from "../../views";
 
@@ -35,7 +35,7 @@ export const QuarterChartView = observer(function QuarterChartView(_props: any) 
                 <div
                   className="sticky flex items-center font-normal z-[1] my-1 whitespace-nowrap px-3 py-1 text-base capitalize bg-custom-background-100 text-custom-text-200"
                   style={{
-                    left: `${SIDEBAR_WIDTH}px`,
+                    left: "0px",
                   }}
                 >
                   {quarterBlock?.title}

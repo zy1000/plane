@@ -74,7 +74,7 @@ export const VIEWS_LIST: ChartDataType[] = [
       startDate: new Date(),
       currentDate: new Date(),
       endDate: new Date(),
-      approxFilterRange: 4, // it will preview week dates with weekends highlighted with 1 week limitations ex: title (Wed 1, Thu 2, Fri 3)
+      approxFilterRange: 2, // it will preview week dates with weekends highlighted with 1 week limitations ex: title (Wed 1, Thu 2, Fri 3)
       dayWidth: 60,
     },
   },
@@ -85,7 +85,7 @@ export const VIEWS_LIST: ChartDataType[] = [
       startDate: new Date(),
       currentDate: new Date(),
       endDate: new Date(),
-      approxFilterRange: 6, // it will preview monthly all dates with weekends highlighted with no limitations ex: title (1, 2, 3)
+      approxFilterRange: 3, // it will preview monthly all dates with weekends highlighted with no limitations ex: title (1, 2, 3)
       dayWidth: 20,
     },
   },
@@ -96,7 +96,7 @@ export const VIEWS_LIST: ChartDataType[] = [
       startDate: new Date(),
       currentDate: new Date(),
       endDate: new Date(),
-      approxFilterRange: 24, // it will preview week starting dates all months data and there is 3 months limitation for preview ex: title (2, 9, 16, 23, 30)
+      approxFilterRange: 12, // it will preview week starting dates all months data and there is 3 months limitation for preview ex: title (2, 9, 16, 23, 30)
       dayWidth: 5,
     },
   },

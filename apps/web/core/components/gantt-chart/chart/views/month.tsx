@@ -2,7 +2,7 @@ import type { FC } from "react";
 import { observer } from "mobx-react";
 // components
 import { cn } from "@plane/utils";
-import { HEADER_HEIGHT, SIDEBAR_WIDTH } from "@/components/gantt-chart/constants";
+import { HEADER_HEIGHT } from "@/components/gantt-chart/constants";
 // helpers
 // hooks
 import { useTimeLineChartStore } from "@/hooks/use-timeline-chart";
@@ -46,7 +46,7 @@ export const MonthChartView = observer(function MonthChartView(_props: any) {
                   <div
                     className="sticky flex items-center font-normal z-[1] m-1 whitespace-nowrap px-3 py-1 text-base capitalize bg-custom-background-100 text-custom-text-200"
                     style={{
-                      left: `${SIDEBAR_WIDTH}px`,
+                      left: "0px",
                     }}
                   >
                     {monthBlock?.title}
