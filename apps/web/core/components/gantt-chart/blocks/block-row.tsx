@@ -15,7 +15,7 @@ import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import type { TSelectionHelper } from "@/hooks/use-multiple-select";
 import { useTimeLineChartStore } from "@/hooks/use-timeline-chart";
 //
-import { BLOCK_HEIGHT, SIDEBAR_WIDTH } from "../constants";
+import { BLOCK_HEIGHT } from "../constants";
 import { ChartAddBlock } from "../helpers";
 
 type Props = {
@@ -51,7 +51,7 @@ export const BlockRow = observer(function BlockRow(props: Props) {
     );
 
     // Observe if the block is visible on the chart
-    const observer = new IntersectionObserver(
+      const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
           setIsHidden(!entry.isIntersecting);
@@ -60,7 +60,7 @@ export const BlockRow = observer(function BlockRow(props: Props) {
       },
       {
         root: intersectionRoot,
-        rootMargin: `0px 0px 0px -${SIDEBAR_WIDTH}px`,
+        rootMargin: "0px",
       }
     );
 
@@ -103,7 +103,7 @@ export const BlockRow = observer(function BlockRow(props: Props) {
                 type="button"
                 className="sticky z-[5] grid h-8 w-8 translate-y-1.5 cursor-pointer place-items-center rounded-sm border border-strong bg-layer-1 text-secondary hover:text-primary"
                 style={{
-                  left: `${SIDEBAR_WIDTH + 4}px`,
+                  left: "4px",
                 }}
                 onClick={() => handleScrollToBlock(block)}
               >

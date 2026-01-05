@@ -61,7 +61,7 @@ interface IPeekOverviewProperties {
 export const PeekOverviewProperties = observer(function PeekOverviewProperties(props: IPeekOverviewProperties) {
   const { workspaceSlug, projectId, issueId, issueOperations, disabled } = props;
   const { t } = useTranslation();
-  const [isMetaExpanded, setIsMetaExpanded] = useState(true);
+  const [isMetaExpanded, setIsMetaExpanded] = useState(false);
   // store hooks
   const { getProjectById } = useProject();
   const {
@@ -243,7 +243,7 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
           </SidebarPropertyListItem>
         )}
 
-        {projectDetails?.module_view && (
+        {isMetaExpanded && projectDetails?.module_view && (
           <SidebarPropertyListItem icon={ModuleIcon} label={t("common.modules")}>
             <IssueModuleSelect
               className="w-full grow"
@@ -256,7 +256,7 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
           </SidebarPropertyListItem>
         )}
 
-        {projectDetails?.cycle_view && (
+        {isMetaExpanded && projectDetails?.cycle_view && (
           <SidebarPropertyListItem
             icon={CycleIcon}
             label={t("common.cycle")}

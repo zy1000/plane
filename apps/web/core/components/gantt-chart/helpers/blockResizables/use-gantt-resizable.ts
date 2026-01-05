@@ -11,7 +11,7 @@ import type { IBlockUpdateDependencyData, IGanttBlock } from "@plane/types";
 // hooks
 import { useTimeLineChartStore } from "@/hooks/use-timeline-chart";
 //
-import { DEFAULT_BLOCK_WIDTH, SIDEBAR_WIDTH } from "../../constants";
+import { DEFAULT_BLOCK_WIDTH } from "../../constants";
 
 export const useGanttResizable = (
   block: IGanttBlock,
@@ -46,7 +46,7 @@ export const useGanttResizable = (
     ganttContainerDimensions.current = ganttContainerElement.getBoundingClientRect();
 
     const dayWidth = currentViewData.data.dayWidth;
-    const mouseX = e.clientX - ganttContainerDimensions.current.left - SIDEBAR_WIDTH + ganttContainerElement.scrollLeft;
+    const mouseX = e.clientX - ganttContainerDimensions.current.left + ganttContainerElement.scrollLeft;
 
     // record position on drag start
     initialPositionRef.current = {
@@ -68,7 +68,7 @@ export const useGanttResizable = (
 
       const { left: containerLeft } = ganttContainerDimensions.current;
 
-      const mouseX = e.clientX - containerLeft - SIDEBAR_WIDTH + ganttContainerElement.scrollLeft;
+      const mouseX = e.clientX - containerLeft + ganttContainerElement.scrollLeft;
 
       let width = initialPositionRef.current.width;
       let marginLeft = initialPositionRef.current.marginLeft;

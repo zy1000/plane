@@ -5,6 +5,7 @@
  */
 
 import { observer } from "mobx-react";
+import { ChevronRightIcon } from "@plane/propel/icons";
 // plane imports
 import type { IGanttBlock } from "@plane/types";
 import { Row } from "@plane/ui";
@@ -25,10 +26,14 @@ type Props = {
   isDragging: boolean;
   selectionHelpers?: TSelectionHelper;
   isEpic?: boolean;
+  nestingLevel: number;
+  isExpanded: boolean;
+  onToggleExpand: (issueId: string) => void;
 };
 
 export const IssuesSidebarBlock = observer(function IssuesSidebarBlock(props: Props) {
-  const { block, enableSelection, isDragging, selectionHelpers, isEpic = false } = props;
+  const { block, enableSelection, isDragging, selectionHelpers, isEpic = false, nestingLevel, isExpanded, onToggleExpand } =
+    props;
   // store hooks
   const { updateActiveBlockId, isBlockActive, getNumberOfDaysFromPosition } = useTimeLineChartStore();
   const { getIsIssuePeeked } = useIssueDetail();
@@ -42,6 +47,10 @@ export const IssuesSidebarBlock = observer(function IssuesSidebarBlock(props: Pr
   const isIssueFocused = selectionHelpers?.getIsEntityActive(block.id);
   const isBlockHoveredOn = isBlockActive(block.id);
 
+  const subIssuesCount = (block.data as any)?.sub_issues_count ?? 0;
+  const showExpandButton = !isEpic && nestingLevel < 3 && subIssuesCount > 0;
+  const indentation = nestingLevel > 0 ? nestingLevel * 12 : 0;
+
   return (
     <div
       className={cn("group/list-block", {
@@ -54,7 +63,7 @@ export const IssuesSidebarBlock = observer(function IssuesSidebarBlock(props: Pr
     >
       <Row
         className={cn(
-          "group flex w-full items-center gap-2 bg-layer-transparent pr-4 hover:bg-layer-transparent-hover",
+          "group flex min-w-full w-max items-center gap-2 bg-layer-transparent pr-4 hover:bg-layer-transparent-hover",
           {
             "bg-layer-transparent-hover": isBlockHoveredOn,
             "bg-accent-primary/5 hover:bg-accent-primary/10": isIssueSelected,
@@ -80,9 +89,31 @@ export const IssuesSidebarBlock = observer(function IssuesSidebarBlock(props: Pr
             />
           </div>
         )}
-        <div className="flex h-full flex-grow items-center justify-between gap-2 truncate">
-          <div className="flex-grow truncate">
-            <IssueGanttSidebarBlock issueId={block.data.id} isEpic={isEpic} />
+        <div className="flex h-full flex-grow items-center justify-between gap-2 whitespace-nowrap">
+          <div className="flex items-center gap-1 whitespace-nowrap" style={indentation ? { marginLeft: `${indentation}px` } : {}}>
+            <div className="size-4 grid place-items-center flex-shrink-0">
+              {showExpandButton && (
+                <button
+                  type="button"
+                  className="size-4 grid place-items-center rounded-sm text-custom-text-400 hover:text-custom-text-300"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    onToggleExpand(block.data.id);
+                  }}
+                >
+                  <ChevronRightIcon
+                    className={cn("size-4", {
+                      "rotate-90": isExpanded,
+                    })}
+                    strokeWidth={2.5}
+                  />
+                </button>
+              )}
+            </div>
+            <div className="flex-none">
+              <IssueGanttSidebarBlock issueId={block.data.id} isEpic={isEpic} />
+            </div>
           </div>
           {duration && (
             <div className="flex-shrink-0 text-13 text-secondary">

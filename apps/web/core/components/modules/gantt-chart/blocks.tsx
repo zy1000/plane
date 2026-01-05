@@ -83,12 +83,12 @@ export const ModuleGanttSidebarBlock = observer(function ModuleGanttSidebarBlock
 
   return (
     <Link
-      className="relative flex h-full w-full items-center gap-2"
+      className="relative flex h-full w-max items-center gap-2 whitespace-nowrap"
       href={`/${workspaceSlug?.toString()}/projects/${moduleDetails?.project_id}/modules/${moduleDetails?.id}`}
       draggable={false}
     >
       <ModuleStatusIcon status={moduleDetails?.status ?? "backlog"} height="16px" width="16px" />
-      <h6 className="flex-grow truncate text-13 font-medium">{moduleDetails?.name}</h6>
+      <h6 className="text-13 font-medium whitespace-nowrap">{moduleDetails?.name}</h6>
     </Link>
   );
 });

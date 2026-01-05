@@ -16,14 +16,14 @@ import { MultipleSelectGroupAction } from "@/components/core/multiple-select";
 // hooks
 import type { TSelectionHelper } from "@/hooks/use-multiple-select";
 // constants
-import { GANTT_SELECT_GROUP, HEADER_HEIGHT, SIDEBAR_WIDTH } from "../constants";
+import { GANTT_SELECT_GROUP, HEADER_HEIGHT } from "../constants";
 
 type Props = {
   blockIds: string[];
   blockUpdateHandler: (block: any, payload: IBlockUpdateData) => void;
   canLoadMoreBlocks?: boolean;
   loadMoreBlocks?: () => void;
-  ganttContainerRef: RefObject<HTMLDivElement>;
+  sidebarContainerRef: RefObject<HTMLDivElement>;
   enableReorder: boolean | ((blockId: string) => boolean);
   enableSelection: boolean | ((blockId: string) => boolean);
   sidebarToRender: (props: any) => React.ReactNode;
@@ -43,7 +43,7 @@ export const GanttChartSidebar = observer(function GanttChartSidebar(props: Prop
     sidebarToRender,
     loadMoreBlocks,
     canLoadMoreBlocks,
-    ganttContainerRef,
+    sidebarContainerRef,
     title,
     selectionHelpers,
     showAllBlocks = false,
@@ -52,14 +52,11 @@ export const GanttChartSidebar = observer(function GanttChartSidebar(props: Prop
 
   const isGroupSelectionEmpty = selectionHelpers.isGroupSelected(GANTT_SELECT_GROUP) === "empty";
 
-  return (
-    <Row
-      // DO NOT REMOVE THE ID
-      id="gantt-sidebar"
-      className="sticky left-0 z-10 h-max min-h-full flex-shrink-0 border-r-[0.5px] border-subtle-1 bg-surface-1"
-      style={{
-        width: `${SIDEBAR_WIDTH}px`,
-      }}
+    return (
+      <Row
+        // DO NOT REMOVE THE ID
+        id="gantt-sidebar"
+      className="min-h-full h-max min-w-full w-max flex-shrink-0 border-r-[0.5px] border-custom-border-200 bg-custom-background-100"
       variant={ERowVariant.HUGGING}
     >
       <Row
@@ -97,7 +94,7 @@ export const GanttChartSidebar = observer(function GanttChartSidebar(props: Prop
             enableReorder,
             enableSelection,
             canLoadMoreBlocks,
-            ganttContainerRef,
+            ganttContainerRef: sidebarContainerRef,
             loadMoreBlocks,
             selectionHelpers,
             showAllBlocks,

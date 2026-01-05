@@ -12,7 +12,6 @@ import { Tooltip } from "@plane/propel/tooltip";
 import { ControlLink } from "@plane/ui";
 import { findTotalDaysInRange, generateWorkItemLink } from "@plane/utils";
 // components
-import { SIDEBAR_WIDTH } from "@/components/gantt-chart/constants";
 // hooks
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useIssues } from "@/hooks/store/use-issues";
@@ -75,7 +74,7 @@ export const IssueGanttBlock = observer(function IssueGanttBlock(props: Props) {
             <div className="absolute top-0 left-0 h-full w-full bg-surface-1/50" />
             <div
               className="sticky w-auto flex-1 truncate overflow-hidden px-2.5 py-1 text-13 text-primary"
-              style={{ left: `${SIDEBAR_WIDTH}px` }}
+              style={{ left: "0px" }}
             >
               {issueDetails?.name}
             </div>
@@ -151,10 +150,10 @@ export const IssueGanttSidebarBlock = observer(function IssueGanttSidebarBlock(p
       id={`issue-${issueId}`}
       href={workItemLink}
       onClick={handleIssuePeekOverview}
-      className="line-clamp-1 w-full cursor-pointer text-13 text-primary"
+      className="w-max cursor-pointer text-13 text-primary"
       disabled={!!issueDetails?.tempId}
     >
-      <div className="relative flex h-full w-full cursor-pointer items-center gap-2">
+      <div className="relative flex h-full w-max cursor-pointer items-center gap-2 whitespace-nowrap">
         {projectIssueTypesMap &&
           issueDetails?.type_id &&
           projectIssueTypesMap[issueDetails.type_id]?.logo_props?.icon &&
@@ -186,7 +185,7 @@ export const IssueGanttSidebarBlock = observer(function IssueGanttSidebarBlock(p
           />
         )}
         <Tooltip tooltipContent={issueDetails?.name} isMobile={isMobile}>
-          <span className="flex-grow truncate text-13 font-medium">{issueDetails?.name}</span>
+        <span className="whitespace-nowrap text-13 font-medium">{issueDetails?.name}</span>
         </Tooltip>
       </div>
     </ControlLink>

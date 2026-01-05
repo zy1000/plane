@@ -42,7 +42,7 @@ export const ModulesSidebarBlock = observer(function ModulesSidebarBlock(props: 
       <Row
         id={`sidebar-block-${block.id}`}
         className={cn(
-          "group flex w-full items-center gap-2 bg-layer-transparent pr-4 hover:bg-layer-transparent-hover",
+          "group flex min-w-full w-max items-center gap-2 bg-layer-transparent pr-4 hover:bg-layer-transparent-hover",
           {
             "bg-transparent-hover": isBlockActive(block.id),
           }
@@ -51,8 +51,8 @@ export const ModulesSidebarBlock = observer(function ModulesSidebarBlock(props: 
           height: `${BLOCK_HEIGHT}px`,
         }}
       >
-        <div className="flex h-full flex-grow items-center justify-between gap-2 truncate">
-          <div className="flex-grow truncate">
+        <div className="flex h-full flex-grow items-center justify-between gap-2 whitespace-nowrap">
+          <div className="flex-none">
             <ModuleGanttSidebarBlock moduleId={block.data.id} />
           </div>
           {duration !== undefined && (
