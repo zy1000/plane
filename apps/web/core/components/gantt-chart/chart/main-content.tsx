@@ -35,7 +35,7 @@ import { TimelineDragHelper } from "./timeline-drag-helper";
 const SIDEBAR_MIN_WIDTH = 260;
 const SIDEBAR_MAX_WIDTH = 560;
 const CHART_MIN_WIDTH = 360;
-
+// 甘特图文件
 type Props = {
   blockIds: string[];
   canLoadMoreBlocks?: boolean;
@@ -175,11 +175,11 @@ export const GanttChartMainContent = observer(function GanttChartMainContent(pro
     if (resizeStartRef.current) return;
 
     const target = e.target as HTMLElement | null;
+    const allowPanFromTarget = !!target?.closest('[data-allow-pan="true"]');
     if (target?.closest('[id^="gantt-block-"]')) return;
     if (
-      target?.closest(
-        'a,button,input,textarea,select,option,[role="button"],[contenteditable="true"],[data-no-pan="true"]'
-      )
+      !allowPanFromTarget &&
+      target?.closest('a,button,input,textarea,select,option,[role="button"],[contenteditable="true"],[data-no-pan="true"]')
     )
       return;
 
