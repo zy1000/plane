@@ -439,6 +439,7 @@ export const BugIssueFormRoot: FC<BugIssueFormProps> = observer((props) => {
                   id={data?.id}
                   projectId={projectId}
                   workspaceSlug={workspaceSlug?.toString()}
+                  issueTypeId={watch("type_id")}
                   selectedParentIssue={selectedParentIssue}
                   startDate={watch("start_date")}
                   targetDate={watch("target_date")}

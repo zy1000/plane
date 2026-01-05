@@ -37,6 +37,7 @@ type Props = {
   projectId: string | undefined;
   issueId?: string;
   searchEpic?: boolean;
+  issueTypeId?: string | null;
 };
 
 // services
@@ -50,6 +51,7 @@ export function ParentIssuesListModal({
   projectId,
   issueId,
   searchEpic = false,
+  issueTypeId,
 }: Props) {
   // i18n
   const { t } = useTranslation();
@@ -81,6 +83,7 @@ export function ParentIssuesListModal({
         search: debouncedSearchTerm,
         parent: searchEpic ? undefined : true,
         issue_id: issueId,
+        issue_type_id: issueTypeId ?? undefined,
         workspace_search: false,
         epic: searchEpic ? true : undefined,
       })
@@ -89,7 +92,7 @@ export function ParentIssuesListModal({
         setIsSearching(false);
         setIsLoading(false);
       });
-  }, [debouncedSearchTerm, isOpen, issueId, projectId, workspaceSlug]);
+  }, [debouncedSearchTerm, isOpen, issueId, issueTypeId, projectId, workspaceSlug]);
 
   return (
     <ModalCore isOpen={isOpen} handleClose={handleClose} position={EModalPosition.CENTER} width={EModalWidth.XXL}>
