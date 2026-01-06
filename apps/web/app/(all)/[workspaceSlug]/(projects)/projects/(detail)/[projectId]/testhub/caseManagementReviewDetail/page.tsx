@@ -5,7 +5,7 @@ import { useEffect, useState, useRef, useMemo } from "react";
 import { PageHead } from "@/components/core/page-title";
 import { Breadcrumbs } from "@plane/ui";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
-import { Row, Col, Tree, Table, Button, Tag, message } from "antd";
+import { Row, Col, Tree, Table, Button, Tag, message, Pagination } from "antd";
 import type { TreeProps } from "antd";
 import { AppstoreOutlined, DeploymentUnitOutlined } from "@ant-design/icons";
 import { CaseService as CaseApiService } from "@/services/qa/case.service";
@@ -132,6 +132,11 @@ export default function CaseManagementReviewDetailPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handlePaginationChange = (page: number, size?: number) => {
+    const nextSize = size || pageSize;
+    fetchReviewCaseList(page, nextSize);
   };
 
   useEffect(() => {
@@ -378,9 +383,9 @@ export default function CaseManagementReviewDetailPage() {
   ];
 
   return (
-    <div className="flex flex-col gap-3 p-4 w-full">
+    <div className="flex flex-col gap-3 p-4 w-full h-full overflow-hidden">
       <PageHead title="评审详情" />
-      <Breadcrumbs>
+      <Breadcrumbs className="grow-0">
         <Breadcrumbs.Item
           component={
             <BreadcrumbLink href={`/${workspaceSlug}/projects/${projectId}/testhub/reviews`} label="用例评审" />
@@ -388,9 +393,9 @@ export default function CaseManagementReviewDetailPage() {
         />
         <Breadcrumbs.Item component={<BreadcrumbLink label="评审详情" isLast />} />
       </Breadcrumbs>
-      <Row className="w-full rounded-md border border-custom-border-200 overflow-hidden" gutter={0}>
-        <Col flex={`${leftWidth}px`} className="relative border-r border-custom-border-200">
-          <div className="p-4">
+      <Row className="w-full flex-1 min-h-0 rounded-md border border-custom-border-200 overflow-hidden" gutter={0}>
+        <Col flex={`${leftWidth}px`} className="relative border-r border-custom-border-200 overflow-hidden">
+          <div className="p-4 h-full overflow-y-auto">
             {!repositoryId && <div className="text-custom-text-300">未找到用例库ID，请先在顶部选择一个用例库</div>}
             {repositoryId && (
               <Tree
@@ -408,8 +413,8 @@ export default function CaseManagementReviewDetailPage() {
           </div>
           <div className="absolute top-0 right-[-2px] w-1 h-full cursor-col-resize" onMouseDown={onMouseDownResize} />
         </Col>
-        <Col flex="auto" className="overflow-y-auto">
-          <div className="p-4">
+        <Col flex="auto" className="overflow-hidden">
+          <div className="p-4 flex flex-col h-full min-h-0 overflow-hidden">
             {loading && (
               <div className="flex items-center justify-center py-12">
                 <div className="text-custom-text-300">加载中...</div>
@@ -421,29 +426,38 @@ export default function CaseManagementReviewDetailPage() {
               </div>
             )}
             {repositoryId && !loading && !error && (
-              <Table
-                dataSource={reviewCases}
-                columns={columns as any}
-                rowKey="id"
-                bordered={true}
-                pagination={{
-                  current: currentPage,
-                  pageSize,
-                  total,
-                  showSizeChanger: true,
-                  showQuickJumper: true,
-                  showTotal: (t, r) => `第 ${r[0]}-${r[1]} 条，共 ${t} 条`,
-                  pageSizeOptions: ["10", "20", "50", "100"],
-                }}
-                locale={{ emptyText: "暂无数据" }}
-                onChange={(pagination) => {
-                  const nextPage = pagination.current || 1;
-                  const nextSize = pagination.pageSize || pageSize;
-                  if (nextPage !== currentPage) setCurrentPage(nextPage);
-                  if (nextSize !== pageSize) setPageSize(nextSize);
-                  fetchReviewCaseList(nextPage, nextSize);
-                }}
-              />
+              <div className="flex flex-col h-full overflow-hidden">
+                <div className="flex-1 overflow-y-auto">
+                  <Table
+                    dataSource={reviewCases}
+                    columns={columns as any}
+                    rowKey="id"
+                    bordered={true}
+                    pagination={false}
+                    locale={{ emptyText: "暂无数据" }}
+                  />
+                </div>
+                <div className="flex-shrink-0 border-t border-custom-border-200 px-4 py-3 bg-custom-background-100 flex items-center justify-between">
+                  <div className="flex items-center gap-4 text-sm">
+                    <span className="text-custom-text-300">
+                      {total > 0
+                        ? `第 ${(currentPage - 1) * pageSize + 1}-${Math.min(currentPage * pageSize, total)} 条，共 ${total} 条`
+                        : ""}
+                    </span>
+                  </div>
+                  <Pagination
+                    current={currentPage}
+                    pageSize={pageSize}
+                    total={total}
+                    showSizeChanger
+                    showQuickJumper
+                    pageSizeOptions={["10", "20", "50", "100"]}
+                    onChange={handlePaginationChange}
+                    onShowSizeChange={handlePaginationChange}
+                    size="small"
+                  />
+                </div>
+              </div>
             )}
             {!repositoryId && !loading && (
               <div className="flex items-center justify-center py-12">

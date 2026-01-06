@@ -5,8 +5,8 @@ from plane.app.views import PlanAPIView, RepositoryAPIView, CaseModuleAPIView, L
     EnumDataAPIView, CaseAttachmentV2Endpoint, CaseDetailAPIView, PlanView, PlanModuleAPIView, PlanCaseAPIView
 from plane.app.views.qa.case import CaseAssetAPIView, CaseIssueWithType, TestCaseCommentAPIView, CaseAPI, \
     CaseLabelAPIView
-from plane.app.views.qa.module import CaseModuleCountAPIView
-from plane.app.views.qa.review import ReviewModuleAPIView, CaseReviewAPIView,CaseReviewView
+from plane.app.views.qa.module import CaseModuleCountAPIView, CaseModuleDetailAPIView
+from plane.app.views.qa.review import ReviewModuleAPIView, CaseReviewAPIView, CaseReviewView
 
 router = SimpleRouter()
 router.register('review', CaseReviewView, basename='review')
@@ -19,6 +19,8 @@ urlpatterns = [
     path('workspaces/<str:slug>/test/plan/module/', PlanModuleAPIView.as_view(), name='test-plan'),
     path('workspaces/<str:slug>/test/plane-assignee/', PlanAPIView.as_view(), name='test-plan'),
     path('workspaces/<str:slug>/test/module/', CaseModuleAPIView.as_view(), name='test-case'),
+    path('workspaces/<str:slug>/test/module/<uuid:module_id>/', CaseModuleDetailAPIView.as_view(),
+         name='test-case-module-detail'),
     path('workspaces/<str:slug>/test/module/count/', CaseModuleCountAPIView.as_view(), name='test-case'),
     path('workspaces/<str:slug>/test/case/', CaseAPIView.as_view(), name='test-case'),
     path('workspaces/<str:slug>/test/case/issues/', CaseIssueWithType.as_view(), name='test-case'),

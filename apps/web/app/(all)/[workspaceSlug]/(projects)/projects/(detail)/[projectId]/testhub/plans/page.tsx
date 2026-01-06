@@ -4,7 +4,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, useRef, useMemo } from "react";
 import { PageHead } from "@/components/core/page-title";
 import { PlanService } from "@/services/qa/plan.service";
-import { Space, Table, Tag, Input, Button, Dropdown, Modal, Tooltip } from "antd";
+import { Space, Table, Tag, Input, Button, Dropdown, Modal, Tooltip, Pagination } from "antd";
 import {
   SearchOutlined,
   PlusOutlined,
@@ -294,16 +294,14 @@ export default function TestPlanDetailPage() {
 
   const renderResult = (result: any) => <span className="text-sm text-custom-text-500">{result ?? "-"}</span>;
 
-  const handleTableChange: TableProps<TestPlan>["onChange"] = (pagination, tableFilters) => {
+  const handleTableChange: TableProps<TestPlan>["onChange"] = (_pagination, tableFilters) => {
     const selectedStates = (tableFilters?.state as number[] | undefined) || [];
     const newFilters = { ...filters, states: selectedStates.length ? selectedStates.map((v) => Number(v)) : undefined };
-    const nextPage = pagination.current || 1;
-    const nextPageSize = pagination.pageSize || pageSize;
     const filtersChanged = JSON.stringify(filters) !== JSON.stringify(newFilters);
+    const nextPage = filtersChanged ? 1 : currentPage;
     setCurrentPage(nextPage);
-    setPageSize(nextPageSize);
-    setFilters(newFilters);
-    fetchTestPlans(nextPage, nextPageSize, filtersChanged ? newFilters : filters);
+    if (filtersChanged) setFilters(newFilters);
+    fetchTestPlans(nextPage, pageSize, filtersChanged ? newFilters : filters);
   };
 
   const [showEditModal, setShowEditModal] = useState(false);
@@ -649,7 +647,7 @@ export default function TestPlanDetailPage() {
                   onMouseDown={onMouseDownResize}
                 />
               </div>
-              <div className="flex-1 overflow-auto py-4 pt-0">
+              <div className="flex-1 overflow-hidden py-4 pt-0">
                 {loading && (
                   <div className="flex items-center justify-center py-12">
                     <div className="text-custom-text-300">加载中...</div>
@@ -666,28 +664,45 @@ export default function TestPlanDetailPage() {
                   </div>
                 )}
                 {repositoryId && !loading && !error && (
-                  <div
-                    className={`testhub-plans-table-scroll relative max-h-[700px] overflow-y-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar]:block [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-[rgb(var(--color-scrollbar))] [&::-webkit-scrollbar-thumb]:rounded-full ${
-                      pageSize === 100 ? "testhub-plans-scrollbar-strong" : ""
-                    }`}
-                  >
-                    <Table
-                      dataSource={testPlans}
-                      columns={columns}
-                      loading={loading}
-                      rowKey="id"
-                      bordered={true}
-                      onChange={handleTableChange}
-                      pagination={{
-                        current: currentPage,
-                        pageSize: pageSize,
-                        total: total,
-                        showSizeChanger: true,
-                        showQuickJumper: true,
-                        showTotal: (t, r) => `第 ${r[0]}-${r[1]} 条，共 ${t} 条`,
-                        pageSizeOptions: ["10", "20", "50", "100"],
-                      }}
-                    />
+                  <div className="flex flex-col h-full overflow-hidden">
+                    <div
+                      className={`testhub-plans-table-scroll flex-1 relative overflow-y-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar]:block [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-[rgb(var(--color-scrollbar))] [&::-webkit-scrollbar-thumb]:rounded-full ${
+                        pageSize === 100 ? "testhub-plans-scrollbar-strong" : ""
+                      }`}
+                    >
+                      <Table
+                        dataSource={testPlans}
+                        columns={columns}
+                        loading={loading}
+                        rowKey="id"
+                        bordered={true}
+                        onChange={handleTableChange}
+                        pagination={false}
+                      />
+                    </div>
+                    <div className="flex-shrink-0 border-t border-custom-border-200 px-4 py-3 bg-custom-background-100 flex items-center justify-between">
+                      <div className="flex items-center gap-4 text-sm">
+                        <span className="text-custom-text-300">
+                          {total > 0
+                            ? `第 ${(currentPage - 1) * pageSize + 1}-${Math.min(
+                                currentPage * pageSize,
+                                total
+                              )} 条，共 ${total} 条`
+                            : ""}
+                        </span>
+                      </div>
+                      <Pagination
+                        current={currentPage}
+                        pageSize={pageSize}
+                        total={total}
+                        showSizeChanger
+                        showQuickJumper
+                        pageSizeOptions={["10", "20", "50", "100"]}
+                        onChange={handlePaginationChange}
+                        onShowSizeChange={handlePaginationChange}
+                        size="small"
+                      />
+                    </div>
                   </div>
                 )}
                 <style
@@ -702,16 +717,6 @@ export default function TestPlanDetailPage() {
                         top: 0;
                         z-index: 5;
                         background: rgb(var(--color-background-100));
-                      }
-
-                      .testhub-plans-table-scroll .ant-table-pagination{
-                        position: sticky;
-                        bottom: 0;
-                        z-index: 5;
-                        background: rgb(var(--color-background-100));
-                        margin: 0;
-                        padding: 8px 16px;
-                        border-top: 1px solid rgb(var(--color-border-200));
                       }
 
                       .testhub-plans-table-scroll.testhub-plans-scrollbar-strong{

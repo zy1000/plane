@@ -21,6 +21,7 @@ from plane.settings.storage import S3Storage
 from plane.bgtasks.storage_metadata_task import get_asset_object_metadata
 from django.conf import settings
 from django.http import HttpResponseRedirect, FileResponse, StreamingHttpResponse
+
 from urllib.parse import quote
 import uuid
 from django.utils import timezone
@@ -342,7 +343,6 @@ class CaseAPIView(BaseAPIView):
         return list_response(data=data, count=cases.count())
 
     def post(self, request, slug):
-
         serializer = CaseCreateUpdateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         test_plan = serializer.save()

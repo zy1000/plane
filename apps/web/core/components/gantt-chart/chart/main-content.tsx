@@ -169,6 +169,7 @@ export const GanttChartMainContent = observer(function GanttChartMainContent(pro
     return () => {
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
+      if (chartContainerRef.current) chartContainerRef.current.classList.remove("gantt-pan-active");
       panStartRef.current = null;
       panActiveRef.current = false;
       panButtonRef.current = null;
@@ -200,6 +201,9 @@ export const GanttChartMainContent = observer(function GanttChartMainContent(pro
     };
     panActiveRef.current = false;
     panButtonRef.current = e.button;
+    document.body.style.cursor = "grabbing";
+    document.body.style.userSelect = "none";
+    chartContainerRef.current.classList.add("gantt-pan-active");
 
     const onMouseMove = (ev: MouseEvent) => {
       const start = panStartRef.current;
@@ -213,8 +217,6 @@ export const GanttChartMainContent = observer(function GanttChartMainContent(pro
         const threshold = 3;
         if (Math.abs(dx) < threshold && Math.abs(dy) < threshold) return;
         panActiveRef.current = true;
-        document.body.style.cursor = "grabbing";
-        document.body.style.userSelect = "none";
       }
 
       el.scrollLeft = start.scrollLeft - dx;
@@ -230,6 +232,7 @@ export const GanttChartMainContent = observer(function GanttChartMainContent(pro
       panButtonRef.current = null;
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
+      if (chartContainerRef.current) chartContainerRef.current.classList.remove("gantt-pan-active");
       if (button === 2 && wasPanning) suppressContextMenuUntilRef.current = Date.now() + 1000;
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("mouseup", onMouseUp);

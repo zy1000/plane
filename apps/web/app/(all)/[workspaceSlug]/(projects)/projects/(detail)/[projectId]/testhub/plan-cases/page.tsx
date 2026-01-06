@@ -8,7 +8,7 @@ import { Button } from "antd";
 import PlanCasesModal from "@/components/qa/plans/plan-cases-modal";
 import PlanIterationModal from "@/components/qa/plans/plan-iteration-modal";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
-import { Row, Col, Tree, Table, Space, Tag, message, Dropdown } from "antd";
+import { Row, Col, Tree, Table, Space, Tag, message, Dropdown, Pagination } from "antd";
 import type { TableProps } from "antd";
 import type { TreeProps } from "antd";
 import { CaseModuleService } from "@/services/qa";
@@ -133,6 +133,11 @@ export default function PlanCasesPage() {
     const key = Array.isArray(selectedKeys) && selectedKeys.length > 0 ? String(selectedKeys[0]) : null;
     setSelectedModuleId(key === "all" ? null : key);
     fetchCases(1, pageSize, key === "all" ? undefined : key || undefined);
+  };
+
+  const handlePaginationChange = (page: number, size?: number) => {
+    const nextSize = size || pageSize;
+    fetchCases(page, nextSize, selectedModuleId || undefined);
   };
 
   const onExpand: TreeProps["onExpand"] = (keys) => {
@@ -360,7 +365,7 @@ export default function PlanCasesPage() {
               className="py-2"
             />
           </Col>
-          <Col flex="auto" className="overflow-y-auto">
+          <Col flex="auto" className="overflow-hidden">
             {loading && (
               <div className="flex items-center justify-center py-12">
                 <div className="text-custom-text-300">加载中...</div>
@@ -372,31 +377,40 @@ export default function PlanCasesPage() {
               </div>
             )}
             {!loading && !error && (
-              <div
-                className={`testhub-plan-cases-table-scroll relative px-0 max-h-[700px] overflow-y-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar]:block [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-[rgb(var(--color-scrollbar))] [&::-webkit-scrollbar-thumb]:rounded-full ${
-                  pageSize === 100 ? "testhub-plan-cases-scrollbar-strong" : ""
-                }`}
-              >
-                <Table
-                  dataSource={cases}
-                  columns={columns}
-                  rowKey={(row) => row?.case?.id || row?.id}
-                  bordered={true}
-                  pagination={{
-                    current: currentPage,
-                    pageSize: pageSize,
-                    total: total,
-                    showSizeChanger: true,
-                    showQuickJumper: true,
-                    showTotal: (t, r) => `第 ${r[0]}-${r[1]} 条，共 ${t} 条`,
-                    pageSizeOptions: ["10", "20", "50", "100"],
-                  }}
-                  onChange={(p) => {
-                    const nextSize = p?.pageSize || pageSize;
-                    const nextPage = p?.current || 1;
-                    fetchCases(nextPage, nextSize, selectedModuleId || undefined);
-                  }}
-                />
+              <div className="flex flex-col h-full overflow-hidden">
+                <div
+                  className={`testhub-plan-cases-table-scroll flex-1 relative px-0 overflow-y-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar]:block [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-[rgb(var(--color-scrollbar))] [&::-webkit-scrollbar-thumb]:rounded-full ${
+                    pageSize === 100 ? "testhub-plan-cases-scrollbar-strong" : ""
+                  }`}
+                >
+                  <Table
+                    dataSource={cases}
+                    columns={columns}
+                    rowKey={(row) => row?.case?.id || row?.id}
+                    bordered={true}
+                    pagination={false}
+                  />
+                </div>
+                <div className="flex-shrink-0 border-t border-custom-border-200 px-4 py-3 bg-custom-background-100 flex items-center justify-between">
+                  <div className="flex items-center gap-4 text-sm">
+                    <span className="text-custom-text-300">
+                      {total > 0
+                        ? `第 ${(currentPage - 1) * pageSize + 1}-${Math.min(currentPage * pageSize, total)} 条，共 ${total} 条`
+                        : ""}
+                    </span>
+                  </div>
+                  <Pagination
+                    current={currentPage}
+                    pageSize={pageSize}
+                    total={total}
+                    showSizeChanger
+                    showQuickJumper
+                    pageSizeOptions={["10", "20", "50", "100"]}
+                    onChange={handlePaginationChange}
+                    onShowSizeChange={handlePaginationChange}
+                    size="small"
+                  />
+                </div>
                 <style
                   dangerouslySetInnerHTML={{
                     __html: `
@@ -409,16 +423,6 @@ export default function PlanCasesPage() {
                     top: 0;
                     z-index: 5;
                     background: rgb(var(--color-background-100));
-                  }
-
-                  .testhub-plan-cases-table-scroll .ant-table-pagination{
-                    position: sticky;
-                    bottom: 0;
-                    z-index: 5;
-                    background: rgb(var(--color-background-100));
-                    margin: 0;
-                    padding: 8px 16px;
-                    border-top: 1px solid rgb(var(--color-border-200));
                   }
 
                   .testhub-plan-cases-table-scroll.testhub-plan-cases-scrollbar-strong{
