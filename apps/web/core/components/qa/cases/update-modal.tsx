@@ -843,29 +843,6 @@ function UpdateModal({ open, onClose, caseId }: UpdateModalProps) {
     }
   };
 
-  // 新增：容器级 onBlur 包装（焦点离开 StepsEditor 整体区域时触发）
-  const handleBlurStepsWrapper = (e: React.FocusEvent<HTMLDivElement>) => {
-    console.log(8888);
-
-    const nextFocus = e.relatedTarget as Node | null;
-    if (nextFocus && e.currentTarget.contains(nextFocus)) return;
-    handleBlurSteps();
-  };
-
-  // 新增：监听“外部点击”作为 onBlur 的兜底，解决多条步骤删除后不触发 onBlur 的问题
-  const stepsEditorWrapperRef = React.useRef<HTMLDivElement | null>(null);
-  React.useEffect(() => {
-    const handlePointerDownOutside = (event: PointerEvent) => {
-      const el = stepsEditorWrapperRef.current;
-      if (!el) return;
-      const target = event.target as Node | null;
-      if (target && el.contains(target)) return; // 点击在内部，忽略
-      handleBlurSteps(); // 外部点击，尝试保存
-    };
-    document.addEventListener("pointerdown", handlePointerDownOutside, true);
-    return () => document.removeEventListener("pointerdown", handlePointerDownOutside, true);
-  }, [stepsValue, caseData?.steps, workspaceSlug, caseId]);
-
   // 渲染加载状态
   if (loading) {
     return (

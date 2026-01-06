@@ -692,7 +692,7 @@ export default function ReviewsPage() {
           </div>
           <div className={styles.resizer} onMouseDown={onMouseDownResize} />
         </div>
-        <div className={`${styles.right} pt-0 overflow-hidden`}>
+        <div className={`${styles.right} !py-0 overflow-hidden`}>
           <div className="flex flex-col h-full overflow-hidden">
             <div
               className={`testhub-reviews-table-scroll flex-1 relative overflow-y-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar]:block [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-[rgb(var(--color-scrollbar))] [&::-webkit-scrollbar-thumb]:rounded-full ${
