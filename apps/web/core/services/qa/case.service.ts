@@ -99,6 +99,15 @@ export class CaseService extends APIService {
       });
   }
 
+  async getCaseReviewRecord(workspaceSlug: string, caseId: string): Promise<any> {
+    const query = { case_id: caseId };
+    return this.get(`/api/workspaces/${workspaceSlug}/test/case/review-record/`, { params: query })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
   private fileUploadService: FileUploadService = new FileUploadService();
 
   private async updateCaseAttachmentUploadStatus(
@@ -290,8 +299,8 @@ export class CaseService extends APIService {
         throw error?.response?.data;
       });
   }
-  async getUnselectIssueCase(workspaceSlug: string, issueId: string, repositoryId: string, moduleId?: string): Promise<any> {
-    return this.get(`/api/workspaces/${workspaceSlug}/test/case/unselect-issue-case/`, {params: {issue_id: issueId, repository_id: repositoryId, module_id: moduleId}})
+  async getUnselectIssueCase(workspaceSlug: string, query: any): Promise<any> {
+    return this.get(`/api/workspaces/${workspaceSlug}/test/case/unselect-issue-case/`, { params: query })
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
