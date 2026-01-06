@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { PageHead } from "@/components/core/page-title";
-import { Input, Table, Dropdown, Button, Modal, Tag, message, Tooltip, Space } from "antd";
+import { Input, Table, Dropdown, Button, Modal, Tag, message, Tooltip, Space, Pagination } from "antd";
 import type { TableProps, TableColumnType, InputRef } from "antd";
 import {
   FolderOutlined,
@@ -366,6 +366,17 @@ export default function ReviewsPage() {
     return total;
   }, [total]);
 
+  const handlePaginationChange = (page: number, size?: number) => {
+    const nextSize = size || pageSize;
+    if (nextSize !== pageSize) setPageSize(nextSize);
+    if (page !== currentPage) setCurrentPage(page);
+  };
+
+  const handlePageSizeChange = (_current: number, size: number) => {
+    if (size !== pageSize) setPageSize(size);
+    if (currentPage !== 1) setCurrentPage(1);
+  };
+
   const dateOnly = (v?: string | number | Date | null) => {
     if (!v) return "-";
     const d = typeof v === "string" || typeof v === "number" ? new Date(v) : v;
@@ -682,90 +693,96 @@ export default function ReviewsPage() {
           <div className={styles.resizer} onMouseDown={onMouseDownResize} />
         </div>
         <div className={`${styles.right} pt-0 overflow-hidden`}>
-          <div
-            className={`testhub-reviews-table-scroll relative max-h-[700px] overflow-y-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar]:block [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-[rgb(var(--color-scrollbar))] [&::-webkit-scrollbar-thumb]:rounded-full ${
-              pageSize === 100 ? "testhub-reviews-scrollbar-strong" : ""
-            }`}
-          >
-            <Table
-              columns={columns}
-              dataSource={reviews}
-              loading={loading}
-              rowKey="id"
-              scroll={{ x: 1300 }}
-              onChange={(pagination, filtersArg) => {
-                const nextPage = pagination.current || 1;
-                const nextPageSize = pagination.pageSize || pageSize;
-                const selectedStates = (filtersArg.state as string[]) || [];
-                const selectedModes = (filtersArg.mode as string[]) || [];
-                const newFilters = {
-                  ...filters,
-                  state: selectedStates.length ? selectedStates : undefined,
-                  mode: selectedModes.length ? selectedModes : undefined,
-                };
-                const filtersChanged = JSON.stringify(filters) !== JSON.stringify(newFilters);
-                if (nextPage !== currentPage) setCurrentPage(nextPage);
-                if (nextPageSize !== pageSize) setPageSize(nextPageSize);
-                if (filtersChanged) setFilters(newFilters);
-              }}
-              pagination={{
-                current: currentPage,
-                pageSize,
-                total: totalForCurrent,
-                showSizeChanger: true,
-                showQuickJumper: true,
-                showTotal: (t, r) => `第 ${r[0]}-${r[1]} 条，共 ${t} 条`,
-                pageSizeOptions: ["10", "20", "50", "100"],
-              }}
-            />
-            <style
-              dangerouslySetInnerHTML={{
-                __html: `
-                  .testhub-reviews-table-scroll{
-                    scrollbar-gutter: stable both-edges;
+          <div className="flex flex-col h-full overflow-hidden">
+            <div
+              className={`testhub-reviews-table-scroll flex-1 relative overflow-y-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar]:block [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-[rgb(var(--color-scrollbar))] [&::-webkit-scrollbar-thumb]:rounded-full ${
+                pageSize === 100 ? "testhub-reviews-scrollbar-strong" : ""
+              }`}
+            >
+              <Table
+                columns={columns}
+                dataSource={reviews}
+                loading={loading}
+                rowKey="id"
+                scroll={{ x: 1300 }}
+                onChange={(_, filtersArg) => {
+                  const selectedStates = (filtersArg.state as string[]) || [];
+                  const selectedModes = (filtersArg.mode as string[]) || [];
+                  const newFilters = {
+                    ...filters,
+                    state: selectedStates.length ? selectedStates : undefined,
+                    mode: selectedModes.length ? selectedModes : undefined,
+                  };
+                  const filtersChanged = JSON.stringify(filters) !== JSON.stringify(newFilters);
+                  if (filtersChanged) {
+                    setCurrentPage(1);
+                    setFilters(newFilters);
                   }
-
-                  .testhub-reviews-table-scroll .ant-table-thead > tr > th{
-                    position: sticky;
-                    top: 0;
-                    z-index: 5;
-                    background: rgb(var(--color-background-100));
-                  }
-
-                  .testhub-reviews-table-scroll .ant-table-pagination{
-                    position: sticky;
-                    bottom: 0;
-                    z-index: 5;
-                    background: rgb(var(--color-background-100));
-                    margin: 0;
-                    padding: 8px 16px;
-                    border-top: 1px solid rgb(var(--color-border-200));
-                  }
-
-                  .testhub-reviews-table-scroll.testhub-reviews-scrollbar-strong{
-                    overflow-y: scroll;
-                    scrollbar-width: auto;
-                    scrollbar-color: rgb(var(--color-scrollbar)) transparent;
-                  }
-
-                  .testhub-reviews-table-scroll.testhub-reviews-scrollbar-strong::-webkit-scrollbar{
-                    width: 12px;
-                    height: 12px;
-                  }
-
-                  .testhub-reviews-table-scroll.testhub-reviews-scrollbar-strong::-webkit-scrollbar-thumb{
-                    background-color: rgba(var(--color-scrollbar), 0.85);
-                    border-radius: 999px;
-                    border: 3px solid rgba(var(--color-background-100), 1);
-                  }
-
-                  .testhub-reviews-table-scroll.testhub-reviews-scrollbar-strong::-webkit-scrollbar-track{
-                    background: transparent;
-                  }
-                `,
-              }}
-            />
+                }}
+                pagination={false}
+              />
+            </div>
+            <div className="flex-shrink-0 border-t border-custom-border-200 px-4 py-3 bg-custom-background-100 flex items-center justify-between">
+              <div className="flex items-center gap-4 text-sm">
+                <span className="text-custom-text-300">
+                  {totalForCurrent > 0
+                    ? `第 ${(currentPage - 1) * pageSize + 1}-${Math.min(
+                        currentPage * pageSize,
+                        totalForCurrent
+                      )} 条，共 ${totalForCurrent} 条`
+                    : ""}
+                </span>
+              </div>
+              <Pagination
+                current={currentPage}
+                pageSize={pageSize}
+                total={totalForCurrent}
+                showSizeChanger
+                showQuickJumper
+                pageSizeOptions={["10", "20", "50", "100"]}
+                onChange={handlePaginationChange}
+                onShowSizeChange={handlePageSizeChange}
+                size="small"
+              />
+            </div>
           </div>
+          <style
+            dangerouslySetInnerHTML={{
+              __html: `
+                .testhub-reviews-table-scroll{
+                  scrollbar-gutter: stable both-edges;
+                }
+
+                .testhub-reviews-table-scroll .ant-table-thead > tr > th{
+                  position: sticky;
+                  top: 0;
+                  z-index: 5;
+                  background: rgb(var(--color-background-100));
+                }
+
+                .testhub-reviews-table-scroll.testhub-reviews-scrollbar-strong{
+                  overflow-y: scroll;
+                  scrollbar-width: auto;
+                  scrollbar-color: rgb(var(--color-scrollbar)) transparent;
+                }
+
+                .testhub-reviews-table-scroll.testhub-reviews-scrollbar-strong::-webkit-scrollbar{
+                  width: 12px;
+                  height: 12px;
+                }
+
+                .testhub-reviews-table-scroll.testhub-reviews-scrollbar-strong::-webkit-scrollbar-thumb{
+                  background-color: rgba(var(--color-scrollbar), 0.85);
+                  border-radius: 999px;
+                  border: 3px solid rgba(var(--color-background-100), 1);
+                }
+
+                .testhub-reviews-table-scroll.testhub-reviews-scrollbar-strong::-webkit-scrollbar-track{
+                  background: transparent;
+                }
+              `,
+            }}
+          />
         </div>
         <CreateReviewModal
           open={createReviewOpen}

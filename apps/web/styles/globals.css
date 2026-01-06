@@ -800,6 +800,12 @@ div.web-view-spinner div.bar12 {
   margin-top: 44px;
 }
 
+.gantt-pan-active,
+.gantt-pan-active * {
+  cursor: grabbing !important;
+  cursor: -webkit-grabbing !important;
+}
+
 /* scrollbar xs size */
 .scrollbar-xs::-webkit-scrollbar {
   height: 10px;

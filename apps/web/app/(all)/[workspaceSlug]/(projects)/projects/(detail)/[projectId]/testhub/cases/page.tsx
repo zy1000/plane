@@ -4,7 +4,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, useRef, useMemo } from "react";
 import type { ComponentPropsWithoutRef, CSSProperties, MouseEvent as ReactMouseEvent } from "react";
 import { PageHead } from "@/components/core/page-title";
-import { Table, Tag, Input, Button, Space, Modal, Dropdown, message } from "antd";
+import { Table, Tag, Input, Button, Space, Modal, Dropdown, message, Pagination } from "antd";
 import { EllipsisOutlined, SearchOutlined, EditOutlined, DeleteOutlined } from "@ant-design/icons";
 import type { TableProps, InputRef, TableColumnType } from "antd";
 import { CaseService } from "@/services/qa/case.service";
@@ -186,6 +186,8 @@ export default function TestCasesPage() {
   // 新增：创建子模块的临时状态
   const [creatingParentId, setCreatingParentId] = useState<string | "all" | null>(null);
   const [newModuleName, setNewModuleName] = useState<string>("");
+  const [renamingModuleId, setRenamingModuleId] = useState<string | null>(null);
+  const [renamingModuleName, setRenamingModuleName] = useState<string>("");
 
   // 新增状态：模块树数据、选中模块
   const [modules, setModules] = useState<any[]>([]);
@@ -384,6 +386,37 @@ export default function TestCasesPage() {
     });
   };
 
+  const startRenameNode = (moduleId: string, currentName: string) => {
+    setCreatingParentId(null);
+    setNewModuleName("");
+    setRenamingModuleId(moduleId);
+    setRenamingModuleName(currentName);
+    setExpandedKeys((prev) => {
+      const prevKeys = prev || [];
+      return prevKeys.includes(moduleId) ? prevKeys : [...prevKeys, moduleId];
+    });
+    setAutoExpandParent(true);
+  };
+
+  const handleRenameBlurOrEnter = async (moduleId: string) => {
+    const name = renamingModuleName.trim();
+    if (!name || !workspaceSlug) {
+      setRenamingModuleId(null);
+      setRenamingModuleName("");
+      return;
+    }
+    try {
+      await caseModuleService.updateCaseModule(workspaceSlug as string, moduleId, { name });
+      setRenamingModuleId(null);
+      setRenamingModuleName("");
+      await fetchModules();
+    } catch (e) {
+      console.error("重命名失败:", e);
+      setRenamingModuleId(null);
+      setRenamingModuleName("");
+    }
+  };
+
   // 修改 fetchCases：支持 module_id 过滤
   const confirmDeleteCases = () => {
     if (selectedCaseIds.length === 0) return;
@@ -418,7 +451,6 @@ export default function TestCasesPage() {
   ) => {
     if (!workspaceSlug || !repositoryId) return;
     try {
-      setLoading(true);
       setError(null);
       // 重置选择
       setSelectedCaseIds([]);
@@ -494,12 +526,38 @@ export default function TestCasesPage() {
 
   // 自定义节点标题：统一图标 + 名称 + 右侧数量
   const renderNodeTitle = (title: string, count?: number, nodeId?: string | "all") => {
+    const actualId = String(nodeId || "all");
+    if (renamingModuleId && renamingModuleId === actualId) {
+      return (
+        <div className="w-full" onClick={(e) => e.stopPropagation()}>
+          <Input
+            size="small"
+            autoFocus
+            placeholder="请输入模块名称"
+            value={renamingModuleName}
+            onChange={(e) => setRenamingModuleName(e.target.value)}
+            onBlur={() => handleRenameBlurOrEnter(actualId)}
+            onPressEnter={() => handleRenameBlurOrEnter(actualId)}
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+          />
+        </div>
+      );
+    }
     const items = [
       {
         key: "add",
         label: (
           <Button type="text" size="small" onClick={() => handleAddUnderNode(nodeId || "all")}>
             添加
+          </Button>
+        ),
+      },
+      {
+        key: "rename",
+        label: (
+          <Button type="text" size="small" onClick={() => startRenameNode(actualId, title)}>
+            重命名
           </Button>
         ),
       },
@@ -1181,62 +1239,76 @@ export default function TestCasesPage() {
                   )}
 
                   {repositoryId && !loading && !error && (
-                    <div
-                      className={`testhub-cases-table-scroll relative max-h-[700px] overflow-y-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar]:block [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-[rgb(var(--color-scrollbar))] [&::-webkit-scrollbar-thumb]:rounded-full ${
-                        pageSize === 100 ? "testhub-cases-scrollbar-strong" : ""
-                      }`}
-                    >
-                      <Table
-                        dataSource={cases}
-                        columns={resizableColumns}
-                        rowKey="id"
-                        bordered={true}
-                        onChange={handleTableChange}
-                        components={{ header: { cell: ResizableHeaderCell as any } }}
-                        tableLayout="fixed"
-                        scroll={{ x: "max-content" }}
-                        rowSelection={{
-                          selectedRowKeys: selectedCaseIds,
-                          onChange: (newSelectedRowKeys) => {
-                            setSelectedCaseIds(newSelectedRowKeys as string[]);
-                          },
-                        }}
-                        pagination={{
-                          current: currentPage,
-                          pageSize: pageSize,
-                          total: total,
-                          showSizeChanger: true,
-                          showQuickJumper: true,
-                          showTotal: (total, range) => (
-                            <div className="flex items-center gap-4">
-                              {selectedCaseIds.length > 0 && (
-                                <div className="flex items-center gap-2">
-                                  <span className="text-custom-text-300">已选择 {selectedCaseIds.length} 条</span>
-                                  <Button
-                                    type="link"
-                                    size="small"
-                                    onClick={() => setIsMoveModalOpen(true)}
-                                    className="p-0 text-custom-primary-100 font-medium"
-                                  >
-                                    移动到
-                                  </Button>
-                                  <Button
-                                    type="link"
-                                    size="small"
-                                    danger
-                                    onClick={confirmDeleteCases}
-                                    className="p-0 font-medium"
-                                  >
-                                    删除
-                                  </Button>
-                                </div>
-                              )}
-                              <span>{`第 ${range[0]}-${range[1]} 条，共 ${total} 条`}</span>
+                    <div className="flex flex-col h-full overflow-hidden">
+                      <div
+                        className={`testhub-cases-table-scroll flex-1 relative overflow-y-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar]:block [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-[rgb(var(--color-scrollbar))] [&::-webkit-scrollbar-thumb]:rounded-full ${
+                          pageSize === 100 ? "testhub-cases-scrollbar-strong" : ""
+                        }`}
+                      >
+                        <Table
+                          dataSource={cases}
+                          columns={resizableColumns}
+                          rowKey="id"
+                          size="middle"
+                          bordered={true}
+                          onChange={handleTableChange}
+                          components={{ header: { cell: ResizableHeaderCell as any } }}
+                          tableLayout="fixed"
+                          scroll={{ x: "max-content" }}
+                          rowSelection={{
+                            selectedRowKeys: selectedCaseIds,
+                            onChange: (newSelectedRowKeys) => {
+                              setSelectedCaseIds(newSelectedRowKeys as string[]);
+                            },
+                          }}
+                          pagination={false}
+                        />
+                      </div>
+                      <div className="flex-shrink-0 border-t border-custom-border-200 px-4 py-3 bg-custom-background-100 flex items-center justify-between">
+                        <div className="flex items-center gap-4 text-sm">
+                          {selectedCaseIds.length > 0 && (
+                            <div className="flex items-center gap-2">
+                              <span className="text-custom-text-300">已选择 {selectedCaseIds.length} 条</span>
+                              <Button
+                                type="link"
+                                size="small"
+                                onClick={() => setIsMoveModalOpen(true)}
+                                className="p-0 text-custom-primary-100 font-medium"
+                              >
+                                移动到
+                              </Button>
+                              <Button
+                                type="link"
+                                size="small"
+                                danger
+                                onClick={confirmDeleteCases}
+                                className="p-0 font-medium"
+                              >
+                                删除
+                              </Button>
                             </div>
-                          ),
-                          pageSizeOptions: ["10", "20", "50", "100"],
-                        }}
-                      />
+                          )}
+                          <span className="text-custom-text-300">
+                            {total > 0
+                              ? `第 ${(currentPage - 1) * pageSize + 1}-${Math.min(
+                                  currentPage * pageSize,
+                                  total
+                                )} 条，共 ${total} 条`
+                              : ""}
+                          </span>
+                        </div>
+                        <Pagination
+                          current={currentPage}
+                          pageSize={pageSize}
+                          total={total}
+                          showSizeChanger
+                          showQuickJumper
+                          pageSizeOptions={["10", "20", "50", "100"]}
+                          onChange={handlePaginationChange}
+                          onShowSizeChange={handlePaginationChange}
+                          size="small"
+                        />
+                      </div>
                     </div>
                   )}
                 </div>
@@ -1299,10 +1371,10 @@ export default function TestCasesPage() {
       <UpdateModal
         open={isUpdateModalOpen}
         onClose={() => {
-          setIsUpdateModalOpen(false);
           setActiveCase(null);
           fetchModules();
-          fetchCases(1, pageSize, filters);
+          fetchCases(currentPage, pageSize, filters);
+          setIsUpdateModalOpen(false);
           const updatedRoute = updateQueryParams({ paramsToRemove: ["peekCase"] });
           router.push(updatedRoute);
         }}

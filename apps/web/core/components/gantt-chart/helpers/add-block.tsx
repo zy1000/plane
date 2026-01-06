@@ -23,18 +23,36 @@ export const ChartAddBlock = observer(function ChartAddBlock(props: Props) {
   // states
   const [isButtonVisible, setIsButtonVisible] = useState(false);
   const [isDraggingFromButton, setIsDraggingFromButton] = useState(false);
+  const [isPointerDown, setIsPointerDown] = useState(false);
   const [buttonXPosition, setButtonXPosition] = useState(0);
   const [buttonStartDate, setButtonStartDate] = useState<Date | null>(null);
   // refs
-  const containerRef = useRef<HTMLDivElement>(null);
   const cleanupDragListenersRef = useRef<(() => void) | null>(null);
+  const cleanupPointerListenersRef = useRef<(() => void) | null>(null);
   const suppressClickRef = useRef(false);
   const downPositionRef = useRef<{ clientX: number; clientY: number } | null>(null);
   const hoverRef = useRef(false);
+  const latestButtonXPositionRef = useRef(0);
+  const rafIdRef = useRef<number | null>(null);
   // hooks
   const { isMobile } = usePlatformOS();
   // chart hook
   const { currentViewData, currentView } = useTimeLineChartStore();
+
+  const scheduleButtonPositionUpdate = () => {
+    if (!currentViewData) return;
+    if (rafIdRef.current !== null) return;
+
+    rafIdRef.current = window.requestAnimationFrame(() => {
+      rafIdRef.current = null;
+      const xPosition = latestButtonXPositionRef.current;
+      setButtonXPosition(xPosition);
+
+      const { startDate: chartStartDate, dayWidth } = currentViewData.data;
+      const columnNumber = xPosition / dayWidth;
+      setButtonStartDate(addDays(chartStartDate, columnNumber));
+    });
+  };
 
   const handleButtonClick = (e: ReactMouseEvent<HTMLButtonElement>) => {
     if (suppressClickRef.current) {
@@ -106,56 +124,77 @@ export const ChartAddBlock = observer(function ChartAddBlock(props: Props) {
     window.addEventListener("mouseup", onMouseUp);
   };
 
+  const handlePointerDown = (e: ReactMouseEvent<HTMLDivElement>) => {
+    if (e.button !== 0 && e.button !== 2) return;
+    if (!hoverRef.current) return;
+
+    setIsPointerDown(true);
+
+    cleanupPointerListenersRef.current?.();
+    const onMouseUp = () => {
+      cleanupPointerListenersRef.current?.();
+      setIsPointerDown(false);
+    };
+
+    const cleanup = () => {
+      window.removeEventListener("mouseup", onMouseUp);
+      cleanupPointerListenersRef.current = null;
+    };
+
+    cleanupPointerListenersRef.current = cleanup;
+    window.addEventListener("mouseup", onMouseUp);
+  };
+
   useEffect(() => {
-    const container = containerRef.current;
-
-    if (!container) return;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!currentViewData) return;
-
-      setButtonXPosition(e.offsetX);
-
-      const { startDate: chartStartDate, dayWidth } = currentViewData.data;
-      const columnNumber = buttonXPosition / dayWidth;
-
-      const startDate = addDays(chartStartDate, columnNumber);
-      setButtonStartDate(startDate);
-    };
-
-    container.addEventListener("mousemove", handleMouseMove);
-
     return () => {
-      container?.removeEventListener("mousemove", handleMouseMove);
+      if (rafIdRef.current !== null) {
+        window.cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
     };
-  }, [buttonXPosition, currentViewData]);
+  }, []);
 
   useEffect(() => {
     return () => {
       cleanupDragListenersRef.current?.();
+      cleanupPointerListenersRef.current?.();
     };
   }, []);
 
   return (
     <div
       className="relative h-full w-full"
+      onMouseDownCapture={handlePointerDown}
+      onMouseMove={(e) => {
+        if (!currentViewData) return;
+        const rect = e.currentTarget.getBoundingClientRect();
+        latestButtonXPositionRef.current = e.clientX - rect.left;
+        scheduleButtonPositionUpdate();
+      }}
       onMouseEnter={() => {
         hoverRef.current = true;
         if (!isDraggingFromButton) setIsButtonVisible(true);
       }}
       onMouseLeave={() => {
         hoverRef.current = false;
+        setIsPointerDown(false);
         setIsButtonVisible(false);
       }}
     >
-      <div ref={containerRef} className="h-full w-full" />
       {isButtonVisible && (
-        <Tooltip tooltipContent={buttonStartDate && renderFormattedDate(buttonStartDate)} isMobile={isMobile}>
+        <Tooltip
+          tooltipContent={buttonStartDate && renderFormattedDate(buttonStartDate)}
+          isMobile={isMobile}
+          disabled={isPointerDown}
+        >
           <button
             type="button"
-            className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 h-8 w-8 bg-custom-background-80 p-1.5 rounded border border-custom-border-300 grid place-items-center text-custom-text-200 hover:text-custom-text-100"
+            className={`absolute left-0 top-1/2 h-8 w-8 bg-custom-background-80 p-1.5 rounded-full border border-custom-border-300 grid place-items-center text-custom-text-200 hover:text-custom-text-100 ${
+              isPointerDown ? "opacity-0" : ""
+            }`}
             style={{
-              marginLeft: `${buttonXPosition}px`,
+              transform: `translate3d(${buttonXPosition}px, -50%, 0) translateX(-50%)`,
+              willChange: "transform",
             }}
             data-allow-pan="true"
             onMouseDown={handleButtonMouseDown}
