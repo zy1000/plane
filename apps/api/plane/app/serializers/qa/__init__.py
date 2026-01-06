@@ -12,6 +12,7 @@ from plane.utils.qa import re_approval_case
 
 from .plan import *
 
+
 class CaseLabelListSerializer(serializers.ModelSerializer):
     class Meta:
         model = CaseLabel
@@ -44,6 +45,7 @@ class CaseModuleListSerializer(serializers.ModelSerializer):
         serializer = CaseModuleListSerializer(direct_children, many=True, context=self.context)
         return serializer.data
 
+
 class TestPlanCreateUpdateSerializer(ModelSerializer):
     """
     Serializer for creating a TestPlan.
@@ -67,7 +69,8 @@ class TestPlanCreateUpdateSerializer(ModelSerializer):
 
     class Meta:
         model = TestPlan
-        fields = ['name', 'description', 'module', 'begin_time', 'end_time', 'repository', 'threshold', 'cases','cycle']
+        fields = ['name', 'description', 'module', 'begin_time', 'end_time', 'repository', 'threshold', 'cases',
+                  'cycle']
 
 
 class CaseDetailSerializer(ModelSerializer):
@@ -110,9 +113,9 @@ class TestPlanDetailSerializer(ModelSerializer):
         return statis
 
     def execute_result(self, obj: TestPlan):
-        success_count = PlanCase.objects.filter(plan=obj,result=PlanCase.Result.SUCCESS).count()
+        success_count = PlanCase.objects.filter(plan=obj, result=PlanCase.Result.SUCCESS).count()
         total_count = obj.plan_cases.count()
-        if not  total_count:
+        if not total_count:
             return '-'
         return '通过' if ((success_count / total_count) * 100 >= obj.threshold) else '不通过'
 
@@ -182,8 +185,8 @@ class CaseCreateUpdateSerializer(ModelSerializer):
 
     class Meta:
         model = TestCase
-        fields = ['name', 'precondition', 'steps', 'remark',  'type', 'priority', 'repository', 'labels',
-                  'module', 'assignee', 'issues', 'test_type','review']
+        fields = ['name', 'precondition', 'steps', 'remark', 'type', 'priority', 'repository', 'labels',
+                  'module', 'assignee', 'issues', 'test_type', 'review']
 
     def create(self, validated_data):
         labels = validated_data.pop('labels', [])
@@ -231,7 +234,6 @@ class CaseListSerializer(ModelSerializer):
         fields = '__all__'
 
 
-
 class CaseModuleCreateUpdateSerializer(ModelSerializer):
     """创建和更新用例"""
 
@@ -240,17 +242,12 @@ class CaseModuleCreateUpdateSerializer(ModelSerializer):
         fields = ['name', 'sort_order', 'parent', 'repository']
 
 
-
-
 class CaseLabelCreateSerializer(serializers.ModelSerializer):
     """"""
 
     class Meta:
         model = CaseLabel
         fields = ['name', 'repository']
-
-
-
 
 
 # 新增：测试用例附件序列化器（复用 FileAsset）
@@ -281,12 +278,13 @@ class IssueListSerializer(BaseSerializer):
         model = Issue
         fields = "__all__"
 
-class IssueUnselectSerializer(BaseSerializer):
 
+class IssueUnselectSerializer(BaseSerializer):
     class Meta:
         model = Issue
-        fields = ['id','name','state','type']
+        fields = ['id', 'name', 'state', 'type']
         depth = 1
+
 
 class CaseIssueSerializer(ModelSerializer):
     issues = IssueListSerializer(many=True, read_only=True)
@@ -414,6 +412,8 @@ class ReviewCaseListSerializer(ModelSerializer):
 
 
 class ReviewCaseRecordsSerializer(ModelSerializer):
+    review_name = serializers.CharField(source='crt.review.name', read_only=True)
+
     class Meta:
         model = CaseReviewRecord
         fields = '__all__'

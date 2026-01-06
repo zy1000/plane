@@ -6,7 +6,6 @@ import type { TableProps } from "antd";
 import { CaseService as QaCaseService } from "@/services/qa/case.service";
 import { RepositoryService } from "@/services/qa/repository.service";
 import styles from "../../../qa/review/TestCaseSelectionModal.module.css";
-import { Trash2 } from "lucide-react";
 import {
   globalEnums,
   getEnums,
@@ -21,6 +20,11 @@ type TTestCase = {
   type?: number;
   priority?: number;
   created_at?: string;
+};
+
+type TTestCaseResponse = {
+  data: TTestCase[];
+  count: number;
 };
 
 type Props = {
@@ -64,7 +68,25 @@ export default function IssueCaseSelectionModal({ open, workspaceSlug, issueId, 
   const qaCaseService = useMemo(() => new QaCaseService(), []);
   const repositoryService = useMemo(() => new RepositoryService(), []);
 
+  const emitIssueCasesRefresh = useCallback(() => {
+    if (typeof window === "undefined") return;
+    window.dispatchEvent(
+      new CustomEvent("issue:qa-cases:refresh", {
+        detail: {
+          workspaceSlug,
+          issueId,
+        },
+      })
+    );
+  }, [workspaceSlug, issueId]);
+
+  const handleRequestClose = useCallback(() => {
+    emitIssueCasesRefresh();
+    onClose();
+  }, [emitIssueCasesRefresh, onClose]);
+
   const [cases, setCases] = useState<TTestCase[]>([]);
+  const [total, setTotal] = useState<number>(0);
   const [loadingCases, setLoadingCases] = useState(false);
   const [searchName, setSearchName] = useState<string>("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -131,24 +153,26 @@ export default function IssueCaseSelectionModal({ open, workspaceSlug, issueId, 
       });
   }, [open, workspaceSlug, selectedRepositoryId, qaCaseService]);
 
-  const fetchCases = useCallback(async () => {
+  const fetchCases = useCallback(async (page: number, size: number) => {
     if (!open || !workspaceSlug || !issueId || !selectedRepositoryId) return;
     setLoadingCases(true);
     try {
-      const list: any = await qaCaseService.getUnselectIssueCase(
-        String(workspaceSlug),
-        String(issueId),
-        selectedRepositoryId,
-        selectedModuleId || undefined
-      );
-      setCases(Array.isArray(list) ? (list as TTestCase[]) : []);
+      const query: any = { page, page_size: size, issue_id: issueId, repository_id: selectedRepositoryId };
+      if (selectedModuleId) query.module_id = selectedModuleId;
+      if (searchName) query.name__icontains = searchName;
+      const res: TTestCaseResponse = await qaCaseService.getUnselectIssueCase(String(workspaceSlug), query);
+      setCases(res?.data || []);
+      setTotal(res?.count || 0);
+      setCurrentPage(page);
+      setPageSize(size);
     } catch (err: any) {
       message.error(err?.message || "获取未关联用例失败");
       setCases([]);
+      setTotal(0);
     } finally {
       setLoadingCases(false);
     }
-  }, [open, workspaceSlug, issueId, selectedRepositoryId, selectedModuleId, qaCaseService]);
+  }, [open, workspaceSlug, issueId, selectedRepositoryId, selectedModuleId, searchName, qaCaseService]);
 
   useEffect(() => {
     if (!open) return;
@@ -156,32 +180,20 @@ export default function IssueCaseSelectionModal({ open, workspaceSlug, issueId, 
     setSelectedMap({});
     setSearchName("");
     setCurrentPage(1);
-    fetchCases();
-  }, [open, fetchCases]);
+    fetchCases(1, pageSize);
+  }, [open, pageSize, fetchCases]);
 
-  const filteredCases = useMemo(() => {
-    const q = (searchName || "").trim().toLowerCase();
-    if (!q) return cases || [];
-    return (cases || []).filter((c) =>
-      String(c.name || "")
-        .toLowerCase()
-        .includes(q)
-    );
-  }, [cases, searchName]);
-
-  const total = filteredCases.length;
-  const pagedCases = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
-    const end = start + pageSize;
-    return filteredCases.slice(start, end);
-  }, [filteredCases, currentPage, pageSize]);
+  useEffect(() => {
+    if (!open || !selectedRepositoryId) return;
+    fetchCases(1, pageSize);
+  }, [open, selectedRepositoryId, selectedModuleId, searchName, pageSize, fetchCases]);
 
   const orderedCases = useMemo(() => {
-    const list = pagedCases || [];
+    const list = cases || [];
     const selectedList = list.filter((c) => selectedIds.has(String(c.id)));
     const unselectedList = list.filter((c) => !selectedIds.has(String(c.id)));
     return [...selectedList, ...unselectedList];
-  }, [pagedCases, selectedIds]);
+  }, [cases, selectedIds]);
 
   const rowSelection = {
     selectedRowKeys: Array.from(selectedIds),
@@ -250,6 +262,10 @@ export default function IssueCaseSelectionModal({ open, workspaceSlug, issueId, 
         ids.map((caseId) => qaCaseService.addIssueCase(String(workspaceSlug), String(issueId), String(caseId)))
       );
       message.success("已成功关联所选用例");
+      emitIssueCasesRefresh();
+      try {
+        await onConfirmed?.();
+      } catch {}
       onClose();
     } catch (e: any) {
       message.error(e?.message || "关联用例失败");
@@ -282,7 +298,7 @@ export default function IssueCaseSelectionModal({ open, workspaceSlug, issueId, 
   return (
     <Modal
       open={open}
-      onCancel={onClose}
+      onCancel={handleRequestClose}
       title={
         <div className="flex items-center gap-4">
           <span>选择测试用例</span>
@@ -310,7 +326,7 @@ export default function IssueCaseSelectionModal({ open, workspaceSlug, issueId, 
       destroyOnClose
       footer={
         <Space>
-          <Button onClick={onClose}>取消</Button>
+          <Button onClick={handleRequestClose}>取消</Button>
           <Button type="primary" onClick={handleConfirm} loading={confirmLoading || loadingCases}>
             确定
           </Button>
@@ -357,12 +373,11 @@ export default function IssueCaseSelectionModal({ open, workspaceSlug, issueId, 
                 total,
                 showSizeChanger: true,
                 pageSizeOptions: ["10", "20", "50", "100"],
-                onChange: (page) => {
-                  setCurrentPage(page);
+                onChange: (page, size) => {
+                  fetchCases(page, size ?? pageSize);
                 },
                 onShowSizeChange: (_current, size) => {
-                  setPageSize(size);
-                  setCurrentPage(1);
+                  fetchCases(1, size);
                 },
                 showTotal: (t, r) => `第 ${r[0]}-${r[1]} 条，共 ${t} 条`,
               }}

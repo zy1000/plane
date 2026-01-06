@@ -27,6 +27,19 @@ export const QaCasesCollapsible: FC<Props> = observer((props) => {
   const [loading, setLoading] = React.useState(false);
   const [data, setData] = React.useState<any[]>([]);
 
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent)?.detail as { workspaceSlug?: string; issueId?: string } | undefined;
+      if (!detail) return;
+      if (String(detail.workspaceSlug || "") !== String(workspaceSlug || "")) return;
+      if (String(detail.issueId || "") !== String(issueId || "")) return;
+      setRefreshKey((k) => k + 1);
+    };
+    window.addEventListener("issue:qa-cases:refresh", handler);
+    return () => window.removeEventListener("issue:qa-cases:refresh", handler);
+  }, [workspaceSlug, issueId]);
+
   const fetchData = React.useCallback(async () => {
     if (!workspaceSlug || !issueId) return;
     setLoading(true);

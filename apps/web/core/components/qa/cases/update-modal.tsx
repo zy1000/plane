@@ -187,6 +187,50 @@ function UpdateModal({ open, onClose, caseId }: UpdateModalProps) {
     }
   };
 
+  type TReviewRecord = {
+    id?: string | number;
+    reason?: string | null;
+    assignee?: string | null;
+    result?: string;
+    created_at?: string;
+  };
+  const [reviewLoading, setReviewLoading] = React.useState<boolean>(false);
+  const [reviewError, setReviewError] = React.useState<string | null>(null);
+  const [reviewList, setReviewList] = React.useState<TReviewRecord[]>([]);
+  const [reviewTotal, setReviewTotal] = React.useState<number>(0);
+  const [reviewPage, setReviewPage] = React.useState<number>(1);
+  const [reviewPageSize, setReviewPageSize] = React.useState<number>(10);
+  const reviewPageSizeOptions = [10, 20, 50, 100];
+
+  const getReviewResultTagColor = (label?: string) => {
+    if (!label) return "default";
+    if (label === "通过") return "green";
+    if (label === "不通过") return "red";
+    if (label === "重新提审") return "gold";
+    if (label === "建议") return "orange";
+    return "default";
+  };
+
+  const fetchReviewRecords = async () => {
+    if (!workspaceSlug || !caseId) return;
+    setReviewLoading(true);
+    setReviewError(null);
+    try {
+      const res = await caseService.getCaseReviewRecord(String(workspaceSlug), String(caseId));
+      const list = Array.isArray((res as any)?.data) ? (res as any).data : Array.isArray(res) ? (res as any) : [];
+      const count = (res as any)?.count ?? list.length;
+      setReviewList(list);
+      setReviewTotal(count);
+      setReviewPage(1);
+    } catch (e: any) {
+      const msg = e?.message || e?.detail || e?.error || "获取评审记录失败";
+      setReviewError(msg);
+      message.error(msg);
+    } finally {
+      setReviewLoading(false);
+    }
+  };
+
   const handleOpenSelectModal = async (type: "Requirement" | "Task" | "Bug") => {
     setForceTypeName(type);
     if (workspaceSlug && caseId) {
@@ -679,6 +723,12 @@ function UpdateModal({ open, onClose, caseId }: UpdateModalProps) {
     }
   }, [activeTab, workspaceSlug, caseId]);
 
+  React.useEffect(() => {
+    if (activeTab === "review") {
+      fetchReviewRecords();
+    }
+  }, [activeTab, workspaceSlug, caseId]);
+
   // 生成选项（参考 create-modal）
   const caseTypeOptions = React.useMemo(
     () =>
@@ -950,6 +1000,17 @@ function UpdateModal({ open, onClose, caseId }: UpdateModalProps) {
                   >
                     执行
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("review")}
+                    className={`px-2 py-3 text-sm -mb-px border-b-2 transition-colors ${
+                      activeTab === "review"
+                        ? "text-blue-600 border-blue-600"
+                        : "text-black border-transparent hover:text-blue-600"
+                    }`}
+                  >
+                    评审历史
+                  </button>
                 </nav>
               </div>
             </div>
@@ -1055,10 +1116,88 @@ function UpdateModal({ open, onClose, caseId }: UpdateModalProps) {
                       ]}
                     />
                   </div>
-                  {!execLoading && execList.length === 0 && (
-                    <div className="py-20 text-center text-gray-400">暂无执行记录</div>
-                  )}
+            
                   {execError && <div className="px-3 py-2 text-sm text-red-600">{execError}</div>}
+                </div>
+              </div>
+            )}
+            {activeTab === "review" && caseId && (
+              <div className="mt-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="text-sm text-gray-600">{reviewTotal}条评审记录</div>
+                </div>
+                <div className="rounded  border-gray-200 overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <Table
+                      size="middle"
+                      rowKey={(r: TReviewRecord) => String(r.id ?? `${r.assignee}-${r.created_at}`)}
+                      dataSource={reviewList.slice((reviewPage - 1) * reviewPageSize, reviewPage * reviewPageSize)}
+                      loading={reviewLoading}
+                      pagination={{
+                        current: reviewPage,
+                        pageSize: reviewPageSize,
+                        total: reviewTotal,
+                        showSizeChanger: true,
+                        showQuickJumper: true,
+                        pageSizeOptions: reviewPageSizeOptions.map(String),
+                        showTotal: (t, range) => `第 ${range[0]}-${range[1]} 条，共 ${t} 条`,
+                        onChange: (p) => setReviewPage(p),
+                        onShowSizeChange: (_c, s) => {
+                          setReviewPageSize(s);
+                          setReviewPage(1);
+                        },
+                      }}
+                      columns={[
+                        {
+                          title: "评审",
+                          dataIndex: "reason",
+                          key: "reason",
+                          render: (v: string | null | undefined) => (
+                            <Tooltip title={v || "-"}>
+                              <span className="truncate block max-w-[420px]">{v || "-"}</span>
+                            </Tooltip>
+                          ),
+                        },
+                        {
+                          title: "评审人",
+                          dataIndex: "assignee",
+                          key: "assignee",
+                          width: 240,
+                          render: (uid: string | null) => (
+                            <MemberDropdown
+                              multiple={false}
+                              value={uid ?? null}
+                              onChange={() => {}}
+                              disabled={true}
+                              placeholder={"未知用户"}
+                              className="w-full text-sm"
+                              buttonContainerClassName="w-full text-left p-0 cursor-default"
+                              buttonVariant="transparent-with-text"
+                              buttonClassName="text-sm p-0 hover:bg-transparent hover:bg-inherit"
+                              showUserDetails={true}
+                              optionsClassName="z-[60]"
+                            />
+                          ),
+                        },
+                        {
+                          title: "评审结果",
+                          dataIndex: "result",
+                          key: "result",
+                          width: 160,
+                          render: (label: string) => <Tag color={getReviewResultTagColor(label)}>{label || "-"}</Tag>,
+                        },
+                        {
+                          title: "评审时间",
+                          dataIndex: "created_at",
+                          key: "created_at",
+                          width: 200,
+                          render: (v: string) => formatCNDateTime(v),
+                        },
+                      ]}
+                    />
+                  </div>
+
+                  {reviewError && <div className="px-3 py-2 text-sm text-red-600">{reviewError}</div>}
                 </div>
               </div>
             )}

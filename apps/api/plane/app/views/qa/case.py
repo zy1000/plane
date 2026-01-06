@@ -9,11 +9,12 @@ from django.core.exceptions import ValidationError
 
 from plane.app.serializers.qa import CaseAttachmentSerializer, IssueListSerializer, CaseIssueSerializer, \
     TestCaseCommentSerializer, PlanCaseRecordSerializer, CaseListSerializer, CaseLabelListSerializer, \
-    IssueUnselectSerializer
+    IssueUnselectSerializer, ReviewCaseRecordsSerializer
 from plane.app.serializers.qa.case import CaseExecuteRecordSerializer
 from plane.app.views import BaseAPIView, BaseViewSet
 from plane.utils.import_export import parser_case_file
-from plane.db.models import TestCase, FileAsset, TestCaseComment, PlanCase, Issue, CaseModule, CaseLabel
+from plane.db.models import TestCase, FileAsset, TestCaseComment, PlanCase, Issue, CaseModule, CaseLabel, \
+    CaseReviewThrough, CaseReviewRecord
 from plane.utils.paginator import CustomPaginator
 from plane.utils.response import list_response
 
@@ -158,6 +159,18 @@ class CaseAPI(BaseViewSet):
             result.append(serializer.data)
         return list_response(data=result, count=len(result))
 
+    @action(detail=False, methods=['get'], url_path='review-record')
+    def review_record(self, request, slug):
+        case_ids = request.query_params.getlist('case_id')
+        if not case_ids:
+            case_id = request.query_params.get('case_id')
+            case_ids = [i for i in (case_id.split(",") if case_id else []) if i]
+
+        crts = CaseReviewThrough.objects.filter(case_id__in=case_ids).values_list('id', flat=True)
+        query = CaseReviewRecord.objects.filter(crt_id__in=crts)
+        serializer = ReviewCaseRecordsSerializer(instance=query, many=True)
+        return list_response(data=serializer.data, count=query.count())
+
     @action(detail=False, methods=['get'], url_path='issues-list')
     def issue_list(self, request, slug):
         type_name = request.query_params.get('type_name').split(',')
@@ -175,8 +188,10 @@ class CaseAPI(BaseViewSet):
         case_id = request.query_params.get('case_id')
         project_id = request.query_params.get('project_id')
 
-        select_issues = TestCase.objects.get(id=case_id).issues.filter(type__name__in=type_name).values_list('id', flat=True)
-        issues = Issue.objects.filter(type__name__in=type_name,project_id=project_id).select_related('type').exclude(id__in=select_issues)
+        select_issues = TestCase.objects.get(id=case_id).issues.filter(type__name__in=type_name).values_list('id',
+                                                                                                             flat=True)
+        issues = Issue.objects.filter(type__name__in=type_name, project_id=project_id).select_related('type').exclude(
+            id__in=select_issues)
         paginator = self.pagination_class()
         paginated_queryset = paginator.paginate_queryset(issues, request)
         serializer = IssueUnselectSerializer(paginated_queryset, many=True)
@@ -195,6 +210,7 @@ class CaseAPI(BaseViewSet):
         issue_id = request.query_params.get('issue_id')
         repository_id = request.query_params.get('repository_id')
         module_id = request.query_params.get('module_id')
+        name__icontains = request.query_params.get('name__icontains')
 
         issue = Issue.objects.get(id=issue_id)
         case_id = issue.cases.values_list('id', flat=True)
@@ -202,9 +218,15 @@ class CaseAPI(BaseViewSet):
         if module_id:
             case_module = CaseModule.objects.get(id=module_id)
             cases = cases.filter(module_id__in=case_module.get_all_children)
+        if name__icontains:
+            cases = cases.filter(name__icontains=name__icontains)
         cases = cases.exclude(id__in=case_id)
-        serializer = CaseListSerializer(cases, many=True)
-        return Response(data=serializer.data, status=status.HTTP_200_OK)
+        cases = cases.order_by('-created_at')
+
+        paginator = self.pagination_class()
+        paginated_queryset = paginator.paginate_queryset(cases, request)
+        serializer = CaseListSerializer(paginated_queryset, many=True)
+        return list_response(data=serializer.data, count=cases.count())
 
     @action(detail=False, methods=['delete'], url_path='delete-issue-case')
     def delete_issue_case(self, request, slug):
