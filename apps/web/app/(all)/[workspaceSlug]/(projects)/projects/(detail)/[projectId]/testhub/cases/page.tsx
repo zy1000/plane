@@ -1155,7 +1155,7 @@ export default function TestCasesPage() {
       <PageHead title={`测试用例${repositoryName ? " - " + repositoryName : ""}`} />
       <div className="h-full w-full">
         <div className="flex h-full w-full flex-col">
-          <Row wrap={false} className="flex-1 overflow-hidden py-4 sm:py-5 " gutter={[0, 16]}>
+          <Row wrap={false} className="flex-1 overflow-hidden pt-4 pb-0 sm:pt-5" gutter={[0, 16]}>
             <Col
               className="relative flex flex-col h-full border-r border-custom-border-200"
               flex="0 0 auto"

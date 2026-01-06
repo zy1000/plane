@@ -349,7 +349,7 @@ export default function PlanCasesPage() {
       <div className="flex-1 overflow-hidden">
         <Row className="h-full">
           <Col
-            className="relative border-r border-custom-border-200 overflow-y-auto"
+            className="relative h-full min-h-0 border-r border-custom-border-200 overflow-y-auto"
             flex="0 0 auto"
             style={{ width: 280, minWidth: 200, maxWidth: 320 }}
           >
@@ -365,7 +365,7 @@ export default function PlanCasesPage() {
               className="py-2"
             />
           </Col>
-          <Col flex="auto" className="overflow-hidden">
+          <Col flex="auto" className="h-full min-h-0 overflow-hidden">
             {loading && (
               <div className="flex items-center justify-center py-12">
                 <div className="text-custom-text-300">加载中...</div>

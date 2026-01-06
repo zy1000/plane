@@ -7,9 +7,9 @@ import {
   ArrowUpOutlined,
   ArrowDownOutlined,
   CopyOutlined,
+  EllipsisOutlined,
 } from "@ant-design/icons";
 import { Button, Input, Modal, Popover } from "antd";
-import { Trash2 } from "lucide-react";
 import React, { useEffect, useState, useRef } from "react";
 import ReactQuill from "react-quill";
 import "react-quill/dist/quill.snow.css"; // 引入默认样式
@@ -408,12 +408,29 @@ export const StepsEditor: React.FC<{
     }
   }, [value, onChange]);
 
+  const wrapperRef = React.useRef<HTMLDivElement | null>(null);
+  const pointerDownInsideRef = React.useRef(false);
+  React.useEffect(() => {
+    const handlePointerDownCapture = () => {
+      pointerDownInsideRef.current = false;
+    };
+    document.addEventListener("pointerdown", handlePointerDownCapture, true);
+    return () => document.removeEventListener("pointerdown", handlePointerDownCapture, true);
+  }, []);
+  const handleWrapperBlur = (e: React.FocusEvent<HTMLDivElement>) => {
+    const nextFocus = e.relatedTarget as Node | null;
+    if (nextFocus && wrapperRef.current?.contains(nextFocus)) return;
+    if (!nextFocus && pointerDownInsideRef.current) return;
+    onBlur?.(rows);
+  };
+
   const tableBorder = "1px solid #d9d9d9";
   const thStyle: React.CSSProperties = {
     padding: 8,
     border: tableBorder,
     textAlign: "center",
     fontWeight: 400,
+    fontSize: "0.875rem",
   };
   const tdStyle: React.CSSProperties = {
     padding: 5,
@@ -539,7 +556,13 @@ export const StepsEditor: React.FC<{
   };
 
   return (
-    <div>
+    <div
+      ref={wrapperRef}
+      onBlur={handleWrapperBlur}
+      onPointerDownCapture={() => {
+        pointerDownInsideRef.current = true;
+      }}
+    >
       {/* 新增：放大编辑模态框 */}
       <Modal
         open={expandedEdit.visible}
@@ -577,7 +600,7 @@ export const StepsEditor: React.FC<{
           <col style={{ width: 72 }} />
           <col />
           <col style={{ width: "30%" }} />
-          <col style={{ width: 100 }} /> {/* 调整操作列宽度 */}
+          <col style={{ width: 50 }} /> {/* 调整操作列宽度 */}
         </colgroup>
         <thead>
           <tr>
@@ -599,7 +622,7 @@ export const StepsEditor: React.FC<{
               }}
             >
               <td
-                style={{ ...tdStyle, cursor: draggingIndex === idx ? "grabbing" : "grab" }}
+                style={{ ...tdStyle, textAlign: "center", cursor: draggingIndex === idx ? "grabbing" : "grab" }}
                 onMouseEnter={() => setHoveredIndex(idx)}
                 onMouseLeave={() => setHoveredIndex(null)}
                 draggable
@@ -649,7 +672,6 @@ export const StepsEditor: React.FC<{
                     placeholder="请输入步骤描述"
                     value={row?.description ?? ""}
                     onChange={(e) => handleCell(idx, "description", e.target.value)}
-                    onBlur={() => onBlur?.(rows)}
                     style={{
                       padding: 0,
                       background: "transparent",
@@ -676,7 +698,6 @@ export const StepsEditor: React.FC<{
                     placeholder="请输入预期结果"
                     value={row?.result ?? ""}
                     onChange={(e) => handleCell(idx, "result", e.target.value)}
-                    onBlur={() => onBlur?.(rows)}
                     style={{
                       padding: 0,
                       background: "transparent",
@@ -695,14 +716,8 @@ export const StepsEditor: React.FC<{
                   />
                 </div>
               </td>
-              <td style={tdStyle}>
-                {/* 原删除按钮 + 更多操作弹窗 */}
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <Trash2
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => handleRemove(idx)}
-                    style={{ color: "#cccccc", fontSize: 16, cursor: "pointer", scale: 0.8 }}
-                  />
+              <td style={{ ...tdStyle, textAlign: "center" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%" }}>
                   <Popover
                     trigger="click"
                     placement="rightTop"
@@ -750,10 +765,21 @@ export const StepsEditor: React.FC<{
                           <CopyOutlined />
                           复制
                         </Button>
+                        <Button
+                          data-button-area="true"
+                          size="small"
+                          type="text"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => handleRemove(idx)}
+                          style={{ display: "flex", justifyContent: "flex-start", alignItems: "center", gap: 6 }}
+                        >
+                          <DeleteOutlined />
+                          删除
+                        </Button>
                       </div>
                     }
                   >
-                    <Button type="text" size="small" icon={<MoreOutlined />} title="更多操作" />
+                    <Button type="text" size="small" icon={<EllipsisOutlined />} title="更多操作" />
                   </Popover>
                 </div>
               </td>
@@ -763,7 +789,13 @@ export const StepsEditor: React.FC<{
       </table>
 
       <div style={{ marginTop: 8, display: "flex", justifyContent: "flex-start" }}>
-        <Button color="primary" variant="text" icon={<PlusOutlined />} onClick={handleAdd}>
+        <Button
+          color="primary"
+          variant="text"
+          icon={<PlusOutlined />}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={handleAdd}
+        >
           新增步骤
         </Button>
       </div>

@@ -383,7 +383,7 @@ export default function CaseManagementReviewDetailPage() {
   ];
 
   return (
-    <div className="flex flex-col gap-3 p-4 w-full h-full overflow-hidden">
+    <div className="flex flex-col gap-3 pt-4 px-4 pb-0 w-full h-full overflow-hidden">
       <PageHead title="评审详情" />
       <Breadcrumbs className="grow-0">
         <Breadcrumbs.Item
@@ -395,7 +395,7 @@ export default function CaseManagementReviewDetailPage() {
       </Breadcrumbs>
       <Row className="w-full flex-1 min-h-0 rounded-md border border-custom-border-200 overflow-hidden" gutter={0}>
         <Col flex={`${leftWidth}px`} className="relative border-r border-custom-border-200 overflow-hidden">
-          <div className="p-4 h-full overflow-y-auto">
+          <div className="pt-4 px-4 pb-0 h-full overflow-y-auto">
             {!repositoryId && <div className="text-custom-text-300">未找到用例库ID，请先在顶部选择一个用例库</div>}
             {repositoryId && (
               <Tree
@@ -414,7 +414,7 @@ export default function CaseManagementReviewDetailPage() {
           <div className="absolute top-0 right-[-2px] w-1 h-full cursor-col-resize" onMouseDown={onMouseDownResize} />
         </Col>
         <Col flex="auto" className="overflow-hidden">
-          <div className="p-4 flex flex-col h-full min-h-0 overflow-hidden">
+          <div className="pt-4 px-4 pb-0 flex flex-col h-full min-h-0 overflow-hidden">
             {loading && (
               <div className="flex items-center justify-center py-12">
                 <div className="text-custom-text-300">加载中...</div>
