@@ -4,17 +4,16 @@ import * as React from "react";
 import { Table, TableBody, TableCell, TableRow } from "@plane/propel/table";
 import { Tag } from "antd";
 import { renderFormattedDate } from "@plane/utils";
-import { useRouter } from "next/navigation";
-import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Button } from "@plane/propel/button";
 import { Unlink } from "lucide-react";
-import { useParams } from "react-router";
+import UpdateModal from "@/components/qa/cases/update-modal";
 
 type Props = {
   data: TestCaseItem[];
   loading: boolean;
   workspaceSlug: string;
   onDelete: (caseId: string | number) => void | Promise<void>;
+  onRefresh?: () => void;
 };
 
 type TestCaseItem = {
@@ -26,9 +25,9 @@ type TestCaseItem = {
 };
 
 export const QaCasesCollapsibleContent: React.FC<Props> = (props) => {
-  const { data, loading, workspaceSlug, onDelete } = props;
-  const { projectId } = useParams();
-  const router = useRouter();
+  const { data, loading, workspaceSlug, onDelete, onRefresh } = props;
+  const [activeCaseId, setActiveCaseId] = React.useState<string | undefined>(undefined);
+  const [isCaseModalOpen, setIsCaseModalOpen] = React.useState(false);
 
   const getReviewColor = (review?: string) => {
     switch (review) {
@@ -65,21 +64,19 @@ export const QaCasesCollapsibleContent: React.FC<Props> = (props) => {
                 </TableCell>
               </TableRow>
             ) : (
-              data.map((item, idx) => (
+              data.map((item) => (
                 <TableRow
                   key={String(item.id)}
-                  className="hover:bg-[#f7f7f7] cursor-pointer"
-                  onClick={() => {
-                    const repoId = typeof item.repository === "string" ? item.repository : item?.repository?.id;
-                    if (!repoId) {
-                      setToast({ type: TOAST_TYPE.ERROR, title: "无法跳转", message: "缺少用例仓库ID" });
-                      return;
-                    }
-                    const url = `/${workspaceSlug}/projects/${projectId}/testhub/cases/?repositoryId=${repoId}&peekCase=${item.id}`;
-                    router.push(url);
-                  }}
+                  className="hover:bg-[#f7f7f7]"
                 >
-                  <TableCell className="max-w-[360px] truncate" title={item.name}>
+                  <TableCell
+                    className="max-w-[360px] truncate cursor-pointer"
+                    title={item.name}
+                    onClick={() => {
+                      setActiveCaseId(String(item.id));
+                      setIsCaseModalOpen(true);
+                    }}
+                  >
                     {item.name ?? "-"}
                   </TableCell>
                   <TableCell>
@@ -107,6 +104,15 @@ export const QaCasesCollapsibleContent: React.FC<Props> = (props) => {
           </TableBody>
         </Table>
       </div>
+      <UpdateModal
+        open={isCaseModalOpen}
+        onClose={() => {
+          setIsCaseModalOpen(false);
+          setActiveCaseId(undefined);
+          onRefresh?.();
+        }}
+        caseId={activeCaseId}
+      />
     </div>
   );
 };

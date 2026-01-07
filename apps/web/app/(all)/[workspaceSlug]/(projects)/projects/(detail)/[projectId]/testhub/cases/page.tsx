@@ -861,16 +861,11 @@ export default function TestCasesPage() {
     fetchCases(page, newPageSize, filters);
   };
 
-  const handlePageSizeChange = (_current: number, size: number) => {
-    fetchCases(1, size, filters);
-  };
 
   const handleEditCase = (record: any) => {
     if (!record || !record.id) return;
     setActiveCase(record);
     setIsUpdateModalOpen(true);
-    const updatedRoute = updateQueryParams({ paramsToAdd: { peekCase: String(record.id) } });
-    router.push(updatedRoute);
   };
 
   const handleDeleteCase = (record: any) => {
@@ -987,7 +982,6 @@ export default function TestCasesPage() {
       message.error(err?.error || "导入失败");
     } finally {
       setLoading(false);
-      // 清空 input value，允许重复上传同一文件
       e.target.value = "";
     }
   };
@@ -1010,8 +1004,6 @@ export default function TestCasesPage() {
             if (!record || !record.id) return;
             setActiveCase(record);
             setIsUpdateModalOpen(true);
-            const updatedRoute = updateQueryParams({ paramsToAdd: { peekCase: String(record.id) } });
-            router.push(updatedRoute);
           }}
         >
           <span className="block max-w-[240px] truncate" title={record?.name || ""}>
@@ -1375,8 +1367,10 @@ export default function TestCasesPage() {
           fetchModules();
           fetchCases(currentPage, pageSize, filters);
           setIsUpdateModalOpen(false);
-          const updatedRoute = updateQueryParams({ paramsToRemove: ["peekCase"] });
-          router.push(updatedRoute);
+          if (searchParams.get("peekCase")) {
+            const updatedRoute = updateQueryParams({ paramsToRemove: ["peekCase"] });
+            router.push(updatedRoute);
+          }
         }}
         caseId={activeCase?.id}
       />
