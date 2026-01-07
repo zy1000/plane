@@ -124,4 +124,13 @@ export class CaseService extends APIService {
       });
   }
 
+  async confirmRecord(workspaceSlug: string, record_id: string): Promise<void> {
+    const params = { record_id };
+    return this.put(`/api/workspaces/${workspaceSlug}/test/review/confirm/`, undefined, { params })
+      .then(() => {})
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
 }

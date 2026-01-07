@@ -200,3 +200,11 @@ class CaseReviewView(BaseViewSet):
         query = CaseReviewRecord.objects.filter(crt=crt)
         serializer = ReviewCaseRecordsSerializer(instance=query, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['put'], url_path='confirm')
+    def confirm_record(self, request, slug):
+        record_id = request.query_params.get('record_id')
+        instance = CaseReviewRecord.objects.get(id=record_id)
+        instance.confirmed = True
+        instance.save(update_fields=['confirmed'])
+        return Response(status=status.HTTP_200_OK)

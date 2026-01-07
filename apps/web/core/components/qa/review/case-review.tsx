@@ -5,7 +5,7 @@ import { useParams, useSearchParams, useRouter } from "next/navigation";
 import { PageHead } from "@/components/core/page-title";
 import { Breadcrumbs } from "@plane/ui";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
-import { Row, Col, Card, Input, Pagination, Tag, Spin, message, Button, Table, Tooltip, Radio, Modal } from "antd";
+import { Row, Col, Card, Input, Pagination, Tag, Spin, message, Button, Table, Tooltip, Radio, Modal, Badge } from "antd";
 import { CheckCircleOutlined, CloseCircleOutlined, ExclamationCircleOutlined } from "@ant-design/icons";
 import debounce from "lodash-es/debounce";
 import { CaseService as CaseApiService } from "@/services/qa/case.service";
@@ -87,6 +87,7 @@ export default function CaseReview() {
   const [submitLoading, setSubmitLoading] = React.useState<boolean>(false);
   const [recordsRefreshKey, setRecordsRefreshKey] = React.useState<number>(0);
   const [isCurrentUserReviewer, setIsCurrentUserReviewer] = React.useState<boolean>(false);
+  const [suggestionCounts, setSuggestionCounts] = React.useState<Record<string, number>>({});
 
   const fetchReviewEnums = async () => {
     if (!workspaceSlug) return;
@@ -95,6 +96,42 @@ export default function CaseReview() {
       setReviewEnums(data || {});
     } catch {}
   };
+
+  const getSuggestionCountFromRecords = React.useCallback((records: any[]) => {
+    return records.filter((item: any) => String(item?.result || "") === "建议" && !Boolean(item?.confirmed)).length;
+  }, []);
+
+  const fetchSuggestionCountForCase = React.useCallback(
+    async (caseId: string) => {
+      if (!workspaceSlug || !reviewId || !caseId) return;
+      try {
+        const data = await reviewService.getRecords(String(workspaceSlug), String(reviewId), String(caseId));
+        const list = Array.isArray(data) ? (data as any[]) : [];
+        const count = getSuggestionCountFromRecords(list);
+        setSuggestionCounts((prev) => ({ ...prev, [String(caseId)]: count }));
+      } catch {
+        setSuggestionCounts((prev) => ({ ...prev, [String(caseId)]: 0 }));
+      }
+    },
+    [workspaceSlug, reviewId, reviewService, getSuggestionCountFromRecords]
+  );
+
+  const fetchSuggestionCountsForCases = React.useCallback(
+    async (rows: ReviewCaseRow[]) => {
+      if (!workspaceSlug || !reviewId) return;
+      const next: Record<string, number> = {};
+      await Promise.allSettled(
+        rows.map(async (row) => {
+          const caseId = String(row.case_id ?? row.id);
+          const data = await reviewService.getRecords(String(workspaceSlug), String(reviewId), caseId);
+          const list = Array.isArray(data) ? (data as any[]) : [];
+          next[caseId] = getSuggestionCountFromRecords(list);
+        })
+      );
+      setSuggestionCounts(next);
+    },
+    [workspaceSlug, reviewId, reviewService, getSuggestionCountFromRecords]
+  );
 
   const fetchCases = async (p = page, s = pageSize, kw?: string) => {
     if (!workspaceSlug || !reviewId) return;
@@ -107,7 +144,9 @@ export default function CaseReview() {
         page_size: s,
         ...(input ? { name__icontains: input } : {}),
       });
-      setCases(Array.isArray(res?.data) ? (res.data as ReviewCaseRow[]) : []);
+      const nextCases = Array.isArray(res?.data) ? (res.data as ReviewCaseRow[]) : [];
+      setCases(nextCases);
+      void fetchSuggestionCountsForCases(nextCases);
       setTotal(Number(res?.count || 0));
       setPage(p);
       setPageSize(s);
@@ -151,6 +190,11 @@ export default function CaseReview() {
     } finally {
       setDetailLoading(false);
     }
+  };
+
+  const handleRecordsUpdated = () => {
+    if (!selectedCaseId) return;
+    fetchSuggestionCountForCase(String(selectedCaseId));
   };
 
   const handleDownloadAttachment = async (attachment: any) => {
@@ -431,6 +475,8 @@ export default function CaseReview() {
                       const caseId = String(item.case_id ?? item.id);
                       const isActive = String(selectedCaseId || "") === caseId;
                       const color = reviewEnums?.CaseReviewThrough_Result?.[item.result]?.color || "default";
+                      const suggestionCount = suggestionCounts[caseId] || 0;
+                      const showBadge = suggestionCount > 0;
                       return (
                         <Card
                           key={item.id}
@@ -445,9 +491,18 @@ export default function CaseReview() {
                             setReviewValue(isReviewer ? "通过" : "建议");
                             setReason("");
                             fetchCaseDetail(caseId);
+                            fetchSuggestionCountForCase(caseId);
                           }}
-                          className={`${isActive ? "ring-2 ring-blue-500" : ""} rounded-md hover:shadow-sm transition-shadow`}
+                          className={`${isActive ? "ring-2 ring-blue-500" : ""} rounded-md hover:shadow-sm transition-shadow relative`}
                         >
+                          {showBadge && (
+                            <div className="absolute top-0 right-1 z-10">
+                              <Badge
+                                count={suggestionCount}
+                                style={{ backgroundColor: "#fa8c16" }}
+                              />
+                            </div>
+                          )}
                           <div className="flex items-center justify-between">
                             <div className="text-sm font-medium truncate">{item.name}</div>
                             <Tag color={color}>{item.result || "-"}</Tag>
@@ -764,6 +819,7 @@ export default function CaseReview() {
                         workspaceSlug={workspaceSlug}
                         reviewId={reviewId}
                         caseId={selectedCaseId}
+                        onRecordsUpdated={handleRecordsUpdated}
                       />
                     )}
                   </Transition>

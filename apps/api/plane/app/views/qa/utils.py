@@ -1,6 +1,8 @@
 import os
 import json
+import random
 import re
+import string
 from io import BytesIO
 
 from django.core.files.uploadedfile import InMemoryUploadedFile

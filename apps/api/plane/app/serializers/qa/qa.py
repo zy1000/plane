@@ -100,8 +100,8 @@ class CaseCreateUpdateSerializer(ModelSerializer):
 
     class Meta:
         model = TestCase
-        fields = ['name', 'precondition', 'steps', 'remark', 'state', 'type', 'priority', 'repository', 'labels',
-                  'module', 'assignee', 'issues', 'test_type']
+        fields = ['code', 'name', 'precondition', 'steps', 'remark', 'state', 'type', 'priority', 'repository',
+                  'labels', 'module', 'assignee', 'issues', 'test_type']
 
     def create(self, validated_data):
         labels = validated_data.pop('labels', [])

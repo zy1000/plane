@@ -33,7 +33,7 @@ function UpdateModal({ open, onClose, caseId }: UpdateModalProps) {
 
   const [activeTab, setActiveTab] = useState<string>("basic");
   // 增加：本地状态与失焦更新逻辑
-  const { workspaceSlug } = useParams() as { workspaceSlug?: string };
+  const { workspaceSlug, projectId } = useParams() as { workspaceSlug?: string; projectId?: string };
   const caseService = React.useMemo(() => new CaseService(), []);
 
   // 新增：加载状态和用例数据状态
@@ -74,9 +74,14 @@ function UpdateModal({ open, onClose, caseId }: UpdateModalProps) {
   const [attachmentFiles, setAttachmentFiles] = useState<File[]>([]);
 
   const [title, setTitle] = React.useState<string>("");
+  const [codeValue, setCodeValue] = React.useState<string>("");
   React.useEffect(() => {
     setTitle(caseData?.name ?? "");
   }, [caseData?.name]);
+
+  React.useEffect(() => {
+    setCodeValue(caseData?.code ?? "");
+  }, [caseData?.code]);
 
   const handleBlurTitle = async () => {
     const newName = title?.trim();
@@ -89,6 +94,18 @@ function UpdateModal({ open, onClose, caseId }: UpdateModalProps) {
       setCaseData((prev: any) => (prev ? { ...prev, name: newName } : prev));
     } catch {
       // 静默处理（可接入通知）
+    }
+  };
+
+  const handleBlurCode = async () => {
+    const newCode = (codeValue ?? "").trim();
+    const oldCode = String(caseData?.code ?? "");
+    if (!workspaceSlug || !caseId) return;
+    if (newCode === oldCode) return;
+    try {
+      await caseService.updateCase(String(workspaceSlug), { id: caseId, code: newCode });
+      setCaseData((prev: any) => (prev ? { ...prev, code: newCode } : prev));
+    } catch {
     }
   };
 
@@ -921,6 +938,10 @@ function UpdateModal({ open, onClose, caseId }: UpdateModalProps) {
           <div className="w-2/3 px-6 py-4 h-full overflow-y-auto">
             <TitleInput value={title} onChange={setTitle} onBlur={handleBlurTitle} />
             <CaseMetaForm
+              projectId={projectId ? String(projectId) : undefined}
+              code={codeValue}
+              onCodeChange={setCodeValue}
+              onCodeBlur={handleBlurCode}
               assignee={assignee}
               onAssigneeChange={(v) => handleUpdateAssine(v)}
               onAssigneeBlur={handleBlurAssignee}

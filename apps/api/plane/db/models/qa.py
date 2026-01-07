@@ -1,10 +1,28 @@
-from django.db import models
+import random
+import string
 from enum import IntEnum
 
+from django.core.validators import RegexValidator
+from django.db import models
 from django.db.models import Q
 
 from . import BaseModel, Issue
 from django.conf import settings
+
+def generate_case_code():
+    """
+     生成一个随机字符串，满足正则: ^[A-Za-z0-9]{1,5}-[A-Za-z0-9]{1,5}$
+     格式：前缀(1-5位)-后缀(1-5位)，仅包含字母和数字
+     """
+    # 字符集：大小写字母 + 数字
+    chars = string.ascii_letters + string.digits  # a-z, A-Z, 0-9
+    # 随机生成前缀长度 (1~5)
+    prefix_length = random.randint(1, 5)
+    prefix = ''.join(random.choices(chars, k=prefix_length))
+    # 随机生成后缀长度 (1~5)
+    suffix_length = random.randint(1, 5)
+    suffix = ''.join(random.choices(chars, k=suffix_length))
+    return f"{prefix}-{suffix}"
 
 
 class TestCaseRepository(BaseModel):
@@ -105,7 +123,14 @@ class TestCase(BaseModel):
         MANUAL = 0, '手动'
         AUTO = 1, '自动'
 
+    code = models.CharField(
+        max_length=12,
+        verbose_name="TestCase Code",
+        validators=[RegexValidator(regex=r"^[A-Za-z0-9]{1,5}-[A-Za-z0-9]{1,5}$")],
+        blank=True
+    )
     name = models.CharField(max_length=255, verbose_name="TestCase Name")
+
     precondition = models.TextField(verbose_name="TestCase Precondition", blank=True, default='<p></p>')
     steps = models.JSONField(verbose_name="TestCase Steps", blank=True, default=dict)
     remark = models.TextField(verbose_name="TestCase Remark", blank=True, default='<p></p>')
@@ -128,13 +153,17 @@ class TestCase(BaseModel):
 
         return crr.result if crr else CaseReviewThrough.Result.NOT_START
 
+    def save(self, *args, **kwargs):
+        if not self.code:
+            self.code = generate_case_code()
+        super().save(*args, **kwargs)
+
     class Meta:
         constraints = [
-            # Enforce uniqueness of project and name when project is not NULL and deleted_at is NULL
             models.UniqueConstraint(
-                fields=["repository", "name"],
+                fields=["repository", "code"],
                 condition=Q(repository__isnull=False, deleted_at__isnull=True),
-                name="unique_case_repository_name_when_not_deleted",
+                name="unique_case_repository_code_when_not_deleted",
             ),
         ]
         db_table = "test_case"
@@ -365,6 +394,11 @@ class CaseReviewRecord(BaseModel):
     reason = models.TextField(verbose_name="CaseReview Reason", blank=True, null=True)
     assignee = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, blank=True, null=True,
                                  related_name="review_records")
+    confirmed = models.BooleanField(
+        default=False,
+        verbose_name="已确认",
+        help_text="标记该评审记录是否已被确认"
+    )
 
     crt = models.ForeignKey(CaseReviewThrough, on_delete=models.SET_NULL, blank=True, null=True,
                             related_name="review_records")

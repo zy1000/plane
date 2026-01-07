@@ -324,6 +324,7 @@ class CaseAPIView(BaseAPIView):
     serializer_class = CaseListSerializer
     filterset_fields = {
         'name': ['exact', 'icontains', 'in'],
+        'code': ['exact', 'icontains', 'in'],
         'labels__name': ['exact', 'icontains'],
         'repository_id': ['exact'],
         'type': ['exact', 'in'],
