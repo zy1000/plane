@@ -12,6 +12,7 @@ import { CaseService as CaseApiService } from "@/services/qa/case.service";
 import { CaseService as ReviewApiService } from "@/services/qa/review.service";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { FolderOpenDot } from "lucide-react";
+import UpdateModal from "@/components/qa/cases/update-modal";
 
 type TCreator = {
   display_name?: string;
@@ -64,6 +65,8 @@ export default function CaseManagementReviewDetailPage() {
   const isDraggingRef = useRef<boolean>(false);
   const startXRef = useRef<number>(0);
   const startWidthRef = useRef<number>(0);
+  const [isCaseModalOpen, setIsCaseModalOpen] = useState(false);
+  const [activeCaseId, setActiveCaseId] = useState<string | undefined>(undefined);
 
   const onExpand: TreeProps["onExpand"] = (keys) => {
     setExpandedKeys(keys as string[]);
@@ -115,7 +118,7 @@ export default function CaseManagementReviewDetailPage() {
   const fetchReviewCaseList = async (page: number = currentPage, size: number = pageSize) => {
     if (!workspaceSlug || !reviewId) return;
     try {
-      setLoading(true);
+      // setLoading(true);
       setError(null);
       const res = await reviewService.getReviewCaseList(workspaceSlug as string, reviewId as string, {
         page,
@@ -274,15 +277,12 @@ export default function CaseManagementReviewDetailPage() {
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
-            if (!workspaceSlug || !record?.case_id || !repositoryId) {
-              message.error("缺少用例信息，无法跳转");
+            if (!record?.case_id) {
+              message.error("缺少用例信息，无法打开");
               return;
             }
-            const caseId = String(record.case_id);
-            const href = `/${workspaceSlug}/projects/${projectId}/testhub/cases?repositoryId=${encodeURIComponent(
-              String(repositoryId)
-            )}&peekCase=${encodeURIComponent(caseId)}`;
-            router.push(href);
+            setActiveCaseId(String(record.case_id));
+            setIsCaseModalOpen(true);
           }}
         >
           {name || "-"}
@@ -383,90 +383,104 @@ export default function CaseManagementReviewDetailPage() {
   ];
 
   return (
-    <div className="flex flex-col gap-3 pt-4 px-4 pb-0 w-full h-full overflow-hidden">
-      <PageHead title="评审详情" />
-      <Breadcrumbs className="grow-0">
-        <Breadcrumbs.Item
-          component={
-            <BreadcrumbLink href={`/${workspaceSlug}/projects/${projectId}/testhub/reviews`} label="用例评审" />
-          }
-        />
-        <Breadcrumbs.Item component={<BreadcrumbLink label="评审详情" isLast />} />
-      </Breadcrumbs>
-      <Row className="w-full flex-1 min-h-0 rounded-md border border-custom-border-200 overflow-hidden" gutter={0}>
-        <Col flex={`${leftWidth}px`} className="relative border-r border-custom-border-200 overflow-hidden">
-          <div className="pt-4 px-4 pb-0 h-full overflow-y-auto">
-            {!repositoryId && <div className="text-custom-text-300">未找到用例库ID，请先在顶部选择一个用例库</div>}
-            {repositoryId && (
-              <Tree
-                showLine={false}
-                defaultExpandAll
-                onSelect={onSelect}
-                onExpand={onExpand}
-                expandedKeys={expandedKeys}
-                autoExpandParent={autoExpandParent}
-                treeData={treeData as any}
-                selectedKeys={selectedModuleId ? [selectedModuleId] : ["all"]}
-                className="py-2"
-              />
-            )}
-          </div>
-          <div className="absolute top-0 right-[-2px] w-1 h-full cursor-col-resize" onMouseDown={onMouseDownResize} />
-        </Col>
-        <Col flex="auto" className="overflow-hidden">
-          <div className="pt-4 px-4 pb-0 flex flex-col h-full min-h-0 overflow-hidden">
-            {loading && (
-              <div className="flex items-center justify-center py-12">
-                <div className="text-custom-text-300">加载中...</div>
-              </div>
-            )}
-            {error && (
-              <div className="bg-red-50 border border-red-200 rounded-md p-4 mb-4">
-                <div className="text-red-800 text-sm">{error}</div>
-              </div>
-            )}
-            {repositoryId && !loading && !error && (
-              <div className="flex flex-col h-full overflow-hidden">
-                <div className="flex-1 overflow-y-auto">
-                  <Table
-                    dataSource={reviewCases}
-                    columns={columns as any}
-                    rowKey="id"
-                    bordered={true}
-                    pagination={false}
-                    locale={{ emptyText: "暂无数据" }}
-                  />
+    <>
+      <div className="flex flex-col gap-3 pt-4 px-4 pb-0 w-full h-full overflow-hidden">
+        <PageHead title="评审详情" />
+        <Breadcrumbs className="grow-0">
+          <Breadcrumbs.Item
+            component={
+              <BreadcrumbLink href={`/${workspaceSlug}/projects/${projectId}/testhub/reviews`} label="用例评审" />
+            }
+          />
+          <Breadcrumbs.Item component={<BreadcrumbLink label="评审详情" isLast />} />
+        </Breadcrumbs>
+        <Row className="w-full flex-1 min-h-0 rounded-md border border-custom-border-200 overflow-hidden" gutter={0}>
+          <Col flex={`${leftWidth}px`} className="relative border-r border-custom-border-200 overflow-hidden">
+            <div className="pt-4 px-4 pb-0 h-full overflow-y-auto">
+              {!repositoryId && <div className="text-custom-text-300">未找到用例库ID，请先在顶部选择一个用例库</div>}
+              {repositoryId && (
+                <Tree
+                  showLine={false}
+                  defaultExpandAll
+                  onSelect={onSelect}
+                  onExpand={onExpand}
+                  expandedKeys={expandedKeys}
+                  autoExpandParent={autoExpandParent}
+                  treeData={treeData as any}
+                  selectedKeys={selectedModuleId ? [selectedModuleId] : ["all"]}
+                  className="py-2"
+                />
+              )}
+            </div>
+            <div
+              className="absolute top-0 right-[-2px] w-1 h-full cursor-col-resize"
+              onMouseDown={onMouseDownResize}
+            />
+          </Col>
+          <Col flex="auto" className="overflow-hidden">
+            <div className="pt-4 px-4 pb-0 flex flex-col h-full min-h-0 overflow-hidden">
+              {loading && (
+                <div className="flex items-center justify-center py-12">
+                  <div className="text-custom-text-300">加载中...</div>
                 </div>
-                <div className="flex-shrink-0 border-t border-custom-border-200 px-4 py-3 bg-custom-background-100 flex items-center justify-between">
-                  <div className="flex items-center gap-4 text-sm">
-                    <span className="text-custom-text-300">
-                      {total > 0
-                        ? `第 ${(currentPage - 1) * pageSize + 1}-${Math.min(currentPage * pageSize, total)} 条，共 ${total} 条`
-                        : ""}
-                    </span>
+              )}
+              {error && (
+                <div className="bg-red-50 border border-red-200 rounded-md p-4 mb-4">
+                  <div className="text-red-800 text-sm">{error}</div>
+                </div>
+              )}
+              {repositoryId && !loading && !error && (
+                <div className="flex flex-col h-full overflow-hidden">
+                  <div className="flex-1 overflow-y-auto">
+                    <Table
+                      dataSource={reviewCases}
+                      columns={columns as any}
+                      rowKey="id"
+                      bordered={true}
+                      pagination={false}
+                      locale={{ emptyText: "暂无数据" }}
+                    />
                   </div>
-                  <Pagination
-                    current={currentPage}
-                    pageSize={pageSize}
-                    total={total}
-                    showSizeChanger
-                    showQuickJumper
-                    pageSizeOptions={["10", "20", "50", "100"]}
-                    onChange={handlePaginationChange}
-                    onShowSizeChange={handlePaginationChange}
-                    size="small"
-                  />
+                  <div className="flex-shrink-0 border-t border-custom-border-200 px-4 py-3 bg-custom-background-100 flex items-center justify-between">
+                    <div className="flex items-center gap-4 text-sm">
+                      <span className="text-custom-text-300">
+                        {total > 0
+                          ? `第 ${(currentPage - 1) * pageSize + 1}-${Math.min(currentPage * pageSize, total)} 条，共 ${total} 条`
+                          : ""}
+                      </span>
+                    </div>
+                    <Pagination
+                      current={currentPage}
+                      pageSize={pageSize}
+                      total={total}
+                      showSizeChanger
+                      showQuickJumper
+                      pageSizeOptions={["10", "20", "50", "100"]}
+                      onChange={handlePaginationChange}
+                      onShowSizeChange={handlePaginationChange}
+                      size="small"
+                    />
+                  </div>
                 </div>
-              </div>
-            )}
-            {!repositoryId && !loading && (
-              <div className="flex items-center justify-center py-12">
-                <div className="text-custom-text-300">未找到用例库ID，请先在顶部选择一个用例库</div>
-              </div>
-            )}
-          </div>
-        </Col>
-      </Row>
-    </div>
+              )}
+              {!repositoryId && !loading && (
+                <div className="flex items-center justify-center py-12">
+                  <div className="text-custom-text-300">未找到用例库ID，请先在顶部选择一个用例库</div>
+                </div>
+              )}
+            </div>
+          </Col>
+        </Row>
+      </div>
+      <UpdateModal
+        open={isCaseModalOpen}
+        onClose={() => {
+          setIsCaseModalOpen(false);
+          setActiveCaseId(undefined);
+          fetchReviewCaseList(currentPage, pageSize);
+        }}
+        caseId={activeCaseId}
+      />
+    </>
   );
 }

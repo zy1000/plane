@@ -42,7 +42,7 @@ export const QaCasesCollapsible: FC<Props> = observer((props) => {
 
   const fetchData = React.useCallback(async () => {
     if (!workspaceSlug || !issueId) return;
-    setLoading(true);
+    // setLoading(true);
     try {
       const list = await serviceRef.current.getIssueCase(String(workspaceSlug), String(issueId));
       if (!Array.isArray(list)) {
@@ -56,7 +56,7 @@ export const QaCasesCollapsible: FC<Props> = observer((props) => {
       setToast({ type: TOAST_TYPE.ERROR, title: "获取用例失败", message });
       setData([]);
     } finally {
-      setLoading(false);
+      // setLoading(false);
     }
   }, [workspaceSlug, issueId]);
 
@@ -97,7 +97,13 @@ export const QaCasesCollapsible: FC<Props> = observer((props) => {
       }
       buttonClassName="w-full"
     >
-      <QaCasesCollapsibleContent data={data} loading={loading} workspaceSlug={workspaceSlug} onDelete={handleDelete} />
+      <QaCasesCollapsibleContent
+        data={data}
+        loading={loading}
+        workspaceSlug={workspaceSlug}
+        onDelete={handleDelete}
+        onRefresh={() => setRefreshKey((k) => k + 1)}
+      />
     </Collapsible>
   );
 });
