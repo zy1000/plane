@@ -2,6 +2,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import { useParams } from "next/navigation";
 import { Modal, Form, Input, Button, message, Select } from "antd";
 import { CaseService } from "@/services/qa/case.service";
 import { ExpandAltOutlined, PlusOutlined } from "@ant-design/icons";
@@ -10,6 +11,7 @@ import Quill from "quill";
 import "quill/dist/quill.snow.css";
 import { WorkItemTable } from "./work-item-table";
 import { StateDropdown } from "@/components/dropdowns/state/dropdown";
+import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import * as LucideIcons from "lucide-react";
 // 新增：文件上传工具与仓库服务
 import { FileUploadService } from "@/services/file-upload.service";
@@ -35,7 +37,6 @@ import { WorkItemSelectModal } from "./work-item-select-modal";
 import { projectIssueTypesCache, ProjectIssueTypeService, ProjectService, type TIssueType } from "@/services/project";
 
 import { getEnums } from "app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/util";
-import { useMember } from "@/hooks/store/use-member";
 import { IssueService } from "@/services/issue/issue.service";
 import { Logo } from "@plane/propel/emoji-icon-picker";
 
@@ -443,6 +444,7 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
   const { isOpen, handleClose, workspaceSlug, repositoryId, repositoryName, onSuccess } = props;
 
   const [form] = Form.useForm();
+  const { projectId } = useParams();
   const [submitting, setSubmitting] = useState<boolean>(false);
   const title = useMemo(() => "新建测试用例", []);
   const [isWorkItemModalOpen, setIsWorkItemModalOpen] = useState<boolean>(false);
@@ -638,26 +640,6 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
       form.setFieldsValue(updates);
     }
   }, [isOpen, caseTypeOptions, casePriorityOptions, caseTestTypeOptions]);
-
-  // 复用成员来源与状态，保持与计划模块一致的调用链
-  const {
-    getUserDetails,
-    workspace: { workspaceMemberIds, isUserSuspended },
-  } = useMember();
-
-  // 维护人下拉选项（单选）
-  const assigneeOptions = useMemo(
-    () =>
-      (workspaceMemberIds ?? []).map((userId) => {
-        const user = getUserDetails(userId);
-        return {
-          value: userId,
-          label: user?.display_name ?? "",
-          disabled: isUserSuspended(userId, workspaceSlug),
-        };
-      }),
-    [workspaceMemberIds, getUserDetails, isUserSuspended, workspaceSlug]
-  );
 
   // 新增：仓库对应项目ID（用于 ProjectAssetEndpoint）
   const [repoProjectId, setRepoProjectId] = useState<string>("");
@@ -911,6 +893,7 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
     if (!isOpen) return;
     // 打开弹窗时同步初始值（仅创建模式）
     form.setFieldsValue({
+      code: "",
       name: "",
       precondition: "",
       // 修正 steps 初始类型为数组且默认一行空数据
@@ -922,7 +905,7 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
       type: "",
       priority: "",
       test_type: "",
-      assignee: "",
+      assignee: null,
     });
   }, [isOpen, form, repositoryName]);
 
@@ -949,6 +932,7 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
 
       // 构造 payload：包含所有表单项（附件除外）
       const payload: any = {
+        code: (values?.code || "").trim(),
         name: (values?.name || "").trim(),
         precondition: (values?.precondition || "").trim(),
         repository: repositoryId,
@@ -1044,19 +1028,20 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
         form={form}
         layout="vertical"
         initialValues={{
+          code: "",
           name: "",
-          precondition: "",
-          steps: [{ description: "", result: "" }],
-          remark: "",
-          issues: "",
-          repository: repositoryName || "",
-          module: "",
-          type: "",
-          priority: "",
-          test_type: "manual",
-          assignee: "",
-        }}
-      >
+      precondition: "",
+      steps: [{ description: "", result: "" }],
+      remark: "",
+      issues: "",
+      repository: repositoryName || "",
+      module: "",
+      type: "",
+      priority: "",
+      test_type: "manual",
+      assignee: null,
+    }}
+  >
         {/* 其余表单项与自定义组件保持不变 */}
         {/* 包括 QuillField 与 StepsEditor 的用法 */}
         {/* 左右布局、风格与已有设计体系保持一致 */}
@@ -1158,10 +1143,9 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
           </div>
 
           {/* 右侧区域 */}
-          <div style={{ flex: 1 }} className="space-y-2">
-            <Form.Item label="所属测试库" name="repository" className="mb-2">
-              <Input placeholder="所属测试库" disabled />
-            </Form.Item>
+          <div style={{ flex: 1 }} className="space-y-4">
+
+
 
             <Form.Item
               label="维护人"
@@ -1169,18 +1153,38 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
               rules={[{ required: true, message: "请选择维护人" }]}
               className="mb-2"
             >
-              <Select
+              <MemberDropdown
+                multiple={false}
+                projectId={projectId ? String(projectId) : undefined}
+                value={form.getFieldValue("assignee") ?? null}
+                onChange={(val) => form.setFieldsValue({ assignee: val })}
                 placeholder="选择维护人"
-                options={assigneeOptions}
-                allowClear
-                showSearch
-                optionFilterProp="label"
-                filterOption={(input, option) => (option?.label ?? "").toLowerCase().includes(input.toLowerCase())}
+                className="w-full"
+                buttonVariant="transparent-with-text"
+                showUserDetails={true}
+                optionsClassName="z-[1100]"
               />
             </Form.Item>
 
+            <Form.Item label="所属测试库" name="repository" className="mb-3">
+              <Input placeholder="所属测试库" disabled />
+            </Form.Item>
+
+
+
+
+            <Form.Item
+              label="用例编号"
+              name="code"
+              className="mb-3"
+            >
+              <Input placeholder="例如：ABC-123" />
+            </Form.Item>
+
+     
+
             {/* 将模块改为下拉框 */}
-            <Form.Item label="模块" name="module" className="mb-2">
+            <Form.Item label="模块" name="module" className="mb-3">
               <Select
                 placeholder="请选择模块"
                 options={moduleOptions}
@@ -1190,7 +1194,7 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
               />
             </Form.Item>
 
-            <Form.Item label="用例类型" name="type" className="mb-2">
+            <Form.Item label="用例类型" name="type" className="mb-3">
               <Select
                 placeholder="请选择用例类型"
                 options={caseTypeOptions}
@@ -1199,7 +1203,7 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
               />
             </Form.Item>
 
-            <Form.Item label="优先级" name="priority" className="mb-2">
+            <Form.Item label="优先级" name="priority" className="mb-3">
               <Select
                 placeholder="请选择优先级"
                 options={casePriorityOptions}
@@ -1208,7 +1212,7 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
               />
             </Form.Item>
 
-            <Form.Item label="测试类型" name="test_type" className="mb-2">
+            <Form.Item label="测试类型" name="test_type" className="mb-3">
               <Select
                 placeholder="请选择测试类型"
                 options={caseTestTypeOptions}
@@ -1218,7 +1222,7 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
             </Form.Item>
 
             {/* 标签 */}
-            <Form.Item label="标签" className="mb-2">
+            <Form.Item label="标签" className="mb-3">
               <div
                 className="flex flex-wrap items-center gap-2 min-h-[32px] p-1 border border-custom-border-200 rounded cursor-text bg-white"
                 onClick={() => {

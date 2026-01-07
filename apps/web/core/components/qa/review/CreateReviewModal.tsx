@@ -28,7 +28,7 @@ type ReviewFormValues = {
 };
 
 export default function CreateReviewModal({ open, onClose, mode = "create", initialValues }: Props) {
-  const { workspaceSlug } = useParams();
+  const { workspaceSlug, projectId } = useParams() as { workspaceSlug?: string; projectId?: string };
   const [submitting, setSubmitting] = useState(false);
   const reviewService = useMemo(() => new ReviewService(), []);
   const qaCaseService = useMemo(() => new QaCaseService(), []);
@@ -165,6 +165,7 @@ export default function CreateReviewModal({ open, onClose, mode = "create", init
         <Form.Item name="assignees" label="评审人" rules={[{ required: true, message: "请选择评审人" }]}>
           <MemberDropdown
             multiple
+            projectId={projectId ? String(projectId) : undefined}
             value={form.getFieldValue("assignees") ?? []}
             onChange={(val) => form.setFieldsValue({ assignees: Array.isArray(val) ? val : [] })}
             placeholder="请选择评审人"

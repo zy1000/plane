@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Spin, message } from "antd";
+import { Button, Spin, message } from "antd";
 import { CheckCircleOutlined, CloseCircleOutlined, ExclamationCircleOutlined } from "@ant-design/icons";
 import { cn, renderFormattedDate } from "@plane/utils";
 import { CaseService as ReviewApiService } from "@/services/qa/review.service";
@@ -15,6 +15,7 @@ type ReviewRecord = {
   reason?: string | null;
   assignee?: string | null;
   created_at?: string;
+  confirmed?: boolean;
 };
 
 type Props = {
@@ -22,16 +23,18 @@ type Props = {
   reviewId: string | undefined;
   caseId: string | undefined;
   className?: string;
+  onRecordsUpdated?: () => void;
 };
 
 export const ReviewRecordsPanel: React.FC<Props> = (props) => {
-  const { workspaceSlug, reviewId, caseId, className = "" } = props;
+  const { workspaceSlug, reviewId, caseId, className = "", onRecordsUpdated } = props;
   const reviewService = React.useMemo(() => new ReviewApiService(), []);
   const { getUserDetails } = useMember();
 
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [records, setRecords] = React.useState<ReviewRecord[]>([]);
+  const [confirmingRecordId, setConfirmingRecordId] = React.useState<string | null>(null);
 
   const fetchRecords = async () => {
     if (!workspaceSlug || !reviewId || !caseId) return;
@@ -53,6 +56,24 @@ export const ReviewRecordsPanel: React.FC<Props> = (props) => {
   React.useEffect(() => {
     fetchRecords();
   }, [workspaceSlug, reviewId, caseId]);
+
+  const handleConfirm = async (recordId: string) => {
+    if (!workspaceSlug || !recordId) return;
+    try {
+      setConfirmingRecordId(recordId);
+      await reviewService.confirmRecord(String(workspaceSlug), recordId);
+      setRecords((prev) =>
+        prev.map((r) => (String(r.id) === String(recordId) ? { ...r, confirmed: true } : r))
+      );
+      onRecordsUpdated?.();
+      message.success("已确认");
+    } catch (e: any) {
+      const msg = e?.message || e?.detail || e?.error || "确认失败";
+      message.error(msg);
+    } finally {
+      setConfirmingRecordId(null);
+    }
+  };
 
   const renderResult = (result: string) => {
     const val = String(result || "");
@@ -106,6 +127,10 @@ export const ReviewRecordsPanel: React.FC<Props> = (props) => {
             const user = uid ? getUserDetails(uid) : undefined;
             const name = user?.display_name || "未知用户";
             const time = r.created_at ? renderFormattedDate(r.created_at, "YYYY-MM-DD HH:mm:ss") : "";
+            const isSuggestion = String(r.result || "") === "建议";
+            const confirmed = Boolean(r.confirmed);
+            const showConfirm = isSuggestion && !confirmed;
+            const showConfirmed = isSuggestion && confirmed;
             return (
               <div
                 key={String(r.id)}
@@ -138,7 +163,23 @@ export const ReviewRecordsPanel: React.FC<Props> = (props) => {
                     <div className="text-xs text-custom-text-400 mt-2">{time}</div>
                   </div>
                 </div>
-                <div className="flex-shrink-0">{renderResult(r.result)}</div>
+                <div className="flex-shrink-0 flex flex-col items-end gap-2">
+                  {renderResult(r.result)}
+                  {showConfirm ? (
+                    <Button
+                      size="small"
+                      color="primary" variant="filled"
+                      onClick={() => handleConfirm(String(r.id))}
+                      loading={String(confirmingRecordId || "") === String(r.id)}
+                    >
+                      确认
+                    </Button>
+                  ) : showConfirmed ? (
+                    <span className="text-xs" style={{ color: "#52c41a" }}>
+                      已确认
+                    </span>
+                  ) : null}
+                </div>
               </div>
             );
           })}

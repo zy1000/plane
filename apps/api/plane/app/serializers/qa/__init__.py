@@ -185,7 +185,7 @@ class CaseCreateUpdateSerializer(ModelSerializer):
 
     class Meta:
         model = TestCase
-        fields = ['name', 'precondition', 'steps', 'remark', 'type', 'priority', 'repository', 'labels',
+        fields = ['code', 'name', 'precondition', 'steps', 'remark', 'type', 'priority', 'repository', 'labels',
                   'module', 'assignee', 'issues', 'test_type', 'review']
 
     def create(self, validated_data):

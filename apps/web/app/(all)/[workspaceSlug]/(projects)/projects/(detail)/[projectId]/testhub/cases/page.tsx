@@ -168,6 +168,7 @@ export default function TestCasesPage() {
   // 筛选状态管理
   const [filters, setFilters] = useState<{
     name?: string;
+    code?: string;
     labels__name__icontains?: string;
     state?: number[];
     type?: number[];
@@ -468,6 +469,7 @@ export default function TestCasesPage() {
 
       // name__icontains, state__in, type__in, priority__in
       if (filterParams.name) queryParams.name__icontains = filterParams.name;
+      if (filterParams.code) queryParams.code__icontains = filterParams.code;
       if (filterParams.labels__name__icontains)
         queryParams.labels__name__icontains = filterParams.labels__name__icontains;
       if (filterParams.state && filterParams.state.length > 0) queryParams.state__in = filterParams.state.join(",");
@@ -722,7 +724,15 @@ export default function TestCasesPage() {
       <div style={{ padding: 8 }} onKeyDown={(e) => e.stopPropagation()}>
         <Input
           ref={searchInput}
-          placeholder={`搜索 ${dataIndex === "name" ? "名称" : dataIndex === "labels" ? "标签" : "其他"}`}
+          placeholder={`搜索 ${
+            dataIndex === "name"
+              ? "名称"
+              : dataIndex === "labels"
+                ? "标签"
+                : dataIndex === "code"
+                  ? "用例编号"
+                  : "其他"
+          }`}
           value={selectedKeys[0]}
           onChange={(e) => setSelectedKeys(e.target.value ? [e.target.value] : [])}
           onPressEnter={() => handleSearch(selectedKeys as string[], dataIndex, confirm, queryParam)}
@@ -767,9 +777,11 @@ export default function TestCasesPage() {
     filteredValue:
       dataIndex === "name" && filters.name
         ? [filters.name]
-        : queryParam === "labels__name__icontains" && filters.labels__name__icontains
-          ? [filters.labels__name__icontains]
-          : null,
+        : dataIndex === "code" && filters.code
+          ? [filters.code]
+          : queryParam === "labels__name__icontains" && filters.labels__name__icontains
+            ? [filters.labels__name__icontains]
+            : null,
   });
 
   const handleSearch = (
@@ -786,9 +798,11 @@ export default function TestCasesPage() {
 
     if (selectedKeys[0]) {
       if (paramKey === "name") newFilters.name = selectedKeys[0];
+      if (paramKey === "code") newFilters.code = selectedKeys[0];
       if (paramKey === "labels__name__icontains") newFilters.labels__name__icontains = selectedKeys[0];
     } else {
       if (paramKey === "name") delete newFilters.name;
+      if (paramKey === "code") delete newFilters.code;
       if (paramKey === "labels__name__icontains") delete newFilters.labels__name__icontains;
     }
 
@@ -811,6 +825,9 @@ export default function TestCasesPage() {
     if (paramKey === "name") {
       delete newFilters.name;
     }
+    if (paramKey === "code") {
+      delete newFilters.code;
+    }
     if (paramKey === "labels__name__icontains") {
       delete newFilters.labels__name__icontains;
     }
@@ -826,6 +843,7 @@ export default function TestCasesPage() {
     const selectedPriorities = (tableFilters?.priority as number[] | undefined) || [];
     const nameFilter = tableFilters?.name?.[0] as string | undefined;
     const labelsFilter = tableFilters?.labels?.[0] as string | undefined;
+    const codeFilter = tableFilters?.code?.[0] as string | undefined;
 
     const newFilters = {
       ...filters,
@@ -839,6 +857,12 @@ export default function TestCasesPage() {
       newFilters.name = nameFilter;
     } else {
       delete newFilters.name;
+    }
+
+    if (codeFilter) {
+      newFilters.code = codeFilter;
+    } else {
+      delete newFilters.code;
     }
 
     if (labelsFilter) {
@@ -991,6 +1015,18 @@ export default function TestCasesPage() {
 
   const columns: TableProps<TestCase>["columns"] = [
     {
+      title: "用例编号",
+      dataIndex: "code",
+      key: "code",
+      width: 110,
+      ...getColumnSearchProps("code"),
+      render: (value: string) => (
+        <span className="block  truncate" title={value || ""}>
+          {value || "-"}
+        </span>
+      ),
+    },
+    {
       title: "名称",
       dataIndex: "name",
       key: "name",
@@ -999,7 +1035,7 @@ export default function TestCasesPage() {
       render: (_: any, record: any) => (
         <button
           type="button"
-          className="text-primary hover:underline inline-block max-w-full"
+          className="text-blue-500 inline-block max-w-full"
           onClick={() => {
             if (!record || !record.id) return;
             setActiveCase(record);
@@ -1050,7 +1086,7 @@ export default function TestCasesPage() {
       dataIndex: "priority",
       key: "priority",
       render: (v) => renderEnumTag("case_priority", v, "warning"),
-      width: 100,
+      width: 80,
       filters: Object.entries((globalEnums.Enums as any)?.case_priority || {}).map(([value, label]) => ({
         text: String(label),
         value: Number(value),
@@ -1063,7 +1099,7 @@ export default function TestCasesPage() {
       dataIndex: "module",
       key: "module",
       render: (module: TModule | undefined) => module?.name || "",
-      width: 120,
+      width: 100,
     },
     {
       title: "维护人",
@@ -1103,13 +1139,13 @@ export default function TestCasesPage() {
           ))}
         </Space>
       ),
-      width: 200,
+      width: 170,
     },
     { title: "更新时间", dataIndex: "updated_at", key: "updated_at", render: (d) => formatDateTime(d), width: 180 },
     {
       title: "操作",
       key: "actions",
-      width: 120,
+      width: 110,
       render: (_: any, record: any) => (
         <Space size={8}>
           <Button type="text" icon={<EditOutlined />} onClick={() => handleEditCase(record)} />

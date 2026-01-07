@@ -7,6 +7,10 @@ import * as LucideIcons from "lucide-react";
 type Option = { value: string; label: React.ReactNode; title?: string; disabled?: boolean };
 
 type CaseMetaFormProps = {
+  projectId?: string;
+  code?: string;
+  onCodeChange?: (v: string) => void;
+  onCodeBlur?: () => void;
   assignee?: string;
   onAssigneeChange: (v: any) => void;
   onAssigneeBlur: () => void;
@@ -34,6 +38,10 @@ type CaseMetaFormProps = {
 
 export function CaseMetaForm(props: CaseMetaFormProps) {
   const {
+    projectId,
+    code,
+    onCodeChange,
+    onCodeBlur,
     assignee,
     onAssigneeChange,
     onAssigneeBlur,
@@ -74,12 +82,13 @@ export function CaseMetaForm(props: CaseMetaFormProps) {
 
   return (
     <div className="mb-5">
-      <div className="grid grid-cols-4 gap-3 ml-[10px]">
+      <div className="grid grid-cols-5 gap-2 ml-[10px]">
         <div>
           <label className="mb-1 block text-sm font-medium text-gray-700 ml-[10px]">维护人</label>
           <div className="w-full rounded-md border border-transparent text-sm  hover:border-blue-300 focus-within:border-blue-400 focus-within:ring-1 focus-within:ring-blue-300">
             <MemberDropdown
               multiple={false}
+              projectId={projectId ? String(projectId) : undefined}
               value={assignee ?? null}
               onChange={(val) => {
                 onAssigneeChange(val);
@@ -93,6 +102,19 @@ export function CaseMetaForm(props: CaseMetaFormProps) {
               dropdownArrowClassName="h-3.5 w-3.5"
               showUserDetails={true}
               optionsClassName="z-[60]"
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="mb-1 block text-sm font-medium text-gray-700 ml-[6px]">用例编号</label>
+          <div className="w-full rounded-md border border-transparent text-sm hover:border-blue-300 focus-within:border-blue-400 focus-within:ring-1 focus-within:ring-blue-300">
+            <input
+              value={code ?? ""}
+              onChange={(e) => onCodeChange?.(e.target.value)}
+              onBlur={onCodeBlur}
+              placeholder="例如：ABC-123"
+              className="w-full text-sm px-2 py-1 bg-transparent outline-none"
             />
           </div>
         </div>
