@@ -55,6 +55,7 @@ type TestCaseResponse = {
 };
 
 import { MoveCaseModal } from "@/components/qa/cases/move-modal";
+import { CopyCaseModal } from "@/components/qa/cases/copy-modal";
 
 type ResizableHeaderCellProps = ComponentPropsWithoutRef<"th"> & {
   width?: number;
@@ -158,6 +159,7 @@ export default function TestCasesPage() {
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
   const [activeCase, setActiveCase] = useState<any | null>(null);
   const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
+  const [isCopyModalOpen, setIsCopyModalOpen] = useState(false);
   const [selectedCaseIds, setSelectedCaseIds] = useState<string[]>([]);
 
   // 分页状态管理
@@ -1308,6 +1310,14 @@ export default function TestCasesPage() {
                               <Button
                                 type="link"
                                 size="small"
+                                onClick={() => setIsCopyModalOpen(true)}
+                                className="p-0 text-custom-primary-100 font-medium"
+                              >
+                                复制到
+                              </Button>
+                              <Button
+                                type="link"
+                                size="small"
                                 danger
                                 onClick={confirmDeleteCases}
                                 className="p-0 font-medium"
@@ -1415,6 +1425,21 @@ export default function TestCasesPage() {
         <MoveCaseModal
           isOpen={isMoveModalOpen}
           handleClose={() => setIsMoveModalOpen(false)}
+          workspaceSlug={workspaceSlug as string}
+          repositoryId={repositoryId}
+          selectedCaseIds={selectedCaseIds}
+          onSuccess={() => {
+            fetchModules();
+            fetchCases(currentPage, pageSize, filters);
+            setSelectedCaseIds([]);
+          }}
+        />
+      )}
+
+      {repositoryId && (
+        <CopyCaseModal
+          isOpen={isCopyModalOpen}
+          handleClose={() => setIsCopyModalOpen(false)}
           workspaceSlug={workspaceSlug as string}
           repositoryId={repositoryId}
           selectedCaseIds={selectedCaseIds}

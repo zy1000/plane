@@ -97,7 +97,7 @@ def parser_excel_case(file_path, sheet_name='case'):
     """使用openpyxl将Excel转换为字典"""
 
     mapping = {"功能": 'label', '测试内容': 'name', '用例等级': 'priority', '测试目的': 'remark',
-               '预置条件': 'precondition', '测试步骤': 'description', '预期结果': 'result', '模块': 'module'}
+               '预置条件': 'precondition', '测试步骤': 'description', '预期结果': 'result', '模块': 'module','编号':'code'}
 
     return parser_excel(file_path, mapping, sheet_name)
 

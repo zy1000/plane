@@ -267,13 +267,17 @@ class CaseAPI(BaseViewSet):
         fail_list = []
         for data in case_data:
             try:
-                instance = TestCase.objects.create(
-                    name=data['name'],
-                    priority=TestCase.Priority[data['priority']].value,
-                    remark=data['remark'],
-                    precondition=data['precondition'],
-                    steps=data['steps'],
+                instance, _ = TestCase.objects.update_or_create(
+                    code=data.get('code'),
                     repository_id=repository_id,
+                    defaults=dict(
+                        name=data['name'],
+                        priority=TestCase.Priority[data['priority']].value,
+                        remark=data['remark'],
+                        precondition=data['precondition'],
+                        steps=data['steps'],
+                        repository_id=repository_id,
+                    )
                 )
 
                 # 创建模块
@@ -302,3 +306,74 @@ class CaseAPI(BaseViewSet):
 
         TestCase.objects.filter(pk__in=cases_id).update(module_id=module_id)
         return Response(status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['post'], url_path='copy-case')
+    def copy_case(self, request, slug):
+        cases_id = request.data.get('cases_id') or []
+        module_id = request.data.get('module_id')
+
+        if not module_id:
+            return Response({"error": "module_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not isinstance(cases_id, list) or len(cases_id) == 0:
+            return Response({"error": "cases_id must be a non-empty list"}, status=status.HTTP_400_BAD_REQUEST)
+
+        target_module = get_object_or_404(CaseModule, id=module_id, repository__workspace__slug=slug)
+
+        source_cases = (
+            TestCase.objects.filter(id__in=cases_id, repository__workspace__slug=slug, deleted_at__isnull=True)
+            .select_related("repository", "module", "assignee")
+            .prefetch_related("labels", "issues", "review_cases")
+        )
+
+        found_ids = set(str(i) for i in source_cases.values_list("id", flat=True))
+        missing_ids = [str(i) for i in cases_id if str(i) not in found_ids]
+        if missing_ids:
+            return Response({"error": f"TestCase not found: {','.join(missing_ids)}"}, status=status.HTTP_404_NOT_FOUND)
+
+        if source_cases.filter(repository_id__isnull=True).exists():
+            return Response({"error": "Invalid source case repository"}, status=status.HTTP_400_BAD_REQUEST)
+
+        if source_cases.exclude(repository_id=target_module.repository_id).exists():
+            return Response({"error": "Target module repository mismatch"}, status=status.HTTP_400_BAD_REQUEST)
+
+        created = []
+        for source_case in source_cases:
+            base_fields = dict(
+                name=source_case.name,
+                precondition=source_case.precondition,
+                steps=source_case.steps,
+                remark=source_case.remark,
+                state=getattr(source_case, "state", None),
+                type=source_case.type,
+                priority=source_case.priority,
+                test_type=getattr(source_case, "test_type", None),
+                repository_id=source_case.repository_id,
+                module_id=target_module.id,
+                assignee_id=source_case.assignee_id,
+            )
+            base_fields = {k: v for k, v in base_fields.items() if v is not None}
+
+            new_case = TestCase.objects.create(code="", **base_fields)
+
+            new_case.labels.set(list(source_case.labels.all()))
+            new_case.issues.set(list(source_case.issues.all()))
+
+            throughs = CaseReviewThrough.objects.filter(case=source_case).select_related("review")
+            if throughs.exists():
+                CaseReviewThrough.objects.bulk_create(
+                    [
+                        CaseReviewThrough(
+                            review_id=t.review_id,
+                            case_id=new_case.id,
+                            result=t.result,
+                        )
+                        for t in throughs
+                    ],
+                    batch_size=1000,
+                )
+
+            created.append(new_case)
+
+        serializer = CaseListSerializer(created, many=True)
+        return list_response(data=serializer.data, count=len(created))
