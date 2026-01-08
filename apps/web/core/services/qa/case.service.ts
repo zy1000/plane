@@ -350,6 +350,15 @@ export class CaseService extends APIService {
       });
 }
 
+  async copyCase(workspaceSlug: string, casesId: Array<string>, moduleId: string): Promise<any> {
+    return this.post(`/api/workspaces/${workspaceSlug}/test/case/copy-case/`, { cases_id: casesId, module_id: moduleId })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+
 
 
 }
