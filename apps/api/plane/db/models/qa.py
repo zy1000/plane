@@ -3,11 +3,13 @@ import string
 from enum import IntEnum
 
 from django.core.validators import RegexValidator
+from django.db import transaction
 from django.db import models
 from django.db.models import Q
+from django.conf import settings
+
 
 from . import BaseModel, Issue
-from django.conf import settings
 
 def generate_case_code():
     """
@@ -168,6 +170,92 @@ class TestCase(BaseModel):
         ]
         db_table = "test_case"
         ordering = ("-created_at",)
+
+
+class TestCaseVersion(BaseModel):
+    case = models.ForeignKey(TestCase, on_delete=models.CASCADE, related_name="versions")
+    version = models.PositiveIntegerField(default=0)
+    repository_id = models.CharField(max_length=36)
+    module_id = models.CharField(max_length=36, null=True, blank=True)
+    assignee_id = models.CharField(max_length=36, null=True, blank=True)
+    code = models.CharField(max_length=12, blank=True)
+    name = models.CharField(max_length=255)
+    precondition = models.TextField(blank=True, default="<p></p>")
+    steps = models.JSONField(blank=True, default=dict)
+    remark = models.TextField(blank=True, default="<p></p>")
+    type = models.IntegerField(choices=TestCase.Type.choices)
+    test_type = models.IntegerField(choices=TestCase.TestType.choices)
+    priority = models.IntegerField(choices=TestCase.Priority.choices)
+    state = models.IntegerField(choices=TestCase.State.choices, default=TestCase.State.PENDING_REVIEW)
+    label_ids = models.JSONField(blank=True, default=list)
+    issue_ids = models.JSONField(blank=True, default=list)
+
+    class Meta:
+        db_table = "test_case_versions"
+        ordering = ("-created_at",)
+        unique_together = ("case", "version")
+
+    @classmethod
+    def create_from_case(cls, case: TestCase) -> "TestCaseVersion":
+        from django.db.models import Max
+
+        latest = (
+            cls.objects.filter(case_id=str(case.id))
+            .aggregate(max_version=Max("version"))
+            .get("max_version")
+        )
+        next_version = 0 if latest is None else latest + 1
+
+        label_ids = list(map(str, case.labels.values_list("id", flat=True)))
+        issue_ids = list(map(str, case.issues.values_list("id", flat=True)))
+
+        return cls.objects.create(
+            case=case,
+            version=next_version,
+            repository_id=str(case.repository_id),
+            module_id=str(case.module_id) if case.module_id else None,
+            assignee_id=str(case.assignee_id) if case.assignee_id else None,
+            code=case.code or "",
+            name=case.name,
+            precondition=case.precondition,
+            steps=case.steps,
+            remark=case.remark,
+            type=case.type,
+            test_type=case.test_type,
+            priority=case.priority,
+            state=getattr(case, "state", TestCase.State.PENDING_REVIEW),
+            label_ids=label_ids,
+            issue_ids=issue_ids,
+        )
+
+    @classmethod
+    def rollback_case(cls, case: TestCase, version: int) -> TestCase:
+        from plane.db.models import CaseLabel as CaseLabelModel, Issue as IssueModel
+
+        snapshot = cls.objects.get(case=case, version=version)
+
+        with transaction.atomic():
+            case.repository_id = snapshot.repository_id
+            case.module_id = snapshot.module_id
+            case.assignee_id = snapshot.assignee_id
+            case.code = snapshot.code
+            case.name = snapshot.name
+            case.precondition = snapshot.precondition
+            case.steps = snapshot.steps
+            case.remark = snapshot.remark
+            case.type = snapshot.type
+            case.test_type = snapshot.test_type
+            case.priority = snapshot.priority
+            case.state = snapshot.state
+
+            labels_qs = CaseLabelModel.objects.filter(id__in=snapshot.label_ids)
+            issues_qs = IssueModel.objects.filter(id__in=snapshot.issue_ids)
+
+            case.save()
+            case.labels.set(labels_qs)
+            case.issues.set(issues_qs)
+
+        return case
 
 
 class PlanModule(BaseModel):
