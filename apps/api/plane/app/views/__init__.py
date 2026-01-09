@@ -202,6 +202,7 @@ from .analytic.base import (
     ExportAnalyticsEndpoint,
     DefaultAnalyticsEndpoint,
     ProjectStatsEndpoint,
+    ProjectStatisticsEndpoint,
 )
 
 from .analytic.advance import (

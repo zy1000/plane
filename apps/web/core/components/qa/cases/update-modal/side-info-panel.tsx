@@ -1,6 +1,6 @@
 "use client";
 import React from "react";
-import { Select, Spin, Tag } from "antd";
+import { Button, Select, Spin, Tag } from "antd";
 import { FolderOutlined } from "@ant-design/icons";
 import { useParams } from "next/navigation";
 import { CaseService } from "../../../../services/qa/case.service";
@@ -8,10 +8,17 @@ import { CaseService as ReviewApiService } from "../../../../services/qa/review.
 import { formatCNDateTime } from "../util";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { getEnums } from "app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/util";
+import { CaseVersionCompareModal } from "./case-version-compare-modal";
 
 const enumsCache: Record<
   string,
-  { case_test_type?: Record<string, string>; plan_case_result?: Record<string, string> }
+  {
+    case_test_type?: Record<string, string>;
+    case_type?: Record<string, string>;
+    case_priority?: Record<string, string>;
+    case_state?: Record<string, string>;
+    plan_case_result?: Record<string, string>;
+  }
 > = {};
 const enumsReqCache: Record<string, Promise<any>> = {};
 
@@ -25,8 +32,37 @@ export function SideInfoPanel({ caseData, caseTestTypeMap }: SideInfoPanelProps)
   const caseService = React.useMemo(() => new CaseService(), []);
   const reviewService = React.useMemo(() => new ReviewApiService(), []);
 
+  type TCaseVersionItem = { id: string; version: number; created_at?: string };
+  const [caseVersions, setCaseVersions] = React.useState<TCaseVersionItem[]>([]);
+  const [loadingCaseVersions, setLoadingCaseVersions] = React.useState(false);
+  React.useEffect(() => {
+    const id = String(caseData?.id || "");
+    if (!workspaceSlug || !id) return;
+    setLoadingCaseVersions(true);
+    caseService
+      .getCaseVersions(String(workspaceSlug), id)
+      .then((data) => setCaseVersions(Array.isArray(data) ? data : []))
+      .catch(() => setCaseVersions([]))
+      .finally(() => setLoadingCaseVersions(false));
+  }, [workspaceSlug, caseData?.id, caseService]);
+
+  const latestVersion = React.useMemo(() => {
+    if (!caseVersions || caseVersions.length === 0) return undefined;
+    return Math.max(...caseVersions.map((v) => Number(v.version)));
+  }, [caseVersions]);
+
+  const currentVersionLabel = React.useMemo(() => {
+    if (latestVersion === undefined) return "-";
+    return `v${latestVersion + 1}`;
+  }, [latestVersion]);
+
+  const [compareOpen, setCompareOpen] = React.useState(false);
+
   const [enumsData, setEnumsData] = React.useState<{
     case_test_type?: Record<string, string>;
+    case_type?: Record<string, string>;
+    case_priority?: Record<string, string>;
+    case_state?: Record<string, string>;
     plan_case_result?: Record<string, string>;
   }>({});
   const [loadingEnums, setLoadingEnums] = React.useState<boolean>(false);
@@ -46,7 +82,13 @@ export function SideInfoPanel({ caseData, caseTestTypeMap }: SideInfoPanelProps)
     enumsReqCache[key] = req;
     req
       .then((enums) => {
-        const data = { case_test_type: enums.case_test_type || {}, plan_case_result: enums.plan_case_result || {} };
+        const data = {
+          case_test_type: enums.case_test_type || {},
+          case_type: enums.case_type || {},
+          case_priority: enums.case_priority || {},
+          case_state: enums.case_state || {},
+          plan_case_result: enums.plan_case_result || {},
+        };
         enumsCache[key] = data;
         setEnumsData(data);
       })
@@ -154,6 +196,18 @@ export function SideInfoPanel({ caseData, caseTestTypeMap }: SideInfoPanelProps)
 
   return (
     <div className="w-1/3 border-l px-6 py-4 h-full overflow-y-auto bg-[#FAFAFA] divide-y divide-gray-100">
+      {workspaceSlug && caseData?.id ? (
+        <CaseVersionCompareModal
+          open={compareOpen}
+          onClose={() => setCompareOpen(false)}
+          workspaceSlug={String(workspaceSlug)}
+          caseId={String(caseData?.id)}
+          caseVersions={caseVersions}
+          latestVersion={latestVersion}
+          currentVersionLabel={currentVersionLabel}
+          enumsData={enumsData}
+        />
+      ) : null}
       <div className="py-5">
         <div className="text-xs text-gray-500 mb-4">属性</div>
         <div className="space-y-4">
@@ -190,7 +244,19 @@ export function SideInfoPanel({ caseData, caseTestTypeMap }: SideInfoPanelProps)
         <div className="space-y-4">
           <div className="flex items-center gap-3 md:gap-4">
             <span className="text-sm text-gray-700 shrink-0 basis-28 md:basis-32">版本</span>
-            <span className="text-sm text-gray-900 flex-1 min-w-0 truncate">v1</span>
+            <div className="flex-1 min-w-0 flex items-center justify-between gap-3">
+              <span className="text-sm text-gray-900 truncate">
+                {loadingCaseVersions ? "加载中..." : currentVersionLabel}
+              </span>
+              <Button
+                size="small"
+                type="link"
+                disabled={loadingCaseVersions || (caseVersions || []).length <= 1}
+                onClick={() => setCompareOpen(true)}
+              >
+                对比历史版本
+              </Button>
+            </div>
           </div>
           <div className="flex items-center gap-3 md:gap-4">
             <span className="text-sm text-gray-700 shrink-0 basis-28 md:basis-32">评审状态</span>

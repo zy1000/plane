@@ -19,6 +19,7 @@ import { WorkItemSelectModal } from "./work-item-select-modal";
 import { CommentOutlined, PlusOutlined } from "@ant-design/icons";
 import type { TIssue } from "@plane/types";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
+import { IssuePeekOverview } from "@/components/issues/peek-overview";
 import { formatCNDateTime } from "./util";
 import styles from "./update-modal.module.css";
 
@@ -1307,6 +1308,7 @@ function UpdateModal({ open, onClose, caseId }: UpdateModalProps) {
         initialSelectedIssues={preselectedIssues}
         caseId={String(caseId ?? "")}
       />
+      <IssuePeekOverview />
     </div>
   );
 }
