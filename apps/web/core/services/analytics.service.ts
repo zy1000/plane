@@ -103,4 +103,12 @@ export class AnalyticsService extends APIService {
     }
     return `${processedUrl}/${endpoint}`;
   }
+
+  async getProjectStatistics<T>(workspaceSlug: string, projectId: string): Promise<T> {
+    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/statistics/`)
+      .then((res) => res?.data)
+      .catch((err) => {
+        throw err?.response?.data;
+      });
+  }
 }

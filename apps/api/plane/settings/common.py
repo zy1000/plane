@@ -216,7 +216,7 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 # Password reset time the number of seconds the uniquely generated uid will be valid
-PASSWORD_RESET_TIMEOUT = 3600
+PASSWORD_RESET_TIMEOUT = 36000
 
 # Static files (CSS, JavaScript, Images)
 STATIC_URL = "/static/"

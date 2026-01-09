@@ -108,6 +108,29 @@ export class CaseService extends APIService {
       });
   }
 
+  async getCaseVersions(workspaceSlug: string, caseId: string): Promise<any> {
+    const query = { case_id: caseId };
+    return this.get(`/api/workspaces/${workspaceSlug}/test/case/version/`, { params: query })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async compareCaseVersions(
+    workspaceSlug: string,
+    caseId: string,
+    fromVersion: number,
+    toVersion: number
+  ): Promise<any> {
+    const query = { case_id: caseId, from_version: fromVersion, to_version: toVersion };
+    return this.get(`/api/workspaces/${workspaceSlug}/test/case/version/compare/`, { params: query })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
   private fileUploadService: FileUploadService = new FileUploadService();
 
   private async updateCaseAttachmentUploadStatus(

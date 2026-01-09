@@ -1,10 +1,12 @@
 # Django imports
 from django.db.models import Count, F, Sum, Q
 from django.db.models.functions import ExtractMonth
+from django.db.models.functions import TruncDay
 from django.utils import timezone
 from django.db.models.functions import Concat
 from django.db.models import Case, When, Value, OuterRef, Func
 from django.db import models
+from datetime import timedelta
 
 # Third party imports
 from rest_framework import status
@@ -476,3 +478,172 @@ class ProjectStatsEndpoint(BaseAPIView):
 
         projects = projects.annotate(**annotations).values("id", *requested_fields)
         return Response(projects, status=status.HTTP_200_OK)
+
+
+class ProjectStatisticsEndpoint(BaseAPIView):
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
+    def get(self, request, slug, project_id):
+        from plane.db.models.page import ProjectPage
+        from plane.db.models.view import IssueView
+        from plane.db.models.milestone import Milestone
+        from plane.db.models.qa import TestCase, TestCaseRepository
+
+        project = (
+            Project.objects.filter(workspace__slug=slug, id=project_id, archived_at__isnull=True)
+            .filter(Q(project_projectmember__member=self.request.user, project_projectmember__is_active=True) | Q(network=2))
+            .first()
+        )
+        if not project:
+            return Response({"message": "Project not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        now = timezone.now()
+        today = now.date()
+        last_7d = now - timedelta(days=7)
+        last_30d = now - timedelta(days=30)
+
+        issues = Issue.issue_objects.filter(workspace__slug=slug, project_id=project_id)
+
+        total_work_items = issues.count()
+        completed_work_items = issues.filter(state__group__in=["completed", "cancelled"]).count()
+        in_progress_work_items = issues.filter(state__group__in=["started", "unstarted"]).count()
+        backlog_work_items = issues.filter(state__group="backlog").count()
+
+        overdue_work_items = issues.filter(target_date__lt=today).exclude(state__group__in=["completed", "cancelled"]).count()
+        due_today_work_items = issues.filter(target_date=today).exclude(state__group__in=["completed", "cancelled"]).count()
+
+        created_last_7d = issues.filter(created_at__gte=last_7d).count()
+        completed_last_7d = issues.filter(completed_at__gte=last_7d).count()
+        created_last_30d = issues.filter(created_at__gte=last_30d).count()
+        completed_last_30d = issues.filter(completed_at__gte=last_30d).count()
+
+        defect_work_items = issues.filter(Q(type__name__icontains="bug") | Q(type__name__icontains="缺陷")).count()
+
+        state_group_distribution = (
+            issues.values("state__group")
+            .annotate(count=Count("id"))
+            .order_by("-count")
+        )
+        priority_distribution = (
+            issues.values("priority")
+            .annotate(count=Count("id"))
+            .order_by("-count")
+        )
+        type_distribution = (
+            issues.values("type_id", "type__name")
+            .annotate(count=Count("id"))
+            .order_by("-count")
+        )
+
+        module_status_distribution = (
+            Module.objects.filter(project_id=project_id, archived_at__isnull=True, deleted_at__isnull=True)
+            .values("status")
+            .annotate(count=Count("id"))
+            .order_by("-count")
+        )
+
+        cycles = Cycle.objects.filter(project_id=project_id, archived_at__isnull=True, deleted_at__isnull=True)
+        active_cycles = cycles.filter(start_date__lte=now, end_date__gte=now).count()
+
+        milestone_state_distribution = (
+            Milestone.objects.filter(project_id=project_id, deleted_at__isnull=True)
+            .values("state")
+            .annotate(count=Count("id"))
+            .order_by("-count")
+        )
+
+        total_members = ProjectMember.objects.filter(project_id=project_id, member__is_bot=False, is_active=True).count()
+        total_pages = ProjectPage.objects.filter(project_id=project_id, deleted_at__isnull=True).count()
+        total_views = IssueView.objects.filter(project_id=project_id, deleted_at__isnull=True).count()
+
+        test_repositories = TestCaseRepository.objects.filter(project_id=project_id, workspace__slug=slug, deleted_at__isnull=True)
+        test_cases = TestCase.objects.filter(repository__in=test_repositories, deleted_at__isnull=True)
+        test_repository_count = test_repositories.count()
+        test_case_count = test_cases.count()
+
+        test_case_type_distribution = (
+            test_cases.values("type")
+            .annotate(count=Count("id"))
+            .order_by("-count")
+        )
+        test_case_test_type_distribution = (
+            test_cases.values("test_type")
+            .annotate(count=Count("id"))
+            .order_by("-count")
+        )
+        test_case_priority_distribution = (
+            test_cases.values("priority")
+            .annotate(count=Count("id"))
+            .order_by("-count")
+        )
+
+        created_by_day = (
+            issues.filter(created_at__gte=last_30d)
+            .annotate(day=TruncDay("created_at"))
+            .values("day")
+            .annotate(count=Count("id"))
+            .order_by("day")
+        )
+        completed_by_day = (
+            issues.filter(completed_at__isnull=False, completed_at__gte=last_30d)
+            .annotate(day=TruncDay("completed_at"))
+            .values("day")
+            .annotate(count=Count("id"))
+            .order_by("day")
+        )
+
+        created_map = {row["day"].date().isoformat(): row["count"] for row in created_by_day}
+        completed_map = {row["day"].date().isoformat(): row["count"] for row in completed_by_day}
+
+        trend_30d = []
+        for offset in range(29, -1, -1):
+            d = (today - timedelta(days=offset)).isoformat()
+            trend_30d.append(
+                {
+                    "date": d,
+                    "created": created_map.get(d, 0),
+                    "completed": completed_map.get(d, 0),
+                }
+            )
+
+        payload = {
+            "project": {
+                "id": str(project.id),
+                "name": project.name,
+                "identifier": project.identifier,
+                "logo_props": project.logo_props,
+            },
+            "kpis": {
+                "total_work_items": total_work_items,
+                "completed_work_items": completed_work_items,
+                "in_progress_work_items": in_progress_work_items,
+                "backlog_work_items": backlog_work_items,
+                "overdue_work_items": overdue_work_items,
+                "due_today_work_items": due_today_work_items,
+                "defect_work_items": defect_work_items,
+                "active_cycles": active_cycles,
+                "total_cycles": cycles.count(),
+                "total_modules": Module.objects.filter(project_id=project_id, archived_at__isnull=True, deleted_at__isnull=True).count(),
+                "total_milestones": Milestone.objects.filter(project_id=project_id, deleted_at__isnull=True).count(),
+                "total_members": total_members,
+                "total_pages": total_pages,
+                "total_views": total_views,
+                "test_repository_count": test_repository_count,
+                "test_case_count": test_case_count,
+                "created_last_7d": created_last_7d,
+                "completed_last_7d": completed_last_7d,
+                "created_last_30d": created_last_30d,
+                "completed_last_30d": completed_last_30d,
+            },
+            "distributions": {
+                "state_groups": list(state_group_distribution),
+                "priorities": list(priority_distribution),
+                "issue_types": list(type_distribution),
+                "module_status": list(module_status_distribution),
+                "milestone_state": list(milestone_state_distribution),
+                "test_case_type": list(test_case_type_distribution),
+                "test_case_test_type": list(test_case_test_type_distribution),
+                "test_case_priority": list(test_case_priority_distribution),
+            },
+            "trend_30d": trend_30d,
+        }
+        return Response(payload, status=status.HTTP_200_OK)

@@ -8,7 +8,8 @@ from plane.app.serializers.qa import ReviewModuleCreateUpdateSerializer, ReviewM
     ReviewModuleListSerializer, ReviewListSerializer, ReviewCreateUpdateSerializer, ReviewCaseListSerializer, \
     ReviewCaseRecordsSerializer
 from plane.app.views import BaseAPIView, BaseViewSet
-from plane.db.models import CaseReview, CaseReviewModule, CaseReviewThrough, CaseModule, TestCase, CaseReviewRecord
+from plane.db.models import CaseReview, CaseReviewModule, CaseReviewThrough, CaseModule, TestCase, CaseReviewRecord, \
+    TestCaseVersion
 from plane.utils.paginator import CustomPaginator
 from plane.utils.qa import update_case_review_status
 from plane.utils.response import list_response
@@ -188,6 +189,10 @@ class CaseReviewView(BaseViewSet):
         )
 
         update_case_review_status(cr, crt, assignee_id)
+
+        # 如果评审通过，则创建用例快照
+        if crt.result == CaseReviewThrough.Result.PASS:
+            TestCaseVersion.create_from_case(case=TestCase.objects.get(id=case_id))
 
         serializer = ReviewCaseListSerializer(instance=crt)
         return Response(serializer.data, status=status.HTTP_200_OK)

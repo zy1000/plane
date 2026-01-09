@@ -211,7 +211,8 @@ class CaseCreateUpdateSerializer(ModelSerializer):
         if labels is not None:
             instance.labels.set(labels)
         if issues is not None:
-            instance.issues.set(issues)
+            for issue in issues:
+                instance.issues.add(issue)
         return instance
 
 

@@ -5,6 +5,7 @@ from plane.app.views import PlanAPIView, RepositoryAPIView, CaseModuleAPIView, L
     EnumDataAPIView, CaseAttachmentV2Endpoint, CaseDetailAPIView, PlanView, PlanModuleAPIView, PlanCaseAPIView
 from plane.app.views.qa.case import CaseAssetAPIView, CaseIssueWithType, TestCaseCommentAPIView, CaseAPI, \
     CaseLabelAPIView
+from plane.app.views.qa.case_version import CaseVersionAPIView, CaseVersionCompareAPIView
 from plane.app.views.qa.module import CaseModuleCountAPIView, CaseModuleDetailAPIView
 from plane.app.views.qa.review import ReviewModuleAPIView, CaseReviewAPIView, CaseReviewView
 
@@ -25,6 +26,8 @@ urlpatterns = [
     path('workspaces/<str:slug>/test/case/', CaseAPIView.as_view(), name='test-case'),
     path('workspaces/<str:slug>/test/case/issues/', CaseIssueWithType.as_view(), name='test-case'),
     path('workspaces/<str:slug>/test/case/label/', LabelAPIView.as_view(), name='test-case'),
+    path('workspaces/<str:slug>/test/case/version/', CaseVersionAPIView.as_view(), name='test-case'),
+    path('workspaces/<str:slug>/test/case/version/compare/', CaseVersionCompareAPIView.as_view(), name='test-case'),
     path('workspaces/<str:slug>/test/case/<uuid:case_id>/', CaseDetailAPIView.as_view(), name='test-case'),
     path('workspaces/<str:slug>/test/case/<uuid:case_id>/assets/', CaseAssetAPIView.as_view(), name='test-case'),
     path('workspaces/<str:slug>/test/repository/', RepositoryAPIView.as_view(), name='test-repository'),
