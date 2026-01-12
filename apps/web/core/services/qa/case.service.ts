@@ -349,6 +349,26 @@ export class CaseService extends APIService {
       });
   }
 
+  async validateImportCase(workspaceSlug: string, formData: FormData): Promise<any> {
+    return this.post(`/api/workspaces/${workspaceSlug}/test/case/validate-import-case/`, formData, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    })
+      .then((response) => response)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async downloadImportTemplate(workspaceSlug: string): Promise<any> {
+    return this.get(`/api/workspaces/${workspaceSlug}/test/case/import-template/`, {}, { responseType: "blob" })
+      .then((response) => response)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
   async createlabel(workspaceSlug: string, name: string, caseId: string|undefined,repositoryId:string): Promise<any[]> {
     return this.post(`/api/workspaces/${workspaceSlug}/test/case/label/`, {name, case_id: caseId,repository_id:repositoryId})
       .then((response) => response?.data || [])

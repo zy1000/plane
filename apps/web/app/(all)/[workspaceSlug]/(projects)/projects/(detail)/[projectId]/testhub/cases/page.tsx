@@ -9,6 +9,7 @@ import { EllipsisOutlined, SearchOutlined, EditOutlined, DeleteOutlined } from "
 import type { TableProps, InputRef, TableColumnType } from "antd";
 import { CaseService } from "@/services/qa/case.service";
 import { CreateCaseModal } from "@/components/qa/cases/create-modal";
+import { ImportCaseModal } from "@/components/qa/cases/import-modal";
 import { Tree, Row, Col } from "antd";
 import type { TreeProps } from "antd";
 import { AppstoreOutlined, PlusOutlined } from "@ant-design/icons";
@@ -156,6 +157,7 @@ export default function TestCasesPage() {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState<boolean>(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState<boolean>(false);
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
   const [activeCase, setActiveCase] = useState<any | null>(null);
   const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
@@ -954,65 +956,6 @@ export default function TestCasesPage() {
     return <Tag color={color}>{label}</Tag>;
   };
 
-  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (!repositoryId) {
-      message.error("请先选择用例库");
-      return;
-    }
-
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("repository_id", repositoryId);
-
-    try {
-      setLoading(true);
-      const res = await caseService.importCase(workspaceSlug as string, formData);
-
-      // 如果有失败的记录，生成CSV并下载
-      if (res.data?.fail && res.data.fail.length > 0) {
-        message.warning(`导入完成，有 ${res.data.fail.length} 条数据导入失败，详情请查看下载的文件`);
-
-        // 创建CSV内容
-        const headers = ["用例名称", "失败原因"];
-        const csvContent = [
-          headers.join(","),
-          ...res.data.fail.map(
-            (item: any) =>
-              // 处理字段中可能包含的逗号，用引号包裹
-              `"${item.name || ""}","${item.error || ""}"`
-          ),
-        ].join("\n");
-
-        // 创建Blob并下载
-        const blob = new Blob(["\ufeff" + csvContent], { type: "text/csv;charset=utf-8;" });
-        const link = document.createElement("a");
-        const url = URL.createObjectURL(blob);
-
-        link.setAttribute("href", url);
-        link.setAttribute("download", `导入失败记录_${new Date().getTime()}.csv`);
-        link.style.visibility = "hidden";
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      } else {
-        message.success("导入成功");
-      }
-
-      fetchCases();
-      fetchModules();
-    } catch (err: any) {
-      console.error(err);
-      message.error(err?.error || "导入失败");
-    } finally {
-      setLoading(false);
-      e.target.value = "";
-    }
-  };
-
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
 
   const columns: TableProps<TestCase>["columns"] = [
@@ -1235,16 +1178,9 @@ export default function TestCasesPage() {
                     <Button type="primary" onClick={() => setIsCreateModalOpen(true)} disabled={!repositoryId}>
                       新建
                     </Button>
-                    <Button onClick={() => fileInputRef.current?.click()} disabled={!repositoryId}>
+                    <Button onClick={() => setIsImportModalOpen(true)} disabled={!repositoryId}>
                       导入
                     </Button>
-                    <input
-                      type="file"
-                      ref={fileInputRef}
-                      style={{ display: "none" }}
-                      accept=".xlsx,.xls"
-                      onChange={handleImport}
-                    />
                   </Space>
                 </div>
 
@@ -1403,6 +1339,19 @@ export default function TestCasesPage() {
             await fetchCases(currentPage, pageSize, filters);
             fetchModules();
             fetchCases(1, pageSize, filters);
+          }}
+        />
+      )}
+
+      {repositoryId && (
+        <ImportCaseModal
+          isOpen={isImportModalOpen}
+          handleClose={() => setIsImportModalOpen(false)}
+          workspaceSlug={workspaceSlug as string}
+          repositoryId={repositoryId as string}
+          onSuccess={async () => {
+            await fetchCases(currentPage, pageSize, filters);
+            await fetchModules();
           }}
         />
       )}
