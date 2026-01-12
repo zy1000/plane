@@ -18,6 +18,7 @@ import { useUser } from "@/hooks/store/user";
 import { RichTextEditor } from "../cases/util";
 import { WorkItemDisplayModal } from "../cases/work-item-display-modal";
 import { ReviewRecordsPanel } from "./review-records";
+import { CaseVersionCompareModal } from "../cases/update-modal/case-version-compare-modal";
 
 type ReviewCaseRow = {
   id: string | number;
@@ -29,20 +30,6 @@ type ReviewCaseRow = {
   created_by: string | number | null;
 };
 
-const priorityLabelMap: Record<number, string> = { 0: "低", 1: "中", 2: "高" };
-
-const getCaseStateTagColor = (text: string): "blue" | "green" | "red" | "default" => {
-  switch (text) {
-    case "待评审":
-      return "blue";
-    case "已通过":
-      return "green";
-    case "已拒绝":
-      return "red";
-    default:
-      return "default";
-  }
-};
 
 export default function CaseReview() {
   const { workspaceSlug, projectId } = useParams();
@@ -74,9 +61,11 @@ export default function CaseReview() {
   const [detailLoading, setDetailLoading] = React.useState<boolean>(false);
   const [caseDetail, setCaseDetail] = React.useState<any>(null);
   const [enumsData, setEnumsData] = React.useState<{
+    case_test_type?: Record<string, string>;
     case_type?: Record<string, string>;
     case_priority?: Record<string, string>;
     case_state?: Record<string, string>;
+    plan_case_result?: Record<string, string>;
   }>({});
   const [attachments, setAttachments] = React.useState<any[]>([]);
   const [activeTab, setActiveTab] = React.useState<"basic" | "requirement" | "work" | "defect" | "history">("basic");
@@ -88,6 +77,21 @@ export default function CaseReview() {
   const [recordsRefreshKey, setRecordsRefreshKey] = React.useState<number>(0);
   const [isCurrentUserReviewer, setIsCurrentUserReviewer] = React.useState<boolean>(false);
   const [suggestionCounts, setSuggestionCounts] = React.useState<Record<string, number>>({});
+
+  type TCaseVersionItem = { id: string; version: number; created_at?: string };
+  const [caseVersions, setCaseVersions] = React.useState<TCaseVersionItem[]>([]);
+  const [loadingCaseVersions, setLoadingCaseVersions] = React.useState(false);
+  const [compareOpen, setCompareOpen] = React.useState(false);
+
+  const latestVersion = React.useMemo(() => {
+    if (!caseVersions || caseVersions.length === 0) return undefined;
+    return Math.max(...caseVersions.map((v) => Number(v.version)));
+  }, [caseVersions]);
+
+  const currentVersionLabel = React.useMemo(() => {
+    if (latestVersion === undefined) return "-";
+    return `v${latestVersion}`;
+  }, [latestVersion]);
 
   const fetchReviewEnums = async () => {
     if (!workspaceSlug) return;
@@ -164,9 +168,11 @@ export default function CaseReview() {
     try {
       const enums = await getEnums(String(workspaceSlug));
       setEnumsData({
+        case_test_type: enums.case_test_type || {},
         case_type: enums.case_type || {},
         case_priority: enums.case_priority || {},
         case_state: enums.case_state || {},
+        plan_case_result: enums.plan_case_result || {},
       });
     } catch {}
   };
@@ -178,6 +184,12 @@ export default function CaseReview() {
       setDetailLoading(true);
       const data = await caseService.getCase(String(workspaceSlug), String(targetId));
       setCaseDetail(data);
+      setLoadingCaseVersions(true);
+      caseService
+        .getCaseVersions(String(workspaceSlug), String(targetId))
+        .then((list) => setCaseVersions(Array.isArray(list) ? list : []))
+        .catch(() => setCaseVersions([]))
+        .finally(() => setLoadingCaseVersions(false));
       try {
         const list = await caseService.getCaseAssetList(String(workspaceSlug), String(targetId));
         setAttachments(Array.isArray(list) ? list : []);
@@ -235,6 +247,10 @@ export default function CaseReview() {
   React.useEffect(() => {
     if (initialCaseId) fetchCaseDetail(initialCaseId);
   }, [initialCaseId]);
+
+  React.useEffect(() => {
+    setCompareOpen(false);
+  }, [selectedCaseId]);
 
   React.useEffect(() => {
     const map: Record<string, string> = {
@@ -627,7 +643,23 @@ export default function CaseReview() {
                   >
                     {activeTab === "basic" && (
                       <div className="flex flex-col gap-4 h-[550px] overflow-y-auto vertical-scrollbar scrollbar-sm">
-                        <div className="text-lg font-semibold">{caseDetail?.name ?? "-"}</div>
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0 flex flex-wrap items-center gap-2">
+                            <div className="text-lg font-semibold min-w-0 break-words">{caseDetail?.name ?? "-"}</div>
+                            <Tag className="m-0 shrink-0" color="blue">
+                              {loadingCaseVersions ? "加载中..." : currentVersionLabel}
+                            </Tag>
+                            <Button
+                              size="small"
+                              type="link"
+                              className="px-0"
+                              disabled={loadingCaseVersions || (caseVersions || []).length <= 1 || !selectedCaseId}
+                              onClick={() => setCompareOpen(true)}
+                            >
+                              版本对比
+                            </Button>
+                          </div>
+                        </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                           <div className="col-span-1">
                             <div className="text-xs text-custom-text-300 mb-1">维护人</div>
@@ -648,6 +680,17 @@ export default function CaseReview() {
                             ) : (
                               <div className="p-2 text-sm text-custom-text-300 h-8 flex items-center">未设置维护人</div>
                             )}
+                          </div>
+                          <div className="col-span-1">
+                            <div className="text-xs text-custom-text-300 mb-1">用例编号</div>
+                            <div className="w-full rounded-md border border-transparent text-sm">
+                              <input
+                                value={String(caseDetail?.code ?? "")}
+                                readOnly
+                                placeholder="-"
+                                className="w-full text-sm px-2 py-1 bg-transparent outline-none"
+                              />
+                            </div>
                           </div>
                           <div className="col-span-1">
                             <div className="text-xs text-custom-text-300 mb-1">类型</div>
@@ -861,6 +904,18 @@ export default function CaseReview() {
                     </div>
                   </div>
                 </div>
+                {selectedCaseId && (
+                  <CaseVersionCompareModal
+                    open={compareOpen}
+                    onClose={() => setCompareOpen(false)}
+                    workspaceSlug={String(workspaceSlug)}
+                    caseId={String(selectedCaseId)}
+                    caseVersions={caseVersions}
+                    latestVersion={latestVersion}
+                    currentVersionLabel={currentVersionLabel}
+                    enumsData={enumsData as any}
+                  />
+                )}
               </div>
             )}
           </div>
