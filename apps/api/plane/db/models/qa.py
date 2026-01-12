@@ -126,7 +126,7 @@ class TestCase(BaseModel):
         AUTO = 1, '自动'
 
     code = models.CharField(
-        max_length=20,
+        max_length=50,
         verbose_name="TestCase Code",
         blank=True
     )

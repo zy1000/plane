@@ -124,14 +124,24 @@ def get_extension_without_dot(filename):
 def clear_excel_data(excel_data: list[dict]):
     excel = []
     for data in excel_data:
-        description = data.pop('description')
-        result = data.pop('result')
-        steps = build_description_result_list(description, result)
-        data['steps'] = steps
-        # 标签
-        data['label'] = [label.strip() for label in data['label'].split('\n') if label]
+        try:
+            description = data.pop('description')
+            result = data.pop('result')
+            steps = build_description_result_list(description, result)
+            data['steps'] = steps
+            if data.get('priority') and data['priority'] == 'H':
+                data['priority'] = 'HIGH'
+            elif data.get('priority') and data['priority'] == 'M':
+                data['priority'] = 'MEDIUM'
+            elif data.get('priority') and data['priority'] == 'L':
+                data['priority'] = 'LOW'
+            # 标签
+            # data['label'] = [label.strip() for label in data['label'].split('\n') if data['label']]
 
-        excel.append(data)
+            excel.append(data)
+        except Exception as e:
+
+            print(e)
     return excel
 
 

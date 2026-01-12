@@ -299,10 +299,10 @@ class CaseAPI(BaseViewSet):
                     case_module, _ = CaseModule.objects.get_or_create(repository_id=repository_id, name=data['module'])
                     instance.module = case_module
                 # 创建标签
-                if data.get('label'):
-                    for label in data['label']:
-                        label_instance, _ = CaseLabel.objects.get_or_create(repository_id=repository_id, name=label)
-                        instance.labels.add(label_instance)
+                # if data.get('label'):
+                #     for label in data['label']:
+                #         label_instance, _ = CaseLabel.objects.get_or_create(repository_id=repository_id, name=label)
+                #         instance.labels.add(label_instance)
                 instance.save()
             except IntegrityError as e:
                 fail_list.append(dict(name=data['name'], error='case name already exists'))
