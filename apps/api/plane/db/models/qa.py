@@ -126,9 +126,8 @@ class TestCase(BaseModel):
         AUTO = 1, '自动'
 
     code = models.CharField(
-        max_length=12,
+        max_length=20,
         verbose_name="TestCase Code",
-        validators=[RegexValidator(regex=r"^[A-Za-z0-9]{1,5}-[A-Za-z0-9]{1,5}$")],
         blank=True
     )
     name = models.CharField(max_length=255, verbose_name="TestCase Name")

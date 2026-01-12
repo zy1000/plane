@@ -267,26 +267,42 @@ class CaseAPI(BaseViewSet):
         fail_list = []
         for data in case_data:
             try:
-                instance, _ = TestCase.objects.update_or_create(
-                    code=data.get('code'),
+                code_key = data.get('code') or ''
+                defaults = dict(
+                    name=data['name'],
                     repository_id=repository_id,
-                    defaults=dict(
-                        name=data['name'],
-                        priority=TestCase.Priority[data['priority']].value,
-                        remark=data['remark'],
-                        precondition=data['precondition'],
-                        steps=data['steps'],
-                        repository_id=repository_id,
-                    )
+                )
+                remark = data.get('remark')
+                if remark not in (None, ''):
+                    defaults['remark'] = remark
+
+                precondition = data.get('precondition')
+                if precondition not in (None, ''):
+                    defaults['precondition'] = precondition
+
+                steps = data.get('steps')
+                if steps not in (None, ''):
+                    defaults['steps'] = steps
+
+                priority_key = data.get('priority')
+                if priority_key not in (None, ''):
+                    defaults['priority'] = TestCase.Priority[priority_key].value
+
+                instance, _ = TestCase.objects.update_or_create(
+                    code=code_key,
+                    repository_id=repository_id,
+                    defaults=defaults
                 )
 
                 # 创建模块
-                case_module, _ = CaseModule.objects.get_or_create(repository_id=repository_id, name=data['module'])
-                instance.module = case_module
+                if data.get('module'):
+                    case_module, _ = CaseModule.objects.get_or_create(repository_id=repository_id, name=data['module'])
+                    instance.module = case_module
                 # 创建标签
-                for label in data['label']:
-                    label_instance, _ = CaseLabel.objects.get_or_create(repository_id=repository_id, name=label)
-                    instance.labels.add(label_instance)
+                if data.get('label'):
+                    for label in data['label']:
+                        label_instance, _ = CaseLabel.objects.get_or_create(repository_id=repository_id, name=label)
+                        instance.labels.add(label_instance)
                 instance.save()
             except IntegrityError as e:
                 fail_list.append(dict(name=data['name'], error='case name already exists'))

@@ -1,12 +1,13 @@
 "use client";
 
 import React from "react";
-import { Modal, Select, Spin, Tag } from "antd";
-import { useParams } from "next/navigation";
-import { Maximize2, X } from "lucide-react";
-import { CaseService } from "../../../../services/qa/case.service";
-import { RichTextEditor, formatCNDateTime } from "../util";
+import { useParams, useSearchParams } from "next/navigation";
+import { Select, Spin, Tag } from "antd";
+import { CaseService } from "@/services/qa/case.service";
+import { RichTextEditor, formatCNDateTime } from "@/components/qa/cases/util";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
+import { getEnums } from "../../util";
+import { IssuePeekOverview } from "@/components/issues/peek-overview";
 
 type TCaseVersionItem = { id: string; version: number; created_at?: string };
 
@@ -18,38 +19,61 @@ type EnumsData = {
   plan_case_result?: Record<string, string>;
 };
 
-type Props = {
-  open: boolean;
-  onClose: () => void;
-  workspaceSlug: string;
-  caseId: string;
-  caseVersions: TCaseVersionItem[];
-  latestVersion?: number;
-  currentVersionLabel: string;
-  enumsData?: EnumsData;
-  width?: number;
-  height?: number | string;
-};
+export default function CaseVersionCompareFullPage() {
+  const { workspaceSlug, projectId } = useParams() as { workspaceSlug?: string; projectId?: string };
+  const searchParams = useSearchParams();
+  const caseId = String(searchParams.get("caseId") || "");
+  const baseVersionFromQuery = searchParams.get("baseVersion");
 
-export function CaseVersionCompareModal({
-  open,
-  onClose,
-  workspaceSlug,
-  caseId,
-  caseVersions,
-  latestVersion,
-  currentVersionLabel,
-  enumsData,
-  width = 920,
-  height = "70vh",
-}: Props) {
-  const { projectId } = useParams() as { projectId?: string };
   const { setPeekIssue } = useIssueDetail();
   const caseService = React.useMemo(() => new CaseService(), []);
+
+  const [caseVersions, setCaseVersions] = React.useState<TCaseVersionItem[]>([]);
+  const [loadingCaseVersions, setLoadingCaseVersions] = React.useState(false);
+
+  const [enumsData, setEnumsData] = React.useState<EnumsData>({});
+  const [loadingEnums, setLoadingEnums] = React.useState(false);
 
   const [compareBaseVersion, setCompareBaseVersion] = React.useState<number | undefined>(undefined);
   const [compareData, setCompareData] = React.useState<any>(null);
   const [loadingCompare, setLoadingCompare] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!workspaceSlug || !caseId) return;
+    setLoadingCaseVersions(true);
+    caseService
+      .getCaseVersions(String(workspaceSlug), String(caseId))
+      .then((data) => setCaseVersions(Array.isArray(data) ? data : []))
+      .catch(() => setCaseVersions([]))
+      .finally(() => setLoadingCaseVersions(false));
+  }, [workspaceSlug, caseId, caseService]);
+
+  React.useEffect(() => {
+    if (!workspaceSlug) return;
+    setLoadingEnums(true);
+    getEnums(String(workspaceSlug))
+      .then((enums) => {
+        setEnumsData({
+          case_test_type: enums.case_test_type || {},
+          case_type: enums.case_type || {},
+          case_priority: enums.case_priority || {},
+          case_state: enums.case_state || {},
+          plan_case_result: enums.plan_case_result || {},
+        });
+      })
+      .catch(() => setEnumsData({}))
+      .finally(() => setLoadingEnums(false));
+  }, [workspaceSlug]);
+
+  const latestVersion = React.useMemo(() => {
+    if (!caseVersions || caseVersions.length === 0) return undefined;
+    return Math.max(...caseVersions.map((v) => Number(v.version)));
+  }, [caseVersions]);
+
+  const currentVersionLabel = React.useMemo(() => {
+    if (latestVersion === undefined) return "-";
+    return `v${latestVersion}`;
+  }, [latestVersion]);
 
   const historyVersionOptions = React.useMemo(() => {
     const latest = latestVersion;
@@ -63,13 +87,36 @@ export function CaseVersionCompareModal({
     });
   }, [caseVersions, latestVersion]);
 
+  React.useEffect(() => {
+    if (compareBaseVersion !== undefined) return;
+    if (historyVersionOptions.length === 0) return;
+
+    const fromQuery = baseVersionFromQuery ? Number(baseVersionFromQuery) : undefined;
+    if (fromQuery !== undefined && !Number.isNaN(fromQuery)) {
+      const exists = historyVersionOptions.some((o) => Number(o.value) === fromQuery);
+      if (exists) {
+        setCompareBaseVersion(fromQuery);
+        return;
+      }
+    }
+
+    const v = historyVersionOptions[0]?.value;
+    if (v === undefined) return;
+    setCompareBaseVersion(v);
+  }, [compareBaseVersion, historyVersionOptions, baseVersionFromQuery]);
+
   const fetchCompare = React.useCallback(
     async (baseVersion: number) => {
       if (!workspaceSlug || !caseId) return;
       if (latestVersion === undefined) return;
       setLoadingCompare(true);
       try {
-        const res = await caseService.compareCaseVersions(String(workspaceSlug), String(caseId), baseVersion, latestVersion);
+        const res = await caseService.compareCaseVersions(
+          String(workspaceSlug),
+          String(caseId),
+          baseVersion,
+          latestVersion
+        );
         setCompareData(res);
       } catch {
         setCompareData(null);
@@ -81,27 +128,10 @@ export function CaseVersionCompareModal({
   );
 
   React.useEffect(() => {
-    if (!open) return;
     if (latestVersion === undefined) return;
     if (compareBaseVersion === undefined) return;
     fetchCompare(compareBaseVersion);
-  }, [open, latestVersion, historyVersionOptions, compareBaseVersion, fetchCompare]);
-
-  React.useEffect(() => {
-    if (open) return;
-    setCompareBaseVersion(undefined);
-    setCompareData(null);
-    setLoadingCompare(false);
-  }, [open]);
-
-  React.useEffect(() => {
-    if (!open) return;
-    if (historyVersionOptions.length === 0) return;
-    const v = historyVersionOptions[0]?.value;
-    if (v === undefined) return;
-    setCompareBaseVersion(v);
-    setCompareData(null);
-  }, [open, historyVersionOptions]);
+  }, [latestVersion, compareBaseVersion, fetchCompare]);
 
   const enumLabel = React.useCallback(
     (field: string, value: any): string | undefined => {
@@ -170,7 +200,7 @@ export function CaseVersionCompareModal({
                     {list.map((it: any) => {
                       const text = String(it?.name ?? it?.id ?? "-");
                       const issueId = it?.id ? String(it.id) : "";
-                      const projectId = it?.project_id ? String(it.project_id) : "";
+                      const nextProjectId = it?.project_id ? String(it.project_id) : "";
                       const isArchived = Boolean(it?.is_archived);
                       return (
                         <Tag
@@ -179,10 +209,10 @@ export function CaseVersionCompareModal({
                           onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
-                            if (!workspaceSlug || !projectId || !issueId) return;
+                            if (!workspaceSlug || !nextProjectId || !issueId) return;
                             setPeekIssue({
                               workspaceSlug: String(workspaceSlug),
-                              projectId,
+                              projectId: nextProjectId,
                               issueId,
                               isArchived,
                             });
@@ -264,66 +294,24 @@ export function CaseVersionCompareModal({
   );
 
   const baseLabel = compareBaseVersion === undefined ? "历史" : `历史 v${Number(compareBaseVersion)}`;
-
   const changedFields: any[] = Array.isArray(compareData?.changed_fields) ? compareData.changed_fields : [];
-  const contentHeight = typeof height === "number" ? `${height}px` : height;
 
-  const handleOpenFullscreen = React.useCallback(() => {
-    const baseVersion = compareBaseVersion ?? historyVersionOptions[0]?.value;
-    if (!workspaceSlug || !caseId || !projectId) return;
-    if (latestVersion === undefined) return;
-    if (baseVersion === undefined) return;
-
-    const url =
-      `/${encodeURIComponent(String(workspaceSlug))}` +
-      `/projects/${encodeURIComponent(String(projectId))}` +
-      `/testhub/cases/compare?caseId=${encodeURIComponent(String(caseId))}` +
-      `&baseVersion=${encodeURIComponent(String(baseVersion))}`;
-    window.open(url, "_blank", "noopener,noreferrer");
-  }, [compareBaseVersion, historyVersionOptions, workspaceSlug, caseId, projectId, latestVersion]);
-
-  const canOpenFullscreen =
-    !!workspaceSlug &&
-    !!caseId &&
-    !!projectId &&
-    latestVersion !== undefined &&
-    (compareBaseVersion !== undefined || historyVersionOptions.length > 0);
+  if (!workspaceSlug || !projectId) return null;
 
   return (
-    <Modal
-      title={
-        <div className="flex items-center justify-between gap-3">
-          <span>版本对比</span>
-          <div className="flex items-center gap-2 -mr-2">
-            <button
-              type="button"
-              className="inline-flex items-center justify-center rounded p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
-              onClick={handleOpenFullscreen}
-              disabled={!canOpenFullscreen}
-              aria-label="全屏打开版本对比"
-            >
-              <Maximize2 size={16} />
-            </button>
-            <button
-              type="button"
-              className="inline-flex items-center justify-center rounded p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
-              onClick={onClose}
-              aria-label="关闭"
-            >
-              <X size={16} />
-            </button>
-          </div>
+    <div className="fixed inset-0 z-[9999] bg-white">
+      <div className="h-full w-full flex flex-col p-5">
+        <div className="flex items-center justify-between gap-3 mb-4">
+          <div className="text-base font-semibold text-gray-900">版本对比</div>
         </div>
-      }
-      open={open}
-      onCancel={onClose}
-      footer={null}
-      width={width}
-      destroyOnClose
-      closable={false}
-    >
-      <div className="flex flex-col" style={{ height: contentHeight, maxHeight: contentHeight }}>
-        {historyVersionOptions.length === 0 ? (
+
+        {!caseId ? (
+          <div className="text-sm text-gray-600">缺少 caseId</div>
+        ) : loadingCaseVersions ? (
+          <div className="flex-1 min-h-0 flex items-center justify-center">
+            <Spin />
+          </div>
+        ) : historyVersionOptions.length === 0 ? (
           <div className="text-sm text-gray-600">暂无历史版本可对比</div>
         ) : (
           <>
@@ -337,6 +325,7 @@ export function CaseVersionCompareModal({
               />
               <span className="text-sm text-gray-700 shrink-0">当前版本</span>
               <span className="text-sm text-gray-900">{currentVersionLabel}</span>
+              {loadingEnums ? <span className="text-xs text-gray-400">枚举加载中</span> : null}
             </div>
 
             <div className="flex-1 min-h-0 vertical-scrollbar scrollbar-md overflow-y-scroll pr-1">
@@ -382,6 +371,8 @@ export function CaseVersionCompareModal({
           </>
         )}
       </div>
-    </Modal>
+      <IssuePeekOverview />
+    </div>
   );
 }
+

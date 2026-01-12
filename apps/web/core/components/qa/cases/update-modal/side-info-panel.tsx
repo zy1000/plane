@@ -53,7 +53,7 @@ export function SideInfoPanel({ caseData, caseTestTypeMap }: SideInfoPanelProps)
 
   const currentVersionLabel = React.useMemo(() => {
     if (latestVersion === undefined) return "-";
-    return `v${latestVersion + 1}`;
+    return `v${latestVersion}`;
   }, [latestVersion]);
 
   const [compareOpen, setCompareOpen] = React.useState(false);

@@ -71,16 +71,25 @@ def build_description_result_list(description: str, result: str):
 
 def parser_excel(file_path, mapping: dict = None, sheet_name='case') -> list[dict]:
     mapping = mapping or {}
+    mapping1 = {"功能": 'label', '测试内容': 'name', '用例等级': 'priority', '测试目的': 'remark',
+               '预置条件': 'precondition', '测试步骤': 'description', '预期结果': 'result', '模块': 'module','编号':'code'}
+    mapping2 = {'功能模块': 'module',"测试项": 'label', '标题': 'name', '重要级别': 'priority', '测试目的': 'remark',
+               '测试数据及准备': 'precondition', '测试执行步骤': 'description', '预期结果': 'result', '脚本编号':'code'}
     workbook = load_workbook(file_path)
 
     # 选择工作表
-    if sheet_name:
+    if sheet_name in workbook.sheetnames:
         worksheet = workbook[sheet_name]
+    elif '测试用例' in workbook.sheetnames:
+        worksheet = workbook['测试用例']
     else:
         worksheet = workbook.active  # 默认活动工作表
 
     # 获取第一行作为列标题
+    headers = [cell.value for cell in worksheet[1]]
+    mapping = mapping2 if '重要级别' in headers else mapping1
     headers = [(mapping.get(cell.value) or cell.value) for cell in worksheet[1]]
+
 
     # 读取数据行
     data = []
