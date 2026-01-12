@@ -1,4 +1,7 @@
+from pathlib import Path
+
 from django.core.files.uploadedfile import InMemoryUploadedFile
+from django.http import FileResponse
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework import status
@@ -14,7 +17,7 @@ from plane.app.serializers.qa.case import CaseExecuteRecordSerializer
 from plane.app.views import BaseAPIView, BaseViewSet
 from plane.utils.import_export import parser_case_file
 from plane.db.models import TestCase, FileAsset, TestCaseComment, PlanCase, Issue, CaseModule, CaseLabel, \
-    CaseReviewThrough, CaseReviewRecord
+    CaseReviewThrough, CaseReviewRecord, TestCaseRepository
 from plane.utils.paginator import CustomPaginator
 from plane.utils.response import list_response
 
@@ -145,6 +148,18 @@ class TestCaseCommentAPIView(BaseAPIView):
 class CaseAPI(BaseViewSet):
     pagination_class = CustomPaginator
 
+    @action(detail=False, methods=['get'], url_path='import-template')
+    def import_template(self, request, slug):
+        template_path = Path(__file__).resolve().parents[4] / '用例模板.xlsx'
+        if not template_path.exists():
+            return Response({'error': 'template file not found'}, status=status.HTTP_404_NOT_FOUND)
+        return FileResponse(
+            open(template_path, 'rb'),
+            as_attachment=True,
+            filename='用例模板.xlsx',
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        )
+
     @action(detail=False, methods=['get'], url_path='execute-record')
     def execute_record(self, request, slug):
         case_id = request.query_params.get('case_id')
@@ -256,8 +271,14 @@ class CaseAPI(BaseViewSet):
 
     @action(detail=False, methods=['post'], url_path='import-case')
     def import_case(self, request, slug):
-        repository_id = request.data['repository_id']
+        repository_id = request.data.get('repository_id')
+        if not repository_id:
+            return Response({'error': 'repository_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+        get_object_or_404(TestCaseRepository, id=repository_id, workspace__slug=slug, deleted_at__isnull=True)
+
         files: list[InMemoryUploadedFile] = request.FILES.getlist('file')
+        if not files:
+            return Response({'error': 'file is required'}, status=status.HTTP_400_BAD_REQUEST)
         try:
             case_data = parser_case_file(files)
         except Exception as e:
@@ -314,6 +335,102 @@ class CaseAPI(BaseViewSet):
 
         return Response(data={'total_count': total_count, 'success_count': success_count, 'fail': fail_list},
                         status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['post'], url_path='validate-import-case')
+    def validate_import_case(self, request, slug):
+        repository_id = request.data.get('repository_id')
+        if not repository_id:
+            return Response({'error': 'repository_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+        get_object_or_404(TestCaseRepository, id=repository_id, workspace__slug=slug, deleted_at__isnull=True)
+
+        files: list[InMemoryUploadedFile] = request.FILES.getlist('file')
+        if not files:
+            return Response({'error': 'file is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            case_data = parser_case_file(files)
+        except Exception as e:
+            return Response({'error': f'用例校验失败:{str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
+
+        name_max_length = TestCase._meta.get_field('name').max_length
+        module_max_length = CaseModule._meta.get_field('name').max_length
+        code_max_length = TestCase._meta.get_field('code').max_length
+
+        results = []
+        passed_count = 0
+
+        for row_number, data in enumerate(case_data, start=1):
+            title = ""
+            errors: list[str] = []
+
+            if not isinstance(data, dict):
+                errors.append('行数据格式错误')
+            else:
+                name = data.get('name')
+                if isinstance(name, str):
+                    title = name
+                if not name or not isinstance(name, str):
+                    errors.append('标题不能为空')
+                elif name_max_length and len(name) > name_max_length:
+                    errors.append(f'标题长度不能超过{name_max_length}')
+
+                code = data.get('code')
+                if code not in (None, ''):
+                    if not isinstance(code, str):
+                        errors.append('编号格式错误')
+                    elif code_max_length and len(code) > code_max_length:
+                        errors.append(f'编号长度不能超过{code_max_length}')
+
+                module = data.get('module')
+                if module not in (None, ''):
+                    if not isinstance(module, str):
+                        errors.append('模块格式错误')
+                    elif module_max_length and len(module) > module_max_length:
+                        errors.append(f'模块长度不能超过{module_max_length}')
+
+                steps = data.get('steps')
+                if steps not in (None, ''):
+                    if not isinstance(steps, list):
+                        errors.append('步骤格式错误')
+                    else:
+                        for idx, step in enumerate(steps, start=1):
+                            if not isinstance(step, dict):
+                                errors.append(f'步骤{idx}格式错误')
+                                continue
+                            if 'description' not in step:
+                                errors.append(f'步骤{idx}缺少描述')
+                            if 'result' not in step:
+                                errors.append(f'步骤{idx}缺少预期结果')
+
+                priority_key = data.get('priority')
+                if priority_key not in (None, ''):
+                    if not isinstance(priority_key, str):
+                        errors.append('优先级格式错误')
+                    elif priority_key not in TestCase.Priority.__members__:
+                        errors.append(f'优先级不合法:{priority_key}')
+
+            passed = len(errors) == 0
+            if passed:
+                passed_count += 1
+
+            results.append(
+                {
+                    'row_number': row_number,
+                    'title': title,
+                    'passed': passed,
+                    'error_reason': '; '.join(errors),
+                }
+            )
+
+        return Response(
+            data={
+                'total_count': len(results),
+                'passed_count': passed_count,
+                'all_passed': passed_count == len(results),
+                'results': results,
+            },
+            status=status.HTTP_200_OK,
+        )
 
     @action(detail=False, methods=['post'], url_path='update-module')
     def update_module(self, request, slug):
