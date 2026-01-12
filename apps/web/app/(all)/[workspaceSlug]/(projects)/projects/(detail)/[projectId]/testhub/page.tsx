@@ -17,7 +17,7 @@ import { Logo } from "@plane/propel/emoji-icon-picker";
 const repositoryService = new RepositoryService();
 
 export default function TestManagementHomePage() {
-  const { workspaceSlug, projectId } = useParams();
+  const { workspaceSlug, projectId } = useParams<{ workspaceSlug: string; projectId: string }>();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [repositories, setRepositories] = useState<any[]>([]);
@@ -234,8 +234,8 @@ export default function TestManagementHomePage() {
       const queryParams: any = { page, page_size: size };
       if (filterParams.name) queryParams.name__icontains = filterParams.name;
       if (filterParams.project) queryParams.project__name__icontains = filterParams.project;
-      if (projectId) queryParams.project_id = projectId;
-      const response: any = await repositoryService.getRepositories(workspaceSlug, queryParams);
+      if (projectId) queryParams.project_id = String(projectId);
+      const response: any = await repositoryService.getRepositories(String(workspaceSlug), queryParams);
       const list = response?.data || [];
       setRepositories(list);
       setTotal(response.count || list.length || 0);
@@ -281,8 +281,16 @@ export default function TestManagementHomePage() {
   };
 
   useEffect(() => {
-    fetchRepositories();
-  }, [workspaceSlug]);
+    if (!workspaceSlug) return;
+    setRepositories([]);
+    setTotal(0);
+    setCurrentPage(1);
+    setPageSize(10);
+    setSearchText("");
+    setSearchedColumn("");
+    setFilters({});
+    fetchRepositories(1, 10, {});
+  }, [workspaceSlug, projectId]);
 
   return (
     <>

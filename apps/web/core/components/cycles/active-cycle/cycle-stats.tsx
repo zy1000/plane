@@ -288,8 +288,8 @@ export const ActiveCycleStats = observer(function ActiveCycleStats(props: Active
               <div className="flex flex-col h-full w-full">
                 {/* 表格头部 */}
                 <div className="grid grid-cols-4 gap-2 px-2 py-1 text-xs font-medium text-custom-text-400 border-b border-custom-border-200 shrink-0 bg-custom-background-100">
-                  <div>测试计划名称</div>
-                  <div>用例库名称</div>
+                  <div>测试计划</div>
+                  <div>用例库</div>
                   <div>状态</div>
                   <div>通过率</div>
                 </div>
