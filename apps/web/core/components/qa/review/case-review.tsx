@@ -84,13 +84,11 @@ export default function CaseReview() {
   const [compareOpen, setCompareOpen] = React.useState(false);
 
   const latestVersion = React.useMemo(() => {
-    if (!caseVersions || caseVersions.length === 0) return undefined;
-    return Math.max(...caseVersions.map((v) => Number(v.version)));
+    return -1;
   }, [caseVersions]);
 
   const currentVersionLabel = React.useMemo(() => {
-    if (latestVersion === undefined) return "-";
-    return `v${latestVersion}`;
+    return "最新";
   }, [latestVersion]);
 
   const fetchReviewEnums = async () => {
@@ -653,7 +651,7 @@ export default function CaseReview() {
                               size="small"
                               type="link"
                               className="px-0"
-                              disabled={loadingCaseVersions || (caseVersions || []).length <= 1 || !selectedCaseId}
+                              disabled={loadingCaseVersions || (caseVersions || []).length <= 0 || !selectedCaseId}
                               onClick={() => setCompareOpen(true)}
                             >
                               版本对比
