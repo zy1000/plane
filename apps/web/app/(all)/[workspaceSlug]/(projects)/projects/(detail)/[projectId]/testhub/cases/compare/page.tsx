@@ -66,20 +66,15 @@ export default function CaseVersionCompareFullPage() {
   }, [workspaceSlug]);
 
   const latestVersion = React.useMemo(() => {
-    if (!caseVersions || caseVersions.length === 0) return undefined;
-    return Math.max(...caseVersions.map((v) => Number(v.version)));
+    return -1;
   }, [caseVersions]);
 
   const currentVersionLabel = React.useMemo(() => {
-    if (latestVersion === undefined) return "-";
-    return `v${latestVersion}`;
+    return "最新";
   }, [latestVersion]);
 
   const historyVersionOptions = React.useMemo(() => {
-    const latest = latestVersion;
-    const list = (caseVersions || [])
-      .filter((v) => latest === undefined || Number(v.version) !== latest)
-      .sort((a, b) => Number(b.version) - Number(a.version));
+    const list = (caseVersions || []).sort((a, b) => Number(b.version) - Number(a.version));
     return list.map((v) => {
       const createdAt = v.created_at ? formatCNDateTime(v.created_at) : "";
       const label = createdAt ? `v${Number(v.version)} · ${createdAt}` : `v${Number(v.version)}`;
@@ -375,4 +370,3 @@ export default function CaseVersionCompareFullPage() {
     </div>
   );
 }
-

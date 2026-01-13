@@ -173,7 +173,7 @@ class TestCase(BaseModel):
 
 class TestCaseVersion(BaseModel):
     case = models.ForeignKey(TestCase, on_delete=models.CASCADE, related_name="versions")
-    version = models.PositiveIntegerField(default=0)
+    version = models.PositiveIntegerField(default=1)
     repository_id = models.CharField(max_length=36)
     module_id = models.CharField(max_length=36, null=True, blank=True)
     assignee_id = models.CharField(max_length=36, null=True, blank=True)
@@ -203,7 +203,7 @@ class TestCaseVersion(BaseModel):
             .aggregate(max_version=Max("version"))
             .get("max_version")
         )
-        next_version = 0 if latest is None else latest + 1
+        next_version = 1 if latest is None else latest + 1
 
         label_ids = list(map(str, case.labels.values_list("id", flat=True)))
         issue_ids = list(map(str, case.issues.values_list("id", flat=True)))

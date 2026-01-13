@@ -47,13 +47,11 @@ export function SideInfoPanel({ caseData, caseTestTypeMap }: SideInfoPanelProps)
   }, [workspaceSlug, caseData?.id, caseService]);
 
   const latestVersion = React.useMemo(() => {
-    if (!caseVersions || caseVersions.length === 0) return undefined;
-    return Math.max(...caseVersions.map((v) => Number(v.version)));
+    return -1;
   }, [caseVersions]);
 
   const currentVersionLabel = React.useMemo(() => {
-    if (latestVersion === undefined) return "-";
-    return `v${latestVersion}`;
+    return "最新";
   }, [latestVersion]);
 
   const [compareOpen, setCompareOpen] = React.useState(false);
@@ -251,7 +249,7 @@ export function SideInfoPanel({ caseData, caseTestTypeMap }: SideInfoPanelProps)
               <Button
                 size="small"
                 type="link"
-                disabled={loadingCaseVersions || (caseVersions || []).length <= 1}
+                disabled={loadingCaseVersions || (caseVersions || []).length <= 0}
                 onClick={() => setCompareOpen(true)}
               >
                 对比历史版本
