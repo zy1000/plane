@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams, useSearchParams, useRouter } from "next/navigation";
-import { useEffect, useState, useMemo, type ReactNode } from "react";
+import { useEffect, useRef, useState, useMemo, type ReactNode } from "react";
 import { PageHead } from "@/components/core/page-title";
 import { Breadcrumbs } from "@plane/ui";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
@@ -15,21 +15,11 @@ import { FolderOpenDot } from "lucide-react";
 import UpdateModal from "@/components/qa/cases/update-modal";
 import TestCaseSelectionModal from "@/components/qa/review/TestCaseSelectionModal";
 
-type TCreator = {
-  display_name?: string;
-};
-
-type TLabel =
-  | {
-      id?: string;
-      name?: string;
-    }
-  | string;
-
 
 type ReviewCaseRow = {
   id: string;
   case_id: string;
+  code?: string;
   name: string;
   priority: number;
   assignees: string[];
@@ -44,6 +34,7 @@ export default function CaseManagementReviewDetailPage() {
   const repositoryIdFromUrl = searchParams.get("repositoryId");
   const repositoryId =
     repositoryIdFromUrl || (typeof window !== "undefined" ? sessionStorage.getItem("selectedRepositoryId") : null);
+  const reviewName = typeof window !== "undefined" ? sessionStorage.getItem("selectedReviewName") : "";
   const router = useRouter();
 
   const caseService = useMemo(() => new CaseApiService(), []);
@@ -64,6 +55,41 @@ export default function CaseManagementReviewDetailPage() {
   const [activeCaseId, setActiveCaseId] = useState<string | undefined>(undefined);
   const [selectedTreeKey, setSelectedTreeKey] = useState<string>("root");
   const [isCaseSelectionOpen, setIsCaseSelectionOpen] = useState(false);
+
+  const [leftWidth, setLeftWidth] = useState<number>(280);
+  const isDraggingRef = useRef<boolean>(false);
+  const startXRef = useRef<number>(0);
+  const startWidthRef = useRef<number>(0);
+  const onMouseDownResize = (e: React.MouseEvent<HTMLDivElement>) => {
+    isDraggingRef.current = true;
+    startXRef.current = e.clientX;
+    startWidthRef.current = leftWidth;
+    window.addEventListener("mousemove", onMouseMoveResize as any);
+    window.addEventListener("mouseup", onMouseUpResize as any);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    e.preventDefault();
+  };
+  const onMouseMoveResize = (e: MouseEvent) => {
+    if (!isDraggingRef.current) return;
+    const next = Math.min(320, Math.max(200, startWidthRef.current + (e.clientX - startXRef.current)));
+    setLeftWidth(next);
+  };
+  const onMouseUpResize = () => {
+    isDraggingRef.current = false;
+    window.removeEventListener("mousemove", onMouseMoveResize as any);
+    window.removeEventListener("mouseup", onMouseUpResize as any);
+    document.body.style.cursor = "auto";
+    document.body.style.userSelect = "auto";
+  };
+
+  useEffect(
+    () => () => {
+      window.removeEventListener("mousemove", onMouseMoveResize as any);
+      window.removeEventListener("mouseup", onMouseUpResize as any);
+    },
+    []
+  );
 
   const onExpand: TreeProps["onExpand"] = (keys) => {
     setExpandedKeys(keys as string[]);
@@ -249,14 +275,14 @@ export default function CaseManagementReviewDetailPage() {
 
   const columns = [
     {
-      title: "用例名称",
-      dataIndex: "name",
-      key: "name",
-      render: (name: string, record: ReviewCaseRow) => (
+      title: "用例编号",
+      dataIndex: "code",
+      key: "code",
+      render: (code: string | undefined, record: ReviewCaseRow) => (
         <Button
           type="link"
           size="small"
-          className="p-0 h-auto"
+          className="p-0 h-auto !text-custom-text-200 hover:!text-custom-text-100"
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -268,9 +294,48 @@ export default function CaseManagementReviewDetailPage() {
             setIsCaseModalOpen(true);
           }}
         >
-          {name || "-"}
+          <span className="text-inherit">{code || "-"}</span>
         </Button>
       ),
+    },
+    {
+      title: "用例名称",
+      dataIndex: "name",
+      key: "name",
+      width: 220,
+      render: (name: string, record: ReviewCaseRow) => (
+        <Button
+          type="link"
+          size="small"
+          className="p-0 h-auto !text-custom-text-200 hover:!text-custom-text-100"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (!record?.case_id) {
+              message.error("缺少用例信息，无法打开");
+              return;
+            }
+            setActiveCaseId(String(record.case_id));
+            setIsCaseModalOpen(true);
+          }}
+        >
+          <span className="block max-w-[200px] truncate text-inherit" title={name || ""}>
+            {name || "-"}
+          </span>
+        </Button>
+      ),
+    },
+    {
+      title: "用例库",
+      dataIndex: "repository",
+      key: "repository",
+      render: (v: string | null) => (v ?? ""),
+    },
+    {
+      title: "模块",
+      dataIndex: "module",
+      key: "module",
+      render: (v: string | null) => (v ?? ""),
     },
     {
       title: "用例等级",
@@ -330,6 +395,8 @@ export default function CaseManagementReviewDetailPage() {
     {
       title: "操作",
       key: "actions",
+      fixed: "right",
+      width: 140,
       render: (_: any, record: ReviewCaseRow) => (
         <div className="flex items-center gap-2">
           <Button
@@ -367,22 +434,34 @@ export default function CaseManagementReviewDetailPage() {
 
   return (
     <>
-      <div className="flex flex-col gap-3 pt-4 px-4 pb-0 w-full h-full overflow-hidden">
+      <div className="flex flex-col pt-4 px-4 pb-0 w-full h-full overflow-hidden">
         <PageHead title="评审详情" />
-        <Breadcrumbs className="grow-0">
-          <Breadcrumbs.Item
-            component={
-              <BreadcrumbLink href={`/${workspaceSlug}/projects/${projectId}/testhub/reviews`} label="用例评审" />
-            }
-          />
-          <Breadcrumbs.Item component={<BreadcrumbLink label="评审详情" isLast />} />
-        </Breadcrumbs>
-        <Row className="w-full flex-1 min-h-0 rounded-md border border-custom-border-200 overflow-hidden" gutter={0}>
-          <Col
-            className="relative h-full min-h-0 border-r border-custom-border-200 overflow-y-auto"
-            flex="0 0 auto"
-            style={{ width: 280, minWidth: 200, maxWidth: 320 }}
+        <div className="w-full flex-1 min-h-0 flex rounded-md border border-custom-border-200 overflow-hidden">
+          <div
+            className="relative h-full min-h-0 border-r border-custom-border-200 overflow-y-auto flex-shrink-0"
+            style={{ width: leftWidth, minWidth: 200, maxWidth: 320 }}
           >
+            <div
+              onMouseDown={onMouseDownResize}
+              className="absolute right-0 top-0 h-full w-2"
+              style={{ cursor: "col-resize", zIndex: 10 }}
+            />
+            <style
+              dangerouslySetInnerHTML={{
+                __html: `
+                .custom-tree-indent .ant-tree-indent-unit {
+                  width: 10px !important;
+                }
+                .custom-tree-indent .ant-tree-switcher {
+                  width: 14px !important;
+                  margin-inline-end: 2px !important;
+                }
+                .custom-tree-indent .ant-tree-node-content-wrapper {
+                  padding-inline: 4px !important;
+                }
+              `,
+              }}
+            />
             {!repositoryId && (
               <div className="p-4 text-custom-text-300">未找到用例库ID，请先在顶部选择一个用例库</div>
             )}
@@ -396,74 +475,121 @@ export default function CaseManagementReviewDetailPage() {
                 autoExpandParent={autoExpandParent}
                 treeData={treeData as any}
                 selectedKeys={treeData.length > 0 ? [selectedTreeKey] : []}
-                className="py-2"
+                className="py-2 pl-2 custom-tree-indent"
               />
             )}
-          </Col>
-          <Col flex="auto" className="overflow-hidden">
-            <div className="pt-4 px-4 pb-0 flex flex-col h-full min-h-0 overflow-hidden">
-              {loading && (
-                <div className="flex items-center justify-center py-12">
-                  <div className="text-custom-text-300">加载中...</div>
+          </div>
+          <div className="flex-1 overflow-hidden min-w-0">
+            <div className="flex flex-col h-full min-h-0 overflow-hidden min-w-0">
+              <div className="px-4 py-3 flex items-center justify-between flex-shrink-0">
+                <div>
+                  <Breadcrumbs className="grow-0">
+                    <Breadcrumbs.Item
+                      component={
+                        <BreadcrumbLink
+                          href={`/${workspaceSlug}/projects/${projectId}/testhub/reviews`}
+                          label="用例评审"
+                        />
+                      }
+                    />
+                    <Breadcrumbs.Item component={<BreadcrumbLink label="评审详情" isLast />} />
+                    {reviewName && <Breadcrumbs.Item component={<BreadcrumbLink label={reviewName} isLast />} />}
+                  </Breadcrumbs>
                 </div>
-              )}
-              {error && (
-                <div className="bg-red-50 border border-red-200 rounded-md p-4 mb-4">
-                  <div className="text-red-800 text-sm">{error}</div>
-                </div>
-              )}
-              {repositoryId && !loading && !error && (
-                <div className="flex flex-col h-full overflow-hidden">
-                  <div className="flex items-center justify-end pb-3">
-                    <Button
-                      type="primary"
+                <div className="flex items-center gap-2">
+                  {repositoryId && (
+                    <button
+                      type="button"
                       onClick={() => {
                         setIsCaseSelectionOpen(true);
                       }}
+                      className="text-white bg-custom-primary-100 hover:bg-custom-primary-200 focus:text-custom-brand-40 focus:bg-custom-primary-200 px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center"
                     >
                       关联用例
-                    </Button>
+                    </button>
+                  )}
+                </div>
+              </div>
+              <div className="flex-1 min-h-0 overflow-hidden pt-0 px-4 pb-4 min-w-0">
+                {loading && (
+                  <div className="flex items-center justify-center py-12">
+                    <div className="text-custom-text-300">加载中...</div>
                   </div>
-                  <div className="flex-1 overflow-y-auto">
-                    <Table
-                      dataSource={reviewCases}
-                      columns={columns as any}
-                      rowKey="id"
-                      bordered={true}
-                      pagination={false}
-                      locale={{ emptyText: "暂无数据" }}
-                    />
+                )}
+                {error && (
+                  <div className="bg-red-50 border border-red-200 rounded-md p-4 mb-4">
+                    <div className="text-red-800 text-sm">{error}</div>
                   </div>
-                  <div className="flex-shrink-0 border-t border-custom-border-200 px-4 py-3 bg-custom-background-100 flex items-center justify-between">
-                    <div className="flex items-center gap-4 text-sm">
-                      <span className="text-custom-text-300">
-                        {total > 0
-                          ? `第 ${(currentPage - 1) * pageSize + 1}-${Math.min(currentPage * pageSize, total)} 条，共 ${total} 条`
-                          : ""}
-                      </span>
+                )}
+                {repositoryId && !loading && !error && (
+                  <div className="flex flex-col h-full overflow-hidden min-w-0">
+                    <div className="testhub-review-detail-table-scroll flex-1 relative overflow-y-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar]:block [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-[rgb(var(--color-scrollbar))] [&::-webkit-scrollbar-thumb]:rounded-full">
+                      <Table
+                        dataSource={reviewCases}
+                        columns={columns as any}
+                        rowKey="id"
+                        bordered={true}
+                        pagination={false}
+                        locale={{ emptyText: "暂无数据" }}
+                        scroll={{ x: "max-content" }}
+                      />
                     </div>
-                    <Pagination
-                      current={currentPage}
-                      pageSize={pageSize}
-                      total={total}
-                      showSizeChanger
-                      showQuickJumper
-                      pageSizeOptions={["10", "20", "50", "100"]}
-                      onChange={handlePaginationChange}
-                      onShowSizeChange={handlePaginationChange}
-                      size="small"
+                    <div className="flex-shrink-0 border-t border-custom-border-200 px-4 py-3 bg-custom-background-100 flex items-center justify-between">
+                      <div className="flex items-center gap-4 text-sm">
+                        <span className="text-custom-text-300">
+                          {total > 0
+                            ? `第 ${(currentPage - 1) * pageSize + 1}-${Math.min(currentPage * pageSize, total)} 条，共 ${total} 条`
+                            : ""}
+                        </span>
+                      </div>
+                      <Pagination
+                        current={currentPage}
+                        pageSize={pageSize}
+                        total={total}
+                        showSizeChanger
+                        showQuickJumper
+                        pageSizeOptions={["10", "20", "50", "100"]}
+                        onChange={handlePaginationChange}
+                        onShowSizeChange={handlePaginationChange}
+                        size="small"
+                      />
+                    </div>
+                    <style
+                      dangerouslySetInnerHTML={{
+                        __html: `
+                      .testhub-review-detail-table-scroll .ant-table-body {
+                        overflow-y: auto !important;
+                      }
+
+                      .testhub-review-detail-table-scroll ::-webkit-scrollbar {
+                        width: 12px;
+                        height: 12px;
+                      }
+
+                      .testhub-review-detail-table-scroll ::-webkit-scrollbar-thumb {
+                        background-color: rgba(var(--color-scrollbar), 0.85);
+                        border-radius: 999px;
+                        border: 3px solid transparent;
+                        background-clip: content-box;
+                      }
+
+                      .testhub-review-detail-table-scroll ::-webkit-scrollbar-track {
+                        background: transparent;
+                      }
+                    `,
+                      }}
                     />
                   </div>
-                </div>
-              )}
-              {!repositoryId && !loading && (
-                <div className="flex items-center justify-center py-12">
-                  <div className="text-custom-text-300">未找到用例库ID，请先在顶部选择一个用例库</div>
-                </div>
-              )}
+                )}
+                {!repositoryId && !loading && (
+                  <div className="flex items-center justify-center py-12">
+                    <div className="text-custom-text-300">未找到用例库ID，请先在顶部选择一个用例库</div>
+                  </div>
+                )}
+              </div>
             </div>
-          </Col>
-        </Row>
+          </div>
+        </div>
       </div>
       <UpdateModal
         open={isCaseModalOpen}

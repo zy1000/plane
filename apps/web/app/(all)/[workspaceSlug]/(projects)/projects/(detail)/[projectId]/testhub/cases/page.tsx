@@ -20,6 +20,9 @@ import { CaseService as ReviewApiService } from "@/services/qa/review.service";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { FolderOpenDot } from "lucide-react";
 import { formatDateTime, globalEnums } from "../util";
+import { Breadcrumbs } from "@plane/ui";
+import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
+import { RepositorySelect } from "../repository-select";
 
 type TCreator = {
   display_name?: string;
@@ -980,7 +983,7 @@ export default function TestCasesPage() {
       render: (_: any, record: any) => (
         <button
           type="button"
-          className="text-blue-500 inline-block max-w-full"
+          className="inline-block max-w-full"
           onClick={() => {
             if (!record || !record.id) return;
             setActiveCase(record);
@@ -1128,20 +1131,12 @@ export default function TestCasesPage() {
       <PageHead title={`测试用例${repositoryName ? " - " + repositoryName : ""}`} />
       <div className="h-full w-full">
         <div className="flex h-full w-full flex-col">
-          <Row wrap={false} className="flex-1 overflow-hidden pt-4 pb-0 sm:pt-5" gutter={[0, 16]}>
+          <Row wrap={false} className="flex-1 overflow-hidden pb-0" gutter={[0, 16]}>
             <Col
               className="relative flex flex-col h-full border-r border-custom-border-200"
               flex="0 0 auto"
               style={{ width: leftWidth, minWidth: 200, maxWidth: 300 }}
             >
-              <div className="p-2 flex-shrink-0">
-                <Input
-                  allowClear
-                  placeholder="按模块名称搜索"
-                  value={searchModule}
-                  onChange={(e) => setSearchModule(e.target.value)}
-                />
-              </div>
               <div
                 onMouseDown={onMouseDownResize}
                 className="absolute right-0 top-0 h-full w-2"
@@ -1152,6 +1147,13 @@ export default function TestCasesPage() {
                   __html: `
                 .custom-tree-indent .ant-tree-indent-unit {
                   width: 10px !important;
+                }
+                .custom-tree-indent .ant-tree-switcher {
+                  width: 14px !important;
+                  margin-inline-end: 2px !important;
+                }
+                .custom-tree-indent .ant-tree-node-content-wrapper {
+                  padding-inline: 4px !important;
                 }
               `,
                 }}
@@ -1166,24 +1168,78 @@ export default function TestCasesPage() {
                   autoExpandParent={autoExpandParent}
                   treeData={treeData}
                   selectedKeys={selectedModuleId ? [selectedModuleId] : ["all"]}
-                  className="py-2 custom-tree-indent"
+                  className="py-2 pl-2 custom-tree-indent"
                 />
               </div>
             </Col>
             {/* 右侧表格 */}
             <Col flex="auto" className="h-full overflow-hidden">
               <div className="flex h-full flex-col">
-                <div className="mb-4 ml-4 flex shrink-0 justify-start">
-                  <Space>
-                    <Button type="primary" onClick={() => setIsCreateModalOpen(true)} disabled={!repositoryId}>
-                      新建
-                    </Button>
-                    <Button onClick={() => setIsImportModalOpen(true)} disabled={!repositoryId}>
+                <div className="px-3 pt-2 pb-2 sm:pt-2 flex items-center justify-between flex-shrink-0">
+                  <div>
+                    <Breadcrumbs>
+                      <Breadcrumbs.Item
+                        component={
+                          <BreadcrumbLink href={`/${workspaceSlug}/projects/${projectId}/testhub`} label="测试用例库" />
+                        }
+                      />
+                      <Breadcrumbs.Item component={<BreadcrumbLink label="测试用例" />} />
+                      <Breadcrumbs.Item
+                        isLast
+                        component={
+                          <RepositorySelect
+                            key={`repository-select-${repositoryId || "all"}`}
+                            workspaceSlug={String(workspaceSlug || "")}
+                            projectId={String(projectId || "")}
+                            className="inline-flex"
+                            buttonClassName="min-w-0 border-0 px-1.5 py-1 text-sm font-medium text-custom-text-300 hover:text-custom-text-100 hover:bg-custom-background-90 cursor-pointer gap-2 h-full"
+                            labelClassName="max-w-[150px] leading-4"
+                            hideChevron
+                            defaultRepositoryId={repositoryId}
+                            onRepositoryChange={({ id, name }) => {
+                              setRepositoryId(id);
+                              setRepositoryName(name ? String(name) : "");
+                              try {
+                                if (id) {
+                                  sessionStorage.setItem("selectedRepositoryId", String(id));
+                                  if (name) sessionStorage.setItem("selectedRepositoryName", String(name));
+                                } else {
+                                  sessionStorage.removeItem("selectedRepositoryId");
+                                  sessionStorage.removeItem("selectedRepositoryName");
+                                }
+                              } catch {}
+                              const ws = String(workspaceSlug || "");
+                              const pid = String(projectId || "");
+                              if (id)
+                                router.push(
+                                  `/${ws}/projects/${pid}/testhub/cases?repositoryId=${encodeURIComponent(String(id))}`
+                                );
+                              else router.push(`/${ws}/projects/${pid}/testhub/cases`);
+                            }}
+                          />
+                        }
+                      />
+                    </Breadcrumbs>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsCreateModalOpen(true)}
+                      disabled={!repositoryId}
+                      className="text-white bg-custom-primary-100 hover:bg-custom-primary-200 focus:text-custom-brand-40 focus:bg-custom-primary-200 px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      新建用例
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsImportModalOpen(true)}
+                      disabled={!repositoryId}
+                      className="text-custom-primary-100 bg-transparent border border-custom-primary-100 hover:bg-custom-primary-100/20 focus:text-custom-primary-100 focus:bg-custom-primary-100/30 px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
                       导入
-                    </Button>
-                  </Space>
+                    </button>
+                  </div>
                 </div>
-
                 <div className="flex-1 min-h-0 overflow-hidden">
                   {/* 加载/错误/空状态 */}
                   {loading && (

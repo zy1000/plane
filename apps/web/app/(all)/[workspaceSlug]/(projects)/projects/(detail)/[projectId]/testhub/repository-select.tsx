@@ -14,6 +14,9 @@ type RepositorySelectProps = {
   workspaceSlug: string;
   projectId?: string;
   className?: string;
+  buttonClassName?: string;
+  labelClassName?: string;
+  hideChevron?: boolean;
   defaultRepositoryId?: string | null;
   onRepositoryChange?: (repository: { id: string | null; name?: string | null }) => void;
 };
@@ -22,6 +25,9 @@ export const RepositorySelect: React.FC<RepositorySelectProps> = ({
   workspaceSlug,
   projectId,
   className,
+  buttonClassName,
+  labelClassName,
+  hideChevron = false,
   defaultRepositoryId = null,
   onRepositoryChange,
 }) => {
@@ -94,12 +100,13 @@ export const RepositorySelect: React.FC<RepositorySelectProps> = ({
           ref={setReferenceElement}
           type="button"
           className={cn(
-            "flex items-center gap-1 rounded border-[0.5px] border-custom-border-300 px-2 py-1 text-xs hover:bg-custom-background-80"
+            "flex items-center gap-1 rounded border-[0.5px] border-custom-border-300 px-3 py-1.5 text-xs hover:bg-custom-background-80 min-w-[220px]",
+            buttonClassName
           )}
           onClick={() => setIsOpen((p) => !p)}
         >
-          <span className="truncate max-w-[160px]">{selectedName}</span>
-          <ChevronDown className="h-3 w-3 flex-shrink-0" />
+          <span className={cn("truncate max-w-[180px]", labelClassName)}>{selectedName}</span>
+          {!hideChevron && <ChevronDown className="h-3 w-3 flex-shrink-0" />}
         </button>
       </Combobox.Button>
 

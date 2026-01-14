@@ -24,10 +24,12 @@ class PlanModuleListSerializer(ModelSerializer):
 class PlanCaseListSerializer(ModelSerializer):
     class TestCaseLiteSerializer(ModelSerializer):
         repository = serializers.UUIDField(source="repository_id", read_only=True)
+        repository_name = serializers.CharField(source="repository.name", read_only=True)
+        module = serializers.CharField(source="module.name", read_only=True)
 
         class Meta:
             model = TestCase
-            fields = ["id", "name", "type", "priority", "updated_at", "repository"]
+            fields = ["id", "name", "type", "priority", "updated_at", "repository",'code','repository_name','module']
 
     plan = serializers.UUIDField(source="plan_id", read_only=True)
     case = TestCaseLiteSerializer(read_only=True)

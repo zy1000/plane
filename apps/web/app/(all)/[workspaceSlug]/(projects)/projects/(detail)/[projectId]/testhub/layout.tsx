@@ -72,8 +72,7 @@ export default function TestManagementLayout() {
 
   return (
     <>
-      {/* 顶部菜单栏（共享于模块内所有子页面） */}
-      {!isOverviewActive && <AppHeader header={<TestManagementMenuBar />} />}
+      <AppHeader header={<TestManagementMenuBar />} />
 
       {/* 主体区域：左侧共享侧边栏 + 可拖拽边框 + 右侧子页面内容 */}
       <div className="relative flex h-full w-full overflow-hidden">

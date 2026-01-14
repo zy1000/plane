@@ -1,7 +1,7 @@
 "use client";
 import React from "react";
 import { Transition } from "@headlessui/react";
-import { useParams, useSearchParams, useRouter } from "next/navigation";
+import { useParams, useSearchParams, useRouter, usePathname } from "next/navigation";
 import { PageHead } from "@/components/core/page-title";
 import { Breadcrumbs } from "@plane/ui";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
@@ -36,6 +36,7 @@ export default function CaseReview() {
   const { workspaceSlug, projectId } = useParams();
   const searchParams = useSearchParams();
   const router = useRouter();
+  const pathname = usePathname();
   const reviewId = searchParams.get("review_id") ?? "";
   const initialCaseId = searchParams.get("case_id") ?? undefined;
 
@@ -61,8 +62,10 @@ export default function CaseReview() {
   const [expandedKeys, setExpandedKeys] = React.useState<string[] | undefined>(undefined);
   const [autoExpandParent, setAutoExpandParent] = React.useState<boolean>(true);
   const [selectedTreeKey, setSelectedTreeKey] = React.useState<string>("root");
+  const [selectedRepositoryId, setSelectedRepositoryId] = React.useState<string | null>(null);
   const [selectedModuleId, setSelectedModuleId] = React.useState<string | null>(null);
   const [reviewTree, setReviewTree] = React.useState<any | null>(null);
+  const skipNextUrlSyncedFetchRef = React.useRef(false);
 
   const [detailLoading, setDetailLoading] = React.useState<boolean>(false);
   const [caseDetail, setCaseDetail] = React.useState<any>(null);
@@ -146,16 +149,20 @@ export default function CaseReview() {
     s = pageSize,
     kw?: string,
     moduleId: string | null = selectedModuleId,
-    autoSelectFirst?: boolean
+    autoSelectFirst?: boolean,
+    repositoryId: string | null = selectedRepositoryId
   ) => {
     if (!workspaceSlug || !reviewId) return;
     try {
       setListLoading(true);
       setError(null);
       const input = (kw ?? keyword).trim();
+      const effectiveProjectId = !repositoryId && !moduleId ? (projectId ? String(projectId) : null) : null;
       const res = await reviewService.getReviewCaseList(String(workspaceSlug), String(reviewId), {
         page: p,
         page_size: s,
+        ...(effectiveProjectId ? { project_id: effectiveProjectId } : {}),
+        ...(repositoryId ? { repository_id: repositoryId } : {}),
         ...(moduleId ? { module_id: moduleId } : {}),
         ...(input ? { name__icontains: input } : {}),
       });
@@ -267,11 +274,8 @@ export default function CaseReview() {
   }, [workspaceSlug]);
 
   React.useEffect(() => {
-    fetchCases(1, pageSize);
     fetchEnums();
     fetchReviewTree();
-    setSelectedTreeKey("root");
-    setSelectedModuleId(null);
     if (workspaceSlug) {
       try {
         fetchWorkspaceMembers(String(workspaceSlug));
@@ -281,6 +285,63 @@ export default function CaseReview() {
       }
     }
   }, [workspaceSlug, reviewId]);
+
+  React.useEffect(() => {
+    if (!workspaceSlug || !reviewId) return;
+    const repositoryIdFromUrl = searchParams.get("repository_id");
+    const moduleIdFromUrl = searchParams.get("module_id");
+
+    if (moduleIdFromUrl) {
+      const nextModuleId = String(moduleIdFromUrl);
+      if (
+        skipNextUrlSyncedFetchRef.current &&
+        selectedModuleId === nextModuleId &&
+        selectedRepositoryId === null &&
+        selectedTreeKey === `module:${nextModuleId}`
+      ) {
+        skipNextUrlSyncedFetchRef.current = false;
+        return;
+      }
+      setSelectedRepositoryId(null);
+      setSelectedModuleId(nextModuleId);
+      setSelectedTreeKey(`module:${nextModuleId}`);
+      fetchCases(1, pageSize, keyword, nextModuleId, false, null);
+      return;
+    }
+
+    if (repositoryIdFromUrl) {
+      const nextRepositoryId = String(repositoryIdFromUrl);
+      const nextTreeKey = selectedTreeKey.startsWith(`repo:${nextRepositoryId}`) ? selectedTreeKey : `repo:${nextRepositoryId}`;
+      if (
+        skipNextUrlSyncedFetchRef.current &&
+        selectedModuleId === null &&
+        selectedRepositoryId === nextRepositoryId &&
+        selectedTreeKey === nextTreeKey
+      ) {
+        skipNextUrlSyncedFetchRef.current = false;
+        return;
+      }
+      setSelectedRepositoryId(nextRepositoryId);
+      setSelectedModuleId(null);
+      setSelectedTreeKey(nextTreeKey);
+      fetchCases(1, pageSize, keyword, null, false, nextRepositoryId);
+      return;
+    }
+
+    if (
+      skipNextUrlSyncedFetchRef.current &&
+      selectedModuleId === null &&
+      selectedRepositoryId === null &&
+      selectedTreeKey === "root"
+    ) {
+      skipNextUrlSyncedFetchRef.current = false;
+      return;
+    }
+    setSelectedRepositoryId(null);
+    setSelectedModuleId(null);
+    setSelectedTreeKey("root");
+    fetchCases(1, pageSize, keyword, null, false, null);
+  }, [workspaceSlug, reviewId, projectId, searchParams.toString()]);
 
   React.useEffect(() => {
     if (initialCaseId) fetchCaseDetail(initialCaseId);
@@ -470,6 +531,22 @@ export default function CaseReview() {
     return [buildTreeNodes(reviewTree)];
   }, [reviewTree]);
 
+  const updateFilterQueryParams = React.useCallback(
+    (next: { project_id?: string | null; repository_id?: string | null; module_id?: string | null }) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (reviewId) params.set("review_id", String(reviewId));
+      params.delete("case_id");
+      params.delete("project_id");
+      params.delete("repository_id");
+      params.delete("module_id");
+      if (next.project_id) params.set("project_id", String(next.project_id));
+      if (next.repository_id) params.set("repository_id", String(next.repository_id));
+      if (next.module_id) params.set("module_id", String(next.module_id));
+      router.replace(`${pathname}?${params.toString()}`);
+    },
+    [pathname, reviewId, router, searchParams]
+  );
+
   const onSelect: TreeProps["onSelect"] = (selectedKeys, info) => {
     const key = Array.isArray(selectedKeys) && selectedKeys.length > 0 ? String(selectedKeys[0]) : "root";
     setSelectedTreeKey(key);
@@ -477,22 +554,42 @@ export default function CaseReview() {
     const node: any = (info as any)?.node || {};
     const kind = node?.kind as string | undefined;
 
-    if (!kind || kind === "root" || kind === "repository" || kind === "repository_modules_all") {
+    if (!kind || kind === "root") {
+      setSelectedRepositoryId(null);
       setSelectedModuleId(null);
       setPage(1);
       setSelectedCaseId(undefined);
       setCaseDetail(null);
-      fetchCases(1, pageSize, keyword, null, true);
+      skipNextUrlSyncedFetchRef.current = true;
+      updateFilterQueryParams({ project_id: projectId ? String(projectId) : null });
+      fetchCases(1, pageSize, keyword, null, true, null);
+      return;
+    }
+
+    if (kind === "repository" || kind === "repository_modules_all") {
+      const repositoryId = node?.repositoryId ? String(node.repositoryId) : null;
+      setSelectedRepositoryId(repositoryId);
+      setSelectedModuleId(null);
+      setPage(1);
+      setSelectedCaseId(undefined);
+      setCaseDetail(null);
+      skipNextUrlSyncedFetchRef.current = true;
+      updateFilterQueryParams({ repository_id: repositoryId });
+      fetchCases(1, pageSize, keyword, null, true, repositoryId);
       return;
     }
 
     if (kind === "module") {
       const moduleId = node?.moduleId ? String(node.moduleId) : null;
+      const repositoryId = node?.repositoryId ? String(node.repositoryId) : null;
+      setSelectedRepositoryId(repositoryId);
       setSelectedModuleId(moduleId);
       setPage(1);
       setSelectedCaseId(undefined);
       setCaseDetail(null);
-      fetchCases(1, pageSize, keyword, moduleId, true);
+      skipNextUrlSyncedFetchRef.current = true;
+      updateFilterQueryParams({ module_id: moduleId });
+      fetchCases(1, pageSize, keyword, moduleId, true, repositoryId);
     }
   };
 
