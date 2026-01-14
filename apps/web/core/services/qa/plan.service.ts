@@ -140,10 +140,16 @@ export class PlanService extends APIService {
         throw error?.response?.data;
       });
   }
-    async getPlanCaseList(
+  async getPlanCaseList(
     workspaceSlug: string,
     plan_id: string,
-    queries?: { page?: number; page_size?: number; module_id?: string | null; name__icontains?: string }
+    queries?: {
+      page?: number;
+      page_size?: number;
+      repository_id?: string | null;
+      module_id?: string | null;
+      name__icontains?: string;
+    }
   ): Promise<{ data: Array<{ id: string; name: string; priority: number; assignees: string[]; result: string; created_by: string | null }>; count: number }> {
     const params = { plan_id, ...(queries || {}) } as any;
     return this.get(`/api/workspaces/${workspaceSlug}/test/plan/case-list/`, { params })

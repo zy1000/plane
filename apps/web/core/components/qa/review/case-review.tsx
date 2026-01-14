@@ -5,8 +5,9 @@ import { useParams, useSearchParams, useRouter } from "next/navigation";
 import { PageHead } from "@/components/core/page-title";
 import { Breadcrumbs } from "@plane/ui";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
-import { Row, Col, Card, Input, Pagination, Tag, Spin, message, Button, Table, Tooltip, Radio, Modal, Badge } from "antd";
-import { CheckCircleOutlined, CloseCircleOutlined, ExclamationCircleOutlined } from "@ant-design/icons";
+import { Row, Col, Card, Input, Pagination, Tag, Spin, message, Button, Table, Tooltip, Radio, Modal, Badge, Tree } from "antd";
+import type { TreeProps } from "antd";
+import { AppstoreOutlined, CheckCircleOutlined, CloseCircleOutlined, DeploymentUnitOutlined, ExclamationCircleOutlined } from "@ant-design/icons";
 import debounce from "lodash-es/debounce";
 import { CaseService as CaseApiService } from "@/services/qa/case.service";
 import { CaseService as ReviewApiService } from "@/services/qa/review.service";
@@ -57,6 +58,11 @@ export default function CaseReview() {
   const [pageSize, setPageSize] = React.useState<number>(10);
   const [keyword, setKeyword] = React.useState<string>("");
   const [selectedCaseId, setSelectedCaseId] = React.useState<string | undefined>(initialCaseId ?? undefined);
+  const [expandedKeys, setExpandedKeys] = React.useState<string[] | undefined>(undefined);
+  const [autoExpandParent, setAutoExpandParent] = React.useState<boolean>(true);
+  const [selectedTreeKey, setSelectedTreeKey] = React.useState<string>("root");
+  const [selectedModuleId, setSelectedModuleId] = React.useState<string | null>(null);
+  const [reviewTree, setReviewTree] = React.useState<any | null>(null);
 
   const [detailLoading, setDetailLoading] = React.useState<boolean>(false);
   const [caseDetail, setCaseDetail] = React.useState<any>(null);
@@ -135,7 +141,13 @@ export default function CaseReview() {
     [workspaceSlug, reviewId, reviewService, getSuggestionCountFromRecords]
   );
 
-  const fetchCases = async (p = page, s = pageSize, kw?: string) => {
+  const fetchCases = async (
+    p = page,
+    s = pageSize,
+    kw?: string,
+    moduleId: string | null = selectedModuleId,
+    autoSelectFirst?: boolean
+  ) => {
     if (!workspaceSlug || !reviewId) return;
     try {
       setListLoading(true);
@@ -144,6 +156,7 @@ export default function CaseReview() {
       const res = await reviewService.getReviewCaseList(String(workspaceSlug), String(reviewId), {
         page: p,
         page_size: s,
+        ...(moduleId ? { module_id: moduleId } : {}),
         ...(input ? { name__icontains: input } : {}),
       });
       const nextCases = Array.isArray(res?.data) ? (res.data as ReviewCaseRow[]) : [];
@@ -152,6 +165,16 @@ export default function CaseReview() {
       setTotal(Number(res?.count || 0));
       setPage(p);
       setPageSize(s);
+      if (autoSelectFirst) {
+        const first = nextCases?.[0];
+        const firstCaseId = first?.case_id ? String(first.case_id) : undefined;
+        setSelectedCaseId(firstCaseId);
+        setCaseDetail(null);
+        if (firstCaseId) {
+          fetchCaseDetail(firstCaseId);
+          fetchSuggestionCountForCase(firstCaseId);
+        }
+      }
     } catch (e: any) {
       const msg = e?.message || e?.detail || e?.error || "获取评审用例列表失败";
       setError(msg);
@@ -173,6 +196,20 @@ export default function CaseReview() {
         plan_case_result: enums.plan_case_result || {},
       });
     } catch {}
+  };
+
+  const fetchReviewTree = async () => {
+    if (!workspaceSlug || !reviewId) return;
+    try {
+      const data = await caseService.getReviewCaseTree(String(workspaceSlug), { review_id: String(reviewId) });
+      setReviewTree(data || null);
+      setExpandedKeys(data ? collectDefaultExpandedKeys(data) : undefined);
+      setAutoExpandParent(true);
+    } catch {
+      setReviewTree(null);
+      setExpandedKeys(undefined);
+      setAutoExpandParent(true);
+    }
   };
 
   const fetchCaseDetail = async (id?: string) => {
@@ -232,6 +269,9 @@ export default function CaseReview() {
   React.useEffect(() => {
     fetchCases(1, pageSize);
     fetchEnums();
+    fetchReviewTree();
+    setSelectedTreeKey("root");
+    setSelectedModuleId(null);
     if (workspaceSlug) {
       try {
         fetchWorkspaceMembers(String(workspaceSlug));
@@ -352,6 +392,110 @@ export default function CaseReview() {
     }
   };
 
+  const onExpand: TreeProps["onExpand"] = (keys) => {
+    setExpandedKeys(keys as string[]);
+    setAutoExpandParent(false);
+  };
+
+  const renderNodeTitle = (title: string, icon: React.ReactNode, count?: number, fontMedium?: boolean) => (
+    <div className="group flex items-center justify-between gap-2 w-full">
+      <div className="flex items-center gap-2">
+        <span className="inline-flex items-center justify-center w-5 h-5 text-custom-text-300">{icon}</span>
+        <span className={`text-sm text-custom-text-200 ${fontMedium ? "font-medium" : ""}`}>{title}</span>
+      </div>
+      <div className="flex items-center gap-2">
+        {typeof count === "number" && <span className="text-xs text-custom-text-300">{count}</span>}
+      </div>
+    </div>
+  );
+
+  function getTreeNodeKey(node: any): string {
+    const kind = String(node?.kind || "");
+    const id = String(node?.id || "");
+    const repositoryId = node?.repository_id ? String(node.repository_id) : null;
+
+    if (kind === "root") return "root";
+    if (kind === "repository") return `repo:${id}`;
+    if (kind === "repository_modules_all") return `repo:${repositoryId}:all_modules`;
+    if (kind === "module") return `module:${id}`;
+    return id;
+  }
+
+  function collectDefaultExpandedKeys(node: any): string[] {
+    const keys = new Set<string>();
+    const visit = (n: any) => {
+      const kind = String(n?.kind || "");
+      if (kind === "root" || kind === "repository" || kind === "repository_modules_all") {
+        keys.add(getTreeNodeKey(n));
+      }
+      const children = Array.isArray(n?.children) ? n.children : [];
+      children.forEach(visit);
+    };
+    visit(node);
+    return Array.from(keys);
+  }
+
+  const buildTreeNodes = (node: any): any => {
+    const kind = String(node?.kind || "");
+    const id = String(node?.id || "");
+    const repositoryId = node?.repository_id ? String(node.repository_id) : null;
+
+    const key = getTreeNodeKey(node);
+
+    const icon =
+      kind === "root" ? (
+        <AppstoreOutlined />
+      ) : kind === "repository" ? (
+        <DeploymentUnitOutlined />
+      ) : kind === "repository_modules_all" ? (
+        <AppstoreOutlined />
+      ) : (
+        <LucideIcons.FolderOpenDot size={14} />
+      );
+
+    const children = Array.isArray(node?.children) ? node.children : [];
+
+    return {
+      title: renderNodeTitle(node?.name ?? "-", icon, undefined, kind === "root" || kind === "repository_modules_all"),
+      key,
+      kind,
+      repositoryId,
+      moduleId: kind === "module" ? id : null,
+      children: children.map((c: any) => buildTreeNodes(c)),
+    };
+  };
+
+  const treeData = React.useMemo(() => {
+    if (!reviewTree) return [];
+    return [buildTreeNodes(reviewTree)];
+  }, [reviewTree]);
+
+  const onSelect: TreeProps["onSelect"] = (selectedKeys, info) => {
+    const key = Array.isArray(selectedKeys) && selectedKeys.length > 0 ? String(selectedKeys[0]) : "root";
+    setSelectedTreeKey(key);
+
+    const node: any = (info as any)?.node || {};
+    const kind = node?.kind as string | undefined;
+
+    if (!kind || kind === "root" || kind === "repository" || kind === "repository_modules_all") {
+      setSelectedModuleId(null);
+      setPage(1);
+      setSelectedCaseId(undefined);
+      setCaseDetail(null);
+      fetchCases(1, pageSize, keyword, null, true);
+      return;
+    }
+
+    if (kind === "module") {
+      const moduleId = node?.moduleId ? String(node.moduleId) : null;
+      setSelectedModuleId(moduleId);
+      setPage(1);
+      setSelectedCaseId(undefined);
+      setCaseDetail(null);
+      fetchCases(1, pageSize, keyword, moduleId, true);
+    }
+  };
+
   React.useEffect(() => {
     const row = cases.find((item) => String(item.case_id ?? item.id) === String(selectedCaseId || ""));
     const reviewers = Array.isArray(row?.assignees) ? row!.assignees.map((id) => String(id)) : [];
@@ -391,7 +535,7 @@ export default function CaseReview() {
           message.success("评审提交成功");
           setReasonModalOpen(false);
           setReason("");
-          fetchCases(page, pageSize);
+          fetchCases(page, pageSize, keyword, selectedModuleId);
           setRecordsRefreshKey((k) => k + 1);
         } catch (e: any) {
           const msg = e?.message || e?.detail || e?.error || "提交评审失败";
@@ -400,7 +544,7 @@ export default function CaseReview() {
           setSubmitLoading(false);
         }
       }, 500),
-    [workspaceSlug, page, pageSize]
+    [workspaceSlug, page, pageSize, keyword, selectedModuleId]
   );
 
   React.useEffect(() => {
@@ -447,7 +591,29 @@ export default function CaseReview() {
       </Breadcrumbs>
 
       <Row className="w-full rounded-md border border-custom-border-200 overflow-hidden" gutter={0} wrap={false}>
-        <Col flex="390px" className="border-r border-custom-border-200">
+        <Col
+          className="relative border-r border-custom-border-200 overflow-y-auto vertical-scrollbar scrollbar-sm max-h-[calc(100dvh-52px-12px)]"
+          flex="0 0 auto"
+          style={{ width: 280, minWidth: 200, maxWidth: 320 }}
+        >
+          <Tree
+            showLine={false}
+            defaultExpandAll
+            onSelect={onSelect}
+            onExpand={onExpand}
+            expandedKeys={expandedKeys}
+            autoExpandParent={autoExpandParent}
+            treeData={treeData}
+            selectedKeys={treeData.length > 0 ? [selectedTreeKey] : []}
+            className="py-2"
+          />
+        </Col>
+
+        <Col
+          flex="0 0 auto"
+          className="border-r border-custom-border-200 max-h-[calc(100dvh-52px-12px)] overflow-hidden"
+          style={{ width: 390, minWidth: 320, maxWidth: 520 }}
+        >
           <div className="p-4 flex flex-col gap-3">
             <Input.Search
               placeholder="按用例名称搜索"
@@ -479,7 +645,7 @@ export default function CaseReview() {
             ) : (
               <div className="flex flex-col gap-3">
                 <div
-                  className="h-[680px] overflow-y-auto vertical-scrollbar scrollbar-sm flex flex-col gap-3 pr-2 pl-1 py-1"
+                  className="overflow-y-auto vertical-scrollbar scrollbar-sm flex flex-col gap-3 pr-2 pl-1 py-1 max-h-[calc(100dvh-300px)]"
                   style={{ scrollbarGutter: "stable" }}
                 >
                   {cases.length === 0 ? (

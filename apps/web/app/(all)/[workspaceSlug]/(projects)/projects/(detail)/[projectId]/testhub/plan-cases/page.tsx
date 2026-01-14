@@ -90,7 +90,7 @@ export default function PlanCasesPage() {
     try {
       const data = await caseService.getPlanCaseTree(String(workspaceSlug), { plan_id: String(planId) });
       setPlanTree(data || null);
-      setExpandedKeys(undefined);
+      setExpandedKeys(data ? collectDefaultExpandedKeys(data) : undefined);
       setAutoExpandParent(true);
     } catch {}
   };
@@ -176,21 +176,38 @@ export default function PlanCasesPage() {
     );
   };
 
+  function getTreeNodeKey(node: any): string {
+    const kind = String(node?.kind || "");
+    const id = String(node?.id || "");
+    const repositoryId = node?.repository_id ? String(node.repository_id) : null;
+
+    if (kind === "root") return "root";
+    if (kind === "repository") return `repo:${id}`;
+    if (kind === "repository_modules_all") return `repo:${repositoryId}:all_modules`;
+    if (kind === "module") return `module:${id}`;
+    return id;
+  }
+
+  function collectDefaultExpandedKeys(node: any): string[] {
+    const keys = new Set<string>();
+    const visit = (n: any) => {
+      const kind = String(n?.kind || "");
+      if (kind === "root" || kind === "repository" || kind === "repository_modules_all") {
+        keys.add(getTreeNodeKey(n));
+      }
+      const children = Array.isArray(n?.children) ? n.children : [];
+      children.forEach(visit);
+    };
+    visit(node);
+    return Array.from(keys);
+  }
+
   const buildTreeNodes = (node: any): any => {
     const kind = String(node?.kind || "");
     const id = String(node?.id || "");
     const repositoryId = node?.repository_id ? String(node.repository_id) : null;
 
-    const key =
-      kind === "root"
-        ? "root"
-        : kind === "repository"
-          ? `repo:${id}`
-          : kind === "repository_modules_all"
-            ? `repo:${repositoryId}:all_modules`
-            : kind === "module"
-              ? `module:${id}`
-              : id;
+    const key = getTreeNodeKey(node);
 
     const icon =
       kind === "root" ? (

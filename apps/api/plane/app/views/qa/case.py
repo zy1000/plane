@@ -20,7 +20,7 @@ from plane.app.serializers.qa.case import CaseExecuteRecordSerializer
 from plane.app.views import BaseAPIView, BaseViewSet
 from plane.utils.import_export import parser_case_file
 from plane.db.models import TestCase, FileAsset, TestCaseComment, PlanCase, Issue, CaseModule, CaseLabel, \
-    CaseReviewThrough, CaseReviewRecord, TestCaseRepository, TestPlan
+    CaseReview, CaseReviewThrough, CaseReviewRecord, TestCaseRepository, TestPlan
 from plane.utils.paginator import CustomPaginator
 from plane.utils.response import list_response
 
@@ -185,6 +185,128 @@ class CaseAPI(BaseViewSet):
 
         rows = (
             PlanCase.objects.filter(plan_id=plan_id, case__deleted_at__isnull=True, case__repository__workspace__slug=slug)
+            .values('case__repository_id', 'case__repository__name', 'case__module_id')
+            .distinct()
+        )
+
+        repo_ids: set[str] = set()
+        repo_name_by_id: dict[str, str] = {}
+        module_ids_by_repo: dict[str, set[str]] = defaultdict(set)
+
+        for r in rows:
+            repo_id = r.get('case__repository_id')
+            if not repo_id:
+                continue
+            repo_id = str(repo_id)
+            repo_ids.add(repo_id)
+            repo_name_by_id[repo_id] = r.get('case__repository__name') or repo_id
+            module_id = r.get('case__module_id')
+            if module_id:
+                module_ids_by_repo[repo_id].add(str(module_id))
+
+        if not repo_ids:
+            return Response({"id": "all", "name": "全部用例库", "kind": "root", "children": []}, status=status.HTTP_200_OK)
+
+        expanded_ids_by_repo: dict[str, set[str]] = {rid: set(mids) for rid, mids in module_ids_by_repo.items()}
+        for repo_id, mids in list(expanded_ids_by_repo.items()):
+            frontier = set(mids)
+            while frontier:
+                parent_ids = set(
+                    CaseModule.objects.filter(id__in=list(frontier), deleted_at__isnull=True, repository_id=repo_id)
+                    .exclude(parent_id__isnull=True)
+                    .values_list('parent_id', flat=True)
+                )
+                parent_ids = {str(pid) for pid in parent_ids if pid}
+                new_parents = parent_ids - mids
+                if not new_parents:
+                    break
+                mids.update(new_parents)
+                frontier = new_parents
+            expanded_ids_by_repo[repo_id] = mids
+
+        all_module_ids: set[str] = set()
+        for mids in expanded_ids_by_repo.values():
+            all_module_ids.update(mids)
+
+        module_rows_by_repo: dict[str, list[dict]] = defaultdict(list)
+        if all_module_ids:
+            for m in CaseModule.objects.filter(id__in=list(all_module_ids), deleted_at__isnull=True).values(
+                'id', 'name', 'parent_id', 'repository_id'
+            ):
+                module_rows_by_repo[str(m.get('repository_id'))].append(m)
+
+        def build_module_tree(repo_id: str):
+            items = module_rows_by_repo.get(repo_id, [])
+            by_id = {str(m.get('id')): m for m in items if m.get('id')}
+            children_map: dict[str, list[str]] = defaultdict(list)
+
+            for m in items:
+                mid = str(m.get('id'))
+                pid = str(m.get('parent_id')) if m.get('parent_id') else None
+                if pid and pid in by_id:
+                    children_map[pid].append(mid)
+
+            roots: list[str] = []
+            for mid, m in by_id.items():
+                pid = str(m.get('parent_id')) if m.get('parent_id') else None
+                if not pid or pid not in by_id:
+                    roots.append(mid)
+
+            def name_key(mid: str):
+                return (by_id.get(mid, {}).get('name') or '').lower()
+
+            roots.sort(key=name_key)
+            for pid in list(children_map.keys()):
+                children_map[pid].sort(key=name_key)
+
+            def build(mid: str):
+                m = by_id.get(mid) or {}
+                return {
+                    "id": mid,
+                    "name": m.get("name") or "-",
+                    "kind": "module",
+                    "repository_id": repo_id,
+                    "children": [build(child) for child in children_map.get(mid, [])],
+                }
+
+            return [build(mid) for mid in roots]
+
+        repo_pairs = [(rid, repo_name_by_id.get(rid) or rid) for rid in repo_ids]
+        repo_pairs.sort(key=lambda x: (x[1] or '').lower())
+
+        children = []
+        for repo_id, repo_name in repo_pairs:
+            module_tree = build_module_tree(repo_id)
+            children.append(
+                {
+                    "id": repo_id,
+                    "name": repo_name or "-",
+                    "kind": "repository",
+                    "repository_id": repo_id,
+                    "children": [
+                        {
+                            "id": f"{repo_id}:all_modules",
+                            "name": "全部模块",
+                            "kind": "repository_modules_all",
+                            "repository_id": repo_id,
+                            "children": module_tree,
+                        }
+                    ],
+                }
+            )
+
+        return Response({"id": "all", "name": "全部用例库", "kind": "root", "children": children}, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['get'], url_path='review-case-tree')
+    def review_case_tree(self, request, slug):
+        review_id = request.query_params.get('review_id')
+        if not review_id:
+            return Response({"error": "review_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        rows = (
+            CaseReviewThrough.objects.filter(
+                review_id=review_id, case__deleted_at__isnull=True, case__repository__workspace__slug=slug
+            )
             .values('case__repository_id', 'case__repository__name', 'case__module_id')
             .distinct()
         )
@@ -471,6 +593,361 @@ class CaseAPI(BaseViewSet):
             plan_cases__plan__id=plan_id, plan_cases__deleted_at__isnull=True
         )
 
+        if repository_id:
+            cases = cases.filter(repository_id=repository_id)
+        if module_id:
+            case_module = get_object_or_404(CaseModule, id=module_id, deleted_at__isnull=True, repository_id__in=repo_ids)
+            cases = cases.filter(module_id__in=case_module.get_all_children)
+
+        ids = list(cases.values_list('id', flat=True))
+        return list_response(data=ids, count=len(ids))
+
+    @action(detail=False, methods=['get'], url_path='project-case-tree')
+    def project_case_tree(self, request, slug):
+        project_id = request.query_params.get('project_id')
+        if not project_id:
+            return Response({"error": "project_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        repositories = list(
+            TestCaseRepository.objects.filter(project_id=project_id, workspace__slug=slug, deleted_at__isnull=True)
+            .values('id', 'name')
+            .order_by('name')
+        )
+        repo_ids = [str(r['id']) for r in repositories]
+
+        modules = list(
+            CaseModule.objects.filter(repository_id__in=repo_ids, deleted_at__isnull=True)
+            .values('id', 'name', 'parent_id', 'repository_id')
+        )
+
+        all_cases = TestCase.objects.filter(repository_id__in=repo_ids, deleted_at__isnull=True)
+
+        repo_counts = {
+            str(r['repository_id']): int(r['count'])
+            for r in all_cases.values('repository_id').annotate(count=Count('id'))
+            if r.get('repository_id')
+        }
+
+        base_module_counts = {
+            str(r['module_id']): int(r['count'])
+            for r in all_cases.exclude(module_id__isnull=True).values('module_id').annotate(count=Count('id'))
+            if r.get('module_id')
+        }
+
+        modules_by_repo: dict[str, list[dict]] = defaultdict(list)
+        for m in modules:
+            rid = m.get('repository_id')
+            if rid:
+                modules_by_repo[str(rid)].append(m)
+
+        def build_module_tree_with_counts(repo_id: str):
+            items = modules_by_repo.get(repo_id, [])
+            by_id = {str(m['id']): m for m in items if m.get('id')}
+            children_map: dict[str, list[str]] = defaultdict(list)
+
+            for m in items:
+                mid = str(m.get('id'))
+                pid = str(m.get('parent_id')) if m.get('parent_id') else None
+                if pid and pid in by_id:
+                    children_map[pid].append(mid)
+
+            def name_key(mid: str):
+                return (by_id.get(mid, {}).get('name') or '').lower()
+
+            roots: list[str] = []
+            for mid, m in by_id.items():
+                pid = str(m.get('parent_id')) if m.get('parent_id') else None
+                if not pid or pid not in by_id:
+                    roots.append(mid)
+            roots.sort(key=name_key)
+            for pid in list(children_map.keys()):
+                children_map[pid].sort(key=name_key)
+
+            memo: dict[str, int] = {}
+
+            def subtree_count(mid: str) -> int:
+                if mid in memo:
+                    return memo[mid]
+                total = int(base_module_counts.get(mid, 0))
+                for child in children_map.get(mid, []):
+                    total += subtree_count(child)
+                memo[mid] = total
+                return total
+
+            def build(mid: str):
+                m = by_id.get(mid) or {}
+                return {
+                    "id": mid,
+                    "name": m.get("name") or "-",
+                    "kind": "module",
+                    "repository_id": repo_id,
+                    "count": subtree_count(mid),
+                    "children": [build(child) for child in children_map.get(mid, [])],
+                }
+
+            return [build(mid) for mid in roots]
+
+        children = []
+        total = 0
+        for r in repositories:
+            repo_id = str(r['id'])
+            repo_name = r.get('name') or "-"
+            repo_total = int(repo_counts.get(repo_id, 0))
+            total += repo_total
+            module_tree = build_module_tree_with_counts(repo_id)
+            children.append(
+                {
+                    "id": repo_id,
+                    "name": repo_name,
+                    "kind": "repository",
+                    "repository_id": repo_id,
+                    "count": repo_total,
+                    "children": [
+                        {
+                            "id": f"{repo_id}:all_modules",
+                            "name": "全部模块",
+                            "kind": "repository_modules_all",
+                            "repository_id": repo_id,
+                            "count": repo_total,
+                            "children": module_tree,
+                        }
+                    ],
+                }
+            )
+
+        return Response(
+            {"id": "all", "name": "全部用例库", "kind": "root", "count": total, "children": children},
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=False, methods=['get'], url_path='project-cases')
+    def project_cases(self, request, slug):
+        project_id = request.query_params.get('project_id')
+        if not project_id:
+            return Response({"error": "project_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        repo_ids = list(
+            TestCaseRepository.objects.filter(project_id=project_id, workspace__slug=slug, deleted_at__isnull=True)
+            .values_list('id', flat=True)
+        )
+
+        repository_id = request.query_params.get('repository_id')
+        module_id = request.query_params.get('module_id')
+        name__icontains = request.query_params.get('name__icontains')
+
+        cases = TestCase.objects.filter(repository_id__in=repo_ids, deleted_at__isnull=True)
+        if repository_id:
+            cases = cases.filter(repository_id=repository_id)
+        if module_id:
+            case_module = get_object_or_404(CaseModule, id=module_id, deleted_at__isnull=True, repository_id__in=repo_ids)
+            cases = cases.filter(module_id__in=case_module.get_all_children)
+        if name__icontains:
+            cases = cases.filter(name__icontains=name__icontains)
+
+        cases = cases.order_by('-created_at')
+        paginator = self.pagination_class()
+        paginated_queryset = paginator.paginate_queryset(cases, request)
+        serializer = CaseListSerializer(paginated_queryset, many=True)
+        return list_response(data=serializer.data, count=cases.count())
+
+    @action(detail=False, methods=['get'], url_path='project-case-ids')
+    def project_case_ids(self, request, slug):
+        project_id = request.query_params.get('project_id')
+        if not project_id:
+            return Response({"error": "project_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        repo_ids = list(
+            TestCaseRepository.objects.filter(project_id=project_id, workspace__slug=slug, deleted_at__isnull=True)
+            .values_list('id', flat=True)
+        )
+
+        repository_id = request.query_params.get('repository_id')
+        module_id = request.query_params.get('module_id')
+
+        cases = TestCase.objects.filter(repository_id__in=repo_ids, deleted_at__isnull=True)
+        if repository_id:
+            cases = cases.filter(repository_id=repository_id)
+        if module_id:
+            case_module = get_object_or_404(CaseModule, id=module_id, deleted_at__isnull=True, repository_id__in=repo_ids)
+            cases = cases.filter(module_id__in=case_module.get_all_children)
+
+        ids = list(cases.values_list('id', flat=True))
+        return list_response(data=ids, count=len(ids))
+
+    @action(detail=False, methods=['get'], url_path='review-unassociated-tree')
+    def review_unassociated_tree(self, request, slug):
+        review_id = request.query_params.get('review_id')
+        if not review_id:
+            return Response({"error": "review_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        review = get_object_or_404(CaseReview, id=review_id, deleted_at__isnull=True, project__workspace__slug=slug)
+
+        repositories = list(
+            TestCaseRepository.objects.filter(project_id=review.project_id, workspace__slug=slug, deleted_at__isnull=True)
+            .values('id', 'name')
+            .order_by('name')
+        )
+        repo_ids = [str(r['id']) for r in repositories]
+
+        modules = list(
+            CaseModule.objects.filter(repository_id__in=repo_ids, deleted_at__isnull=True)
+            .values('id', 'name', 'parent_id', 'repository_id')
+        )
+
+        unassociated = (
+            TestCase.objects.filter(repository_id__in=repo_ids, deleted_at__isnull=True)
+            .exclude(review_cases__review_id=review_id, review_cases__deleted_at__isnull=True)
+        )
+
+        repo_counts = {
+            str(r['repository_id']): int(r['count'])
+            for r in unassociated.values('repository_id').annotate(count=Count('id'))
+            if r.get('repository_id')
+        }
+
+        base_module_counts = {
+            str(r['module_id']): int(r['count'])
+            for r in unassociated.exclude(module_id__isnull=True).values('module_id').annotate(count=Count('id'))
+            if r.get('module_id')
+        }
+
+        modules_by_repo: dict[str, list[dict]] = defaultdict(list)
+        for m in modules:
+            rid = m.get('repository_id')
+            if rid:
+                modules_by_repo[str(rid)].append(m)
+
+        def build_module_tree_with_counts(repo_id: str):
+            items = modules_by_repo.get(repo_id, [])
+            by_id = {str(m['id']): m for m in items if m.get('id')}
+            children_map: dict[str, list[str]] = defaultdict(list)
+
+            for m in items:
+                mid = str(m.get('id'))
+                pid = str(m.get('parent_id')) if m.get('parent_id') else None
+                if pid and pid in by_id:
+                    children_map[pid].append(mid)
+
+            def name_key(mid: str):
+                return (by_id.get(mid, {}).get('name') or '').lower()
+
+            roots: list[str] = []
+            for mid, m in by_id.items():
+                pid = str(m.get('parent_id')) if m.get('parent_id') else None
+                if not pid or pid not in by_id:
+                    roots.append(mid)
+            roots.sort(key=name_key)
+            for pid in list(children_map.keys()):
+                children_map[pid].sort(key=name_key)
+
+            memo: dict[str, int] = {}
+
+            def subtree_count(mid: str) -> int:
+                if mid in memo:
+                    return memo[mid]
+                total = int(base_module_counts.get(mid, 0))
+                for child in children_map.get(mid, []):
+                    total += subtree_count(child)
+                memo[mid] = total
+                return total
+
+            def build(mid: str):
+                m = by_id.get(mid) or {}
+                return {
+                    "id": mid,
+                    "name": m.get("name") or "-",
+                    "kind": "module",
+                    "repository_id": repo_id,
+                    "count": subtree_count(mid),
+                    "children": [build(child) for child in children_map.get(mid, [])],
+                }
+
+            return [build(mid) for mid in roots]
+
+        children = []
+        total = 0
+        for r in repositories:
+            repo_id = str(r['id'])
+            repo_name = r.get('name') or "-"
+            repo_total = int(repo_counts.get(repo_id, 0))
+            total += repo_total
+            module_tree = build_module_tree_with_counts(repo_id)
+            children.append(
+                {
+                    "id": repo_id,
+                    "name": repo_name,
+                    "kind": "repository",
+                    "repository_id": repo_id,
+                    "count": repo_total,
+                    "children": [
+                        {
+                            "id": f"{repo_id}:all_modules",
+                            "name": "全部模块",
+                            "kind": "repository_modules_all",
+                            "repository_id": repo_id,
+                            "count": repo_total,
+                            "children": module_tree,
+                        }
+                    ],
+                }
+            )
+
+        return Response(
+            {"id": "all", "name": "全部用例库", "kind": "root", "count": total, "children": children},
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=False, methods=['get'], url_path='review-unassociated-cases')
+    def review_unassociated_cases(self, request, slug):
+        review_id = request.query_params.get('review_id')
+        if not review_id:
+            return Response({"error": "review_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        review = get_object_or_404(CaseReview, id=review_id, deleted_at__isnull=True, project__workspace__slug=slug)
+        repo_ids = list(
+            TestCaseRepository.objects.filter(project_id=review.project_id, workspace__slug=slug, deleted_at__isnull=True)
+            .values_list('id', flat=True)
+        )
+
+        repository_id = request.query_params.get('repository_id')
+        module_id = request.query_params.get('module_id')
+        name__icontains = request.query_params.get('name__icontains')
+
+        cases = TestCase.objects.filter(repository_id__in=repo_ids, deleted_at__isnull=True).exclude(
+            review_cases__review_id=review_id, review_cases__deleted_at__isnull=True
+        )
+        if repository_id:
+            cases = cases.filter(repository_id=repository_id)
+        if module_id:
+            case_module = get_object_or_404(CaseModule, id=module_id, deleted_at__isnull=True, repository_id__in=repo_ids)
+            cases = cases.filter(module_id__in=case_module.get_all_children)
+        if name__icontains:
+            cases = cases.filter(name__icontains=name__icontains)
+
+        cases = cases.order_by('-created_at')
+        paginator = self.pagination_class()
+        paginated_queryset = paginator.paginate_queryset(cases, request)
+        serializer = CaseListSerializer(paginated_queryset, many=True)
+        return list_response(data=serializer.data, count=cases.count())
+
+    @action(detail=False, methods=['get'], url_path='review-unassociated-case-ids')
+    def review_unassociated_case_ids(self, request, slug):
+        review_id = request.query_params.get('review_id')
+        if not review_id:
+            return Response({"error": "review_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        review = get_object_or_404(CaseReview, id=review_id, deleted_at__isnull=True, project__workspace__slug=slug)
+        repo_ids = list(
+            TestCaseRepository.objects.filter(project_id=review.project_id, workspace__slug=slug, deleted_at__isnull=True)
+            .values_list('id', flat=True)
+        )
+
+        repository_id = request.query_params.get('repository_id')
+        module_id = request.query_params.get('module_id')
+
+        cases = TestCase.objects.filter(repository_id__in=repo_ids, deleted_at__isnull=True).exclude(
+            review_cases__review_id=review_id, review_cases__deleted_at__isnull=True
+        )
         if repository_id:
             cases = cases.filter(repository_id=repository_id)
         if module_id:
