@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams, useSearchParams, useRouter } from "next/navigation";
-import { useEffect, useState, useRef, useMemo } from "react";
+import { useEffect, useState, useMemo, type ReactNode } from "react";
 import { PageHead } from "@/components/core/page-title";
 import { Breadcrumbs } from "@plane/ui";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
@@ -13,6 +13,7 @@ import { CaseService as ReviewApiService } from "@/services/qa/review.service";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { FolderOpenDot } from "lucide-react";
 import UpdateModal from "@/components/qa/cases/update-modal";
+import TestCaseSelectionModal from "@/components/qa/review/TestCaseSelectionModal";
 
 type TCreator = {
   display_name?: string;
@@ -48,8 +49,7 @@ export default function CaseManagementReviewDetailPage() {
   const caseService = useMemo(() => new CaseApiService(), []);
   const reviewService = useMemo(() => new ReviewApiService(), []);
 
-  const [modules, setModules] = useState<any[]>([]);
-  const [allTotal, setAllTotal] = useState<number | undefined>(undefined);
+  const [reviewTree, setReviewTree] = useState<any | null>(null);
   const [selectedModuleId, setSelectedModuleId] = useState<string | null>(null);
   const [expandedKeys, setExpandedKeys] = useState<string[] | undefined>(undefined);
   const [autoExpandParent, setAutoExpandParent] = useState<boolean>(true);
@@ -59,51 +59,24 @@ export default function CaseManagementReviewDetailPage() {
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(10);
   const [total, setTotal] = useState<number>(0);
-  const treeInitializedRef = useRef<boolean>(false);
   const [reviewEnums, setReviewEnums] = useState<Record<string, Record<string, { label: string; color: string }>>>({});
-  const [leftWidth, setLeftWidth] = useState<number>(300);
-  const isDraggingRef = useRef<boolean>(false);
-  const startXRef = useRef<number>(0);
-  const startWidthRef = useRef<number>(0);
   const [isCaseModalOpen, setIsCaseModalOpen] = useState(false);
   const [activeCaseId, setActiveCaseId] = useState<string | undefined>(undefined);
+  const [selectedTreeKey, setSelectedTreeKey] = useState<string>("root");
+  const [isCaseSelectionOpen, setIsCaseSelectionOpen] = useState(false);
 
   const onExpand: TreeProps["onExpand"] = (keys) => {
     setExpandedKeys(keys as string[]);
     setAutoExpandParent(false);
   };
 
-  const batchUpdateModuleCounts = (list: any[], countsMap: Record<string, number>) => {
-    if (!Array.isArray(list)) return [];
-    return list.map((m) => {
-      const updatedM: any = { ...m };
-      const idStr = String(m?.id);
-      if (countsMap && Object.prototype.hasOwnProperty.call(countsMap, idStr)) {
-        updatedM.total = countsMap[idStr];
-      }
-      if (m.children) {
-        updatedM.children = batchUpdateModuleCounts(m.children, countsMap);
-      }
-      return updatedM;
-    });
-  };
-
-  const fetchModules = async () => {
-    if (!workspaceSlug || !repositoryId) return;
+  const fetchReviewTree = async () => {
+    if (!workspaceSlug || !reviewId) return;
     try {
-      const moduleData = await caseService.getModules(workspaceSlug as string, repositoryId as string);
-      const countsResponse = await reviewService.getModuleCount(workspaceSlug as string, reviewId as string);
-      const { total: t = 0, ...countsMap } = countsResponse as any;
-      setAllTotal(t as number);
-      const updated = batchUpdateModuleCounts(moduleData, countsMap as Record<string, number>);
-      setModules(updated);
-      if (!treeInitializedRef.current) {
-        setExpandedKeys(["all"]);
-        setAutoExpandParent(true);
-        treeInitializedRef.current = true;
-      }
+      const data = await caseService.getReviewCaseTree(workspaceSlug as string, { review_id: reviewId });
+      setReviewTree(data || null);
     } catch (e) {
-      setError("获取模块数据失败，请稍后重试");
+      setError("获取用例树失败，请稍后重试");
     }
   };
 
@@ -115,7 +88,11 @@ export default function CaseManagementReviewDetailPage() {
     } catch (e) {}
   };
 
-  const fetchReviewCaseList = async (page: number = currentPage, size: number = pageSize) => {
+  const fetchReviewCaseList = async (
+    page: number = currentPage,
+    size: number = pageSize,
+    moduleId?: string | null
+  ) => {
     if (!workspaceSlug || !reviewId) return;
     try {
       // setLoading(true);
@@ -123,7 +100,7 @@ export default function CaseManagementReviewDetailPage() {
       const res = await reviewService.getReviewCaseList(workspaceSlug as string, reviewId as string, {
         page,
         page_size: size,
-        module_id: selectedModuleId,
+        module_id: typeof moduleId === "undefined" ? selectedModuleId : moduleId,
       });
       setReviewCases(Array.isArray(res?.data) ? (res.data as ReviewCaseRow[]) : []);
       setTotal(Number(res?.count || 0));
@@ -147,13 +124,16 @@ export default function CaseManagementReviewDetailPage() {
       try {
         if (repositoryIdFromUrl) sessionStorage.setItem("selectedRepositoryId", repositoryIdFromUrl);
       } catch {}
-      fetchModules();
+      setReviewTree(null);
+      fetchReviewTree();
       fetchReviewEnums();
       fetchReviewCaseList(1, pageSize);
+      setSelectedTreeKey("root");
+      setSelectedModuleId(null);
     } else {
       setLoading(false);
     }
-  }, [repositoryId]);
+  }, [repositoryId, reviewId]);
 
   useEffect(() => {
     if (!repositoryId && workspaceSlug) {
@@ -163,62 +143,14 @@ export default function CaseManagementReviewDetailPage() {
     }
   }, [repositoryId, workspaceSlug, searchParams, router]);
 
-  const onMouseDownResize = (e: React.MouseEvent<HTMLDivElement>) => {
-    isDraggingRef.current = true;
-    startXRef.current = e.clientX;
-    startWidthRef.current = leftWidth;
-    window.addEventListener("mousemove", onMouseMoveResize as any);
-    window.addEventListener("mouseup", onMouseUpResize as any);
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
-    e.preventDefault();
-  };
-
-  const onMouseMoveResize = (e: MouseEvent) => {
-    if (!isDraggingRef.current) return;
-    const next = Math.min(300, Math.max(200, startWidthRef.current + (e.clientX - startXRef.current)));
-    setLeftWidth(next);
-  };
-
-  const onMouseUpResize = () => {
-    isDraggingRef.current = false;
-    window.removeEventListener("mousemove", onMouseMoveResize as any);
-    window.removeEventListener("mouseup", onMouseUpResize as any);
-    document.body.style.cursor = "auto";
-    document.body.style.userSelect = "auto";
-  };
-
-  useEffect(() => {
-    return () => {
-      window.removeEventListener("mousemove", onMouseMoveResize as any);
-      window.removeEventListener("mouseup", onMouseUpResize as any);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!repositoryId) return;
-    fetchReviewCaseList(1, pageSize);
-  }, [selectedModuleId]);
-
-  const onSelect: TreeProps["onSelect"] = (selectedKeys, info) => {
-    const key = selectedKeys[0] as string | undefined;
-    const nextId = !key || key === "all" ? null : key;
-    setSelectedModuleId(nextId);
-  };
-
-  const getNodeCount = (m: any) => {
-    const c = m?.case_count ?? m?.count ?? m?.total ?? m?.cases_count;
-    return typeof c === "number" ? c : undefined;
-  };
-
-  const renderNodeTitle = (title: string, count?: number) => {
+  const renderNodeTitle = (title: string, icon: ReactNode, count?: number, fontMedium?: boolean) => {
     return (
-      <div className="flex items-center justify-between gap-2 w-full">
+      <div className="group flex items-center justify-between gap-2 w-full">
         <div className="flex items-center gap-2">
           <span className="inline-flex items-center justify-center w-5 h-5 text-custom-text-300">
-            <FolderOpenDot size={14} />
+            {icon}
           </span>
-          <span className="text-sm text-custom-text-200">{title}</span>
+          <span className={`text-sm text-custom-text-200 ${fontMedium ? "font-medium" : ""}`}>{title}</span>
         </div>
         <div className="flex items-center gap-2">
           {typeof count === "number" && <span className="text-xs text-custom-text-300">{count}</span>}
@@ -227,40 +159,91 @@ export default function CaseManagementReviewDetailPage() {
     );
   };
 
-  const buildTreeNodes = (list: any[]): any[] => {
-    if (!Array.isArray(list)) return [];
-    return list.map((node: any) => {
-      const nodeId = String(node?.id);
-      const childrenNodes = buildTreeNodes(node?.children || []);
-      return {
-        title: renderNodeTitle(node?.name ?? "-", getNodeCount(node)),
-        key: nodeId,
-        icon: <AppstoreOutlined />,
-        children: [...childrenNodes],
-      };
-    });
-  };
+  function getTreeNodeKey(node: any): string {
+    const kind = String(node?.kind || "");
+    const id = String(node?.id || "");
+    const repositoryId = node?.repository_id ? String(node.repository_id) : null;
 
-  const treeData = [
-    {
-      title: (
-        <div className="flex items-center justify-between gap-2 w-full">
-          <div className="flex items-center gap-2">
-            <span className="inline-flex items-center justify-center w-5 h-5 text-custom-text-300">
-              <AppstoreOutlined />
-            </span>
-            <span className="text-sm font-medium text-custom-text-200">全部模块</span>
-          </div>
-          <div className="flex items-center gap-2">
-            {typeof allTotal === "number" && <span className="text-xs text-custom-text-300">{allTotal}</span>}
-          </div>
-        </div>
-      ),
-      key: "all",
-      icon: <AppstoreOutlined />,
-      children: [...buildTreeNodes(modules)],
-    },
-  ];
+    if (kind === "root") return "root";
+    if (kind === "repository") return `repo:${id}`;
+    if (kind === "repository_modules_all") return `repo:${repositoryId}:all_modules`;
+    if (kind === "module") return `module:${id}`;
+    return id;
+  }
+
+  function collectDefaultExpandedKeys(node: any): string[] {
+    const keys = new Set<string>();
+    const visit = (n: any) => {
+      const kind = String(n?.kind || "");
+      if (kind === "root" || kind === "repository" || kind === "repository_modules_all") {
+        keys.add(getTreeNodeKey(n));
+      }
+      const children = Array.isArray(n?.children) ? n.children : [];
+      children.forEach(visit);
+    };
+    visit(node);
+    return Array.from(keys);
+  }
+
+  const treeData = useMemo(() => {
+    if (!reviewTree) return [];
+    const buildTreeNodes = (node: any): any => {
+      const kind = String(node?.kind || "");
+      const id = String(node?.id || "");
+      const repositoryId = node?.repository_id ? String(node.repository_id) : null;
+
+      const key = getTreeNodeKey(node);
+
+      const icon =
+        kind === "root" ? (
+          <AppstoreOutlined />
+        ) : kind === "repository" ? (
+          <DeploymentUnitOutlined />
+        ) : kind === "repository_modules_all" ? (
+          <AppstoreOutlined />
+        ) : (
+          <FolderOpenDot size={14} />
+        );
+
+      const children = Array.isArray(node?.children) ? node.children : [];
+
+      return {
+        title: renderNodeTitle(node?.name ?? "-", icon, undefined, kind === "root" || kind === "repository_modules_all"),
+        key,
+        kind,
+        repositoryId,
+        moduleId: kind === "module" ? id : null,
+        children: children.map((c: any) => buildTreeNodes(c)),
+      };
+    };
+    return [buildTreeNodes(reviewTree)];
+  }, [reviewTree]);
+
+  useEffect(() => {
+    if (!reviewTree) return;
+    setExpandedKeys(collectDefaultExpandedKeys(reviewTree));
+    setAutoExpandParent(true);
+  }, [reviewTree]);
+
+  const onSelect: TreeProps["onSelect"] = (selectedKeys, info) => {
+    const key = Array.isArray(selectedKeys) && selectedKeys.length > 0 ? String(selectedKeys[0]) : "root";
+    setSelectedTreeKey(key);
+
+    const node: any = (info as any)?.node || {};
+    const kind = node?.kind as string | undefined;
+
+    if (!kind || kind === "root" || kind === "repository" || kind === "repository_modules_all") {
+      setSelectedModuleId(null);
+      fetchReviewCaseList(1, pageSize, null);
+      return;
+    }
+
+    if (kind === "module") {
+      const moduleId = node?.moduleId ? String(node.moduleId) : null;
+      setSelectedModuleId(moduleId);
+      fetchReviewCaseList(1, pageSize, moduleId);
+    }
+  };
 
   const priorityLabelMap: Record<number, string> = { 0: "低", 1: "中", 2: "高" };
 
@@ -395,27 +378,27 @@ export default function CaseManagementReviewDetailPage() {
           <Breadcrumbs.Item component={<BreadcrumbLink label="评审详情" isLast />} />
         </Breadcrumbs>
         <Row className="w-full flex-1 min-h-0 rounded-md border border-custom-border-200 overflow-hidden" gutter={0}>
-          <Col flex={`${leftWidth}px`} className="relative border-r border-custom-border-200 overflow-hidden">
-            <div className="pt-4 px-4 pb-0 h-full overflow-y-auto">
-              {!repositoryId && <div className="text-custom-text-300">未找到用例库ID，请先在顶部选择一个用例库</div>}
-              {repositoryId && (
-                <Tree
-                  showLine={false}
-                  defaultExpandAll
-                  onSelect={onSelect}
-                  onExpand={onExpand}
-                  expandedKeys={expandedKeys}
-                  autoExpandParent={autoExpandParent}
-                  treeData={treeData as any}
-                  selectedKeys={selectedModuleId ? [selectedModuleId] : ["all"]}
-                  className="py-2"
-                />
-              )}
-            </div>
-            <div
-              className="absolute top-0 right-[-2px] w-1 h-full cursor-col-resize"
-              onMouseDown={onMouseDownResize}
-            />
+          <Col
+            className="relative h-full min-h-0 border-r border-custom-border-200 overflow-y-auto"
+            flex="0 0 auto"
+            style={{ width: 280, minWidth: 200, maxWidth: 320 }}
+          >
+            {!repositoryId && (
+              <div className="p-4 text-custom-text-300">未找到用例库ID，请先在顶部选择一个用例库</div>
+            )}
+            {repositoryId && (
+              <Tree
+                showLine={false}
+                defaultExpandAll
+                onSelect={onSelect}
+                onExpand={onExpand}
+                expandedKeys={expandedKeys}
+                autoExpandParent={autoExpandParent}
+                treeData={treeData as any}
+                selectedKeys={treeData.length > 0 ? [selectedTreeKey] : []}
+                className="py-2"
+              />
+            )}
           </Col>
           <Col flex="auto" className="overflow-hidden">
             <div className="pt-4 px-4 pb-0 flex flex-col h-full min-h-0 overflow-hidden">
@@ -431,6 +414,16 @@ export default function CaseManagementReviewDetailPage() {
               )}
               {repositoryId && !loading && !error && (
                 <div className="flex flex-col h-full overflow-hidden">
+                  <div className="flex items-center justify-end pb-3">
+                    <Button
+                      type="primary"
+                      onClick={() => {
+                        setIsCaseSelectionOpen(true);
+                      }}
+                    >
+                      关联用例
+                    </Button>
+                  </div>
                   <div className="flex-1 overflow-y-auto">
                     <Table
                       dataSource={reviewCases}
@@ -481,6 +474,27 @@ export default function CaseManagementReviewDetailPage() {
         }}
         caseId={activeCaseId}
       />
+      {isCaseSelectionOpen && (
+        <TestCaseSelectionModal
+          open={isCaseSelectionOpen}
+          onClose={() => setIsCaseSelectionOpen(false)}
+          initialSelectedIds={[]}
+          projectId={projectId ? String(projectId) : undefined}
+          reviewId={reviewId ? String(reviewId) : undefined}
+          onConfirm={async (ids) => {
+            if (!workspaceSlug || !reviewId) return;
+            try {
+              await reviewService.addReviewCases(String(workspaceSlug), { review_id: String(reviewId), case_ids: ids || [] });
+              message.success("已关联所选用例");
+              setIsCaseSelectionOpen(false);
+              fetchReviewTree();
+              fetchReviewCaseList(1, pageSize, selectedModuleId);
+            } catch (e: any) {
+              message.error(e?.message || e?.detail || e?.error || "关联用例失败");
+            }
+          }}
+        />
+      )}
     </>
   );
 }

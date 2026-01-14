@@ -216,6 +216,19 @@ class PlanView(BaseViewSet):
         query = PlanCase.objects.filter(plan_id=request.query_params['plan_id'])
         if name := request.query_params.get('name__icontains'):
             query = query.filter(case__name__icontains=name)
+
+        repository_ids = (
+            request.query_params.getlist('repository_id')
+            or request.query_params.getlist('repository_ids')
+            or request.query_params.getlist('case__repository_id')
+        )
+        if repository_ids:
+            query = query.filter(case__repository_id__in=repository_ids)
+        else:
+            repository_id = request.query_params.get('repository_id') or request.query_params.get('case__repository_id')
+            if repository_id:
+                query = query.filter(case__repository_id=repository_id)
+
         module_ids = request.query_params.getlist('module_id') or request.query_params.getlist('module_ids')
         if module_ids:
             expanded = set(module_ids)

@@ -106,6 +106,14 @@ export class CaseService extends APIService {
       });
   }
 
+  async addReviewCases(workspaceSlug: string, data: { review_id: string; case_ids: string[] }): Promise<void> {
+    return this.post(`/api/workspaces/${workspaceSlug}/test/review/add-cases/`, data)
+      .then(() => {})
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
   async getModuleCount(workspaceSlug: string, review_id: string): Promise<ModuleCountResponse> {
     const query = {review_id}
     return this.get(`/api/workspaces/${workspaceSlug}/test/review/module-count/`, {params: query})

@@ -32,6 +32,14 @@ export class CaseService extends APIService {
       });
   }
 
+  async getReviewCaseTree(workspaceSlug: string, queries: { review_id: string }): Promise<any> {
+    return this.get(`/api/workspaces/${workspaceSlug}/test/case/review-case-tree/`, { params: queries })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
   async getPlanUnassociatedCaseTree(workspaceSlug: string, queries: { plan_id: string }): Promise<any> {
     return this.get(`/api/workspaces/${workspaceSlug}/test/case/plan-unassociated-tree/`, { params: queries })
       .then((response) => response?.data)
@@ -56,6 +64,66 @@ export class CaseService extends APIService {
     queries: { plan_id: string; repository_id?: string; module_id?: string }
   ): Promise<{ data: string[]; count: number }> {
     return this.get(`/api/workspaces/${workspaceSlug}/test/case/plan-unassociated-case-ids/`, { params: queries })
+      .then((response) => ({ data: response?.data?.data ?? [], count: Number(response?.data?.count || 0) }))
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async getProjectCaseTree(workspaceSlug: string, queries: { project_id: string }): Promise<any> {
+    return this.get(`/api/workspaces/${workspaceSlug}/test/case/project-case-tree/`, { params: queries })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async getProjectCases(
+    workspaceSlug: string,
+    queries: { project_id: string; repository_id?: string; module_id?: string; page?: number; page_size?: number; name__icontains?: string }
+  ): Promise<any> {
+    return this.get(`/api/workspaces/${workspaceSlug}/test/case/project-cases/`, { params: queries })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async getProjectCaseIds(
+    workspaceSlug: string,
+    queries: { project_id: string; repository_id?: string; module_id?: string }
+  ): Promise<{ data: string[]; count: number }> {
+    return this.get(`/api/workspaces/${workspaceSlug}/test/case/project-case-ids/`, { params: queries })
+      .then((response) => ({ data: response?.data?.data ?? [], count: Number(response?.data?.count || 0) }))
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async getReviewUnassociatedCaseTree(workspaceSlug: string, queries: { review_id: string }): Promise<any> {
+    return this.get(`/api/workspaces/${workspaceSlug}/test/case/review-unassociated-tree/`, { params: queries })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async getReviewUnassociatedCases(
+    workspaceSlug: string,
+    queries: { review_id: string; repository_id?: string; module_id?: string; page?: number; page_size?: number; name__icontains?: string }
+  ): Promise<any> {
+    return this.get(`/api/workspaces/${workspaceSlug}/test/case/review-unassociated-cases/`, { params: queries })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async getReviewUnassociatedCaseIds(
+    workspaceSlug: string,
+    queries: { review_id: string; repository_id?: string; module_id?: string }
+  ): Promise<{ data: string[]; count: number }> {
+    return this.get(`/api/workspaces/${workspaceSlug}/test/case/review-unassociated-case-ids/`, { params: queries })
       .then((response) => ({ data: response?.data?.data ?? [], count: Number(response?.data?.count || 0) }))
       .catch((error) => {
         throw error?.response?.data;

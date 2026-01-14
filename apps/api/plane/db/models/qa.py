@@ -177,7 +177,7 @@ class TestCaseVersion(BaseModel):
     repository_id = models.CharField(max_length=36)
     module_id = models.CharField(max_length=36, null=True, blank=True)
     assignee_id = models.CharField(max_length=36, null=True, blank=True)
-    code = models.CharField(max_length=12, blank=True)
+    code = models.CharField(max_length=50, blank=True)
     name = models.CharField(max_length=255)
     precondition = models.TextField(blank=True, default="<p></p>")
     steps = models.JSONField(blank=True, default=dict)

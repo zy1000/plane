@@ -163,10 +163,10 @@ export default function ReviewsPage() {
   };
 
   const fetchAllReviewsTotal = async () => {
-    if (!workspaceSlug) return;
+    if (!workspaceSlug || !projectId) return;
     try {
       const params: any = { page: 1, page_size: 1 };
-      if (repositoryId) params.module__repository_id = repositoryId;
+      params.project_id = projectId;
       const res = await caseService.getReviews(workspaceSlug as string, params);
       setAllTotal(Number(res?.count || 0));
     } catch (e) {
@@ -180,7 +180,7 @@ export default function ReviewsPage() {
     moduleId: string | null,
     extraFilters?: { name?: string; state?: string[]; mode?: string[] }
   ) => {
-    if (!workspaceSlug) return;
+    if (!workspaceSlug || !projectId) return;
     setLoading(true);
     setError("");
     try {
@@ -188,7 +188,7 @@ export default function ReviewsPage() {
       if (moduleId) {
         params.module_id = moduleId;
       } else {
-        params.module__repository_id = repositoryId
+        params.project_id = projectId;
       }
       if (extraFilters?.name) params.name__icontains = extraFilters.name;
       if (extraFilters?.state && extraFilters.state.length) params.state__in = extraFilters.state.join(",");

@@ -1,15 +1,18 @@
 from gunicorn.util import close
+import uuid
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework import status
 from django.db.models import Count
+from django.db import transaction
+from django.shortcuts import get_object_or_404
 
 from plane.app.serializers.qa import ReviewModuleCreateUpdateSerializer, ReviewModuleDetailSerializer, \
     ReviewModuleListSerializer, ReviewListSerializer, ReviewCreateUpdateSerializer, ReviewCaseListSerializer, \
     ReviewCaseRecordsSerializer
 from plane.app.views import BaseAPIView, BaseViewSet
 from plane.db.models import CaseReview, CaseReviewModule, CaseReviewThrough, CaseModule, TestCase, CaseReviewRecord, \
-    TestCaseVersion
+    TestCaseRepository, TestCaseVersion
 from plane.utils.paginator import CustomPaginator
 from plane.utils.qa import update_case_review_status
 from plane.utils.response import list_response
@@ -101,6 +104,57 @@ class CaseReviewView(BaseViewSet):
         CaseReviewThrough.objects.filter(id__in=request.data['ids']).delete(
             soft=False)
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @transaction.atomic
+    @action(detail=False, methods=['post'], url_path='add-cases')
+    def add_cases(self, request, slug):
+        review_id = request.data.get('review_id')
+        raw_case_ids = request.data.get('case_ids')
+
+        if not review_id:
+            return Response({"error": "review_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not isinstance(raw_case_ids, list) or len(raw_case_ids) == 0:
+            return Response({"error": "case_ids must be a non-empty list"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            case_ids = [uuid.UUID(str(i)) for i in raw_case_ids if i]
+        except Exception:
+            return Response({"error": "Invalid case_ids"}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not case_ids:
+            return Response({"error": "case_ids must be a non-empty list"}, status=status.HTTP_400_BAD_REQUEST)
+
+        review = get_object_or_404(CaseReview, id=review_id, deleted_at__isnull=True, project__workspace__slug=slug)
+
+        repo_ids = list(
+            TestCaseRepository.objects.filter(
+                project_id=review.project_id, workspace__slug=slug, deleted_at__isnull=True
+            ).values_list('id', flat=True)
+        )
+
+        found_case_ids = set(
+            TestCase.objects.filter(id__in=case_ids, repository_id__in=repo_ids, deleted_at__isnull=True).values_list(
+                'id', flat=True
+            )
+        )
+        missing_case_ids = set(case_ids) - found_case_ids
+        if missing_case_ids:
+            missing_str = ",".join(sorted([str(i) for i in missing_case_ids]))
+            return Response({"error": f"TestCase not found: {missing_str}"}, status=status.HTTP_404_NOT_FOUND)
+
+        existing_case_ids = set(
+            CaseReviewThrough.objects.filter(review=review, case_id__in=list(found_case_ids)).values_list('case_id', flat=True)
+        )
+
+        to_create_case_ids = found_case_ids - existing_case_ids
+        if to_create_case_ids:
+            CaseReviewThrough.objects.bulk_create(
+                [CaseReviewThrough(review=review, case_id=case_id) for case_id in to_create_case_ids],
+                batch_size=1000,
+            )
+
+        return Response(status=status.HTTP_200_OK)
 
     @action(detail=False, methods=['get'], url_path='case-list')
     def case_list(self, request, slug):

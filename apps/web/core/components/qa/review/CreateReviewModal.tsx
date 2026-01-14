@@ -2,13 +2,11 @@
 import dayjs from "dayjs";
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
-import { Modal, Form, Input, Select, DatePicker, Button, Space, message, Badge } from "antd";
+import { Modal, Form, Input, Select, DatePicker, Button, Space, message } from "antd";
 // 说明：替换评审人选择器为统一的 MemberDropdown 组件，保持参数结构不变
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import type { RangePickerProps } from "antd/es/date-picker";
-import TestCaseSelectionModal from "./TestCaseSelectionModal";
 import { CaseService as ReviewService } from "@/services/qa/review.service";
-import { CaseService as QaCaseService } from "@/services/qa/case.service";
 
 type Props = {
   open: boolean;
@@ -24,24 +22,16 @@ type ReviewFormValues = {
   assignees: string[];
   started_at?: any;
   ended_at?: any;
-  cases?: string[];
 };
 
 export default function CreateReviewModal({ open, onClose, mode = "create", initialValues }: Props) {
   const { workspaceSlug, projectId } = useParams() as { workspaceSlug?: string; projectId?: string };
   const [submitting, setSubmitting] = useState(false);
   const reviewService = useMemo(() => new ReviewService(), []);
-  const qaCaseService = useMemo(() => new QaCaseService(), []);
   const [moduleOptions, setModuleOptions] = useState<{ value: string; label: string }[]>([]);
-  const [caseOptions, setCaseOptions] = useState<{ value: string; label: string }[]>([]);
-  const [caseModalOpen, setCaseModalOpen] = useState(false);
-  const [casesTouched, setCasesTouched] = useState(false);
   // 成员选择改为使用 MemberDropdown 的内部数据源
 
   const [form] = Form.useForm<ReviewFormValues>();
-  const casesWatch = Form.useWatch("cases", form);
-  const selectedCaseCount = Array.isArray(casesWatch) ? casesWatch.length : 0;
-  const displayCaseCount = selectedCaseCount > 0 ? selectedCaseCount : Number((initialValues as any)?.case_count || 0);
 
   const disabledDate: RangePickerProps["disabledDate"] = (current) => {
     const start = form.getFieldValue("started_at");
@@ -58,7 +48,6 @@ export default function CreateReviewModal({ open, onClose, mode = "create", init
 
   useEffect(() => {
     if (!open || !workspaceSlug || !projectId) return;
-    const repositoryId = typeof window !== "undefined" ? sessionStorage.getItem("selectedRepositoryId") : null;
     reviewService
       .getReviewModules(String(workspaceSlug), String(projectId))
       .then((data) => {
@@ -69,18 +58,8 @@ export default function CreateReviewModal({ open, onClose, mode = "create", init
         setModuleOptions(opts);
       })
       .catch(() => setModuleOptions([]));
-    qaCaseService
-      .getCases(String(workspaceSlug), { repository_id: repositoryId })
-      .then((data) => {
-        const opts = (Array.isArray(data) ? data : []).map((c: any) => ({
-          value: String(c.id),
-          label: String(c.name),
-        }));
-        setCaseOptions(opts);
-      })
-      .catch(() => setCaseOptions([]));
     // MemberDropdown 在首次打开时会自行触发成员数据获取
-  }, [open, workspaceSlug, reviewService, qaCaseService]);
+  }, [open, workspaceSlug, projectId, reviewService]);
 
   useEffect(() => {
     if (!open) return;
@@ -92,9 +71,7 @@ export default function CreateReviewModal({ open, onClose, mode = "create", init
       assignees: Array.isArray(vals.assignees) ? vals.assignees : [],
       started_at: vals.started_at ? dayjs(vals.started_at) : undefined,
       ended_at: vals.ended_at ? dayjs(vals.ended_at) : undefined,
-      cases: Array.isArray(vals.cases) ? vals.cases : [],
     });
-    setCasesTouched(false);
   }, [open, initialValues, form]);
 
   const handleSubmit = async () => {
@@ -114,13 +91,11 @@ export default function CreateReviewModal({ open, onClose, mode = "create", init
       if (mode === "create") {
         payload.started_at = v.started_at ? v.started_at.format("YYYY-MM-DD") : null;
         payload.ended_at = v.ended_at ? v.ended_at.format("YYYY-MM-DD") : null;
-        payload.cases = Array.isArray(v.cases) ? v.cases : [];
         await reviewService.createReview(String(workspaceSlug), payload);
         message.success("评审已创建");
       } else {
         if (v.started_at) payload.started_at = v.started_at.format("YYYY-MM-DD");
         if (v.ended_at) payload.ended_at = v.ended_at.format("YYYY-MM-DD");
-        if (casesTouched) payload.cases = Array.isArray(v.cases) ? v.cases : [];
         await reviewService.updateReview(String(workspaceSlug), { id: initialValues?.id, ...payload });
         message.success("评审已更新");
       }
@@ -200,73 +175,7 @@ export default function CreateReviewModal({ open, onClose, mode = "create", init
             </Form.Item>
           </Space>
         </Form.Item>
-        <Form.Item
-          name="cases"
-          label={
-            <div className="flex items-center gap-2">
-              <span>用例</span>
-              <Button
-                type="link"
-                className={`px-0 ${displayCaseCount === 0 ? "text-custom-text-400" : ""}`}
-                disabled={displayCaseCount === 0}
-                onClick={() => {
-                  form.setFieldsValue({ cases: [] });
-                  message.success("已清除用例");
-                  setCasesTouched(true);
-                }}
-              >
-                清除用例
-              </Button>
-            </div>
-          }
-        >
-          <div className="flex items-center gap-3">
-            <span className="text-sm text-custom-text-200">已选择{displayCaseCount}条用例</span>
-            <Button
-              type="link"
-              className="px-0 text-primary hover:opacity-80 active:opacity-70"
-              onClick={async () => {
-                if (
-                  mode === "edit" &&
-                  initialValues?.id &&
-                  (!Array.isArray(form.getFieldValue("cases")) || !form.getFieldValue("cases")?.length)
-                ) {
-                  try {
-                    const res = await reviewService.getReviewCaseList(String(workspaceSlug), String(initialValues.id), {
-                      page: 1,
-                      page_size: 1000,
-                    });
-                    const ids = Array.isArray(res?.data)
-                      ? (res.data as any[]).map((r: any) => String(r?.case_id ?? r?.id)).filter(Boolean)
-                      : [];
-                    form.setFieldsValue({ cases: ids });
-                  } catch {}
-                }
-                setCaseModalOpen(true);
-              }}
-            >
-              关联用例
-            </Button>
-          </div>
-        </Form.Item>
       </Form>
-      {caseModalOpen && (
-        <TestCaseSelectionModal
-          open={caseModalOpen}
-          onClose={() => setCaseModalOpen(false)}
-          initialSelectedIds={form.getFieldValue("cases") ?? []}
-          onConfirm={(ids) => {
-            form.setFieldsValue({ cases: ids });
-            message.success("已关联所选用例");
-            setCaseModalOpen(false);
-            setCasesTouched(true);
-          }}
-          onChangeSelected={(ids) => {
-            form.setFieldsValue({ cases: ids });
-            setCasesTouched(true);
-          }}
-        />
-      )}
     </Modal>
   );
 }
