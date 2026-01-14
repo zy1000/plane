@@ -71,7 +71,9 @@ export default function TestPlanDetailPage() {
   const [total, setTotal] = useState(0);
   const [filters, setFilters] = useState<{ name?: string; assigneeName?: string; states?: number[] }>({});
 
-  const totalPlans = useMemo(() => modules.reduce((sum, m) => sum + (m.count || 0), 0), [modules]);
+  const [allTotal, setAllTotal] = useState<number | undefined>(undefined);
+  const [moduleCounts, setModuleCounts] = useState<Record<string, number>>({});
+  const totalPlansFromModules = useMemo(() => modules.reduce((sum, m) => sum + (m.count || 0), 0), [modules]);
 
   const onMouseDownResize = (e: React.MouseEvent<HTMLDivElement>) => {
     isDraggingRef.current = true;
@@ -130,10 +132,15 @@ export default function TestPlanDetailPage() {
   }, [repositoryId, workspaceSlug, projectId, searchParams, router]);
 
   const fetchModules = async () => {
-    if (!workspaceSlug || !repositoryId) return;
+    if (!workspaceSlug || !projectId) return;
     try {
-      const data: any[] = await planService.getPlanModules(workspaceSlug as string, { repository_id: repositoryId });
+      const pid = Array.isArray(projectId) ? projectId[0] : projectId;
+      const data: any[] = await planService.getPlanModules(workspaceSlug as string, pid);
       setModules(Array.isArray(data) ? data : []);
+      const countsResponse: any = await planService.getPlanModulesCount(workspaceSlug as string, pid);
+      const { total: t = 0, ...countsMap } = countsResponse || {};
+      setAllTotal(typeof t === "number" ? t : Number(t || 0));
+      setModuleCounts(countsMap as Record<string, number>);
     } catch {}
   };
 
@@ -386,7 +393,7 @@ export default function TestPlanDetailPage() {
       width: 140,
       render: (result: any) => renderResult(result),
     },
-    { title: "用例数", dataIndex: "cases", key: "cases", render: (cases) => (cases ? cases.length : 0) },
+    { title: "用例数", dataIndex: "case_count", key: "case_count", render: (case_count: number) => (case_count ? case_count : 0) },
     {
       title: "开始日期",
       dataIndex: "begin_time",
@@ -444,11 +451,12 @@ export default function TestPlanDetailPage() {
     filterParams = filters,
     moduleOverride?: string | null
   ) => {
-    if (!workspaceSlug || !repositoryId) return;
+    if (!workspaceSlug || !projectId) return;
     try {
       setLoading(true);
       setError(null);
-      const queryParams: any = { repository_id: repositoryId, page: page, page_size: size };
+      const pid = Array.isArray(projectId) ? projectId[0] : projectId;
+      const queryParams: any = { project_id: pid, page: page, page_size: size };
       const moduleParam = typeof moduleOverride !== "undefined" ? moduleOverride : selectedModuleId;
       if (moduleParam) queryParams.module_id = moduleParam;
       if (filterParams.name) queryParams.name__icontains = filterParams.name;
@@ -481,10 +489,11 @@ export default function TestPlanDetailPage() {
     const map: Record<string, number> = {};
     modules.forEach((m) => {
       if (!m?.id) return;
-      map[m.id] = m.count || 0;
+      const fromApi = moduleCounts[m.id];
+      map[m.id] = typeof fromApi === "number" ? fromApi : m.count || 0;
     });
     return map;
-  }, [modules]);
+  }, [modules, moduleCounts]);
   const confirmDeleteModule = (node: PlanModule) => {
     Modal.confirm({
       title: "删除模块",
@@ -511,7 +520,7 @@ export default function TestPlanDetailPage() {
       return;
     }
     try {
-      await planService.createPlanModule(workspaceSlug as string, { name, repository: repositoryId });
+      await planService.createPlanModule(workspaceSlug as string, { name, project: projectId });
       setCreatingOpen(false);
       setCreatingName("");
       await fetchModules();
@@ -562,7 +571,9 @@ export default function TestPlanDetailPage() {
                       <span className="text-sm">全部计划</span>
                     </div>
                     <div className="flex items-center gap-2 w-[140px] justify-end">
-                      <span className="text-xs text-custom-text-300">{totalPlans}</span>
+                      <span className="text-xs text-custom-text-300">
+                        {typeof allTotal === "number" ? allTotal : totalPlansFromModules}
+                      </span>
                       <span className={styles.actionIcon} onClick={() => setCreatingOpen(true)}>
                         <PlusOutlined />
                       </span>

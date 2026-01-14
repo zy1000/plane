@@ -53,14 +53,6 @@ class TestCaseRepositorySerializer(ModelSerializer):
     Serializer for creating a TestPlan.
     """
 
-    def create(self, validated_data):
-        instance = super().create(validated_data)
-
-        # 给每个用例库创建统一模块
-        CaseReviewModule.objects.create(name='未规划用例', repository=instance, is_default=True)
-        PlanModule.objects.create(name='未规划计划', repository=instance, is_default=True)
-        return instance
-
     class Meta:
         model = TestCaseRepository
         fields = ['name', 'description', 'project', 'workspace']

@@ -72,6 +72,7 @@ export default function ReviewsPage() {
   const [modules, setModules] = useState<ReviewModule[]>([]);
   const [reviews, setReviews] = useState<ReviewItem[]>(initialReviews);
   const [total, setTotal] = useState<number>(0);
+  const [allTotal, setAllTotal] = useState<number | undefined>(undefined);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>("");
   const [reviewEnums, setReviewEnums] = useState<Record<string, Record<string, { label: string; color: string }>>>({});
@@ -84,7 +85,8 @@ export default function ReviewsPage() {
   const [editOpen, setEditOpen] = useState<boolean>(false);
   const [editReview, setEditReview] = useState<any>(null);
 
-  const totalReviews = useMemo(() => modules.reduce((sum, m) => sum + (m.review_count || 0), 0), [modules]);
+  const modulesTotalReviews = useMemo(() => modules.reduce((sum, m) => sum + (m.review_count || 0), 0), [modules]);
+  const totalReviews = typeof allTotal === "number" ? allTotal : modulesTotalReviews;
 
   const onMouseDownResize = (e: React.MouseEvent<HTMLDivElement>) => {
     isDraggingRef.current = true;
@@ -125,6 +127,7 @@ export default function ReviewsPage() {
     } catch {}
     fetchModules();
     fetchEnums();
+    fetchAllReviewsTotal();
     const storageKey = `reviews_name_filter_${workspaceSlug}_${repositoryId}`;
     const savedName = sessionStorage.getItem(storageKey) || "";
     const initFilters = savedName ? { ...filters, name: savedName } : { ...filters };
@@ -142,11 +145,9 @@ export default function ReviewsPage() {
   }, [repositoryId, workspaceSlug, searchParams, router]);
 
   const fetchModules = async () => {
-    if (!workspaceSlug) return;
+    if (!workspaceSlug || !projectId) return;
     try {
-      const data: ReviewModule[] = await caseService.getReviewModules(workspaceSlug as string, {
-        repository_id: repositoryId,
-      });
+      const data: ReviewModule[] = await caseService.getReviewModules(workspaceSlug as string, projectId as string);
       setModules(Array.isArray(data) ? data : []);
     } catch (e) {
       // ignore error for placeholder page
@@ -159,6 +160,18 @@ export default function ReviewsPage() {
       const data = await caseService.getReviewEnums(workspaceSlug as string);
       setReviewEnums(data || {});
     } catch (e) {}
+  };
+
+  const fetchAllReviewsTotal = async () => {
+    if (!workspaceSlug) return;
+    try {
+      const params: any = { page: 1, page_size: 1 };
+      if (repositoryId) params.module__repository_id = repositoryId;
+      const res = await caseService.getReviews(workspaceSlug as string, params);
+      setAllTotal(Number(res?.count || 0));
+    } catch (e) {
+      setAllTotal(undefined);
+    }
   };
 
   const fetchReviews = async (
@@ -295,7 +308,7 @@ export default function ReviewsPage() {
       return;
     }
     try {
-      await caseService.createReviewModule(workspaceSlug as string, { name, repository: repositoryId });
+      await caseService.createReviewModule(workspaceSlug as string, { name, project: projectId });
       setCreatingOpen(false);
       setCreatingName("");
       await fetchModules();
@@ -337,6 +350,8 @@ export default function ReviewsPage() {
         try {
           await caseService.deleteReview(workspaceSlug as string, { ids: [review.id] });
           await fetchReviews(currentPage, pageSize, selectedModuleId, filters);
+          await fetchModules();
+          await fetchAllReviewsTotal();
           message.success("删除成功");
         } catch (e) {}
       },
@@ -789,6 +804,7 @@ export default function ReviewsPage() {
           onClose={() => {
             fetchReviews(currentPage, pageSize, selectedModuleId, filters);
             fetchModules();
+            fetchAllReviewsTotal();
             setCreateReviewOpen(false);
           }}
         />
@@ -800,6 +816,7 @@ export default function ReviewsPage() {
             onClose={() => {
               fetchReviews(currentPage, pageSize, selectedModuleId, filters);
               fetchModules();
+              fetchAllReviewsTotal();
               setEditOpen(false);
               setEditReview(null);
             }}

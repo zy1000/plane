@@ -259,19 +259,19 @@ class TestCaseVersion(BaseModel):
 
 class PlanModule(BaseModel):
     name = models.CharField(max_length=30)
-    repository = models.ForeignKey(TestCaseRepository, on_delete=models.CASCADE, verbose_name="TestCaseRepository",
-                                   related_name="plan_modules")
+    project = models.ForeignKey('db.Project', null=True, blank=True, on_delete=models.CASCADE,
+                                related_name="project_%(class)s")
     is_default = models.BooleanField(default=False)
 
     class Meta:
-        constraints = [
-            # Enforce uniqueness of project and name when project is not NULL and deleted_at is NULL
-            models.UniqueConstraint(
-                fields=["repository", "name"],
-                condition=Q(repository__isnull=False, deleted_at__isnull=True),
-                name="unique_plane_module_repository_name_when_not_deleted",
-            ),
-        ]
+        # constraints = [
+        #     # Enforce uniqueness of project and name when project is not NULL and deleted_at is NULL
+        #     models.UniqueConstraint(
+        #         fields=["repository", "name"],
+        #         condition=Q(repository__isnull=False, deleted_at__isnull=True),
+        #         name="unique_plane_module_repository_name_when_not_deleted",
+        #     ),
+        # ]
         db_table = "test_plan_modules"
         ordering = ("created_at",)
 
@@ -290,10 +290,10 @@ class TestPlan(BaseModel):
     result = models.CharField(max_length=30, default='-', verbose_name="TestPlan execute result")
     threshold = models.IntegerField(null=True, blank=True, default=100, verbose_name="TestPlan Threshold")
 
-    module = models.ForeignKey(PlanModule, null=True, on_delete=models.CASCADE, verbose_name="PlanModule",
+    module = models.ForeignKey(PlanModule, null=True, on_delete=models.SET_NULL, verbose_name="PlanModule",
                                related_name="plans")
-    repository = models.ForeignKey(TestCaseRepository, on_delete=models.CASCADE, verbose_name="TestCaseRepository",
-                                   related_name="plans")
+    project = models.ForeignKey('db.Project', null=True, blank=True, on_delete=models.CASCADE,
+                                related_name="project_%(class)s")
     cases = models.ManyToManyField(TestCase, blank=True, related_name="plans", through="PlanCase",
                                    through_fields=("plan", "case"))
 
@@ -305,14 +305,14 @@ class TestPlan(BaseModel):
         return self.get_state_display()
 
     class Meta:
-        constraints = [
-            # Enforce uniqueness of project and name when project is not NULL and deleted_at is NULL
-            models.UniqueConstraint(
-                fields=["repository", "name"],
-                condition=Q(repository__isnull=False, deleted_at__isnull=True),
-                name="unique_plan_repository_name_when_not_deleted",
-            ),
-        ]
+        # constraints = [
+        #     # Enforce uniqueness of project and name when project is not NULL and deleted_at is NULL
+        #     models.UniqueConstraint(
+        #         fields=["repository", "name"],
+        #         condition=Q(repository__isnull=False, deleted_at__isnull=True),
+        #         name="unique_plan_repository_name_when_not_deleted",
+        #     ),
+        # ]
         db_table = "test_plan"
         ordering = ("-created_at",)
 
@@ -395,19 +395,19 @@ class TestCaseComment(BaseModel):
 
 class CaseReviewModule(BaseModel):
     name = models.CharField(max_length=30)
-    repository = models.ForeignKey(TestCaseRepository, on_delete=models.CASCADE, verbose_name="CaseReviewModule",
-                                   related_name="review_modules")
+    project = models.ForeignKey('db.Project', null=True, blank=True, on_delete=models.CASCADE,
+                                related_name="project_%(class)s")
     is_default = models.BooleanField(default=False)
 
     class Meta:
-        constraints = [
-            # Enforce uniqueness of project and name when project is not NULL and deleted_at is NULL
-            models.UniqueConstraint(
-                fields=["repository", "name"],
-                condition=Q(repository__isnull=False, deleted_at__isnull=True),
-                name="unique_review_module_repository_name_when_not_deleted",
-            ),
-        ]
+        # constraints = [
+        #     # Enforce uniqueness of project and name when project is not NULL and deleted_at is NULL
+        #     models.UniqueConstraint(
+        #         fields=["repository", "name"],
+        #         condition=Q(repository__isnull=False, deleted_at__isnull=True),
+        #         name="unique_review_module_repository_name_when_not_deleted",
+        #     ),
+        # ]
         verbose_name = "CaseReviewModule"
         verbose_name_plural = "CaseReviewModule"
         db_table = "test_review_module"
@@ -434,17 +434,27 @@ class CaseReview(BaseModel):
     )
     mode = models.CharField(choices=ReviewMode.choices, default=ReviewMode.SINGLE, verbose_name="CaseReview Mode")
 
-    module = models.ForeignKey(CaseReviewModule, on_delete=models.CASCADE, verbose_name="CaseReviewModule",
+    module = models.ForeignKey(CaseReviewModule,null=True, on_delete=models.SET_NULL, verbose_name="CaseReviewModule",
                                related_name="reviews")
     started_at = models.DateField(null=True, blank=True, verbose_name="CaseReview Started Time")
     ended_at = models.DateField(null=True, blank=True, verbose_name="CaseReview Ended Time")
 
+    project = models.ForeignKey('db.Project', null=True, blank=True, on_delete=models.CASCADE,
+                                related_name="project_%(class)s")
     cases = models.ManyToManyField(TestCase, blank=True, related_name="reviews", through="CaseReviewThrough",
                                    through_fields=("review", "case"))
 
     class Meta:
         verbose_name = "CaseReview"
         verbose_name_plural = "CaseReview"
+        constraints = [
+            # Enforce uniqueness of project and name when project is not NULL and deleted_at is NULL
+            models.UniqueConstraint(
+                fields=["project", "name"],
+                condition=Q(project__isnull=False, deleted_at__isnull=True),
+                name="unique_review_project_name_when_not_deleted",
+            ),
+        ]
         db_table = "test_case_review"
         ordering = ("-created_at",)
 

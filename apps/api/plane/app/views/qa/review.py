@@ -20,7 +20,7 @@ class ReviewModuleAPIView(BaseAPIView):
     serializer_class = ReviewModuleListSerializer
     filterset_fields = {
         'name': ['exact', 'icontains', 'in'],
-        'repository_id': ['exact', 'in'],
+        'project_id': ['exact'],
     }
 
     def post(self, request, slug):
@@ -47,10 +47,10 @@ class CaseReviewAPIView(BaseAPIView):
     serializer_class = ReviewListSerializer
     filterset_fields = {
         'name': ['exact', 'icontains', 'in'],
+        'project_id': ['exact', 'in'],
         'module_id': ['exact', 'in'],
         'state': ['exact', 'in'],
         'mode': ['exact', 'in'],
-        'module__repository_id': ['exact']
     }
 
     def post(self, request, slug):

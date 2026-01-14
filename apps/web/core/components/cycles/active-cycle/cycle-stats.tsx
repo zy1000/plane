@@ -287,9 +287,8 @@ export const ActiveCycleStats = observer(function ActiveCycleStats(props: Active
             ) : testPlans.length > 0 ? (
               <div className="flex flex-col h-full w-full">
                 {/* 表格头部 */}
-                <div className="grid grid-cols-4 gap-2 px-2 py-1 text-xs font-medium text-custom-text-400 border-b border-custom-border-200 shrink-0 bg-custom-background-100">
+                <div className="grid grid-cols-3 gap-2 px-2 py-1 text-xs font-medium text-custom-text-400 border-b border-custom-border-200 shrink-0 bg-custom-background-100">
                   <div>测试计划</div>
-                  <div>用例库</div>
                   <div>状态</div>
                   <div>通过率</div>
                 </div>
@@ -302,7 +301,7 @@ export const ActiveCycleStats = observer(function ActiveCycleStats(props: Active
                   {testPlans.map((plan) => (
                     <div
                       key={plan.id}
-                      className="grid grid-cols-4 gap-2 px-2 py-2 text-sm hover:bg-custom-background-90 cursor-pointer"
+                      className="grid grid-cols-3 gap-2 px-2 py-2 text-sm hover:bg-custom-background-90 cursor-pointer"
                       onClick={() => {
                         const planId = plan?.id;
                         const repo = plan?.repository;
@@ -315,12 +314,6 @@ export const ActiveCycleStats = observer(function ActiveCycleStats(props: Active
                     >
                       <div className="truncate text-custom-text-100" title={plan.name}>
                         {plan.name}
-                      </div>
-                      <div
-                        className="truncate text-custom-text-300"
-                        title={(plan.repository?.name ?? plan.repository_name) || "未知"}
-                      >
-                        {(plan.repository?.name ?? plan.repository_name) || "未知"}
                       </div>
                       <div className="flex items-center">{renderState(plan.state)}</div>
                       <div className="flex items-center">{renderPassRate(plan.pass_rate)}</div>

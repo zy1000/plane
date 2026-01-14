@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams, useSearchParams, useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState, cloneElement } from "react";
+import { useEffect, useMemo, useRef, useState, cloneElement, type ReactNode } from "react";
 import { PageHead } from "@/components/core/page-title";
 import { Breadcrumbs } from "@plane/ui";
 import { Button } from "antd";
@@ -11,7 +11,7 @@ import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { Row, Col, Tree, Table, Space, Tag, message, Dropdown, Pagination } from "antd";
 import type { TableProps } from "antd";
 import type { TreeProps } from "antd";
-import { CaseModuleService } from "@/services/qa";
+import { CaseService } from "@/services/qa/case.service";
 import { PlanService } from "@/services/qa/plan.service";
 import { AppstoreOutlined, DeploymentUnitOutlined, DownOutlined } from "@ant-design/icons";
 import { FolderOpenDot } from "lucide-react";
@@ -49,12 +49,14 @@ export default function PlanCasesPage() {
   const Enums = globalEnums.Enums;
 
   const planService = useRef(new PlanService()).current;
-  const moduleService = useRef(new CaseModuleService()).current;
+  const caseService = useRef(new CaseService()).current;
 
-  const [modules, setModules] = useState<any[]>([]);
   const [expandedKeys, setExpandedKeys] = useState<string[] | undefined>(undefined);
   const [autoExpandParent, setAutoExpandParent] = useState<boolean>(true);
+  const [selectedTreeKey, setSelectedTreeKey] = useState<string>("root");
+  const [selectedRepositoryId, setSelectedRepositoryId] = useState<string | null>(null);
   const [selectedModuleId, setSelectedModuleId] = useState<string | null>(null);
+  const [planTree, setPlanTree] = useState<any | null>(null);
 
   const [cases, setCases] = useState<PlanCaseItem[]>([]);
   const [total, setTotal] = useState<number>(0);
@@ -75,39 +77,26 @@ export default function PlanCasesPage() {
   ];
 
   useEffect(() => {
-    if (!workspaceSlug || !repositoryId) return;
+    if (!workspaceSlug || !planId) return;
+    fetchPlanTree();
+    fetchCases(1, pageSize, undefined, undefined);
+    setSelectedTreeKey("root");
+    setSelectedRepositoryId(null);
+    setSelectedModuleId(null);
+  }, [workspaceSlug, planId]);
+
+  const fetchPlanTree = async () => {
+    if (!workspaceSlug || !planId) return;
     try {
-      if (repositoryIdFromUrl) sessionStorage.setItem("selectedRepositoryId", repositoryIdFromUrl);
+      const data = await caseService.getPlanCaseTree(String(workspaceSlug), { plan_id: String(planId) });
+      setPlanTree(data || null);
+      setExpandedKeys(undefined);
+      setAutoExpandParent(true);
     } catch {}
-    moduleService
-      .getCaseModules(workspaceSlug as string, { repository_id: repositoryId })
-      .then((data) => {
-        setModules(Array.isArray(data) ? data : []);
-        setExpandedKeys(undefined);
-        setAutoExpandParent(true);
-      })
-      .catch(() => {})
-      .finally(() => {});
-  }, [workspaceSlug, repositoryId, moduleService]);
+  };
 
-  useEffect(() => {
-    if (!repositoryId && workspaceSlug) {
-      const ws = String(workspaceSlug || "");
-      const current = `/${ws}/projects/${projectId}/testhub/plan-cases${searchParams.toString() ? `?${searchParams.toString()}` : ""}`;
-      try {
-        message.warning("未检测到用例库，请选择一个用例库后自动跳回");
-      } catch {}
-      router.push(`/${ws}/projects/${projectId}/testhub?redirect_to=${encodeURIComponent(current)}`);
-    }
-  }, [repositoryId, workspaceSlug, searchParams, router]);
-
-  useEffect(() => {
-    if (!workspaceSlug || !repositoryId || !planId) return;
-    fetchCases(1, pageSize, selectedModuleId || undefined);
-  }, [workspaceSlug, repositoryId, planId]);
-
-  const fetchCases = async (page: number, size: number, moduleId?: string) => {
-    if (!workspaceSlug || !repositoryId || !planId) return;
+  const fetchCases = async (page: number, size: number, repoId?: string, moduleId?: string) => {
+    if (!workspaceSlug || !planId) return;
     try {
       setLoading(true);
       setError(null);
@@ -116,6 +105,7 @@ export default function PlanCasesPage() {
         page_size: size,
         plan_id: planId,
       };
+      if (repoId) params["case__repository_id"] = repoId;
       if (moduleId) params["case__module_id"] = moduleId;
       const response: PlanCaseResponse = await planService.getPlanCases(workspaceSlug as string, params);
       setCases(response?.data || []);
@@ -129,15 +119,40 @@ export default function PlanCasesPage() {
     }
   };
 
-  const onSelect: TreeProps["onSelect"] = (selectedKeys) => {
-    const key = Array.isArray(selectedKeys) && selectedKeys.length > 0 ? String(selectedKeys[0]) : null;
-    setSelectedModuleId(key === "all" ? null : key);
-    fetchCases(1, pageSize, key === "all" ? undefined : key || undefined);
+  const onSelect: TreeProps["onSelect"] = (selectedKeys, info) => {
+    const key = Array.isArray(selectedKeys) && selectedKeys.length > 0 ? String(selectedKeys[0]) : "root";
+    setSelectedTreeKey(key);
+
+    const node: any = (info as any)?.node || {};
+    const kind = node?.kind as string | undefined;
+
+    if (!kind || kind === "root") {
+      setSelectedRepositoryId(null);
+      setSelectedModuleId(null);
+      fetchCases(1, pageSize, undefined, undefined);
+      return;
+    }
+
+    if (kind === "repository" || kind === "repository_modules_all") {
+      const repoId = node?.repositoryId ? String(node.repositoryId) : null;
+      setSelectedRepositoryId(repoId);
+      setSelectedModuleId(null);
+      fetchCases(1, pageSize, repoId || undefined, undefined);
+      return;
+    }
+
+    if (kind === "module") {
+      const repoId = node?.repositoryId ? String(node.repositoryId) : null;
+      const moduleId = node?.moduleId ? String(node.moduleId) : null;
+      setSelectedRepositoryId(repoId);
+      setSelectedModuleId(moduleId);
+      fetchCases(1, pageSize, repoId || undefined, moduleId || undefined);
+    }
   };
 
   const handlePaginationChange = (page: number, size?: number) => {
     const nextSize = size || pageSize;
-    fetchCases(page, nextSize, selectedModuleId || undefined);
+    fetchCases(page, nextSize, selectedRepositoryId || undefined, selectedModuleId || undefined);
   };
 
   const onExpand: TreeProps["onExpand"] = (keys) => {
@@ -145,19 +160,14 @@ export default function PlanCasesPage() {
     setAutoExpandParent(false);
   };
 
-  const getNodeCount = (m: any) => {
-    const c = m?.case_count ?? m?.count ?? m?.total ?? m?.cases_count;
-    return typeof c === "number" ? c : undefined;
-  };
-
-  const renderNodeTitle = (title: string, count?: number) => {
+  const renderNodeTitle = (title: string, icon: ReactNode, count?: number, fontMedium?: boolean) => {
     return (
       <div className="group flex items-center justify-between gap-2 w-full">
         <div className="flex items-center gap-2">
           <span className="inline-flex items-center justify-center w-5 h-5 text-custom-text-300">
-            <FolderOpenDot size={14} />
+            {icon}
           </span>
-          <span className="text-sm text-custom-text-200">{title}</span>
+          <span className={`text-sm text-custom-text-200 ${fontMedium ? "font-medium" : ""}`}>{title}</span>
         </div>
         <div className="flex items-center gap-2">
           {typeof count === "number" && <span className="text-xs text-custom-text-300">{count}</span>}
@@ -166,50 +176,62 @@ export default function PlanCasesPage() {
     );
   };
 
-  const buildTreeNodes = (list: any[]): any[] => {
-    if (!Array.isArray(list)) return [];
-    return list.map((node: any) => {
-      const nodeId = String(node?.id);
-      const childrenNodes = buildTreeNodes(node?.children || []);
-      return {
-        title: renderNodeTitle(node?.name ?? "-", getNodeCount(node)),
-        key: nodeId,
-        icon: <AppstoreOutlined />,
-        children: childrenNodes,
-      };
-    });
+  const buildTreeNodes = (node: any): any => {
+    const kind = String(node?.kind || "");
+    const id = String(node?.id || "");
+    const repositoryId = node?.repository_id ? String(node.repository_id) : null;
+
+    const key =
+      kind === "root"
+        ? "root"
+        : kind === "repository"
+          ? `repo:${id}`
+          : kind === "repository_modules_all"
+            ? `repo:${repositoryId}:all_modules`
+            : kind === "module"
+              ? `module:${id}`
+              : id;
+
+    const icon =
+      kind === "root" ? (
+        <AppstoreOutlined />
+      ) : kind === "repository" ? (
+        <DeploymentUnitOutlined />
+      ) : kind === "repository_modules_all" ? (
+        <AppstoreOutlined />
+      ) : (
+        <FolderOpenDot size={14} />
+      );
+
+    const children = Array.isArray(node?.children) ? node.children : [];
+
+    return {
+      title: renderNodeTitle(node?.name ?? "-", icon, undefined, kind === "root" || kind === "repository_modules_all"),
+      key,
+      kind,
+      repositoryId,
+      moduleId: kind === "module" ? id : null,
+      children: children.map((c: any) => buildTreeNodes(c)),
+    };
   };
 
   const treeData = useMemo(() => {
-    return [
-      {
-        title: (
-          <div className="group flex items-center justify-between gap-2 w-full">
-            <div className="flex items-center gap-2">
-              <span className="inline-flex items-center justify-center w-5 h-5 text-custom-text-300">
-                <AppstoreOutlined />
-              </span>
-              <span className="text-sm font-medium text-custom-text-200">全部模块</span>
-            </div>
-            <div className="flex items-center gap-2" />
-          </div>
-        ),
-        key: "all",
-        icon: <AppstoreOutlined />,
-        children: buildTreeNodes(modules),
-      },
-    ];
-  }, [modules]);
+    if (!planTree) return [];
+    return [buildTreeNodes(planTree)];
+  }, [planTree]);
 
   const onCancelRelation = async (record: PlanCaseItem) => {
     const caseId = record?.case?.id;
     if (!workspaceSlug || !planId || !caseId) return;
     try {
       await planService.cancelPlanCase(String(workspaceSlug), record.id);
-      const data = await moduleService.getCaseModules(String(workspaceSlug), { repository_id: repositoryId });
-      setModules(Array.isArray(data) ? data : []);
-      setExpandedKeys((Array.isArray(data) ? data : []).map((n: any) => n?.id).filter(Boolean));
-      await fetchCases(currentPage, pageSize, selectedModuleId || undefined);
+      await fetchPlanTree();
+      await fetchCases(
+        currentPage,
+        pageSize,
+        selectedRepositoryId || undefined,
+        selectedModuleId || undefined
+      );
     } catch (e) {
       setError("取消关联失败");
     }
@@ -361,7 +383,7 @@ export default function PlanCasesPage() {
               expandedKeys={expandedKeys}
               autoExpandParent={autoExpandParent}
               treeData={treeData}
-              selectedKeys={selectedModuleId ? [selectedModuleId] : ["all"]}
+              selectedKeys={treeData.length > 0 ? [selectedTreeKey] : []}
               className="py-2"
             />
           </Col>
@@ -463,7 +485,8 @@ export default function PlanCasesPage() {
         initialSelectedCaseIds={(cases || []).map((c) => c?.case?.id).filter((id): id is string => Boolean(id))}
         onClosed={() => {
           // 关闭后刷新列表，保留当前查询参数与筛选
-          fetchCases(currentPage, pageSize, selectedModuleId || undefined);
+          fetchPlanTree();
+          fetchCases(currentPage, pageSize, selectedRepositoryId || undefined, selectedModuleId || undefined);
         }}
       />
       <PlanIterationModal
@@ -473,7 +496,8 @@ export default function PlanCasesPage() {
         projectId={String(projectId)}
         planId={String(planId || "")}
         onClosed={() => {
-          fetchCases(currentPage, pageSize, selectedModuleId || undefined);
+          fetchPlanTree();
+          fetchCases(currentPage, pageSize, selectedRepositoryId || undefined, selectedModuleId || undefined);
         }}
       />
     </div>
