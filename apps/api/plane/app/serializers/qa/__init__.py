@@ -7,7 +7,8 @@ from rest_framework.serializers import ModelSerializer
 
 from plane.app.serializers import UserLiteSerializer, BaseSerializer, IssueAssigneeSerializer, ProjectDetailSerializer
 from plane.db.models import TestPlan, TestCaseRepository, User, TestCase, CaseLabel, CaseModule, FileAsset, Issue, \
-    CaseReviewModule, CaseReview, CaseReviewThrough, TestCaseComment, CaseReviewRecord, PlanModule, PlanCase
+    CaseReviewModule, CaseReview, CaseReviewThrough, TestCaseComment, CaseReviewRecord, PlanModule, PlanCase, \
+    TestCaseVersion
 from plane.utils.qa import re_approval_case
 
 from .plan import *
@@ -187,6 +188,7 @@ class CaseCreateUpdateSerializer(ModelSerializer):
             instance.labels.set(labels)
         if issues:
             instance.issues.set(issues)
+        TestCaseVersion.create_from_case(instance)
         return instance
 
     def update(self, instance, validated_data):
@@ -388,6 +390,10 @@ class ReviewCaseListSerializer(ModelSerializer):
     name = serializers.SerializerMethodField()
     priority = serializers.SerializerMethodField()
     assignees = serializers.SerializerMethodField()
+    code = serializers.CharField(source='case.code', read_only=True)
+    repository = serializers.CharField(source='case.repository.name', read_only=True)
+    module = serializers.CharField(source='case.module.name', read_only=True)
+
 
     def get_name(self, obj: CaseReviewThrough):
         return obj.case.name
@@ -400,7 +406,7 @@ class ReviewCaseListSerializer(ModelSerializer):
 
     class Meta:
         model = CaseReviewThrough
-        fields = ['id', 'name', 'priority', 'assignees', 'result', 'created_by', 'case_id']
+        fields = ['id', 'name', 'priority', 'assignees', 'result', 'created_by', 'case_id','code','repository','module']
 
 
 class ReviewCaseRecordsSerializer(ModelSerializer):

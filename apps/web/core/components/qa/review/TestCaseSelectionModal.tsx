@@ -162,6 +162,7 @@ export default function TestCaseSelectionModal({
 
   const caseColumns: TableProps<TTestCase>["columns"] = [
     { title: "名称", dataIndex: "name", key: "name", render: (v) => <span className={styles.nameCell}>{v}</span> },
+    { title: "用例库", dataIndex: "repository_name", key: "repository_name", render: (m) => m || "-", width: 160 },
     { title: "模块", dataIndex: "module", key: "module", render: (m) => m?.name || "-", width: 160 },
     {
       title: "类型",
@@ -363,9 +364,6 @@ export default function TestCaseSelectionModal({
       <div className={styles.modalBody}>
         <div className={styles.content}>
           <div className={styles.leftPane}>
-            <div className="px-2 py-2 flex items-center justify-between">
-              <span className="text-sm text-custom-text-300">用例树</span>
-            </div>
             <div className="px-2">
               <Tree
                 showLine={false}

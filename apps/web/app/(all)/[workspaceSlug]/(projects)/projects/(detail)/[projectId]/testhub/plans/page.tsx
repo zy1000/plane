@@ -358,23 +358,26 @@ export default function TestPlanDetailPage() {
 
   const columns: TableProps<TestPlan>["columns"] = [
     {
-      title: "名称",
+      title: "计划名称",
       dataIndex: "name",
       key: "name",
       ...getColumnSearchProps("name"),
       render: (_name: string, record: TestPlan) => (
         <Button
           type="link"
-          className="!p-0"
+          className="!p-0 !text-custom-text-200 hover:!text-custom-text-100"
           onClick={() => {
             if (!record?.id) return;
+            try {
+              sessionStorage.setItem("selectedPlanName", record?.name || "");
+            } catch {}
             const ws = (workspaceSlug as string) || "";
             const pid = (projectId as string) || "";
             const repoQuery = repositoryId ? `&repositoryId=${encodeURIComponent(String(repositoryId))}` : "";
             router.push(`/${ws}/projects/${pid}/testhub/plan-cases?planId=${record.id}${repoQuery}`);
           }}
         >
-          <span className="truncate">{record.name}</span>
+          <span className="truncate text-inherit">{record.name}</span>
         </Button>
       ),
     },
@@ -542,6 +545,11 @@ export default function TestPlanDetailPage() {
                 className="relative flex flex-col h-full border-r border-custom-border-200 min-w-[200px] max-w-[300px]"
                 style={{ width: leftWidth }}
               >
+                <div
+                  onMouseDown={onMouseDownResize}
+                  className="absolute right-0 top-0 h-full w-2"
+                  style={{ cursor: "col-resize", zIndex: 10 }}
+                />
                 <div className="p-2 flex-shrink-0">
                   <Space>
                     <Input
@@ -550,9 +558,13 @@ export default function TestPlanDetailPage() {
                       value={searchModule}
                       onChange={(e) => setSearchModule(e.target.value)}
                     />
-                    <Button type="primary" onClick={() => setShowCreateModal(true)}>
-                      新建
-                    </Button>
+                    <button
+                      type="button"
+                      onClick={() => setShowCreateModal(true)}
+                      className="text-white bg-custom-primary-100 hover:bg-custom-primary-200 focus:text-custom-brand-40 focus:bg-custom-primary-200 px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center"
+                    >
+                      新建计划
+                    </button>
                   </Space>
                 </div>
                 <div className="flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm">

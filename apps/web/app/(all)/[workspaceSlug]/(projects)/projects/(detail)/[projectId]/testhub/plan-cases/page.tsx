@@ -20,6 +20,7 @@ import { formatDateTime, globalEnums } from "../util";
 type TLabel = { id?: string; name?: string } | string;
 type TestCase = {
   id: string;
+  code?: string;
   name: string;
   remark?: string;
   state?: number;
@@ -29,6 +30,8 @@ type TestCase = {
   updated_at?: string;
   repository?: string;
   labels?: TLabel[];
+  module?: string;
+  repository_name?: string;
 };
 type PlanCaseItem = {
   id: string;
@@ -46,6 +49,7 @@ export default function PlanCasesPage() {
   const repositoryId =
     repositoryIdFromUrl || (typeof window !== "undefined" ? sessionStorage.getItem("selectedRepositoryId") : null);
   const repositoryName = typeof window !== "undefined" ? sessionStorage.getItem("selectedRepositoryName") : "";
+  const planName = typeof window !== "undefined" ? sessionStorage.getItem("selectedPlanName") : "";
   const Enums = globalEnums.Enums;
 
   const planService = useRef(new PlanService()).current;
@@ -160,6 +164,41 @@ export default function PlanCasesPage() {
     setAutoExpandParent(false);
   };
 
+  const [leftWidth, setLeftWidth] = useState<number>(280);
+  const isDraggingRef = useRef<boolean>(false);
+  const startXRef = useRef<number>(0);
+  const startWidthRef = useRef<number>(0);
+  const onMouseDownResize = (e: React.MouseEvent<HTMLDivElement>) => {
+    isDraggingRef.current = true;
+    startXRef.current = e.clientX;
+    startWidthRef.current = leftWidth;
+    window.addEventListener("mousemove", onMouseMoveResize as any);
+    window.addEventListener("mouseup", onMouseUpResize as any);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    e.preventDefault();
+  };
+  const onMouseMoveResize = (e: MouseEvent) => {
+    if (!isDraggingRef.current) return;
+    const next = Math.min(320, Math.max(200, startWidthRef.current + (e.clientX - startXRef.current)));
+    setLeftWidth(next);
+  };
+  const onMouseUpResize = () => {
+    isDraggingRef.current = false;
+    window.removeEventListener("mousemove", onMouseMoveResize as any);
+    window.removeEventListener("mouseup", onMouseUpResize as any);
+    document.body.style.cursor = "auto";
+    document.body.style.userSelect = "auto";
+  };
+
+  useEffect(
+    () => () => {
+      window.removeEventListener("mousemove", onMouseMoveResize as any);
+      window.removeEventListener("mouseup", onMouseUpResize as any);
+    },
+    []
+  );
+
   const renderNodeTitle = (title: string, icon: ReactNode, count?: number, fontMedium?: boolean) => {
     return (
       <div className="group flex items-center justify-between gap-2 w-full">
@@ -256,28 +295,70 @@ export default function PlanCasesPage() {
 
   const columns: TableProps<PlanCaseItem>["columns"] = [
     {
-      title: "名称",
+      title: "用例编号",
+      dataIndex: "code",
+      key: "code",
+      width: 120,
+      render: (_: any, record: PlanCaseItem) => {
+        const code = record?.case?.code;
+        const cid = record?.case?.id;
+        return (
+          <span className="block truncate" title={code || ""}>
+            <Button
+            type="text"
+            className="p-0 h-auto text-custom-text-200 hover:text-custom-text-100 hover:bg-transparent"
+            onClick={() =>
+              router.push(
+                `/${workspaceSlug}/projects/${projectId}/testhub/test-execution?case_id=${encodeURIComponent(String(cid))}&plan_id=${encodeURIComponent(String(planId || ""))}`
+              )
+            }
+          >
+            {code}
+          </Button>
+          </span>
+        );
+      },
+    },
+    {
+      title: "用例名称",
       dataIndex: "name",
+      width: 240,
       key: "name",
       render: (_: any, record: PlanCaseItem) => {
         const name = record?.case?.name ?? "-";
         const cid = record?.case?.id;
         if (!cid) return name;
-        const repoQuery = repositoryId ? `&repositoryId=${encodeURIComponent(String(repositoryId))}` : "";
 
         return (
           <Button
-            type="link"
+            type="text"
+            className="p-0 h-auto text-custom-text-200 hover:text-custom-text-100 hover:bg-transparent"
             onClick={() =>
               router.push(
-                `/${workspaceSlug}/projects/${projectId}/testhub/test-execution?case_id=${encodeURIComponent(String(cid))}&plan_id=${encodeURIComponent(String(planId || ""))}${repoQuery}`
+                `/${workspaceSlug}/projects/${projectId}/testhub/test-execution?case_id=${encodeURIComponent(String(cid))}&plan_id=${encodeURIComponent(String(planId || ""))}`
               )
             }
           >
-            {name}
+         <span className="block max-w-[300px] truncate text-inherit" title={name || ""}>
+            {name || "-"}
+          </span>
           </Button>
         );
       },
+    },
+        {
+      title: "用例库",
+      dataIndex: "repository_name",
+      key: "repository_name",
+      render: (_: any, record: PlanCaseItem) =>
+        record?.case?.repository_name ?? "-",
+    },
+        {
+      title: "模块",
+      dataIndex: "module",
+      key: "module_name",
+      render: (_: any, record: PlanCaseItem) =>
+        record?.case?.module ?? "-",
     },
     {
       title: "类型",
@@ -319,6 +400,7 @@ export default function PlanCasesPage() {
     {
       title: "操作",
       key: "actions",
+      width: 100,
       render: (_: any, record: PlanCaseItem) => (
         <Space>
           <Button
@@ -327,9 +409,8 @@ export default function PlanCasesPage() {
             onClick={() => {
               const cid = record?.case?.id;
               if (!cid) return;
-              const repoQuery = repositoryId ? `&repositoryId=${encodeURIComponent(String(repositoryId))}` : "";
               router.push(
-                `/${workspaceSlug}/projects/${projectId}/testhub/test-execution?case_id=${encodeURIComponent(String(cid))}&plan_id=${encodeURIComponent(String(planId || ""))}${repoQuery}`
+                `/${workspaceSlug}/projects/${projectId}/testhub/test-execution?case_id=${encodeURIComponent(String(cid))}&plan_id=${encodeURIComponent(String(planId || ""))}`
               );
             }}
           >
@@ -344,54 +425,35 @@ export default function PlanCasesPage() {
   ];
 
   return (
-    <div className="w-full h-full flex flex-col">
+    <div className="h-full w-full">
       <PageHead title="计划用例" description={repositoryName || ""} />
-      <div className="px-4 py-3 flex items-center justify-between">
-        <div>
-          <Breadcrumbs>
-            <Breadcrumbs.Item
-              component={
-                <BreadcrumbLink href={`/${workspaceSlug}/projects/${projectId}/testhub/plans`} label="测试计划" />
-              }
+      <div className="flex h-full w-full flex-col">
+        <div className="flex-1 min-h-0 flex overflow-hidden">
+          <div
+            className="relative h-full min-h-0 border-r border-custom-border-200 overflow-y-auto flex-shrink-0"
+            style={{ width: leftWidth, minWidth: 200, maxWidth: 320 }}
+          >
+            <div
+              onMouseDown={onMouseDownResize}
+              className="absolute right-0 top-0 h-full w-2"
+              style={{ cursor: "col-resize", zIndex: 10 }}
             />
-            <Breadcrumbs.Item component={<BreadcrumbLink label="测试计划详情" isLast />} />
-          </Breadcrumbs>
-        </div>
-        <div>
-          <Dropdown.Button
-            type="primary"
-            icon={<DownOutlined />}
-            menu={{
-              items: dropdownItems,
-              onClick: ({ key }) => {
-                if (key === "by_work_item") {
-                  setIsPlanModalOpen(true);
-                } else if (key === "by_iteration") {
-                  setIsIterationModalOpen(true);
-                } else if (key === "by_release") {
-                  message.info("通过发布规划暂未实现");
+            <style
+              dangerouslySetInnerHTML={{
+                __html: `
+                .custom-tree-indent .ant-tree-indent-unit {
+                  width: 10px !important;
                 }
-              },
-            }}
-            onClick={() => setIsPlanModalOpen(true)}
-            disabled={!repositoryId}
-            style={{ backgroundColor: "#6897f7", borderColor: "#6897f7" }}
-            buttonsRender={(buttons) => [
-              cloneElement(buttons[0] as any, { style: { backgroundColor: "#6897f7", borderColor: "#6897f7" } }),
-              cloneElement(buttons[1] as any, { style: { backgroundColor: "#6897f7", borderColor: "#6897f7" } }),
-            ]}
-          >
-            规划用例
-          </Dropdown.Button>
-        </div>
-      </div>
-      <div className="flex-1 overflow-hidden">
-        <Row className="h-full">
-          <Col
-            className="relative h-full min-h-0 border-r border-custom-border-200 overflow-y-auto"
-            flex="0 0 auto"
-            style={{ width: 280, minWidth: 200, maxWidth: 320 }}
-          >
+                .custom-tree-indent .ant-tree-switcher {
+                  width: 14px !important;
+                  margin-inline-end: 2px !important;
+                }
+                .custom-tree-indent .ant-tree-node-content-wrapper {
+                  padding-inline: 4px !important;
+                }
+              `,
+              }}
+            />
             <Tree
               showLine={false}
               defaultExpandAll
@@ -401,58 +463,106 @@ export default function PlanCasesPage() {
               autoExpandParent={autoExpandParent}
               treeData={treeData}
               selectedKeys={treeData.length > 0 ? [selectedTreeKey] : []}
-              className="py-2"
+              className="py-2 pl-2 custom-tree-indent"
             />
-          </Col>
-          <Col flex="auto" className="h-full min-h-0 overflow-hidden">
-            {loading && (
-              <div className="flex items-center justify-center py-12">
-                <div className="text-custom-text-300">加载中...</div>
-              </div>
-            )}
-            {error && (
-              <div className="bg-red-50 border border-red-200 rounded-md p-4 mb-4">
-                <div className="text-red-800 text-sm">{error}</div>
-              </div>
-            )}
-            {!loading && !error && (
-              <div className="flex flex-col h-full overflow-hidden">
-                <div
-                  className={`testhub-plan-cases-table-scroll flex-1 relative px-0 overflow-y-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar]:block [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-[rgb(var(--color-scrollbar))] [&::-webkit-scrollbar-thumb]:rounded-full ${
-                    pageSize === 100 ? "testhub-plan-cases-scrollbar-strong" : ""
-                  }`}
-                >
-                  <Table
-                    dataSource={cases}
-                    columns={columns}
-                    rowKey={(row) => row?.case?.id || row?.id}
-                    bordered={true}
-                    pagination={false}
-                  />
+          </div>
+          <div className="flex-1 h-full min-h-0 overflow-hidden min-w-0">
+            <div className="flex h-full flex-col min-w-0">
+              <div className="px-0 py-3 flex items-center justify-between flex-shrink-0">
+                <div>
+                  <Breadcrumbs>
+                    <Breadcrumbs.Item
+                      component={
+                        <BreadcrumbLink href={`/${workspaceSlug}/projects/${projectId}/testhub/plans`} label="测试计划" />
+                      }
+                    />
+                    <Breadcrumbs.Item component={<BreadcrumbLink label="测试计划详情" isLast />} />
+                    {planName && <Breadcrumbs.Item component={<BreadcrumbLink label={planName} isLast />} />}
+                  </Breadcrumbs>
                 </div>
-                <div className="flex-shrink-0 border-t border-custom-border-200 px-4 py-3 bg-custom-background-100 flex items-center justify-between">
-                  <div className="flex items-center gap-4 text-sm">
-                    <span className="text-custom-text-300">
-                      {total > 0
-                        ? `第 ${(currentPage - 1) * pageSize + 1}-${Math.min(currentPage * pageSize, total)} 条，共 ${total} 条`
-                        : ""}
-                    </span>
+                <div>
+                  <Dropdown.Button
+                    type="primary"
+                    icon={<DownOutlined />}
+                    menu={{
+                      items: dropdownItems,
+                      onClick: ({ key }) => {
+                        if (key === "by_work_item") {
+                          setIsPlanModalOpen(true);
+                        } else if (key === "by_iteration") {
+                          setIsIterationModalOpen(true);
+                        } else if (key === "by_release") {
+                          message.info("通过发布规划暂未实现");
+                        }
+                      },
+                    }}
+                    onClick={() => setIsPlanModalOpen(true)}
+                    disabled={!repositoryId}
+                    buttonsRender={(buttons) => [
+                      cloneElement(buttons[0] as any, {
+                        className:
+                          "text-white bg-custom-primary-100 hover:bg-custom-primary-200 focus:text-custom-brand-40 focus:bg-custom-primary-200 px-3 py-0.5 font-medium text-xs rounded-l flex items-center gap-1.5 whitespace-nowrap transition-all justify-center disabled:opacity-50 disabled:cursor-not-allowed",
+                      }),
+                      cloneElement(buttons[1] as any, {
+                        className:
+                          "text-white bg-custom-primary-100 hover:bg-custom-primary-200 focus:text-custom-brand-40 focus:bg-custom-primary-200 px-2 py-0.5 font-medium text-xs rounded-r flex items-center justify-center transition-all disabled:opacity-50 disabled:cursor-not-allowed",
+                      }),
+                    ]}
+                  >
+                    规划用例
+                  </Dropdown.Button>
+                </div>
+              </div>
+              <div className="flex-1 min-h-0 overflow-hidden px-0 pb-3 min-w-0">
+                {loading && (
+                  <div className="flex items-center justify-center py-12">
+                    <div className="text-custom-text-300">加载中...</div>
                   </div>
-                  <Pagination
-                    current={currentPage}
-                    pageSize={pageSize}
-                    total={total}
-                    showSizeChanger
-                    showQuickJumper
-                    pageSizeOptions={["10", "20", "50", "100"]}
-                    onChange={handlePaginationChange}
-                    onShowSizeChange={handlePaginationChange}
-                    size="small"
-                  />
-                </div>
-                <style
-                  dangerouslySetInnerHTML={{
-                    __html: `
+                )}
+                {error && (
+                  <div className="bg-red-50 border border-red-200 rounded-md p-4 mb-4">
+                    <div className="text-red-800 text-sm">{error}</div>
+                  </div>
+                )}
+                {!loading && !error && (
+                  <div className="flex flex-col h-full overflow-hidden min-w-0">
+                    <div
+                      className={`testhub-plan-cases-table-scroll flex-1 relative px-0 overflow-y-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar]:block [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-[rgb(var(--color-scrollbar))] [&::-webkit-scrollbar-thumb]:rounded-full ${
+                        pageSize === 100 ? "testhub-plan-cases-scrollbar-strong" : ""
+                      }`}
+                    >
+                      <Table
+                        dataSource={cases}
+                        columns={columns}
+                        rowKey={(row) => row?.case?.id || row?.id}
+                        bordered={false}
+                        pagination={false}
+                        scroll={{ x: "max-content" }}
+                      />
+                    </div>
+                    <div className="flex-shrink-0 border-t border-custom-border-200 px-0 py-3 bg-custom-background-100 flex items-center justify-between">
+                      <div className="flex items-center gap-4 text-sm">
+                        <span className="text-custom-text-300">
+                          {total > 0
+                            ? `第 ${(currentPage - 1) * pageSize + 1}-${Math.min(currentPage * pageSize, total)} 条，共 ${total} 条`
+                            : ""}
+                        </span>
+                      </div>
+                      <Pagination
+                        current={currentPage}
+                        pageSize={pageSize}
+                        total={total}
+                        showSizeChanger
+                        showQuickJumper
+                        pageSizeOptions={["10", "20", "50", "100"]}
+                        onChange={handlePaginationChange}
+                        onShowSizeChange={handlePaginationChange}
+                        size="small"
+                      />
+                    </div>
+                    <style
+                      dangerouslySetInnerHTML={{
+                        __html: `
                   .testhub-plan-cases-table-scroll{
                     scrollbar-gutter: stable both-edges;
                   }
@@ -461,7 +571,7 @@ export default function PlanCasesPage() {
                     position: sticky;
                     top: 0;
                     z-index: 5;
-                    background: rgb(var(--color-background-100));
+                    background: #f5f5f5;
                   }
 
                   .testhub-plan-cases-table-scroll.testhub-plan-cases-scrollbar-strong{
@@ -485,12 +595,14 @@ export default function PlanCasesPage() {
                     background: transparent;
                   }
                 `,
-                  }}
-                />
+                      }}
+                    />
+                  </div>
+                )}
               </div>
-            )}
-          </Col>
-        </Row>
+            </div>
+          </div>
+        </div>
       </div>
       <PlanCasesModal
         isOpen={isPlanModalOpen}

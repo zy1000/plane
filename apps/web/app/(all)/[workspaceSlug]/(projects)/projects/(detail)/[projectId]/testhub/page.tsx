@@ -48,7 +48,7 @@ export default function TestManagementHomePage() {
     const redirectTo = searchParams.get("redirect_to");
     const ws = String(workspaceSlug || "");
     const pid = String(projectId || "");
-    let target = redirectTo ? decodeURIComponent(redirectTo) : `/${ws}/projects/${pid}/testhub/plans`;
+    let target = redirectTo ? decodeURIComponent(redirectTo) : `/${ws}/projects/${pid}/testhub/cases`;
     target = target.includes("?")
       ? `${target}&repositoryId=${encodeURIComponent(String(repositoryIdFromUrl))}`
       : `${target}?repositoryId=${encodeURIComponent(String(repositoryIdFromUrl))}`;
@@ -311,17 +311,17 @@ export default function TestManagementHomePage() {
             <>
               <div>
                 <div className="flex items-center justify-between gap-4 border-b border-custom-border-200 px-4 py-3 sm:px-5">
-                  <div>测试用例库</div>
-                  <Button
-                    type="primary"
-                    icon={<PlusOutlined />}
+                  <div></div>
+                  <button
+                    type="button"
                     onClick={() => {
                       setEditing(null);
                       setModalOpen(true);
                     }}
+                    className="text-white bg-custom-primary-100 hover:bg-custom-primary-200 focus:text-custom-brand-40 focus:bg-custom-primary-200 px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    新增
-                  </Button>
+                    新建用例库
+                  </button>
                 </div>
                 <Table
                   dataSource={repositories}

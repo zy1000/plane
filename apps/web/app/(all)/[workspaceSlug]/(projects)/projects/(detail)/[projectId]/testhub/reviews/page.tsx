@@ -412,13 +412,17 @@ export default function ReviewsPage() {
       render: (name: string, record: ReviewItem) => (
         <Button
           type="link"
-          onClick={() =>
+          className="!text-custom-text-200 hover:!text-custom-text-100"
+          onClick={() => {
+            try {
+              sessionStorage.setItem("selectedReviewName", name || "");
+            } catch {}
             router.push(
               `/${workspaceSlug}/projects/${projectId}/testhub/caseManagementReviewDetail?review_id=${record.id}`
-            )
-          }
+            );
+          }}
         >
-          {name}
+          <span className="text-inherit">{name}</span>
         </Button>
       ),
     },
@@ -612,9 +616,13 @@ export default function ReviewsPage() {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
-              <Button type="primary" onClick={() => setCreateReviewOpen(true)}>
-                新建
-              </Button>
+              <button
+                type="button"
+                onClick={() => setCreateReviewOpen(true)}
+                className="text-white bg-custom-primary-100 hover:bg-custom-primary-200 focus:text-custom-brand-40 focus:bg-custom-primary-200 px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center"
+              >
+                新建评审
+              </button>
             </Space>
           </div>
           <div className={`${styles.treeRoot} flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm`}>

@@ -144,13 +144,15 @@ class CaseReviewView(BaseViewSet):
             return Response({"error": f"TestCase not found: {missing_str}"}, status=status.HTTP_404_NOT_FOUND)
 
         existing_case_ids = set(
-            CaseReviewThrough.objects.filter(review=review, case_id__in=list(found_case_ids)).values_list('case_id', flat=True)
+            CaseReviewThrough.objects.filter(review=review, case_id__in=list(found_case_ids)).values_list('case_id',
+                                                                                                          flat=True)
         )
 
         to_create_case_ids = found_case_ids - existing_case_ids
         if to_create_case_ids:
             CaseReviewThrough.objects.bulk_create(
-                [CaseReviewThrough(review=review, case_id=case_id) for case_id in to_create_case_ids],
+                [CaseReviewThrough(review=review, case_id=case_id, created_by=request.user) for case_id in
+                 to_create_case_ids],
                 batch_size=1000,
             )
 
@@ -159,6 +161,10 @@ class CaseReviewView(BaseViewSet):
     @action(detail=False, methods=['get'], url_path='case-list')
     def case_list(self, request, slug):
         query = CaseReviewThrough.objects.filter(review_id=request.query_params['review_id'])
+        if project_id := request.query_params.get('project_id'):
+            query = query.filter(case__repository__project_id=project_id)
+        if repository_id := request.query_params.get('repository_id'):
+            query = query.filter(case__repository_id=repository_id)
         if name := request.query_params.get('name__icontains'):
             query = query.filter(case__name__icontains=name)
         module_ids = request.query_params.getlist('module_id') or request.query_params.getlist('module_ids')

@@ -1,8 +1,7 @@
-import random
-import string
 from enum import IntEnum
 
 from django.core.validators import RegexValidator
+from django.db import IntegrityError
 from django.db import transaction
 from django.db import models
 from django.db.models import Q
@@ -11,20 +10,22 @@ from django.conf import settings
 
 from . import BaseModel, Issue
 
-def generate_case_code():
-    """
-     生成一个随机字符串，满足正则: ^[A-Za-z0-9]{1,5}-[A-Za-z0-9]{1,5}$
-     格式：前缀(1-5位)-后缀(1-5位)，仅包含字母和数字
-     """
-    # 字符集：大小写字母 + 数字
-    chars = string.ascii_letters + string.digits  # a-z, A-Z, 0-9
-    # 随机生成前缀长度 (1~5)
-    prefix_length = random.randint(1, 5)
-    prefix = ''.join(random.choices(chars, k=prefix_length))
-    # 随机生成后缀长度 (1~5)
-    suffix_length = random.randint(1, 5)
-    suffix = ''.join(random.choices(chars, k=suffix_length))
-    return f"{prefix}-{suffix}"
+def generate_case_code(*, project_id, project_identifier, repository_id=None):
+    prefix = f"{project_identifier}-"
+
+    queryset = TestCase.objects.filter(deleted_at__isnull=True)
+    if project_id:
+        queryset = queryset.filter(repository__project_id=project_id)
+    elif repository_id:
+        queryset = queryset.filter(repository_id=repository_id)
+
+    max_number = 0
+    for code in queryset.filter(code__startswith=prefix).values_list("code", flat=True):
+        suffix = code[len(prefix) :]
+        if suffix.isdigit():
+            max_number = max(max_number, int(suffix))
+
+    return f"{project_identifier}-{max_number + 1}"
 
 
 class TestCaseRepository(BaseModel):
@@ -155,9 +156,34 @@ class TestCase(BaseModel):
         return crr.result if crr else CaseReviewThrough.Result.NOT_START
 
     def save(self, *args, **kwargs):
-        if not self.code:
-            self.code = generate_case_code()
-        super().save(*args, **kwargs)
+        if self.code:
+            return super().save(*args, **kwargs)
+
+        project_id = None
+        project_identifier = None
+        if self.repository_id:
+            repository = self.repository
+            if repository and repository.project_id:
+                project_id = repository.project_id
+                project_identifier = repository.project.identifier
+
+        if not project_identifier:
+            project_identifier = "NA"
+
+        max_attempts = 5
+        for attempt in range(max_attempts):
+            try:
+                with transaction.atomic():
+                    self.code = generate_case_code(
+                        project_id=project_id,
+                        project_identifier=project_identifier,
+                        repository_id=self.repository_id,
+                    )
+                    return super().save(*args, **kwargs)
+            except IntegrityError:
+                if attempt == max_attempts - 1:
+                    raise
+                self.code = ""
 
     class Meta:
         constraints = [
@@ -203,7 +229,7 @@ class TestCaseVersion(BaseModel):
             .aggregate(max_version=Max("version"))
             .get("max_version")
         )
-        next_version = 1 if latest is None else latest + 1
+        next_version = 0 if latest is None else latest + 1
 
         label_ids = list(map(str, case.labels.values_list("id", flat=True)))
         issue_ids = list(map(str, case.issues.values_list("id", flat=True)))

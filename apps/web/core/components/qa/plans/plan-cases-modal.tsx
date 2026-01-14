@@ -319,6 +319,20 @@ export const PlanCasesModal: React.FC<Props> = ({
       },
     },
     {
+      title: "用例库",
+      dataIndex: "repository_name",
+      key: "repository_name",
+      width: 100,
+      render: (v: string) => (v ? v : "-")
+    },
+    {
+      title: "模块",
+      dataIndex: "module",
+      key: "module",
+      width: 100,
+      render: (v: any) => (v && v.name ? v.name : "-")
+    },
+    {
       title: "类型",
       dataIndex: "type",
       width: 100,
@@ -338,13 +352,7 @@ export const PlanCasesModal: React.FC<Props> = ({
         return <Tag>{label}</Tag>;
       },
     },
-    {
-      title: "更新时间",
-      dataIndex: "updated_at",
-      width: 180,
-      key: "updated_at",
-      render: (v: string) => (v ? formatDateTime(v) : "-"),
-    },
+
   ];
 
   return (
