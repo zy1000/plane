@@ -293,9 +293,7 @@ export const ActiveCycleStats = observer(function ActiveCycleStats(props: Active
             ) : testPlans.length > 0 ? (
               <div className="flex flex-col h-full w-full">
                 {/* 表格头部 */}
-                <div className="grid grid-cols-4 gap-2 px-2 py-1 text-xs font-medium text-placeholder border-b border-subtle shrink-0 bg-surface-1">
-                  <div>测试计划</div>
-                  <div>用例库</div>
+                <div className="grid grid-cols-3 gap-2 px-2 py-1 text-xs font-medium text-placeholder border-b border-subtle shrink-0 bg-surface-1">                  <div>测试计划</div>
                   <div>状态</div>
                   <div>通过率</div>
                 </div>
@@ -308,8 +306,7 @@ export const ActiveCycleStats = observer(function ActiveCycleStats(props: Active
                   {testPlans.map((plan) => (
                     <div
                       key={plan.id}
-                      className="grid grid-cols-4 gap-2 px-2 py-2 text-sm hover:bg-surface-2 cursor-pointer"
-                      onClick={() => {
+                      className="grid grid-cols-3 gap-2 px-2 py-2 text-sm hover:bg-surface-2 cursor-pointer"                      onClick={() => {
                         const planId = plan?.id;
                         const repo = plan?.repository;
                         const repositoryId = typeof repo === "string" ? repo : repo?.id;
@@ -321,12 +318,6 @@ export const ActiveCycleStats = observer(function ActiveCycleStats(props: Active
                     >
                       <div className="truncate text-primary" title={plan.name}>
                         {plan.name}
-                      </div>
-                      <div
-                        className="truncate text-tertiary"
-                        title={(plan.repository?.name ?? plan.repository_name) || "未知"}
-                      >
-                        {(plan.repository?.name ?? plan.repository_name) || "未知"}
                       </div>
                       <div className="flex items-center">{renderState(plan.state)}</div>
                       <div className="flex items-center">{renderPassRate(plan.pass_rate)}</div>

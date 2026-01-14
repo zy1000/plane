@@ -13,6 +13,6 @@ class TestPlanFilter(filters.FilterSet):
             'name': ['exact', 'icontains', 'in'],
             'id': ['exact', 'in'],
             'state': ['in'],
-            'repository_id': ['exact'],
+            'project_id': ['exact'],
             'module_id': ['exact'],
         }

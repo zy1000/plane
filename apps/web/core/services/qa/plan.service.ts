@@ -8,6 +8,15 @@ export class PlanService extends APIService {
     super(API_BASE_URL);
   }
 
+  async getPlanModulesCount(workspaceSlug: string, projectId: string): Promise<any> {
+    const params = { project_id: projectId };
+    return this.get(`/api/workspaces/${workspaceSlug}/test/plan/module/count/`, { params })
+      .then((response) => response?.data ?? {})
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
   async getPlans(workspaceSlug: string, queries?: any): Promise<any> {
     return this.get(`/api/workspaces/${workspaceSlug}/test/plane/`, {
       params: queries,
@@ -34,8 +43,17 @@ export class PlanService extends APIService {
       });
   }
 
-  async getPlanModules(workspaceSlug: string, queries?: any): Promise<any[]> {
-    return this.get(`/api/workspaces/${workspaceSlug}/test/plan/module/`, { params: queries })
+  async addPlanCases(workspaceSlug: string, data: { plan_id: string; case_ids: string[] }): Promise<any> {
+    return this.post(`/api/workspaces/${workspaceSlug}/test/plan/add-cases/`, data)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async getPlanModules(workspaceSlug: string, projectId: string, queries?: any): Promise<any[]> {
+    const params = { project_id: projectId, ...(queries || {}) };
+    return this.get(`/api/workspaces/${workspaceSlug}/test/plan/module/`, { params })
       .then((response) => response?.data || [])
       .catch((error) => {
         throw error?.response?.data;

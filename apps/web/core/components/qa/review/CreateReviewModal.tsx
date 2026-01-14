@@ -57,10 +57,10 @@ export default function CreateReviewModal({ open, onClose, mode = "create", init
   }, [form]);
 
   useEffect(() => {
-    if (!open || !workspaceSlug) return;
+    if (!open || !workspaceSlug || !projectId) return;
     const repositoryId = typeof window !== "undefined" ? sessionStorage.getItem("selectedRepositoryId") : null;
     reviewService
-      .getReviewModules(String(workspaceSlug), { repository_id: repositoryId })
+      .getReviewModules(String(workspaceSlug), String(projectId))
       .then((data) => {
         const opts = (Array.isArray(data) ? data : []).map((m: any) => ({
           value: String(m.id),
@@ -110,6 +110,7 @@ export default function CreateReviewModal({ open, onClose, mode = "create", init
         assignees: selectedAssignees,
         mode: selectedAssignees.length <= 1 ? "单人评审" : "多人评审",
       };
+      if (projectId) payload.project = projectId;
       if (mode === "create") {
         payload.started_at = v.started_at ? v.started_at.format("YYYY-MM-DD") : null;
         payload.ended_at = v.ended_at ? v.ended_at.format("YYYY-MM-DD") : null;
@@ -159,7 +160,7 @@ export default function CreateReviewModal({ open, onClose, mode = "create", init
         <Form.Item name="description" label="描述">
           <Input.TextArea rows={3} placeholder="请输入描述" />
         </Form.Item>
-        <Form.Item name="module_id" label="所属模块" rules={[{ required: true, message: "请选择所属模块" }]}>
+        <Form.Item name="module_id" label="所属模块">
           <Select placeholder="请选择所属模块" options={moduleOptions} showSearch allowClear />
         </Form.Item>
         <Form.Item name="assignees" label="评审人" rules={[{ required: true, message: "请选择评审人" }]}>

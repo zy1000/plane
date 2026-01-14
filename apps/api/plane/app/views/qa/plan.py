@@ -3,6 +3,9 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from yaml import serialize
 
+from django.db import transaction
+from django.db.models import Count, Q, Prefetch
+from django.shortcuts import get_object_or_404
 from plane.app.serializers.qa import TestPlanDetailSerializer, CaseModuleCreateUpdateSerializer, \
     CaseModuleListSerializer, CaseLabelListSerializer, CaseLabelCreateSerializer, CaseCreateUpdateSerializer, \
     CaseListSerializer, CaseAttachmentSerializer, ReviewCaseRecordsSerializer
@@ -77,6 +80,9 @@ class PlanAPIView(BaseAPIView):
     serializer_class = TestPlanCreateUpdateSerializer
     filterset_class = TestPlanFilter
 
+    def get_queryset(self):
+        return TestPlan.objects.all().prefetch_related('cases')
+
     def post(self, request, slug):
         serializer = self.serializer_class(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -85,7 +91,7 @@ class PlanAPIView(BaseAPIView):
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     def get(self, request, slug):
-        planes = self.filter_queryset(self.queryset).distinct()
+        planes = self.filter_queryset(self.get_queryset()).distinct()
         paginator = self.pagination_class()
         paginated_queryset = paginator.paginate_queryset(planes, request)
         serializer = TestPlanDetailSerializer(instance=paginated_queryset, many=True)
@@ -111,16 +117,40 @@ class PlanCaseAPIView(BaseAPIView):
     pagination_class = CustomPaginator
     filterset_fields = {
         'plan_id': ['exact', 'in'],
+        'case__repository_id': ['exact', 'in'],
         'case__module_id': ['exact', 'in'],
     }
     serializer_class = PlanCaseListSerializer
 
+    def get_queryset(self):
+        return (
+            PlanCase.objects.select_related("case").only(
+                "id",
+                "plan_id",
+                "case_id",
+                "result",
+                "created_at",
+                "updated_at",
+                "case__id",
+                "case__name",
+                "case__type",
+                "case__priority",
+                "case__updated_at",
+                "case__repository_id",
+            )
+        )
+
     def get(self, request, slug):
-        plans = self.filter_queryset(self.queryset).distinct()
+        plans = self.filter_queryset(self.get_queryset())
         paginator = self.pagination_class()
         paginated_queryset = paginator.paginate_queryset(plans, request)
         serializer = self.serializer_class(instance=paginated_queryset, many=True)
-        return list_response(data=serializer.data, count=plans.count())
+        count = (
+            getattr(getattr(getattr(paginator, "page", None), "paginator", None), "count", None)
+            if paginated_queryset is not None
+            else None
+        )
+        return list_response(data=serializer.data, count=count if count is not None else plans.count())
 
 
 class PlanModuleAPIView(BaseAPIView):
@@ -129,7 +159,7 @@ class PlanModuleAPIView(BaseAPIView):
     serializer_class = PlanModuleListSerializer
     filterset_fields = {
         'name': ['exact', 'icontains', 'in'],
-        'repository_id': ['exact', 'in'],
+        'project_id': ['exact', 'in'],
         'id': ['exact']
     }
 
@@ -149,6 +179,28 @@ class PlanModuleAPIView(BaseAPIView):
         module_ids = request.data.pop('ids')
         self.queryset.filter(id__in=module_ids).delete(soft=False)
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class PlanModuleCountAPIView(BaseAPIView):
+    model = PlanModule
+    queryset = PlanModule.objects.all()
+    filterset_fields = {
+        'name': ['exact', 'icontains', 'in'],
+        'project_id': ['exact', 'in'],
+    }
+
+    def get(self, request, slug):
+        project_id = request.query_params['project_id']
+
+        modules = self.filter_queryset(self.queryset).annotate(
+            plan_count=Count('plans', filter=Q(plans__deleted_at__isnull=True))
+        ).values('id', 'plan_count')
+
+        result = dict(total=TestPlan.objects.filter(project_id=project_id, deleted_at__isnull=True).count())
+        for module in modules:
+            result[str(module['id'])] = module['plan_count']
+
+        return Response(data=result)
 
 
 class PlanView(BaseViewSet):
@@ -305,6 +357,64 @@ class PlanView(BaseViewSet):
                 for case_id in new_case_ids
             ]
             PlanCase.objects.bulk_create(new_plan_cases, batch_size=1000)
+
+        return Response(status=status.HTTP_200_OK)
+
+    @transaction.atomic
+    @action(detail=False, methods=['post'], url_path='add-cases')
+    def add_cases(self, request, slug):
+        plan_id = request.data.get('plan_id')
+        raw_case_ids = request.data.get('case_ids')
+
+        if not plan_id:
+            return Response({"error": "plan_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not isinstance(raw_case_ids, list) or len(raw_case_ids) == 0:
+            return Response({"error": "case_ids must be a non-empty list"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            case_ids = [uuid.UUID(str(i)) for i in raw_case_ids if i]
+        except Exception:
+            return Response({"error": "Invalid case_ids"}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not case_ids:
+            return Response({"error": "case_ids must be a non-empty list"}, status=status.HTTP_400_BAD_REQUEST)
+
+        plan = get_object_or_404(TestPlan, id=plan_id, deleted_at__isnull=True, project__workspace__slug=slug)
+
+        repo_ids = list(
+            TestCaseRepository.objects.filter(
+                project_id=plan.project_id, workspace__slug=slug, deleted_at__isnull=True
+            ).values_list('id', flat=True)
+        )
+
+        found_case_ids = set(
+            TestCase.objects.filter(id__in=case_ids, repository_id__in=repo_ids, deleted_at__isnull=True).values_list(
+                'id', flat=True
+            )
+        )
+        missing_case_ids = set(case_ids) - found_case_ids
+        if missing_case_ids:
+            missing_str = ",".join(sorted([str(i) for i in missing_case_ids]))
+            return Response({"error": f"TestCase not found: {missing_str}"}, status=status.HTTP_404_NOT_FOUND)
+
+        existing_case_ids = set(
+            PlanCase.objects.filter(plan=plan, case_id__in=list(found_case_ids)).values_list('case_id', flat=True)
+        )
+
+        soft_deleted_qs = PlanCase.all_objects.filter(plan=plan, case_id__in=list(found_case_ids)).exclude(
+            deleted_at__isnull=True
+        )
+        soft_deleted_case_ids = set(soft_deleted_qs.values_list('case_id', flat=True))
+        if soft_deleted_case_ids:
+            soft_deleted_qs.update(deleted_at=None)
+
+        to_create_case_ids = found_case_ids - existing_case_ids - soft_deleted_case_ids
+        if to_create_case_ids:
+            PlanCase.objects.bulk_create(
+                [PlanCase(plan=plan, case_id=case_id) for case_id in to_create_case_ids],
+                batch_size=1000,
+            )
 
         return Response(status=status.HTTP_200_OK)
 

@@ -1,14 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Tree, Table, Row, Col, Tag, message, Tooltip } from "antd";
 import type { TreeProps } from "antd";
 import type { TableProps } from "antd";
-import { AppstoreOutlined } from "@ant-design/icons";
+import { AppstoreOutlined, DeploymentUnitOutlined } from "@ant-design/icons";
 import { ModalCore, EModalPosition, EModalWidth } from "@plane/ui";
 import { Button } from "@plane/propel/button";
 import { CaseService } from "@/services/qa/case.service";
-import { CaseModuleService } from "@/services/qa";
 import { PlanService } from "@/services/qa/plan.service";
 import {
   formatDateTime,
@@ -45,20 +44,19 @@ export const PlanCasesModal: React.FC<Props> = ({
   isOpen,
   onClose,
   workspaceSlug,
-  repositoryId,
-  repositoryName,
   planId,
   initialSelectedCaseIds,
   onClosed,
 }) => {
   const Enums = globalEnums.Enums;
   const caseService = useRef(new CaseService()).current;
-  const moduleService = useRef(new CaseModuleService()).current;
   const planService = useRef(new PlanService()).current;
 
-  const [modules, setModules] = useState<any[]>([]);
+  const [planTree, setPlanTree] = useState<any | null>(null);
   const [expandedKeys, setExpandedKeys] = useState<string[]>([]);
   const [autoExpandParent, setAutoExpandParent] = useState<boolean>(true);
+  const [selectedTreeKey, setSelectedTreeKey] = useState<string>("root");
+  const [selectedRepositoryId, setSelectedRepositoryId] = useState<string | null>(null);
   const [selectedModuleId, setSelectedModuleId] = useState<string | null>(null);
 
   const [cases, setCases] = useState<TestCase[]>([]);
@@ -66,7 +64,10 @@ export const PlanCasesModal: React.FC<Props> = ({
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState<boolean>(false);
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [existingIds, setExistingIds] = useState<string[]>([]);
+  const [selectedNewIds, setSelectedNewIds] = useState<string[]>([]);
+  const [checkedTreeKeys, setCheckedTreeKeys] = useState<string[]>([]);
+  const nodeCaseIdsCacheRef = useRef<Record<string, string[]>>({});
 
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [pageSize] = useState<number>(10);
@@ -101,34 +102,44 @@ export const PlanCasesModal: React.FC<Props> = ({
   };
 
   useEffect(() => {
-    if (!isOpen || !workspaceSlug || !repositoryId) return;
-    moduleService
-      .getCaseModules(String(workspaceSlug), { repository_id: repositoryId })
-      .then((data: any[]) => {
-        setModules(Array.isArray(data) ? data : []);
-        setExpandedKeys((Array.isArray(data) ? data : []).map((n: any) => String(n?.id)).filter(Boolean));
-      })
-      .catch(() => setModules([]));
-  }, [isOpen, workspaceSlug, repositoryId, moduleService]);
-
-  useEffect(() => {
-    if (!isOpen || !workspaceSlug || !repositoryId) return;
-    fetchCases(1, selectedModuleId || undefined);
     const init = Array.isArray(initialSelectedCaseIds) ? initialSelectedCaseIds.filter(Boolean) : [];
-    setSelectedIds(init);
+    setExistingIds(init);
+    setSelectedNewIds([]);
+    setCheckedTreeKeys([]);
+    nodeCaseIdsCacheRef.current = {};
+    setSelectedTreeKey("root");
+    setSelectedRepositoryId(null);
+    setSelectedModuleId(null);
+    if (!isOpen || !workspaceSlug || !planId) return;
+    fetchPlanTree();
+    fetchCases(1, undefined, undefined);
   }, [isOpen]);
 
-  const fetchCases = async (page: number, moduleId?: string) => {
+  const fetchPlanTree = async () => {
+    if (!workspaceSlug || !planId) return;
     try {
+      const data = await caseService.getPlanUnassociatedCaseTree(String(workspaceSlug), { plan_id: String(planId) });
+      setPlanTree(data || null);
+      setExpandedKeys([]);
+      setAutoExpandParent(true);
+    } catch {
+      setPlanTree(null);
+    }
+  };
+
+  const fetchCases = async (page: number, repoId?: string, moduleId?: string) => {
+    try {
+      if (!planId) return;
       setLoading(true);
       setError(null);
       const params: any = {
-        repository_id: repositoryId,
+        plan_id: String(planId || ""),
         page,
         page_size: 10,
       };
+      if (repoId) params.repository_id = repoId;
       if (moduleId) params.module_id = moduleId;
-      const response: TestCaseResponse = await caseService.getCases(String(workspaceSlug), params);
+      const response: TestCaseResponse = await caseService.getPlanUnassociatedCases(String(workspaceSlug), params);
       setCases(response?.data || []);
       setTotal(response?.count || 0);
       setCurrentPage(page);
@@ -139,10 +150,35 @@ export const PlanCasesModal: React.FC<Props> = ({
     }
   };
 
-  const onSelect: TreeProps["onSelect"] = (selectedKeys) => {
-    const key = Array.isArray(selectedKeys) && selectedKeys.length > 0 ? String(selectedKeys[0]) : null;
-    setSelectedModuleId(key === "all" ? null : key);
-    fetchCases(1, key === "all" ? undefined : key || undefined);
+  const onSelect: TreeProps["onSelect"] = (selectedKeys, info) => {
+    const key = Array.isArray(selectedKeys) && selectedKeys.length > 0 ? String(selectedKeys[0]) : "root";
+    setSelectedTreeKey(key);
+
+    const node: any = (info as any)?.node || {};
+    const kind = node?.kind as string | undefined;
+
+    if (!kind || kind === "root") {
+      setSelectedRepositoryId(null);
+      setSelectedModuleId(null);
+      fetchCases(1, undefined, undefined);
+      return;
+    }
+
+    if (kind === "repository" || kind === "repository_modules_all") {
+      const repoId = node?.repositoryId ? String(node.repositoryId) : null;
+      setSelectedRepositoryId(repoId);
+      setSelectedModuleId(null);
+      fetchCases(1, repoId || undefined, undefined);
+      return;
+    }
+
+    if (kind === "module") {
+      const repoId = node?.repositoryId ? String(node.repositoryId) : null;
+      const moduleId = node?.moduleId ? String(node.moduleId) : null;
+      setSelectedRepositoryId(repoId);
+      setSelectedModuleId(moduleId);
+      fetchCases(1, repoId || undefined, moduleId || undefined);
+    }
   };
 
   const onExpand: TreeProps["onExpand"] = (keys) => {
@@ -150,19 +186,121 @@ export const PlanCasesModal: React.FC<Props> = ({
     setAutoExpandParent(false);
   };
 
-  const buildTreeNodes = (list: any[]): any[] => {
-    if (!Array.isArray(list)) return [];
-    return list.map((node: any) => ({
-      title: node?.name ?? "-",
-      key: String(node?.id ?? ""),
-      icon: <AppstoreOutlined />,
-      children: buildTreeNodes(node?.children || []),
-    }));
+  const getNodeUnassociatedCaseIds = async (node: any): Promise<string[]> => {
+    if (!workspaceSlug || !planId) return [];
+    const kind = node?.kind as string | undefined;
+    const cacheKey = String(node?.key || "");
+    if (cacheKey && nodeCaseIdsCacheRef.current[cacheKey]) return nodeCaseIdsCacheRef.current[cacheKey];
+
+    const params: any = { plan_id: String(planId) };
+    if (kind === "repository" || kind === "repository_modules_all" || kind === "module") {
+      if (node?.repositoryId) params.repository_id = String(node.repositoryId);
+    }
+    if (kind === "module" && node?.moduleId) params.module_id = String(node.moduleId);
+
+    const res = await caseService.getPlanUnassociatedCaseIds(String(workspaceSlug), params);
+    const ids = Array.isArray(res?.data) ? res.data : [];
+    if (cacheKey) nodeCaseIdsCacheRef.current[cacheKey] = ids;
+    return ids;
   };
+
+  const onCheck: TreeProps["onCheck"] = async (checkedKeys, info: any) => {
+    // @ts-ignore
+    const nextChecked = Array.isArray(checkedKeys) ? (checkedKeys as string[]) : (checkedKeys?.checked as string[]);
+    setCheckedTreeKeys(nextChecked || []);
+
+    const node = info?.node;
+    const checked = Boolean(info?.checked);
+    if (!node) return;
+    
+
+    try {
+      const ids = await getNodeUnassociatedCaseIds(node);
+      setSelectedNewIds((prev) => {
+        const prevSet = new Set(prev || []);
+        if (checked) {
+          for (const id of ids) prevSet.add(String(id));
+          return Array.from(prevSet);
+        }
+        for (const id of ids) prevSet.delete(String(id));
+        return Array.from(prevSet);
+      });
+    } catch {}
+  };
+
+  const syncTreeCheckState = (newSelectedIds: string[]) => {
+    const selectedSet = new Set(newSelectedIds);
+    const nextTreeKeys = checkedTreeKeys.filter((key) => {
+      const cachedIds = nodeCaseIdsCacheRef.current[key];
+      // 如果没有缓存，我们假设它仍然被选中（无法验证）
+      if (!cachedIds) return true;
+      // 如果缓存的所有 ID 都在当前选中列表中，则保留选中状态
+      const allSelected = cachedIds.every((id) => selectedSet.has(id));
+      return allSelected;
+    });
+
+    if (nextTreeKeys.length !== checkedTreeKeys.length) {
+      setCheckedTreeKeys(nextTreeKeys);
+    }
+  };
+
+  const renderNodeTitle = (title: string, icon: ReactNode, count?: number, fontMedium?: boolean) => {
+    return (
+      <div className="group flex items-center justify-between gap-2 w-full">
+        <div className="flex items-center gap-2">
+          <span className="inline-flex items-center justify-center w-5 h-5 text-custom-text-300">{icon}</span>
+          <span className={`text-sm text-custom-text-200 ${fontMedium ? "font-medium" : ""}`}>{title}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          {typeof count === "number" && <span className="text-xs text-custom-text-300">{count}</span>}
+        </div>
+      </div>
+    );
+  };
+
+  const buildTreeNode = (node: any): any => {
+    const kind = String(node?.kind || "");
+    const id = String(node?.id || "");
+    const repositoryId = node?.repository_id ? String(node.repository_id) : null;
+    const count = typeof node?.count === "number" ? node.count : undefined;
+
+    const key =
+      kind === "root"
+        ? "root"
+        : kind === "repository"
+          ? `repo:${id}`
+          : kind === "repository_modules_all"
+            ? `repo:${repositoryId}:all_modules`
+            : kind === "module"
+              ? `module:${id}`
+              : id;
+
+    const icon =
+      kind === "root" ? (
+        <AppstoreOutlined />
+      ) : kind === "repository" ? (
+        <DeploymentUnitOutlined />
+      ) : kind === "repository_modules_all" ? (
+        <AppstoreOutlined />
+      ) : (
+        <AppstoreOutlined />
+      );
+
+    const children = Array.isArray(node?.children) ? node.children : [];
+    return {
+      title: renderNodeTitle(node?.name ?? "-", icon, count, kind === "root" || kind === "repository_modules_all"),
+      key,
+      kind,
+      repositoryId,
+      moduleId: kind === "module" ? id : null,
+      children: children.map((c: any) => buildTreeNode(c)),
+    };
+  };
+
   const treeData = useMemo(() => {
-    const children = buildTreeNodes(modules || []);
-    return [{ title: "全部模块", key: "all", icon: <AppstoreOutlined />, children }];
-  }, [modules]);
+    if (!planTree) return [];
+    return [buildTreeNode(planTree)];
+  }, [planTree]);
 
   const columns: TableProps<TestCase>["columns"] = [
     {
@@ -222,7 +360,7 @@ export const PlanCasesModal: React.FC<Props> = ({
       <div className="w-full">
         <div className="flex items-center justify-between gap-4 border-b border-custom-border-200 px-6 py-4">
           <h3 className="text-lg font-medium">
-            规划用例{repositoryName ? ` - ${repositoryName}` : ""}
+            规划用例
           </h3>
           <Button
             variant="neutral-primary"
@@ -241,9 +379,6 @@ export const PlanCasesModal: React.FC<Props> = ({
             flex="0 0 auto"
             style={{ width: leftWidth, minWidth: 200, maxWidth: 320 }}
           >
-            <div className="flex items-center justify-between px-2 pb-2">
-              <div className="text-sm text-custom-text-300">用例模块</div>
-            </div>
             <div
               onMouseDown={onMouseDownResize}
               className="absolute right-0 top-0 h-full w-2"
@@ -252,12 +387,15 @@ export const PlanCasesModal: React.FC<Props> = ({
             <Tree
               showLine={false}
               defaultExpandAll
+              checkable
               onSelect={onSelect}
+              onCheck={onCheck}
               onExpand={onExpand}
               expandedKeys={expandedKeys}
               autoExpandParent={autoExpandParent}
               treeData={treeData}
-              selectedKeys={selectedModuleId ? [selectedModuleId] : ["all"]}
+              selectedKeys={treeData.length > 0 ? [selectedTreeKey] : []}
+              checkedKeys={checkedTreeKeys}
               className="py-2"
             />
           </Col>
@@ -285,20 +423,30 @@ export const PlanCasesModal: React.FC<Props> = ({
                 bordered={true}
                 tableLayout="fixed"
                 rowSelection={{
-                  selectedRowKeys: selectedIds,
-                  onChange: (keys) => setSelectedIds(keys as string[]),
+                  selectedRowKeys: selectedNewIds,
+                  onChange: (keys) => {
+                    const nextKeys = keys as string[];
+                    setSelectedNewIds(nextKeys);
+                    syncTreeCheckState(nextKeys);
+                  },
                   preserveSelectedRowKeys: true,
                   selections: [
                     {
                       key: "select-all",
                       text: "本页全选",
-                      onSelect: () =>
-                        setSelectedIds((prev) => Array.from(new Set([...prev, ...cases.map((c) => c.id)]))),
+                      onSelect: () => {
+                        const nextKeys = Array.from(new Set([...selectedNewIds, ...cases.map((c) => c.id)]));
+                        setSelectedNewIds(nextKeys);
+                        syncTreeCheckState(nextKeys);
+                      },
                     },
                     {
                       key: "clear-all",
                       text: "清空选择",
-                      onSelect: () => setSelectedIds([]),
+                      onSelect: () => {
+                        setSelectedNewIds([]);
+                        syncTreeCheckState([]);
+                      },
                     },
                   ],
                 }}
@@ -312,7 +460,7 @@ export const PlanCasesModal: React.FC<Props> = ({
                 }}
                 onChange={(p) => {
                   const nextPage = p?.current || 1;
-                  fetchCases(nextPage, selectedModuleId || undefined);
+                  fetchCases(nextPage, selectedRepositoryId || undefined, selectedModuleId || undefined);
                 }}
               />
             )}
@@ -331,15 +479,22 @@ export const PlanCasesModal: React.FC<Props> = ({
           </Button>
           <Button
             variant="primary"
-            disabled={saving || !workspaceSlug || !repositoryId || !planId}
+            disabled={saving || !workspaceSlug || !planId}
             onClick={async () => {
               if (!workspaceSlug || !planId) {
                 message.error("缺少必要参数：workspace或计划ID");
                 return;
               }
               try {
+                if (!selectedNewIds || selectedNewIds.length === 0) {
+                  message.warning("请先选择要关联的用例");
+                  return;
+                }
                 setSaving(true);
-                await planService.updatePlan(String(workspaceSlug), { id: planId, cases: selectedIds });
+                await planService.addPlanCases(String(workspaceSlug), {
+                  plan_id: String(planId),
+                  case_ids: selectedNewIds.map(String),
+                });
                 message.success("用例关联已更新");
                 onClose();
                 onClosed && onClosed();

@@ -69,7 +69,7 @@ class TestPlanCreateUpdateSerializer(ModelSerializer):
 
     class Meta:
         model = TestPlan
-        fields = ['name', 'description', 'module', 'begin_time', 'end_time', 'repository', 'threshold', 'cases',
+        fields = ['name', 'description', 'module', 'begin_time', 'end_time', 'project', 'threshold', 'cases',
                   'cycle']
 
 
@@ -92,7 +92,6 @@ class TestPlanDetailSerializer(ModelSerializer):
     Serializer for creating a TestPlan.
     """
     assignees = UserLiteSerializer(many=True, read_only=True)
-    cases = CaseDetailSerializer(many=True, read_only=True)
 
     case_count = serializers.SerializerMethodField()
     pass_rate = serializers.SerializerMethodField()
@@ -137,14 +136,6 @@ class TestCaseRepositorySerializer(ModelSerializer):
     """
     Serializer for creating a TestPlan.
     """
-
-    def create(self, validated_data):
-        instance = super().create(validated_data)
-
-        # 给每个用例库创建统一模块
-        CaseReviewModule.objects.create(name='未规划用例', repository=instance, is_default=True)
-        PlanModule.objects.create(name='未规划计划', repository=instance, is_default=True)
-        return instance
 
     class Meta:
         model = TestCaseRepository
@@ -318,7 +309,7 @@ class TestCaseCommentSerializer(ModelSerializer):
 class ReviewModuleCreateUpdateSerializer(ModelSerializer):
     class Meta:
         model = CaseReviewModule
-        fields = ['name', 'repository']
+        fields = ['name', 'project']
 
 
 class ReviewModuleDetailSerializer(ModelSerializer):
@@ -386,7 +377,7 @@ class ReviewListSerializer(ModelSerializer):
         return statis
 
     def get_module_name(self, obj: CaseReview):
-        return obj.module.name
+        return obj.module.name if obj.module else ''
 
     class Meta:
         model = CaseReview

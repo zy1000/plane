@@ -130,22 +130,26 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
       .enumsList(workspaceSlug)
       .then(() => {})
       .catch(() => {});
-    planService
-      .getPlanModules(String(workspaceSlug), { repository_id: repositoryId })
-      .then((data: any[]) => {
-        const list = Array.isArray(data) ? data : [];
-        const opts = list.map((m: any) => ({
-          value: String(m.id),
-          query: String(m.name),
-          content: <span className="flex-grow truncate">{String(m.name)}</span>,
-        }));
-        setModuleOptions(opts);
-        if (mode === "create" && !moduleId) {
-          const def = list.find((m: any) => m?.is_default);
-          if (def) setModuleId(String(def.id));
-        }
-      })
-      .catch(() => setModuleOptions([]));
+    if (workspaceSlug && projectId) {
+      planService
+        .getPlanModules(String(workspaceSlug), String(projectId))
+        .then((data: any[]) => {
+          const list = Array.isArray(data) ? data : [];
+          const opts = list.map((m: any) => ({
+            value: String(m.id),
+            query: String(m.name),
+            content: <span className="flex-grow truncate">{String(m.name)}</span>,
+          }));
+          setModuleOptions(opts);
+          if (mode === "create" && !moduleId) {
+            const def = list.find((m: any) => m?.is_default);
+            if (def) setModuleId(String(def.id));
+          }
+        })
+        .catch(() => setModuleOptions([]));
+    } else {
+      setModuleOptions([]);
+    }
 
     if (workspaceSlug && projectId) {
       cycleService
@@ -174,9 +178,7 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
     if (beginTime && endTime && endTime.getTime() < beginTime.getTime()) {
       nextErrors.time = "结束时间不能早于开始时间";
     }
-    if (!moduleId) {
-      nextErrors.module = "请选择所属模块";
-    }
+
     if (!Number.isFinite(threshold) || threshold < 0 || threshold > 100) {
       nextErrors.threshold = "阀值范围为 0 - 100";
     }
@@ -191,7 +193,7 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
 
       const payload: any = {
         name: name.trim(),
-        repository: repositoryId,
+        project: projectId,
         description: description || "",
         begin_time: beginTime ? renderFormattedPayloadDate(beginTime) : null,
         end_time: endTime ? renderFormattedPayloadDate(endTime) : null,
@@ -270,7 +272,7 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
           {/* 所属模块（下拉选择，可搜索，必选） */}
           <div className="col-span-1">
             <label className="text-sm text-custom-text-300 mb-1 block">
-              所属模块<span className="text-red-500">*</span>
+              所属模块
             </label>
             <CustomSearchSelect
               className="w-[320px]"

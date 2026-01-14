@@ -18,9 +18,9 @@ export class CaseService extends APIService {
         throw error?.response?.data;
       });
   }
-  async getReviewModules(workspaceSlug: string, queries?: any): Promise<any> {
+  async getReviewModules(workspaceSlug: string, projectId: string, queries?: any): Promise<any> {
     return this.get(`/api/workspaces/${workspaceSlug}/test/review/module/`, {
-      params: queries,
+      params: { project_id: projectId, ...(queries || {}) },
     })
       .then((response) => response?.data)
       .catch((error) => {

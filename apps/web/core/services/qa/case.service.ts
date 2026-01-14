@@ -24,6 +24,44 @@ export class CaseService extends APIService {
       });
   }
 
+  async getPlanCaseTree(workspaceSlug: string, queries: { plan_id: string }): Promise<any> {
+    return this.get(`/api/workspaces/${workspaceSlug}/test/case/plan-case-tree/`, { params: queries })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async getPlanUnassociatedCaseTree(workspaceSlug: string, queries: { plan_id: string }): Promise<any> {
+    return this.get(`/api/workspaces/${workspaceSlug}/test/case/plan-unassociated-tree/`, { params: queries })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async getPlanUnassociatedCases(
+    workspaceSlug: string,
+    queries: { plan_id: string; repository_id?: string; module_id?: string; page?: number; page_size?: number }
+  ): Promise<any> {
+    return this.get(`/api/workspaces/${workspaceSlug}/test/case/plan-unassociated-cases/`, { params: queries })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async getPlanUnassociatedCaseIds(
+    workspaceSlug: string,
+    queries: { plan_id: string; repository_id?: string; module_id?: string }
+  ): Promise<{ data: string[]; count: number }> {
+    return this.get(`/api/workspaces/${workspaceSlug}/test/case/plan-unassociated-case-ids/`, { params: queries })
+      .then((response) => ({ data: response?.data?.data ?? [], count: Number(response?.data?.count || 0) }))
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
   async createCase(workspaceSlug: string, data: any): Promise<any> {
     return this.post(`/api/workspaces/${workspaceSlug}/test/case/`, data)
       .then((response) => response?.data)
