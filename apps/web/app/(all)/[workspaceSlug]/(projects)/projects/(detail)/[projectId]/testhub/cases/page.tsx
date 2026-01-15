@@ -202,6 +202,26 @@ export default function TestCasesPage() {
   const [modules, setModules] = useState<any[]>([]);
   const [selectedModuleId, setSelectedModuleId] = useState<string | null>(null);
 
+  const selectionContextKey = useMemo(() => {
+    return JSON.stringify({
+      repositoryId,
+      selectedModuleId,
+      filters,
+      ordering,
+    });
+  }, [repositoryId, selectedModuleId, filters, ordering]);
+  const lastSelectionContextKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (
+      lastSelectionContextKeyRef.current !== null &&
+      lastSelectionContextKeyRef.current !== selectionContextKey
+    ) {
+      setSelectedCaseIds([]);
+    }
+    lastSelectionContextKeyRef.current = selectionContextKey;
+  }, [selectionContextKey]);
+
   // 新增：树主题（默认/紧凑/高对比）
   const [treeTheme, setTreeTheme] = useState<"light" | "compact" | "high-contrast">("light");
   const [expandedKeys, setExpandedKeys] = useState<string[]>(["all"]);
@@ -442,9 +462,8 @@ export default function TestCasesPage() {
           await caseService.deleteCase(workspaceSlug as string, selectedCaseIds);
           message.success("删除成功");
           setSelectedCaseIds([]);
-          // 删除后刷新列表，如果当前页空了，考虑回到上一页（这里简化为刷新当前页）
           await fetchModules();
-          await fetchCases(currentPage, pageSize, filters);
+          await fetchCases(1, pageSize, filters);
         } catch (e) {
           console.error("批量删除失败:", e);
           message.error("删除失败");
@@ -462,8 +481,6 @@ export default function TestCasesPage() {
     if (!workspaceSlug || !repositoryId) return;
     try {
       setError(null);
-      // 重置选择
-      setSelectedCaseIds([]);
 
       const effectiveOrdering = orderingParam === undefined ? ordering : orderingParam ?? undefined;
       const queryParams: any = {
@@ -1314,8 +1331,17 @@ export default function TestCasesPage() {
                           scroll={{ x: "max-content" }}
                           rowSelection={{
                             selectedRowKeys: selectedCaseIds,
+                            preserveSelectedRowKeys: true,
                             onChange: (newSelectedRowKeys) => {
-                              setSelectedCaseIds(newSelectedRowKeys as string[]);
+                              const nextSelectedKeys = (newSelectedRowKeys as (string | number)[]).map((k) => String(k));
+                              const currentPageIds = (cases || []).map((c) => String(c.id));
+
+                              setSelectedCaseIds((prev) => {
+                                const next = new Set(prev.map((k) => String(k)));
+                                for (const id of currentPageIds) next.delete(id);
+                                for (const id of nextSelectedKeys) next.add(id);
+                                return Array.from(next);
+                              });
                             },
                           }}
                           pagination={false}
@@ -1326,31 +1352,33 @@ export default function TestCasesPage() {
                           {selectedCaseIds.length > 0 && (
                             <div className="flex items-center gap-2">
                               <span className="text-custom-text-300">已选择 {selectedCaseIds.length} 条</span>
-                              <Button
-                                type="link"
-                                size="small"
+                              <span
+                                className="cursor-pointer text-sm transition-colors"
+                                style={{ color: "#2a83ff" }}
+                                onClick={() => setSelectedCaseIds([])}
+                              >
+                                清除选择
+                              </span>
+                              <span
+                                className="cursor-pointer text-sm transition-colors"
+                                style={{ color: "#2a83ff" }}
                                 onClick={() => setIsMoveModalOpen(true)}
-                                className="p-0 text-custom-primary-100 font-medium"
                               >
                                 移动到
-                              </Button>
-                              <Button
-                                type="link"
-                                size="small"
+                              </span>
+                              <span
+                                className="cursor-pointer text-sm transition-colors"
+                                style={{ color: "#2a83ff" }}
                                 onClick={() => setIsCopyModalOpen(true)}
-                                className="p-0 text-custom-primary-100 font-medium"
                               >
                                 复制到
-                              </Button>
-                              <Button
-                                type="link"
-                                size="small"
-                                danger
+                              </span>
+                              <span
+                                className="text-red-500 hover:text-red-600 cursor-pointer transition-colors text-sm"
                                 onClick={confirmDeleteCases}
-                                className="p-0 font-medium"
                               >
                                 删除
-                              </Button>
+                              </span>
                             </div>
                           )}
                           <span className="text-custom-text-300">
@@ -1470,7 +1498,7 @@ export default function TestCasesPage() {
           selectedCaseIds={selectedCaseIds}
           onSuccess={() => {
             fetchModules();
-            fetchCases(currentPage, pageSize, filters);
+            fetchCases(1, pageSize, filters);
             setSelectedCaseIds([]);
           }}
         />

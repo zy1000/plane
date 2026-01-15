@@ -5,7 +5,7 @@ import { useEffect, useRef, useState, useMemo, type ReactNode } from "react";
 import { PageHead } from "@/components/core/page-title";
 import { Breadcrumbs } from "@plane/ui";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
-import { Row, Col, Tree, Table, Button, Tag, message, Pagination } from "antd";
+import { Row, Col, Tree, Table, Button, Tag, message, Pagination, Popconfirm, Select } from "antd";
 import type { TreeProps, TableProps } from "antd";
 import { AppstoreOutlined, DeploymentUnitOutlined } from "@ant-design/icons";
 import { CaseService as CaseApiService } from "@/services/qa/case.service";
@@ -14,6 +14,7 @@ import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { FolderOpenDot } from "lucide-react";
 import UpdateModal from "@/components/qa/cases/update-modal";
 import TestCaseSelectionModal from "@/components/qa/review/TestCaseSelectionModal";
+import { useUser } from "@/hooks/store/user";
 
 
 type ReviewCaseRow = {
@@ -56,6 +57,32 @@ export default function CaseManagementReviewDetailPage() {
   const [activeCaseId, setActiveCaseId] = useState<string | undefined>(undefined);
   const [selectedTreeKey, setSelectedTreeKey] = useState<string>("root");
   const [isCaseSelectionOpen, setIsCaseSelectionOpen] = useState(false);
+  const { data: currentUser } = useUser();
+  const [selectedCaseIds, setSelectedCaseIds] = useState<string[]>([]);
+  const [selectedCaseMap, setSelectedCaseMap] = useState<Record<string, string>>({});
+
+  const [reviewList, setReviewList] = useState<Array<{ id: string; name: string }>>([]);
+  const [reviewListLoading, setReviewListLoading] = useState<boolean>(false);
+
+  const selectionContextKey = useMemo(() => {
+    return JSON.stringify({
+      reviewId,
+      selectedModuleId,
+      ordering,
+    });
+  }, [reviewId, selectedModuleId, ordering]);
+  const lastSelectionContextKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (
+      lastSelectionContextKeyRef.current !== null &&
+      lastSelectionContextKeyRef.current !== selectionContextKey
+    ) {
+      setSelectedCaseIds([]);
+      setSelectedCaseMap({});
+    }
+    lastSelectionContextKeyRef.current = selectionContextKey;
+  }, [selectionContextKey]);
 
   const [leftWidth, setLeftWidth] = useState<number>(280);
   const isDraggingRef = useRef<boolean>(false);
@@ -173,6 +200,26 @@ export default function CaseManagementReviewDetailPage() {
       router.push(`/${ws}/projects/${projectId}/testhub?redirect_to=${encodeURIComponent(current)}`);
     }
   }, [repositoryId, workspaceSlug, searchParams, router]);
+
+  useEffect(() => {
+    if (!workspaceSlug || !projectId) return;
+    setReviewListLoading(true);
+    reviewService
+      .getReviewList(String(workspaceSlug), { project_id: String(projectId) })
+      .then((data) => setReviewList(Array.isArray(data) ? data : []))
+      .catch(() => setReviewList([]))
+      .finally(() => setReviewListLoading(false));
+  }, [workspaceSlug, projectId, reviewService]);
+
+  const onChangeReview = (nextReviewId: string) => {
+    const found = reviewList.find((r) => String(r.id) === String(nextReviewId));
+    if (typeof window !== "undefined") {
+      if (found?.name) sessionStorage.setItem("selectedReviewName", String(found.name));
+    }
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("review_id", String(nextReviewId));
+    router.push(`/${workspaceSlug}/projects/${projectId}/testhub/caseManagementReviewDetail?${params.toString()}`);
+  };
 
   const renderNodeTitle = (title: string, icon: ReactNode, count?: number, fontMedium?: boolean) => {
     return (
@@ -432,7 +479,7 @@ export default function CaseManagementReviewDetailPage() {
               }
             }}
           >
-            取消关联
+            取关
           </Button>
         </div>
       ),
@@ -517,8 +564,25 @@ export default function CaseManagementReviewDetailPage() {
                         />
                       }
                     />
-                    <Breadcrumbs.Item component={<BreadcrumbLink label="评审详情" isLast />} />
-                    {reviewName && <Breadcrumbs.Item component={<BreadcrumbLink label={reviewName} isLast />} />}
+                    <Breadcrumbs.Item
+                      component={
+                        <Breadcrumbs.ItemWrapper className="!cursor-pointer">
+                          <Select
+                            value={reviewId || undefined}
+                            placeholder="选择评审"
+                            loading={reviewListLoading}
+                            showSearch
+                            optionFilterProp="label"
+                            className="min-w-[200px] h-full !cursor-pointer [&_.ant-select-selector]:!p-0 [&_.ant-select-selector]:!h-full [&_.ant-select-selector]:!min-h-full [&_.ant-select-selector]:!items-center [&_.ant-select-selector]:!cursor-pointer [&_.ant-select-selection-wrap]:!h-full [&_.ant-select-selection-wrap]:!items-center [&_.ant-select-selection-wrap]:!flex [&_.ant-select-selection-search]:!h-full [&_.ant-select-selection-search-input]:!h-full [&_.ant-select-selection-item]:!leading-4 [&_.ant-select-selection-item]:!text-sm [&_.ant-select-selection-item]:!text-custom-text-200 [&_.ant-select-selection-placeholder]:!leading-4 [&_.ant-select-selection-placeholder]:!text-sm [&_.ant-select-selection-placeholder]:!text-custom-text-300"
+                            variant="borderless"
+                            suffixIcon={null}
+                            showArrow={false}
+                            options={reviewList.map((r) => ({ value: String(r.id), label: String(r.name || "-") }))}
+                            onChange={onChangeReview}
+                          />
+                        </Breadcrumbs.ItemWrapper>
+                      }
+                    />
                   </Breadcrumbs>
                 </div>
                 <div className="flex items-center gap-2">
@@ -558,10 +622,110 @@ export default function CaseManagementReviewDetailPage() {
                         locale={{ emptyText: "暂无数据" }}
                         scroll={{ x: "max-content" }}
                         onChange={handleTableChange}
+                        rowSelection={{
+                          selectedRowKeys: selectedCaseIds,
+                          preserveSelectedRowKeys: true,
+                          onChange: (newSelectedRowKeys) => {
+                            const nextSelectedKeys = (newSelectedRowKeys as (string | number)[]).map((k) => String(k));
+                            const currentPageIds = (reviewCases || []).map((c) => String(c.id));
+
+                            setSelectedCaseIds((prev) => {
+                              const next = new Set(prev.map((k) => String(k)));
+                              for (const id of currentPageIds) next.delete(id);
+                              for (const id of nextSelectedKeys) next.add(id);
+                              return Array.from(next);
+                            });
+
+                            setSelectedCaseMap((prev) => {
+                              const next = { ...prev };
+                              (reviewCases || []).forEach((row) => {
+                                const id = String(row.id);
+                                if (nextSelectedKeys.includes(id)) {
+                                  next[id] = String(row.case_id);
+                                } else {
+                                  delete next[id];
+                                }
+                              });
+                              return next;
+                            });
+                          },
+                        }}
                       />
                     </div>
                     <div className="flex-shrink-0 border-t border-custom-border-200 px-4 py-3 bg-custom-background-100 flex items-center justify-between">
                       <div className="flex items-center gap-4 text-sm">
+                        {selectedCaseIds.length > 0 && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-custom-text-300">已选择 {selectedCaseIds.length} 条</span>
+                            <span
+                              className="cursor-pointer text-sm transition-colors"
+                              style={{ color: "#2a83ff" }}
+                              onClick={() => {
+                                setSelectedCaseIds([]);
+                                setSelectedCaseMap({});
+                              }}
+                            >
+                              清除选择
+                            </span>
+                            {/* <Popconfirm
+                              title="确定通过选中用例？"
+                              onConfirm={async () => {
+                                if (!workspaceSlug || !reviewId) return;
+                                try {
+                                  const caseIds = selectedCaseIds
+                                    .map((id) => selectedCaseMap[id])
+                                    .filter((id) => !!id);
+                                  
+                                  if (caseIds.length === 0) return;
+
+                                  await caseService.submitCaseReview(workspaceSlug as string, {
+                                    review_id: reviewId as string,
+                                    case_id: caseIds,
+                                    result: "通过",
+                                    assignee: currentUser?.id ? String(currentUser.id) : undefined,
+                                  });
+                                  
+                                  message.success("已批量通过用例");
+                                  setSelectedCaseIds([]);
+                                  setSelectedCaseMap({});
+                                  fetchReviewCaseList(1, pageSize);
+                                } catch (e: any) {
+                                  message.error(e?.message || e?.detail || e?.error || "操作失败");
+                                }
+                              }}
+                              okText="确定"
+                              cancelText="取消"
+                            >
+                              <span
+                                className="cursor-pointer text-sm transition-colors"
+                                style={{ color: "#2a83ff" }}
+                              >
+                                通过
+                              </span>
+                            </Popconfirm> */}
+                            <Popconfirm
+                              title="确定取消关联选中用例？"
+                              onConfirm={async () => {
+                                if (!workspaceSlug || !reviewId) return;
+                                try {
+                                  await reviewService.CaseCancel(workspaceSlug as string, { ids: selectedCaseIds });
+                                  message.success("已批量取消关联");
+                                  setSelectedCaseIds([]);
+                                  setSelectedCaseMap({});
+                                  fetchReviewCaseList(1, pageSize);
+                                } catch (e: any) {
+                                  message.error(e?.message || e?.detail || e?.error || "操作失败");
+                                }
+                              }}
+                              okText="确定"
+                              cancelText="取消"
+                            >
+                              <span className="text-red-500 hover:text-red-600 cursor-pointer text-sm transition-colors">
+                                取关
+                              </span>
+                            </Popconfirm>
+                          </div>
+                        )}
                         <span className="text-custom-text-300">
                           {total > 0
                             ? `第 ${(currentPage - 1) * pageSize + 1}-${Math.min(currentPage * pageSize, total)} 条，共 ${total} 条`

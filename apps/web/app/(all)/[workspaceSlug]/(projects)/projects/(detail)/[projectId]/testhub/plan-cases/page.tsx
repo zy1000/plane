@@ -8,7 +8,7 @@ import { Button } from "antd";
 import PlanCasesModal from "@/components/qa/plans/plan-cases-modal";
 import PlanIterationModal from "@/components/qa/plans/plan-iteration-modal";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
-import { Row, Col, Tree, Table, Space, Tag, message, Dropdown, Pagination } from "antd";
+import { Row, Col, Tree, Table, Space, Tag, message, Dropdown, Pagination, Popconfirm, Select } from "antd";
 import type { TableProps } from "antd";
 import type { TreeProps } from "antd";
 import { CaseService } from "@/services/qa/case.service";
@@ -16,6 +16,7 @@ import { PlanService } from "@/services/qa/plan.service";
 import { AppstoreOutlined, DeploymentUnitOutlined, DownOutlined } from "@ant-design/icons";
 import { FolderOpenDot } from "lucide-react";
 import { formatDateTime, globalEnums } from "../util";
+import { useUser } from "@/hooks/store/user";
 
 type TLabel = { id?: string; name?: string } | string;
 type TestCase = {
@@ -54,6 +55,7 @@ export default function PlanCasesPage() {
 
   const planService = useRef(new PlanService()).current;
   const caseService = useRef(new CaseService()).current;
+  const { data: currentUser } = useUser();
 
   const [expandedKeys, setExpandedKeys] = useState<string[] | undefined>(undefined);
   const [autoExpandParent, setAutoExpandParent] = useState<boolean>(true);
@@ -73,8 +75,35 @@ export default function PlanCasesPage() {
 
   const [activeCase, setActiveCase] = useState<TestCase | null>(null);
   const [detailLoading, setDetailLoading] = useState<boolean>(false);
-  const [isPlanModalOpen, setIsPlanModalOpen] = useState<boolean>(false);
-  const [isIterationModalOpen, setIsIterationModalOpen] = useState<boolean>(false);
+  const [isPlanModalOpen, setIsPlanModalOpen] = useState(false);
+  const [isIterationModalOpen, setIsIterationModalOpen] = useState(false);
+  const [selectedCaseIds, setSelectedCaseIds] = useState<string[]>([]);
+  const [selectedPlanCaseToCaseIdMap, setSelectedPlanCaseToCaseIdMap] = useState<Record<string, string>>({});
+  const [bulkExecuteLoading, setBulkExecuteLoading] = useState<boolean>(false);
+
+  const [planList, setPlanList] = useState<Array<{ id: string; name: string }>>([]);
+  const [planListLoading, setPlanListLoading] = useState<boolean>(false);
+
+  const selectionContextKey = useMemo(() => {
+    return JSON.stringify({
+      planId,
+      selectedRepositoryId,
+      selectedModuleId,
+      ordering,
+    });
+  }, [planId, selectedRepositoryId, selectedModuleId, ordering]);
+  const lastSelectionContextKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (
+      lastSelectionContextKeyRef.current !== null &&
+      lastSelectionContextKeyRef.current !== selectionContextKey
+    ) {
+      setSelectedCaseIds([]);
+      setSelectedPlanCaseToCaseIdMap({});
+    }
+    lastSelectionContextKeyRef.current = selectionContextKey;
+  }, [selectionContextKey]);
 
   const dropdownItems = [
     { key: "by_iteration", label: "通过迭代规划" },
@@ -83,12 +112,33 @@ export default function PlanCasesPage() {
 
   useEffect(() => {
     if (!workspaceSlug || !planId) return;
+    setLoading(true);
     fetchPlanTree();
     fetchCases(1, pageSize, undefined, undefined);
     setSelectedTreeKey("root");
     setSelectedRepositoryId(null);
     setSelectedModuleId(null);
   }, [workspaceSlug, planId]);
+
+  useEffect(() => {
+    if (!workspaceSlug || !projectId) return;
+    setPlanListLoading(true);
+    planService
+      .getPlanList(String(workspaceSlug), { project_id: String(projectId) })
+      .then((data) => setPlanList(Array.isArray(data) ? data : []))
+      .catch(() => setPlanList([]))
+      .finally(() => setPlanListLoading(false));
+  }, [workspaceSlug, projectId]);
+
+  const onChangePlan = (nextPlanId: string) => {
+    const found = planList.find((p) => String(p.id) === String(nextPlanId));
+    if (typeof window !== "undefined") {
+      if (found?.name) sessionStorage.setItem("selectedPlanName", String(found.name));
+    }
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("planId", String(nextPlanId));
+    router.push(`/${workspaceSlug}/projects/${projectId}/testhub/plan-cases?${params.toString()}`);
+  };
 
   const fetchPlanTree = async () => {
     if (!workspaceSlug || !planId) return;
@@ -309,20 +359,98 @@ export default function PlanCasesPage() {
     return [buildTreeNodes(planTree)];
   }, [planTree]);
 
-  const onCancelRelation = async (record: PlanCaseItem) => {
-    const caseId = record?.case?.id;
-    if (!workspaceSlug || !planId || !caseId) return;
+  const onCancelRelation = async (ids: string | string[]) => {
+    if (!workspaceSlug || !planId) return;
     try {
-      await planService.cancelPlanCase(String(workspaceSlug), record.id);
+      await planService.cancelPlanCase(String(workspaceSlug), ids);
+      if (Array.isArray(ids)) {
+        setSelectedCaseIds([]);
+        setSelectedPlanCaseToCaseIdMap({});
+      }
       await fetchPlanTree();
       await fetchCases(
-        currentPage,
+        1,
         pageSize,
         selectedRepositoryId || undefined,
         selectedModuleId || undefined
       );
+      message.success("取消关联成功");
     } catch (e) {
       setError("取消关联失败");
+    }
+  };
+
+  const getSuccessResultLabel = () => {
+    const map = (Enums as any)?.plan_case_result || {};
+    const keys = Object.keys(map);
+    if (keys.includes("通过")) return "通过";
+    if (keys.includes("成功")) return "成功";
+    const filtered = keys.filter((k) => k !== "未执行");
+    return filtered[0] ?? "通过";
+  };
+
+  const onBulkExecuteSelected = async () => {
+    if (!workspaceSlug || !planId) return;
+    if (!currentUser?.id) {
+      message.warning("缺少用户信息，无法提交执行结果");
+      return;
+    }
+    const caseIds = Array.from(
+      new Set(selectedCaseIds.map((planCaseId) => selectedPlanCaseToCaseIdMap[String(planCaseId)]).filter(Boolean))
+    );
+    if (caseIds.length === 0) {
+      message.warning("未找到选中用例的 case_id");
+      return;
+    }
+
+    setBulkExecuteLoading(true);
+    const successLabel = getSuccessResultLabel();
+    try {
+      const stepGroups = await Promise.all(
+        caseIds.map(async (cid) => {
+          let detail: any = null;
+          try {
+            detail = await planService.getPlanCaseDetail(String(workspaceSlug), {
+              plan_id: String(planId),
+              case_id: String(cid),
+            });
+          } catch {
+            detail = await caseService.getCase(String(workspaceSlug), String(cid));
+          }
+          const chosenSteps =
+            Array.isArray(detail?.execute_steps) && detail.execute_steps.length > 0
+              ? (detail.execute_steps as any[])
+              : Array.isArray(detail?.steps)
+                ? (detail.steps as any[])
+                : [];
+          const stepsPayload = (chosenSteps || []).map((s: any) => ({
+            description: String(s?.description ?? ""),
+            result: String(s?.result ?? ""),
+            actual_result: String(s?.actual_result ?? ""),
+            exec_result: successLabel,
+          }));
+          return { case_id: String(cid)};
+        })
+      );
+
+      const payload: any = {
+        plan_id: String(planId),
+        case_id: caseIds.map(String),
+        result: successLabel,
+        assignee: String(currentUser.id),
+        issue_ids: [],
+      };
+      await planService.caseExecute(String(workspaceSlug), payload);
+      message.success("批量执行结果提交成功");
+      setSelectedCaseIds([]);
+      setSelectedPlanCaseToCaseIdMap({});
+      await fetchPlanTree();
+      await fetchCases(currentPage, pageSize, selectedRepositoryId || undefined, selectedModuleId || undefined);
+    } catch (e: any) {
+      const msg = e?.message || e?.detail || e?.error || "批量提交结果失败";
+      message.error(msg);
+    } finally {
+      setBulkExecuteLoading(false);
     }
   };
 
@@ -385,7 +513,7 @@ export default function PlanCasesPage() {
       title: "用例库",
       dataIndex: "repository_name",
       key: "repository_name",
-      width: 160,
+      width: 140,
       render: (_: any, record: PlanCaseItem) =>
         record?.case?.repository_name ? (
           <span className="block truncate" title={record.case.repository_name}>
@@ -399,7 +527,7 @@ export default function PlanCasesPage() {
       title: "模块",
       dataIndex: "module",
       key: "module_name",
-      width: 160,
+      width: 120,
       render: (_: any, record: PlanCaseItem) =>
         record?.case?.module ? (
           <span className="block truncate" title={record.case.module}>
@@ -471,8 +599,8 @@ export default function PlanCasesPage() {
           >
             执行
           </Button>
-          <Button size="small" type="link" danger onClick={() => onCancelRelation(record)}>
-            取消关联
+          <Button size="small" type="link" danger onClick={() => onCancelRelation([record.id])}>
+            取关
           </Button>
         </Space>
       ),
@@ -531,8 +659,27 @@ export default function PlanCasesPage() {
                         <BreadcrumbLink href={`/${workspaceSlug}/projects/${projectId}/testhub/plans`} label="测试计划" />
                       }
                     />
-                    <Breadcrumbs.Item component={<BreadcrumbLink label="测试计划详情" isLast />} />
-                    {planName && <Breadcrumbs.Item component={<BreadcrumbLink label={planName} isLast />} />}
+                    <Breadcrumbs.Item
+                      component={
+                        <div className="flex items-center h-full">
+                          <Select
+                            value={planId || undefined}
+                            placeholder="选择测试计划"
+                            loading={planListLoading}
+                            size="small"
+                            showSearch
+                            optionFilterProp="label"
+                            style={{ height: "100%" }}
+                            className="min-w-[200px] h-full cursor-pointer [&_.ant-select-selector]:!p-0 [&_.ant-select-selector]:!h-full [&_.ant-select-selector]:!min-h-full [&_.ant-select-selector]:!items-center [&_.ant-select-selector]:!cursor-pointer [&_.ant-select-selection-wrap]:!h-full [&_.ant-select-selection-wrap]:!items-center [&_.ant-select-selection-wrap]:!flex [&_.ant-select-selection-search]:!h-full [&_.ant-select-selection-search-input]:!h-full [&_.ant-select-selection-item]:!leading-4 [&_.ant-select-selection-item]:!text-sm [&_.ant-select-selection-item]:!text-custom-text-200 [&_.ant-select-selection-placeholder]:!leading-4 [&_.ant-select-selection-placeholder]:!text-sm [&_.ant-select-selection-placeholder]:!text-custom-text-300"
+                            variant="borderless"
+                            suffixIcon={null}
+                            showArrow={false}
+                            options={planList.map((p) => ({ value: String(p.id), label: String(p.name || "-") }))}
+                            onChange={onChangePlan}
+                          />
+                        </div>
+                      }
+                    />
                   </Breadcrumbs>
                 </div>
                 <div>
@@ -589,16 +736,86 @@ export default function PlanCasesPage() {
                       <Table
                         dataSource={cases}
                         columns={columns}
-                        rowKey={(row) => row?.case?.id || row?.id}
+                        rowKey={(row) => row.id}
                         bordered={false}
                         onChange={handleTableChange}
                         tableLayout="fixed"
                         pagination={false}
                         scroll={{ x: "max-content" }}
+                        rowSelection={{
+                          selectedRowKeys: selectedCaseIds,
+                          preserveSelectedRowKeys: true,
+                          onChange: (newSelectedRowKeys) => {
+                            const nextSelectedKeys = (newSelectedRowKeys as (string | number)[]).map((k) => String(k));
+                            const currentPageIds = (cases || []).map((row) => String(row.id));
+
+                            setSelectedCaseIds((prev) => {
+                              const next = new Set(prev.map((k) => String(k)));
+                              for (const id of currentPageIds) next.delete(id);
+                              for (const id of nextSelectedKeys) next.add(id);
+                              return Array.from(next);
+                            });
+
+                            setSelectedPlanCaseToCaseIdMap((prev) => {
+                              const next = { ...(prev || {}) } as Record<string, string>;
+                              const currentPageSelected = new Set(
+                                nextSelectedKeys.filter((k) => currentPageIds.includes(String(k)))
+                              );
+                              for (const pid of currentPageIds) {
+                                if (!currentPageSelected.has(String(pid))) delete next[String(pid)];
+                              }
+                              for (const pid of Array.from(currentPageSelected)) {
+                                const row = (cases || []).find((r) => String(r.id) === String(pid));
+                                const cid = row?.case?.id;
+                                if (cid) next[String(pid)] = String(cid);
+                              }
+                              return next;
+                            });
+                          },
+                        }}
                       />
                     </div>
                     <div className="flex-shrink-0 border-t border-custom-border-200 px-0 py-3 bg-custom-background-100 flex items-center justify-between">
                       <div className="flex items-center gap-4 text-sm">
+                        {selectedCaseIds.length > 0 && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-custom-text-300">已选择 {selectedCaseIds.length} 条</span>
+                            <span
+                              className="cursor-pointer text-sm transition-colors"
+                              style={{ color: "#2a83ff" }}
+                              onClick={() => {
+                                setSelectedCaseIds([]);
+                                setSelectedPlanCaseToCaseIdMap({});
+                              }}
+                            >
+                              清除选择
+                            </span>
+                            <Popconfirm
+                              title="确定将选中用例全部标记为执行成功？"
+                              onConfirm={onBulkExecuteSelected}
+                              okText="确定"
+                              cancelText="取消"
+                              okButtonProps={{ loading: bulkExecuteLoading }}
+                            >
+                              <span
+                                className="cursor-pointer text-sm transition-colors"
+                                style={{ color: "#2a83ff" }}
+                              >
+                                执行
+                              </span>
+                            </Popconfirm>
+                            <Popconfirm
+                              title="确定取关选中用例？"
+                              onConfirm={() => onCancelRelation(selectedCaseIds)}
+                              okText="确定"
+                              cancelText="取消"
+                            >
+                              <span className="text-red-500 hover:text-red-600 cursor-pointer transition-colors">
+                                取关
+                              </span>
+                            </Popconfirm>
+                          </div>
+                        )}
                         <span className="text-custom-text-300">
                           {total > 0
                             ? `第 ${(currentPage - 1) * pageSize + 1}-${Math.min(currentPage * pageSize, total)} 条，共 ${total} 条`

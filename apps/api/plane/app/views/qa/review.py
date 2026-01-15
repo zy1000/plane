@@ -9,7 +9,7 @@ from django.shortcuts import get_object_or_404
 
 from plane.app.serializers.qa import ReviewModuleCreateUpdateSerializer, ReviewModuleDetailSerializer, \
     ReviewModuleListSerializer, ReviewListSerializer, ReviewCreateUpdateSerializer, ReviewCaseListSerializer, \
-    ReviewCaseRecordsSerializer
+    ReviewCaseRecordsSerializer, ReviewSerializer
 from plane.app.views import BaseAPIView, BaseViewSet
 from plane.db.models import CaseReview, CaseReviewModule, CaseReviewThrough, CaseModule, TestCase, CaseReviewRecord, \
     TestCaseRepository, TestCaseVersion
@@ -98,6 +98,20 @@ class CaseReviewAPIView(BaseAPIView):
         ids = request.data.pop('ids')
         self.queryset.filter(id__in=ids).delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class ReviewListAPIView(BaseAPIView):
+    queryset = CaseReview.objects.all()
+    serializer_class = ReviewSerializer
+
+    filterset_fields = {
+        'project_id': ['exact', 'in'],
+    }
+
+    def get(self, request, slug):
+        queryset = self.filter_queryset(self.queryset.filter(project__workspace__slug=slug)).distinct()
+        serializer = self.serializer_class(queryset, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 class CaseReviewView(BaseViewSet):
@@ -249,31 +263,35 @@ class CaseReviewView(BaseViewSet):
     def case_review(self, request, slug):
         # 输入参数
         review_id = request.data.get('review_id')
-        case_id = request.data.get('case_id')
+        case_ids = request.data.get('case_id')
         record_result = request.data.get('result')
         reason = request.data.get('reason')
         assignee_id = request.data.get('assignee')
 
-        # 获取评审单与评审用例
-        cr = CaseReview.objects.get(id=review_id)
-        crt = CaseReviewThrough.objects.get(review=cr, case_id=case_id)
+        if isinstance(case_ids, str):
+            case_ids = [case_ids]
 
-        # 记录评审历史：每次提交一条记录，保留历史
-        CaseReviewRecord.objects.create(
-            result=record_result,
-            reason=reason,
-            assignee_id=assignee_id,
-            crt=crt,
-        )
+        for case_id in case_ids:
+            # 获取评审单与评审用例
+            cr = CaseReview.objects.get(id=review_id)
+            crt = CaseReviewThrough.objects.get(review=cr, case_id=case_id)
 
-        update_case_review_status(cr, crt, assignee_id)
+            # 记录评审历史：每次提交一条记录，保留历史
+            CaseReviewRecord.objects.create(
+                result=record_result,
+                reason=reason,
+                assignee_id=assignee_id,
+                crt=crt,
+            )
 
-        # 如果评审通过，则创建用例快照
-        if crt.result == CaseReviewThrough.Result.PASS:
-            TestCaseVersion.create_from_case(case=TestCase.objects.get(id=case_id))
+            update_case_review_status(cr, crt, assignee_id)
 
-        serializer = ReviewCaseListSerializer(instance=crt)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+            # 如果评审通过，则创建用例快照
+            if crt.result == CaseReviewThrough.Result.PASS:
+                TestCaseVersion.create_from_case(case=TestCase.objects.get(id=case_id))
+
+        # serializer = ReviewCaseListSerializer(instance=crt)
+        return Response(status=status.HTTP_200_OK)
 
     @action(detail=False, methods=['get'], url_path='records')
     def get_records(self, request, slug):

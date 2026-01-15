@@ -8,6 +8,14 @@ export class PlanService extends APIService {
     super(API_BASE_URL);
   }
 
+  async getPlanList(workspaceSlug: string, queries?: any): Promise<Array<{ id: string; name: string }>> {
+    return this.get(`/api/workspaces/${workspaceSlug}/test/plan/list/`, { params: queries })
+      .then((response) => response?.data || [])
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
   async getPlanModulesCount(workspaceSlug: string, projectId: string): Promise<any> {
     const params = { project_id: projectId };
     return this.get(`/api/workspaces/${workspaceSlug}/test/plan/module/count/`, { params })
@@ -140,7 +148,7 @@ export class PlanService extends APIService {
       });
   }
 
-  async cancelPlanCase(workspaceSlug: string, planCaseId: string): Promise<any> {
+  async cancelPlanCase(workspaceSlug: string, planCaseId: string | string[]): Promise<any> {
     const data = { id: planCaseId };
     return this.post(`/api/workspaces/${workspaceSlug}/test/plan/cancel/`, data)
       .then((response) => response?.data)

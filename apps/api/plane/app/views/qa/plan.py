@@ -11,7 +11,7 @@ from django.db.models.functions import Cast
 from django.shortcuts import get_object_or_404
 from plane.app.serializers.qa import TestPlanDetailSerializer, CaseModuleCreateUpdateSerializer, \
     CaseModuleListSerializer, CaseLabelListSerializer, CaseLabelCreateSerializer, CaseCreateUpdateSerializer, \
-    CaseListSerializer, CaseAttachmentSerializer, ReviewCaseRecordsSerializer
+    CaseListSerializer, CaseAttachmentSerializer, ReviewCaseRecordsSerializer, PlanListSerializer
 from plane.app.serializers.qa.plan import PlanModuleCreateUpdateSerializer, PlanModuleListSerializer, \
     PlanCaseListSerializer, PlanCaseCardSerializer, PlanCaseRecordSerializer
 from plane.app.views.qa.filters import TestPlanFilter
@@ -180,6 +180,19 @@ class PlanAPIView(BaseAPIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
+class PlanListAPIView(BaseAPIView):
+    model = TestPlan
+    queryset = TestPlan.objects.all()
+    serializer_class = PlanListSerializer
+    filterset_fields = {
+        'project_id': ['exact', 'in'],
+    }
+
+    def get(self, request, slug):
+        queryset = self.filter_queryset(self.queryset.filter(project__workspace__slug=slug)).distinct()
+        serializer = self.serializer_class(queryset, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
 class PlanCaseAPIView(BaseAPIView):
     queryset = PlanCase.objects.all()
     pagination_class = CustomPaginator
@@ -298,7 +311,8 @@ class PlanView(BaseViewSet):
 
     @action(detail=False, methods=['post'], url_path='cancel')
     def cancel(self, request, slug):
-        PlanCase.objects.get(id=request.data['id']).delete(soft=False)
+        print(request.data)
+        PlanCase.objects.filter(id__in=request.data['id']).delete(soft=False)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(detail=False, methods=['get'], url_path='case-list')
@@ -356,28 +370,32 @@ class PlanView(BaseViewSet):
     @action(detail=False, methods=['post'], url_path='execute')
     def execute(self, request, slug):
         plan_id = request.data['plan_id']
-        case_id = request.data['case_id']
+        case_ids = request.data['case_id']
         result = request.data['result']
         reason = request.data.get('reason')
-        steps = request.data['steps']
+        steps = request.data.get('steps')
         assignee = request.data['assignee']
-        issue_ids = request.data.get('issue_ids', [])
 
-        plan_case = PlanCase.objects.get(plan_id=plan_id, case_id=case_id)
+        if isinstance(case_ids, str):
+            case_ids = [case_ids]
+        for case_id in case_ids:
 
-        # 创建执行记录
-        pcr = PlanCaseRecord.objects.create(result=result, reason=reason, steps=steps, assignee_id=assignee,
-                                            plan_case=plan_case)
-        plan_case.result = result
-        plan_case.save()
+            plan_case = PlanCase.objects.get(plan_id=plan_id, case_id=case_id)
 
-        plan = TestPlan.objects.get(id=plan_id)
-        # 修改计划状态
-        if not PlanCase.objects.filter(plan_id=plan_id, result=PlanCase.Result.NOT_START).exists():
-            plan.state = TestPlan.State.COMPLETED
-        else:
-            plan.state = TestPlan.State.PROGRESS
-        plan.save()
+            # 创建执行记录
+            pcr = PlanCaseRecord.objects.create(result=result, reason=reason,
+                                                steps=steps if steps else plan_case.case.steps, assignee_id=assignee,
+                                                plan_case=plan_case)
+            plan_case.result = result
+            plan_case.save()
+
+            plan = TestPlan.objects.get(id=plan_id)
+            # 修改计划状态
+            if not PlanCase.objects.filter(plan_id=plan_id, result=PlanCase.Result.NOT_START).exists():
+                plan.state = TestPlan.State.COMPLETED
+            else:
+                plan.state = TestPlan.State.PROGRESS
+            plan.save()
         return Response(status=status.HTTP_201_CREATED)
 
     @action(detail=False, methods=['get'], url_path='case-detail')
@@ -576,7 +594,7 @@ class CaseAPIView(BaseAPIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     def delete(self, request, slug):
-        self.filter_queryset(self.queryset).all().delete()
+        self.filter_queryset(self.queryset).all().delete(soft=False)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
