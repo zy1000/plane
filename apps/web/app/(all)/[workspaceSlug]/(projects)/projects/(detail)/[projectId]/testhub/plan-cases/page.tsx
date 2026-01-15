@@ -69,6 +69,7 @@ export default function PlanCasesPage() {
 
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(10);
+  const [ordering, setOrdering] = useState<string | undefined>(undefined);
 
   const [activeCase, setActiveCase] = useState<TestCase | null>(null);
   const [detailLoading, setDetailLoading] = useState<boolean>(false);
@@ -99,11 +100,17 @@ export default function PlanCasesPage() {
     } catch {}
   };
 
-  const fetchCases = async (page: number, size: number, repoId?: string, moduleId?: string) => {
+  const fetchCases = async (
+    page: number,
+    size: number,
+    repoId?: string,
+    moduleId?: string,
+    orderingParam?: string | null
+  ) => {
     if (!workspaceSlug || !planId) return;
     try {
-      setLoading(true);
       setError(null);
+      const effectiveOrdering = orderingParam === undefined ? ordering : orderingParam ?? undefined;
       const params: any = {
         page,
         page_size: size,
@@ -111,6 +118,7 @@ export default function PlanCasesPage() {
       };
       if (repoId) params["case__repository_id"] = repoId;
       if (moduleId) params["case__module_id"] = moduleId;
+      if (effectiveOrdering) params.ordering = effectiveOrdering;
       const response: PlanCaseResponse = await planService.getPlanCases(workspaceSlug as string, params);
       setCases(response?.data || []);
       setTotal(response?.count || 0);
@@ -158,6 +166,30 @@ export default function PlanCasesPage() {
     const nextSize = size || pageSize;
     const nextPage = nextSize !== pageSize ? 1 : page;
     fetchCases(nextPage, nextSize, selectedRepositoryId || undefined, selectedModuleId || undefined);
+  };
+
+  const handleTableChange: TableProps<PlanCaseItem>["onChange"] = (_pagination, _filters, sorter) => {
+    const sorterValue = Array.isArray(sorter) ? sorter[0] : sorter;
+    const sorterField = String((sorterValue as any)?.field ?? "");
+    const sorterOrder = (sorterValue as any)?.order as "ascend" | "descend" | undefined;
+
+    const nextOrdering =
+      sorterField === "updated_at"
+        ? sorterOrder === "ascend"
+          ? "case__updated_at"
+          : sorterOrder === "descend"
+            ? "-case__updated_at"
+            : undefined
+        : sorterField === "code"
+          ? sorterOrder === "ascend"
+            ? "case__code"
+            : sorterOrder === "descend"
+              ? "-case__code"
+              : undefined
+        : undefined;
+
+    setOrdering(nextOrdering);
+    fetchCases(1, pageSize, selectedRepositoryId || undefined, selectedModuleId || undefined, nextOrdering ?? null);
   };
 
   const onExpand: TreeProps["onExpand"] = (keys) => {
@@ -319,6 +351,8 @@ export default function PlanCasesPage() {
           </span>
         );
       },
+      sorter: true,
+      sortOrder: ordering === "case__code" ? "ascend" : ordering === "-case__code" ? "descend" : null,
     },
     {
       title: "用例名称",
@@ -340,31 +374,46 @@ export default function PlanCasesPage() {
               )
             }
           >
-         <span className="block max-w-[300px] truncate text-inherit" title={name || ""}>
+         <span className="block max-w-[220px] truncate text-inherit" title={name || ""}>
             {name || "-"}
           </span>
           </Button>
         );
       },
     },
-        {
+    {
       title: "用例库",
       dataIndex: "repository_name",
       key: "repository_name",
+      width: 160,
       render: (_: any, record: PlanCaseItem) =>
-        record?.case?.repository_name ?? "-",
+        record?.case?.repository_name ? (
+          <span className="block truncate" title={record.case.repository_name}>
+            {record.case.repository_name}
+          </span>
+        ) : (
+          "-"
+        ),
     },
-        {
+    {
       title: "模块",
       dataIndex: "module",
       key: "module_name",
+      width: 160,
       render: (_: any, record: PlanCaseItem) =>
-        record?.case?.module ?? "-",
+        record?.case?.module ? (
+          <span className="block truncate" title={record.case.module}>
+            {record.case.module}
+          </span>
+        ) : (
+          "-"
+        ),
     },
     {
       title: "类型",
       dataIndex: "type",
       key: "type",
+      width: 100,
       render: (_: any, record: PlanCaseItem) => {
         const v = record?.case?.type as number;
         const label = Enums?.case_type?.[v] || "-";
@@ -375,6 +424,7 @@ export default function PlanCasesPage() {
       title: "优先级",
       dataIndex: "priority",
       key: "priority",
+      width: 100,
       render: (_: any, record: PlanCaseItem) => {
         const v = record?.case?.priority as number;
         const label = Enums?.case_priority?.[v] || "-";
@@ -385,6 +435,7 @@ export default function PlanCasesPage() {
       title: "执行结果",
       dataIndex: "result",
       key: "result",
+      width: 120,
       render: (_: any, record: PlanCaseItem) => {
         const label = record?.result || "-";
         const color = (Enums as any)?.plan_case_result?.[label];
@@ -395,13 +446,16 @@ export default function PlanCasesPage() {
       title: "更新时间",
       dataIndex: "updated_at",
       key: "updated_at",
+      width: 180,
       render: (_: any, record: PlanCaseItem) =>
         record?.case?.updated_at ? formatDateTime(record.case.updated_at) : "-",
+      sorter: true,
+      sortOrder: ordering === "case__updated_at" ? "ascend" : ordering === "-case__updated_at" ? "descend" : null,
     },
     {
       title: "操作",
       key: "actions",
-      width: 100,
+      width: 140,
       render: (_: any, record: PlanCaseItem) => (
         <Space>
           <Button
@@ -537,6 +591,8 @@ export default function PlanCasesPage() {
                         columns={columns}
                         rowKey={(row) => row?.case?.id || row?.id}
                         bordered={false}
+                        onChange={handleTableChange}
+                        tableLayout="fixed"
                         pagination={false}
                         scroll={{ x: "max-content" }}
                       />

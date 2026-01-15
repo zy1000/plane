@@ -103,6 +103,7 @@ export class CaseService extends APIService {
       project_id?: string | null;
       repository_id?: string | null;
       module_id?: string | null;
+      ordering?: string;
       name__icontains?: string;
     }
   ): Promise<{ data: Array<{ id: string; name: string; priority: number; assignees: string[]; result: string; created_by: string | null }>; count: number }> {

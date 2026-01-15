@@ -457,7 +457,7 @@ export default function TestCasesPage() {
     page: number = currentPage,
     size: number = pageSize,
     filterParams: typeof filters = filters,
-    orderingParam: string | undefined = ordering
+    orderingParam?: string | null
   ) => {
     if (!workspaceSlug || !repositoryId) return;
     try {
@@ -465,13 +465,14 @@ export default function TestCasesPage() {
       // 重置选择
       setSelectedCaseIds([]);
 
+      const effectiveOrdering = orderingParam === undefined ? ordering : orderingParam ?? undefined;
       const queryParams: any = {
         page,
         page_size: size,
         repository_id: repositoryId,
       };
 
-      if (orderingParam) queryParams.ordering = orderingParam;
+      if (effectiveOrdering) queryParams.ordering = effectiveOrdering;
 
       // 新增：如果有选中模块，添加 module_id 参数
       if (selectedModuleId && selectedModuleId !== "all") {
@@ -867,7 +868,13 @@ export default function TestCasesPage() {
           : sorterOrder === "descend"
             ? "-updated_at"
             : undefined
-        : undefined;
+        : sorterField === "code"
+          ? sorterOrder === "ascend"
+            ? "code"
+            : sorterOrder === "descend"
+              ? "-code"
+              : undefined
+          : undefined;
 
     const newFilters = {
       ...filters,
@@ -902,7 +909,7 @@ export default function TestCasesPage() {
     setPageSize(nextPageSize);
     setFilters(newFilters);
     setOrdering(nextOrdering);
-    fetchCases(nextPage, nextPageSize, newFilters, nextOrdering);
+    fetchCases(nextPage, nextPageSize, newFilters, nextOrdering ?? null);
   };
 
   const handlePaginationChange = (page: number, size?: number) => {
@@ -986,6 +993,8 @@ export default function TestCasesPage() {
       dataIndex: "code",
       key: "code",
       width: 110,
+      sorter: true,
+      sortOrder: ordering === "code" ? "ascend" : ordering === "-code" ? "descend" : null,
       ...getColumnSearchProps("code"),
       render: (value: string) => (
         <span className="block  truncate" title={value || ""}>
