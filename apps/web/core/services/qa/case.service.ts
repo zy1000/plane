@@ -380,7 +380,7 @@ export class CaseService extends APIService {
   }
   async submitCaseReview(
     workspaceSlug: string,
-    payload: { review_id: string; case_id: string; result: string; reason?: string; assignee?: string }
+    payload: { review_id: string; case_id: string | string[]; result: string; reason?: string; assignee?: string }
   ): Promise<any> {
     return this.post(`/api/workspaces/${workspaceSlug}/test/review/case-review/`, payload)
       .then((response) => response?.data)

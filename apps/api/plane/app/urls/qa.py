@@ -8,8 +8,9 @@ from plane.app.views.qa.case import CaseAssetAPIView, CaseIssueWithType, TestCas
     CaseLabelAPIView
 from plane.app.views.qa.case_version import CaseVersionAPIView, CaseVersionCompareAPIView
 from plane.app.views.qa.module import CaseModuleCountAPIView, CaseModuleDetailAPIView
-from plane.app.views.qa.plan import PlanModuleDetailAPIView
-from plane.app.views.qa.review import ReviewModuleAPIView, ReviewModuleDetailAPIView, CaseReviewAPIView, CaseReviewView
+from plane.app.views.qa.plan import PlanModuleDetailAPIView, PlanListAPIView
+from plane.app.views.qa.review import ReviewModuleAPIView, ReviewModuleDetailAPIView, CaseReviewAPIView, CaseReviewView, \
+    ReviewListAPIView
 
 router = SimpleRouter()
 router.register('review', CaseReviewView, basename='review')
@@ -18,6 +19,7 @@ router.register('case', CaseAPI, basename='case')
 
 urlpatterns = [
     path('workspaces/<str:slug>/test/plane/', PlanAPIView.as_view(), name='test-plan'),
+    path('workspaces/<str:slug>/test/plan/list/', PlanListAPIView.as_view(), name='test-plan'),
     path('workspaces/<str:slug>/test/plane/case/', PlanCaseAPIView.as_view(), name='test-plan'),
     path('workspaces/<str:slug>/test/plan/module/', PlanModuleAPIView.as_view(), name='test-plan'),
     path('workspaces/<str:slug>/test/plan/module/<uuid:module_id>/', PlanModuleDetailAPIView.as_view(),
@@ -41,6 +43,7 @@ urlpatterns = [
     path('workspaces/<str:slug>/test/review/module/<uuid:module_id>/', ReviewModuleDetailAPIView.as_view(),
          name='test-review-module-detail'),
     path('workspaces/<str:slug>/test/review/', CaseReviewAPIView.as_view(), name='test-repository-enums'),
+    path('workspaces/<str:slug>/test/review/list/', ReviewListAPIView.as_view(), name='test-repository-enums'),
     path('workspaces/<str:slug>/test/', include(router.urls)),
     path(
         "workspaces/<str:slug>/cases/<uuid:case_id>/attachments/<uuid:pk>/",

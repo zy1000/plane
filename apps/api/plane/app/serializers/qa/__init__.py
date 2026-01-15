@@ -74,6 +74,12 @@ class TestPlanCreateUpdateSerializer(ModelSerializer):
                   'cycle']
 
 
+class PlanListSerializer(ModelSerializer):
+    class Meta:
+        model = TestPlan
+        fields = ['name', 'id']
+
+
 class CaseDetailSerializer(ModelSerializer):
     """
     Serializer for creating a TestPlan.
@@ -391,6 +397,12 @@ class ReviewListSerializer(ModelSerializer):
         exclude = ['cases']
 
 
+class ReviewSerializer(ModelSerializer):
+    class Meta:
+        model = CaseReview
+        fields = ['id', 'name']
+
+
 class ReviewCaseListSerializer(ModelSerializer):
     name = serializers.SerializerMethodField()
     priority = serializers.SerializerMethodField()
@@ -398,7 +410,6 @@ class ReviewCaseListSerializer(ModelSerializer):
     code = serializers.CharField(source='case.code', read_only=True)
     repository = serializers.CharField(source='case.repository.name', read_only=True)
     module = serializers.CharField(source='case.module.name', read_only=True)
-
 
     def get_name(self, obj: CaseReviewThrough):
         return obj.case.name
@@ -411,7 +422,8 @@ class ReviewCaseListSerializer(ModelSerializer):
 
     class Meta:
         model = CaseReviewThrough
-        fields = ['id', 'name', 'priority', 'assignees', 'result', 'created_by', 'case_id','code','repository','module']
+        fields = ['id', 'name', 'priority', 'assignees', 'result', 'created_by', 'case_id', 'code', 'repository',
+                  'module']
 
 
 class ReviewCaseRecordsSerializer(ModelSerializer):

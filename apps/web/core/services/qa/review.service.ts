@@ -11,6 +11,14 @@ export class CaseService extends APIService {
     super(API_BASE_URL);
    }
 
+  async getReviewList(workspaceSlug: string, queries?: any): Promise<Array<{ id: string; name: string }>> {
+    return this.get(`/api/workspaces/${workspaceSlug}/test/review/list/`, { params: queries })
+      .then((response) => response?.data || [])
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
    async createReviewModule(workspaceSlug: string, data: any): Promise<any> {
     return this.post(`/api/workspaces/${workspaceSlug}/test/review/module/`, data)
       .then((response) => response?.data)
