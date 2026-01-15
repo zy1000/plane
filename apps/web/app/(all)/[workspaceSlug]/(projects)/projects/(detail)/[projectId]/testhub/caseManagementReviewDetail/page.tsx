@@ -6,7 +6,7 @@ import { PageHead } from "@/components/core/page-title";
 import { Breadcrumbs } from "@plane/ui";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { Row, Col, Tree, Table, Button, Tag, message, Pagination } from "antd";
-import type { TreeProps } from "antd";
+import type { TreeProps, TableProps } from "antd";
 import { AppstoreOutlined, DeploymentUnitOutlined } from "@ant-design/icons";
 import { CaseService as CaseApiService } from "@/services/qa/case.service";
 import { CaseService as ReviewApiService } from "@/services/qa/review.service";
@@ -50,6 +50,7 @@ export default function CaseManagementReviewDetailPage() {
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(10);
   const [total, setTotal] = useState<number>(0);
+  const [ordering, setOrdering] = useState<string | undefined>(undefined);
   const [reviewEnums, setReviewEnums] = useState<Record<string, Record<string, { label: string; color: string }>>>({});
   const [isCaseModalOpen, setIsCaseModalOpen] = useState(false);
   const [activeCaseId, setActiveCaseId] = useState<string | undefined>(undefined);
@@ -117,16 +118,19 @@ export default function CaseManagementReviewDetailPage() {
   const fetchReviewCaseList = async (
     page: number = currentPage,
     size: number = pageSize,
-    moduleId?: string | null
+    moduleId?: string | null,
+    orderingParam?: string | null
   ) => {
     if (!workspaceSlug || !reviewId) return;
     try {
       // setLoading(true);
       setError(null);
+      const effectiveOrdering = orderingParam === undefined ? ordering : orderingParam ?? undefined;
       const res = await reviewService.getReviewCaseList(workspaceSlug as string, reviewId as string, {
         page,
         page_size: size,
         module_id: typeof moduleId === "undefined" ? selectedModuleId : moduleId,
+        ...(effectiveOrdering ? { ordering: effectiveOrdering } : {}),
       });
       setReviewCases(Array.isArray(res?.data) ? (res.data as ReviewCaseRow[]) : []);
       setTotal(Number(res?.count || 0));
@@ -279,6 +283,8 @@ export default function CaseManagementReviewDetailPage() {
       title: "用例编号",
       dataIndex: "code",
       key: "code",
+      sorter: true,
+      sortOrder: ordering === "case__code" ? "ascend" : ordering === "-case__code" ? "descend" : null,
       render: (code: string | undefined, record: ReviewCaseRow) => (
         <Button
           type="link"
@@ -433,6 +439,24 @@ export default function CaseManagementReviewDetailPage() {
     },
   ];
 
+  const handleTableChange: TableProps<ReviewCaseRow>["onChange"] = (_pagination, _filters, sorter) => {
+    const sorterValue = Array.isArray(sorter) ? sorter[0] : sorter;
+    const sorterField = String((sorterValue as any)?.field ?? "");
+    const sorterOrder = (sorterValue as any)?.order as "ascend" | "descend" | undefined;
+
+    const nextOrdering =
+      sorterField === "code"
+        ? sorterOrder === "ascend"
+          ? "case__code"
+          : sorterOrder === "descend"
+            ? "-case__code"
+            : undefined
+        : undefined;
+
+    setOrdering(nextOrdering);
+    fetchReviewCaseList(1, pageSize, undefined, nextOrdering ?? null);
+  };
+
   return (
     <>
       <div className="flex flex-col pt-4 px-4 pb-0 w-full h-full overflow-hidden">
@@ -533,6 +557,7 @@ export default function CaseManagementReviewDetailPage() {
                         pagination={false}
                         locale={{ emptyText: "暂无数据" }}
                         scroll={{ x: "max-content" }}
+                        onChange={handleTableChange}
                       />
                     </div>
                     <div className="flex-shrink-0 border-t border-custom-border-200 px-4 py-3 bg-custom-background-100 flex items-center justify-between">

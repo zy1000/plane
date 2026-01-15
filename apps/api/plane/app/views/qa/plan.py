@@ -5,8 +5,9 @@ from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.response import Response
 from yaml import serialize
 
-from django.db import transaction
-from django.db.models import Count, Q, Prefetch
+from django.db import connection, transaction
+from django.db.models import Case, CharField, Count, F, Func, IntegerField, Prefetch, Q, Value, When
+from django.db.models.functions import Cast
 from django.shortcuts import get_object_or_404
 from plane.app.serializers.qa import TestPlanDetailSerializer, CaseModuleCreateUpdateSerializer, \
     CaseModuleListSerializer, CaseLabelListSerializer, CaseLabelCreateSerializer, CaseCreateUpdateSerializer, \
@@ -30,6 +31,71 @@ from django.http import HttpResponseRedirect, FileResponse, StreamingHttpRespons
 from urllib.parse import quote
 import uuid
 from django.utils import timezone
+
+
+class NumericSuffixCodeOrderingFilter(OrderingFilter):
+    def filter_queryset(self, request, queryset, view):
+        ordering = self.get_ordering(request, queryset, view)
+        if not ordering:
+            return queryset
+
+        if connection.vendor != 'postgresql':
+            return queryset.order_by(*ordering)
+
+        needs_code = any(field.lstrip('-') in ('code', 'case__code') for field in ordering)
+        if not needs_code:
+            return queryset.order_by(*ordering)
+
+        code_field = 'case__code' if any(field.lstrip('-') == 'case__code' for field in ordering) else 'code'
+
+        queryset = queryset.annotate(
+            _code_sort_group=Case(
+                When(**{f"{code_field}__regex": r'.*-[0-9]+$'}, then=Value(0)),
+                default=Value(1),
+                output_field=IntegerField(),
+            ),
+            _code_prefix=Case(
+                When(
+                    **{f"{code_field}__regex": r'.*-[0-9]+$'},
+                    then=Func(
+                        F(code_field),
+                        function='regexp_replace',
+                        template="regexp_replace(%(expressions)s, '-[0-9]+$', '')",
+                    ),
+                ),
+                default=Value(''),
+                output_field=CharField(),
+            ),
+            _code_num=Case(
+                When(
+                    **{f"{code_field}__regex": r'.*-[0-9]+$'},
+                    then=Cast(
+                        Func(
+                            F(code_field),
+                            function='substring',
+                            template="substring(%(expressions)s from '-([0-9]+)$')",
+                        ),
+                        IntegerField(),
+                    ),
+                ),
+                default=Value(None),
+                output_field=IntegerField(),
+            ),
+        )
+
+        new_ordering = []
+        for field in ordering:
+            if field.lstrip('-') not in ('code', 'case__code'):
+                new_ordering.append(field)
+                continue
+
+            desc = field.startswith('-')
+            new_ordering.append('_code_sort_group')
+            new_ordering.append('-_code_prefix' if desc else '_code_prefix')
+            new_ordering.append('-_code_num' if desc else '_code_num')
+            new_ordering.append(f"-{code_field}" if desc else code_field)
+
+        return queryset.order_by(*new_ordering)
 
 
 class RepositoryAPIView(BaseAPIView):
@@ -123,6 +189,8 @@ class PlanCaseAPIView(BaseAPIView):
         'case__module_id': ['exact', 'in'],
     }
     serializer_class = PlanCaseListSerializer
+    filter_backends = (DjangoFilterBackend, SearchFilter, NumericSuffixCodeOrderingFilter)
+    ordering_fields = ['case__updated_at', 'case__code']
 
     def get_queryset(self):
         return (
@@ -134,6 +202,7 @@ class PlanCaseAPIView(BaseAPIView):
                 "created_at",
                 "updated_at",
                 "case__id",
+                "case__code",
                 "case__name",
                 "case__type",
                 "case__priority",
@@ -239,9 +308,9 @@ class PlanView(BaseViewSet):
             query = query.filter(case__name__icontains=name)
 
         repository_ids = (
-            request.query_params.getlist('repository_id')
-            or request.query_params.getlist('repository_ids')
-            or request.query_params.getlist('case__repository_id')
+                request.query_params.getlist('repository_id')
+                or request.query_params.getlist('repository_ids')
+                or request.query_params.getlist('case__repository_id')
         )
         if repository_ids:
             query = query.filter(case__repository_id__in=repository_ids)
@@ -466,7 +535,7 @@ class CaseAPIView(BaseAPIView):
     )
     pagination_class = CustomPaginator
     serializer_class = CaseListSerializer
-    filter_backends = (DjangoFilterBackend, SearchFilter,OrderingFilter)
+    filter_backends = (DjangoFilterBackend, SearchFilter, NumericSuffixCodeOrderingFilter)
     filterset_fields = {
         'name': ['exact', 'icontains', 'in'],
         'code': ['exact', 'icontains', 'in'],
@@ -478,9 +547,7 @@ class CaseAPIView(BaseAPIView):
         'id': ['exact', 'in'],
         'plan_cases__plan__id': ['exact', 'in'],
     }
-    ordering_fields = ['updated_at']
-    ordering = ['-updated_at']
-
+    ordering_fields = ['updated_at', 'code']
 
     def get(self, request, slug):
         cases = self.filter_queryset(self.queryset)

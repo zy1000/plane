@@ -17,6 +17,7 @@ from plane.utils.paginator import CustomPaginator
 from plane.utils.qa import update_case_review_status
 from plane.utils.response import list_response
 from plane.app.views.qa.filters import CaseReviewFilter
+from plane.app.views.qa.plan import NumericSuffixCodeOrderingFilter
 
 
 class ReviewModuleAPIView(BaseAPIView):
@@ -68,6 +69,7 @@ class CaseReviewAPIView(BaseAPIView):
     pagination_class = CustomPaginator
     serializer_class = ReviewListSerializer
     filterset_class = CaseReviewFilter
+    ordering_fields = ["case__updated_at", "case__code"]
 
     def post(self, request, slug):
         serializer = ReviewCreateUpdateSerializer(data=request.data)
@@ -100,6 +102,7 @@ class CaseReviewAPIView(BaseAPIView):
 
 class CaseReviewView(BaseViewSet):
     pagination_class = CustomPaginator
+    ordering_fields = ["case__updated_at", "case__code"]
 
     @action(detail=False, methods=['get'], url_path='enums')
     def get_enums(self, request, slug):
@@ -209,6 +212,8 @@ class CaseReviewView(BaseViewSet):
                     expanded.update(new_children)
                     frontier = new_children
                 query = query.filter(case__module_id__in=list(expanded))
+
+        query = NumericSuffixCodeOrderingFilter().filter_queryset(request, query, self)
         paginator = self.pagination_class()
         paginated_queryset = paginator.paginate_queryset(query, request)
         serializer = ReviewCaseListSerializer(instance=paginated_queryset, many=True)
