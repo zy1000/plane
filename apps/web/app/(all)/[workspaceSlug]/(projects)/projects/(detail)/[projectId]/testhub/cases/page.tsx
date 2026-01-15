@@ -171,6 +171,7 @@ export default function TestCasesPage() {
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(10);
   const [total, setTotal] = useState<number>(0);
+  const [ordering, setOrdering] = useState<string | undefined>(undefined);
 
   // 筛选状态管理
   const [filters, setFilters] = useState<{
@@ -455,7 +456,8 @@ export default function TestCasesPage() {
   const fetchCases = async (
     page: number = currentPage,
     size: number = pageSize,
-    filterParams: typeof filters = filters
+    filterParams: typeof filters = filters,
+    orderingParam: string | undefined = ordering
   ) => {
     if (!workspaceSlug || !repositoryId) return;
     try {
@@ -468,6 +470,8 @@ export default function TestCasesPage() {
         page_size: size,
         repository_id: repositoryId,
       };
+
+      if (orderingParam) queryParams.ordering = orderingParam;
 
       // 新增：如果有选中模块，添加 module_id 参数
       if (selectedModuleId && selectedModuleId !== "all") {
@@ -844,13 +848,26 @@ export default function TestCasesPage() {
   };
 
   // 表格变更回调：统一处理分页与服务端过滤
-  const handleTableChange: TableProps<TestCase>["onChange"] = (pagination, tableFilters) => {
+  const handleTableChange: TableProps<TestCase>["onChange"] = (pagination, tableFilters, sorter) => {
     const selectedStates = (tableFilters?.state as number[] | undefined) || [];
     const selectedTypes = (tableFilters?.type as number[] | undefined) || [];
     const selectedPriorities = (tableFilters?.priority as number[] | undefined) || [];
     const nameFilter = tableFilters?.name?.[0] as string | undefined;
     const labelsFilter = tableFilters?.labels?.[0] as string | undefined;
     const codeFilter = tableFilters?.code?.[0] as string | undefined;
+
+    const sorterValue = Array.isArray(sorter) ? sorter[0] : sorter;
+    const sorterField = String((sorterValue as any)?.field ?? "");
+    const sorterOrder = (sorterValue as any)?.order as "ascend" | "descend" | undefined;
+
+    const nextOrdering =
+      sorterField === "updated_at"
+        ? sorterOrder === "ascend"
+          ? "updated_at"
+          : sorterOrder === "descend"
+            ? "-updated_at"
+            : undefined
+        : undefined;
 
     const newFilters = {
       ...filters,
@@ -884,12 +901,14 @@ export default function TestCasesPage() {
     setCurrentPage(nextPage);
     setPageSize(nextPageSize);
     setFilters(newFilters);
-    fetchCases(nextPage, nextPageSize, newFilters);
+    setOrdering(nextOrdering);
+    fetchCases(nextPage, nextPageSize, newFilters, nextOrdering);
   };
 
   const handlePaginationChange = (page: number, size?: number) => {
     const newPageSize = size || pageSize;
-    fetchCases(page, newPageSize, filters);
+    const nextPage = newPageSize !== pageSize ? 1 : page;
+    fetchCases(nextPage, newPageSize, filters);
   };
 
 
@@ -1089,7 +1108,15 @@ export default function TestCasesPage() {
       ),
       width: 170,
     },
-    { title: "更新时间", dataIndex: "updated_at", key: "updated_at", render: (d) => formatDateTime(d), width: 180 },
+    {
+      title: "更新时间",
+      dataIndex: "updated_at",
+      key: "updated_at",
+      render: (d) => formatDateTime(d),
+      width: 180,
+      sorter: true,
+      sortOrder: ordering === "updated_at" ? "ascend" : ordering === "-updated_at" ? "descend" : null,
+    },
     {
       title: "操作",
       key: "actions",

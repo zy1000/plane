@@ -156,7 +156,8 @@ export default function PlanCasesPage() {
 
   const handlePaginationChange = (page: number, size?: number) => {
     const nextSize = size || pageSize;
-    fetchCases(page, nextSize, selectedRepositoryId || undefined, selectedModuleId || undefined);
+    const nextPage = nextSize !== pageSize ? 1 : page;
+    fetchCases(nextPage, nextSize, selectedRepositoryId || undefined, selectedModuleId || undefined);
   };
 
   const onExpand: TreeProps["onExpand"] = (keys) => {

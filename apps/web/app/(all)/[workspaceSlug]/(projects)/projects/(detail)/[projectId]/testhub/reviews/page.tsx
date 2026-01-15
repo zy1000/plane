@@ -643,7 +643,11 @@ export default function ReviewsPage() {
 
   const handlePaginationChange = (page: number, size?: number) => {
     const nextSize = size || pageSize;
-    if (nextSize !== pageSize) setPageSize(nextSize);
+    if (nextSize !== pageSize) {
+      setPageSize(nextSize);
+      if (currentPage !== 1) setCurrentPage(1);
+      return;
+    }
     if (page !== currentPage) setCurrentPage(page);
   };
 

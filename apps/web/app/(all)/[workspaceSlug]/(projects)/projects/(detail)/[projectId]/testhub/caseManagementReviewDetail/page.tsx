@@ -142,7 +142,8 @@ export default function CaseManagementReviewDetailPage() {
 
   const handlePaginationChange = (page: number, size?: number) => {
     const nextSize = size || pageSize;
-    fetchReviewCaseList(page, nextSize);
+    const nextPage = nextSize !== pageSize ? 1 : page;
+    fetchReviewCaseList(nextPage, nextSize);
   };
 
   useEffect(() => {
