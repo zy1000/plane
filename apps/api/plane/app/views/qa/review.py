@@ -16,6 +16,7 @@ from plane.db.models import CaseReview, CaseReviewModule, CaseReviewThrough, Cas
 from plane.utils.paginator import CustomPaginator
 from plane.utils.qa import update_case_review_status
 from plane.utils.response import list_response
+from plane.app.views.qa.filters import CaseReviewFilter
 
 
 class ReviewModuleAPIView(BaseAPIView):
@@ -34,7 +35,7 @@ class ReviewModuleAPIView(BaseAPIView):
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     def get(self, request, slug):
-        query = self.filter_queryset(self.queryset).order_by('created_at')
+        query = self.filter_queryset(self.queryset.filter(parent=None)).order_by('created_at')
         serializer = self.serializer_class(instance=query, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -44,17 +45,29 @@ class ReviewModuleAPIView(BaseAPIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
+class ReviewModuleDetailAPIView(BaseAPIView):
+    queryset = CaseReviewModule.objects.all()
+    serializer_class = ReviewModuleCreateUpdateSerializer
+
+    def patch(self, request, slug, module_id):
+        module = get_object_or_404(
+            self.queryset,
+            id=module_id,
+            deleted_at__isnull=True,
+            project__workspace__slug=slug,
+        )
+        serializer = self.serializer_class(instance=module, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        module.refresh_from_db()
+        return Response(ReviewModuleListSerializer(instance=module).data, status=status.HTTP_200_OK)
+
+
 class CaseReviewAPIView(BaseAPIView):
     queryset = CaseReview.objects.all()
     pagination_class = CustomPaginator
     serializer_class = ReviewListSerializer
-    filterset_fields = {
-        'name': ['exact', 'icontains', 'in'],
-        'project_id': ['exact', 'in'],
-        'module_id': ['exact', 'in'],
-        'state': ['exact', 'in'],
-        'mode': ['exact', 'in'],
-    }
+    filterset_class = CaseReviewFilter
 
     def post(self, request, slug):
         serializer = ReviewCreateUpdateSerializer(data=request.data)

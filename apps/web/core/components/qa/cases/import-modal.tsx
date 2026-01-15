@@ -137,7 +137,7 @@ export function ImportCaseModal(props: Props) {
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = "用例模板.xlsx";
+      link.download = "测试用例导入模板-V1.0.xlsx";
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);

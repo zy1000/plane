@@ -51,7 +51,9 @@ export default function CreateReviewModal({ open, onClose, mode = "create", init
     reviewService
       .getReviewModules(String(workspaceSlug), String(projectId))
       .then((data) => {
-        const opts = (Array.isArray(data) ? data : []).map((m: any) => ({
+        const flatten = (nodes: any[]): any[] =>
+          (nodes || []).flatMap((n) => [n, ...(Array.isArray(n?.children) ? flatten(n.children) : [])]);
+        const opts = flatten(Array.isArray(data) ? data : []).map((m: any) => ({
           value: String(m.id),
           label: String(m.name),
         }));

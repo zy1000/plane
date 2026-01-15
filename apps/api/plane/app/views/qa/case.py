@@ -20,7 +20,7 @@ from plane.app.serializers.qa.case import CaseExecuteRecordSerializer
 from plane.app.views import BaseAPIView, BaseViewSet
 from plane.utils.import_export import parser_case_file
 from plane.db.models import TestCase, FileAsset, TestCaseComment, PlanCase, Issue, CaseModule, CaseLabel, \
-    CaseReview, CaseReviewThrough, CaseReviewRecord, TestCaseRepository, TestPlan
+    CaseReview, CaseReviewThrough, CaseReviewRecord, TestCaseRepository, TestPlan, TestCaseVersion
 from plane.utils.paginator import CustomPaginator
 from plane.utils.response import list_response
 
@@ -153,13 +153,13 @@ class CaseAPI(BaseViewSet):
 
     @action(detail=False, methods=['get'], url_path='import-template')
     def import_template(self, request, slug):
-        template_path = Path(__file__).resolve().parents[4] / '用例模板.xlsx'
+        template_path = Path(__file__).resolve().parents[4] / '测试用例导入模板-V1.0.xlsx'
         if not template_path.exists():
             return Response({'error': 'template file not found'}, status=status.HTTP_404_NOT_FOUND)
         return FileResponse(
             open(template_path, 'rb'),
             as_attachment=True,
-            filename='用例模板.xlsx',
+            filename='测试用例导入模板-V1.0.xlsx',
             content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         )
 
@@ -184,7 +184,8 @@ class CaseAPI(BaseViewSet):
             return Response({"error": "plan_id is required"}, status=status.HTTP_400_BAD_REQUEST)
 
         rows = (
-            PlanCase.objects.filter(plan_id=plan_id, case__deleted_at__isnull=True, case__repository__workspace__slug=slug)
+            PlanCase.objects.filter(plan_id=plan_id, case__deleted_at__isnull=True,
+                                    case__repository__workspace__slug=slug)
             .values('case__repository_id', 'case__repository__name', 'case__module_id')
             .distinct()
         )
@@ -205,7 +206,8 @@ class CaseAPI(BaseViewSet):
                 module_ids_by_repo[repo_id].add(str(module_id))
 
         if not repo_ids:
-            return Response({"id": "all", "name": "全部用例库", "kind": "root", "children": []}, status=status.HTTP_200_OK)
+            return Response({"id": "all", "name": "全部用例库", "kind": "root", "children": []},
+                            status=status.HTTP_200_OK)
 
         expanded_ids_by_repo: dict[str, set[str]] = {rid: set(mids) for rid, mids in module_ids_by_repo.items()}
         for repo_id, mids in list(expanded_ids_by_repo.items()):
@@ -231,7 +233,7 @@ class CaseAPI(BaseViewSet):
         module_rows_by_repo: dict[str, list[dict]] = defaultdict(list)
         if all_module_ids:
             for m in CaseModule.objects.filter(id__in=list(all_module_ids), deleted_at__isnull=True).values(
-                'id', 'name', 'parent_id', 'repository_id'
+                    'id', 'name', 'parent_id', 'repository_id'
             ):
                 module_rows_by_repo[str(m.get('repository_id'))].append(m)
 
@@ -295,7 +297,8 @@ class CaseAPI(BaseViewSet):
                 }
             )
 
-        return Response({"id": "all", "name": "全部用例库", "kind": "root", "children": children}, status=status.HTTP_200_OK)
+        return Response({"id": "all", "name": "全部用例库", "kind": "root", "children": children},
+                        status=status.HTTP_200_OK)
 
     @action(detail=False, methods=['get'], url_path='review-case-tree')
     def review_case_tree(self, request, slug):
@@ -327,7 +330,8 @@ class CaseAPI(BaseViewSet):
                 module_ids_by_repo[repo_id].add(str(module_id))
 
         if not repo_ids:
-            return Response({"id": "all", "name": "全部用例库", "kind": "root", "children": []}, status=status.HTTP_200_OK)
+            return Response({"id": "all", "name": "全部用例库", "kind": "root", "children": []},
+                            status=status.HTTP_200_OK)
 
         expanded_ids_by_repo: dict[str, set[str]] = {rid: set(mids) for rid, mids in module_ids_by_repo.items()}
         for repo_id, mids in list(expanded_ids_by_repo.items()):
@@ -353,7 +357,7 @@ class CaseAPI(BaseViewSet):
         module_rows_by_repo: dict[str, list[dict]] = defaultdict(list)
         if all_module_ids:
             for m in CaseModule.objects.filter(id__in=list(all_module_ids), deleted_at__isnull=True).values(
-                'id', 'name', 'parent_id', 'repository_id'
+                    'id', 'name', 'parent_id', 'repository_id'
             ):
                 module_rows_by_repo[str(m.get('repository_id'))].append(m)
 
@@ -417,7 +421,8 @@ class CaseAPI(BaseViewSet):
                 }
             )
 
-        return Response({"id": "all", "name": "全部用例库", "kind": "root", "children": children}, status=status.HTTP_200_OK)
+        return Response({"id": "all", "name": "全部用例库", "kind": "root", "children": children},
+                        status=status.HTTP_200_OK)
 
     @action(detail=False, methods=['get'], url_path='plan-unassociated-tree')
     def plan_unassociated_tree(self, request, slug):
@@ -441,7 +446,7 @@ class CaseAPI(BaseViewSet):
 
         unassociated = (
             TestCase.objects.filter(repository_id__in=repo_ids, deleted_at__isnull=True)
-            .exclude(plan_cases__plan__id=plan_id,plan_cases__deleted_at__isnull=True)
+            .exclude(plan_cases__plan__id=plan_id, plan_cases__deleted_at__isnull=True)
         )
 
         repo_counts = {
@@ -563,7 +568,8 @@ class CaseAPI(BaseViewSet):
         if repository_id:
             cases = cases.filter(repository_id=repository_id)
         if module_id:
-            case_module = get_object_or_404(CaseModule, id=module_id, deleted_at__isnull=True, repository_id__in=repo_ids)
+            case_module = get_object_or_404(CaseModule, id=module_id, deleted_at__isnull=True,
+                                            repository_id__in=repo_ids)
             cases = cases.filter(module_id__in=case_module.get_all_children)
         if name__icontains:
             cases = cases.filter(name__icontains=name__icontains)
@@ -596,7 +602,8 @@ class CaseAPI(BaseViewSet):
         if repository_id:
             cases = cases.filter(repository_id=repository_id)
         if module_id:
-            case_module = get_object_or_404(CaseModule, id=module_id, deleted_at__isnull=True, repository_id__in=repo_ids)
+            case_module = get_object_or_404(CaseModule, id=module_id, deleted_at__isnull=True,
+                                            repository_id__in=repo_ids)
             cases = cases.filter(module_id__in=case_module.get_all_children)
 
         ids = list(cases.values_list('id', flat=True))
@@ -739,7 +746,8 @@ class CaseAPI(BaseViewSet):
         if repository_id:
             cases = cases.filter(repository_id=repository_id)
         if module_id:
-            case_module = get_object_or_404(CaseModule, id=module_id, deleted_at__isnull=True, repository_id__in=repo_ids)
+            case_module = get_object_or_404(CaseModule, id=module_id, deleted_at__isnull=True,
+                                            repository_id__in=repo_ids)
             cases = cases.filter(module_id__in=case_module.get_all_children)
         if name__icontains:
             cases = cases.filter(name__icontains=name__icontains)
@@ -768,7 +776,8 @@ class CaseAPI(BaseViewSet):
         if repository_id:
             cases = cases.filter(repository_id=repository_id)
         if module_id:
-            case_module = get_object_or_404(CaseModule, id=module_id, deleted_at__isnull=True, repository_id__in=repo_ids)
+            case_module = get_object_or_404(CaseModule, id=module_id, deleted_at__isnull=True,
+                                            repository_id__in=repo_ids)
             cases = cases.filter(module_id__in=case_module.get_all_children)
 
         ids = list(cases.values_list('id', flat=True))
@@ -783,7 +792,8 @@ class CaseAPI(BaseViewSet):
         review = get_object_or_404(CaseReview, id=review_id, deleted_at__isnull=True, project__workspace__slug=slug)
 
         repositories = list(
-            TestCaseRepository.objects.filter(project_id=review.project_id, workspace__slug=slug, deleted_at__isnull=True)
+            TestCaseRepository.objects.filter(project_id=review.project_id, workspace__slug=slug,
+                                              deleted_at__isnull=True)
             .values('id', 'name')
             .order_by('name')
         )
@@ -905,7 +915,8 @@ class CaseAPI(BaseViewSet):
 
         review = get_object_or_404(CaseReview, id=review_id, deleted_at__isnull=True, project__workspace__slug=slug)
         repo_ids = list(
-            TestCaseRepository.objects.filter(project_id=review.project_id, workspace__slug=slug, deleted_at__isnull=True)
+            TestCaseRepository.objects.filter(project_id=review.project_id, workspace__slug=slug,
+                                              deleted_at__isnull=True)
             .values_list('id', flat=True)
         )
 
@@ -919,7 +930,8 @@ class CaseAPI(BaseViewSet):
         if repository_id:
             cases = cases.filter(repository_id=repository_id)
         if module_id:
-            case_module = get_object_or_404(CaseModule, id=module_id, deleted_at__isnull=True, repository_id__in=repo_ids)
+            case_module = get_object_or_404(CaseModule, id=module_id, deleted_at__isnull=True,
+                                            repository_id__in=repo_ids)
             cases = cases.filter(module_id__in=case_module.get_all_children)
         if name__icontains:
             cases = cases.filter(name__icontains=name__icontains)
@@ -938,7 +950,8 @@ class CaseAPI(BaseViewSet):
 
         review = get_object_or_404(CaseReview, id=review_id, deleted_at__isnull=True, project__workspace__slug=slug)
         repo_ids = list(
-            TestCaseRepository.objects.filter(project_id=review.project_id, workspace__slug=slug, deleted_at__isnull=True)
+            TestCaseRepository.objects.filter(project_id=review.project_id, workspace__slug=slug,
+                                              deleted_at__isnull=True)
             .values_list('id', flat=True)
         )
 
@@ -951,7 +964,8 @@ class CaseAPI(BaseViewSet):
         if repository_id:
             cases = cases.filter(repository_id=repository_id)
         if module_id:
-            case_module = get_object_or_404(CaseModule, id=module_id, deleted_at__isnull=True, repository_id__in=repo_ids)
+            case_module = get_object_or_404(CaseModule, id=module_id, deleted_at__isnull=True,
+                                            repository_id__in=repo_ids)
             cases = cases.filter(module_id__in=case_module.get_all_children)
 
         ids = list(cases.values_list('id', flat=True))
@@ -1108,6 +1122,9 @@ class CaseAPI(BaseViewSet):
                 #         label_instance, _ = CaseLabel.objects.get_or_create(repository_id=repository_id, name=label)
                 #         instance.labels.add(label_instance)
                 instance.save()
+
+                # 创建历史版本
+                TestCaseVersion.create_from_case(instance)
             except IntegrityError as e:
                 fail_list.append(dict(name=data['name'], error='case name already exists'))
                 continue

@@ -311,7 +311,7 @@ class TestCaseCommentSerializer(ModelSerializer):
 class ReviewModuleCreateUpdateSerializer(ModelSerializer):
     class Meta:
         model = CaseReviewModule
-        fields = ['name', 'project']
+        fields = ['name', 'project', 'parent']
 
 
 class ReviewModuleDetailSerializer(ModelSerializer):
@@ -322,9 +322,14 @@ class ReviewModuleDetailSerializer(ModelSerializer):
 
 class ReviewModuleListSerializer(ModelSerializer):
     review_count = serializers.SerializerMethodField()
+    children = serializers.SerializerMethodField()
 
     def get_review_count(self, obj: CaseReviewModule):
-        return obj.reviews.count()
+        return obj.reviews.filter(deleted_at__isnull=True).count()
+
+    def get_children(self, obj: CaseReviewModule):
+        qs = obj.children.filter(deleted_at__isnull=True).order_by("created_at")
+        return ReviewModuleListSerializer(qs, many=True).data
 
     class Meta:
         model = CaseReviewModule

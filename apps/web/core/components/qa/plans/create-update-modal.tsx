@@ -134,7 +134,9 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
       planService
         .getPlanModules(String(workspaceSlug), String(projectId))
         .then((data: any[]) => {
-          const list = Array.isArray(data) ? data : [];
+          const flatten = (nodes: any[]): any[] =>
+            (nodes || []).flatMap((n) => [n, ...(Array.isArray(n?.children) ? flatten(n.children) : [])]);
+          const list = flatten(Array.isArray(data) ? data : []);
           const opts = list.map((m: any) => ({
             value: String(m.id),
             query: String(m.name),

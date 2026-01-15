@@ -32,6 +32,19 @@ export const RichTextEditor = ({
   const contentRef = useRef<HTMLDivElement | null>(null);
   const [expanded, setExpanded] = useState(false);
   const [overflowing, setOverflowing] = useState(false);
+  const hasContent = (() => {
+    if (!value) return false;
+    const trimmed = value.trim();
+    if (!trimmed) return false;
+    const hasMedia = /<(img|video|iframe|embed|object|svg)\b/i.test(trimmed);
+    if (hasMedia) return true;
+    const text = trimmed
+      .replace(/<style[\s\S]*?<\/style>/gi, "")
+      .replace(/<[^>]+>/g, "")
+      .replace(/&nbsp;/gi, " ")
+      .trim();
+    return text.length > 0;
+  })();
   // 定义工具栏配置
   const modules = {
     toolbar: [
@@ -334,16 +347,21 @@ export const RichTextEditor = ({
           scrollingContainer=".qa-quill .ql-container"
         />
       ) : (
-        <div className="relative min-h-[60px] py-2 px-3 leading-7 text-gray-700 rounded-md">
-          {value && value.trim() ? (
+        <div
+          className={`relative min-h-[60px] py-2 px-3 leading-7 text-gray-700 rounded-md ${
+            editable ? "cursor-text" : ""
+          }`}
+          onMouseDown={() => editable && setEditing(true)}
+        >
+          {hasContent ? (
             <div
               ref={contentRef}
-              className={expanded ? "" : "max-h-[160px] overflow-hidden"}
+              className={`${expanded ? "" : "max-h-[160px] overflow-hidden"} ${editable ? "min-h-[60px]" : ""}`}
               tabIndex={editable ? 0 : -1}
               onClick={() => editable && setEditing(true)}
               onFocus={() => editable && setEditing(true)}
               aria-label={placeholder}
-              dangerouslySetInnerHTML={{ __html: value }}
+              dangerouslySetInnerHTML={{ __html: value || "" }}
             />
           ) : (
             <span

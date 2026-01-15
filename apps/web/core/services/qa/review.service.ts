@@ -36,6 +36,14 @@ export class CaseService extends APIService {
       });
   }
 
+  async updateReviewModule(workspaceSlug: string, moduleId: string, data: any): Promise<any> {
+    return this.patch(`/api/workspaces/${workspaceSlug}/test/review/module/${moduleId}/`, data)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
     //获取评审枚举值
     async getReviewEnums(workspaceSlug: string): Promise<any> {
       return this.get(`/api/workspaces/${workspaceSlug}/test/review/enums/`)
