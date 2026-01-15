@@ -1,5 +1,7 @@
+from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status
 from rest_framework.decorators import action
+from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.response import Response
 from yaml import serialize
 
@@ -464,6 +466,7 @@ class CaseAPIView(BaseAPIView):
     )
     pagination_class = CustomPaginator
     serializer_class = CaseListSerializer
+    filter_backends = (DjangoFilterBackend, SearchFilter,OrderingFilter)
     filterset_fields = {
         'name': ['exact', 'icontains', 'in'],
         'code': ['exact', 'icontains', 'in'],
@@ -475,6 +478,9 @@ class CaseAPIView(BaseAPIView):
         'id': ['exact', 'in'],
         'plan_cases__plan__id': ['exact', 'in'],
     }
+    ordering_fields = ['updated_at']
+    ordering = ['-updated_at']
+
 
     def get(self, request, slug):
         cases = self.filter_queryset(self.queryset)

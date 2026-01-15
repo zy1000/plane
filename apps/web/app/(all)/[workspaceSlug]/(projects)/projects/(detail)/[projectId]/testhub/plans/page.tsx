@@ -509,7 +509,8 @@ export default function TestPlanDetailPage() {
 
   const handlePaginationChange = (page: number, size?: number) => {
     const newPageSize = size || pageSize;
-    fetchTestPlans(page, newPageSize, filters);
+    const nextPage = newPageSize !== pageSize ? 1 : page;
+    fetchTestPlans(nextPage, newPageSize, filters);
   };
   const handlePageSizeChange = (current: number, size: number) => {
     fetchTestPlans(1, size, filters);
