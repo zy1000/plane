@@ -284,6 +284,13 @@ class TestCaseVersion(BaseModel):
 
 
 class PlanModule(BaseModel):
+    parent = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="children",
+    )
     name = models.CharField(max_length=30)
     project = models.ForeignKey('db.Project', null=True, blank=True, on_delete=models.CASCADE,
                                 related_name="project_%(class)s")
@@ -420,6 +427,13 @@ class TestCaseComment(BaseModel):
 
 
 class CaseReviewModule(BaseModel):
+    parent = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="children",
+    )
     name = models.CharField(max_length=30)
     project = models.ForeignKey('db.Project', null=True, blank=True, on_delete=models.CASCADE,
                                 related_name="project_%(class)s")

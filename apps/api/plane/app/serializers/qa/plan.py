@@ -12,9 +12,14 @@ class PlanModuleCreateUpdateSerializer(ModelSerializer):
 
 class PlanModuleListSerializer(ModelSerializer):
     count = serializers.SerializerMethodField()
+    children = serializers.SerializerMethodField()
 
     def get_count(self, obj: PlanModule):
         return obj.plans.filter(deleted_at__isnull=True).count()
+
+    def get_children(self, obj: PlanModule):
+        qs = obj.children.filter(deleted_at__isnull=True).order_by("created_at")
+        return PlanModuleListSerializer(qs, many=True).data
 
     class Meta:
         model = PlanModule

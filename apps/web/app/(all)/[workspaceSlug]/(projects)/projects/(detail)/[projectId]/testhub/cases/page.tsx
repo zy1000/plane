@@ -1183,7 +1183,6 @@ export default function TestCasesPage() {
                           <BreadcrumbLink href={`/${workspaceSlug}/projects/${projectId}/testhub`} label="测试用例库" />
                         }
                       />
-                      <Breadcrumbs.Item component={<BreadcrumbLink label="测试用例" />} />
                       <Breadcrumbs.Item
                         isLast
                         component={

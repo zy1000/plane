@@ -171,7 +171,7 @@ class PlanModuleAPIView(BaseAPIView):
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     def get(self, request, slug):
-        query = self.filter_queryset(self.queryset).order_by('created_at')
+        query = self.filter_queryset(self.queryset.filter(parent=None)).order_by('created_at')
         serializer = self.serializer_class(instance=query, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -179,6 +179,25 @@ class PlanModuleAPIView(BaseAPIView):
         module_ids = request.data.pop('ids')
         self.queryset.filter(id__in=module_ids).delete(soft=False)
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class PlanModuleDetailAPIView(BaseAPIView):
+    model = PlanModule
+    queryset = PlanModule.objects.all()
+    serializer_class = PlanModuleCreateUpdateSerializer
+
+    def patch(self, request, slug, module_id):
+        module = get_object_or_404(
+            self.queryset,
+            id=module_id,
+            deleted_at__isnull=True,
+            project__workspace__slug=slug,
+        )
+        serializer = self.serializer_class(instance=module, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        module.refresh_from_db()
+        return Response(PlanModuleListSerializer(instance=module).data, status=status.HTTP_200_OK)
 
 
 class PlanModuleCountAPIView(BaseAPIView):

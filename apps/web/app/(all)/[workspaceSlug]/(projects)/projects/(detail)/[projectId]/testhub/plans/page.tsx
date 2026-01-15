@@ -4,7 +4,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, useRef, useMemo } from "react";
 import { PageHead } from "@/components/core/page-title";
 import { PlanService } from "@/services/qa/plan.service";
-import { Space, Table, Tag, Input, Button, Dropdown, Modal, Tooltip, Pagination } from "antd";
+import { Space, Table, Tag, Input, Button, Dropdown, Modal, Tooltip, Pagination, Tree } from "antd";
 import {
   SearchOutlined,
   PlusOutlined,
@@ -15,10 +15,18 @@ import {
   EditOutlined,
 } from "@ant-design/icons";
 import type { TableProps, InputRef, TableColumnType } from "antd";
+import type { TreeProps } from "antd";
 import type { FilterDropdownProps } from "antd/es/table/interface";
 import { Avatar, AvatarGroup } from "@plane/ui";
 import { getFileURL } from "@plane/utils";
-type PlanModule = { id: string; name: string; is_default?: boolean; repository?: string; count?: number };
+type PlanModule = {
+  id: string;
+  name: string;
+  is_default?: boolean;
+  parent?: string | null;
+  children?: PlanModule[];
+  total?: number;
+};
 type TestPlan = {
   id: string;
   name: string;
@@ -62,8 +70,12 @@ export default function TestPlanDetailPage() {
   const startWidthRef = useRef<number>(0);
   const [searchModule, setSearchModule] = useState<string>("");
   const [modules, setModules] = useState<PlanModule[]>([]);
-  const [creatingOpen, setCreatingOpen] = useState<boolean>(false);
-  const [creatingName, setCreatingName] = useState<string>("");
+  const [creatingParentId, setCreatingParentId] = useState<string | "all" | null>(null);
+  const [newModuleName, setNewModuleName] = useState<string>("");
+  const [renamingModuleId, setRenamingModuleId] = useState<string | null>(null);
+  const [renamingModuleName, setRenamingModuleName] = useState<string>("");
+  const [expandedKeys, setExpandedKeys] = useState<string[]>(["all"]);
+  const [autoExpandParent, setAutoExpandParent] = useState<boolean>(true);
   const [selectedModuleId, setSelectedModuleId] = useState<string | null>(null);
 
   const [currentPage, setCurrentPage] = useState(1);
@@ -73,7 +85,11 @@ export default function TestPlanDetailPage() {
 
   const [allTotal, setAllTotal] = useState<number | undefined>(undefined);
   const [moduleCounts, setModuleCounts] = useState<Record<string, number>>({});
-  const totalPlansFromModules = useMemo(() => modules.reduce((sum, m) => sum + (m.count || 0), 0), [modules]);
+  const totalPlansFromModules = useMemo(() => {
+    const sum = (list: PlanModule[]): number =>
+      (list || []).reduce((acc, n) => acc + Number(n?.total || 0) + sum(n?.children || []), 0);
+    return sum(modules);
+  }, [modules]);
 
   const onMouseDownResize = (e: React.MouseEvent<HTMLDivElement>) => {
     isDraggingRef.current = true;
@@ -131,16 +147,30 @@ export default function TestPlanDetailPage() {
     }
   }, [repositoryId, workspaceSlug, projectId, searchParams, router]);
 
+  const batchUpdateModuleCounts = (list: any[], countsMap: Record<string, number>): any[] => {
+    return (list || []).map((m: any) => {
+      const updated = { ...m };
+      if (m?.id && countsMap[String(m.id)] !== undefined) {
+        updated.total = countsMap[String(m.id)];
+      }
+      if (Array.isArray(m?.children) && m.children.length) {
+        updated.children = batchUpdateModuleCounts(m.children, countsMap);
+      }
+      return updated;
+    });
+  };
+
   const fetchModules = async () => {
     if (!workspaceSlug || !projectId) return;
     try {
       const pid = Array.isArray(projectId) ? projectId[0] : projectId;
-      const data: any[] = await planService.getPlanModules(workspaceSlug as string, pid);
-      setModules(Array.isArray(data) ? data : []);
       const countsResponse: any = await planService.getPlanModulesCount(workspaceSlug as string, pid);
       const { total: t = 0, ...countsMap } = countsResponse || {};
       setAllTotal(typeof t === "number" ? t : Number(t || 0));
       setModuleCounts(countsMap as Record<string, number>);
+      const data: any[] = await planService.getPlanModules(workspaceSlug as string, pid);
+      const updatedModules = batchUpdateModuleCounts(Array.isArray(data) ? data : [], countsMap as Record<string, number>);
+      setModules(updatedModules);
     } catch {}
   };
 
@@ -484,19 +514,73 @@ export default function TestPlanDetailPage() {
   const handlePageSizeChange = (current: number, size: number) => {
     fetchTestPlans(1, size, filters);
   };
-  const filteredModules = useMemo(() => {
-    const q = searchModule.trim().toLowerCase();
-    return modules.filter((n) => (n?.name || "").toLowerCase().includes(q));
-  }, [searchModule, modules]);
-  const moduleCountsMap = useMemo(() => {
-    const map: Record<string, number> = {};
-    modules.forEach((m) => {
-      if (!m?.id) return;
-      const fromApi = moduleCounts[m.id];
-      map[m.id] = typeof fromApi === "number" ? fromApi : m.count || 0;
+
+  const onExpand: TreeProps["onExpand"] = (keys) => {
+    setExpandedKeys(keys as string[]);
+    setAutoExpandParent(false);
+  };
+
+  const handleAddUnderNode = (parentId: string | "all") => {
+    setRenamingModuleId(null);
+    setRenamingModuleName("");
+    setCreatingParentId(parentId);
+    setNewModuleName("");
+    setExpandedKeys((prev) => {
+      const pid = String(parentId);
+      return prev.includes(pid) ? prev : [...prev, pid];
     });
-    return map;
-  }, [modules, moduleCounts]);
+    setAutoExpandParent(true);
+  };
+
+  const handleCreateBlurOrEnter = async (parentId: string | "all") => {
+    const name = newModuleName.trim();
+    if (!name || !workspaceSlug || !projectId) {
+      setCreatingParentId(null);
+      setNewModuleName("");
+      return;
+    }
+    const pid = Array.isArray(projectId) ? projectId[0] : projectId;
+    const payload: any = { name, project: pid };
+    if (parentId !== "all") payload.parent = parentId;
+    try {
+      await planService.createPlanModule(workspaceSlug as string, payload);
+      setCreatingParentId(null);
+      setNewModuleName("");
+      await fetchModules();
+      await fetchTestPlans(1, pageSize, filters, selectedModuleId ?? undefined);
+    } catch (e) {
+      setCreatingParentId(null);
+      setNewModuleName("");
+    }
+  };
+
+  const startRenameNode = (moduleId: string, currentName: string) => {
+    setCreatingParentId(null);
+    setNewModuleName("");
+    setRenamingModuleId(moduleId);
+    setRenamingModuleName(currentName);
+    setExpandedKeys((prev) => (prev.includes(moduleId) ? prev : [...prev, moduleId]));
+    setAutoExpandParent(true);
+  };
+
+  const handleRenameBlurOrEnter = async (moduleId: string) => {
+    const name = renamingModuleName.trim();
+    if (!name || !workspaceSlug) {
+      setRenamingModuleId(null);
+      setRenamingModuleName("");
+      return;
+    }
+    try {
+      await planService.updatePlanModule(workspaceSlug as string, moduleId, { name });
+      setRenamingModuleId(null);
+      setRenamingModuleName("");
+      await fetchModules();
+    } catch (e) {
+      setRenamingModuleId(null);
+      setRenamingModuleName("");
+    }
+  };
+
   const confirmDeleteModule = (node: PlanModule) => {
     Modal.confirm({
       title: "删除模块",
@@ -515,23 +599,223 @@ export default function TestPlanDetailPage() {
       },
     });
   };
-  const handleCreateModule = async () => {
-    const name = creatingName.trim();
-    if (!name || !workspaceSlug || !repositoryId) {
-      setCreatingOpen(false);
-      setCreatingName("");
+
+  const renderCreatingInput = (parentId: string | "all") => (
+    <div className="w-full" onClick={(e) => e.stopPropagation()}>
+      <Input
+        size="small"
+        autoFocus
+        placeholder="请输入模块名称"
+        value={newModuleName}
+        onChange={(e) => setNewModuleName(e.target.value)}
+        onBlur={() => handleCreateBlurOrEnter(parentId)}
+        onPressEnter={() => handleCreateBlurOrEnter(parentId)}
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.stopPropagation()}
+      />
+    </div>
+  );
+
+  const getNodeCount = (m: any) => {
+    const c = m?.total ?? m?.count;
+    return typeof c === "number" ? c : undefined;
+  };
+
+  const renderNodeTitle = (node: any) => {
+    const nodeId = String(node?.id);
+    const title = String(node?.name || "-");
+    const isDefault = Boolean(node?.is_default);
+    const count = getNodeCount(node);
+
+    if (renamingModuleId && renamingModuleId === nodeId) {
+      return (
+        <div className="w-full" onClick={(e) => e.stopPropagation()}>
+          <Input
+            size="small"
+            autoFocus
+            placeholder="请输入模块名称"
+            value={renamingModuleName}
+            onChange={(e) => setRenamingModuleName(e.target.value)}
+            onBlur={() => handleRenameBlurOrEnter(nodeId)}
+            onPressEnter={() => handleRenameBlurOrEnter(nodeId)}
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+          />
+        </div>
+      );
+    }
+
+    const menuItems = [
+      {
+        key: "add",
+        label: (
+          <Button type="text" size="small" onClick={() => handleAddUnderNode(nodeId)}>
+            添加
+          </Button>
+        ),
+      },
+      ...(!isDefault
+        ? [
+            {
+              key: "rename",
+              label: (
+                <Button type="text" size="small" onClick={() => startRenameNode(nodeId, title)}>
+                  重命名
+                </Button>
+              ),
+            },
+            {
+              key: "delete",
+              label: (
+                <Button type="text" danger size="small" onClick={() => confirmDeleteModule(node)}>
+                  删除
+                </Button>
+              ),
+            },
+          ]
+        : []),
+    ];
+
+    return (
+      <div className="group flex items-center justify-between gap-2 w-full">
+        <div className="flex items-center gap-2">
+          <span className="text-custom-text-300">
+            <FolderOutlined />
+          </span>
+          <span className="text-sm text-custom-text-200">{title}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          {typeof count === "number" && <span className="text-xs text-custom-text-300">{count}</span>}
+          <Dropdown
+            trigger={["hover"]}
+            menu={{
+              items: menuItems,
+            }}
+          >
+            <Button
+              type="text"
+              size="small"
+              icon={<EllipsisOutlined />}
+              className="opacity-0 group-hover:opacity-100 transition-opacity"
+            />
+          </Dropdown>
+        </div>
+      </div>
+    );
+  };
+
+  const buildTreeNodes = (list: any[]): any[] => {
+    if (!Array.isArray(list)) return [];
+    return list.map((node: any) => {
+      const nodeId = String(node?.id);
+      const childrenNodes = buildTreeNodes(node?.children || []);
+      const creatingChild =
+        creatingParentId === nodeId
+          ? [
+              {
+                title: renderCreatingInput(nodeId),
+                key: `__creating__${nodeId}`,
+                selectable: false,
+              },
+            ]
+          : [];
+      return {
+        title: renderNodeTitle(node),
+        key: nodeId,
+        children: [...creatingChild, ...childrenNodes],
+      };
+    });
+  };
+
+  const filterModulesByName = (list: any[], q: string): any[] => {
+    if (!q) return list || [];
+    const query = q.trim().toLowerCase();
+    const walk = (nodes: any[]): any[] => {
+      return (nodes || [])
+        .map((n) => {
+          const name = String(n?.name || "").toLowerCase();
+          const childMatches = walk(n?.children || []);
+          const selfMatch = name.includes(query);
+          if (selfMatch || childMatches.length) {
+            return { ...n, children: childMatches };
+          }
+          return null;
+        })
+        .filter(Boolean) as any[];
+    };
+    return walk(list || []);
+  };
+
+  const filteredModules = useMemo(() => filterModulesByName(modules, searchModule), [modules, searchModule]);
+
+  const treeData = [
+    {
+      title: (
+        <div className="group flex items-center justify-between gap-2 w-full">
+          <div className="flex items-center gap-2">
+            <span className="text-custom-text-300">
+              <FolderOutlined />
+            </span>
+            <span className="text-sm font-medium text-custom-text-200">全部计划</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-custom-text-300">
+              {typeof allTotal === "number" ? allTotal : totalPlansFromModules}
+            </span>
+            <Dropdown
+              trigger={["hover"]}
+              menu={{
+                items: [
+                  {
+                    key: "add",
+                    label: (
+                      <Button type="text" size="small" onClick={() => handleAddUnderNode("all")}>
+                        添加
+                      </Button>
+                    ),
+                  },
+                ],
+              }}
+            >
+              <Button
+                type="text"
+                size="small"
+                icon={<EllipsisOutlined />}
+                className="opacity-0 group-hover:opacity-100 transition-opacity"
+              />
+            </Dropdown>
+          </div>
+        </div>
+      ),
+      key: "all",
+      children: [
+        ...(creatingParentId === "all"
+          ? [
+              {
+                title: renderCreatingInput("all"),
+                key: "__creating__root",
+                selectable: false,
+              },
+            ]
+          : []),
+        ...buildTreeNodes(filteredModules),
+      ],
+    },
+  ];
+
+  const onSelect: TreeProps["onSelect"] = (selectedKeys, info) => {
+    const keyStr = String(info?.node?.key);
+    if (keyStr.startsWith("__creating__")) return;
+    if (!info.selected) {
+      if (keyStr === "all") setSelectedModuleId(null);
       return;
     }
-    try {
-      await planService.createPlanModule(workspaceSlug as string, { name, project: projectId });
-      setCreatingOpen(false);
-      setCreatingName("");
-      await fetchModules();
-      await fetchTestPlans(currentPage, pageSize, filters, selectedModuleId ?? undefined);
-    } catch (e) {
-      setCreatingOpen(false);
-      setCreatingName("");
-    }
+    const key = selectedKeys[0] as string | undefined;
+    const nextModuleId = !key || key === "all" ? null : key;
+    setSelectedModuleId(nextModuleId);
+    setCurrentPage(1);
+    fetchModules();
+    fetchTestPlans(1, pageSize, filters, nextModuleId);
   };
 
   return (
@@ -568,102 +852,16 @@ export default function TestPlanDetailPage() {
                   </Space>
                 </div>
                 <div className="flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm">
-                  <div
-                    className={`${styles.row} flex items-center justify-between px-2 py-2 cursor-pointer ${selectedModuleId === null ? "bg-blue-50" : ""}`}
-                    onClick={() => {
-                      setSelectedModuleId(null);
-                      setCurrentPage(1);
-                      fetchTestPlans(1, pageSize, filters, null);
-                    }}
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="text-custom-text-300">
-                        <FolderOutlined />
-                      </span>
-                      <span className="text-sm">全部计划</span>
-                    </div>
-                    <div className="flex items-center gap-2 w-[140px] justify-end">
-                      <span className="text-xs text-custom-text-300">
-                        {typeof allTotal === "number" ? allTotal : totalPlansFromModules}
-                      </span>
-                      <span className={styles.actionIcon} onClick={() => setCreatingOpen(true)}>
-                        <PlusOutlined />
-                      </span>
-                    </div>
-                  </div>
-                  {creatingOpen && (
-                    <div className="px-2 py-2">
-                      <Input
-                        size="small"
-                        autoFocus
-                        placeholder="请输入模块名称"
-                        value={creatingName}
-                        onChange={(e) => setCreatingName(e.target.value)}
-                        onBlur={handleCreateModule}
-                        onPressEnter={handleCreateModule}
-                      />
-                    </div>
-                  )}
-                  <div>
-                    {filteredModules.map((node) => (
-                      <div
-                        key={node.id}
-                        className={`${styles.row} flex items-center justify-between px-2 py-2 cursor-pointer ${selectedModuleId === node.id ? "bg-blue-50" : ""}`}
-                        style={{ paddingLeft: 20 }}
-                        onClick={() => {
-                          const nextId = node.id;
-                          setSelectedModuleId(nextId);
-                          setCurrentPage(1);
-                          fetchTestPlans(1, pageSize, filters, nextId);
-                        }}
-                      >
-                        <div className="flex items-center gap-2">
-                          <span className="text-custom-text-300">
-                            <FolderOutlined />
-                          </span>
-                          <span className="text-sm">{node.name}</span>
-                        </div>
-                        <div className="flex items-center gap-2 w-[140px] justify-end">
-                          {typeof moduleCountsMap[node.id] === "number" && (
-                            <span className="text-xs text-custom-text-300">{moduleCountsMap[node.id]}</span>
-                          )}
-                          {!node.is_default ? (
-                            <Dropdown
-                              trigger={["hover"]}
-                              menu={{
-                                items: [
-                                  {
-                                    key: "delete",
-                                    label: (
-                                      <Button
-                                        type="text"
-                                        size="small"
-                                        danger
-                                        icon={<DeleteOutlined />}
-                                        onClick={() => confirmDeleteModule(node)}
-                                        className="!text-red-600 hover:!bg-red-50"
-                                      >
-                                        删除
-                                      </Button>
-                                    ),
-                                  },
-                                ],
-                              }}
-                            >
-                              <Button
-                                type="text"
-                                size="small"
-                                icon={<EllipsisOutlined />}
-                                className={styles.actionMenu}
-                              />
-                            </Dropdown>
-                          ) : (
-                            <span className="w-6 inline-flex items-center justify-center" />
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                  <Tree
+                    blockNode
+                    showIcon={false}
+                    treeData={treeData as any}
+                    selectedKeys={[selectedModuleId ?? "all"]}
+                    expandedKeys={expandedKeys}
+                    autoExpandParent={autoExpandParent}
+                    onExpand={onExpand}
+                    onSelect={onSelect}
+                  />
                 </div>
                 <div
                   className="absolute top-0 right-0 w-[6px] h-full cursor-col-resize"

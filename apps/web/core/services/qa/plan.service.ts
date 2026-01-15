@@ -78,6 +78,14 @@ export class PlanService extends APIService {
       });
   }
 
+  async updatePlanModule(workspaceSlug: string, moduleId: string, data: any): Promise<any> {
+    return this.patch(`/api/workspaces/${workspaceSlug}/test/plan/module/${moduleId}/`, data)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
   async deletePlan(workspaceSlug: string, planIds: Array<string>): Promise<any> {
     return this.delete(`/api/workspaces/${workspaceSlug}/test/plane/`, {
       ids: planIds,
