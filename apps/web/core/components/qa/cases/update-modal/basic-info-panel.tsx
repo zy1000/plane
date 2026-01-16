@@ -1,22 +1,23 @@
 "use client";
 import React from "react";
+import { useParams } from "next/navigation";
 import { Button, Table, Tooltip, Modal, Input, Spin } from "antd";
 import * as LucideIcons from "lucide-react";
 import { convertBytesToSize, renderFormattedDate } from "@plane/utils";
-import { RichTextEditor, StepsEditor } from "../util";
+import { StepsEditor } from "../util";
+// plane imports
+import { EFileAssetType } from "@plane/types";
+import { RichTextEditor } from "@/components/editor/rich-text";
+import { useWorkspace } from "@/hooks/store/use-workspace";
+import { useEditorAsset } from "@/hooks/store/use-editor-asset";
+import { WorkspaceService } from "@/plane-web/services";
 
 type BasicInfoPanelProps = {
+  caseId: string;
   preconditionValue: string;
-  onPreconditionChange: (v: string) => void;
-  onPreconditionBlur: () => void;
-
   stepsValue: { description?: string; result?: string }[];
-  onStepsChange: (v: { description?: string; result?: string }[]) => void;
-  onStepsBlur: (v: { description?: string; result?: string }[]) => void;
-
   remarkValue: string;
-  onRemarkChange: (v: string) => void;
-  onRemarkBlur: () => void;
+  onSave: (data: { precondition: string; steps: any[]; remark: string }) => Promise<void>;
 
   attachmentsLoading: boolean;
   caseAttachments: any[];
@@ -43,15 +44,11 @@ type BasicInfoPanelProps = {
 
 export function BasicInfoPanel(props: BasicInfoPanelProps) {
   const {
+    caseId,
     preconditionValue,
-    onPreconditionChange,
-    onPreconditionBlur,
     stepsValue,
-    onStepsChange,
-    onStepsBlur,
     remarkValue,
-    onRemarkChange,
-    onRemarkBlur,
+    onSave,
     attachmentsLoading,
     caseAttachments,
     fileInputRef,
@@ -74,33 +71,158 @@ export function BasicInfoPanel(props: BasicInfoPanelProps) {
     onCreateComment,
   } = props;
 
+  const [isEditing, setIsEditing] = React.useState(false);
+  const [localPrecondition, setLocalPrecondition] = React.useState(preconditionValue);
+  const [localSteps, setLocalSteps] = React.useState(stepsValue);
+  const [localRemark, setLocalRemark] = React.useState(remarkValue);
+
+  // plane hooks
+  const { workspaceSlug, projectId } = useParams() as { workspaceSlug?: string; projectId?: string };
+  const { getWorkspaceBySlug } = useWorkspace();
+  const workspaceId = workspaceSlug ? getWorkspaceBySlug(workspaceSlug)?.id : undefined;
+  const { uploadEditorAsset, duplicateEditorAsset } = useEditorAsset();
+  const workspaceService = React.useMemo(() => new WorkspaceService(), []);
+
+  const handleUploadFile = async (blockId: string | undefined, file: File) => {
+    if (!workspaceSlug || !projectId || !caseId) throw new Error("Missing context");
+    try {
+      const { asset_id } = await uploadEditorAsset({
+        blockId: blockId ?? "",
+        data: {
+          entity_identifier: projectId,
+          entity_type: EFileAssetType.PROJECT_DESCRIPTION,
+        },
+        file,
+        projectId,
+        workspaceSlug,
+      });
+      return asset_id;
+    } catch (error) {
+      console.error("Upload failed", error);
+      throw new Error("Upload failed");
+    }
+  };
+
+  const handleDuplicateFile = async (assetId: string) => {
+    if (!workspaceSlug || !projectId || !caseId) throw new Error("Missing context");
+    try {
+      const { asset_id } = await duplicateEditorAsset({
+        assetId,
+        entityId: projectId,
+        entityType: EFileAssetType.PROJECT_DESCRIPTION,
+        projectId,
+        workspaceSlug,
+      });
+      return asset_id;
+    } catch (error) {
+      console.error("Duplicate failed", error);
+      throw new Error("Duplicate failed");
+    }
+  };
+
+  React.useEffect(() => {
+    if (!isEditing) {
+      setLocalPrecondition(preconditionValue);
+      setLocalSteps(stepsValue);
+      setLocalRemark(remarkValue);
+    }
+  }, [preconditionValue, stepsValue, remarkValue, isEditing]);
+
+  const handleSave = async () => {
+    await onSave({
+      precondition: localPrecondition,
+      steps: localSteps,
+      remark: localRemark,
+    });
+    setIsEditing(false);
+  };
+
+  const handleCancel = () => {
+    setLocalPrecondition(preconditionValue);
+    setLocalSteps(stepsValue);
+    setLocalRemark(remarkValue);
+    setIsEditing(false);
+  };
+
   return (
     <div className="space-y-8 rounded-b-md border-gray-200 px-6 py-6 transition-colors focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-100">
       <div>
-        <label className="mb-3 flex items-center gap-2 text-sm font-medium text-gray-700">
-          <LucideIcons.ListChecks size={16} className="text-gray-500" aria-hidden="true" />
-          前置条件
-        </label>
+        <div className="mb-3 flex items-center justify-between">
+          <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+            前置条件
+          </label>
+          {!isEditing && (
+            <Button
+              type="link"
+              onClick={() => setIsEditing(true)}
+              className="transition-all"
+            >
+              编辑
+            </Button>
+          )}
+        </div>
         <RichTextEditor
-          value={preconditionValue ?? ""}
-          onChange={onPreconditionChange}
-          onBlur={onPreconditionBlur}
-          aria-label="前置条件"
+          id="qa-precondition-editor"
+          editable={isEditing}
+          initialValue={localPrecondition ?? ""}
+          value={isEditing ? undefined : (localPrecondition ?? "")}
+          workspaceSlug={workspaceSlug ?? ""}
+          workspaceId={workspaceId ?? ""}
+          projectId={projectId ?? ""}
+          onChange={(_: any, val: string) => setLocalPrecondition(val)}
+          uploadFile={handleUploadFile}
+          duplicateFile={handleDuplicateFile}
+          searchMentionCallback={async (payload) =>
+            await workspaceService.searchEntity(workspaceSlug?.toString() ?? "", {
+              ...payload,
+              project_id: projectId?.toString() ?? "",
+            })
+          }
+          containerClassName="min-h-[100px] rounded-md"
         />
       </div>
       <div>
         <label className="mb-3 flex items-center gap-2 text-sm font-medium text-gray-700">
-          <LucideIcons.ListOrdered size={16} className="text-gray-500" aria-hidden="true" />
           测试步骤
         </label>
-        <StepsEditor value={stepsValue} onChange={onStepsChange} onBlur={onStepsBlur} aria-label="测试步骤" />
+        <StepsEditor
+          value={localSteps}
+          onChange={setLocalSteps}
+          editable={isEditing}
+          aria-label="测试步骤"
+        />
       </div>
       <div>
         <label className="mb-3 flex items-center gap-2 text-sm font-medium text-gray-700">
-          <LucideIcons.StickyNote size={16} className="text-gray-500" aria-hidden="true" />
           备注
         </label>
-        <RichTextEditor value={remarkValue ?? ""} onChange={onRemarkChange} onBlur={onRemarkBlur} aria-label="备注" />
+        <RichTextEditor
+          id="qa-remark-editor"
+          editable={isEditing}
+          initialValue={localRemark ?? ""}
+          value={isEditing ? undefined : (localRemark ?? "")}
+          workspaceSlug={workspaceSlug ?? ""}
+          workspaceId={workspaceId ?? ""}
+          projectId={projectId ?? ""}
+          onChange={(_: any, val: string) => setLocalRemark(val)}
+          uploadFile={handleUploadFile}
+          duplicateFile={handleDuplicateFile}
+          searchMentionCallback={async (payload) =>
+            await workspaceService.searchEntity(workspaceSlug?.toString() ?? "", {
+              ...payload,
+              project_id: projectId?.toString() ?? "",
+            })
+          }
+          containerClassName="min-h-[100px] rounded-md"
+        />
+        {isEditing && (
+          <div className="mt-4 flex justify-end gap-2">
+            <Button onClick={handleCancel}>取消</Button>
+            <Button type="primary" onClick={handleSave}>
+              保存
+            </Button>
+          </div>
+        )}
       </div>
       <section
         aria-labelledby="attachments-title"
@@ -110,7 +232,6 @@ export function BasicInfoPanel(props: BasicInfoPanelProps) {
       >
         <div className="mb-3 flex items-center justify-between">
           <span id="attachments-title" className="flex items-center gap-2 text-sm font-medium text-gray-700">
-            <LucideIcons.Paperclip size={16} className="text-gray-500" aria-hidden="true" />
             附件
           </span>
           <Tooltip title="上传文件">
@@ -277,7 +398,6 @@ export function BasicInfoPanel(props: BasicInfoPanelProps) {
       </section>
       <div className="mt-6 h-[420px] flex flex-col rounded bg-white">
         <span id="attachments-title" className="flex items-center gap-2 text-sm font-medium text-gray-700">
-          <LucideIcons.MessageSquareMore size={16} className="text-gray-500" aria-hidden="true" />
           评论
         </span>
         <div className="flex-1 min-h-0 overflow-y-auto px-3 py-2">

@@ -6,9 +6,6 @@ import { useParams } from "next/navigation";
 import { Modal, Form, Input, Button, message, Select } from "antd";
 import { CaseService } from "@/services/qa/case.service";
 import { ExpandAltOutlined, PlusOutlined } from "@ant-design/icons";
-// 删除顶层 Quill import，改为动态加载
-import Quill from "quill";
-import "quill/dist/quill.snow.css";
 import { WorkItemTable } from "./work-item-table";
 import { StateDropdown } from "@/components/dropdowns/state/dropdown";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
@@ -18,6 +15,18 @@ import { FileUploadService } from "@/services/file-upload.service";
 import { getFileMetaDataForUpload, generateFileUploadPayload } from "@plane/services";
 import { RepositoryService } from "@/services/qa/repository.service";
 // 修正：使用相对路径导入枚举获取函数
+import { RichTextEditor } from "@/components/editor/rich-text";
+import { useMember } from "@/hooks/store/use-member";
+import { useWorkspace } from "@/hooks/store/use-workspace";
+import { useEditorAsset } from "@/hooks/store/use-editor-asset";
+import { useUser } from "@/hooks/store/user";
+import { WorkspaceService } from "@/plane-web/services";
+import { EFileAssetType, type TIssue, type TPartialProject } from "@plane/types";
+import { Logo } from "@plane/propel/emoji-icon-picker";
+import { IssueService } from "@/services/issue/issue.service";
+import { projectIssueTypesCache, ProjectIssueTypeService, ProjectService, type TIssueType } from "@/services/project";
+import { getEnums } from "app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/util";
+import { WorkItemSelectModal } from "./work-item-select-modal";
 
 type Props = {
   isOpen: boolean;
@@ -31,14 +40,6 @@ type Props = {
 };
 
 const caseService = new CaseService();
-
-import type { TIssue, TPartialProject } from "@plane/types";
-import { WorkItemSelectModal } from "./work-item-select-modal";
-import { projectIssueTypesCache, ProjectIssueTypeService, ProjectService, type TIssueType } from "@/services/project";
-
-import { getEnums } from "app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/util";
-import { IssueService } from "@/services/issue/issue.service";
-import { Logo } from "@plane/propel/emoji-icon-picker";
 
 type StepRow = { description?: string; result?: string };
 
@@ -69,8 +70,11 @@ const StepsEditor: React.FC<{
   };
 
   const dragItem = React.useRef<number | null>(null);
+  const dragArmedRef = React.useRef(false);
+  const dragImageRef = React.useRef<HTMLDivElement | null>(null);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
+  const [dropTarget, setDropTarget] = useState<{ index: number; edge: "top" | "bottom" } | null>(null);
 
   const [expandedEdit, setExpandedEdit] = useState<{
     visible: boolean;
@@ -101,15 +105,25 @@ const StepsEditor: React.FC<{
     update(next);
   };
 
-  const handleDropOnRow = (dropIdx: number) => {
+  const handleDropOnRow = (dropIdx: number, edge: "top" | "bottom") => {
     const dragIdx = dragItem.current;
-    if (dragIdx === null || dragIdx === dropIdx) {
+    if (dragIdx === null) {
+      dragItem.current = null;
+      return;
+    }
+    if (dragIdx === dropIdx) {
       dragItem.current = null;
       return;
     }
     const next = [...rows];
     const [moved] = next.splice(dragIdx, 1);
-    next.splice(dropIdx, 0, moved);
+
+    const normalizedDropIdx = dragIdx < dropIdx ? dropIdx - 1 : dropIdx;
+    let insertIndex = edge === "top" ? normalizedDropIdx : normalizedDropIdx + 1;
+    if (insertIndex < 0) insertIndex = 0;
+    if (insertIndex > next.length) insertIndex = next.length;
+
+    next.splice(insertIndex, 0, moved);
     update(next);
     dragItem.current = null;
   };
@@ -196,57 +210,168 @@ const StepsEditor: React.FC<{
           {rows.map((row, idx) => (
             <tr
               key={idx}
-              style={{ cursor: "default" }}
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={() => {
-                handleDropOnRow(idx);
+              style={{
+                cursor: "default",
+                background: draggingIndex === idx ? "#fff" : hoveredIndex === idx ? "#f0f5ff" : undefined,
+                transition: "background-color 120ms ease",
+              }}
+              className="transition-colors"
+              onMouseEnter={() => setHoveredIndex(idx)}
+              onMouseLeave={() => setHoveredIndex(null)}
+              onDragOver={(e) => {
+                e.preventDefault();
+                if (draggingIndex !== null && draggingIndex !== idx) {
+                  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                  const edge = e.clientY < rect.top + rect.height / 2 ? "top" : "bottom";
+                  setDropTarget({ index: idx, edge });
+                }
+              }}
+              onDragLeave={() => {
+                if (dropTarget?.index === idx) {
+                  setDropTarget(null);
+                }
+              }}
+              draggable
+              onDragStart={(e) => {
+                if (!dragArmedRef.current) {
+                  e.preventDefault();
+                  return;
+                }
+                dragItem.current = idx;
+                setDraggingIndex(idx);
+                dragArmedRef.current = false;
+                e.dataTransfer.effectAllowed = "move";
+                const dragEl = document.createElement("div");
+                dragEl.style.position = "fixed";
+                dragEl.style.top = "0";
+                dragEl.style.left = "0";
+                // 记录鼠标相对于行左上角的偏移，使拖拽时行位置与鼠标保持相对静止
+                const startRect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                const offsetX = e.clientX - startRect.left;
+                const offsetY = e.clientY - startRect.top;
+                dragEl.dataset.offsetX = String(offsetX);
+                dragEl.dataset.offsetY = String(offsetY);
+                dragEl.style.transform = `translate3d(${e.clientX - offsetX}px, ${e.clientY - offsetY}px, 0)`;
+                const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                const width = rect.width;
+                dragEl.style.width = `${width}px`;
+                dragEl.style.display = "grid";
+                // 动态计算列宽比例
+                const col1 = (e.currentTarget as HTMLElement).children[0]?.getBoundingClientRect().width || 72;
+                const col2 = (e.currentTarget as HTMLElement).children[1]?.getBoundingClientRect().width || 0;
+                const col3 = (e.currentTarget as HTMLElement).children[2]?.getBoundingClientRect().width || 0;
+                const col4 = (e.currentTarget as HTMLElement).children[3]?.getBoundingClientRect().width || 100;
+                dragEl.style.gridTemplateColumns = `${col1}px ${col2}px ${col3}px ${col4}px`;
+                dragEl.style.alignItems = "stretch";
+                dragEl.style.background = "#fff";
+                dragEl.style.boxShadow = "0 6px 16px -8px rgba(0,0,0,0.08), 0 9px 28px 0 rgba(0,0,0,0.05), 0 12px 48px 16px rgba(0,0,0,0.03)";
+                dragEl.style.border = "1px solid #d9d9d9";
+                dragEl.style.borderRadius = "6px";
+                dragEl.style.overflow = "hidden";
+                dragEl.style.pointerEvents = "none";
+                dragEl.style.fontSize = "14px";
+                dragEl.style.color = "rgba(0,0,0,0.88)";
+                dragEl.style.zIndex = "9999";
+                const mkCell = (text: string, align: "left" | "center" = "left") => {
+                  const cell = document.createElement("div");
+                  cell.style.padding = "8px";
+                  cell.style.borderRight = "1px solid #d9d9d9";
+                  cell.style.whiteSpace = "pre-wrap";
+                  cell.style.wordBreak = "break-word";
+                  cell.style.textAlign = align;
+                  cell.textContent = text;
+                  return cell;
+                };
+                dragEl.appendChild(mkCell(String(idx + 1), "center"));
+                dragEl.appendChild(mkCell(String(row?.description ?? "")));
+                dragEl.appendChild(mkCell(String(row?.result ?? "")));
+                const opCell = mkCell("", "center");
+                opCell.style.borderRight = "none";
+                dragEl.appendChild(opCell);
+                document.body.appendChild(dragEl);
+                dragImageRef.current = dragEl;
+                const transparentPixel = new Image();
+                transparentPixel.src =
+                  "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==";
+                e.dataTransfer.setDragImage(transparentPixel, 0, 0);
+                try {
+                  e.dataTransfer.setData("text/plain", String(idx));
+                } catch {}
+              }}
+              onDrag={(e) => {
+                if (!dragImageRef.current) return;
+                if (!e.clientX && !e.clientY) return;
+                const offsetX = Number(dragImageRef.current.dataset.offsetX || 0);
+                const offsetY = Number(dragImageRef.current.dataset.offsetY || 0);
+                dragImageRef.current.style.transform = `translate3d(${e.clientX - offsetX}px, ${e.clientY - offsetY}px, 0)`;
+              }}
+              onDragEnd={() => {
                 setDraggingIndex(null);
+                setDropTarget(null);
+                dragArmedRef.current = false;
+                dragItem.current = null;
+                if (dragImageRef.current) {
+                  dragImageRef.current.remove();
+                  dragImageRef.current = null;
+                }
+              }}
+              onDrop={() => {
+                const edge = dropTarget?.index === idx ? dropTarget.edge : "bottom";
+                handleDropOnRow(idx, edge);
+                setDraggingIndex(null);
+                setDropTarget(null);
+                dragArmedRef.current = false;
+                if (dragImageRef.current) {
+                  dragImageRef.current.remove();
+                  dragImageRef.current = null;
+                }
               }}
             >
               <td
-                style={{ ...tdStyle, cursor: draggingIndex === idx ? "grabbing" : "grab" }}
-                onMouseEnter={() => setHoveredIndex(idx)}
-                onMouseLeave={() => setHoveredIndex(null)}
-                draggable
-                onMouseDown={() => setDraggingIndex(idx)}
-                onDragStart={(e) => {
-                  dragItem.current = idx;
-                  e.dataTransfer.effectAllowed = "move";
+                style={{
+                  ...tdStyle,
+                  cursor: draggingIndex === idx ? "grabbing" : "grab",
+                  boxShadow:
+                    dropTarget?.index === idx
+                      ? dropTarget.edge === "top"
+                        ? "inset 0 1px 0 #3e79f7"
+                        : "inset 0 -1px 0 #3e79f7"
+                      : undefined,
                 }}
-                onDragEnd={() => setDraggingIndex(null)}
+                onMouseDown={() => {
+                  dragArmedRef.current = true;
+                }}
+                onMouseUp={() => {
+                  dragArmedRef.current = false;
+                }}
               >
-                {hoveredIndex === idx ? (
-                  <span
-                    aria-label="drag-handle"
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      cursor: draggingIndex === idx ? "grabbing" : "grab",
-                      WebkitUserSelect: "none",
-                      userSelect: "none",
-                    }}
-                  >
-                    <svg
-                      width="16"
-                      height="16"
-                      viewBox="0 0 20 20"
-                      fill="#999"
-                      xmlns="http://www.w3.org/2000/svg"
-                      style={{ display: "block", transform: "rotate(90deg)" }}
-                    >
-                      <circle cx="5" cy="6" r="1.6" />
-                      <circle cx="10" cy="6" r="1.6" />
-                      <circle cx="15" cy="6" r="1.6" />
-                      <circle cx="5" cy="12" r="1.6" />
-                      <circle cx="10" cy="12" r="1.6" />
-                      <circle cx="15" cy="12" r="1.6" />
-                    </svg>
-                  </span>
-                ) : (
-                  <span style={{ cursor: draggingIndex === idx ? "grabbing" : "grab" }}>{idx + 1}</span>
-                )}
+                <span
+                  aria-label="drag-handle"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    cursor: draggingIndex === idx ? "grabbing" : "grab",
+                    WebkitUserSelect: "none",
+                    userSelect: "none",
+                    width: "100%",
+                    height: "100%",
+                    justifyContent: "center",
+                  }}
+                >
+                  {idx + 1}
+                </span>
               </td>
-              <td style={tdStyle}>
+              <td
+                style={{
+                  ...tdStyle,
+                  boxShadow:
+                    dropTarget?.index === idx
+                      ? dropTarget.edge === "top"
+                        ? "inset 0 1px 0 #3e79f7"
+                        : "inset 0 -1px 0 #3e79f7"
+                      : undefined,
+                }}
+              >
                 <div className="group" style={{ display: "flex", alignItems: "flex-start", gap: 4 }}>
                   <Input.TextArea
                     bordered={false}
@@ -271,7 +396,17 @@ const StepsEditor: React.FC<{
                   />
                 </div>
               </td>
-              <td style={tdStyle}>
+              <td
+                style={{
+                  ...tdStyle,
+                  boxShadow:
+                    dropTarget?.index === idx
+                      ? dropTarget.edge === "top"
+                        ? "inset 0 1px 0 #3e79f7"
+                        : "inset 0 -1px 0 #3e79f7"
+                      : undefined,
+                }}
+              >
                 <div className="group" style={{ display: "flex", alignItems: "flex-start", gap: 4 }}>
                   <Input.TextArea
                     bordered={false}
@@ -296,7 +431,17 @@ const StepsEditor: React.FC<{
                   />
                 </div>
               </td>
-              <td style={tdStyle}>
+              <td
+                style={{
+                  ...tdStyle,
+                  boxShadow:
+                    dropTarget?.index === idx
+                      ? dropTarget.edge === "top"
+                        ? "inset 0 1px 0 #3e79f7"
+                        : "inset 0 -1px 0 #3e79f7"
+                      : undefined,
+                }}
+              >
                 <Button danger type="link" onClick={() => handleRemove(idx)}>
                   删除
                 </Button>
@@ -315,131 +460,6 @@ const StepsEditor: React.FC<{
   );
 };
 
-type QuillFieldProps = { value?: string; onChange?: (val: string) => void; placeholder?: string };
-
-const QuillField: React.FC<QuillFieldProps> = ({ value, onChange, placeholder }) => {
-  const containerRef = React.useRef<HTMLDivElement | null>(null);
-  const quillRef = React.useRef<any>(null);
-  const toolbarRef = React.useRef<HTMLElement | null>(null);
-  const textChangeHandlerRef = React.useRef<((...args: any[]) => void) | null>(null);
-  const keydownHandlerRef = React.useRef<((e: KeyboardEvent) => void) | null>(null);
-  const initialClassNameRef = React.useRef<string>("");
-  const onChangeRef = React.useRef<typeof onChange>(onChange);
-  const [quillLoaded, setQuillLoaded] = useState(false);
-
-  useEffect(() => {
-    onChangeRef.current = onChange;
-  }, [onChange]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    const loadQuill = async () => {
-      try {
-        const container = containerRef.current;
-        if (!container || quillRef.current) return;
-        initialClassNameRef.current = container.className;
-
-        const q = new Quill(container, {
-          theme: "snow",
-          placeholder: placeholder || undefined,
-          bounds: container,
-        });
-
-        // 修复链接弹窗位置，使其左对齐且不被遮挡
-        const tooltip = (q.theme as any).tooltip;
-        const originalPosition = tooltip.position;
-        tooltip.position = function (reference: any) {
-          originalPosition.call(this, reference);
-
-          if (!reference || !this.root) return;
-
-          // reference.left 是视口坐标 (假设 container 没有 position: relative，tooltip 也是相对于 body/viewport 定位)
-          // 如果 container 有 bounds 设置，Quill 会尝试限制位置。
-          // 我们强制左对齐到选区开始位置。
-          this.root.style.left = `${reference.left}px`;
-        };
-
-        quillRef.current = q;
-        toolbarRef.current = (q.getModule("toolbar") as any)?.container ?? null;
-
-        if (typeof value === "string") {
-          q.root.innerHTML = value || "";
-        }
-
-        const handleTextChange = () => {
-          const html = q.root.innerHTML;
-          onChangeRef.current?.(html);
-        };
-        textChangeHandlerRef.current = handleTextChange;
-        q.on("text-change", handleTextChange);
-
-        const handleKeyDown = (e: KeyboardEvent) => {
-          const isFocused =
-            !!q?.hasFocus() || (document.activeElement && container.contains(document.activeElement as Node));
-          if (!isFocused) return;
-          if (e.ctrlKey || e.metaKey || e.altKey || e.key === "Escape" || e.key === "Tab") return;
-          e.stopPropagation();
-        };
-        keydownHandlerRef.current = handleKeyDown;
-        container.addEventListener("keydown", handleKeyDown, { capture: true });
-
-        setQuillLoaded(true);
-      } catch (error) {
-        console.error("Failed to load Quill:", error);
-      }
-    };
-
-    loadQuill();
-
-    return () => {
-      const q = quillRef.current;
-      const textChangeHandler = textChangeHandlerRef.current;
-      if (q && textChangeHandler) {
-        try {
-          q.off("text-change", textChangeHandler);
-        } catch {}
-      }
-      textChangeHandlerRef.current = null;
-
-      const container = containerRef.current;
-      const keydownHandler = keydownHandlerRef.current;
-      if (container && keydownHandler) {
-        container.removeEventListener("keydown", keydownHandler, { capture: true } as any);
-      }
-      keydownHandlerRef.current = null;
-
-      const toolbar = toolbarRef.current;
-      if (toolbar?.parentNode) {
-        toolbar.parentNode.removeChild(toolbar);
-      }
-      toolbarRef.current = null;
-
-      if (container) {
-        container.innerHTML = "";
-        container.className = initialClassNameRef.current;
-      }
-      quillRef.current = null;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!quillLoaded || !quillRef.current || typeof value !== "string") return;
-
-    const currentHTML = quillRef.current.root.innerHTML;
-    if (value !== currentHTML) {
-      quillRef.current.root.innerHTML = value || "";
-    }
-  }, [value, quillLoaded]);
-
-  return (
-    <div style={{ border: "1px solid #d9d9d9", borderRadius: 4 }}>
-      <div ref={containerRef} style={{ minHeight: 180 }} />
-      {!quillLoaded && <div style={{ padding: 16, textAlign: "center", color: "#999" }}>加载富文本编辑器...</div>}
-    </div>
-  );
-};
-
 export const CreateCaseModal: React.FC<Props> = (props) => {
   const { isOpen, handleClose, workspaceSlug, repositoryId, repositoryName, onSuccess } = props;
 
@@ -448,6 +468,11 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
   const [submitting, setSubmitting] = useState<boolean>(false);
   const title = useMemo(() => "新建测试用例", []);
   const [isWorkItemModalOpen, setIsWorkItemModalOpen] = useState<boolean>(false);
+  const { data: currentUser } = useUser();
+  const currentUserId = currentUser?.id ? String(currentUser.id) : null;
+  const {
+    project: { fetchProjectMembers },
+  } = useMember();
   // 新增：选中工作项状态（用于表格回显）
   const [selectedIssues, setSelectedIssues] = useState<TIssue[]>([]);
   // 新增：枚举数据状态
@@ -456,6 +481,39 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
     case_priority?: Record<string, string>;
     case_test_type?: Record<string, string>;
   }>({});
+  const [editorResetKey, setEditorResetKey] = useState(0);
+
+  const { getWorkspaceBySlug } = useWorkspace();
+  const workspaceId = workspaceSlug ? getWorkspaceBySlug(workspaceSlug)?.id : undefined;
+  const { uploadEditorAsset, duplicateEditorAsset } = useEditorAsset();
+  const workspaceService = useMemo(() => new WorkspaceService(), []);
+
+  const handleUploadFile = async (blockId: string | undefined, file: File) => {
+    if (!workspaceSlug || !projectId) throw new Error("Missing context");
+    const { asset_id } = await uploadEditorAsset({
+      blockId: blockId ?? "",
+      data: {
+        entity_identifier: String(projectId),
+        entity_type: EFileAssetType.PROJECT_DESCRIPTION,
+      },
+      file,
+      projectId: String(projectId),
+      workspaceSlug,
+    });
+    return asset_id;
+  };
+
+  const handleDuplicateFile = async (assetId: string) => {
+    if (!workspaceSlug || !projectId) throw new Error("Missing context");
+    const { asset_id } = await duplicateEditorAsset({
+      assetId,
+      entityId: String(projectId),
+      entityType: EFileAssetType.PROJECT_DESCRIPTION,
+      projectId: String(projectId),
+      workspaceSlug,
+    });
+    return asset_id;
+  };
 
   // 新增：删除单个已选工作项，并同步表单显示文本
   const handleRemoveSelected = (id: string) => {
@@ -882,6 +940,7 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
     form.resetFields();
     setSelectedIssues([]);
     setSubmitting(false);
+    setEditorResetKey((k) => k + 1);
   };
 
   const onCloseWithReset = () => {
@@ -905,9 +964,19 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
       type: "",
       priority: "",
       test_type: "",
-      assignee: null,
+      assignee: currentUserId,
     });
-  }, [isOpen, form, repositoryName]);
+    setEditorResetKey((k) => k + 1);
+  }, [isOpen, form, repositoryName, currentUserId]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    if (!currentUserId) return;
+    const currentAssignee = form.getFieldValue("assignee");
+    if (currentAssignee === null || currentAssignee === undefined || currentAssignee === "") {
+      form.setFieldsValue({ assignee: currentUserId });
+    }
+  }, [isOpen, currentUserId, form]);
 
   // 新增：弹窗打开时拉取模块列表
   useEffect(() => {
@@ -924,6 +993,12 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
         setModuleOptions([]);
       });
   }, [isOpen, workspaceSlug, repositoryId]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    if (!workspaceSlug || !projectId) return;
+    fetchProjectMembers(workspaceSlug.toString(), String(projectId));
+  }, [isOpen, workspaceSlug, projectId, fetchProjectMembers]);
 
   const handleSubmit = async () => {
     try {
@@ -1043,8 +1118,7 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
     }}
   >
         {/* 其余表单项与自定义组件保持不变 */}
-        {/* 包括 QuillField 与 StepsEditor 的用法 */}
-        {/* 左右布局、风格与已有设计体系保持一致 */}
+        {/* 包括 RichTextEditor 与 StepsEditor 的用法 */}
         <div style={{ display: "flex", gap: 16, height: "75vh", alignItems: "stretch" }}>
           {/* 左侧区域 */}
           <div style={{ flex: 2, height: "100%", overflowY: "auto" }}>
@@ -1052,16 +1126,58 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
               <Input placeholder="请输入标题" />
             </Form.Item>
             {/* 保留工作项回显表格与附件列表等 */}
-            <Form.Item label="前置条件" name="precondition">
-              <QuillField placeholder="请输入前置条件" />
+            <Form.Item label="前置条件">
+              <RichTextEditor
+                key={`qa-precondition-editor-${editorResetKey}`}
+                id="qa-precondition-editor"
+                editable
+                initialValue={form.getFieldValue("precondition") ?? ""}
+                workspaceSlug={workspaceSlug}
+                workspaceId={workspaceId ?? ""}
+                projectId={projectId ? String(projectId) : ""}
+                onChange={(_: any, val: string) => form.setFieldsValue({ precondition: val })}
+                uploadFile={handleUploadFile}
+                duplicateFile={handleDuplicateFile}
+                searchMentionCallback={async (payload) =>
+                  await workspaceService.searchEntity(workspaceSlug?.toString() ?? "", {
+                    ...payload,
+                    project_id: projectId?.toString() ?? "",
+                  })
+                }
+                containerClassName="min-h-[100px] rounded-md"
+              />
+            </Form.Item>
+            <Form.Item name="precondition" hidden>
+              <Input />
             </Form.Item>
 
             <Form.Item label="用例步骤" name="steps">
               <StepsEditor />
             </Form.Item>
 
-            <Form.Item label="备注" name="remark">
-              <QuillField placeholder="请输入备注" />
+            <Form.Item label="备注">
+              <RichTextEditor
+                key={`qa-remark-editor-${editorResetKey}`}
+                id="qa-remark-editor"
+                editable
+                initialValue={form.getFieldValue("remark") ?? ""}
+                workspaceSlug={workspaceSlug}
+                workspaceId={workspaceId ?? ""}
+                projectId={projectId ? String(projectId) : ""}
+                onChange={(_: any, val: string) => form.setFieldsValue({ remark: val })}
+                uploadFile={handleUploadFile}
+                duplicateFile={handleDuplicateFile}
+                searchMentionCallback={async (payload) =>
+                  await workspaceService.searchEntity(workspaceSlug?.toString() ?? "", {
+                    ...payload,
+                    project_id: projectId?.toString() ?? "",
+                  })
+                }
+                containerClassName="min-h-[100px] rounded-md"
+              />
+            </Form.Item>
+            <Form.Item name="remark" hidden>
+              <Input />
             </Form.Item>
 
             <Form.Item

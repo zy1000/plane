@@ -417,7 +417,8 @@ export const StepsEditor: React.FC<{
   value?: { description?: string; result?: string }[];
   onChange?: (v: { description?: string; result?: string }[]) => void;
   onBlur?: (v: { description?: string; result?: string }[]) => void;
-}> = ({ value, onChange, onBlur }) => {
+  editable?: boolean;
+}> = ({ value, onChange, onBlur, editable = true }) => {
   const rows = Array.isArray(value) && value.length > 0 ? value : [{ description: "", result: "" }];
 
   useEffect(() => {
@@ -458,8 +459,11 @@ export const StepsEditor: React.FC<{
 
   // 拖拽排序所需的引用
   const dragItem = React.useRef<number | null>(null);
+  const dragArmedRef = React.useRef(false);
+  const dragImageRef = React.useRef<HTMLDivElement | null>(null);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
+  const [dropTarget, setDropTarget] = useState<{ index: number; edge: "top" | "bottom" } | null>(null);
 
   // 新增：放大编辑状态管理
   const [expandedEdit, setExpandedEdit] = useState<{
@@ -527,15 +531,25 @@ export const StepsEditor: React.FC<{
   };
 
   // 在目标行上触发 drop，完成数组内的重排
-  const handleDropOnRow = (dropIdx: number) => {
+  const handleDropOnRow = (dropIdx: number, edge: "top" | "bottom") => {
     const dragIdx = dragItem.current;
-    if (dragIdx === null || dragIdx === dropIdx) {
+    if (dragIdx === null) {
+      dragItem.current = null;
+      return;
+    }
+    if (dragIdx === dropIdx) {
       dragItem.current = null;
       return;
     }
     const next = [...rows];
     const [moved] = next.splice(dragIdx, 1);
-    next.splice(dropIdx, 0, moved);
+
+    const normalizedDropIdx = dragIdx < dropIdx ? dropIdx - 1 : dropIdx;
+    let insertIndex = edge === "top" ? normalizedDropIdx : normalizedDropIdx + 1;
+    if (insertIndex < 0) insertIndex = 0;
+    if (insertIndex > next.length) insertIndex = next.length;
+
+    next.splice(insertIndex, 0, moved);
     update(next);
     dragItem.current = null;
   };
@@ -587,17 +601,26 @@ export const StepsEditor: React.FC<{
         onCancel={cancelExpandedEdit}
         title={expandedEdit.field === "description" ? "编辑步骤描述" : "编辑预期结果"}
         width="60vw"
-        footer={[
-          <Button key="cancel" onClick={cancelExpandedEdit}>
-            取消
-          </Button>,
-          <Button key="save" type="primary" onClick={saveExpandedEdit}>
-            保存
-          </Button>,
-        ]}
+        footer={
+          editable
+            ? [
+                <Button key="cancel" onClick={cancelExpandedEdit}>
+                  取消
+                </Button>,
+                <Button key="save" type="primary" onClick={saveExpandedEdit}>
+                  保存
+                </Button>,
+              ]
+            : [
+                <Button key="close" onClick={cancelExpandedEdit}>
+                  关闭
+                </Button>,
+              ]
+        }
         destroyOnClose
       >
         <Input.TextArea
+          readOnly={!editable}
           autoSize={{ minRows: 6, maxRows: 20 }}
           placeholder={expandedEdit.field === "description" ? "请输入步骤描述" : "请输入预期结果"}
           value={expandedEdit.value}
@@ -618,73 +641,194 @@ export const StepsEditor: React.FC<{
           <col style={{ width: 72 }} />
           <col />
           <col style={{ width: "30%" }} />
-          <col style={{ width: 50 }} /> {/* 调整操作列宽度 */}
+          {editable && <col style={{ width: 50 }} />}
         </colgroup>
         <thead>
           <tr>
             <th style={thStyle}>编号</th>
             <th style={thStyle}>步骤描述</th>
             <th style={thStyle}>预期结果</th>
-            <th style={thStyle}>操作</th>
+            {editable && <th style={thStyle}>操作</th>}
           </tr>
         </thead>
         <tbody>
           {rows.map((row, idx) => (
             <tr
               key={idx}
-              style={{ cursor: "default" }}
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={() => {
-                handleDropOnRow(idx);
+              style={{
+                cursor: "default",
+                background: draggingIndex === idx ? "#fff" : hoveredIndex === idx ? "#f0f5ff" : undefined,
+                transition: "background-color 120ms ease",
+              }}
+              className="transition-colors"
+              onMouseEnter={() => setHoveredIndex(idx)}
+              onMouseLeave={() => setHoveredIndex(null)}
+              onDragOver={(e) => {
+                if (editable) {
+                  e.preventDefault();
+                  if (draggingIndex !== null && draggingIndex !== idx) {
+                    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                    const edge = e.clientY < rect.top + rect.height / 2 ? "top" : "bottom";
+                    setDropTarget({ index: idx, edge });
+                  }
+                }
+              }}
+              onDragLeave={() => {
+                if (editable && dropTarget?.index === idx) {
+                  setDropTarget(null);
+                }
+              }}
+              draggable={editable}
+              onDragStart={(e) => {
+                if (!editable) return;
+                if (!dragArmedRef.current) {
+                  e.preventDefault();
+                  return;
+                }
+                dragItem.current = idx;
+                setDraggingIndex(idx);
+                dragArmedRef.current = false;
+                e.dataTransfer.effectAllowed = "move";
+                const dragEl = document.createElement("div");
+                dragEl.style.position = "fixed";
+                dragEl.style.top = "0";
+                dragEl.style.left = "0";
+                // 记录鼠标相对于行左上角的偏移，使拖拽时行位置与鼠标保持相对静止
+                const startRect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                const offsetX = e.clientX - startRect.left;
+                const offsetY = e.clientY - startRect.top;
+                dragEl.dataset.offsetX = String(offsetX);
+                dragEl.dataset.offsetY = String(offsetY);
+                dragEl.style.transform = `translate3d(${e.clientX - offsetX}px, ${e.clientY - offsetY}px, 0)`;
+                const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                const width = rect.width;
+                dragEl.style.width = `${width}px`;
+                dragEl.style.display = "grid";
+                // 动态计算列宽比例
+                const col1 = (e.currentTarget as HTMLElement).children[0]?.getBoundingClientRect().width || 72;
+                const col2 = (e.currentTarget as HTMLElement).children[1]?.getBoundingClientRect().width || 0;
+                const col3 = (e.currentTarget as HTMLElement).children[2]?.getBoundingClientRect().width || 0;
+                const col4 = (e.currentTarget as HTMLElement).children[3]?.getBoundingClientRect().width || 50;
+                dragEl.style.gridTemplateColumns = `${col1}px ${col2}px ${col3}px ${col4}px`;
+                dragEl.style.alignItems = "stretch";
+                dragEl.style.background = "#fff";
+                dragEl.style.boxShadow = "0 6px 16px -8px rgba(0,0,0,0.08), 0 9px 28px 0 rgba(0,0,0,0.05), 0 12px 48px 16px rgba(0,0,0,0.03)";
+                dragEl.style.border = "1px solid #d9d9d9";
+                dragEl.style.borderRadius = "6px";
+                dragEl.style.overflow = "hidden";
+                dragEl.style.pointerEvents = "none";
+                dragEl.style.fontSize = "14px";
+                dragEl.style.color = "rgba(0,0,0,0.88)";
+                dragEl.style.zIndex = "9999";
+                const mkCell = (text: string, align: "left" | "center" = "left") => {
+                  const cell = document.createElement("div");
+                  cell.style.padding = "8px";
+                  cell.style.borderRight = "1px solid #d9d9d9";
+                  cell.style.whiteSpace = "pre-wrap";
+                  cell.style.wordBreak = "break-word";
+                  cell.style.textAlign = align;
+                  cell.textContent = text;
+                  return cell;
+                };
+                dragEl.appendChild(mkCell(String(idx + 1), "center"));
+                dragEl.appendChild(mkCell(String(row?.description ?? "")));
+                dragEl.appendChild(mkCell(String(row?.result ?? "")));
+                const opCell = mkCell("", "center");
+                opCell.style.borderRight = "none";
+                dragEl.appendChild(opCell);
+                document.body.appendChild(dragEl);
+                dragImageRef.current = dragEl;
+                const transparentPixel = new Image();
+                transparentPixel.src =
+                  "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==";
+                e.dataTransfer.setDragImage(transparentPixel, 0, 0);
+                try {
+                  e.dataTransfer.setData("text/plain", String(idx));
+                } catch {}
+              }}
+              onDrag={(e) => {
+                if (!editable) return;
+                if (!dragImageRef.current) return;
+                if (!e.clientX && !e.clientY) return;
+                const offsetX = Number(dragImageRef.current.dataset.offsetX || 0);
+                const offsetY = Number(dragImageRef.current.dataset.offsetY || 0);
+                dragImageRef.current.style.transform = `translate3d(${e.clientX - offsetX}px, ${e.clientY - offsetY}px, 0)`;
+              }}
+              onDragEnd={() => {
+                if (!editable) return;
                 setDraggingIndex(null);
+                setDropTarget(null);
+                dragArmedRef.current = false;
+                dragItem.current = null;
+                if (dragImageRef.current) {
+                  dragImageRef.current.remove();
+                  dragImageRef.current = null;
+                }
+              }}
+              onDrop={() => {
+                if (editable) {
+                  const edge = dropTarget?.index === idx ? dropTarget.edge : "bottom";
+                  handleDropOnRow(idx, edge);
+                  setDraggingIndex(null);
+                  setDropTarget(null);
+                  dragArmedRef.current = false;
+                  if (dragImageRef.current) {
+                    dragImageRef.current.remove();
+                    dragImageRef.current = null;
+                  }
+                }
               }}
             >
               <td
-                style={{ ...tdStyle, textAlign: "center", cursor: draggingIndex === idx ? "grabbing" : "grab" }}
-                onMouseEnter={() => setHoveredIndex(idx)}
-                onMouseLeave={() => setHoveredIndex(null)}
-                draggable
-                onMouseDown={() => setDraggingIndex(idx)}
-                onDragStart={(e) => {
-                  dragItem.current = idx;
-                  e.dataTransfer.effectAllowed = "move";
+                style={{
+                  ...tdStyle,
+                  textAlign: "center",
+                  cursor: editable ? (draggingIndex === idx ? "grabbing" : "grab") : "default",
+                  boxShadow:
+                    dropTarget?.index === idx
+                      ? dropTarget.edge === "top"
+                        ? "inset 0 1px 0 #3e79f7"
+                        : "inset 0 -1px 0 #3e79f7"
+                      : undefined,
                 }}
-                onDragEnd={() => setDraggingIndex(null)}
+                onMouseDown={() => {
+                  if (!editable) return;
+                  dragArmedRef.current = true;
+                }}
+                onMouseUp={() => {
+                  if (!editable) return;
+                  dragArmedRef.current = false;
+                }}
               >
-                {hoveredIndex === idx ? (
-                  <span
-                    aria-label="drag-handle"
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      cursor: draggingIndex === idx ? "grabbing" : "grab",
-                      WebkitUserSelect: "none",
-                      userSelect: "none",
-                    }}
-                  >
-                    <svg
-                      width="16"
-                      height="16"
-                      viewBox="0 0 20 20"
-                      fill="#999"
-                      xmlns="http://www.w3.org/2000/svg"
-                      style={{ display: "block", transform: "rotate(90deg)" }}
-                    >
-                      <circle cx="5" cy="6" r="1.6" />
-                      <circle cx="10" cy="6" r="1.6" />
-                      <circle cx="15" cy="6" r="1.6" />
-                      <circle cx="5" cy="12" r="1.6" />
-                      <circle cx="10" cy="12" r="1.6" />
-                      <circle cx="15" cy="12" r="1.6" />
-                    </svg>
-                  </span>
-                ) : (
-                  <span style={{ cursor: draggingIndex === idx ? "grabbing" : "grab" }}>{idx + 1}</span>
-                )}
+                <span
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    cursor: draggingIndex === idx ? "grabbing" : "grab",
+                    WebkitUserSelect: "none",
+                    userSelect: "none",
+                    width: "100%",
+                    height: "100%",
+                    justifyContent: "center",
+                  }}
+                >
+                  {idx + 1}
+                </span>
               </td>
-              <td style={tdStyle}>
+              <td
+                style={{
+                  ...tdStyle,
+                  boxShadow:
+                    dropTarget?.index === idx
+                      ? dropTarget.edge === "top"
+                        ? "inset 0 1px 0 #3e79f7"
+                        : "inset 0 -1px 0 #3e79f7"
+                      : undefined,
+                }}
+              >
                 <div className="group" style={{ display: "flex", alignItems: "flex-start", gap: 4 }}>
                   <Input.TextArea
+                    readOnly={!editable}
                     bordered={false}
                     autoSize={{ minRows: 1, maxRows: 8 }}
                     placeholder="请输入步骤描述"
@@ -708,9 +852,20 @@ export const StepsEditor: React.FC<{
                   />
                 </div>
               </td>
-              <td style={tdStyle}>
+              <td
+                style={{
+                  ...tdStyle,
+                  boxShadow:
+                    dropTarget?.index === idx
+                      ? dropTarget.edge === "top"
+                        ? "inset 0 1px 0 #3e79f7"
+                        : "inset 0 -1px 0 #3e79f7"
+                      : undefined,
+                }}
+              >
                 <div className="group" style={{ display: "flex", alignItems: "flex-start", gap: 4 }}>
                   <Input.TextArea
+                    readOnly={!editable}
                     bordered={false}
                     autoSize={{ minRows: 1, maxRows: 8 }}
                     placeholder="请输入预期结果"
@@ -734,89 +889,112 @@ export const StepsEditor: React.FC<{
                   />
                 </div>
               </td>
-              <td style={{ ...tdStyle, textAlign: "center" }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%" }}>
-                  <Popover
-                    trigger="click"
-                    placement="rightTop"
-                    overlayStyle={{ padding: 0 }}
-                    content={
-                      <div
-                        style={{
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: 6,
-                          textAlign: "left",
-                          alignItems: "flex-start",
-                        }}
-                      >
-                        <Button
-                          data-button-area="true"
-                          size="small"
-                          type="text"
-                          onMouseDown={(e) => e.preventDefault()}
-                          onClick={() => handleInsertAbove(idx)}
-                          style={{ display: "flex", justifyContent: "flex-start", alignItems: "center", gap: 6 }}
-                        >
-                          <ArrowUpOutlined />
-                          向上添加步骤
-                        </Button>
-                        <Button
-                          data-button-area="true"
-                          size="small"
-                          type="text"
-                          onMouseDown={(e) => e.preventDefault()}
-                          onClick={() => handleInsertBelow(idx)}
-                          style={{ display: "flex", justifyContent: "flex-start", alignItems: "center", gap: 6 }}
-                        >
-                          <ArrowDownOutlined />
-                          向下添加步骤
-                        </Button>
-                        <Button
-                          data-button-area="true"
-                          size="small"
-                          type="text"
-                          onMouseDown={(e) => e.preventDefault()}
-                          onClick={() => handleCopyRow(idx)}
-                          style={{ display: "flex", justifyContent: "flex-start", alignItems: "center", gap: 6 }}
-                        >
-                          <CopyOutlined />
-                          复制
-                        </Button>
-                        <Button
-                          data-button-area="true"
-                          size="small"
-                          type="text"
-                          onMouseDown={(e) => e.preventDefault()}
-                          onClick={() => handleRemove(idx)}
-                          style={{ display: "flex", justifyContent: "flex-start", alignItems: "center", gap: 6 }}
-                        >
-                          <DeleteOutlined />
-                          删除
-                        </Button>
-                      </div>
-                    }
+              {editable && (
+                <td
+                  style={{
+                    ...tdStyle,
+                    textAlign: "center",
+                    boxShadow:
+                      dropTarget?.index === idx
+                        ? dropTarget.edge === "top"
+                          ? "inset 0 1px 0 #3e79f7"
+                          : "inset 0 -1px 0 #3e79f7"
+                        : undefined,
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 8,
+                      width: "100%",
+                    }}
                   >
-                    <Button type="text" size="small" icon={<EllipsisOutlined />} title="更多操作" />
-                  </Popover>
-                </div>
-              </td>
+                    <Popover
+                      trigger="click"
+                      placement="rightTop"
+                      overlayStyle={{ padding: 0 }}
+                      content={
+                        <div
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 6,
+                            textAlign: "left",
+                            alignItems: "flex-start",
+                          }}
+                        >
+                          <Button
+                            data-button-area="true"
+                            size="small"
+                            type="text"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => handleInsertAbove(idx)}
+                            style={{ display: "flex", justifyContent: "flex-start", alignItems: "center", gap: 6 }}
+                          >
+                            <ArrowUpOutlined />
+                            向上添加步骤
+                          </Button>
+                          <Button
+                            data-button-area="true"
+                            size="small"
+                            type="text"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => handleInsertBelow(idx)}
+                            style={{ display: "flex", justifyContent: "flex-start", alignItems: "center", gap: 6 }}
+                          >
+                            <ArrowDownOutlined />
+                            向下添加步骤
+                          </Button>
+                          <Button
+                            data-button-area="true"
+                            size="small"
+                            type="text"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => handleCopyRow(idx)}
+                            style={{ display: "flex", justifyContent: "flex-start", alignItems: "center", gap: 6 }}
+                          >
+                            <CopyOutlined />
+                            复制
+                          </Button>
+                          <Button
+                            data-button-area="true"
+                            size="small"
+                            type="text"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => handleRemove(idx)}
+                            style={{ display: "flex", justifyContent: "flex-start", alignItems: "center", gap: 6 }}
+                          >
+                            <DeleteOutlined />
+                            删除
+                          </Button>
+                        </div>
+                      }
+                    >
+                      <Button type="text" size="small" icon={<EllipsisOutlined />} title="更多操作" />
+                    </Popover>
+                  </div>
+                </td>
+              )}
             </tr>
           ))}
         </tbody>
       </table>
 
-      <div style={{ marginTop: 8, display: "flex", justifyContent: "flex-start" }}>
-        <Button
-          color="primary"
-          variant="text"
-          icon={<PlusOutlined />}
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={handleAdd}
-        >
-          新增步骤
-        </Button>
-      </div>
+      {editable && (
+        <div style={{ marginTop: 8, display: "flex", justifyContent: "flex-start" }}>
+          <Button
+            color="primary"
+            variant="text"
+            icon={<PlusOutlined />}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={handleAdd}
+          >
+            新增步骤
+          </Button>
+        </div>
+      )}
     </div>
   );
 };

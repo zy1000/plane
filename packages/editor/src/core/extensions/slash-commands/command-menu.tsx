@@ -124,7 +124,7 @@ export const SlashCommandsMenu = forwardRef(function SlashCommandsMenu(props: Sl
       {/* Backdrop */}
       <FloatingOverlay
         style={{
-          zIndex: 99,
+          zIndex: 2000,
         }}
         lockScroll
       />
@@ -133,7 +133,7 @@ export const SlashCommandsMenu = forwardRef(function SlashCommandsMenu(props: Sl
         ref={commandListContainer}
         className="relative max-h-80 min-w-[12rem] overflow-y-auto rounded-md border-[0.5px] border-custom-border-300 bg-custom-background-100 px-2 py-2.5 shadow-custom-shadow-rg space-y-2"
         style={{
-          zIndex: 100,
+          zIndex: 2001,
         }}
         onClick={(e) => {
           e.stopPropagation();

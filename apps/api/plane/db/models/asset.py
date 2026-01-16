@@ -31,6 +31,7 @@ class FileAsset(BaseModel):
         ISSUE_DESCRIPTION = "ISSUE_DESCRIPTION"
         COMMENT_DESCRIPTION = "COMMENT_DESCRIPTION"
         PAGE_DESCRIPTION = "PAGE_DESCRIPTION"
+        PROJECT_DESCRIPTION = "PROJECT_DESCRIPTION"
         USER_COVER = "USER_COVER"
         USER_AVATAR = "USER_AVATAR"
         WORKSPACE_LOGO = "WORKSPACE_LOGO"
@@ -96,6 +97,7 @@ class FileAsset(BaseModel):
             self.EntityTypeContext.ISSUE_DESCRIPTION,
             self.EntityTypeContext.COMMENT_DESCRIPTION,
             self.EntityTypeContext.PAGE_DESCRIPTION,
+            self.EntityTypeContext.PROJECT_DESCRIPTION,
             self.EntityTypeContext.DRAFT_ISSUE_DESCRIPTION,
         ]:
             return f"/api/assets/v2/workspaces/{self.workspace.slug}/projects/{self.project_id}/{self.id}/"
@@ -106,4 +108,3 @@ class FileAsset(BaseModel):
 class File(BaseModel):
     name = models.CharField(max_length=255, blank=True, verbose_name="原始文件名")
     size = models.PositiveBigIntegerField(verbose_name="文件大小 (bytes)")
-
