@@ -866,48 +866,46 @@ function UpdateModal({ open, onClose, caseId }: UpdateModalProps) {
     }
   };
 
-  const handleBlurPrecondition = async () => {
-    console.log(2222);
 
+
+  const handleSaveBasicInfo = async (data: { precondition: string; steps: any[]; remark: string }) => {
     if (!workspaceSlug || !caseId) return;
-    if (preconditionValue === caseData?.precondition) return;
-    try {
-      await caseService.updateCase(String(workspaceSlug), { id: caseId, precondition: preconditionValue });
-      setCaseData((prev: any) => (prev ? { ...prev, precondition: preconditionValue } : prev));
-    } catch {
-      // 静默处理
+
+    const payload: any = {};
+    let hasChange = false;
+
+    if (data.precondition !== caseData?.precondition) {
+      payload.precondition = data.precondition;
+      hasChange = true;
     }
-  };
 
-  const handleBlurRemark = async () => {
-    if (!workspaceSlug || !caseId) return;
-    if (remarkValue === caseData?.remark) return;
-    try {
-      await caseService.updateCase(String(workspaceSlug), { id: caseId, remark: remarkValue });
-      setCaseData((prev: any) => (prev ? { ...prev, remark: remarkValue } : prev));
-    } catch {
-      // 静默处理
+    if (data.remark !== caseData?.remark) {
+      payload.remark = data.remark;
+      hasChange = true;
     }
-  };
 
-  // 新增：Steps 更新逻辑（参考前置条件 onBlur）
-  const handleBlurSteps = async (rowsArg?: { description?: string; result?: string }[]) => {
-    if (!workspaceSlug || !caseId) return;
     const oldSteps = Array.isArray(caseData?.steps) ? caseData.steps : [];
     const mapRows = (rows: { description?: string; result?: string }[]) =>
       (rows || []).map((r) => ({ description: r?.description ?? "", result: r?.result ?? "" }));
     const filterEmpty = (rows: { description: string; result: string }[]) =>
       rows.filter((r) => !(r.description.trim() === "" && r.result.trim() === ""));
-    const sourceRows = Array.isArray(rowsArg) ? rowsArg : stepsValue;
-    const nextSteps = filterEmpty(mapRows(sourceRows));
+
+    const nextSteps = filterEmpty(mapRows(data.steps));
     const prevStepsRaw = mapRows(oldSteps);
-    if (JSON.stringify(nextSteps) === JSON.stringify(prevStepsRaw)) return;
+
+    if (JSON.stringify(nextSteps) !== JSON.stringify(prevStepsRaw)) {
+      payload.steps = nextSteps;
+      hasChange = true;
+    }
+
+    if (!hasChange) return;
 
     try {
-      await caseService.updateCase(String(workspaceSlug), { id: caseId, steps: nextSteps });
-      setCaseData((prev: any) => (prev ? { ...prev, steps: nextSteps } : prev));
-    } catch {
-      // 静默处理
+      await caseService.updateCase(String(workspaceSlug), { id: caseId, ...payload });
+      setCaseData((prev: any) => (prev ? { ...prev, ...payload } : prev));
+      message.success("保存成功");
+    } catch (e: any) {
+      message.error(e?.message || "保存失败");
     }
   };
 
@@ -1041,15 +1039,11 @@ function UpdateModal({ open, onClose, caseId }: UpdateModalProps) {
 
             {activeTab === "basic" && (
               <BasicInfoPanel
+                caseId={caseId}
                 preconditionValue={preconditionValue ?? ""}
-                onPreconditionChange={(v) => setPreconditionValue(v)}
-                onPreconditionBlur={handleBlurPrecondition}
                 stepsValue={stepsValue}
-                onStepsChange={setStepsValue}
-                onStepsBlur={(rows) => handleBlurSteps(rows)}
                 remarkValue={remarkValue ?? ""}
-                onRemarkChange={(v) => setRemarkValue(v)}
-                onRemarkBlur={handleBlurRemark}
+                onSave={handleSaveBasicInfo}
                 attachmentsLoading={attachmentsLoading}
                 caseAttachments={caseAttachments}
                 fileInputRef={fileInputRef}
