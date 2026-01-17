@@ -104,8 +104,18 @@ export class AnalyticsService extends APIService {
     return `${processedUrl}/${endpoint}`;
   }
 
-  async getProjectStatistics<T>(workspaceSlug: string, projectId: string): Promise<T> {
-    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/statistics/`)
+  async getProjectStatistics<T>(
+    workspaceSlug: string,
+    projectId: string,
+    params?: {
+      start_date?: string;
+      end_date?: string;
+      cycle_id?: string;
+    }
+  ): Promise<T> {
+    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/statistics/`, {
+      params,
+    })
       .then((res) => res?.data)
       .catch((err) => {
         throw err?.response?.data;
