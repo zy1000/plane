@@ -7,8 +7,8 @@ from django.db import models
 from django.db.models import Q
 from django.conf import settings
 
-
 from . import BaseModel, Issue
+
 
 def generate_case_code(*, project_id, project_identifier, repository_id=None):
     prefix = f"{project_identifier}-"
@@ -21,7 +21,7 @@ def generate_case_code(*, project_id, project_identifier, repository_id=None):
 
     max_number = 0
     for code in queryset.filter(code__startswith=prefix).values_list("code", flat=True):
-        suffix = code[len(prefix) :]
+        suffix = code[len(prefix):]
         if suffix.isdigit():
             max_number = max(max_number, int(suffix))
 
@@ -126,6 +126,10 @@ class TestCase(BaseModel):
         MANUAL = 0, '手动'
         AUTO = 1, '自动'
 
+    class StepType(models.IntegerChoices):
+        STEP = 0
+        TEXT = 1
+
     code = models.CharField(
         max_length=50,
         verbose_name="TestCase Code",
@@ -134,7 +138,13 @@ class TestCase(BaseModel):
     name = models.CharField(max_length=255, verbose_name="TestCase Name")
 
     precondition = models.TextField(verbose_name="TestCase Precondition", blank=True, default='<p></p>')
-    steps = models.JSONField(verbose_name="TestCase Steps", blank=True, default=dict)
+    steps = models.JSONField(verbose_name="TestCase Steps", blank=True, default=dict, null=True)
+    # 新增文本描述模式
+    mode = models.IntegerField(choices=StepType.choices, default=StepType.STEP)
+    text_description = models.TextField(null=True, blank=True, default='<p></p>')
+    text_result = models.TextField(null=True, blank=True, default='<p></p>')
+
+
     remark = models.TextField(verbose_name="TestCase Remark", blank=True, default='<p></p>')
     type = models.IntegerField(choices=Type.choices, default=Type.FUNCTIONAL, verbose_name="TestCase Type")
     test_type = models.IntegerField(choices=TestType.choices, default=TestType.AUTO, verbose_name="TestType Type")
@@ -206,6 +216,9 @@ class TestCaseVersion(BaseModel):
     code = models.CharField(max_length=50, blank=True)
     name = models.CharField(max_length=255)
     precondition = models.TextField(blank=True, default="<p></p>")
+    mode = models.IntegerField(choices=TestCase.StepType.choices, default=TestCase.StepType.STEP)
+    text_description = models.TextField(null=True, blank=True, default='<p></p>')
+    text_result = models.TextField(null=True, blank=True, default='<p></p>')
     steps = models.JSONField(blank=True, default=dict)
     remark = models.TextField(blank=True, default="<p></p>")
     type = models.IntegerField(choices=TestCase.Type.choices)
@@ -251,6 +264,9 @@ class TestCaseVersion(BaseModel):
             state=getattr(case, "state", TestCase.State.PENDING_REVIEW),
             label_ids=label_ids,
             issue_ids=issue_ids,
+            mode=case.mode,
+            text_description=case.text_description,
+            text_result=case.text_result,
         )
 
     @classmethod
@@ -474,7 +490,7 @@ class CaseReview(BaseModel):
     )
     mode = models.CharField(choices=ReviewMode.choices, default=ReviewMode.SINGLE, verbose_name="CaseReview Mode")
 
-    module = models.ForeignKey(CaseReviewModule,null=True, on_delete=models.SET_NULL, verbose_name="CaseReviewModule",
+    module = models.ForeignKey(CaseReviewModule, null=True, on_delete=models.SET_NULL, verbose_name="CaseReviewModule",
                                related_name="reviews")
     started_at = models.DateField(null=True, blank=True, verbose_name="CaseReview Started Time")
     ended_at = models.DateField(null=True, blank=True, verbose_name="CaseReview Ended Time")

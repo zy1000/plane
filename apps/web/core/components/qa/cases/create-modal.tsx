@@ -3,9 +3,9 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
-import { Modal, Form, Input, Button, message, Select } from "antd";
+import { Modal, Form, Input, Button, message, Select, Dropdown } from "antd";
 import { CaseService } from "@/services/qa/case.service";
-import { ExpandAltOutlined, PlusOutlined } from "@ant-design/icons";
+import { DownOutlined, ExpandAltOutlined, PlusOutlined } from "@ant-design/icons";
 import { WorkItemTable } from "./work-item-table";
 import { StateDropdown } from "@/components/dropdowns/state/dropdown";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
@@ -61,7 +61,7 @@ const StepsEditor: React.FC<{
     border: tableBorder,
     background: "#fafafa",
     textAlign: "left",
-    fontWeight: 500,
+    fontWeight: "bold",
   };
   const tdStyle: React.CSSProperties = {
     padding: 5,
@@ -482,6 +482,7 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
     case_test_type?: Record<string, string>;
   }>({});
   const [editorResetKey, setEditorResetKey] = useState(0);
+  const [stepMode, setStepMode] = useState<number>(0);
 
   const { getWorkspaceBySlug } = useWorkspace();
   const workspaceId = workspaceSlug ? getWorkspaceBySlug(workspaceSlug)?.id : undefined;
@@ -941,6 +942,7 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
     setSelectedIssues([]);
     setSubmitting(false);
     setEditorResetKey((k) => k + 1);
+    setStepMode(0);
   };
 
   const onCloseWithReset = () => {
@@ -957,6 +959,9 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
       precondition: "",
       // 修正 steps 初始类型为数组且默认一行空数据
       steps: [{ description: "", result: "" }],
+      mode: 0,
+      text_description: "",
+      text_result: "",
       remark: "",
       issues: "",
       repository: repositoryName || "",
@@ -966,6 +971,7 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
       test_type: "",
       assignee: currentUserId,
     });
+    setStepMode(0);
     setEditorResetKey((k) => k + 1);
   }, [isOpen, form, repositoryName, currentUserId]);
 
@@ -1006,20 +1012,27 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
       setSubmitting(true);
 
       // 构造 payload：包含所有表单项（附件除外）
+      const mode = typeof values?.mode === "number" ? values.mode : 0;
       const payload: any = {
         code: (values?.code || "").trim(),
         name: (values?.name || "").trim(),
         precondition: (values?.precondition || "").trim(),
         repository: repositoryId,
         remark: values?.remark || "",
-        steps: Array.isArray(values?.steps)
-          ? values.steps
-              .map((s: any) => ({
-                description: (s?.description || "").trim(),
-                result: (s?.result || "").trim(),
-              }))
-              .filter((s: any) => Boolean(s.description || s.result))
-          : [],
+        mode,
+        text_description: values?.text_description || "",
+        text_result: values?.text_result || "",
+        steps:
+          mode === 1
+            ? []
+            : Array.isArray(values?.steps)
+              ? values.steps
+                  .map((s: any) => ({
+                    description: (s?.description || "").trim(),
+                    result: (s?.result || "").trim(),
+                  }))
+                  .filter((s: any) => Boolean(s.description || s.result))
+              : [],
         // 新增：右侧与其它项的值全部带上（附件除外）
         assignee: values?.assignee || null,
         module: values?.module || null,
@@ -1122,11 +1135,11 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
         <div style={{ display: "flex", gap: 16, height: "75vh", alignItems: "stretch" }}>
           {/* 左侧区域 */}
           <div style={{ flex: 2, height: "100%", overflowY: "auto" }}>
-            <Form.Item label={<span>标题</span>} name="name" rules={[{ required: true, message: "请输入标题" }]}>
+            <Form.Item label={<span className="font-bold">标题</span>} name="name" rules={[{ required: true, message: "请输入标题" }]}>
               <Input placeholder="请输入标题" />
             </Form.Item>
             {/* 保留工作项回显表格与附件列表等 */}
-            <Form.Item label="前置条件">
+            <Form.Item label={<span className="font-bold">前置条件</span>}>
               <RichTextEditor
                 key={`qa-precondition-editor-${editorResetKey}`}
                 id="qa-precondition-editor"
@@ -1138,6 +1151,7 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
                 onChange={(_: any, val: string) => form.setFieldsValue({ precondition: val })}
                 uploadFile={handleUploadFile}
                 duplicateFile={handleDuplicateFile}
+                placeholder='请输入前置条件'
                 searchMentionCallback={async (payload) =>
                   await workspaceService.searchEntity(workspaceSlug?.toString() ?? "", {
                     ...payload,
@@ -1151,11 +1165,127 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
               <Input />
             </Form.Item>
 
-            <Form.Item label="用例步骤" name="steps">
-              <StepsEditor />
+            <Form.Item name="mode" hidden>
+              <Input />
             </Form.Item>
 
-            <Form.Item label="备注">
+            {stepMode === 1 ? (
+              <>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                  <span style={{ fontSize: 14, fontWeight: "bold" }}>文本描述</span>
+                  <Dropdown
+                    trigger={["click"]}
+                    menu={{
+                      selectable: true,
+                      selectedKeys: [stepMode === 1 ? "text" : "step"],
+                      items: [
+                        { key: "step", label: "步骤描述" },
+                        { key: "text", label: "文本描述" },
+                      ],
+                      onClick: ({ key }) => {
+                        const nextMode = key === "text" ? 1 : 0;
+                        setStepMode(nextMode);
+                        form.setFieldsValue({ mode: nextMode });
+                      },
+                    }}
+                  >
+                    <Button
+                      type="text"
+                      className="px-0 text-sm font-medium text-gray-500 hover:text-gray-700"
+                      style={{ fontSize: 14 }}
+                    >
+                      更改类型 <DownOutlined />
+                    </Button>
+                  </Dropdown>
+                </div>
+                <Form.Item>
+                  <RichTextEditor
+                    key={`qa-text-description-editor-${editorResetKey}`}
+                    id="qa-text-description-editor"
+                    editable
+                    initialValue={form.getFieldValue("text_description") ?? ""}
+                    placeholder='请输入文本描述'
+                    workspaceSlug={workspaceSlug}
+                    workspaceId={workspaceId ?? ""}
+                    projectId={projectId ? String(projectId) : ""}
+                    onChange={(_: any, val: string) => form.setFieldsValue({ text_description: val })}
+                    uploadFile={handleUploadFile}
+                    duplicateFile={handleDuplicateFile}
+                    searchMentionCallback={async (payload) =>
+                      await workspaceService.searchEntity(workspaceSlug?.toString() ?? "", {
+                        ...payload,
+                        project_id: projectId?.toString() ?? "",
+                      })
+                    }
+                    containerClassName="min-h-[100px] rounded-md"
+                  />
+                </Form.Item>
+                <Form.Item name="text_description" hidden>
+                  <Input />
+                </Form.Item>
+
+                <Form.Item label={<span className="font-bold">预期结果</span>}>
+                  <RichTextEditor
+                    key={`qa-text-result-editor-${editorResetKey}`}
+                    id="qa-text-result-editor"
+                    editable
+                    initialValue={form.getFieldValue("text_result") ?? ""}
+                    placeholder='请输入预期结果'
+                    workspaceSlug={workspaceSlug}
+                    workspaceId={workspaceId ?? ""}
+                    projectId={projectId ? String(projectId) : ""}
+                    onChange={(_: any, val: string) => form.setFieldsValue({ text_result: val })}
+                    uploadFile={handleUploadFile}
+                    duplicateFile={handleDuplicateFile}
+                    searchMentionCallback={async (payload) =>
+                      await workspaceService.searchEntity(workspaceSlug?.toString() ?? "", {
+                        ...payload,
+                        project_id: projectId?.toString() ?? "",
+                      })
+                    }
+                    containerClassName="min-h-[100px] rounded-md"
+                  />
+                </Form.Item>
+                <Form.Item name="text_result" hidden>
+                  <Input />
+                </Form.Item>
+              </>
+            ) : (
+              <>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                  <span style={{ fontSize: 14, fontWeight: "bold" }}>用例步骤</span>
+                  <Dropdown
+                    trigger={["click"]}
+                    menu={{
+                      selectable: true,
+                      selectedKeys: [stepMode === 1 ? "text" : "step"],
+                      items: [
+                        { key: "step", label: "步骤描述" },
+                        { key: "text", label: "文本描述" },
+                      ],
+                      onClick: ({ key }) => {
+                        const nextMode = key === "text" ? 1 : 0;
+                        setStepMode(nextMode);
+                        form.setFieldsValue({ mode: nextMode });
+                      },
+                    }}
+                  >
+                    <Button
+                      type="text"
+                      className="px-0 text-sm font-medium text-gray-500 hover:text-gray-700"
+                      style={{ fontSize: 14 }}
+                    >
+                      更改类型 <DownOutlined />
+                    </Button>
+                  </Dropdown>
+                </div>
+                <Form.Item name="steps">
+                  <StepsEditor />
+                </Form.Item>
+              </>
+            )}
+
+            <Form.Item label={<span className="font-bold">备注</span>}>
               <RichTextEditor
                 key={`qa-remark-editor-${editorResetKey}`}
                 id="qa-remark-editor"
@@ -1163,6 +1293,7 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
                 initialValue={form.getFieldValue("remark") ?? ""}
                 workspaceSlug={workspaceSlug}
                 workspaceId={workspaceId ?? ""}
+                placeholder='请输入备注'
                 projectId={projectId ? String(projectId) : ""}
                 onChange={(_: any, val: string) => form.setFieldsValue({ remark: val })}
                 uploadFile={handleUploadFile}
@@ -1183,7 +1314,7 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
             <Form.Item
               label={
                 <div style={{ display: "flex", alignItems: "center" }}>
-                  <span>工作项</span>
+                  <span className="font-bold">工作项</span>
                   <Button
                     type="link"
                     icon={<PlusOutlined />}
@@ -1213,7 +1344,7 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
             </Form.Item>
 
             {/* 新增：附件属性（位于“工作项”下面） */}
-            <Form.Item label="附件">
+            <Form.Item label={<span className="font-bold">附件</span>}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                 <Button type="default" icon={<PlusOutlined />} onClick={handlePickAttachments}>
                   选择文件
@@ -1264,7 +1395,7 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
 
 
             <Form.Item
-              label="维护人"
+              label={<span className="font-bold">维护人</span>}
               name="assignee"
               rules={[{ required: true, message: "请选择维护人" }]}
               className="mb-2"
@@ -1282,7 +1413,7 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
               />
             </Form.Item>
 
-            <Form.Item label="所属测试库" name="repository" className="mb-3">
+            <Form.Item label={<span className="font-bold">所属测试库</span>} name="repository" className="mb-3">
               <Input placeholder="所属测试库" disabled />
             </Form.Item>
 
@@ -1290,7 +1421,7 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
 
 
             <Form.Item
-              label="用例编号"
+              label={<span className="font-bold">用例编号</span>}
               name="code"
               className="mb-3"
             >
@@ -1300,7 +1431,7 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
      
 
             {/* 将模块改为下拉框 */}
-            <Form.Item label="模块" name="module" className="mb-3">
+            <Form.Item label={<span className="font-bold">模块</span>} name="module" className="mb-3">
               <Select
                 placeholder="请选择模块"
                 options={moduleOptions}
@@ -1310,7 +1441,7 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
               />
             </Form.Item>
 
-            <Form.Item label="用例类型" name="type" className="mb-3">
+            <Form.Item label={<span className="font-bold">用例类型</span>} name="type" className="mb-3">
               <Select
                 placeholder="请选择用例类型"
                 options={caseTypeOptions}
@@ -1319,7 +1450,7 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
               />
             </Form.Item>
 
-            <Form.Item label="优先级" name="priority" className="mb-3">
+            <Form.Item label={<span className="font-bold">优先级</span>} name="priority" className="mb-3">
               <Select
                 placeholder="请选择优先级"
                 options={casePriorityOptions}
@@ -1328,7 +1459,7 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
               />
             </Form.Item>
 
-            <Form.Item label="测试类型" name="test_type" className="mb-3">
+            <Form.Item label={<span className="font-bold">测试类型</span>} name="test_type" className="mb-3">
               <Select
                 placeholder="请选择测试类型"
                 options={caseTestTypeOptions}
@@ -1338,7 +1469,7 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
             </Form.Item>
 
             {/* 标签 */}
-            <Form.Item label="标签" className="mb-3">
+            <Form.Item label={<span className="font-bold">标签</span>} className="mb-3">
               <div
                 className="flex flex-wrap items-center gap-2 min-h-[32px] p-1 border border-custom-border-200 rounded cursor-text bg-white"
                 onClick={() => {
