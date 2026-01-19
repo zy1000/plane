@@ -1,7 +1,8 @@
 "use client";
 import React from "react";
 import { useParams } from "next/navigation";
-import { Button, Table, Tooltip, Modal, Input, Spin } from "antd";
+import { Button, Dropdown, Table, Tooltip, Modal, Input, Spin } from "antd";
+import { DownOutlined } from "@ant-design/icons";
 import * as LucideIcons from "lucide-react";
 import { convertBytesToSize, renderFormattedDate } from "@plane/utils";
 import { StepsEditor } from "../util";
@@ -16,8 +17,18 @@ type BasicInfoPanelProps = {
   caseId: string;
   preconditionValue: string;
   stepsValue: { description?: string; result?: string }[];
+  modeValue: number;
+  textDescriptionValue: string;
+  textResultValue: string;
   remarkValue: string;
-  onSave: (data: { precondition: string; steps: any[]; remark: string }) => Promise<void>;
+  onSave: (data: {
+    precondition: string;
+    steps: any[];
+    mode: number;
+    textDescription: string;
+    textResult: string;
+    remark: string;
+  }) => Promise<void>;
 
   attachmentsLoading: boolean;
   caseAttachments: any[];
@@ -47,6 +58,9 @@ export function BasicInfoPanel(props: BasicInfoPanelProps) {
     caseId,
     preconditionValue,
     stepsValue,
+    modeValue,
+    textDescriptionValue,
+    textResultValue,
     remarkValue,
     onSave,
     attachmentsLoading,
@@ -74,6 +88,9 @@ export function BasicInfoPanel(props: BasicInfoPanelProps) {
   const [isEditing, setIsEditing] = React.useState(false);
   const [localPrecondition, setLocalPrecondition] = React.useState(preconditionValue);
   const [localSteps, setLocalSteps] = React.useState(stepsValue);
+  const [localMode, setLocalMode] = React.useState<number>(modeValue ?? 0);
+  const [localTextDescription, setLocalTextDescription] = React.useState(textDescriptionValue ?? "");
+  const [localTextResult, setLocalTextResult] = React.useState(textResultValue ?? "");
   const [localRemark, setLocalRemark] = React.useState(remarkValue);
 
   // plane hooks
@@ -124,14 +141,20 @@ export function BasicInfoPanel(props: BasicInfoPanelProps) {
     if (!isEditing) {
       setLocalPrecondition(preconditionValue);
       setLocalSteps(stepsValue);
+      setLocalMode(modeValue ?? 0);
+      setLocalTextDescription(textDescriptionValue ?? "");
+      setLocalTextResult(textResultValue ?? "");
       setLocalRemark(remarkValue);
     }
-  }, [preconditionValue, stepsValue, remarkValue, isEditing]);
+  }, [preconditionValue, stepsValue, modeValue, textDescriptionValue, textResultValue, remarkValue, isEditing]);
 
   const handleSave = async () => {
     await onSave({
       precondition: localPrecondition,
       steps: localSteps,
+      mode: localMode,
+      textDescription: localTextDescription,
+      textResult: localTextResult,
       remark: localRemark,
     });
     setIsEditing(false);
@@ -140,6 +163,9 @@ export function BasicInfoPanel(props: BasicInfoPanelProps) {
   const handleCancel = () => {
     setLocalPrecondition(preconditionValue);
     setLocalSteps(stepsValue);
+    setLocalMode(modeValue ?? 0);
+    setLocalTextDescription(textDescriptionValue ?? "");
+    setLocalTextResult(textResultValue ?? "");
     setLocalRemark(remarkValue);
     setIsEditing(false);
   };
@@ -148,7 +174,7 @@ export function BasicInfoPanel(props: BasicInfoPanelProps) {
     <div className="space-y-8 rounded-b-md border-gray-200 px-6 py-6 transition-colors focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-100">
       <div>
         <div className="mb-3 flex items-center justify-between">
-          <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+          <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
             前置条件
           </label>
           {!isEditing && (
@@ -163,6 +189,7 @@ export function BasicInfoPanel(props: BasicInfoPanelProps) {
         </div>
         <RichTextEditor
           id="qa-precondition-editor"
+          placeholder='请输入前置条件'
           editable={isEditing}
           initialValue={localPrecondition ?? ""}
           value={isEditing ? undefined : (localPrecondition ?? "")}
@@ -182,23 +209,118 @@ export function BasicInfoPanel(props: BasicInfoPanelProps) {
         />
       </div>
       <div>
-        <label className="mb-3 flex items-center gap-2 text-sm font-medium text-gray-700">
-          测试步骤
-        </label>
-        <StepsEditor
-          value={localSteps}
-          onChange={setLocalSteps}
-          editable={isEditing}
-          aria-label="测试步骤"
-        />
+        {localMode === 1 ? (
+          <div className="space-y-8">
+            <div>
+              <div className="mb-3 flex items-center justify-between gap-6">
+                <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">文本描述</label>
+                <Dropdown
+                  trigger={["click"]}
+                  menu={{
+                    selectable: true,
+                    selectedKeys: [localMode === 1 ? "text" : "step"],
+                    items: [
+                      { key: "step", label: "步骤描述" },
+                      { key: "text", label: "文本描述" },
+                    ],
+                    onClick: ({ key }) => {
+                      setLocalMode(key === "text" ? 1 : 0);
+                    },
+                  }}
+                >
+                  <Button
+                    type="text"
+                    size="small"
+                    className="px-0 text-sm font-medium text-gray-500 hover:text-gray-700"
+                  >
+                    更改类型 <DownOutlined />
+                  </Button>
+                </Dropdown>
+              </div>
+              <RichTextEditor
+                id="qa-text-description-editor"
+                editable={isEditing}
+                placeholder='请输入文本描述'
+                initialValue={localTextDescription ?? ""}
+                value={isEditing ? undefined : (localTextDescription ?? "")}
+                workspaceSlug={workspaceSlug ?? ""}
+                workspaceId={workspaceId ?? ""}
+                projectId={projectId ?? ""}
+                onChange={(_: any, val: string) => setLocalTextDescription(val)}
+                uploadFile={handleUploadFile}
+                duplicateFile={handleDuplicateFile}
+                searchMentionCallback={async (payload) =>
+                  await workspaceService.searchEntity(workspaceSlug?.toString() ?? "", {
+                    ...payload,
+                    project_id: projectId?.toString() ?? "",
+                  })
+                }
+                containerClassName="min-h-[100px] rounded-md"
+              />
+            </div>
+            <div>
+              <label className="mb-3 flex items-center gap-2 text-sm font-semibold text-gray-700">预期结果</label>
+              <RichTextEditor
+                id="qa-text-result-editor"
+                editable={isEditing}
+                placeholder='请输入预期结果'
+                initialValue={localTextResult ?? ""}
+                value={isEditing ? undefined : (localTextResult ?? "")}
+                workspaceSlug={workspaceSlug ?? ""}
+                workspaceId={workspaceId ?? ""}
+                projectId={projectId ?? ""}
+                onChange={(_: any, val: string) => setLocalTextResult(val)}
+                uploadFile={handleUploadFile}
+                duplicateFile={handleDuplicateFile}
+                searchMentionCallback={async (payload) =>
+                  await workspaceService.searchEntity(workspaceSlug?.toString() ?? "", {
+                    ...payload,
+                    project_id: projectId?.toString() ?? "",
+                  })
+                }
+                containerClassName="min-h-[100px] rounded-md"
+              />
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="mb-3 flex items-center justify-between gap-6">
+              <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">测试步骤</label>
+              <Dropdown
+                trigger={["click"]}
+                menu={{
+                  selectable: true,
+                  selectedKeys: [localMode === 1 ? "text" : "step"],
+                  items: [
+                    { key: "step", label: "步骤描述" },
+                    { key: "text", label: "文本描述" },
+                  ],
+                  onClick: ({ key }) => {
+                    setLocalMode(key === "text" ? 1 : 0);
+                  },
+                }}
+              >
+                <Button
+                  type="text"
+                  size="small"
+                  className="px-0 text-sm font-medium text-gray-500 hover:text-gray-700"
+                >
+                  更改类型 <DownOutlined />
+                </Button>
+              </Dropdown>
+            </div>
+            <StepsEditor value={localSteps} onChange={setLocalSteps} editable={isEditing} aria-label="测试步骤" />
+          </>
+        )}
       </div>
       <div>
-        <label className="mb-3 flex items-center gap-2 text-sm font-medium text-gray-700">
+        <label className="mb-3 flex items-center gap-2 text-sm font-semibold text-gray-700">
           备注
         </label>
         <RichTextEditor
           id="qa-remark-editor"
           editable={isEditing}
+          placeholder='请输入备注'
           initialValue={localRemark ?? ""}
           value={isEditing ? undefined : (localRemark ?? "")}
           workspaceSlug={workspaceSlug ?? ""}
@@ -231,7 +353,7 @@ export function BasicInfoPanel(props: BasicInfoPanelProps) {
         role="group"
       >
         <div className="mb-3 flex items-center justify-between">
-          <span id="attachments-title" className="flex items-center gap-2 text-sm font-medium text-gray-700">
+          <span id="attachments-title" className="flex items-center gap-2 text-sm font-semibold text-gray-700">
             附件
           </span>
           <Tooltip title="上传文件">
@@ -397,7 +519,7 @@ export function BasicInfoPanel(props: BasicInfoPanelProps) {
         </div>
       </section>
       <div className="mt-6 h-[420px] flex flex-col rounded bg-white">
-        <span id="attachments-title" className="flex items-center gap-2 text-sm font-medium text-gray-700">
+        <span id="attachments-title" className="flex items-center gap-2 text-sm font-semibold text-gray-700">
           评论
         </span>
         <div className="flex-1 min-h-0 overflow-y-auto px-3 py-2">

@@ -676,6 +676,9 @@ function UpdateModal({ open, onClose, caseId }: UpdateModalProps) {
   const [priorityValue, setPriorityValue] = React.useState<string | undefined>(undefined);
   const [preconditionValue, setPreconditionValue] = React.useState<string | undefined>(undefined);
   const [remarkValue, setRemarkValue] = React.useState<string | undefined>(undefined);
+  const [modeValue, setModeValue] = React.useState<number>(0);
+  const [textDescriptionValue, setTextDescriptionValue] = React.useState<string>("");
+  const [textResultValue, setTextResultValue] = React.useState<string>("");
   // 新增：测试步骤本地状态（与 StepsEditor 交互）
   const [stepsValue, setStepsValue] = React.useState<{ description?: string; result?: string }[]>([
     { description: "", result: "" },
@@ -690,6 +693,9 @@ function UpdateModal({ open, onClose, caseId }: UpdateModalProps) {
       // 新增：同步富文本本地状态
       setPreconditionValue(caseData?.precondition ?? "");
       setRemarkValue(caseData?.remark ?? "");
+      setModeValue(typeof caseData?.mode === "number" ? caseData.mode : 0);
+      setTextDescriptionValue(caseData?.text_description ?? "");
+      setTextResultValue(caseData?.text_result ?? "");
       // 新增：同步步骤本地状态
       setStepsValue(
         Array.isArray(caseData?.steps) && caseData.steps.length > 0 ? caseData.steps : [{ description: "", result: "" }]
@@ -703,6 +709,9 @@ function UpdateModal({ open, onClose, caseId }: UpdateModalProps) {
       // 新增：清空富文本本地状态
       setPreconditionValue("");
       setRemarkValue("");
+      setModeValue(0);
+      setTextDescriptionValue("");
+      setTextResultValue("");
       // 新增：清空步骤本地状态
       setStepsValue([{ description: "", result: "" }]);
     }
@@ -868,7 +877,14 @@ function UpdateModal({ open, onClose, caseId }: UpdateModalProps) {
 
 
 
-  const handleSaveBasicInfo = async (data: { precondition: string; steps: any[]; remark: string }) => {
+  const handleSaveBasicInfo = async (data: {
+    precondition: string;
+    steps: any[];
+    mode: number;
+    textDescription: string;
+    textResult: string;
+    remark: string;
+  }) => {
     if (!workspaceSlug || !caseId) return;
 
     const payload: any = {};
@@ -884,18 +900,34 @@ function UpdateModal({ open, onClose, caseId }: UpdateModalProps) {
       hasChange = true;
     }
 
-    const oldSteps = Array.isArray(caseData?.steps) ? caseData.steps : [];
-    const mapRows = (rows: { description?: string; result?: string }[]) =>
-      (rows || []).map((r) => ({ description: r?.description ?? "", result: r?.result ?? "" }));
-    const filterEmpty = (rows: { description: string; result: string }[]) =>
-      rows.filter((r) => !(r.description.trim() === "" && r.result.trim() === ""));
-
-    const nextSteps = filterEmpty(mapRows(data.steps));
-    const prevStepsRaw = mapRows(oldSteps);
-
-    if (JSON.stringify(nextSteps) !== JSON.stringify(prevStepsRaw)) {
-      payload.steps = nextSteps;
+    if ((typeof caseData?.mode === "number" ? caseData.mode : 0) !== data.mode) {
+      payload.mode = data.mode;
       hasChange = true;
+    }
+
+    if (data.mode === 1) {
+      if ((caseData?.text_description ?? "") !== data.textDescription) {
+        payload.text_description = data.textDescription;
+        hasChange = true;
+      }
+      if ((caseData?.text_result ?? "") !== data.textResult) {
+        payload.text_result = data.textResult;
+        hasChange = true;
+      }
+    } else {
+      const oldSteps = Array.isArray(caseData?.steps) ? caseData.steps : [];
+      const mapRows = (rows: { description?: string; result?: string }[]) =>
+        (rows || []).map((r) => ({ description: r?.description ?? "", result: r?.result ?? "" }));
+      const filterEmpty = (rows: { description: string; result: string }[]) =>
+        rows.filter((r) => !(r.description.trim() === "" && r.result.trim() === ""));
+
+      const nextSteps = filterEmpty(mapRows(data.steps));
+      const prevStepsRaw = mapRows(oldSteps);
+
+      if (JSON.stringify(nextSteps) !== JSON.stringify(prevStepsRaw)) {
+        payload.steps = nextSteps;
+        hasChange = true;
+      }
     }
 
     if (!hasChange) return;
@@ -1042,6 +1074,9 @@ function UpdateModal({ open, onClose, caseId }: UpdateModalProps) {
                 caseId={caseId}
                 preconditionValue={preconditionValue ?? ""}
                 stepsValue={stepsValue}
+                modeValue={modeValue}
+                textDescriptionValue={textDescriptionValue}
+                textResultValue={textResultValue}
                 remarkValue={remarkValue ?? ""}
                 onSave={handleSaveBasicInfo}
                 attachmentsLoading={attachmentsLoading}
