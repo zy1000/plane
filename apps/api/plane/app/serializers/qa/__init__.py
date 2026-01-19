@@ -1,7 +1,10 @@
 from collections import defaultdict
+from decimal import Decimal
+
 
 from django.db.models import Count
 from django.db.models.expressions import result
+from django.utils import timezone
 from rest_framework import serializers
 from rest_framework.serializers import ModelSerializer
 
@@ -194,7 +197,7 @@ class CaseCreateUpdateSerializer(ModelSerializer):
             instance.labels.set(labels)
         if issues:
             instance.issues.set(issues)
-        TestCaseVersion.create_from_case(instance)
+        # TestCaseVersion.create_from_case(instance)
         return instance
 
     def update(self, instance, validated_data):
@@ -222,12 +225,22 @@ class CaseListSerializer(ModelSerializer):
     assignee = UserLiteSerializer(read_only=True)
     labels = CaseLabelListSerializer(many=True, read_only=True)
     repository_name = serializers.CharField(source='repository.name', read_only=True)
+    version = serializers.SerializerMethodField(read_only=True)
 
     # 保持原有的 review 字段
     review = serializers.SerializerMethodField()
 
     def get_review(self, obj):
         return obj.review
+
+    def get_version(self, obj: TestCase):
+        if not obj.versions.exists():
+            return 1.0
+        last_version = obj.versions.order_by('-version').first()
+        if obj.updated_at == last_version.updated_at:
+            return last_version.version
+        else:
+            return str(Decimal(str(last_version.version)) + Decimal(str(0.1)))
 
     class Meta:
         model = TestCase
@@ -428,6 +441,10 @@ class ReviewCaseListSerializer(ModelSerializer):
 
 class ReviewCaseRecordsSerializer(ModelSerializer):
     review_name = serializers.CharField(source='crt.review.name', read_only=True)
+    update_time = serializers.SerializerMethodField()
+
+    def get_update_time(self, obj: CaseReviewThrough):
+        return timezone.localtime(obj.updated_at).strftime("%Y-%m-%d %H:%M:%S")
 
     class Meta:
         model = CaseReviewRecord

@@ -97,8 +97,8 @@ export default function CaseReview() {
   }, [caseVersions]);
 
   const currentVersionLabel = React.useMemo(() => {
-    return "最新";
-  }, [latestVersion]);
+    return caseDetail?.version ? `V${caseDetail.version}` : "最新";
+  }, [caseDetail?.version]);
 
   const fetchReviewEnums = async () => {
     if (!workspaceSlug) return;
@@ -742,7 +742,7 @@ export default function CaseReview() {
             ) : (
               <div className="flex flex-col gap-3">
                 <div
-                  className="overflow-y-auto vertical-scrollbar scrollbar-sm flex flex-col gap-3 pr-2 pl-1 py-1 max-h-[calc(100dvh-300px)]"
+                  className="overflow-y-auto vertical-scrollbar scrollbar-sm flex flex-col gap-3 pr-5 pl-1 pt-4 pb-2 max-h-[calc(100dvh-300px)]"
                   style={{ scrollbarGutter: "stable" }}
                 >
                   {cases.length === 0 ? (
@@ -770,14 +770,11 @@ export default function CaseReview() {
                             fetchCaseDetail(caseId);
                             fetchSuggestionCountForCase(caseId);
                           }}
-                          className={`${isActive ? "ring-2 ring-blue-500" : ""} rounded-md hover:shadow-sm transition-shadow relative`}
+                          className={`${isActive ? "ring-2 ring-blue-500" : ""} rounded-md hover:shadow-sm transition-shadow relative !overflow-visible`}
                         >
                           {showBadge && (
-                            <div className="absolute top-0 right-1 z-10">
-                              <Badge
-                                count={suggestionCount}
-                                style={{ backgroundColor: "#fa8c16" }}
-                              />
+                            <div className="absolute -top-2 -right-2 z-10">
+                              <Badge count={suggestionCount} style={{ backgroundColor: "#ee313b" }} />
                             </div>
                           )}
                           <div className="flex items-center justify-between">

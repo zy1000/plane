@@ -39,8 +39,8 @@ class CaseVersionCompareAPIView(BaseAPIView):
             )
 
         try:
-            from_version_int = -1 if str(from_version).lower() == "current" else int(from_version)
-            to_version_int = -1 if str(to_version).lower() == "current" else int(to_version)
+            from_version_int = -1 if str(from_version).lower() == "current" else float(from_version)
+            to_version_int = -1 if str(to_version).lower() == "current" else float(to_version)
         except ValueError:
             return Response(
                 {"error": "from_version and to_version must be integers"},
@@ -124,5 +124,3 @@ class CaseVersionCompareAPIView(BaseAPIView):
             }
         )
         return Response(serializer.data, status=status.HTTP_200_OK)
-
-

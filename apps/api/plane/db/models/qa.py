@@ -209,7 +209,7 @@ class TestCase(BaseModel):
 
 class TestCaseVersion(BaseModel):
     case = models.ForeignKey(TestCase, on_delete=models.CASCADE, related_name="versions")
-    version = models.PositiveIntegerField(default=1)
+    version = models.FloatField(default=1)
     repository_id = models.CharField(max_length=36)
     module_id = models.CharField(max_length=36, null=True, blank=True)
     assignee_id = models.CharField(max_length=36, null=True, blank=True)
@@ -227,6 +227,8 @@ class TestCaseVersion(BaseModel):
     state = models.IntegerField(choices=TestCase.State.choices, default=TestCase.State.PENDING_REVIEW)
     label_ids = models.JSONField(blank=True, default=list)
     issue_ids = models.JSONField(blank=True, default=list)
+    updated_at = models.DateTimeField(verbose_name="Last Modified At")
+
 
     class Meta:
         db_table = "test_case_versions"
@@ -242,7 +244,7 @@ class TestCaseVersion(BaseModel):
             .aggregate(max_version=Max("version"))
             .get("max_version")
         )
-        next_version = 0 if latest is None else latest + 1
+        next_version = 1.0 if latest is None else latest + 0.1
 
         label_ids = list(map(str, case.labels.values_list("id", flat=True)))
         issue_ids = list(map(str, case.issues.values_list("id", flat=True)))
@@ -267,6 +269,7 @@ class TestCaseVersion(BaseModel):
             mode=case.mode,
             text_description=case.text_description,
             text_result=case.text_result,
+            updated_at=case.updated_at,
         )
 
     @classmethod
