@@ -51,8 +51,8 @@ export function SideInfoPanel({ caseData, caseTestTypeMap }: SideInfoPanelProps)
   }, [caseVersions]);
 
   const currentVersionLabel = React.useMemo(() => {
-    return "最新";
-  }, [latestVersion]);
+    return caseData?.version ? `V${caseData.version}` : "最新";
+  }, [caseData?.version]);
 
   const [compareOpen, setCompareOpen] = React.useState(false);
 

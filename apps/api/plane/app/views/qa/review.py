@@ -6,6 +6,7 @@ from rest_framework import status
 from django.db.models import Count
 from django.db import transaction
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 
 from plane.app.serializers.qa import ReviewModuleCreateUpdateSerializer, ReviewModuleDetailSerializer, \
     ReviewModuleListSerializer, ReviewListSerializer, ReviewCreateUpdateSerializer, ReviewCaseListSerializer, \
@@ -275,14 +276,32 @@ class CaseReviewView(BaseViewSet):
             # 获取评审单与评审用例
             cr = CaseReview.objects.get(id=review_id)
             crt = CaseReviewThrough.objects.get(review=cr, case_id=case_id)
+            # 该评审人员上一次评审结果也是通过，本次结果也是通过,并且该用例的结果不为不通过或者重新提审，则只更新记录时间
 
-            # 记录评审历史：每次提交一条记录，保留历史
-            CaseReviewRecord.objects.create(
-                result=record_result,
-                reason=reason,
-                assignee_id=assignee_id,
-                crt=crt,
-            )
+            last_record = None
+            if assignee_id:
+                last_record = (
+                    CaseReviewRecord.objects
+                    .filter(crt=crt, assignee_id=assignee_id)
+                    .order_by('-created_at')
+                    .first()
+                )
+
+            if (
+                record_result == CaseReviewRecord.Result.PASS
+                and last_record
+                and last_record.result == CaseReviewRecord.Result.PASS
+            ):
+                last_record.created_at = timezone.now()
+                last_record.save(update_fields=['created_at', 'updated_at'])
+            else:
+                # 记录评审历史：每次提交一条记录，保留历史
+                CaseReviewRecord.objects.create(
+                    result=record_result,
+                    reason=reason,
+                    assignee_id=assignee_id,
+                    crt=crt,
+                )
 
             update_case_review_status(cr, crt, assignee_id)
 

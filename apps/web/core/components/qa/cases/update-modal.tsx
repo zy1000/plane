@@ -1203,11 +1203,15 @@ function UpdateModal({ open, onClose, caseId }: UpdateModalProps) {
                           title: "评审",
                           dataIndex: "reason",
                           key: "reason",
-                          render: (v: string | null | undefined) => (
-                            <Tooltip title={v || "-"}>
-                              <span className="truncate block max-w-[420px]">{v || "-"}</span>
-                            </Tooltip>
-                          ),
+                          render: (v: string | null | undefined, record: TReviewRecord) => {
+                            const isPassed = record.result === "通过" || record.result === "passed";
+                            const text = isPassed && !v ? "OK" : v || "-";
+                            return (
+                              <Tooltip title={text}>
+                                <span className="truncate block max-w-[420px]">{text}</span>
+                              </Tooltip>
+                            );
+                          },
                         },
                         {
                           title: "评审人",

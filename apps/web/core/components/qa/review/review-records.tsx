@@ -16,6 +16,7 @@ type ReviewRecord = {
   assignee?: string | null;
   created_at?: string;
   confirmed?: boolean;
+  update_time: string;
 };
 
 type Props = {
@@ -126,7 +127,7 @@ export const ReviewRecordsPanel: React.FC<Props> = (props) => {
             const uid = r.assignee ? String(r.assignee) : null;
             const user = uid ? getUserDetails(uid) : undefined;
             const name = user?.display_name || "未知用户";
-            const time = r.created_at ? renderFormattedDate(r.created_at, "YYYY-MM-DD HH:mm:ss") : "";
+            const time = r.update_time
             const isSuggestion = String(r.result || "") === "建议";
             const confirmed = Boolean(r.confirmed);
             const showConfirm = isSuggestion && !confirmed;
