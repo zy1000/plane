@@ -1,7 +1,7 @@
 // 顶部 imports（新增 Select）
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useRef, useLayoutEffect } from "react";
 import { useParams } from "next/navigation";
 import { Modal, Form, Input, Button, message, Select, Dropdown } from "antd";
 import { CaseService } from "@/services/qa/case.service";
@@ -27,6 +27,65 @@ import { IssueService } from "@/services/issue/issue.service";
 import { projectIssueTypesCache, ProjectIssueTypeService, ProjectService, type TIssueType } from "@/services/project";
 import { getEnums } from "app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/util";
 import { WorkItemSelectModal } from "./work-item-select-modal";
+
+// 内联 AutoResizeTextarea
+const AutoResizeTextarea = ({
+  value,
+  onChange,
+  placeholder,
+  readOnly,
+  style,
+  autoFocus,
+  onFocus,
+  onBlur,
+  ...props
+}: any) => {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const adjustHeight = () => {
+    const el = textareaRef.current;
+    if (el) {
+      el.style.height = "auto";
+      el.style.height = `${el.scrollHeight}px`;
+    }
+  };
+
+  useLayoutEffect(() => {
+    adjustHeight();
+  }, [value]);
+
+  return (
+    <textarea
+      ref={textareaRef}
+      value={value}
+      onChange={(e) => {
+        onChange?.(e);
+        adjustHeight();
+      }}
+      placeholder={placeholder}
+      readOnly={readOnly}
+      rows={1}
+      autoFocus={autoFocus}
+      onFocus={onFocus}
+      onBlur={onBlur}
+      style={{
+          ...style,
+          resize: "none",
+          overflow: "hidden",
+          minHeight: "20px",
+          border: "none",
+          outline: "none",
+          boxShadow: "none",
+          width: "100%",
+          fontFamily: "inherit",
+          fontSize: "14px",
+          padding: 0,
+          backgroundColor: "transparent",
+        }}
+      {...props}
+    />
+  );
+};
 
 type Props = {
   isOpen: boolean;
@@ -62,11 +121,13 @@ const StepsEditor: React.FC<{
     background: "#fafafa",
     textAlign: "left",
     fontWeight: "bold",
+    fontSize: "14px",
   };
   const tdStyle: React.CSSProperties = {
     padding: 5,
     border: tableBorder,
     verticalAlign: "top",
+    fontSize: "14px",
   };
 
   const dragItem = React.useRef<number | null>(null);
@@ -373,15 +434,11 @@ const StepsEditor: React.FC<{
                 }}
               >
                 <div className="group" style={{ display: "flex", alignItems: "flex-start", gap: 4 }}>
-                  <Input.TextArea
-                    bordered={false}
-                    autoSize={{ minRows: 1, maxRows: 8 }}
+                  <AutoResizeTextarea
                     placeholder="请输入步骤描述"
                     value={row?.description ?? ""}
-                    onChange={(e) => handleCell(idx, "description", e.target.value)}
+                    onChange={(e: any) => handleCell(idx, "description", e.target.value)}
                     style={{
-                      padding: 0,
-                      background: "transparent",
                       lineHeight: "20px",
                       flex: 1,
                     }}
@@ -408,15 +465,11 @@ const StepsEditor: React.FC<{
                 }}
               >
                 <div className="group" style={{ display: "flex", alignItems: "flex-start", gap: 4 }}>
-                  <Input.TextArea
-                    bordered={false}
-                    autoSize={{ minRows: 1, maxRows: 8 }}
+                  <AutoResizeTextarea
                     placeholder="请输入预期结果"
                     value={row?.result ?? ""}
-                    onChange={(e) => handleCell(idx, "result", e.target.value)}
+                    onChange={(e: any) => handleCell(idx, "result", e.target.value)}
                     style={{
-                      padding: 0,
-                      background: "transparent",
                       lineHeight: "20px",
                       flex: 1,
                     }}
