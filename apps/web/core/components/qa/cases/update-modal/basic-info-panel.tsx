@@ -146,7 +146,7 @@ export function BasicInfoPanel(props: BasicInfoPanelProps) {
       setLocalTextResult(textResultValue ?? "");
       setLocalRemark(remarkValue);
     }
-  }, [preconditionValue, stepsValue, modeValue, textDescriptionValue, textResultValue, remarkValue, isEditing]);
+  }, [preconditionValue, stepsValue, modeValue, textDescriptionValue, textResultValue, remarkValue]);
 
   const handleSave = async () => {
     await onSave({

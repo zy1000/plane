@@ -3,48 +3,42 @@ import React from "react";
 import { Button, Select, Spin, Tag } from "antd";
 import { FolderOutlined } from "@ant-design/icons";
 import { useParams } from "next/navigation";
-import { CaseService } from "../../../../services/qa/case.service";
-import { CaseService as ReviewApiService } from "../../../../services/qa/review.service";
 import { formatCNDateTime } from "../util";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
-import { getEnums } from "app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/util";
 import { CaseVersionCompareModal } from "./case-version-compare-modal";
 
-const enumsCache: Record<
-  string,
-  {
+type SideInfoPanelProps = {
+  caseData: any;
+  caseVersions: { id: string; version: number; created_at?: string }[];
+  loadingCaseVersions: boolean;
+  enumsData: {
     case_test_type?: Record<string, string>;
     case_type?: Record<string, string>;
     case_priority?: Record<string, string>;
     case_state?: Record<string, string>;
     plan_case_result?: Record<string, string>;
-  }
-> = {};
-const enumsReqCache: Record<string, Promise<any>> = {};
-
-type SideInfoPanelProps = {
-  caseData: any;
-  caseTestTypeMap?: Record<string, string>;
+  };
+  reviewEnums: Record<string, Record<string, { label: string; color: string }>>;
+  latestExec: {
+    id?: string | number;
+    name?: string;
+    result?: string;
+    created_by?: string | null;
+    created_at?: string;
+  } | null;
+  onChangeTestType: (v: string) => void | Promise<void>;
 };
 
-export function SideInfoPanel({ caseData, caseTestTypeMap }: SideInfoPanelProps) {
+export function SideInfoPanel({
+  caseData,
+  caseVersions,
+  loadingCaseVersions,
+  enumsData,
+  reviewEnums,
+  latestExec,
+  onChangeTestType,
+}: SideInfoPanelProps) {
   const { workspaceSlug } = useParams() as { workspaceSlug?: string };
-  const caseService = React.useMemo(() => new CaseService(), []);
-  const reviewService = React.useMemo(() => new ReviewApiService(), []);
-
-  type TCaseVersionItem = { id: string; version: number; created_at?: string };
-  const [caseVersions, setCaseVersions] = React.useState<TCaseVersionItem[]>([]);
-  const [loadingCaseVersions, setLoadingCaseVersions] = React.useState(false);
-  React.useEffect(() => {
-    const id = String(caseData?.id || "");
-    if (!workspaceSlug || !id) return;
-    setLoadingCaseVersions(true);
-    caseService
-      .getCaseVersions(String(workspaceSlug), id)
-      .then((data) => setCaseVersions(Array.isArray(data) ? data : []))
-      .catch(() => setCaseVersions([]))
-      .finally(() => setLoadingCaseVersions(false));
-  }, [workspaceSlug, caseData?.id, caseService]);
 
   const latestVersion = React.useMemo(() => {
     return -1;
@@ -55,54 +49,6 @@ export function SideInfoPanel({ caseData, caseTestTypeMap }: SideInfoPanelProps)
   }, [caseData?.version]);
 
   const [compareOpen, setCompareOpen] = React.useState(false);
-
-  const [enumsData, setEnumsData] = React.useState<{
-    case_test_type?: Record<string, string>;
-    case_type?: Record<string, string>;
-    case_priority?: Record<string, string>;
-    case_state?: Record<string, string>;
-    plan_case_result?: Record<string, string>;
-  }>({});
-  const [loadingEnums, setLoadingEnums] = React.useState<boolean>(false);
-  React.useEffect(() => {
-    if (caseTestTypeMap && Object.keys(caseTestTypeMap).length > 0) {
-      setEnumsData({ case_test_type: caseTestTypeMap });
-      return;
-    }
-    if (!workspaceSlug) return;
-    const key = String(workspaceSlug);
-    if (enumsCache[key] && Object.keys(enumsCache[key]?.case_test_type || {}).length > 0) {
-      setEnumsData(enumsCache[key]);
-      return;
-    }
-    setLoadingEnums(true);
-    const req = enumsReqCache[key] || getEnums(key);
-    enumsReqCache[key] = req;
-    req
-      .then((enums) => {
-        const data = {
-          case_test_type: enums.case_test_type || {},
-          case_type: enums.case_type || {},
-          case_priority: enums.case_priority || {},
-          case_state: enums.case_state || {},
-          plan_case_result: enums.plan_case_result || {},
-        };
-        enumsCache[key] = data;
-        setEnumsData(data);
-      })
-      .finally(() => setLoadingEnums(false));
-  }, [workspaceSlug, caseTestTypeMap]);
-
-  const [reviewEnums, setReviewEnums] = React.useState<
-    Record<string, Record<string, { label: string; color: string }>>
-  >({});
-  React.useEffect(() => {
-    if (!workspaceSlug) return;
-    reviewService
-      .getReviewEnums(String(workspaceSlug))
-      .then((data) => setReviewEnums(data || {}))
-      .catch(() => {});
-  }, [workspaceSlug, reviewService]);
 
   const normalizeId = (v: any): string | undefined => {
     if (v === null || v === undefined) return undefined;
@@ -118,16 +64,9 @@ export function SideInfoPanel({ caseData, caseTestTypeMap }: SideInfoPanelProps)
     () => Object.keys(enumsData.case_test_type || {}).length > 0,
     [enumsData.case_test_type]
   );
-  const syncTimerRef = React.useRef<number | undefined>(undefined);
   React.useEffect(() => {
     if (!optionsReady) return;
-    if (syncTimerRef.current) window.clearTimeout(syncTimerRef.current);
-    syncTimerRef.current = window.setTimeout(() => {
-      setTestTypeValue(normalizeId(caseData?.test_type));
-    }, 150);
-    return () => {
-      if (syncTimerRef.current) window.clearTimeout(syncTimerRef.current);
-    };
+    setTestTypeValue(normalizeId(caseData?.test_type));
   }, [caseData?.test_type, optionsReady]);
 
   const colorForLabel = (text: string) => {
@@ -154,43 +93,8 @@ export function SideInfoPanel({ caseData, caseTestTypeMap }: SideInfoPanelProps)
 
   const handleChangeTestType = async (v: string) => {
     setTestTypeValue(v);
-    const id = String(caseData?.id || "");
-    if (!id || !workspaceSlug) return;
-    try {
-      await caseService.updateCase(String(workspaceSlug), { id, test_type: Number(v) });
-    } catch {}
+    await onChangeTestType(v);
   };
-
-  type TExecRecord = {
-    id?: string | number;
-    name?: string;
-    result?: string;
-    created_by?: string | null;
-    created_at?: string;
-  };
-  const [latestExec, setLatestExec] = React.useState<TExecRecord | null>(null);
-  React.useEffect(() => {
-    const id = String(caseData?.id || "");
-    if (!workspaceSlug || !id) return;
-    caseService
-      .getCaseExecuteRecord(String(workspaceSlug), id)
-      .then((res) => {
-        const list: TExecRecord[] = Array.isArray((res as any)?.data)
-          ? (res as any).data
-          : Array.isArray(res)
-            ? (res as any)
-            : [];
-        if (list.length === 0) {
-          setLatestExec(null);
-          return;
-        }
-        const sorted = [...list].sort(
-          (a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
-        );
-        setLatestExec(sorted[0]);
-      })
-      .catch(() => setLatestExec(null));
-  }, [workspaceSlug, caseData?.id]);
 
   return (
     <div className="w-1/3 border-l px-6 py-4 h-full overflow-y-auto bg-[#FAFAFA] divide-y divide-gray-100">

@@ -3,6 +3,7 @@
 import React, { useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { CaseService } from "../../../services/qa/case.service";
+import { CaseService as ReviewApiService } from "../../../services/qa/review.service";
 import { Tag, Spin, Tooltip, message, Input, Table } from "antd";
 import { getEnums } from "../../../../app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/util";
 import { useMember } from "@/hooks/store/use-member";
@@ -36,53 +37,18 @@ function UpdateModal({ open, onClose, caseId }: UpdateModalProps) {
   // 增加：本地状态与失焦更新逻辑
   const { workspaceSlug, projectId } = useParams() as { workspaceSlug?: string; projectId?: string };
   const caseService = React.useMemo(() => new CaseService(), []);
+  const reviewService = React.useMemo(() => new ReviewApiService(), []);
+  const loadSeqRef = React.useRef<number>(0);
+  const [initialLoading, setInitialLoading] = React.useState<boolean>(false);
+  const [initialReady, setInitialReady] = React.useState<boolean>(false);
 
-  // 新增：加载状态和用例数据状态
-  const [loading, setLoading] = React.useState<boolean>(false);
+  // 新增：用例数据状态
   const [caseData, setCaseData] = React.useState<any>(null);
   const [labelList, setLabelList] = React.useState<any[]>([]);
-
-  // 新增：监听open变化，当模态框打开时获取数据
-  React.useEffect(() => {
-    if (open && caseId && workspaceSlug) {
-      fetchCaseData();
-    } else {
-      // 关闭时清空数据
-      setCaseData(null);
-      setLabelList([]);
-      setReplyTargetId(undefined);
-      setReplyContent({});
-    }
-  }, [open]); // 仅在打开时拉取详情
-
-  const fetchCaseData = async () => {
-    if (!workspaceSlug || !caseId) return;
-
-    setLoading(true);
-    try {
-      const data = await caseService.getCase(String(workspaceSlug), caseId);
-      setCaseData(data);
-      if (data?.labels) {
-        setLabelList(data.labels);
-      }
-    } catch (error) {
-      console.error("获取用例数据失败:", error);
-      // 这里可以添加错误提示
-    } finally {
-      setLoading(false);
-    }
-  };
   const [attachmentFiles, setAttachmentFiles] = useState<File[]>([]);
 
   const [title, setTitle] = React.useState<string>("");
   const [codeValue, setCodeValue] = React.useState<string>("");
-  React.useEffect(() => {
-    setTitle(caseData?.name ?? "");
-  }, [caseData?.name]);
-
-  React.useEffect(() => {
-    setCodeValue(caseData?.code ?? "");
-  }, [caseData?.code]);
 
   const handleBlurTitle = async () => {
     const newName = title?.trim();
@@ -292,26 +258,21 @@ function UpdateModal({ open, onClose, caseId }: UpdateModalProps) {
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
   const handlePickAttachments = () => fileInputRef.current?.click();
 
-  // 新增：打开时拉取已上传附件列表
-  React.useEffect(() => {
-    let alive = true;
-    const fetchAttachments = async () => {
-      if (!open || !workspaceSlug || !caseId) return;
-      setAttachmentsLoading(true);
-      try {
-        const list = await caseService.getCaseAssetList(String(workspaceSlug), String(caseId));
-        if (!alive) return;
-        setCaseAttachments(Array.isArray(list) ? list : []);
-      } catch {
-      } finally {
-        if (alive) setAttachmentsLoading(false);
-      }
-    };
-    fetchAttachments();
-    return () => {
-      alive = false;
-    };
-  }, [open, workspaceSlug, caseId]);
+  const fetchAttachments = async (seq?: number) => {
+    if (!workspaceSlug || !caseId) return;
+    setAttachmentsLoading(true);
+    try {
+      const list = await caseService.getCaseAssetList(String(workspaceSlug), String(caseId));
+      if (seq && seq !== loadSeqRef.current) return;
+      setCaseAttachments(Array.isArray(list) ? list : []);
+    } catch {
+      if (seq && seq !== loadSeqRef.current) return;
+      setCaseAttachments([]);
+    } finally {
+      if (seq && seq !== loadSeqRef.current) return;
+      setAttachmentsLoading(false);
+    }
+  };
 
   const fileUploadService = useMemo(() => new FileUploadService(), []);
   const [attachmentAssetIds, setAttachmentAssetIds] = useState<string[]>([]);
@@ -483,10 +444,6 @@ function UpdateModal({ open, onClose, caseId }: UpdateModalProps) {
     } catch {}
     setCommentsLoading(false);
   };
-
-  React.useEffect(() => {
-    if (open && caseId && workspaceSlug) fetchComments(true);
-  }, [open, caseId, workspaceSlug]);
 
   const handleCreateComment = async () => {
     if (!workspaceSlug || !caseId) return;
@@ -684,64 +641,183 @@ function UpdateModal({ open, onClose, caseId }: UpdateModalProps) {
     { description: "", result: "" },
   ]);
 
-  React.useEffect(() => {
-    if (caseData) {
-      setAssignee(normalizeId(caseData?.assignee));
-      setStateValue(normalizeId(caseData?.state));
-      setTypeValue(normalizeId(caseData?.type));
-      setPriorityValue(normalizeId(caseData?.priority));
-      // 新增：同步富文本本地状态
-      setPreconditionValue(caseData?.precondition ?? "");
-      setRemarkValue(caseData?.remark ?? "");
-      setModeValue(typeof caseData?.mode === "number" ? caseData.mode : 0);
-      setTextDescriptionValue(caseData?.text_description ?? "");
-      setTextResultValue(caseData?.text_result ?? "");
-      // 新增：同步步骤本地状态
-      setStepsValue(
-        Array.isArray(caseData?.steps) && caseData.steps.length > 0 ? caseData.steps : [{ description: "", result: "" }]
-      );
-    } else {
-      // 清空状态
-      setAssignee(undefined);
-      setStateValue(undefined);
-      setTypeValue(undefined);
-      setPriorityValue(undefined);
-      // 新增：清空富文本本地状态
-      setPreconditionValue("");
-      setRemarkValue("");
-      setModeValue(0);
-      setTextDescriptionValue("");
-      setTextResultValue("");
-      // 新增：清空步骤本地状态
-      setStepsValue([{ description: "", result: "" }]);
-    }
-  }, [caseData]);
-
   // 新增：枚举数据状态与拉取逻辑（参考 create-modal）
   const [enumsData, setEnumsData] = React.useState<{
+    case_test_type?: Record<string, string>;
     case_type?: Record<string, string>;
     case_priority?: Record<string, string>;
     case_state?: Record<string, string>;
     plan_case_result?: Record<string, string>;
   }>({});
+  const fetchEnums = async (seq?: number) => {
+    if (!workspaceSlug) return;
+    try {
+      const enums = await getEnums(String(workspaceSlug));
+      if (seq && seq !== loadSeqRef.current) return;
+      setEnumsData({
+        case_test_type: enums.case_test_type || {},
+        case_type: enums.case_type || {},
+        case_priority: enums.case_priority || {},
+        case_state: enums.case_state || {},
+        plan_case_result: enums.plan_case_result || {},
+      });
+    } catch {
+      if (seq && seq !== loadSeqRef.current) return;
+      setEnumsData({
+        case_test_type: {},
+        case_type: {},
+        case_priority: {},
+        case_state: {},
+        plan_case_result: {},
+      });
+    }
+  };
+
+  const [caseVersions, setCaseVersions] = React.useState<{ id: string; version: number; created_at?: string }[]>([]);
+  const [loadingCaseVersions, setLoadingCaseVersions] = React.useState<boolean>(false);
+  const fetchCaseVersions = async (seq?: number) => {
+    if (!workspaceSlug || !caseId) return;
+    setLoadingCaseVersions(true);
+    try {
+      const data = await caseService.getCaseVersions(String(workspaceSlug), String(caseId));
+      if (seq && seq !== loadSeqRef.current) return;
+      setCaseVersions(Array.isArray(data) ? data : []);
+    } catch {
+      if (seq && seq !== loadSeqRef.current) return;
+      setCaseVersions([]);
+    } finally {
+      if (seq && seq !== loadSeqRef.current) return;
+      setLoadingCaseVersions(false);
+    }
+  };
+
+  const [reviewEnums, setReviewEnums] = React.useState<Record<string, Record<string, { label: string; color: string }>>>(
+    {}
+  );
+  const fetchReviewEnums = async (seq?: number) => {
+    if (!workspaceSlug) return;
+    try {
+      const data = await reviewService.getReviewEnums(String(workspaceSlug));
+      if (seq && seq !== loadSeqRef.current) return;
+      setReviewEnums(data || {});
+    } catch {
+      if (seq && seq !== loadSeqRef.current) return;
+      setReviewEnums({});
+    }
+  };
+
+  type TLatestExecRecord = {
+    id?: string | number;
+    name?: string;
+    result?: string;
+    created_by?: string | null;
+    created_at?: string;
+  };
+  const [latestExec, setLatestExec] = React.useState<TLatestExecRecord | null>(null);
+  const fetchLatestExec = async (seq?: number) => {
+    if (!workspaceSlug || !caseId) return;
+    try {
+      const res = await caseService.getCaseExecuteRecord(String(workspaceSlug), String(caseId));
+      const list: TLatestExecRecord[] = Array.isArray((res as any)?.data)
+        ? (res as any).data
+        : Array.isArray(res)
+          ? (res as any)
+          : [];
+      if (seq && seq !== loadSeqRef.current) return;
+      if (list.length === 0) {
+        setLatestExec(null);
+        return;
+      }
+      const sorted = [...list].sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+      setLatestExec(sorted[0]);
+    } catch {
+      if (seq && seq !== loadSeqRef.current) return;
+      setLatestExec(null);
+    }
+  };
+
+  const handleChangeTestType = async (v: string) => {
+    if (!workspaceSlug || !caseId) return;
+    setCaseData((prev: any) => (prev ? { ...prev, test_type: Number(v) } : prev));
+    try {
+      await caseService.updateCase(String(workspaceSlug), { id: String(caseId), test_type: Number(v) });
+    } catch {}
+  };
+
+  const hydrateFromCaseData = (data: any) => {
+    setTitle(data?.name ?? "");
+    setCodeValue(data?.code ?? "");
+
+    setAssignee(normalizeId(data?.assignee));
+    setStateValue(normalizeId(data?.state));
+    setTypeValue(normalizeId(data?.type));
+    setPriorityValue(normalizeId(data?.priority));
+
+    setPreconditionValue(data?.precondition ?? "");
+    setRemarkValue(data?.remark ?? "");
+    setModeValue(typeof data?.mode === "number" ? data.mode : 0);
+    setTextDescriptionValue(data?.text_description ?? "");
+    setTextResultValue(data?.text_result ?? "");
+
+    setStepsValue(Array.isArray(data?.steps) && data.steps.length > 0 ? data.steps : [{ description: "", result: "" }]);
+  };
+
+  const fetchCaseData = async (seq?: number) => {
+    if (!workspaceSlug || !caseId) return;
+    try {
+      const data = await caseService.getCase(String(workspaceSlug), caseId);
+      if (seq && seq !== loadSeqRef.current) return;
+      setCaseData(data);
+      setLabelList(Array.isArray(data?.labels) ? data.labels : []);
+      hydrateFromCaseData(data);
+    } catch {
+      if (seq && seq !== loadSeqRef.current) return;
+      setCaseData(null);
+      setLabelList([]);
+      hydrateFromCaseData(null);
+    }
+  };
 
   React.useEffect(() => {
-    if (!open || !workspaceSlug) return;
-    const fetchEnums = async () => {
-      try {
-        const enums = await getEnums(String(workspaceSlug));
-        setEnumsData({
-          case_type: enums.case_type || {},
-          case_priority: enums.case_priority || {},
-          case_state: enums.case_state || {},
-          plan_case_result: enums.plan_case_result || {},
-        });
-      } catch {
-        // 暂时静默处理错误
-      }
-    };
-    fetchEnums();
-  }, [open, workspaceSlug]);
+    loadSeqRef.current += 1;
+    const seq = loadSeqRef.current;
+
+    if (!open || !caseId || !workspaceSlug) {
+      setInitialLoading(false);
+      setInitialReady(false);
+      setCaseData(null);
+      setLabelList([]);
+      hydrateFromCaseData(null);
+      setCaseAttachments([]);
+      setAttachmentFiles([]);
+      setCaseVersions([]);
+      setReviewEnums({});
+      setLatestExec(null);
+      setComments([]);
+      setCommentTotal(0);
+      setCommentPage(1);
+      setReplyTargetId(undefined);
+      setReplyContent({});
+      return;
+    }
+
+    setInitialReady(false);
+    setInitialLoading(true);
+
+    Promise.allSettled([
+      fetchCaseData(seq),
+      fetchEnums(seq),
+      fetchAttachments(seq),
+      fetchCaseVersions(seq),
+      fetchReviewEnums(seq),
+      fetchLatestExec(seq),
+      fetchComments(true, 1),
+    ]).finally(() => {
+      if (seq !== loadSeqRef.current) return;
+      setInitialLoading(false);
+      setInitialReady(true);
+    });
+  }, [open, caseId, workspaceSlug]);
 
   // 切换到“执行”页时自动拉取执行记录
   React.useEffect(() => {
@@ -890,12 +966,14 @@ function UpdateModal({ open, onClose, caseId }: UpdateModalProps) {
     const payload: any = {};
     let hasChange = false;
 
-    if (data.precondition !== caseData?.precondition) {
+    const normalizeText = (text: any) => (text === null || text === undefined ? "" : String(text));
+
+    if (normalizeText(data.precondition) !== normalizeText(caseData?.precondition)) {
       payload.precondition = data.precondition;
       hasChange = true;
     }
 
-    if (data.remark !== caseData?.remark) {
+    if (normalizeText(data.remark) !== normalizeText(caseData?.remark)) {
       payload.remark = data.remark;
       hasChange = true;
     }
@@ -906,11 +984,11 @@ function UpdateModal({ open, onClose, caseId }: UpdateModalProps) {
     }
 
     if (data.mode === 1) {
-      if ((caseData?.text_description ?? "") !== data.textDescription) {
+      if (normalizeText(data.textDescription) !== normalizeText(caseData?.text_description)) {
         payload.text_description = data.textDescription;
         hasChange = true;
       }
-      if ((caseData?.text_result ?? "") !== data.textResult) {
+      if (normalizeText(data.textResult) !== normalizeText(caseData?.text_result)) {
         payload.text_result = data.textResult;
         hasChange = true;
       }
@@ -941,8 +1019,8 @@ function UpdateModal({ open, onClose, caseId }: UpdateModalProps) {
     }
   };
 
-  // 渲染加载状态
-  if (loading) {
+  // 渲染加载状态（等所有数据请求完成后再展示内容）
+  if (!initialReady || initialLoading) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center" aria-modal="true" role="dialog">
         <div className="absolute inset-0 bg-black/40" onClick={onClose} aria-hidden="true" />
@@ -953,8 +1031,8 @@ function UpdateModal({ open, onClose, caseId }: UpdateModalProps) {
     );
   }
 
-  // 如果没有数据且不是加载中，不渲染内容
-  if (!caseData && !loading) {
+  // 如果没有数据，不渲染内容
+  if (!caseData) {
     return null;
   }
 
@@ -1317,7 +1395,15 @@ function UpdateModal({ open, onClose, caseId }: UpdateModalProps) {
               </div>
             )}
           </div>
-          <SideInfoPanel caseData={caseData} />
+          <SideInfoPanel
+            caseData={caseData}
+            caseVersions={caseVersions}
+            loadingCaseVersions={loadingCaseVersions}
+            enumsData={enumsData}
+            reviewEnums={reviewEnums}
+            latestExec={latestExec}
+            onChangeTestType={handleChangeTestType}
+          />
         </div>
 
         {/* 底部操作区 */}
