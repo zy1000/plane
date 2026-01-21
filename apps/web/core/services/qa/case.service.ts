@@ -146,6 +146,17 @@ export class CaseService extends APIService {
       });
   }
 
+  async getCaseMindmap(
+    workspaceSlug: string,
+    queries: { repository_id: string; module_id?: string | string[] }
+  ): Promise<{ root: any }> {
+    return this.get(`/api/workspaces/${workspaceSlug}/test/case/mindmap/`, { params: queries })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
   async createComment(workspaceSlug: string, payload: { case: string; content: string; parent?: string }): Promise<any> {
     return this.post(`/api/workspaces/${workspaceSlug}/test/comments/`, payload)
       .then((response) => response?.data)

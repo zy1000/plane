@@ -8,7 +8,7 @@ from plane.app.views.qa.case import CaseAssetAPIView, CaseIssueWithType, TestCas
     CaseLabelAPIView
 from plane.app.views.qa.case_version import CaseVersionAPIView, CaseVersionCompareAPIView
 from plane.app.views.qa.module import CaseModuleCountAPIView, CaseModuleDetailAPIView
-from plane.app.views.qa.plan import PlanModuleDetailAPIView, PlanListAPIView
+from plane.app.views.qa.plan import PlanModuleDetailAPIView, PlanListAPIView, CaseMindmapAPIView
 from plane.app.views.qa.review import ReviewModuleAPIView, ReviewModuleDetailAPIView, CaseReviewAPIView, CaseReviewView, \
     ReviewListAPIView
 
@@ -31,6 +31,7 @@ urlpatterns = [
          name='test-case-module-detail'),
     path('workspaces/<str:slug>/test/module/count/', CaseModuleCountAPIView.as_view(), name='test-case'),
     path('workspaces/<str:slug>/test/case/', CaseAPIView.as_view(), name='test-case'),
+    path('workspaces/<str:slug>/test/case/mindmap/', CaseMindmapAPIView.as_view(), name='test-case-mindmap'),
     path('workspaces/<str:slug>/test/case/issues/', CaseIssueWithType.as_view(), name='test-case'),
     path('workspaces/<str:slug>/test/case/label/', LabelAPIView.as_view(), name='test-case'),
     path('workspaces/<str:slug>/test/case/version/', CaseVersionAPIView.as_view(), name='test-case'),
