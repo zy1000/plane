@@ -178,6 +178,7 @@ class CaseLabelSerializer(ModelSerializer):
 class CaseCreateUpdateSerializer(ModelSerializer):
     labels = serializers.PrimaryKeyRelatedField(queryset=CaseLabel.objects.all(), many=True, required=False)
     issues = serializers.PrimaryKeyRelatedField(queryset=Issue.objects.all(), many=True, required=False)
+    code = serializers.CharField(required=False)
 
     review = serializers.SerializerMethodField()
 
@@ -188,6 +189,8 @@ class CaseCreateUpdateSerializer(ModelSerializer):
         model = TestCase
         fields = ['code', 'name', 'precondition', 'steps', 'remark', 'type', 'priority', 'repository', 'labels',
                   'module', 'assignee', 'issues', 'test_type', 'review', 'mode', 'text_description', 'text_result']
+
+        validators = []
 
     def create(self, validated_data):
         labels = validated_data.pop('labels', [])

@@ -1310,3 +1310,24 @@ class CaseAPI(BaseViewSet):
 
         serializer = CaseListSerializer(created, many=True)
         return list_response(data=serializer.data, count=len(created))
+
+
+class CaseMindmapAPIView(BaseAPIView):
+    model = TestCase
+    def get(self,request,slug):
+        repository_id = request.query_params.get("repository_id")
+        module_id = request.query_params.get("module_id")
+
+        if not repository_id:
+            return Response(status=status.HTTP_400_BAD_REQUEST)
+
+        modules = list(CaseModule.objects.filter(repository_id=repository_id, module_id=module_id).values("id",'name','parent_id','sort_order'))
+        module_map = {str(m['id']): m for m in modules }
+        children_map = {}
+        for module in modules:
+            mid = str(module['id'])
+            pid = str(module['parent_id'])
+
+
+
+

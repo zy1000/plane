@@ -53,6 +53,7 @@
     "jspdf": "catalog:",
     "lodash-es": "catalog:",
     "lucide-react": "catalog:",
+    "mind-elixir": "^5.0.0",
     "mobx": "catalog:",
     "mobx-react": "catalog:",
     "mobx-utils": "catalog:",

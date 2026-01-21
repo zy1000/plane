@@ -12,7 +12,7 @@ import { CreateCaseModal } from "@/components/qa/cases/create-modal";
 import { ImportCaseModal } from "@/components/qa/cases/import-modal";
 import { Tree, Row, Col } from "antd";
 import type { TreeProps } from "antd";
-import { AppstoreOutlined, PlusOutlined } from "@ant-design/icons";
+import { AppstoreOutlined, PlusOutlined, UnorderedListOutlined, ShareAltOutlined } from "@ant-design/icons";
 import { CaseModuleService } from "@/services/qa";
 import UpdateModal from "@/components/qa/cases/update-modal";
 import { useQueryParams } from "@/hooks/use-query-params";
@@ -140,6 +140,7 @@ export default function TestCasesPage() {
   const searchParams = useSearchParams();
   const { updateQueryParams } = useQueryParams();
   const repositoryIdFromUrl = searchParams.get("repositoryId");
+  const moduleIdFromUrl = searchParams.get("moduleId");
   const [repositoryId, setRepositoryId] = useState<string | null>(repositoryIdFromUrl);
   const [repositoryName, setRepositoryName] = useState<string>("");
 
@@ -201,6 +202,12 @@ export default function TestCasesPage() {
   // 新增状态：模块树数据、选中模块
   const [modules, setModules] = useState<any[]>([]);
   const [selectedModuleId, setSelectedModuleId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!moduleIdFromUrl) return;
+    if (moduleIdFromUrl === "all") setSelectedModuleId(null);
+    else setSelectedModuleId(moduleIdFromUrl);
+  }, [moduleIdFromUrl]);
 
   const selectionContextKey = useMemo(() => {
     return JSON.stringify({
@@ -1274,6 +1281,30 @@ export default function TestCasesPage() {
                     </Breadcrumbs>
                   </div>
                   <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      className="h-8 w-8 rounded border border-custom-primary-100 bg-custom-primary-100/10 text-custom-primary-100 flex items-center justify-center"
+                      aria-label="列表视图"
+                    >
+                      <UnorderedListOutlined />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!repositoryId) return;
+                        const ws = String(workspaceSlug || "");
+                        const pid = String(projectId || "");
+                        const params = new URLSearchParams();
+                        params.set("repositoryId", String(repositoryId));
+                        params.set("moduleId", selectedModuleId ? String(selectedModuleId) : "all");
+                        router.push(`/${ws}/projects/${pid}/testhub/cases/mind?${params.toString()}`);
+                      }}
+                      disabled={!repositoryId}
+                      className="h-8 w-8 rounded border border-custom-border-200 text-custom-text-300 hover:text-custom-text-100 hover:bg-custom-background-90 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                      aria-label="脑图视图"
+                    >
+                      <ShareAltOutlined />
+                    </button>
                     <button
                       type="button"
                       onClick={() => setIsCreateModalOpen(true)}

@@ -610,6 +610,128 @@ class CaseDetailAPIView(BaseAPIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
+class CaseMindmapAPIView(BaseAPIView):
+    def get(self, request, slug):
+        repository_id = request.query_params.get("repository_id")
+        module_ids_raw = (
+            request.query_params.getlist("module_id")
+            or request.query_params.getlist("module_id[]")
+            or ([] if request.query_params.get("module_id") is None else [request.query_params.get("module_id")])
+        )
+
+        if not repository_id:
+            return Response({"error": "repository_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        modules = list(
+            CaseModule.objects.filter(repository_id=repository_id, deleted_at__isnull=True)
+            .values("id", "name", "parent_id", "sort_order")
+            .order_by("sort_order", "created_at")
+        )
+        module_map = {str(m["id"]): m for m in modules}
+        children_map = {}
+        roots = []
+        for m in modules:
+            mid = str(m["id"])
+            pid = str(m["parent_id"]) if m["parent_id"] else None
+            if pid and pid in module_map:
+                children_map.setdefault(pid, []).append(mid)
+            else:
+                roots.append(mid)
+
+        def collect_descendants(root_id: str) -> set[str]:
+            stack = [root_id]
+            collected: set[str] = set()
+            while stack:
+                cur = stack.pop()
+                if cur in collected:
+                    continue
+                collected.add(cur)
+                for child_id in children_map.get(cur, []):
+                    stack.append(child_id)
+            return collected
+
+        selected_module_ids: list[str] = []
+        for raw in module_ids_raw:
+            if raw is None:
+                continue
+            for part in str(raw).split(","):
+                mid = part.strip()
+                if not mid or mid == "all":
+                    continue
+                selected_module_ids.append(mid)
+        selected_module_ids = list(dict.fromkeys(selected_module_ids))
+
+        for mid in selected_module_ids:
+            if mid not in module_map:
+                return Response({"error": "module not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        allowed_module_ids: set[str] | None = None
+        if selected_module_ids:
+            allowed_module_ids = set()
+            for mid in selected_module_ids:
+                allowed_module_ids |= collect_descendants(mid)
+
+        cases_qs = TestCase.objects.filter(repository_id=repository_id, deleted_at__isnull=True)
+        if allowed_module_ids is not None:
+            cases_qs = cases_qs.filter(module_id__in=list(allowed_module_ids))
+
+        cases = list(
+            cases_qs.values(
+                "id",
+                "code",
+                "name",
+                "module_id",
+                "mode",
+                "precondition",
+                "steps",
+                "remark",
+                "text_description",
+                "text_result",
+            ).order_by("created_at")
+        )
+
+        cases_by_module: dict[str | None, list[dict]] = {}
+        for c in cases:
+            mid = str(c["module_id"]) if c.get("module_id") else None
+            steps = c.get("steps")
+            if not isinstance(steps, list):
+                c["steps"] = []
+            cases_by_module.setdefault(mid, []).append(c)
+
+        def build_module_node(mid: str) -> dict:
+            meta = module_map[mid]
+            child_ids = children_map.get(mid, [])
+            child_ids = sorted(child_ids, key=lambda x: (module_map[x].get("sort_order") or 0, module_map[x].get("name") or ""))
+            return {
+                "id": mid,
+                "name": meta.get("name") or "",
+                "children": [build_module_node(cid) for cid in child_ids],
+                "cases": cases_by_module.get(mid, []),
+            }
+
+        if selected_module_ids:
+            selected_children = sorted(
+                selected_module_ids,
+                key=lambda x: (module_map[x].get("sort_order") or 0, module_map[x].get("name") or ""),
+            )
+            root_children_nodes = [build_module_node(mid) for mid in selected_children]
+        else:
+            root_children = sorted(
+                roots,
+                key=lambda x: (module_map[x].get("sort_order") or 0, module_map[x].get("name") or ""),
+            )
+            root_children_nodes = [build_module_node(mid) for mid in root_children]
+
+        root = {
+            "id": "all",
+            "name": "全部用例",
+            "children": root_children_nodes,
+            "cases": cases_by_module.get(None, []),
+        }
+
+        return Response({"root": root}, status=status.HTTP_200_OK)
+
+
 class CaseModuleAPIView(BaseAPIView):
     model = CaseModule
     queryset = CaseModule.objects.all()
