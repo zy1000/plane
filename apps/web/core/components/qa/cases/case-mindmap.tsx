@@ -79,6 +79,29 @@ type Props = {
 export const CaseMindmap = ({ data, editable = true, before, onOperation, onContextAction }: Props) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mindRef = useRef<MindElixirInstance | null>(null);
+  const decorateTags = () => {
+    const container = containerRef.current;
+    if (!container) return;
+    const map: Record<string, string> = {
+      模块: "module",
+      用例: "case",
+      前置条件: "precondition",
+      备注: "remark",
+      文本描述: "text_description",
+      步骤描述: "step_description",
+      预期结果: "expected_result",
+    };
+    const spans = container.querySelectorAll(".tags span");
+    spans.forEach((el) => {
+      const text = (el.textContent || "").trim();
+      const key = map[text];
+      if (key) {
+        if ((el as HTMLElement).dataset.qaTag !== key) (el as HTMLElement).dataset.qaTag = key;
+      } else {
+        if ((el as HTMLElement).dataset.qaTag) delete (el as HTMLElement).dataset.qaTag;
+      }
+    });
+  };
 
   const onOperationRef = useRef(onOperation);
   onOperationRef.current = onOperation;
@@ -195,6 +218,7 @@ export const CaseMindmap = ({ data, editable = true, before, onOperation, onCont
 
     mind.init(data);
     mindRef.current = mind;
+    setTimeout(() => decorateTags(), 0);
 
     mind.bus.addListener("operation", (op: Operation) => {
       onOperationRef.current?.(op);
@@ -214,6 +238,7 @@ export const CaseMindmap = ({ data, editable = true, before, onOperation, onCont
   useEffect(() => {
     if (!mindRef.current) return;
     mindRef.current.refresh(data);
+    setTimeout(() => decorateTags(), 0);
     if (isFirstRender.current) {
       try {
         (mindRef.current as any)?.toCenter?.();
@@ -281,6 +306,34 @@ export const CaseMindmap = ({ data, editable = true, before, onOperation, onCont
             margin-left: 8px !important;
             display: inline-flex !important;
             flex-shrink: 0 !important;
+          }
+          .tags span[data-qa-tag="module"] {
+            background: rgba(14, 165, 233, 0.18) !important;
+            color: #0369a1 !important;
+          }
+          .tags span[data-qa-tag="case"] {
+            background: rgba(34, 197, 94, 0.18) !important;
+            color: #166534 !important;
+          }
+          .tags span[data-qa-tag="precondition"] {
+            background: rgba(245, 158, 11, 0.2) !important;
+            color: #92400e !important;
+          }
+          .tags span[data-qa-tag="remark"] {
+            background: rgba(236, 72, 153, 0.18) !important;
+            color: #9d174d !important;
+          }
+          .tags span[data-qa-tag="text_description"] {
+            background: rgba(139, 92, 246, 0.18) !important;
+            color: #5b21b6 !important;
+          }
+          .tags span[data-qa-tag="step_description"] {
+            background: rgba(148, 163, 184, 0.25) !important;
+            color: #334155 !important;
+          }
+          .tags span[data-qa-tag="expected_result"] {
+            background: #ffb3fb !important;
+            color: #4d0049 !important;
           }
         `,
         }}

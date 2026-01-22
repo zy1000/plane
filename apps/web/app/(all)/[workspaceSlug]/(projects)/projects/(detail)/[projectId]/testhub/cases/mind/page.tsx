@@ -33,6 +33,9 @@ export default function TestCasesMindPage() {
     return Array.from(new Set(parts));
   })();
   const moduleIdsKeyFromUrl = moduleIdsFromUrl.length ? moduleIdsFromUrl.join(",") : "all";
+  const hasModuleIdParam =
+    searchParams.get("moduleId") !== null || (searchParams.getAll("moduleId") || []).length > 0;
+  const allModulesSelectedFromUrl = hasModuleIdParam && moduleIdsFromUrl.length === 0;
   const [repositoryId, setRepositoryId] = useState<string | null>(repositoryIdFromUrl);
   const [selectedModuleIds, setSelectedModuleIds] = useState<string[]>(moduleIdsFromUrl);
   const [repositoryName, setRepositoryName] = useState<string>("");
@@ -46,6 +49,18 @@ export default function TestCasesMindPage() {
   const [renameOpen, setRenameOpen] = useState(false);
   const [renamingModuleId, setRenamingModuleId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState<string>("");
+  const allModuleIds = useMemo(() => {
+    const ids: string[] = [];
+    const visit = (nodes: any[]) => {
+      for (const node of nodes || []) {
+        const key = String(node?.key ?? "");
+        if (key && key !== "all") ids.push(key);
+        if (Array.isArray(node?.children) && node.children.length) visit(node.children);
+      }
+    };
+    visit(treeData);
+    return Array.from(new Set(ids));
+  }, [treeData]);
 
   const caseService = useMemo(() => new CaseService(), []);
   const caseModuleService = useMemo(() => new CaseModuleService(), []);
@@ -66,8 +81,12 @@ export default function TestCasesMindPage() {
   }, [repositoryIdFromUrl]);
 
   useEffect(() => {
+    if (allModulesSelectedFromUrl) {
+      setSelectedModuleIds(allModuleIds);
+      return;
+    }
     setSelectedModuleIds(moduleIdsFromUrl);
-  }, [moduleIdsKeyFromUrl]);
+  }, [moduleIdsKeyFromUrl, allModulesSelectedFromUrl, allModuleIds]);
 
   const onExpand: TreeProps["onExpand"] = (keys) => {
     setExpandedKeys(keys as string[]);
@@ -114,7 +133,6 @@ export default function TestCasesMindPage() {
       setTreeData([
         {
           key: "all",
-          disableCheckbox: true,
           title: (
             <div className="flex items-center justify-between gap-2 min-w-0">
               <span className="truncate">全部用例</span>
@@ -129,7 +147,6 @@ export default function TestCasesMindPage() {
       setTreeData([
         {
           key: "all",
-          disableCheckbox: true,
           title: "全部用例",
           children: [],
         },
@@ -181,6 +198,7 @@ export default function TestCasesMindPage() {
         tags: ["用例"],
         children: [],
         mode,
+        expanded: false,
       };
 
       const preconditionRaw = stripHtml(c.precondition);
@@ -261,6 +279,11 @@ export default function TestCasesMindPage() {
 
   const fetchMind = async (silent = false) => {
     if (!workspaceSlug || !repositoryId) return;
+    const hasSelection = selectedModuleIds.length > 0 || allModulesSelectedFromUrl;
+    if (!hasSelection) {
+      setMindData(null);
+      return;
+    }
     if (!silent) setLoadingMind(true);
     try {
       const res = await caseService.getCaseMindmap(String(workspaceSlug), {
@@ -809,7 +832,7 @@ export default function TestCasesMindPage() {
                         setRepositoryName(name ? String(name) : "");
                         if (id)
                           router.push(
-                            `/${ws}/projects/${pid}/testhub/cases/mind?repositoryId=${encodeURIComponent(String(id))}&moduleId=all`
+                            `/${ws}/projects/${pid}/testhub/cases/mind?repositoryId=${encodeURIComponent(String(id))}`
                           );
                         else router.push(`/${ws}/projects/${pid}/testhub/cases/mind`);
                       }}
@@ -895,7 +918,7 @@ export default function TestCasesMindPage() {
                     const params = new URLSearchParams();
                     if (repositoryId) params.set("repositoryId", String(repositoryId));
                     if (!key || key === "all") {
-                      setSelectedModuleIds([]);
+                      setSelectedModuleIds(allModuleIds);
                       params.set("moduleId", "all");
                       router.push(`/${ws}/projects/${pid}/testhub/cases/mind?${params.toString()}`);
                       return;
@@ -904,27 +927,52 @@ export default function TestCasesMindPage() {
                     params.append("moduleId", key);
                     router.push(`/${ws}/projects/${pid}/testhub/cases/mind?${params.toString()}`);
                   }}
-                  onCheck={(checkedKeys) => {
+                  onCheck={(checkedKeys, info) => {
                     const nextKeys = Array.isArray(checkedKeys) ? checkedKeys : (checkedKeys as any)?.checked || [];
-                    const moduleIds = (nextKeys as any[]).map((k) => String(k)).filter((k) => k && k !== "all");
-                    setSelectedModuleIds(moduleIds);
-
                     const ws = String(workspaceSlug || "");
                     const pid = String(projectId || "");
                     const params = new URLSearchParams();
                     if (repositoryId) params.set("repositoryId", String(repositoryId));
-                    if (!moduleIds.length) {
+                    const normalizedKeys = (nextKeys as any[]).map((k) => String(k));
+                    const eventKey = String((info as any)?.node?.key ?? "");
+                    const eventChecked = Boolean((info as any)?.checked);
+                    if (eventKey === "all") {
+                      if (eventChecked) {
+                        setSelectedModuleIds(allModuleIds);
+                        params.set("moduleId", "all");
+                      } else {
+                        setSelectedModuleIds([]);
+                      }
+                      const query = params.toString();
+                      router.push(`/${ws}/projects/${pid}/testhub/cases/mind${query ? `?${query}` : ""}`);
+                      return;
+                    }
+                    const moduleIds = normalizedKeys.filter((k) => k && k !== "all");
+                    if (moduleIds.length === allModuleIds.length && allModuleIds.length > 0) {
+                      setSelectedModuleIds(allModuleIds);
                       params.set("moduleId", "all");
-                    } else {
+                      const query = params.toString();
+                      router.push(`/${ws}/projects/${pid}/testhub/cases/mind${query ? `?${query}` : ""}`);
+                      return;
+                    }
+                    setSelectedModuleIds(moduleIds);
+                    if (moduleIds.length) {
                       for (const mid of moduleIds) params.append("moduleId", mid);
                     }
-                    router.push(`/${ws}/projects/${pid}/testhub/cases/mind?${params.toString()}`);
+                    const query = params.toString();
+                    router.push(`/${ws}/projects/${pid}/testhub/cases/mind${query ? `?${query}` : ""}`);
                   }}
                   onExpand={onExpand}
                   expandedKeys={expandedKeys}
                   autoExpandParent={autoExpandParent}
                   treeData={treeData}
-                  checkedKeys={{ checked: selectedModuleIds, halfChecked: [] }}
+                  checkedKeys={{
+                    checked:
+                      allModuleIds.length > 0 && selectedModuleIds.length === allModuleIds.length
+                        ? ["all", ...selectedModuleIds]
+                        : selectedModuleIds,
+                    halfChecked: [],
+                  }}
                   selectedKeys={[selectedModuleIds[0] || "all"]}
                   className="py-2 pl-2 custom-tree-indent"
                 />

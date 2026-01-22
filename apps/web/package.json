@@ -17,6 +17,7 @@
     "fix:format": "oxfmt ."
   },
   "dependencies": {
+    "@ant-design/icons": "^5.4.0",
     "@atlaskit/pragmatic-drag-and-drop": "catalog:",
     "@atlaskit/pragmatic-drag-and-drop-auto-scroll": "catalog:",
     "@atlaskit/pragmatic-drag-and-drop-hitbox": "catalog:",
@@ -40,11 +41,13 @@
     "@react-pdf/renderer": "^3.4.5",
     "@react-router/node": "catalog:",
     "@tanstack/react-table": "^8.21.3",
+    "antd": "^5.27.6",
     "axios": "catalog:",
     "clsx": "^2.0.0",
     "cmdk": "^1.0.0",
     "comlink": "^4.4.1",
     "date-fns": "^4.1.0",
+    "dayjs": "^1.11.18",
     "echarts": "catalog:",
     "echarts-for-react": "catalog:",
     "emoji-picker-react": "^4.5.16",
@@ -70,6 +73,7 @@
     "react-masonry-component": "^6.3.0",
     "react-pdf-html": "^2.1.2",
     "react-popper": "^2.3.0",
+    "react-quill": "^2.0.0",
     "react-router": "catalog:",
     "recharts": "^2.12.7",
     "serve": "14.2.5",
@@ -77,11 +81,7 @@
     "swr": "catalog:",
     "use-font-face-observer": "^1.2.2",
     "uuid": "catalog:",
-    "dayjs": "^1.11.18",
-    "quill": "^2.0.3",
-    "react-quill": "^2.0.0",
-    "antd": "^5.27.6",
-    "@ant-design/icons": "^5.4.0"
+    "xmind-embed-viewer": "^1.2.0"
   },
   "devDependencies": {
     "@dotenvx/dotenvx": "catalog:",
