@@ -1296,7 +1296,7 @@ export default function TestCasesPage() {
                         const pid = String(projectId || "");
                         const params = new URLSearchParams();
                         params.set("repositoryId", String(repositoryId));
-                        params.set("moduleId", selectedModuleId ? String(selectedModuleId) : "all");
+                        if (selectedModuleId) params.set("moduleId", String(selectedModuleId));
                         router.push(`/${ws}/projects/${pid}/testhub/cases/mind?${params.toString()}`);
                       }}
                       disabled={!repositoryId}

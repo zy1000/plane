@@ -19,6 +19,7 @@ export default {
     upgrade: "升级",
     overview: "概览",
     milestones: "里程碑",
+    filestore: "文件",
   },
   auth: {
     common: {

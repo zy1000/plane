@@ -32,12 +32,12 @@ const MENU_ITEMS: TMenuItem[] = [
     href: (ws, pid) => `/${ws}/projects/${pid}/testhub/reviews`,
     isActive: (pathname, ws, pid) => isTMReviewsMenuActive(pathname, ws, pid),
   },
-  {
-    key: "mindmap",
-    label: "文件存储",
-    href: (ws, pid) => `/${ws}/projects/${pid}/testhub/mindmap`,
-    isActive: (pathname, ws, pid) => isTMMindmapMenuActive(pathname, ws, pid),
-  },
+  // {
+  //   key: "mindmap",
+  //   label: "文件存储",
+  //   href: (ws, pid) => `/${ws}/projects/${pid}/testhub/mindmap`,
+  //   isActive: (pathname, ws, pid) => isTMMindmapMenuActive(pathname, ws, pid),
+  // },
 ];
 
 export const TestManagementMenuBar = () => {
