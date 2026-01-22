@@ -235,7 +235,6 @@ export default function TestCasesMindPage() {
         ? {
             id: "me-root",
             topic: String(root?.name ?? "全部用例"),
-            tags: ["用例"],
             children: [
               ...(Array.isArray(root?.children) ? root.children.map((m: any) => buildModule(m)) : []),
               ...(Array.isArray(root?.cases) ? root.cases.map((c: any) => buildCase(c)) : []),
