@@ -296,7 +296,7 @@ CELERY_IMPORTS = (
     "plane.bgtasks.issue_description_version_sync",
 )
 
-FILE_SIZE_LIMIT = int(os.environ.get("FILE_SIZE_LIMIT", 5242880))
+FILE_SIZE_LIMIT = int(os.environ.get("FILE_SIZE_LIMIT", 52428800))
 
 # Unsplash Access key
 UNSPLASH_ACCESS_KEY = os.environ.get("UNSPLASH_ACCESS_KEY")

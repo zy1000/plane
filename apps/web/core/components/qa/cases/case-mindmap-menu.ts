@@ -46,7 +46,10 @@ export const getContextMenuVisibility = (input: {
 
   if (nodeId.startsWith("case:")) {
     if (mode === 1) {
-      return { allowed: ["新增文本描述", "切换为步骤模式", "删除"], deleteLabel: "删除" };
+      return {
+        allowed: ["新增文本描述", "新增前置条件", "新增备注", "切换为步骤模式", "删除"],
+        deleteLabel: "删除",
+      };
     }
     return {
       allowed: ["新增用例", "新增步骤", "新增前置条件", "新增备注", "切换为文本模式", "删除"],

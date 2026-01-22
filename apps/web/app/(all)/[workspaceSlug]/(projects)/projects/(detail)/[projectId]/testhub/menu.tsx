@@ -4,7 +4,7 @@ import { usePathname, useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import React from "react";
 import { cn } from "@plane/utils";
-import { isTMOverviewMenuActive, isTMPlansMenuActive, isTMReviewsMenuActive } from "./route-helpers";
+import { isTMMindmapMenuActive, isTMOverviewMenuActive, isTMPlansMenuActive, isTMReviewsMenuActive } from "./route-helpers";
 
 type TMenuItem = {
   key: string;
@@ -31,6 +31,12 @@ const MENU_ITEMS: TMenuItem[] = [
     label: "用例评审",
     href: (ws, pid) => `/${ws}/projects/${pid}/testhub/reviews`,
     isActive: (pathname, ws, pid) => isTMReviewsMenuActive(pathname, ws, pid),
+  },
+  {
+    key: "mindmap",
+    label: "文件存储",
+    href: (ws, pid) => `/${ws}/projects/${pid}/testhub/mindmap`,
+    isActive: (pathname, ws, pid) => isTMMindmapMenuActive(pathname, ws, pid),
   },
 ];
 

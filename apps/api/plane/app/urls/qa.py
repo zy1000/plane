@@ -9,6 +9,7 @@ from plane.app.views.qa.case import CaseAssetAPIView, CaseIssueWithType, TestCas
 from plane.app.views.qa.case_version import CaseVersionAPIView, CaseVersionCompareAPIView
 from plane.app.views.qa.module import CaseModuleCountAPIView, CaseModuleDetailAPIView
 from plane.app.views.qa.plan import PlanModuleDetailAPIView, PlanListAPIView, CaseMindmapAPIView
+from plane.app.views.qa.mindmap import MindmapAssetAPIView, MindmapAssetDetailAPIView, MindmapAssetDownloadAPIView
 from plane.app.views.qa.review import ReviewModuleAPIView, ReviewModuleDetailAPIView, CaseReviewAPIView, CaseReviewView, \
     ReviewListAPIView
 
@@ -45,6 +46,9 @@ urlpatterns = [
          name='test-review-module-detail'),
     path('workspaces/<str:slug>/test/review/', CaseReviewAPIView.as_view(), name='test-repository-enums'),
     path('workspaces/<str:slug>/test/review/list/', ReviewListAPIView.as_view(), name='test-repository-enums'),
+    path('workspaces/<str:slug>/test/mindmap/assets/', MindmapAssetAPIView.as_view(), name='test-mindmap-assets'),
+    path('workspaces/<str:slug>/test/mindmap/assets/<uuid:pk>/', MindmapAssetDetailAPIView.as_view(), name='test-mindmap-asset-detail'),
+    path('workspaces/<str:slug>/test/mindmap/assets/<uuid:pk>/download/', MindmapAssetDownloadAPIView.as_view(), name='test-mindmap-asset-download'),
     path('workspaces/<str:slug>/test/', include(router.urls)),
     path(
         "workspaces/<str:slug>/cases/<uuid:case_id>/attachments/<uuid:pk>/",
