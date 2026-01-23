@@ -178,7 +178,7 @@ class CaseLabelSerializer(ModelSerializer):
 class CaseCreateUpdateSerializer(ModelSerializer):
     labels = serializers.PrimaryKeyRelatedField(queryset=CaseLabel.objects.all(), many=True, required=False)
     issues = serializers.PrimaryKeyRelatedField(queryset=Issue.objects.all(), many=True, required=False)
-    code = serializers.CharField(required=False)
+    code = serializers.CharField(required=False, allow_blank=True)
 
     review = serializers.SerializerMethodField()
 
