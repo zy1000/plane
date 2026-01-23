@@ -4,7 +4,7 @@ import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 import { CycleIcon, IntakeIcon, ModuleIcon, PageIcon, TestManagementIcon, ViewsIcon, WorkItemsIcon } from "@plane/propel/icons";
 import type { EUserProjectRoles, IPartialProject } from "@plane/types";
 import type { TNavigationItem } from "@/components/navigation/tab-navigation-root";
-import { Milestone, Rss } from "lucide-react";
+import { Folder, Milestone, Rss } from "lucide-react";
 
 type UseNavigationItemsProps = {
   workspaceSlug: string;
@@ -116,6 +116,16 @@ export const useNavigationItems = ({
         access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
         shouldRender: !!project?.inbox_view,
         sortOrder: 8,
+      },
+      {
+        i18n_key: "sidebar.filestore",
+        key: "filestore",
+        name: "文件",
+        href: `/${workspaceSlug}/projects/${projectId}/filestore`,
+        icon: Folder,
+        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
+        shouldRender: true,
+        sortOrder: 9,
       },
     ],
     [project]

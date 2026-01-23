@@ -168,7 +168,7 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
         icon: Folder,
         access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
         shouldRender: true,
-        sortOrder: 8,
+        sortOrder: 9,
       },
    
     ],

@@ -328,7 +328,6 @@ export default function FilestorePage() {
               loading={loading}
               pagination={false}
               size="small"
-              scroll={{ y: "100%" }}
             />
           </div>
           <div className="flex-shrink-0 border-t border-custom-border-200 px-4 py-3 bg-custom-background-100 flex items-center justify-between">
