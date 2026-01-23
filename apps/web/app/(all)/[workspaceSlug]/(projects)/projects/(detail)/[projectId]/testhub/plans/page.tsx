@@ -749,6 +749,23 @@ export default function TestPlanDetailPage() {
 
   const filteredModules = useMemo(() => filterModulesByName(modules, searchModule), [modules, searchModule]);
 
+  const findModuleById = (list: PlanModule[], id: string): PlanModule | null => {
+    for (const item of list || []) {
+      if (String(item.id) === id) return item;
+      const child = findModuleById(item.children || [], id);
+      if (child) return child;
+    }
+    return null;
+  };
+
+  const hasDescendant = (node: PlanModule, targetId: string): boolean => {
+    for (const child of node.children || []) {
+      if (String(child.id) === targetId) return true;
+      if (hasDescendant(child, targetId)) return true;
+    }
+    return false;
+  };
+
   const treeData = [
     {
       title: (
@@ -819,6 +836,30 @@ export default function TestPlanDetailPage() {
     fetchTestPlans(1, pageSize, filters, nextModuleId);
   };
 
+  const onDrop: TreeProps["onDrop"] = async (info) => {
+    const dragKey = String(info.dragNode?.key);
+    const dropKey = String(info.node?.key);
+    if (!workspaceSlug) return;
+    if (!dragKey || !dropKey) return;
+    if (info.dropToGap) return;
+    if (dragKey === dropKey) return;
+    if (dragKey === "all" || dragKey.startsWith("__creating__")) return;
+    if (dropKey.startsWith("__creating__")) return;
+    const dragModule = findModuleById(modules, dragKey);
+    if (!dragModule) return;
+    if (dropKey !== "all" && hasDescendant(dragModule, dropKey)) return;
+    const newParent = dropKey === "all" ? null : dropKey;
+    try {
+      await planService.updatePlanModule(workspaceSlug as string, dragKey, { parent: newParent });
+      setExpandedKeys((prev) => {
+        if (dropKey === "all" || prev.includes(dropKey)) return prev;
+        return [...prev, dropKey];
+      });
+      await fetchModules();
+      await fetchTestPlans(1, pageSize, filters, selectedModuleId ?? undefined);
+    } catch (e) {}
+  };
+
   return (
     <>
       <PageHead title={`测试计划 - ${decodedRepositoryName}`} />
@@ -855,6 +896,7 @@ export default function TestPlanDetailPage() {
                 <div className="flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm">
                   <Tree
                     blockNode
+                    draggable
                     showIcon={false}
                     treeData={treeData as any}
                     selectedKeys={[selectedModuleId ?? "all"]}
@@ -862,6 +904,8 @@ export default function TestPlanDetailPage() {
                     autoExpandParent={autoExpandParent}
                     onExpand={onExpand}
                     onSelect={onSelect}
+                    onDrop={onDrop}
+                    className="testhub-plan-module-tree"
                   />
                 </div>
                 <div
@@ -960,6 +1004,10 @@ export default function TestPlanDetailPage() {
 
                       .testhub-plans-table-scroll.testhub-plans-scrollbar-strong::-webkit-scrollbar-track{
                         background: transparent;
+                      }
+
+                      .testhub-plan-module-tree .ant-tree-draggable-icon{
+                        display: none !important;
                       }
                     `,
                   }}
