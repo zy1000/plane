@@ -79,6 +79,7 @@ type Props = {
 export const CaseMindmap = ({ data, editable = true, before, onOperation, onContextAction }: Props) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mindRef = useRef<MindElixirInstance | null>(null);
+  const decorateScheduledRef = useRef(false);
   const decorateTags = () => {
     const container = containerRef.current;
     if (!container) return;
@@ -102,6 +103,14 @@ export const CaseMindmap = ({ data, editable = true, before, onOperation, onCont
       }
     });
   };
+  const scheduleDecorateTags = () => {
+    if (decorateScheduledRef.current) return;
+    decorateScheduledRef.current = true;
+    requestAnimationFrame(() => {
+      decorateScheduledRef.current = false;
+      decorateTags();
+    });
+  };
 
   const onOperationRef = useRef(onOperation);
   onOperationRef.current = onOperation;
@@ -117,6 +126,8 @@ export const CaseMindmap = ({ data, editable = true, before, onOperation, onCont
     if (mindRef.current) return;
 
     const container = containerRef.current;
+    const observer = new MutationObserver(() => scheduleDecorateTags());
+    observer.observe(container, { subtree: true, childList: true, characterData: true });
 
     const handleRightClick = (e: Event) => {
       const target = e.target as HTMLElement;
@@ -218,7 +229,7 @@ export const CaseMindmap = ({ data, editable = true, before, onOperation, onCont
 
     mind.init(data);
     mindRef.current = mind;
-    setTimeout(() => decorateTags(), 0);
+    scheduleDecorateTags();
 
     mind.bus.addListener("operation", (op: Operation) => {
       onOperationRef.current?.(op);
@@ -227,6 +238,7 @@ export const CaseMindmap = ({ data, editable = true, before, onOperation, onCont
     return () => {
       container.removeEventListener("contextmenu", handleRightClick);
       container.removeEventListener("click", handleContainerClick);
+      observer.disconnect();
       mindRef.current?.destroy?.();
       mindRef.current = null;
     };
@@ -238,7 +250,7 @@ export const CaseMindmap = ({ data, editable = true, before, onOperation, onCont
   useEffect(() => {
     if (!mindRef.current) return;
     mindRef.current.refresh(data);
-    setTimeout(() => decorateTags(), 0);
+    scheduleDecorateTags();
     if (isFirstRender.current) {
       try {
         (mindRef.current as any)?.toCenter?.();
