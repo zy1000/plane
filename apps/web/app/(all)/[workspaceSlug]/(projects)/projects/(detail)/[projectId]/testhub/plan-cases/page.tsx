@@ -823,11 +823,11 @@ export default function PlanCasesPage() {
                         </span>
                       </div>
                       <Pagination
+                        simple
                         current={currentPage}
                         pageSize={pageSize}
                         total={total}
                         showSizeChanger
-                        showQuickJumper
                         pageSizeOptions={["10", "20", "50", "100"]}
                         onChange={handlePaginationChange}
                         onShowSizeChange={handlePaginationChange}

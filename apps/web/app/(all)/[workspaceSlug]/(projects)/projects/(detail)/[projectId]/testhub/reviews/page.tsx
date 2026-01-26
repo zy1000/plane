@@ -64,6 +64,7 @@ export default function ReviewsPage() {
   const repositoryIdFromUrl = searchParams.get("repositoryId");
   const repositoryId =
     repositoryIdFromUrl || (typeof window !== "undefined" ? sessionStorage.getItem("selectedRepositoryId") : null);
+  const repositoryKey = repositoryId ? String(repositoryId) : "all";
   const [leftWidth, setLeftWidth] = useState<number>(300);
   const isDraggingRef = useRef<boolean>(false);
   const startXRef = useRef<number>(0);
@@ -132,28 +133,20 @@ export default function ReviewsPage() {
   }, []);
 
   useEffect(() => {
-    if (!workspaceSlug || !repositoryId) return;
+    if (!workspaceSlug) return;
     try {
       if (repositoryIdFromUrl) sessionStorage.setItem("selectedRepositoryId", repositoryIdFromUrl);
     } catch {}
     fetchModules();
     fetchEnums();
     fetchAllReviewsTotal();
-    const storageKey = `reviews_name_filter_${workspaceSlug}_${repositoryId}`;
+    const storageKey = `reviews_name_filter_${workspaceSlug}_${repositoryKey}`;
     const savedName = sessionStorage.getItem(storageKey) || "";
     const initFilters = savedName ? { ...filters, name: savedName } : { ...filters };
     setFilters(initFilters);
     debouncedFetchReviews(1, pageSize, selectedModuleId, initFilters);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workspaceSlug, repositoryId]);
-
-  useEffect(() => {
-    if (!repositoryId && workspaceSlug) {
-      const ws = String(workspaceSlug || "");
-      const current = `/${ws}/projects/${projectId}/testhub/reviews${searchParams.toString() ? `?${searchParams.toString()}` : ""}`;
-      router.push(`/${ws}/projects/${projectId}/testhub?redirect_to=${encodeURIComponent(current)}`);
-    }
-  }, [repositoryId, workspaceSlug, searchParams, router]);
+  }, [workspaceSlug, repositoryKey]);
 
   const fetchModules = async () => {
     if (!workspaceSlug || !projectId) return;
@@ -285,7 +278,7 @@ export default function ReviewsPage() {
       if (dataIndex === "name") delete newFilters.name;
     }
     setFilters(newFilters);
-    const storageKey = `reviews_name_filter_${workspaceSlug}_${repositoryId}`;
+    const storageKey = `reviews_name_filter_${workspaceSlug}_${repositoryKey}`;
     if (dataIndex === "name") {
       const v = newFilters.name || "";
       try {
@@ -301,7 +294,7 @@ export default function ReviewsPage() {
     const newFilters = { ...filters };
     if (dataIndex === "name") delete newFilters.name;
     setFilters(newFilters);
-    const storageKey = `reviews_name_filter_${workspaceSlug}_${repositoryId}`;
+    const storageKey = `reviews_name_filter_${workspaceSlug}_${repositoryKey}`;
     if (dataIndex === "name") {
       try {
         sessionStorage.setItem(storageKey, "");
@@ -945,11 +938,11 @@ export default function ReviewsPage() {
                 </span>
               </div>
               <Pagination
+                simple
                 current={currentPage}
                 pageSize={pageSize}
                 total={totalForCurrent}
                 showSizeChanger
-                showQuickJumper
                 pageSizeOptions={["10", "20", "50", "100"]}
                 onChange={handlePaginationChange}
                 onShowSizeChange={handlePageSizeChange}

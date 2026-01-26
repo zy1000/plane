@@ -788,12 +788,12 @@ export default function CaseReview() {
                   )}
                 </div>
                 <Pagination
+                  simple
                   size="small"
                   current={page}
                   pageSize={pageSize}
                   total={total}
                   showSizeChanger
-                  showQuickJumper
                   pageSizeOptions={[10, 20, 50, 100] as any}
                   onChange={(p, s) => {
                     setPage(p);
