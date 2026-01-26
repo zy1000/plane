@@ -226,6 +226,10 @@ export const coreRoutes: RouteConfigEntry[] = [
             ":workspaceSlug/projects/:projectId/filestore",
             "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/filestore/page.tsx"
           ),
+          route(
+            ":workspaceSlug/projects/:projectId/filestore/onlyoffice/:assetId",
+            "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/filestore/onlyoffice/[assetId]/page.tsx"
+          ),
 
           // Intake list
           layout("./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/intake/layout.tsx", [

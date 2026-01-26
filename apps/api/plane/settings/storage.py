@@ -1,6 +1,7 @@
 # Python imports
 import os
 import uuid
+from typing import Optional
 
 # Third party imports
 import boto3
@@ -164,6 +165,14 @@ class S3Storage(S3Boto3Storage):
             return None
 
         return response
+
+    def get_object(self, object_name: str) -> Optional[dict]:
+        """Fetch an object from S3/MinIO using boto3 get_object."""
+        try:
+            return self.s3_client.get_object(Bucket=self.aws_storage_bucket_name, Key=str(object_name))
+        except ClientError as e:
+            log_exception(e)
+            return None
 
     def upload_file(
         self,
