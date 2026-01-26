@@ -4,6 +4,13 @@ from plane.app.views.filestore import (
     FilestoreAssetAPIView,
     FilestoreAssetDetailAPIView,
     FilestoreAssetDownloadAPIView,
+    FilestoreAssetOnlyOfficeCallbackAPIView,
+    FilestoreAssetOnlyOfficeConfigAPIView,
+    FilestoreAssetOnlyOfficeDownloadProxyAPIView,
+    FilestoreAssetOnlyOfficeForceSaveAPIView,
+    FilestoreAssetOnlyOfficeRestoreVersionAPIView,
+    FilestoreAssetOnlyOfficeStatusAPIView,
+    FilestoreAssetOnlyOfficeVersionsAPIView,
 )
 
 urlpatterns = [
@@ -22,5 +29,39 @@ urlpatterns = [
         FilestoreAssetDownloadAPIView.as_view(),
         name="project-filestore-asset-download",
     ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/filestore/assets/<uuid:pk>/onlyoffice/config/",
+        FilestoreAssetOnlyOfficeConfigAPIView.as_view(),
+        name="project-filestore-asset-onlyoffice-config",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/filestore/assets/<uuid:pk>/onlyoffice/download/",
+        FilestoreAssetOnlyOfficeDownloadProxyAPIView.as_view(),
+        name="project-filestore-asset-onlyoffice-download",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/filestore/assets/<uuid:pk>/onlyoffice/callback/",
+        FilestoreAssetOnlyOfficeCallbackAPIView.as_view(),
+        name="project-filestore-asset-onlyoffice-callback",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/filestore/assets/<uuid:pk>/onlyoffice/status/",
+        FilestoreAssetOnlyOfficeStatusAPIView.as_view(),
+        name="project-filestore-asset-onlyoffice-status",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/filestore/assets/<uuid:pk>/onlyoffice/versions/",
+        FilestoreAssetOnlyOfficeVersionsAPIView.as_view(),
+        name="project-filestore-asset-onlyoffice-versions",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/filestore/assets/<uuid:pk>/onlyoffice/versions/restore/",
+        FilestoreAssetOnlyOfficeRestoreVersionAPIView.as_view(),
+        name="project-filestore-asset-onlyoffice-versions-restore",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/filestore/assets/<uuid:pk>/onlyoffice/forcesave/",
+        FilestoreAssetOnlyOfficeForceSaveAPIView.as_view(),
+        name="project-filestore-asset-onlyoffice-forcesave",
+    ),
 ]
-

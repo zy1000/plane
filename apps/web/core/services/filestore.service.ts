@@ -21,6 +21,21 @@ export type TFilestoreAssetListResponse = {
   data: TFilestoreAsset[];
 };
 
+export type TOnlyOfficeConfigResponse = {
+  document_server_url: string;
+  config: Record<string, any>;
+};
+
+export type TOnlyOfficeStatusResponse = {
+  onlyoffice: Record<string, any>;
+  versions_count: number;
+  updated_at: string;
+};
+
+export type TOnlyOfficeVersionsResponse = {
+  versions: Array<Record<string, any>>;
+};
+
 export class FilestoreService extends APIService {
   private fileUploadService: FileUploadService = new FileUploadService();
 
@@ -101,5 +116,58 @@ export class FilestoreService extends APIService {
         throw error?.response?.data;
       });
   }
-}
 
+  async getOnlyOfficeConfig(workspaceSlug: string, projectId: string, assetId: string): Promise<TOnlyOfficeConfigResponse> {
+    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/filestore/assets/${assetId}/onlyoffice/config/`)
+      .then((response) => response?.data ?? { document_server_url: "", config: {} })
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async getOnlyOfficeStatus(workspaceSlug: string, projectId: string, assetId: string): Promise<TOnlyOfficeStatusResponse> {
+    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/filestore/assets/${assetId}/onlyoffice/status/`)
+      .then((response) => response?.data ?? { onlyoffice: {}, versions_count: 0, updated_at: "" })
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async listOnlyOfficeVersions(
+    workspaceSlug: string,
+    projectId: string,
+    assetId: string
+  ): Promise<TOnlyOfficeVersionsResponse> {
+    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/filestore/assets/${assetId}/onlyoffice/versions/`)
+      .then((response) => response?.data ?? { versions: [] })
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async restoreOnlyOfficeVersion(
+    workspaceSlug: string,
+    projectId: string,
+    assetId: string,
+    versionKey: string
+  ): Promise<{ status: string }> {
+    return this.post(
+      `/api/workspaces/${workspaceSlug}/projects/${projectId}/filestore/assets/${assetId}/onlyoffice/versions/restore/`,
+      { version_key: versionKey }
+    )
+      .then((response) => response?.data ?? { status: "ok" })
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async forceSaveOnlyOffice(workspaceSlug: string, projectId: string, assetId: string, docKey: string): Promise<any> {
+    return this.post(`/api/workspaces/${workspaceSlug}/projects/${projectId}/filestore/assets/${assetId}/onlyoffice/forcesave/`, {
+      doc_key: docKey,
+    })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+}
