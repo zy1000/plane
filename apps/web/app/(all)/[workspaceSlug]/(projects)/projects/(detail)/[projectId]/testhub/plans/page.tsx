@@ -125,27 +125,15 @@ export default function TestPlanDetailPage() {
   );
 
   useEffect(() => {
-    if (repositoryId && workspaceSlug) {
-      try {
-        if (repositoryIdFromUrl) {
-          sessionStorage.setItem("selectedRepositoryId", repositoryIdFromUrl);
-        }
-      } catch {}
-      fetchModules();
-      fetchTestPlans(1, pageSize);
-    }
-  }, [repositoryId, workspaceSlug]);
-
-  useEffect(() => {
-    if (!repositoryId && workspaceSlug) {
-      const ws = String(workspaceSlug || "");
-      const pid = String(projectId || "");
-      const current = `/${ws}/projects/${pid}/testhub/plans${searchParams.toString() ? `?${searchParams.toString()}` : ""}`;
-      try {
-      } catch {}
-      router.push(`/${ws}/projects/${pid}/testhub?redirect_to=${encodeURIComponent(current)}`);
-    }
-  }, [repositoryId, workspaceSlug, projectId, searchParams, router]);
+    if (!workspaceSlug || !projectId) return;
+    try {
+      if (repositoryIdFromUrl) {
+        sessionStorage.setItem("selectedRepositoryId", repositoryIdFromUrl);
+      }
+    } catch {}
+    fetchModules();
+    fetchTestPlans(1, pageSize);
+  }, [workspaceSlug, projectId]);
 
   const batchUpdateModuleCounts = (list: any[], countsMap: Record<string, number>): any[] => {
     return (list || []).map((m: any) => {
@@ -344,6 +332,7 @@ export default function TestPlanDetailPage() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingPlan, setEditingPlan] = useState<TestPlan | null>(null);
   const openEditModal = (plan: TestPlan) => {
+    if (!repositoryId) return;
     setEditingPlan(plan);
     setShowEditModal(true);
   };
@@ -463,6 +452,7 @@ export default function TestPlanDetailPage() {
             size="small"
             icon={<EditOutlined />}
             aria-label="编辑"
+            disabled={!repositoryId}
             onClick={() => openEditModal(record)}
           />
           <Button
@@ -924,12 +914,7 @@ export default function TestPlanDetailPage() {
                     <div className="text-red-800 text-sm">{error}</div>
                   </div>
                 )}
-                {!repositoryId && !loading && (
-                  <div className="flex items-center justify-center py-12">
-                    <div className="text-custom-text-300">未找到用例库ID，请重新选择用例库</div>
-                  </div>
-                )}
-                {repositoryId && !loading && !error && (
+                {!loading && !error && (
                   <div className="flex flex-col h-full overflow-hidden">
                     <div
                       className={`testhub-plans-table-scroll flex-1 relative overflow-y-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar]:block [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-[rgb(var(--color-scrollbar))] [&::-webkit-scrollbar-thumb]:rounded-full ${
@@ -958,11 +943,11 @@ export default function TestPlanDetailPage() {
                         </span>
                       </div>
                       <Pagination
+                        simple
                         current={currentPage}
                         pageSize={pageSize}
                         total={total}
                         showSizeChanger
-                        showQuickJumper
                         pageSizeOptions={["10", "20", "50", "100"]}
                         onChange={handlePaginationChange}
                         onShowSizeChange={handlePaginationChange}
@@ -1026,7 +1011,7 @@ export default function TestPlanDetailPage() {
         }}
         workspaceSlug={workspaceSlug as string}
         projectId={projectId as string}
-        repositoryId={repositoryId as string}
+        repositoryId={String(repositoryId || "")}
         repositoryName={decodedRepositoryName}
         mode="create"
         onSuccess={refreshAll}
@@ -1042,7 +1027,7 @@ export default function TestPlanDetailPage() {
         }}
         workspaceSlug={workspaceSlug as string}
         projectId={projectId as string}
-        repositoryId={repositoryId as string}
+        repositoryId={String(repositoryId || "")}
         repositoryName={decodedRepositoryName}
         mode="edit"
         planId={editingPlan?.id}
