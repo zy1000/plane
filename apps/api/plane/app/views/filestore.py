@@ -25,7 +25,6 @@ from plane.utils.host import base_host
 
 FILESTORE_ENTITY_TYPE = "PROJECT_FILESTORE"
 
-ONLYOFFICE_DOCUMENT_SERVER_URL = os.environ.get("ONLYOFFICE_DOCUMENT_SERVER_URL", "http://10.32.190.226:89")
 
 
 def _onlyoffice_jwt_secret() -> str:
@@ -209,7 +208,8 @@ class FilestoreAssetAPIView(BaseAPIView):
 
         workspace = Workspace.objects.get(slug=slug)
         asset_key = f"{workspace.id}/{uuid.uuid4().hex}-{name}"
-        size_limit = min(size, settings.FILE_SIZE_LIMIT)
+        # size_limit = min(size, settings.FILE_SIZE_LIMIT)
+        size_limit = size
 
         asset = FileAsset.objects.create(
             attributes={"name": name, "type": file_type, "size": size_limit},
@@ -375,7 +375,7 @@ class FilestoreAssetOnlyOfficeConfigAPIView(BaseAPIView):
 
         return Response(
             {
-                "document_server_url": ONLYOFFICE_DOCUMENT_SERVER_URL.rstrip("/"),
+                "document_server_url": settings.ONLYOFFICE_DOCUMENT_SERVER_URL.rstrip("/"),
                 "config": config,
             },
             status=status.HTTP_200_OK,
@@ -670,7 +670,7 @@ class FilestoreAssetOnlyOfficeForceSaveAPIView(BaseAPIView):
             token = _jwt_encode_request_payload(body)
             headers[_onlyoffice_jwt_header()] = f"Bearer {token}"
 
-        command_url = ONLYOFFICE_DOCUMENT_SERVER_URL.rstrip("/") + "/coauthoring/CommandService.ashx"
+        command_url = settings.ONLYOFFICE_DOCUMENT_SERVER_URL.rstrip("/") + "/coauthoring/CommandService.ashx"
         try:
             resp = requests.post(command_url, json=body, headers=headers, timeout=(5, 30))
             data = None
@@ -687,7 +687,7 @@ class FilestoreAssetOnlyOfficeForceSaveAPIView(BaseAPIView):
 
             return Response(
                 {
-                    "document_server_url": ONLYOFFICE_DOCUMENT_SERVER_URL.rstrip("/"),
+                    "document_server_url": settings.ONLYOFFICE_DOCUMENT_SERVER_URL.rstrip("/"),
                     "command_url": command_url,
                     "response_status": resp.status_code,
                     "response": data,
