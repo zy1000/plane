@@ -100,6 +100,7 @@ export default function TestExecutionPage() {
   const leftRef = React.useRef<HTMLDivElement | null>(null);
   const rightRef = React.useRef<HTMLDivElement | null>(null);
   const syncingRef = React.useRef<boolean>(false);
+  const restoreLeftScrollTopRef = React.useRef<number | null>(null);
 
   const fetchCases = async (
     p = page,
@@ -107,10 +108,16 @@ export default function TestExecutionPage() {
     kw?: string,
     repoId: string | null = selectedRepositoryId,
     moduleId: string | null = selectedModuleId,
-    autoSelectFirst?: boolean
+    autoSelectFirst?: boolean,
+    preserveScroll?: boolean
   ) => {
     if (!workspaceSlug) return;
     try {
+      if (preserveScroll) {
+        restoreLeftScrollTopRef.current = leftRef.current?.scrollTop ?? 0;
+      } else {
+        restoreLeftScrollTopRef.current = null;
+      }
       setListLoading(true);
       setError(null);
       const input = (kw ?? keyword).trim();
@@ -137,6 +144,7 @@ export default function TestExecutionPage() {
         }
       }
     } catch (e: any) {
+      restoreLeftScrollTopRef.current = null;
       const msg = e?.message || e?.detail || e?.error || "获取用例列表失败";
       setError(msg);
       message.error(msg);
@@ -246,6 +254,20 @@ export default function TestExecutionPage() {
   React.useEffect(() => {
     setMounted(true);
   }, []);
+
+  React.useEffect(() => {
+    if (listLoading) return;
+    const top = restoreLeftScrollTopRef.current;
+    if (top === null) return;
+    if (typeof window === "undefined") return;
+    const raf = window.requestAnimationFrame(() => {
+      if (leftRef.current) {
+        leftRef.current.scrollTop = top;
+      }
+      restoreLeftScrollTopRef.current = null;
+    });
+    return () => window.cancelAnimationFrame(raf);
+  }, [listLoading]);
 
   React.useEffect(() => {
     setSelectedTreeKey("root");
@@ -518,7 +540,7 @@ export default function TestExecutionPage() {
           setReason("");
           setStepActualResultMap({});
           setStepExecResultMap({});
-          await fetchCases(page, pageSize, keyword);
+          await fetchCases(page, pageSize, keyword, selectedRepositoryId, selectedModuleId, undefined, true);
           await fetchCaseDetail(String(selectedCaseId));
         } catch (e: any) {
           const msg = getErrorMessage(e, "请稍后重试");
