@@ -17,8 +17,7 @@ import {
 import type { TableProps, InputRef, TableColumnType } from "antd";
 import type { TreeProps } from "antd";
 import type { FilterDropdownProps } from "antd/es/table/interface";
-import { Avatar, AvatarGroup } from "@plane/ui";
-import { getFileURL } from "@plane/utils";
+import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 type PlanModule = {
   id: string;
   name: string;
@@ -32,7 +31,7 @@ type TestPlan = {
   name: string;
   begin_time?: string | null;
   end_time?: string | null;
-  assignees?: Array<{ id: string; display_name: string; avatar_url?: string | null }>;
+  assignees?: any[];
   cases?: any[];
   state?: string | number;
   module?: string | null;
@@ -235,21 +234,24 @@ export default function TestPlanDetailPage() {
     fetchTestPlans(1, pageSize, newFilters);
   };
 
-  const renderAssignees = (assignees: TestPlan["assignees"]) => {
-    if (!assignees || assignees.length === 0) return <span className="text-custom-text-400">-</span>;
+  const renderAssignees = (assignees: any[]) => {
+    const assigneeIds = assignees;
+    if (assigneeIds.length === 0) return null;
+
     return (
-      <AvatarGroup max={3} size="md" showTooltip={true}>
-        {assignees.map((assignee) => (
-          <Avatar
-            key={assignee.id}
-            src={getFileURL(assignee.avatar_url ?? "")}
-            name={assignee.display_name}
-            fallbackText={assignee.display_name}
-            size="lg"
-            showTooltip={true}
-          />
-        ))}
-      </AvatarGroup>
+      <MemberDropdown
+        multiple={true}
+        value={assigneeIds}
+        onChange={() => {}}
+        disabled={true}
+        placeholder=""
+        className="w-full text-sm"
+        buttonContainerClassName="w-full text-left p-0 cursor-default"
+        buttonVariant="transparent-with-text"
+        buttonClassName="text-sm p-0 hover:bg-transparent hover:bg-inherit"
+        showUserDetails={true}
+        optionsClassName="z-[60]"
+      />
     );
   };
 
@@ -417,16 +419,23 @@ export default function TestPlanDetailPage() {
     },
     { title: "用例数", dataIndex: "case_count", key: "case_count", render: (case_count: number) => (case_count ? case_count : 0) },
     {
-      title: "开始日期",
-      dataIndex: "begin_time",
-      key: "begin_time",
-      render: (dateString) => (dateString ? formatDate(dateString) : "-"),
+      title: "起止日期",
+      key: "date_range",
+      width: 220,
+      render: (_: unknown, record: TestPlan) => {
+        const begin = record.begin_time ? formatDate(record.begin_time) : "-";
+        const end = record.end_time ? formatDate(record.end_time) : "-";
+        if (!record.begin_time && !record.end_time) return "-";
+        return `${begin}-${end}`;
+      },
     },
     {
-      title: "结束日期",
-      dataIndex: "end_time",
-      key: "end_time",
-      render: (dateString) => (dateString ? formatDate(dateString) : "-"),
+      title: "执行人",
+      dataIndex: "assignees",
+      key: "assignees",
+      width: 220,
+      ...getColumnSearchProps("assignees"),
+      render: (assignees: any[]) => renderAssignees(assignees),
     },
     {
       title: "操作",
@@ -1014,6 +1023,8 @@ export default function TestPlanDetailPage() {
         repositoryId={String(repositoryId || "")}
         repositoryName={decodedRepositoryName}
         mode="create"
+        autoSelectDefaultModule={false}
+        initialData={selectedModuleId ? ({ module: selectedModuleId } as any) : null}
         onSuccess={refreshAll}
       />
 

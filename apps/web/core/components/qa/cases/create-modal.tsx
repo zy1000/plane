@@ -94,6 +94,7 @@ type Props = {
   // 只读展示字段
   repositoryId: string;
   repositoryName: string;
+  initialModuleId?: string | null;
   // 创建成功回调（用于刷新列表或其它联动）
   onSuccess?: () => void | Promise<void>;
 };
@@ -514,7 +515,7 @@ const StepsEditor: React.FC<{
 };
 
 export const CreateCaseModal: React.FC<Props> = (props) => {
-  const { isOpen, handleClose, workspaceSlug, repositoryId, repositoryName, onSuccess } = props;
+  const { isOpen, handleClose, workspaceSlug, repositoryId, repositoryName, initialModuleId, onSuccess } = props;
 
   const [form] = Form.useForm();
   const { projectId } = useParams();
@@ -1018,7 +1019,7 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
       remark: "",
       issues: "",
       repository: repositoryName || "",
-      module: "",
+      module: initialModuleId ? String(initialModuleId) : "",
       type: "",
       priority: "",
       test_type: "",
@@ -1026,7 +1027,7 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
     });
     setStepMode(0);
     setEditorResetKey((k) => k + 1);
-  }, [isOpen, form, repositoryName, currentUserId]);
+  }, [isOpen, form, repositoryName, currentUserId, initialModuleId]);
 
   useEffect(() => {
     if (!isOpen) return;
