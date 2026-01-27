@@ -26,38 +26,25 @@ from plane.utils.host import base_host
 FILESTORE_ENTITY_TYPE = "PROJECT_FILESTORE"
 
 
-
 def _onlyoffice_jwt_secret() -> str:
     return (
-        os.environ.get("ONLYOFFICE_JWT_SECRET")
-        or os.environ.get("JWT_SECRET")
-        or os.environ.get("DOCUMENT_SERVER_JWT_SECRET")
-        or "jwt_secret"
+            os.environ.get("ONLYOFFICE_JWT_SECRET")
+            or os.environ.get("JWT_SECRET")
+            or os.environ.get("DOCUMENT_SERVER_JWT_SECRET")
+            or "jwt_secret"
     )
 
 
 def _onlyoffice_jwt_enabled() -> bool:
-    raw = (
-        os.environ.get("ONLYOFFICE_JWT_ENABLED")
-        or os.environ.get("JWT_ENABLED")
-        or os.environ.get("DOCUMENT_SERVER_JWT_ENABLED")
-    )
-    if raw is None:
-        return True
-    val = str(raw).strip().lower()
-    if val in ["0", "false", "no", "off"]:
-        return False
-    if val in ["1", "true", "yes", "on"]:
-        return True
-    return True
+    return False
 
 
 def _onlyoffice_jwt_header() -> str:
     return (
-        os.environ.get("ONLYOFFICE_JWT_HEADER")
-        or os.environ.get("JWT_HEADER")
-        or os.environ.get("DOCUMENT_SERVER_JWT_HEADER")
-        or "AuthorizationJwt"
+            os.environ.get("ONLYOFFICE_JWT_HEADER")
+            or os.environ.get("JWT_HEADER")
+            or os.environ.get("DOCUMENT_SERVER_JWT_HEADER")
+            or "AuthorizationJwt"
     )
 
 
@@ -501,9 +488,9 @@ class FilestoreAssetOnlyOfficeCallbackAPIView(BaseAPIView):
                     response.raise_for_status()
                     response.raw.decode_content = True
                     content_type = (
-                        response.headers.get("Content-Type")
-                        or (asset.attributes or {}).get("type")
-                        or "application/octet-stream"
+                            response.headers.get("Content-Type")
+                            or (asset.attributes or {}).get("type")
+                            or "application/octet-stream"
                     )
                     ok = storage.upload_file(
                         file_obj=response.raw,

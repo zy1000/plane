@@ -201,6 +201,7 @@ class PlanCaseAPIView(BaseAPIView):
         'plan_id': ['exact', 'in'],
         'case__repository_id': ['exact', 'in'],
         'case__module_id': ['exact', 'in'],
+        'result': ['exact', 'in'],
     }
     serializer_class = PlanCaseListSerializer
     filter_backends = (DjangoFilterBackend, SearchFilter, NumericSuffixCodeOrderingFilter)

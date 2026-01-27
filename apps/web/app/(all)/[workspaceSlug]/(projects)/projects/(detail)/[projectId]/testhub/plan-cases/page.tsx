@@ -72,6 +72,7 @@ export default function PlanCasesPage() {
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(10);
   const [ordering, setOrdering] = useState<string | undefined>(undefined);
+  const [selectedResults, setSelectedResults] = useState<string[] | undefined>(undefined);
 
   const [activeCase, setActiveCase] = useState<TestCase | null>(null);
   const [detailLoading, setDetailLoading] = useState<boolean>(false);
@@ -90,8 +91,9 @@ export default function PlanCasesPage() {
       selectedRepositoryId,
       selectedModuleId,
       ordering,
+      selectedResults,
     });
-  }, [planId, selectedRepositoryId, selectedModuleId, ordering]);
+  }, [planId, selectedRepositoryId, selectedModuleId, ordering, selectedResults]);
   const lastSelectionContextKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -155,12 +157,15 @@ export default function PlanCasesPage() {
     size: number,
     repoId?: string,
     moduleId?: string,
-    orderingParam?: string | null
+    orderingParam?: string | null,
+    resultsParam?: string[] | null
   ) => {
     if (!workspaceSlug || !planId) return;
     try {
       setError(null);
       const effectiveOrdering = orderingParam === undefined ? ordering : orderingParam ?? undefined;
+      const effectiveResults =
+        resultsParam === undefined ? selectedResults : resultsParam === null ? undefined : resultsParam;
       const params: any = {
         page,
         page_size: size,
@@ -169,6 +174,7 @@ export default function PlanCasesPage() {
       if (repoId) params["case__repository_id"] = repoId;
       if (moduleId) params["case__module_id"] = moduleId;
       if (effectiveOrdering) params.ordering = effectiveOrdering;
+      if (effectiveResults && effectiveResults.length > 0) params.result__in = effectiveResults.join(",");
       const response: PlanCaseResponse = await planService.getPlanCases(workspaceSlug as string, params);
       setCases(response?.data || []);
       setTotal(response?.count || 0);
@@ -218,10 +224,15 @@ export default function PlanCasesPage() {
     fetchCases(nextPage, nextSize, selectedRepositoryId || undefined, selectedModuleId || undefined);
   };
 
-  const handleTableChange: TableProps<PlanCaseItem>["onChange"] = (_pagination, _filters, sorter) => {
+  const handleTableChange: TableProps<PlanCaseItem>["onChange"] = (_pagination, tableFilters, sorter) => {
     const sorterValue = Array.isArray(sorter) ? sorter[0] : sorter;
     const sorterField = String((sorterValue as any)?.field ?? "");
     const sorterOrder = (sorterValue as any)?.order as "ascend" | "descend" | undefined;
+
+    const nextResultFiltersRaw = (tableFilters?.result as (string | number)[] | undefined) || [];
+    const nextResultFilters = nextResultFiltersRaw.map((v) => String(v)).filter(Boolean);
+    const nextSelectedResults = nextResultFilters.length > 0 ? nextResultFilters : undefined;
+    setSelectedResults(nextSelectedResults);
 
     const nextOrdering =
       sorterField === "updated_at"
@@ -239,7 +250,14 @@ export default function PlanCasesPage() {
         : undefined;
 
     setOrdering(nextOrdering);
-    fetchCases(1, pageSize, selectedRepositoryId || undefined, selectedModuleId || undefined, nextOrdering ?? null);
+    fetchCases(
+      1,
+      pageSize,
+      selectedRepositoryId || undefined,
+      selectedModuleId || undefined,
+      nextOrdering ?? null,
+      nextSelectedResults ?? null
+    );
   };
 
   const onExpand: TreeProps["onExpand"] = (keys) => {
@@ -564,6 +582,9 @@ export default function PlanCasesPage() {
       dataIndex: "result",
       key: "result",
       width: 120,
+      filters: Object.keys((Enums as any)?.plan_case_result || {}).map((label) => ({ text: label, value: label })),
+      filterMultiple: true,
+      filteredValue: selectedResults ?? null,
       render: (_: any, record: PlanCaseItem) => {
         const label = record?.result || "-";
         const color = (Enums as any)?.plan_case_result?.[label];
