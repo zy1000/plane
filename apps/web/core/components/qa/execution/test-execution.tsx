@@ -628,11 +628,11 @@ export default function TestExecutionPage() {
         .replace(/'/g, "&#39;");
     const header =
       '<tr style="">' +
-      '<td colspan="1" rowspan="1" colwidth="120" hidecontent="false" class="" style=""><p class="editor-paragraph-block">序号</p></td>' +
-      '<td colspan="1" rowspan="1" colwidth="240" hidecontent="false" class="" style=""><p class="editor-paragraph-block">步骤描述</p></td>' +
-      '<td colspan="1" rowspan="1" colwidth="200" hidecontent="false" class="" style=""><p class="editor-paragraph-block">预期结果</p></td>' +
-      '<td colspan="1" rowspan="1" colwidth="200" hidecontent="false" class="" style=""><p class="editor-paragraph-block">实际结果</p></td>' +
-      '<td colspan="1" rowspan="1" colwidth="180" hidecontent="false" class="" style=""><p class="editor-paragraph-block">步骤执行结果</p></td>' +
+      '<td colspan="1" rowspan="1" colwidth="80" hidecontent="false" class="" style=""><p class="editor-paragraph-block">序号</p></td>' +
+      '<td colspan="1" rowspan="1" colwidth="260" hidecontent="false" class="" style=""><p class="editor-paragraph-block">步骤描述</p></td>' +
+      '<td colspan="1" rowspan="1" colwidth="160" hidecontent="false" class="" style=""><p class="editor-paragraph-block">预期结果</p></td>' +
+      '<td colspan="1" rowspan="1" colwidth="260" hidecontent="false" class="" style=""><p class="editor-paragraph-block">实际结果</p></td>' +
+      '<td colspan="1" rowspan="1" colwidth="140" hidecontent="false" class="" style=""><p class="editor-paragraph-block">步骤执行结果</p></td>' +
       "</tr>";
     const rows = steps
       .map((s, i) => {
@@ -643,19 +643,19 @@ export default function TestExecutionPage() {
         const exec = escape(String((s as any).exec_result || ""));
         return (
           '<tr style="">' +
-          '<td colspan="1" rowspan="1" colwidth="120" hidecontent="false" class="" style=""><p class="editor-paragraph-block">' +
+          '<td colspan="1" rowspan="1" colwidth="80" hidecontent="false" class="" style=""><p class="editor-paragraph-block">' +
           idx +
           "</p></td>" +
-          '<td colspan="1" rowspan="1" colwidth="240" hidecontent="false" class="" style=""><p class="editor-paragraph-block">' +
+          '<td colspan="1" rowspan="1" colwidth="260" hidecontent="false" class="" style=""><p class="editor-paragraph-block">' +
           desc +
           "</p></td>" +
-          '<td colspan="1" rowspan="1" colwidth="200" hidecontent="false" class="" style=""><p class="editor-paragraph-block">' +
+          '<td colspan="1" rowspan="1" colwidth="160" hidecontent="false" class="" style=""><p class="editor-paragraph-block">' +
           expected +
           "</p></td>" +
-          '<td colspan="1" rowspan="1" colwidth="200" hidecontent="false" class="" style=""><p class="editor-paragraph-block">' +
+          '<td colspan="1" rowspan="1" colwidth="260" hidecontent="false" class="" style=""><p class="editor-paragraph-block">' +
           actual +
           "</p></td>" +
-          '<td colspan="1" rowspan="1" colwidth="180" hidecontent="false" class="" style=""><p class="editor-paragraph-block">' +
+          '<td colspan="1" rowspan="1" colwidth="140" hidecontent="false" class="" style=""><p class="editor-paragraph-block">' +
           exec +
           "</p></td>" +
           "</tr>"
@@ -743,6 +743,7 @@ export default function TestExecutionPage() {
           title: "步骤描述",
           dataIndex: "description",
           key: "description",
+          width: "30%",
           render: (text: any) => <span className="whitespace-pre-wrap break-words">{String(text || "")}</span>,
           onHeaderCell: () => ({ style: headerStyle }),
           onCell: () => ({ style: cellStyle }),
@@ -751,6 +752,7 @@ export default function TestExecutionPage() {
           title: "预期结果",
           dataIndex: "result",
           key: "result",
+          width: "18%",
           render: (text: any) => (
             <span className="whitespace-pre-wrap break-words text-custom-text-300">{String(text || "")}</span>
           ),
@@ -760,6 +762,7 @@ export default function TestExecutionPage() {
         {
           title: "实际结果",
           key: "actual_result",
+          width: "30%",
           shouldCellUpdate: (record: any, prevRecord: any) => record.actualValue !== prevRecord.actualValue,
           render: (_: any, record: any, idx: number) => (
             <div className="w-full rounded border border-transparent hover:border-[#1890ff] transition-colors">
@@ -771,7 +774,7 @@ export default function TestExecutionPage() {
         },
         {
           title: "执行结果",
-          width: 90,
+          width: "14%",
           key: "exec_result",
           shouldCellUpdate: (record: any, prevRecord: any) => record.execValue !== prevRecord.execValue,
           render: (_: any, record: any, idx: number) => (
@@ -794,16 +797,15 @@ export default function TestExecutionPage() {
     );
     return (
       <div className="rounded border border-custom-border-200">
-        <div className="overflow-x-auto">
-          <Table
-            size="small"
-            pagination={false}
-            bordered={false}
-            rowKey={(r: any) => String(r?.__key)}
-            dataSource={dataSource}
-            columns={columns as any}
-          />
-        </div>
+        <Table
+          size="small"
+          pagination={false}
+          bordered={false}
+          tableLayout="fixed"
+          rowKey={(r: any) => String(r?.__key)}
+          dataSource={dataSource}
+          columns={columns as any}
+        />
       </div>
     );
   };
@@ -953,321 +955,323 @@ export default function TestExecutionPage() {
 
           <Col
             flex="auto"
-            className="overflow-y-auto vertical-scrollbar scrollbar-sm max-h-[calc(100dvh-130px)]"
-            style={{ scrollPaddingBottom: 16 }}
-            ref={rightRef}
+            className="flex flex-col max-h-[calc(100dvh-130px)] min-h-0"
           >
-            <div className="p-4 pb-16" style={{ scrollPaddingBottom: 16 }}>
-              {!selectedCaseId ? (
-                <div className="text-custom-text-300 py-12 text-center">请从左侧选择一个用例</div>
-              ) : detailLoading ? (
-                <div className="flex items-center justify-center py-12">
-                  <Spin />
-                </div>
-              ) : !caseDetail ? (
-                <div className="text-custom-text-300 py-12 text-center">未获取到用例详情</div>
-              ) : (
-                <div className="flex flex-col gap-4">
-                  <div className="border-b border-gray-200">
-                    <nav className="flex gap-4 overflow-x-auto">
-                      <button
-                        type="button"
-                        onClick={() => setActiveTab("basic")}
-                        className={`flex items-center gap-1.5 px-2 py-3 text-sm -mb-px border-b-2 transition-colors ${
-                          activeTab === "basic"
-                            ? "text-blue-600 border-blue-600"
-                            : "text-black border-transparent hover:text-blue-600"
-                        }`}
-                      >
-                        <LucideIcons.Info size={16} aria-hidden="true" />
-                        基本信息
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setActiveTab("requirement")}
-                        className={`flex items-center gap-1.5 px-2 py-3 text-sm -mb-px border-b-2 transition-colors ${
-                          activeTab === "requirement"
-                            ? "text-blue-600 border-blue-600"
-                            : "text-black border-transparent hover:text-blue-600"
-                        }`}
-                      >
-                        <LucideIcons.FileText size={16} aria-hidden="true" />
-                        产品需求
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setActiveTab("work")}
-                        className={`flex items-center gap-1.5 px-2 py-3 text-sm -mb-px border-b-2 transition-colors ${
-                          activeTab === "work"
-                            ? "text-blue-600 border-blue-600"
-                            : "text-black border-transparent hover:text-blue-600"
-                        }`}
-                      >
-                        <LucideIcons.ListTodo size={16} aria-hidden="true" />
-                        工作项
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setActiveTab("defect")}
-                        className={`flex items-center gap-1.5 px-2 py-3 text-sm -mb-px border-b-2 transition-colors ${
-                          activeTab === "defect"
-                            ? "text-blue-600 border-blue-600"
-                            : "text-black border-transparent hover:text-blue-600"
-                        }`}
-                      >
-                        <LucideIcons.Bug size={16} aria-hidden="true" />
-                        缺陷
-                      </button>
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          setActiveTab("history");
-                          if (!workspaceSlug || !planId || !selectedCaseId) return;
-                          try {
-                            await planService.getPlanCaseRecord(String(workspaceSlug), {
-                              plan_id: String(planId),
-                              case_id: String(selectedCaseId),
-                            });
-                          } catch {}
-                        }}
-                        className={`flex items-center gap-1.5 px-2 py-3 text-sm -mb-px border-b-2 transition-colors ${
-                          activeTab === "history"
-                            ? "text-blue-600 border-blue-600"
-                            : "text-black border-transparent hover:text-blue-600"
-                        }`}
-                      >
-                        <LucideIcons.History size={16} aria-hidden="true" />
-                        执行历史
-                      </button>
-                    </nav>
-                  </div>
+            <div className="flex flex-col flex-1 min-h-0">
+              <div
+                ref={rightRef}
+                className="flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm"
+                style={{ scrollPaddingBottom: 16 }}
+              >
+                <div className="p-4" style={{ scrollPaddingBottom: 16 }}>
+                  {!selectedCaseId ? (
+                    <div className="text-custom-text-300 py-12 text-center">请从左侧选择一个用例</div>
+                  ) : detailLoading ? (
+                    <div className="flex items-center justify-center py-12">
+                      <Spin />
+                    </div>
+                  ) : !caseDetail ? (
+                    <div className="text-custom-text-300 py-12 text-center">未获取到用例详情</div>
+                  ) : (
+                    <div className="flex flex-col gap-4">
+                      <div className="border-b border-gray-200">
+                        <nav className="flex gap-4 overflow-x-auto">
+                          <button
+                            type="button"
+                            onClick={() => setActiveTab("basic")}
+                            className={`flex items-center gap-1.5 px-2 py-3 text-sm -mb-px border-b-2 transition-colors ${
+                              activeTab === "basic"
+                                ? "text-blue-600 border-blue-600"
+                                : "text-black border-transparent hover:text-blue-600"
+                            }`}
+                          >
+                            <LucideIcons.Info size={16} aria-hidden="true" />
+                            基本信息
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setActiveTab("requirement")}
+                            className={`flex items-center gap-1.5 px-2 py-3 text-sm -mb-px border-b-2 transition-colors ${
+                              activeTab === "requirement"
+                                ? "text-blue-600 border-blue-600"
+                                : "text-black border-transparent hover:text-blue-600"
+                            }`}
+                          >
+                            <LucideIcons.FileText size={16} aria-hidden="true" />
+                            产品需求
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setActiveTab("work")}
+                            className={`flex items-center gap-1.5 px-2 py-3 text-sm -mb-px border-b-2 transition-colors ${
+                              activeTab === "work" ? "text-blue-600 border-blue-600" : "text-black border-transparent hover:text-blue-600"
+                            }`}
+                          >
+                            <LucideIcons.ListTodo size={16} aria-hidden="true" />
+                            工作项
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setActiveTab("defect")}
+                            className={`flex items-center gap-1.5 px-2 py-3 text-sm -mb-px border-b-2 transition-colors ${
+                              activeTab === "defect"
+                                ? "text-blue-600 border-blue-600"
+                                : "text-black border-transparent hover:text-blue-600"
+                            }`}
+                          >
+                            <LucideIcons.Bug size={16} aria-hidden="true" />
+                            缺陷
+                          </button>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              setActiveTab("history");
+                              if (!workspaceSlug || !planId || !selectedCaseId) return;
+                              try {
+                                await planService.getPlanCaseRecord(String(workspaceSlug), {
+                                  plan_id: String(planId),
+                                  case_id: String(selectedCaseId),
+                                });
+                              } catch {}
+                            }}
+                            className={`flex items-center gap-1.5 px-2 py-3 text-sm -mb-px border-b-2 transition-colors ${
+                              activeTab === "history"
+                                ? "text-blue-600 border-blue-600"
+                                : "text-black border-transparent hover:text-blue-600"
+                            }`}
+                          >
+                            <LucideIcons.History size={16} aria-hidden="true" />
+                            执行历史
+                          </button>
+                        </nav>
+                      </div>
 
-                  <div>
-                    <Transition
-                      show={activeTab === "basic"}
-                      enter="transition duration-150 ease-out"
-                      enterFrom="transform scale-95 opacity-0"
-                      enterTo="transform scale-100 opacity-100"
-                      leave="transition duration-100 ease-in"
-                      leaveFrom="transform scale-100 opacity-100"
-                      leaveTo="transform scale-95 opacity-0"
-                    >
-                      {activeTab === "basic" && (
-                        <div className="flex flex-col gap-4 h-[550px] overflow-y-auto vertical-scrollbar scrollbar-sm">
-                          <div className="text-lg font-semibold">{caseDetail?.name ?? "-"}</div>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                            <div className="col-span-1">
-                              <div className="text-xs text-custom-text-300 mb-1">维护人</div>
-                              {caseDetail?.assignee ? (
-                                <MemberDropdown
-                                  multiple={false}
-                                  value={caseDetail.assignee.id}
-                                  onChange={() => {}}
-                                  disabled={true}
-                                  placeholder={getUserDetails(caseDetail.assignee)?.display_name || "未知用户"}
-                                  className="w-full text-sm h-8"
-                                  buttonContainerClassName="w-full text-left p-0 cursor-default h-8 flex items-center"
-                                  buttonVariant="transparent-with-text"
-                                  buttonClassName="text-sm p-0 hover:bg-transparent hover:bg-inherit h-8"
-                                  showUserDetails={true}
-                                  optionsClassName="z-[60]"
-                                />
-                              ) : (
-                                <div className="p-2 text-sm text-custom-text-300 h-8 flex items-center">
-                                  未设置维护人
+                      <div className="min-h-[550px]">
+                        <Transition
+                          show={activeTab === "basic"}
+                          enter="transition duration-150 ease-out"
+                          enterFrom="transform scale-95 opacity-0"
+                          enterTo="transform scale-100 opacity-100"
+                          leave="transition duration-100 ease-in"
+                          leaveFrom="transform scale-100 opacity-100"
+                          leaveTo="transform scale-95 opacity-0"
+                        >
+                          {activeTab === "basic" && (
+                            <div className="flex flex-col gap-4 h-[550px] overflow-y-auto vertical-scrollbar scrollbar-sm">
+                              <div className="text-lg font-semibold">{caseDetail?.name ?? "-"}</div>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                                <div className="col-span-1">
+                                  <div className="text-xs text-custom-text-300 mb-1">维护人</div>
+                                  {caseDetail?.assignee ? (
+                                    <MemberDropdown
+                                      multiple={false}
+                                      value={caseDetail.assignee.id}
+                                      onChange={() => {}}
+                                      disabled={true}
+                                      placeholder={getUserDetails(caseDetail.assignee)?.display_name || "未知用户"}
+                                      className="w-full text-sm h-8"
+                                      buttonContainerClassName="w-full text-left p-0 cursor-default h-8 flex items-center"
+                                      buttonVariant="transparent-with-text"
+                                      buttonClassName="text-sm p-0 hover:bg-transparent hover:bg-inherit h-8"
+                                      showUserDetails={true}
+                                      optionsClassName="z-[60]"
+                                    />
+                                  ) : (
+                                    <div className="p-2 text-sm text-custom-text-300 h-8 flex items-center">未设置维护人</div>
+                                  )}
                                 </div>
-                              )}
-                            </div>
-                            <div className="col-span-1">
-                              <div className="text-xs text-custom-text-300 mb-1">类型</div>
-                              <div className="h-8 flex items-center">
-                                <Tag>{enumsData.case_type?.[String(caseDetail?.type)] ?? "-"}</Tag>
+                                <div className="col-span-1">
+                                  <div className="text-xs text-custom-text-300 mb-1">类型</div>
+                                  <div className="h-8 flex items-center">
+                                    <Tag>{enumsData.case_type?.[String(caseDetail?.type)] ?? "-"}</Tag>
+                                  </div>
+                                </div>
+                                <div className="col-span-1">
+                                  <div className="text-xs text-custom-text-300 mb-1">等级</div>
+                                  <div className="h-8 flex items-center">
+                                    <Tag>{enumsData.case_priority?.[String(caseDetail?.priority)] ?? "-"}</Tag>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div>
+                                <label className="mb-3 flex items-center gap-2 text-sm font-medium text-gray-700">
+                                  <LucideIcons.ListChecks size={16} aria-hidden="true" />
+                                  前置条件
+                                </label>
+                                <RichTextEditor
+                                  value={String(caseDetail?.precondition ?? "")}
+                                  onChange={() => {}}
+                                  onBlur={() => {}}
+                                  aria-label="前置条件"
+                                  placeholder="暂无内容"
+                                  editable={false}
+                                />
+                              </div>
+
+                              <div>
+                                <label className="mb-2 flex items-center gap-2 text-sm font-medium text-gray-700">
+                                  <LucideIcons.ListOrdered size={16} aria-hidden="true" />
+                                  测试步骤
+                                </label>
+                                <StepsTable
+                                  steps={displaySteps}
+                                  actualMap={stepActualResultMap}
+                                  execMap={stepExecResultMap}
+                                  onChangeActual={handleChangeActual}
+                                  onChangeExec={handleChangeExec}
+                                />
+                              </div>
+
+                              <div>
+                                <label className="mb-2 flex items-center gap-2 text-sm font-medium text-gray-700">
+                                  <LucideIcons.StickyNote size={16} aria-hidden="true" />
+                                  备注
+                                </label>
+                                <RichTextEditor
+                                  value={caseDetail?.remark}
+                                  onChange={() => {}}
+                                  onBlur={() => {}}
+                                  aria-label="备注"
+                                  placeholder="暂无内容"
+                                  editable={false}
+                                />
+                              </div>
+
+                              <div id="attachments-section" className="scroll-mb-16">
+                                <div className="mb-2 flex items-center justify-between">
+                                  <span className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                                    <LucideIcons.Paperclip size={16} aria-hidden="true" />
+                                    附件
+                                  </span>
+                                </div>
+                                {attachments.length === 0 ? (
+                                  <div className="p-3 text-sm text-custom-text-300">暂无附件</div>
+                                ) : (
+                                  <Table
+                                    size="small"
+                                    pagination={false}
+                                    rowKey={(r: any) => String(r?.id)}
+                                    dataSource={attachments}
+                                    columns={[
+                                      {
+                                        title: "文件名",
+                                        dataIndex: ["attributes", "name"],
+                                        key: "name",
+                                        render: (_: any, record: any) => (
+                                          <span className="truncate block max-w-[480px]">
+                                            {String(record?.attributes?.name || record?.filename || record?.id)}
+                                          </span>
+                                        ),
+                                      },
+                                      {
+                                        title: "操作",
+                                        key: "action",
+                                        width: 120,
+                                        render: (_: any, record: any) => (
+                                          <Tooltip title="下载">
+                                            <Button type="link" size="small" onClick={() => handleDownloadAttachment(record)}>
+                                              下载
+                                            </Button>
+                                          </Tooltip>
+                                        ),
+                                      },
+                                    ]}
+                                  />
+                                )}
                               </div>
                             </div>
-                            <div className="col-span-1">
-                              <div className="text-xs text-custom-text-300 mb-1">等级</div>
-                              <div className="h-8 flex items-center">
-                                <Tag>{enumsData.case_priority?.[String(caseDetail?.priority)] ?? "-"}</Tag>
+                          )}
+                        </Transition>
+
+                        <Transition
+                          show={activeTab === "requirement"}
+                          enter="transition duration-150 ease-out"
+                          enterFrom="transform scale-95 opacity-0"
+                          enterTo="transform scale-100 opacity-100"
+                          leave="transition duration-100 ease-in"
+                          leaveFrom="transform scale-100 opacity-100"
+                          leaveTo="transform scale-95 opacity-0"
+                        >
+                          {activeTab === "requirement" && selectedCaseId && (
+                            <div className="mt-4 h-[550px] overflow-y-auto vertical-scrollbar scrollbar-sm">
+                              <div className="flex items-center justify-between mb-3">
+                                <div className="text-sm text-gray-600">{currentCount}个产品需求</div>
                               </div>
+                              <WorkItemDisplayModal caseId={String(selectedCaseId)} defaultType="Requirement" />
                             </div>
-                          </div>
+                          )}
+                        </Transition>
 
-                          <div>
-                            <label className="mb-3 flex items-center gap-2 text-sm font-medium text-gray-700">
-                              <LucideIcons.ListChecks size={16} aria-hidden="true" />
-                              前置条件
-                            </label>
-                            <RichTextEditor
-                              value={String(caseDetail?.precondition ?? "")}
-                              onChange={() => {}}
-                              onBlur={() => {}}
-                              aria-label="前置条件"
-                              placeholder="暂无内容"
-                              editable={false}
-                            />
-                          </div>
-
-                          <div>
-                            <label className="mb-2 flex items-center gap-2 text-sm font-medium text-gray-700">
-                              <LucideIcons.ListOrdered size={16} aria-hidden="true" />
-                              测试步骤
-                            </label>
-                            <StepsTable
-                              steps={displaySteps}
-                              actualMap={stepActualResultMap}
-                              execMap={stepExecResultMap}
-                              onChangeActual={handleChangeActual}
-                              onChangeExec={handleChangeExec}
-                            />
-                          </div>
-
-                          <div>
-                            <label className="mb-2 flex items-center gap-2 text-sm font-medium text-gray-700">
-                              <LucideIcons.StickyNote size={16} aria-hidden="true" />
-                              备注
-                            </label>
-                            <RichTextEditor
-                              value={caseDetail?.remark}
-                              onChange={() => {}}
-                              onBlur={() => {}}
-                              aria-label="备注"
-                              placeholder="暂无内容"
-                              editable={false}
-                            />
-                          </div>
-
-                          <div id="attachments-section" className="scroll-mb-16">
-                            <div className="mb-2 flex items-center justify-between">
-                              <span className="flex items-center gap-2 text-sm font-medium text-gray-700">
-                                <LucideIcons.Paperclip size={16} aria-hidden="true" />
-                                附件
-                              </span>
+                        <Transition
+                          show={activeTab === "work"}
+                          enter="transition duration-150 ease-out"
+                          enterFrom="transform scale-95 opacity-0"
+                          enterTo="transform scale-100 opacity-100"
+                          leave="transition duration-100 ease-in"
+                          leaveFrom="transform scale-100 opacity-100"
+                          leaveTo="transform scale-95 opacity-0"
+                        >
+                          {activeTab === "work" && selectedCaseId && (
+                            <div className="mt-4 h-[550px] overflow-y-auto vertical-scrollbar scrollbar-sm">
+                              <div className="flex items-center justify-between mb-3">
+                                <div className="text-sm text-gray-600">{currentCount}个工作项</div>
+                              </div>
+                              <WorkItemDisplayModal caseId={String(selectedCaseId)} defaultType="Task" />
                             </div>
-                            {attachments.length === 0 ? (
-                              <div className="p-3 text-sm text-custom-text-300">暂无附件</div>
-                            ) : (
-                              <Table
-                                size="small"
-                                pagination={false}
-                                rowKey={(r: any) => String(r?.id)}
-                                dataSource={attachments}
-                                columns={[
-                                  {
-                                    title: "文件名",
-                                    dataIndex: ["attributes", "name"],
-                                    key: "name",
-                                    render: (_: any, record: any) => (
-                                      <span className="truncate block max-w-[480px]">
-                                        {String(record?.attributes?.name || record?.filename || record?.id)}
-                                      </span>
-                                    ),
-                                  },
-                                  {
-                                    title: "操作",
-                                    key: "action",
-                                    width: 120,
-                                    render: (_: any, record: any) => (
-                                      <Tooltip title="下载">
-                                        <Button
-                                          type="link"
-                                          size="small"
-                                          onClick={() => handleDownloadAttachment(record)}
-                                        >
-                                          下载
-                                        </Button>
-                                      </Tooltip>
-                                    ),
-                                  },
-                                ]}
+                          )}
+                        </Transition>
+
+                        <Transition
+                          show={activeTab === "defect"}
+                          enter="transition duration-150 ease-out"
+                          enterFrom="transform scale-95 opacity-0"
+                          enterTo="transform scale-100 opacity-100"
+                          leave="transition duration-100 ease-in"
+                          leaveFrom="transform scale-100 opacity-100"
+                          leaveTo="transform scale-95 opacity-0"
+                        >
+                          {activeTab === "defect" && selectedCaseId && (
+                            <div className="mt-4 h-[550px] overflow-y-auto vertical-scrollbar scrollbar-sm">
+                              <div className="flex items-center justify-between mb-3">
+                                <div className="text-sm text-gray-600">{currentCount}个缺陷</div>
+                              </div>
+                              <WorkItemDisplayModal
+                                caseId={String(selectedCaseId)}
+                                defaultType="Bug"
+                                reloadToken={recordsRefreshKey}
                               />
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </Transition>
+                            </div>
+                          )}
+                        </Transition>
 
-                    <Transition
-                      show={activeTab === "requirement"}
-                      enter="transition duration-150 ease-out"
-                      enterFrom="transform scale-95 opacity-0"
-                      enterTo="transform scale-100 opacity-100"
-                      leave="transition duration-100 ease-in"
-                      leaveFrom="transform scale-100 opacity-100"
-                      leaveTo="transform scale-95 opacity-0"
-                    >
-                      {activeTab === "requirement" && selectedCaseId && (
-                        <div className="mt-4 h-[550px] overflow-y-auto vertical-scrollbar scrollbar-sm">
-                          <div className="flex items-center justify-between mb-3">
-                            <div className="text-sm text-gray-600">{currentCount}个产品需求</div>
-                          </div>
-                          <WorkItemDisplayModal caseId={String(selectedCaseId)} defaultType="Requirement" />
-                        </div>
-                      )}
-                    </Transition>
+                        <Transition
+                          show={activeTab === "history"}
+                          enter="transition duration-150 ease-out"
+                          enterFrom="transform scale-95 opacity-0"
+                          enterTo="transform scale-100 opacity-100"
+                          leave="transition duration-100 ease-in"
+                          leaveFrom="transform scale-100 opacity-100"
+                          leaveTo="transform scale-95 opacity-0"
+                        >
+                          {activeTab === "history" && (
+                            <ExecutionRecordsPanel
+                              key={`${selectedCaseId}-${recordsRefreshKey}`}
+                              workspaceSlug={workspaceSlug}
+                              reviewId={reviewId}
+                              caseId={selectedCaseId}
+                            />
+                          )}
+                        </Transition>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
 
-                    <Transition
-                      show={activeTab === "work"}
-                      enter="transition duration-150 ease-out"
-                      enterFrom="transform scale-95 opacity-0"
-                      enterTo="transform scale-100 opacity-100"
-                      leave="transition duration-100 ease-in"
-                      leaveFrom="transform scale-100 opacity-100"
-                      leaveTo="transform scale-95 opacity-0"
-                    >
-                      {activeTab === "work" && selectedCaseId && (
-                        <div className="mt-4 h-[550px] overflow-y-auto vertical-scrollbar scrollbar-sm">
-                          <div className="flex items-center justify-between mb-3">
-                            <div className="text-sm text-gray-600">{currentCount}个工作项</div>
-                          </div>
-                          <WorkItemDisplayModal caseId={String(selectedCaseId)} defaultType="Task" />
-                        </div>
-                      )}
-                    </Transition>
-
-                    <Transition
-                      show={activeTab === "defect"}
-                      enter="transition duration-150 ease-out"
-                      enterFrom="transform scale-95 opacity-0"
-                      enterTo="transform scale-100 opacity-100"
-                      leave="transition duration-100 ease-in"
-                      leaveFrom="transform scale-100 opacity-100"
-                      leaveTo="transform scale-95 opacity-0"
-                    >
-                      {activeTab === "defect" && selectedCaseId && (
-                        <div className="mt-4 h-[550px] overflow-y-auto vertical-scrollbar scrollbar-sm">
-                          <div className="flex items-center justify-between mb-3">
-                            <div className="text-sm text-gray-600">{currentCount}个缺陷</div>
-                          </div>
-                          <WorkItemDisplayModal
-                            caseId={String(selectedCaseId)}
-                            defaultType="Bug"
-                            reloadToken={recordsRefreshKey}
-                          />
-                        </div>
-                      )}
-                    </Transition>
-
-                    <Transition
-                      show={activeTab === "history"}
-                      enter="transition duration-150 ease-out"
-                      enterFrom="transform scale-95 opacity-0"
-                      enterTo="transform scale-100 opacity-100"
-                      leave="transition duration-100 ease-in"
-                      leaveFrom="transform scale-100 opacity-100"
-                      leaveTo="transform scale-95 opacity-0"
-                    >
-                      {activeTab === "history" && (
-                        <ExecutionRecordsPanel
-                          key={`${selectedCaseId}-${recordsRefreshKey}`}
-                          workspaceSlug={workspaceSlug}
-                          reviewId={reviewId}
-                          caseId={selectedCaseId}
-                        />
-                      )}
-                    </Transition>
-                  </div>
-
-                  <div className="w-full" style={{ borderTop: "1px solid #f0f0f0" }}>
+              {selectedCaseId && !detailLoading && caseDetail ? (
+                <div className="w-full shrink-0" style={{ borderTop: "1px solid #f0f0f0" }}>
+                  <div className="p-4">
                     <div className="px-0 py-3 flex flex-col gap-3">
                       <Radio.Group onChange={handleRadioChange} value={reviewValue} disabled={!selectedCaseId}>
                         {Object.keys(enumsData?.plan_case_result || {})
@@ -1279,9 +1283,7 @@ export default function TestExecutionPage() {
                           ))}
                       </Radio.Group>
                       <div>
-                        <label className="mb-2 flex items-center gap-2 text-sm font-medium text-gray-700">
-                          原因说明
-                        </label>
+                        <label className="mb-2 flex items-center gap-2 text-sm font-medium text-gray-700">原因说明</label>
                         <Input.TextArea
                           value={reason}
                           onChange={(e) => setReason(e.target.value)}
@@ -1314,7 +1316,7 @@ export default function TestExecutionPage() {
                     </div>
                   </div>
                 </div>
-              )}
+              ) : null}
             </div>
           </Col>
         </Row>
