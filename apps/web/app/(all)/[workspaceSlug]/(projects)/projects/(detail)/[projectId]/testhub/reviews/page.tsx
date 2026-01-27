@@ -558,6 +558,23 @@ export default function ReviewsPage() {
 
   const filteredModules = useMemo(() => filterModulesByName(modules, search), [modules, search]);
 
+  const findModuleById = (list: ReviewModule[], id: string): ReviewModule | null => {
+    for (const item of list || []) {
+      if (String(item.id) === id) return item;
+      const child = findModuleById(item.children || [], id);
+      if (child) return child;
+    }
+    return null;
+  };
+
+  const hasDescendant = (node: ReviewModule, targetId: string): boolean => {
+    for (const child of node.children || []) {
+      if (String(child.id) === targetId) return true;
+      if (hasDescendant(child, targetId)) return true;
+    }
+    return false;
+  };
+
   const treeData = [
     {
       title: (
@@ -623,6 +640,30 @@ export default function ReviewsPage() {
     setSelectedModuleId(nextModuleId);
     setCurrentPage(1);
     fetchModules();
+  };
+
+  const onDrop: TreeProps["onDrop"] = async (info) => {
+    const dragKey = String(info.dragNode?.key);
+    const dropKey = String(info.node?.key);
+    if (!workspaceSlug) return;
+    if (!dragKey || !dropKey) return;
+    if (info.dropToGap) return;
+    if (dragKey === dropKey) return;
+    if (dragKey === "all" || dragKey.startsWith("__creating__")) return;
+    if (dropKey.startsWith("__creating__")) return;
+    const dragModule = findModuleById(modules, dragKey);
+    if (!dragModule) return;
+    if (dropKey !== "all" && hasDescendant(dragModule, dropKey)) return;
+    const newParent = dropKey === "all" ? null : dropKey;
+    try {
+      await caseService.updateReviewModule(workspaceSlug as string, dragKey, { parent: newParent });
+      setExpandedKeys((prev) => {
+        if (dropKey === "all" || prev.includes(dropKey)) return prev;
+        return [...prev, dropKey];
+      });
+      await fetchModules();
+      await fetchAllReviewsTotal();
+    } catch (e) {}
   };
 
   useEffect(() => {
@@ -885,6 +926,7 @@ export default function ReviewsPage() {
           <div className={`${styles.treeRoot} flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm`}>
             <Tree
               blockNode
+              draggable
               showIcon={false}
               treeData={treeData as any}
               selectedKeys={[selectedModuleId ?? "all"]}
@@ -892,6 +934,8 @@ export default function ReviewsPage() {
               autoExpandParent={autoExpandParent}
               onExpand={onExpand}
               onSelect={onSelect}
+              onDrop={onDrop}
+              className="testhub-review-module-tree"
             />
           </div>
           <div className={styles.resizer} onMouseDown={onMouseDownResize} />
@@ -983,6 +1027,10 @@ export default function ReviewsPage() {
 
                 .testhub-reviews-table-scroll.testhub-reviews-scrollbar-strong::-webkit-scrollbar-track{
                   background: transparent;
+                }
+
+                .testhub-review-module-tree .ant-tree-draggable-icon{
+                  display: none !important;
                 }
               `,
             }}
