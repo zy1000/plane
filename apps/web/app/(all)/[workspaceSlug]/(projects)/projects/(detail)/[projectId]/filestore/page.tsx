@@ -713,7 +713,7 @@ export default function FilestorePage() {
               pageSize={pageSize}
               total={total}
               showSizeChanger
-              showQuickJumper
+              simple
               pageSizeOptions={["10", "20", "50", "100"]}
               onChange={handlePaginationChange}
               onShowSizeChange={handlePaginationChange}
