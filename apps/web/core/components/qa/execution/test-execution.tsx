@@ -457,6 +457,30 @@ export default function TestExecutionPage() {
     setReason("");
   }, [selectedCaseId, cases, currentUser?.id, enumsData?.plan_case_result]);
 
+  const getErrorMessage = (e: any, fallback: string) => {
+    if (!e) return fallback;
+    if (typeof e === "string") return e;
+    const direct =
+      e?.msg ??
+      e?.message ??
+      e?.detail ??
+      e?.error ??
+      e?.data?.msg ??
+      e?.data?.message ??
+      e?.data?.detail ??
+      e?.data?.error;
+    if (direct) return String(direct);
+    if (typeof e === "object") {
+      const keys = Object.keys(e);
+      if (keys.length > 0) {
+        const v = (e as any)[keys[0]];
+        if (typeof v === "string") return v;
+        if (Array.isArray(v) && v.length > 0) return String(v[0]);
+      }
+    }
+    return fallback;
+  };
+
   const buildPayload = () => {
     if (!workspaceSlug || !planId || !selectedCaseId || !reviewValue || !currentUser?.id) return null;
     const chosenSteps =
@@ -497,8 +521,8 @@ export default function TestExecutionPage() {
           await fetchCases(page, pageSize, keyword);
           await fetchCaseDetail(String(selectedCaseId));
         } catch (e: any) {
-          const msg = e?.message || e?.detail || e?.error || "提交结果失败";
-          message.error(msg);
+          const msg = getErrorMessage(e, "请稍后重试");
+          message.error(msg.startsWith("执行失败") ? msg : `执行失败：${msg}`);
         } finally {
           setSubmitLoading(false);
         }

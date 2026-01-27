@@ -1484,6 +1484,7 @@ export default function TestCasesPage() {
           workspaceSlug={workspaceSlug as string}
           repositoryId={repositoryId as string}
           repositoryName={repositoryName || ""}
+          initialModuleId={selectedModuleId}
           onSuccess={async () => {
             // 新增成功后刷新当前列表与分页/筛选状态
             await fetchCases(currentPage, pageSize, filters);

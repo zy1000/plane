@@ -193,6 +193,7 @@ class PlanListAPIView(BaseAPIView):
         serializer = self.serializer_class(queryset, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
+
 class PlanCaseAPIView(BaseAPIView):
     queryset = PlanCase.objects.all()
     pagination_class = CustomPaginator
@@ -376,11 +377,16 @@ class PlanView(BaseViewSet):
         steps = request.data.get('steps')
         assignee = request.data['assignee']
 
+        query = TestPlan.objects.get(id=plan_id).assignees.all()
+        plan_executor = query.values_list('id', flat=True)
+
         if isinstance(case_ids, str):
             case_ids = [case_ids]
         for case_id in case_ids:
 
             plan_case = PlanCase.objects.get(plan_id=plan_id, case_id=case_id)
+            if query.exists() and request.user.id not in plan_executor:
+                return Response(status=status.HTTP_403_FORBIDDEN, data={'msg': f'你没有权限执行"{plan_case.case.name}"'})
 
             # 创建执行记录
             pcr = PlanCaseRecord.objects.create(result=result, reason=reason,
@@ -614,9 +620,9 @@ class CaseMindmapAPIView(BaseAPIView):
     def get(self, request, slug):
         repository_id = request.query_params.get("repository_id")
         module_ids_raw = (
-            request.query_params.getlist("module_id")
-            or request.query_params.getlist("module_id[]")
-            or ([] if request.query_params.get("module_id") is None else [request.query_params.get("module_id")])
+                request.query_params.getlist("module_id")
+                or request.query_params.getlist("module_id[]")
+                or ([] if request.query_params.get("module_id") is None else [request.query_params.get("module_id")])
         )
 
         if not repository_id:
@@ -701,7 +707,8 @@ class CaseMindmapAPIView(BaseAPIView):
         def build_module_node(mid: str) -> dict:
             meta = module_map[mid]
             child_ids = children_map.get(mid, [])
-            child_ids = sorted(child_ids, key=lambda x: (module_map[x].get("sort_order") or 0, module_map[x].get("name") or ""))
+            child_ids = sorted(child_ids,
+                               key=lambda x: (module_map[x].get("sort_order") or 0, module_map[x].get("name") or ""))
             return {
                 "id": mid,
                 "name": meta.get("name") or "",

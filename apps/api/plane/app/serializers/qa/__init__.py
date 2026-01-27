@@ -74,7 +74,7 @@ class TestPlanCreateUpdateSerializer(ModelSerializer):
     class Meta:
         model = TestPlan
         fields = ['name', 'description', 'module', 'begin_time', 'end_time', 'project', 'threshold', 'cases',
-                  'cycle']
+                  'cycle','assignees']
 
 
 class PlanListSerializer(ModelSerializer):
@@ -101,7 +101,6 @@ class TestPlanDetailSerializer(ModelSerializer):
     """
     Serializer for creating a TestPlan.
     """
-    assignees = UserLiteSerializer(many=True, read_only=True)
 
     case_count = serializers.SerializerMethodField()
     pass_rate = serializers.SerializerMethodField()

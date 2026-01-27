@@ -351,6 +351,11 @@ class TestPlan(BaseModel):
 
     cycle = models.ForeignKey("db.Cycle", null=True, blank=True, related_name="plans", on_delete=models.DO_NOTHING)
     modules = models.ManyToManyField("db.Module", blank=True, related_name="plans", db_table="plan_modules_relations")
+    assignees = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        blank=True,
+        related_name="plan_assignee",
+    )
 
     @property
     def state_display(self):

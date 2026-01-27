@@ -473,3 +473,7 @@ if ENABLE_DRF_SPECTACULAR:
 # MongoDB Settings
 MONGO_DB_URL = os.environ.get("MONGO_DB_URL", False)
 MONGO_DB_DATABASE = os.environ.get("MONGO_DB_DATABASE", False)
+
+# onlyoffice
+ONLYOFFICE_DOCUMENT_SERVER_URL= os.environ.get("ONLYOFFICE_DOCUMENT_SERVER_URL", "http://10.32.190.226:89")
+ONLYOFFICE_JWT_ENABLED = os.environ.get("ONLYOFFICE_JWT_ENABLED", "0") == "1"

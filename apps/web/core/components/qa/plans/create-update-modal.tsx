@@ -4,6 +4,7 @@ import { Button } from "@plane/propel/button";
 import { Input, TextArea, EModalPosition, EModalWidth, ModalCore, CustomSearchSelect } from "@plane/ui";
 import { CalendarDays } from "lucide-react";
 import { DateDropdown } from "@/components/dropdowns/date";
+import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { renderFormattedPayloadDate } from "@plane/utils";
 // services
 import { PlanService } from "@/services/qa/plan.service";
@@ -23,6 +24,7 @@ type Props = {
   repositoryName: string;
   // 预留编辑模式
   mode?: TMode;
+  autoSelectDefaultModule?: boolean;
   planId?: string;
   initialData?: {
     name?: string;
@@ -50,6 +52,7 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
     repositoryId,
     repositoryName,
     mode = "create",
+    autoSelectDefaultModule = true,
     planId,
     initialData,
     onSuccess,
@@ -60,6 +63,9 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
   const [description, setDescription] = useState<string>(initialData?.description ?? "");
   const [moduleId, setModuleId] = useState<string | null>(initialData?.module ?? null);
   const [cycleId, setCycleId] = useState<string | null>(initialData?.cycle ?? null);
+  const [assignees, setAssignees] = useState<string[]>(
+    Array.isArray(initialData?.assignees) ? initialData!.assignees.map((id) => String(id)) : []
+  );
 
   const [beginTime, setBeginTime] = useState<Date | null>(
     initialData?.begin_time ? new Date(initialData?.begin_time as any) : null
@@ -76,7 +82,13 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
   );
   const [stateValue] = useState<number>(0);
   const [submitting, setSubmitting] = useState<boolean>(false);
-  const [errors, setErrors] = useState<{ name?: string; time?: string; module?: string; threshold?: string }>({});
+  const [errors, setErrors] = useState<{
+    name?: string;
+    time?: string;
+    module?: string;
+    threshold?: string;
+    assignees?: string;
+  }>({});
 
   // 新增：关闭时重置所有字段
   const resetForm = () => {
@@ -84,6 +96,7 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
     setDescription(initialData?.description ?? "");
     setModuleId(initialData?.module ?? null);
     setCycleId(initialData?.cycle ?? null);
+    setAssignees(Array.isArray(initialData?.assignees) ? initialData!.assignees.map((id) => String(id)) : []);
     if (mode === "create") {
       setBeginTime(null);
       setEndTime(null);
@@ -109,13 +122,15 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
       setDescription(initialData?.description ?? "");
       setModuleId(initialData?.module ?? null);
       setCycleId(initialData?.cycle ?? null);
+      setAssignees(Array.isArray(initialData?.assignees) ? initialData!.assignees.map((id) => String(id)) : []);
       setBeginTime(initialData?.begin_time ? new Date(initialData?.begin_time as any) : null);
       setEndTime(initialData?.end_time ? new Date(initialData?.end_time as any) : null);
     } else {
-      setName("");
-      setDescription("");
-      setModuleId(null);
-      setCycleId(null);
+      setName(initialData?.name ?? "");
+      setDescription(initialData?.description ?? "");
+      setModuleId(initialData?.module ?? null);
+      setCycleId(initialData?.cycle ?? null);
+      setAssignees(Array.isArray(initialData?.assignees) ? initialData!.assignees.map((id) => String(id)) : []);
       setBeginTime(null);
       setEndTime(null);
     }
@@ -143,7 +158,7 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
             content: <span className="flex-grow truncate">{String(m.name)}</span>,
           }));
           setModuleOptions(opts);
-          if (mode === "create" && !moduleId) {
+          if (mode === "create" && autoSelectDefaultModule && !moduleId) {
             const def = list.find((m: any) => m?.is_default);
             if (def) setModuleId(String(def.id));
           }
@@ -167,15 +182,21 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
         })
         .catch(() => setCycleOptions([]));
     }
-  }, [isOpen, workspaceSlug, repositoryId, projectId]);
+  }, [isOpen, workspaceSlug, repositoryId, projectId, autoSelectDefaultModule]);
 
   const title = useMemo(() => (mode === "edit" ? "编辑测试计划" : "新建测试计划"), [mode]);
 
   // 简单校验：名称必填、结束时间不早于开始时间
   const validate = (): boolean => {
-    const nextErrors: { name?: string; time?: string; module?: string; threshold?: string } = {};
+    const nextErrors: { name?: string; time?: string; module?: string; threshold?: string; assignees?: string } = {};
     if (!name || !name.trim()) {
       nextErrors.name = "请输入计划名称";
+    }
+    if (!moduleId) {
+      nextErrors.module = "请选择所属模块";
+    }
+    if (!assignees.length) {
+      nextErrors.assignees = "请选择执行人";
     }
     if (beginTime && endTime && endTime.getTime() < beginTime.getTime()) {
       nextErrors.time = "结束时间不能早于开始时间";
@@ -197,6 +218,7 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
         name: name.trim(),
         project: projectId,
         description: description || "",
+        assignees,
         begin_time: beginTime ? renderFormattedPayloadDate(beginTime) : null,
         end_time: endTime ? renderFormattedPayloadDate(endTime) : null,
         threshold,
@@ -211,6 +233,7 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
           id: planId,
           name: payload.name,
           description: payload.description,
+          assignees: payload.assignees,
           threshold: payload.threshold,
           begin_time: payload.begin_time,
           end_time: payload.end_time,
@@ -274,7 +297,7 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
           {/* 所属模块（下拉选择，可搜索，必选） */}
           <div className="col-span-1">
             <label className="text-sm text-custom-text-300 mb-1 block">
-              所属模块
+              所属模块<span className="text-red-500">*</span>
             </label>
             <CustomSearchSelect
               className="w-[320px]"
@@ -316,6 +339,27 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
                 </div>
               }
             />
+          </div>
+
+          <div className="col-span-1">
+            <label className="text-sm text-custom-text-300 mb-1 block">
+              执行人<span className="text-red-500">*</span>
+            </label>
+            <div className="h-9 w-full max-w-[320px]">
+              <MemberDropdown
+                multiple
+                projectId={projectId ? String(projectId) : undefined}
+                value={assignees}
+                onChange={(val) => setAssignees(Array.isArray(val) ? val.map((id) => String(id)) : [])}
+                placeholder="请选择执行人"
+                className="h-full w-full"
+                buttonClassName="overflow-hidden"
+                buttonVariant="transparent-with-text"
+                showUserDetails={true}
+                optionsClassName="z-[1100]"
+              />
+            </div>
+            {errors.assignees && <p className="text-xs text-red-500 mt-1">{errors.assignees}</p>}
           </div>
 
           {/* 计划起止时间样式参照 CreateReviewModal.tsx L177-200 */}
