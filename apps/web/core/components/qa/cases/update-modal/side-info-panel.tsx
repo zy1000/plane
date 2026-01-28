@@ -97,7 +97,7 @@ export function SideInfoPanel({
   };
 
   return (
-    <div className="w-1/3 border-l px-6 py-4 h-full overflow-y-auto bg-[#FAFAFA] divide-y divide-gray-100">
+    <div className="w-[22.222%] border-l px-6 py-4 h-full overflow-y-auto bg-[#FAFAFA] divide-y divide-gray-100">
       {workspaceSlug && caseData?.id ? (
         <CaseVersionCompareModal
           open={compareOpen}
