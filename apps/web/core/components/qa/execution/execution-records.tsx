@@ -192,7 +192,7 @@ export const ExecutionRecordsPanel: React.FC<Props> = (props) => {
       <div
         className={cn(
           "p-4 text-sm text-custom-text-300",
-          "h-[550px] overflow-y-auto vertical-scrollbar scrollbar-sm scroll-smooth",
+          "min-h-[550px]",
           className
         )}
       >

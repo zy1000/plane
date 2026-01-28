@@ -102,6 +102,38 @@ export default function TestExecutionPage() {
   const syncingRef = React.useRef<boolean>(false);
   const restoreLeftScrollTopRef = React.useRef<number | null>(null);
 
+  // Resize logic
+  const [leftWidth, setLeftWidth] = React.useState<number>(280);
+  const isDraggingRef = React.useRef<boolean>(false);
+  const startXRef = React.useRef<number>(0);
+  const startWidthRef = React.useRef<number>(0);
+
+  const onMouseMoveResize = React.useCallback((e: MouseEvent) => {
+    if (!isDraggingRef.current) return;
+    const delta = e.clientX - startXRef.current;
+    const next = Math.min(600, Math.max(200, startWidthRef.current + delta));
+    setLeftWidth(next);
+  }, []);
+
+  const onMouseUpResize = React.useCallback(() => {
+    isDraggingRef.current = false;
+    document.removeEventListener("mousemove", onMouseMoveResize);
+    document.removeEventListener("mouseup", onMouseUpResize);
+    document.body.style.cursor = "auto";
+    document.body.style.userSelect = "auto";
+  }, [onMouseMoveResize]);
+
+  const onMouseDownResize = (e: React.MouseEvent<HTMLDivElement>) => {
+    isDraggingRef.current = true;
+    startXRef.current = e.clientX;
+    startWidthRef.current = leftWidth;
+    document.addEventListener("mousemove", onMouseMoveResize);
+    document.addEventListener("mouseup", onMouseUpResize);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    e.preventDefault();
+  };
+
   const fetchCases = async (
     p = page,
     s = pageSize,
@@ -721,7 +753,7 @@ export default function TestExecutionPage() {
           autoSize={{ minRows: 1 }}
           style={{ maxHeight: 300, overflow: "auto" }}
           placeholder={placeholder || "点击输入结果"}
-          className="text-sm resize-none"
+          className="text-sm resize-none !p-3 !bg-transparent focus:!shadow-none"
         />
       );
     };
@@ -765,12 +797,12 @@ export default function TestExecutionPage() {
           width: "30%",
           shouldCellUpdate: (record: any, prevRecord: any) => record.actualValue !== prevRecord.actualValue,
           render: (_: any, record: any, idx: number) => (
-            <div className="w-full rounded border border-transparent hover:border-[#1890ff] transition-colors">
+            <div className="w-full h-full">
               <EditableTextArea value={record.actualValue} onCommit={(val) => onChangeActual(idx, val)} />
             </div>
           ),
           onHeaderCell: () => ({ style: headerStyle }),
-          onCell: () => ({ style: cellStyle }),
+          onCell: () => ({ style: { ...cellStyle, padding: 0 } }),
         },
         {
           title: "执行结果",
@@ -849,20 +881,27 @@ export default function TestExecutionPage() {
       <Transition show={mounted} enter="transition-opacity duration-200" enterFrom="opacity-0" enterTo="opacity-100">
         <Row className="w-full rounded-md border border-custom-border-200 overflow-hidden" gutter={0} wrap={false}>
           <Col
-            className="relative border-r border-custom-border-200 overflow-y-auto vertical-scrollbar scrollbar-sm max-h-[calc(100dvh-130px)]"
+            className="relative border-r border-custom-border-200 max-h-[calc(100dvh-130px)] flex flex-col group/left-col"
             flex="0 0 auto"
-            style={{ width: 280, minWidth: 200, maxWidth: 320 }}
+            style={{ width: leftWidth, minWidth: 200, maxWidth: 600 }}
           >
-            <Tree
-              showLine={false}
-              defaultExpandAll
-              onSelect={onSelect}
-              onExpand={onExpand}
-              expandedKeys={expandedKeys}
-              autoExpandParent={autoExpandParent}
-              treeData={treeData}
-              selectedKeys={treeData.length > 0 ? [selectedTreeKey] : []}
-              className="py-2"
+            <div className="flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm">
+              <Tree
+                showLine={false}
+                defaultExpandAll
+                onSelect={onSelect}
+                onExpand={onExpand}
+                expandedKeys={expandedKeys}
+                autoExpandParent={autoExpandParent}
+                treeData={treeData}
+                selectedKeys={treeData.length > 0 ? [selectedTreeKey] : []}
+                className="py-2"
+              />
+            </div>
+            {/* Resize Handle */}
+            <div
+              onMouseDown={onMouseDownResize}
+              className="absolute top-0 right-[-3px] bottom-0 w-[6px] cursor-col-resize z-10"
             />
           </Col>
 
@@ -934,29 +973,28 @@ export default function TestExecutionPage() {
                       })
                     )}
                   </div>
-                  <Pagination
-                    simple
-                    size="small"
-                    current={page}
-                    pageSize={pageSize}
-                    total={total}
-                    showSizeChanger
-                    pageSizeOptions={[10, 20, 50, 100] as any}
-                    onChange={(p, s) => {
-                      setPage(p);
-                      setPageSize(s);
-                      fetchCases(p, s, keyword);
-                    }}
-                  />
+                  <div className="flex justify-center w-full">
+                    <Pagination
+                      simple
+                      size="small"
+                      current={page}
+                      pageSize={pageSize}
+                      total={total}
+                      showSizeChanger
+                      pageSizeOptions={[10, 20, 50, 100] as any}
+                      onChange={(p, s) => {
+                        setPage(p);
+                        setPageSize(s);
+                        fetchCases(p, s, keyword);
+                      }}
+                    />
+                  </div>
                 </div>
               )}
             </div>
           </Col>
 
-          <Col
-            flex="auto"
-            className="flex flex-col max-h-[calc(100dvh-130px)] min-h-0"
-          >
+          <Col flex="auto" className="flex flex-col max-h-[calc(100dvh-130px)] min-h-0">
             <div className="flex flex-col flex-1 min-h-0">
               <div
                 ref={rightRef}
@@ -1057,7 +1095,7 @@ export default function TestExecutionPage() {
                           leaveTo="transform scale-95 opacity-0"
                         >
                           {activeTab === "basic" && (
-                            <div className="flex flex-col gap-4 h-[550px] overflow-y-auto vertical-scrollbar scrollbar-sm">
+                            <div className="flex flex-col gap-4 min-h-[550px]">
                               <div className="text-lg font-semibold">{caseDetail?.name ?? "-"}</div>
                               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                                 <div className="col-span-1">
@@ -1194,7 +1232,7 @@ export default function TestExecutionPage() {
                           leaveTo="transform scale-95 opacity-0"
                         >
                           {activeTab === "requirement" && selectedCaseId && (
-                            <div className="mt-4 h-[550px] overflow-y-auto vertical-scrollbar scrollbar-sm">
+                            <div className="mt-4 min-h-[550px]">
                               <div className="flex items-center justify-between mb-3">
                                 <div className="text-sm text-gray-600">{currentCount}个产品需求</div>
                               </div>
@@ -1213,7 +1251,7 @@ export default function TestExecutionPage() {
                           leaveTo="transform scale-95 opacity-0"
                         >
                           {activeTab === "work" && selectedCaseId && (
-                            <div className="mt-4 h-[550px] overflow-y-auto vertical-scrollbar scrollbar-sm">
+                            <div className="mt-4 min-h-[550px]">
                               <div className="flex items-center justify-between mb-3">
                                 <div className="text-sm text-gray-600">{currentCount}个工作项</div>
                               </div>
@@ -1232,7 +1270,7 @@ export default function TestExecutionPage() {
                           leaveTo="transform scale-95 opacity-0"
                         >
                           {activeTab === "defect" && selectedCaseId && (
-                            <div className="mt-4 h-[550px] overflow-y-auto vertical-scrollbar scrollbar-sm">
+                            <div className="mt-4 min-h-[550px]">
                               <div className="flex items-center justify-between mb-3">
                                 <div className="text-sm text-gray-600">{currentCount}个缺陷</div>
                               </div>
@@ -1283,7 +1321,6 @@ export default function TestExecutionPage() {
                           ))}
                       </Radio.Group>
                       <div>
-                        <label className="mb-2 flex items-center gap-2 text-sm font-medium text-gray-700">原因说明</label>
                         <Input.TextArea
                           value={reason}
                           onChange={(e) => setReason(e.target.value)}
