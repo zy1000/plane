@@ -533,6 +533,7 @@ export const WorkItemSelectModal: React.FC<Props> = ({
       width="70vw"
       destroyOnClose
       maskClosable={false}
+      zIndex={1250}
       footer={
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
           <Button onClick={onClose}>取消</Button>

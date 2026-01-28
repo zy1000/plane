@@ -662,6 +662,7 @@ export const StepsEditor: React.FC<{
         onCancel={cancelExpandedEdit}
         title={expandedEdit.field === "description" ? "编辑步骤描述" : "编辑预期结果"}
         width="60vw"
+        zIndex={1250}
         footer={
           editable
             ? [
@@ -967,7 +968,7 @@ export const StepsEditor: React.FC<{
                     <Popover
                       trigger="click"
                       placement="rightTop"
-                      overlayStyle={{ padding: 0 }}
+                      overlayStyle={{ padding: 0, zIndex: 1200 }}
                       content={
                         <div
                           style={{

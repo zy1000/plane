@@ -101,7 +101,7 @@ export function CaseMetaForm(props: CaseMetaFormProps) {
               buttonClassName="text-sm"
               dropdownArrowClassName="h-3.5 w-3.5"
               showUserDetails={true}
-              optionsClassName="z-[60]"
+              optionsClassName="z-[1200]"
             />
           </div>
         </div>
@@ -132,6 +132,7 @@ export function CaseMetaForm(props: CaseMetaFormProps) {
               suffixIcon={null}
               variant="borderless"
               className="w-full text-sm"
+              dropdownStyle={{ zIndex: 1200 }}
               filterOption={(input, option) =>
                 String(option?.label ?? "")
                   .toLowerCase()
@@ -153,6 +154,7 @@ export function CaseMetaForm(props: CaseMetaFormProps) {
               suffixIcon={null}
               variant="borderless"
               className="w-full text-sm"
+              dropdownStyle={{ zIndex: 1200 }}
               filterOption={(input, option) =>
                 String(option?.label ?? "")
                   .toLowerCase()

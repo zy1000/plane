@@ -13,13 +13,14 @@ import { QaCasesCollapsibleContent } from "./content";
 
 type Props = {
   workspaceSlug: string;
+  projectId: string;
   issueId: string;
   disabled?: boolean;
   issueServiceType: TIssueServiceType;
 };
 
 export const QaCasesCollapsible: FC<Props> = observer((props) => {
-  const { workspaceSlug, issueId, disabled = false, issueServiceType } = props;
+  const { workspaceSlug, projectId, issueId, disabled = false, issueServiceType } = props;
   const { openWidgets, toggleOpenWidget } = useIssueDetail(issueServiceType);
   const isCollapsibleOpen = openWidgets.includes("qa-cases");
   const [refreshKey, setRefreshKey] = React.useState(0);
@@ -101,6 +102,7 @@ export const QaCasesCollapsible: FC<Props> = observer((props) => {
         data={data}
         loading={loading}
         workspaceSlug={workspaceSlug}
+        projectId={projectId}
         onDelete={handleDelete}
         onRefresh={() => setRefreshKey((k) => k + 1)}
       />

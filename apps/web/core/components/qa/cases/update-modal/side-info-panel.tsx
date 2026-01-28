@@ -130,6 +130,7 @@ export function SideInfoPanel({
                   onChange={handleChangeTestType}
                   placeholder="请选择测试类型"
                   aria-label="测试类型"
+                  dropdownStyle={{ zIndex: 1200 }}
                 />
               </div>
             ) : (
@@ -209,7 +210,7 @@ export function SideInfoPanel({
                   buttonVariant="transparent-with-text"
                   buttonClassName="text-sm p-0 hover:bg-transparent hover:bg-inherit"
                   showUserDetails={true}
-                  optionsClassName="z-[60]"
+                  optionsClassName="z-[1200]"
                 />
               ) : (
                 "-"
@@ -272,7 +273,7 @@ export function SideInfoPanel({
                   buttonVariant="transparent-with-text"
                   buttonClassName="text-sm"
                   showUserDetails={true}
-                  optionsClassName="z-[60]"
+                  optionsClassName="z-[1200]"
                 />
               }
             </span>
@@ -298,7 +299,7 @@ export function SideInfoPanel({
                   buttonVariant="transparent-with-text"
                   buttonClassName="text-sm"
                   showUserDetails={true}
-                  optionsClassName="z-[60]"
+                  optionsClassName="z-[1200]"
                 />
               }
             </span>
