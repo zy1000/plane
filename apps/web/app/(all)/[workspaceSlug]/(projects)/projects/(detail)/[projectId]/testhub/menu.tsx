@@ -64,8 +64,8 @@ export const TestManagementMenuBar = () => {
   const repositoryIdForLinks = repositoryIdFromStorage || repositoryIdFromUrl;
 
   return (
-    <div className="w-full  border-custom-border-200 bg-custom-background-100">
-      <div className="pl-0 py-2 flex items-center gap-2">
+    <div className="w-full border-b border-custom-border-200 bg-custom-background-100">
+      <div className="flex items-center px-4 overflow-x-auto no-scrollbar">
         {MENU_ITEMS.map((item) => {
           const href = item.href(ws, pid);
           const active = item.isActive(pathname, ws, pid);
@@ -78,10 +78,10 @@ export const TestManagementMenuBar = () => {
               key={item.key}
               href={finalHref}
               className={cn(
-                "px-2.5 py-1.5 rounded text-xs font-medium",
+                "px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap",
                 active
-                  ? "bg-custom-background-90 text-custom-text-100"
-                  : "text-custom-text-300 hover:bg-custom-background-90 hover:text-custom-text-100"
+                  ? "border-custom-text-100 text-custom-text-100"
+                  : "border-transparent text-custom-text-300 hover:text-custom-text-100"
               )}
             >
               {item.label}
