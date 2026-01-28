@@ -134,6 +134,42 @@ function ResizableHeaderCell(props: ResizableHeaderCellProps) {
   );
 }
 
+// 独立的输入组件，避免 Tree 渲染导致输入法中断
+const ModuleInput = ({
+  defaultValue = "",
+  placeholder = "",
+  onCommit,
+}: {
+  defaultValue?: string;
+  placeholder?: string;
+  onCommit: (value: string) => void;
+}) => {
+  const [value, setValue] = useState(defaultValue);
+  const committedRef = useRef(false);
+
+  const commit = () => {
+    if (committedRef.current) return;
+    committedRef.current = true;
+    onCommit(value);
+  };
+
+  return (
+    <div className="w-full" onClick={(e) => e.stopPropagation()}>
+      <Input
+        size="small"
+        autoFocus
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={commit}
+        onPressEnter={commit}
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.stopPropagation()}
+      />
+    </div>
+  );
+};
+
 export default function TestCasesPage() {
   const { workspaceSlug, projectId } = useParams();
   const router = useRouter();
@@ -195,9 +231,7 @@ export default function TestCasesPage() {
   const [reviewEnums, setReviewEnums] = useState<Record<string, Record<string, { label: string; color: string }>>>({});
   // 新增：创建子模块的临时状态
   const [creatingParentId, setCreatingParentId] = useState<string | "all" | null>(null);
-  const [newModuleName, setNewModuleName] = useState<string>("");
   const [renamingModuleId, setRenamingModuleId] = useState<string | null>(null);
-  const [renamingModuleName, setRenamingModuleName] = useState<string>("");
 
   // 新增状态：模块树数据、选中模块
   const [modules, setModules] = useState<any[]>([]);
@@ -360,7 +394,6 @@ export default function TestCasesPage() {
   const handleAddUnderNode = (parentId: string | "all") => {
     if (!repositoryId) return;
     setCreatingParentId(parentId);
-    setNewModuleName("");
 
     // 新增：确保当前父节点展开，便于显示临时输入框
     setExpandedKeys((prev) => {
@@ -372,11 +405,10 @@ export default function TestCasesPage() {
   };
 
   // 新增：输入框失焦或回车时调用创建接口
-  const handleCreateBlurOrEnter = async (parentId: string | "all") => {
-    const name = newModuleName.trim();
+  const handleCreateBlurOrEnter = async (parentId: string | "all", inputValue: string) => {
+    const name = inputValue.trim();
     if (!name || !workspaceSlug || !repositoryId) {
       setCreatingParentId(null);
-      setNewModuleName("");
       return;
     }
     const payload: any = {
@@ -390,13 +422,11 @@ export default function TestCasesPage() {
       await caseService.createModules(workspaceSlug as string, payload);
       // 刷新模块树与列表
       setCreatingParentId(null);
-      setNewModuleName("");
       await fetchModules();
       await fetchCases(1, pageSize, filters);
     } catch (e) {
       console.error("创建模块失败:", e);
       setCreatingParentId(null);
-      setNewModuleName("");
     }
   };
   // 新增：删除确认弹窗与删除逻辑
@@ -424,9 +454,7 @@ export default function TestCasesPage() {
 
   const startRenameNode = (moduleId: string, currentName: string) => {
     setCreatingParentId(null);
-    setNewModuleName("");
     setRenamingModuleId(moduleId);
-    setRenamingModuleName(currentName);
     setExpandedKeys((prev) => {
       const prevKeys = prev || [];
       return prevKeys.includes(moduleId) ? prevKeys : [...prevKeys, moduleId];
@@ -434,22 +462,19 @@ export default function TestCasesPage() {
     setAutoExpandParent(true);
   };
 
-  const handleRenameBlurOrEnter = async (moduleId: string) => {
-    const name = renamingModuleName.trim();
+  const handleRenameBlurOrEnter = async (moduleId: string, inputValue: string) => {
+    const name = inputValue.trim();
     if (!name || !workspaceSlug) {
       setRenamingModuleId(null);
-      setRenamingModuleName("");
       return;
     }
     try {
       await caseModuleService.updateCaseModule(workspaceSlug as string, moduleId, { name });
       setRenamingModuleId(null);
-      setRenamingModuleName("");
       await fetchModules();
     } catch (e) {
       console.error("重命名失败:", e);
       setRenamingModuleId(null);
-      setRenamingModuleName("");
     }
   };
 
@@ -567,19 +592,11 @@ export default function TestCasesPage() {
     const actualId = String(nodeId || "all");
     if (renamingModuleId && renamingModuleId === actualId) {
       return (
-        <div className="w-full" onClick={(e) => e.stopPropagation()}>
-          <Input
-            size="small"
-            autoFocus
-            placeholder="请输入模块名称"
-            value={renamingModuleName}
-            onChange={(e) => setRenamingModuleName(e.target.value)}
-            onBlur={() => handleRenameBlurOrEnter(actualId)}
-            onPressEnter={() => handleRenameBlurOrEnter(actualId)}
-            onClick={(e) => e.stopPropagation()}
-            onKeyDown={(e) => e.stopPropagation()}
-          />
-        </div>
+        <ModuleInput
+          placeholder="请输入模块名称"
+          defaultValue={title}
+          onCommit={(val) => handleRenameBlurOrEnter(actualId, val)}
+        />
       );
     }
     const items = [
@@ -633,17 +650,7 @@ export default function TestCasesPage() {
     );
   };
   const renderCreatingInput = (parentId: string | "all") => (
-    <div className="w-full">
-      <Input
-        size="small"
-        autoFocus
-        placeholder="请输入模块名称"
-        value={newModuleName}
-        onChange={(e) => setNewModuleName(e.target.value)}
-        onBlur={() => handleCreateBlurOrEnter(parentId)}
-        onPressEnter={() => handleCreateBlurOrEnter(parentId)}
-      />
-    </div>
+    <ModuleInput placeholder="请输入模块名称" onCommit={(val) => handleCreateBlurOrEnter(parentId, val)} />
   );
 
   // 新增：递归构建树节点，任意层级都支持插入“添加”的临时输入框

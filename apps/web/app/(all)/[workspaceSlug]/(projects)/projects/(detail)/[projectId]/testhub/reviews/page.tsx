@@ -57,6 +57,42 @@ const initialModules: ModuleNode[] = [];
 
 const initialReviews: ReviewItem[] = [];
 
+// 独立的输入组件，避免 Tree 渲染导致输入法中断
+const ModuleInput = ({
+  defaultValue = "",
+  placeholder = "",
+  onCommit,
+}: {
+  defaultValue?: string;
+  placeholder?: string;
+  onCommit: (value: string) => void;
+}) => {
+  const [value, setValue] = useState(defaultValue);
+  const committedRef = useRef(false);
+
+  const commit = () => {
+    if (committedRef.current) return;
+    committedRef.current = true;
+    onCommit(value);
+  };
+
+  return (
+    <div className="w-full" onClick={(e) => e.stopPropagation()}>
+      <Input
+        size="small"
+        autoFocus
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={commit}
+        onPressEnter={commit}
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.stopPropagation()}
+      />
+    </div>
+  );
+};
+
 export default function ReviewsPage() {
   const { workspaceSlug, projectId } = useParams<{ workspaceSlug: string; projectId: string }>();
   const searchParams = useSearchParams();
@@ -75,9 +111,7 @@ export default function ReviewsPage() {
   const [pageSize, setPageSize] = useState<number>(10);
   const [modules, setModules] = useState<ReviewModule[]>([]);
   const [creatingParentId, setCreatingParentId] = useState<string | "all" | null>(null);
-  const [newModuleName, setNewModuleName] = useState<string>("");
   const [renamingModuleId, setRenamingModuleId] = useState<string | null>(null);
-  const [renamingModuleName, setRenamingModuleName] = useState<string>("");
   const [expandedKeys, setExpandedKeys] = useState<string[]>(["all"]);
   const [autoExpandParent, setAutoExpandParent] = useState<boolean>(true);
   const [reviews, setReviews] = useState<ReviewItem[]>(initialReviews);
@@ -312,9 +346,7 @@ export default function ReviewsPage() {
 
   const handleAddUnderNode = (parentId: string | "all") => {
     setRenamingModuleId(null);
-    setRenamingModuleName("");
     setCreatingParentId(parentId);
-    setNewModuleName("");
     setExpandedKeys((prev) => {
       const pid = String(parentId);
       return prev.includes(pid) ? prev : [...prev, pid];
@@ -322,11 +354,10 @@ export default function ReviewsPage() {
     setAutoExpandParent(true);
   };
 
-  const handleCreateBlurOrEnter = async (parentId: string | "all") => {
-    const name = newModuleName.trim();
+  const handleCreateBlurOrEnter = async (parentId: string | "all", inputValue: string) => {
+    const name = inputValue.trim();
     if (!name || !workspaceSlug || !projectId) {
       setCreatingParentId(null);
-      setNewModuleName("");
       return;
     }
     const payload: any = { name, project: projectId };
@@ -334,39 +365,32 @@ export default function ReviewsPage() {
     try {
       await caseService.createReviewModule(workspaceSlug as string, payload);
       setCreatingParentId(null);
-      setNewModuleName("");
       await fetchModules();
       await fetchAllReviewsTotal();
     } catch (e) {
       setCreatingParentId(null);
-      setNewModuleName("");
     }
   };
 
   const startRenameNode = (moduleId: string, currentName: string) => {
     setCreatingParentId(null);
-    setNewModuleName("");
     setRenamingModuleId(moduleId);
-    setRenamingModuleName(currentName);
     setExpandedKeys((prev) => (prev.includes(moduleId) ? prev : [...prev, moduleId]));
     setAutoExpandParent(true);
   };
 
-  const handleRenameBlurOrEnter = async (moduleId: string) => {
-    const name = renamingModuleName.trim();
+  const handleRenameBlurOrEnter = async (moduleId: string, inputValue: string) => {
+    const name = inputValue.trim();
     if (!name || !workspaceSlug) {
       setRenamingModuleId(null);
-      setRenamingModuleName("");
       return;
     }
     try {
       await caseService.updateReviewModule(workspaceSlug as string, moduleId, { name });
       setRenamingModuleId(null);
-      setRenamingModuleName("");
       await fetchModules();
     } catch (e) {
       setRenamingModuleId(null);
-      setRenamingModuleName("");
     }
   };
 
@@ -412,19 +436,7 @@ export default function ReviewsPage() {
   };
 
   const renderCreatingInput = (parentId: string | "all") => (
-    <div className="w-full" onClick={(e) => e.stopPropagation()}>
-      <Input
-        size="small"
-        autoFocus
-        placeholder="请输入模块名称"
-        value={newModuleName}
-        onChange={(e) => setNewModuleName(e.target.value)}
-        onBlur={() => handleCreateBlurOrEnter(parentId)}
-        onPressEnter={() => handleCreateBlurOrEnter(parentId)}
-        onClick={(e) => e.stopPropagation()}
-        onKeyDown={(e) => e.stopPropagation()}
-      />
-    </div>
+    <ModuleInput placeholder="请输入模块名称" onCommit={(val) => handleCreateBlurOrEnter(parentId, val)} />
   );
 
   const getNodeCount = (m: any) => {
@@ -440,19 +452,11 @@ export default function ReviewsPage() {
 
     if (renamingModuleId && renamingModuleId === nodeId) {
       return (
-        <div className="w-full" onClick={(e) => e.stopPropagation()}>
-          <Input
-            size="small"
-            autoFocus
-            placeholder="请输入模块名称"
-            value={renamingModuleName}
-            onChange={(e) => setRenamingModuleName(e.target.value)}
-            onBlur={() => handleRenameBlurOrEnter(nodeId)}
-            onPressEnter={() => handleRenameBlurOrEnter(nodeId)}
-            onClick={(e) => e.stopPropagation()}
-            onKeyDown={(e) => e.stopPropagation()}
-          />
-        </div>
+        <ModuleInput
+          placeholder="请输入模块名称"
+          defaultValue={title}
+          onCommit={(val) => handleRenameBlurOrEnter(nodeId, val)}
+        />
       );
     }
 
