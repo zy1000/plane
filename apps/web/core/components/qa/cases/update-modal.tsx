@@ -1059,7 +1059,7 @@ function UpdateModal({ open, onClose, caseId, workspaceSlug: propWorkspaceSlug, 
         {/* 内容区域：左右布局 */}
         <div className="flex flex-1 min-h-0">
           {/* 左侧：2/3宽度 */}
-          <div className="w-2/3 px-6 py-4 h-full overflow-y-auto">
+          <div className="w-[77.778%] px-6 py-4 h-full overflow-y-auto">
             <TitleInput value={title} onChange={setTitle} onBlur={handleBlurTitle} />
             <CaseMetaForm
               projectId={projectId ? String(projectId) : undefined}
