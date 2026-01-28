@@ -103,12 +103,118 @@ export const CaseMindmap = ({ data, editable = true, before, onOperation, onCont
       }
     });
   };
+  const decorateExpandButtons = () => {
+    const container = containerRef.current;
+    if (!container) return;
+    const canvas = container.querySelector(".map-canvas") as HTMLElement | null;
+    if (!canvas) return;
+    const canvasRect = canvas.getBoundingClientRect();
+    const buttons = canvas.querySelectorAll("me-parent > me-epd") as NodeListOf<HTMLElement>;
+    buttons.forEach((btn) => {
+      const parent = btn.closest("me-parent") as HTMLElement | null;
+      if (!parent) return;
+      const children = parent.querySelector(":scope > me-children") as HTMLElement | null;
+      if (!children) return;
+      const sideRoot = parent.closest(".lhs, .rhs") as HTMLElement | null;
+      const isLhs = !!sideRoot && sideRoot.classList.contains("lhs");
+      const parentRect = parent.getBoundingClientRect();
+      const childrenRect = children.getBoundingClientRect();
+      const y1 = (parentRect.top + parentRect.bottom) / 2 - canvasRect.top;
+      let xStart = 0;
+      let xEnd = 0;
+      if (isLhs) {
+        xStart = parentRect.left - canvasRect.left;
+        xEnd = childrenRect.right - canvasRect.left;
+      } else {
+        xStart = parentRect.right - canvasRect.left;
+        xEnd = childrenRect.left - canvasRect.left;
+      }
+      if (!Number.isFinite(xStart) || !Number.isFinite(xEnd) || !Number.isFinite(y1)) return;
+      const centerX = (xStart + xEnd) / 2;
+      const centerY = y1 - 4;
+      const style = btn.style;
+      style.position = "absolute";
+      style.left = `${centerX}px`;
+      style.top = `${centerY}px`;
+      style.transform = "translate(-50%, -50%)";
+      style.zIndex = "50";
+      style.pointerEvents = "auto";
+    });
+  };
+  const decorateLines = () => {
+    const container = containerRef.current;
+    if (!container) return;
+    const canvas = container.querySelector(".map-canvas") as HTMLElement | null;
+    if (!canvas) return;
+
+    // Define colors for each level
+    // Level 1: Main branch lines (Root -> Level 1)
+    // Level 2: Sub branch lines (Level 1 -> Level 2)
+    // ...
+    const colors = ["#4f46e5", "#0ea5e9", "#22c55e", "#f97316", "#ec4899", "#a855f7", "#eab308"];
+
+    // 1. Process Main Branch Lines (Level 1)
+    // These lines are in .lines SVG and connect Root to Level 1 nodes
+    const mainPaths = canvas.querySelectorAll(".lines path") as NodeListOf<SVGPathElement>;
+    if (mainPaths.length > 0) {
+      const level1Color = colors[0];
+      mainPaths.forEach((path) => {
+        path.style.stroke = level1Color;
+      });
+    }
+
+    // 2. Process Sub Branch Lines (Level 2+)
+    // These lines are in .subLines SVG
+    // They correspond to nodes that are descendants of me-children
+    const subPaths = canvas.querySelectorAll(".subLines path") as NodeListOf<SVGPathElement>;
+    if (subPaths.length === 0) return;
+
+    // Find all me-parent nodes that are inside me-children (i.e. Level 2+)
+    // The order of these nodes in DOM should match the order of paths in .subLines
+    const allParents = Array.from(canvas.querySelectorAll("me-parent"));
+    const subNodeParents = allParents.filter((el) => el.closest("me-children"));
+
+    subNodeParents.forEach((parent, index) => {
+      if (index >= subPaths.length) return;
+
+      // Calculate depth based on nesting of me-children
+      // Level 2 node is inside 1 me-children (depth 1 relative to Level 1)
+      // Level 3 node is inside 2 me-children (depth 2)
+      let depth = 0;
+      let curr = parent.parentElement;
+      while (curr && curr !== canvas) {
+        if (curr.tagName.toLowerCase() === "me-children") {
+          depth++;
+        }
+        curr = curr.parentElement;
+      }
+
+      // depth starts at 1 for Level 2 nodes.
+      // We want Level 2 lines to have a different color from Level 1 lines.
+      // Level 1 used colors[0].
+      // So let's use colors[depth] or colors[depth % len]
+      // If depth=1 (Level 2), use colors[1].
+      
+      const colorIndex = depth % colors.length;
+      const color = colors[colorIndex];
+      
+      const path = subPaths[index];
+      if (path) {
+        path.style.stroke = color;
+      }
+    });
+  };
+  const decorateAll = () => {
+    decorateTags();
+    decorateExpandButtons();
+    decorateLines();
+  };
   const scheduleDecorateTags = () => {
     if (decorateScheduledRef.current) return;
     decorateScheduledRef.current = true;
     requestAnimationFrame(() => {
       decorateScheduledRef.current = false;
-      decorateTags();
+      decorateAll();
     });
   };
 
@@ -127,7 +233,15 @@ export const CaseMindmap = ({ data, editable = true, before, onOperation, onCont
 
     const container = containerRef.current;
     const observer = new MutationObserver(() => scheduleDecorateTags());
-    observer.observe(container, { subtree: true, childList: true, characterData: true });
+    observer.observe(container, {
+      subtree: true,
+      childList: true,
+      characterData: true,
+      attributes: true,
+      attributeFilter: ["style", "class"],
+    });
+    const handleResize = () => scheduleDecorateTags();
+    window.addEventListener("resize", handleResize);
 
     const handleRightClick = (e: Event) => {
       const target = e.target as HTMLElement;
@@ -239,6 +353,7 @@ export const CaseMindmap = ({ data, editable = true, before, onOperation, onCont
       container.removeEventListener("contextmenu", handleRightClick);
       container.removeEventListener("click", handleContainerClick);
       observer.disconnect();
+      window.removeEventListener("resize", handleResize);
       mindRef.current?.destroy?.();
       mindRef.current = null;
     };
@@ -287,25 +402,8 @@ export const CaseMindmap = ({ data, editable = true, before, onOperation, onCont
             flex-wrap: nowrap !important;
             border-radius: 8px !important;
           }
-          me-main > me-wrapper > me-parent > me-epd {
-            top: 50%;
-            transform: translateY(-50%);
-          }
           me-epd {
-            top: 50% !important;
-            transform: translateY(-50%);
-          }
-          .lhs > me-wrapper > me-parent > me-epd {
-            left: -10px;
-          }
-          .lhs me-epd {
-            left: 5px;
-          }
-          .rhs > me-wrapper > me-parent > me-epd {
-            right: -10px;
-          }
-          .rhs me-epd {
-            right: 5px;
+            transition: left 0.2s ease, top 0.2s ease, transform 0.2s ease;
           }
           me-root {
             border-radius: 8px !important;
