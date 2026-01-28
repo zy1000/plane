@@ -6,7 +6,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { PageHead } from "@/components/core/page-title";
 import { Breadcrumbs } from "@plane/ui";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
-import { Row, Col, Card, Input, Pagination, Tag, Spin, message, Button, Table, Tooltip, Radio, Select, Tree } from "antd";
+import { Row, Col, Card, Input, Pagination, Tag, Spin, message, Button, Table, Tooltip, Radio, Select, Tree, Modal } from "antd";
 import type { TreeProps } from "antd";
 import { AppstoreOutlined, DeploymentUnitOutlined } from "@ant-design/icons";
 import * as LucideIcons from "lucide-react";
@@ -89,6 +89,8 @@ export default function TestExecutionPage() {
   const [currentCount, setCurrentCount] = React.useState<number>(0);
   const [reviewValue, setReviewValue] = React.useState<string | null>(null);
   const [reason, setReason] = React.useState<string>("");
+  const [reasonModalOpen, setReasonModalOpen] = React.useState<boolean>(false);
+  const [reasonDraft, setReasonDraft] = React.useState<string>("");
   const [submitLoading, setSubmitLoading] = React.useState<boolean>(false);
   const [recordsRefreshKey, setRecordsRefreshKey] = React.useState<number>(0);
   const [isCurrentUserReviewer, setIsCurrentUserReviewer] = React.useState<boolean>(false);
@@ -1320,13 +1322,19 @@ export default function TestExecutionPage() {
                             </Radio>
                           ))}
                       </Radio.Group>
-                      <div>
+                      <div
+                        onDoubleClick={() => {
+                          setReasonDraft(reason);
+                          setReasonModalOpen(true);
+                        }}
+                      >
                         <Input.TextArea
                           value={reason}
                           onChange={(e) => setReason(e.target.value)}
-                          rows={4}
-                          placeholder="请输入原因（必要时）"
+                          autoSize={{ minRows: 1, maxRows: 1 }}
+                          placeholder="请输入原因（双击可全屏输入）"
                           allowClear
+                          className="resize-none"
                           onKeyDownCapture={(e) => {
                             if (e.ctrlKey || e.metaKey || e.altKey || e.key === "Escape" || e.key === "Tab") return;
                             e.stopPropagation();
@@ -1358,6 +1366,31 @@ export default function TestExecutionPage() {
           </Col>
         </Row>
       </Transition>
+      <Modal
+        title="执行原因"
+        open={reasonModalOpen}
+        cancelText="取消"
+        okText="确定"
+        onCancel={() => setReasonModalOpen(false)}
+        onOk={() => {
+          setReason(reasonDraft);
+          setReasonModalOpen(false);
+        }}
+        destroyOnClose
+        width={600}
+      >
+        <Input.TextArea
+          value={reasonDraft}
+          onChange={(e) => setReasonDraft(e.target.value)}
+          rows={4}
+          placeholder="请输入原因"
+          allowClear
+          onKeyDownCapture={(e) => {
+            if (e.ctrlKey || e.metaKey || e.altKey || e.key === "Escape" || e.key === "Tab") return;
+            e.stopPropagation();
+          }}
+        />
+      </Modal>
       <BugIssueModal
         isOpen={isCreateDefectOpen}
         onClose={() => setIsCreateDefectOpen(false)}
