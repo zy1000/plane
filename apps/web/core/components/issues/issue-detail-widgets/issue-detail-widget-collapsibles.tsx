@@ -70,6 +70,7 @@ export const IssueDetailWidgetCollapsibles = observer(function IssueDetailWidget
       {!hideWidgets?.includes("qa-cases") && (
         <QaCasesCollapsible
           workspaceSlug={workspaceSlug}
+          projectId={projectId}
           issueId={issueId}
           disabled={disabled}
           issueServiceType={issueServiceType}

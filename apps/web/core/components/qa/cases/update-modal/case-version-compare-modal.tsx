@@ -321,6 +321,7 @@ export function CaseVersionCompareModal({
       width={width}
       destroyOnClose
       closable={false}
+      zIndex={1250}
     >
       <div className="flex flex-col" style={{ height: contentHeight, maxHeight: contentHeight }}>
         {historyVersionOptions.length === 0 ? (
@@ -334,6 +335,7 @@ export function CaseVersionCompareModal({
                 value={compareBaseVersion}
                 options={historyVersionOptions}
                 onChange={(v) => setCompareBaseVersion(Number(v))}
+                dropdownStyle={{ zIndex: 1300 }}
               />
               <span className="text-sm text-gray-700 shrink-0">当前版本</span>
               <span className="text-sm text-gray-900">{currentVersionLabel}</span>

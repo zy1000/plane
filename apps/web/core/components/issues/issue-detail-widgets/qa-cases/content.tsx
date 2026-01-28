@@ -12,6 +12,7 @@ type Props = {
   data: TestCaseItem[];
   loading: boolean;
   workspaceSlug: string;
+  projectId: string;
   onDelete: (caseId: string | number) => void | Promise<void>;
   onRefresh?: () => void;
 };
@@ -25,7 +26,7 @@ type TestCaseItem = {
 };
 
 export const QaCasesCollapsibleContent: React.FC<Props> = (props) => {
-  const { data, loading, workspaceSlug, onDelete, onRefresh } = props;
+  const { data, loading, workspaceSlug, projectId, onDelete, onRefresh } = props;
   const [activeCaseId, setActiveCaseId] = React.useState<string | undefined>(undefined);
   const [isCaseModalOpen, setIsCaseModalOpen] = React.useState(false);
 
@@ -72,7 +73,8 @@ export const QaCasesCollapsibleContent: React.FC<Props> = (props) => {
                   <TableCell
                     className="max-w-[360px] truncate cursor-pointer"
                     title={item.name}
-                    onClick={() => {
+                    onClick={(e) => {
+                      e.stopPropagation();
                       setActiveCaseId(String(item.id));
                       setIsCaseModalOpen(true);
                     }}
@@ -112,6 +114,8 @@ export const QaCasesCollapsibleContent: React.FC<Props> = (props) => {
           onRefresh?.();
         }}
         caseId={activeCaseId}
+        workspaceSlug={workspaceSlug}
+        projectId={projectId}
       />
     </div>
   );

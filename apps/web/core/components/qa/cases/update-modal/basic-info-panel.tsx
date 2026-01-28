@@ -216,6 +216,7 @@ export function BasicInfoPanel(props: BasicInfoPanelProps) {
                 <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">文本描述</label>
                 <Dropdown
                   trigger={["click"]}
+                  overlayStyle={{ zIndex: 1200 }}
                   menu={{
                     selectable: true,
                     selectedKeys: [localMode === 1 ? "text" : "step"],
@@ -288,6 +289,7 @@ export function BasicInfoPanel(props: BasicInfoPanelProps) {
               <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">测试步骤</label>
               <Dropdown
                 trigger={["click"]}
+                overlayStyle={{ zIndex: 1200 }}
                 menu={{
                   selectable: true,
                   selectedKeys: [localMode === 1 ? "text" : "step"],

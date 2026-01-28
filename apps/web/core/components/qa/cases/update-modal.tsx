@@ -1,10 +1,11 @@
 // 顶部：添加 client 指令与必要的导入
 "use client";
 import React, { useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { useParams } from "next/navigation";
 import { CaseService } from "../../../services/qa/case.service";
 import { CaseService as ReviewApiService } from "../../../services/qa/review.service";
-import { Tag, Spin, Tooltip, message, Input, Table } from "antd";
+import { Tag, Spin, Tooltip, message, Input, Table, Select } from "antd";
 import { getEnums } from "../../../../app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/util";
 import { useMember } from "@/hooks/store/use-member";
 import * as LucideIcons from "lucide-react";
@@ -28,14 +29,18 @@ type UpdateModalProps = {
   open: boolean;
   onClose: () => void;
   caseId?: string; // 改为传入case ID而不是完整数据
+  workspaceSlug?: string;
+  projectId?: string;
 };
 
-function UpdateModal({ open, onClose, caseId }: UpdateModalProps) {
+function UpdateModal({ open, onClose, caseId, workspaceSlug: propWorkspaceSlug, projectId: propProjectId }: UpdateModalProps) {
   if (!open || !caseId) return null;
 
   const [activeTab, setActiveTab] = useState<string>("basic");
   // 增加：本地状态与失焦更新逻辑
-  const { workspaceSlug, projectId } = useParams() as { workspaceSlug?: string; projectId?: string };
+  const params = useParams() as { workspaceSlug?: string; projectId?: string };
+  const workspaceSlug = propWorkspaceSlug || params.workspaceSlug;
+  const projectId = propProjectId || params.projectId;
   const caseService = React.useMemo(() => new CaseService(), []);
   const reviewService = React.useMemo(() => new ReviewApiService(), []);
   const loadSeqRef = React.useRef<number>(0);
@@ -521,7 +526,7 @@ function UpdateModal({ open, onClose, caseId }: UpdateModalProps) {
                     buttonVariant="transparent-with-text"
                     buttonClassName="text-sm p-0 hover:bg-transparent hover:bg-inherit"
                     showUserDetails={true}
-                    optionsClassName="z-[60]"
+                    optionsClassName="z-[1200]"
                   />
                 </div>
               </span>
@@ -540,7 +545,7 @@ function UpdateModal({ open, onClose, caseId }: UpdateModalProps) {
                   buttonVariant="transparent-with-text"
                   buttonClassName="text-sm p-0 hover:bg-transparent hover:bg-inherit font-semibold"
                   showUserDetails={true}
-                  optionsClassName="z-[60]"
+                  optionsClassName="z-[1200]"
                 />
               </div>
               {depth >= 2 && parentCreatorName ? <span className="mx-1">回复</span> : null}
@@ -557,7 +562,7 @@ function UpdateModal({ open, onClose, caseId }: UpdateModalProps) {
                     buttonVariant="transparent-with-text"
                     buttonClassName="text-sm p-0 hover:bg-transparent hover:bg-inherit font-semibold"
                     showUserDetails={true}
-                    optionsClassName="z-[60]"
+                    optionsClassName="z-[1200]"
                   />
                 </div>
               ) : null}
@@ -1020,24 +1025,34 @@ function UpdateModal({ open, onClose, caseId }: UpdateModalProps) {
   };
 
   // 渲染加载状态（等所有数据请求完成后再展示内容）
-  if (!initialReady || initialLoading) {
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center" aria-modal="true" role="dialog">
+  if (!initialReady || initialLoading || !caseData) {
+    return createPortal(
+      <div
+        className="fixed inset-0 z-[1100] flex items-center justify-center"
+        aria-modal="true"
+        role="dialog"
+        data-prevent-outside-click="true"
+      >
         <div className="absolute inset-0 bg-black/40" onClick={onClose} aria-hidden="true" />
         <div className="relative z-10 w-[85vw] h-[90vh] max-h-[90vh] overflow-hidden rounded-lg bg-white shadow-lg flex items-center justify-center">
-          <Spin size="large" />
+          {!initialReady || initialLoading ? (
+            <Spin size="large" />
+          ) : (
+            <div className="text-gray-500 text-sm">暂无数据或加载失败</div>
+          )}
         </div>
-      </div>
+      </div>,
+      document.body
     );
   }
 
-  // 如果没有数据，不渲染内容
-  if (!caseData) {
-    return null;
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center" aria-modal="true" role="dialog">
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[1100] flex items-center justify-center"
+      aria-modal="true"
+      role="dialog"
+      data-prevent-outside-click="true"
+    >
       <div className="absolute inset-0 bg-black/40" onClick={onClose} aria-hidden="true" />
       <div className="relative z-10 w-[85vw] h-[90vh] max-h-[90vh] overflow-hidden rounded-lg bg-white shadow-lg flex flex-col">
         <ModalHeader onClose={onClose} caseId={String(caseId ?? "")} />
@@ -1199,6 +1214,9 @@ function UpdateModal({ open, onClose, caseId }: UpdateModalProps) {
                         showQuickJumper: true,
                         pageSizeOptions: execPageSizeOptions.map(String),
                         showTotal: (t, range) => `第 ${range[0]}-${range[1]} 条，共 ${t} 条`,
+                        selectComponentClass: (props: any) => (
+                          <Select {...props} dropdownStyle={{ zIndex: 1200 }} />
+                        ),
                         onChange: (p) => setExecPage(p),
                         onShowSizeChange: (_c, s) => {
                           setExecPageSize(s);
@@ -1232,7 +1250,7 @@ function UpdateModal({ open, onClose, caseId }: UpdateModalProps) {
                               buttonVariant="transparent-with-text"
                               buttonClassName="text-sm p-0 hover:bg-transparent hover:bg-inherit"
                               showUserDetails={true}
-                              optionsClassName="z-[60]"
+                              optionsClassName="z-[1200]"
                             />
                           ),
                         },
@@ -1270,6 +1288,9 @@ function UpdateModal({ open, onClose, caseId }: UpdateModalProps) {
                         showQuickJumper: true,
                         pageSizeOptions: reviewPageSizeOptions.map(String),
                         showTotal: (t, range) => `第 ${range[0]}-${range[1]} 条，共 ${t} 条`,
+                        selectComponentClass: (props: any) => (
+                          <Select {...props} dropdownStyle={{ zIndex: 1200 }} />
+                        ),
                         onChange: (p) => setReviewPage(p),
                         onShowSizeChange: (_c, s) => {
                           setReviewPageSize(s);
@@ -1308,7 +1329,7 @@ function UpdateModal({ open, onClose, caseId }: UpdateModalProps) {
                               buttonVariant="transparent-with-text"
                               buttonClassName="text-sm p-0 hover:bg-transparent hover:bg-inherit"
                               showUserDetails={true}
-                              optionsClassName="z-[60]"
+                              optionsClassName="z-[1200]"
                             />
                           ),
                         },
@@ -1427,8 +1448,8 @@ function UpdateModal({ open, onClose, caseId }: UpdateModalProps) {
         initialSelectedIssues={preselectedIssues}
         caseId={String(caseId ?? "")}
       />
-      <IssuePeekOverview />
-    </div>
+    </div>,
+    document.body
   );
 }
 
