@@ -5,16 +5,17 @@ import { useEffect, useMemo, useRef, useState, cloneElement, type ReactNode } fr
 import { PageHead } from "@/components/core/page-title";
 import { Breadcrumbs } from "@plane/ui";
 import { Button } from "antd";
+import { Tooltip } from "@plane/propel/tooltip";
 import PlanCasesModal from "@/components/qa/plans/plan-cases-modal";
 import PlanIterationModal from "@/components/qa/plans/plan-iteration-modal";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
-import { Row, Col, Tree, Table, Space, Tag, message, Dropdown, Pagination, Popconfirm, Select } from "antd";
+import { Tree, Table, Space, Tag, message, Dropdown, Pagination, Popconfirm, Select } from "antd";
 import type { TableProps } from "antd";
 import type { TreeProps } from "antd";
 import { CaseService } from "@/services/qa/case.service";
 import { PlanService } from "@/services/qa/plan.service";
-import { AppstoreOutlined, DeploymentUnitOutlined, DownOutlined } from "@ant-design/icons";
-import { FolderOpenDot } from "lucide-react";
+import { AppstoreOutlined, DownOutlined } from "@ant-design/icons";
+import { FolderOpenDot, Atom } from "lucide-react";
 import { formatDateTime, globalEnums } from "../util";
 import { useUser } from "@/hooks/store/user";
 
@@ -353,7 +354,7 @@ export default function PlanCasesPage() {
       kind === "root" ? (
         <AppstoreOutlined />
       ) : kind === "repository" ? (
-        <DeploymentUnitOutlined />
+        <Atom size={14} />
       ) : kind === "repository_modules_all" ? (
         <AppstoreOutlined />
       ) : (
@@ -534,9 +535,11 @@ export default function PlanCasesPage() {
       width: 140,
       render: (_: any, record: PlanCaseItem) =>
         record?.case?.repository_name ? (
-          <span className="block truncate" title={record.case.repository_name}>
-            {record.case.repository_name}
-          </span>
+          <Tooltip tooltipContent={record.case.repository_name}>
+            <span className="block max-w-[140px] truncate text-inherit">
+              {record.case.repository_name}
+            </span>
+          </Tooltip>
         ) : (
           "-"
         ),
@@ -548,9 +551,11 @@ export default function PlanCasesPage() {
       width: 120,
       render: (_: any, record: PlanCaseItem) =>
         record?.case?.module ? (
-          <span className="block truncate" title={record.case.module}>
-            {record.case.module}
-          </span>
+          <Tooltip tooltipContent={record.case.module}>
+            <span className="block max-w-[120px] truncate text-inherit">
+              {record.case.module}
+            </span>
+          </Tooltip>
         ) : (
           "-"
         ),
@@ -661,6 +666,11 @@ export default function PlanCasesPage() {
             <Tree
               showLine={false}
               defaultExpandAll
+              switcherIcon={
+                <span className="inline-flex items-center justify-center w-5 h-5 text-custom-text-300">
+                  <DownOutlined />
+                </span>
+              }
               onSelect={onSelect}
               onExpand={onExpand}
               expandedKeys={expandedKeys}

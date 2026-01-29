@@ -8,7 +8,7 @@ import { Breadcrumbs } from "@plane/ui";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { Row, Col, Card, Input, Pagination, Tag, Spin, message, Button, Table, Tooltip, Radio, Select, Tree, Modal } from "antd";
 import type { TreeProps } from "antd";
-import { AppstoreOutlined, DeploymentUnitOutlined } from "@ant-design/icons";
+import { AppstoreOutlined } from "@ant-design/icons";
 import * as LucideIcons from "lucide-react";
 import debounce from "lodash-es/debounce";
 import { CaseService as CaseApiService } from "@/services/qa/case.service";
@@ -18,6 +18,7 @@ import { RichTextEditor } from "../cases/util";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { useMember } from "@/hooks/store/use-member";
 import { useUser } from "@/hooks/store/user";
+import { useProjectNavigationPreferences } from "@/hooks/use-navigation-preferences";
 import { WorkItemDisplayModal } from "../cases/work-item-display-modal";
 import { ReviewRecordsPanel } from "../review/review-records";
 import { CreateUpdateIssueModal } from "@/components/issues/issue-modal/modal";
@@ -103,6 +104,9 @@ export default function TestExecutionPage() {
   const rightRef = React.useRef<HTMLDivElement | null>(null);
   const syncingRef = React.useRef<boolean>(false);
   const restoreLeftScrollTopRef = React.useRef<number | null>(null);
+
+  const { preferences: projectPreferences } = useProjectNavigationPreferences();
+  const topOffset = projectPreferences.navigationMode === "horizontal" ? 180 : 130;
 
   // Resize logic
   const [leftWidth, setLeftWidth] = React.useState<number>(280);
@@ -423,7 +427,7 @@ export default function TestExecutionPage() {
       kind === "root" ? (
         <AppstoreOutlined />
       ) : kind === "repository" ? (
-        <DeploymentUnitOutlined />
+        <LucideIcons.Atom size={14} />
       ) : kind === "repository_modules_all" ? (
         <AppstoreOutlined />
       ) : (
@@ -885,7 +889,7 @@ export default function TestExecutionPage() {
           <Col
             className="relative border-r border-custom-border-200 max-h-[calc(100dvh-130px)] flex flex-col group/left-col"
             flex="0 0 auto"
-            style={{ width: leftWidth, minWidth: 200, maxWidth: 600 }}
+            style={{ width: leftWidth, minWidth: 200, maxWidth: 600, maxHeight: `calc(100dvh - ${topOffset}px)` }}
           >
             <div className="flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm">
               <Tree
@@ -910,7 +914,7 @@ export default function TestExecutionPage() {
           <Col
             flex="0 0 auto"
             className="border-r border-custom-border-200 max-h-[calc(100dvh-130px)] overflow-hidden"
-            style={{ width: 360, minWidth: 280, maxWidth: 520 }}
+            style={{ width: 360, minWidth: 280, maxWidth: 520, maxHeight: `calc(100dvh - ${topOffset}px)` }}
           >
             <div className="p-4 flex flex-col gap-3">
               <Input.Search
@@ -996,12 +1000,12 @@ export default function TestExecutionPage() {
             </div>
           </Col>
 
-          <Col flex="auto" className="flex flex-col max-h-[calc(100dvh-130px)] min-h-0">
+          <Col flex="auto" className="flex flex-col min-h-0" style={{ maxHeight: `calc(100dvh - ${topOffset}px)` }}>
             <div className="flex flex-col flex-1 min-h-0">
               <div
                 ref={rightRef}
                 className="flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm"
-                style={{ scrollPaddingBottom: 16 }}
+                style={{ scrollPaddingBottom: 80 }}
               >
                 <div className="p-4" style={{ scrollPaddingBottom: 16 }}>
                   {!selectedCaseId ? (
@@ -1310,7 +1314,7 @@ export default function TestExecutionPage() {
               </div>
 
               {selectedCaseId && !detailLoading && caseDetail ? (
-                <div className="w-full shrink-0" style={{ borderTop: "1px solid #f0f0f0" }}>
+                <div className="sticky bottom-0 w-full shrink-0 bg-custom-background-100" style={{ borderTop: "1px solid #f0f0f0" }}>
                   <div className="p-4">
                     <div className="px-0 py-3 flex flex-col gap-3">
                       <Radio.Group onChange={handleRadioChange} value={reviewValue} disabled={!selectedCaseId}>
