@@ -1,6 +1,6 @@
 "use client";
 import React from "react";
-import { Button, Select, Spin, Tag } from "antd";
+import { Button, Select, Spin, Tag, Tooltip } from "antd";
 import { FolderOutlined } from "@ant-design/icons";
 import { useParams } from "next/navigation";
 import { formatCNDateTime } from "../util";
@@ -97,7 +97,7 @@ export function SideInfoPanel({
   };
 
   return (
-    <div className="w-[22.222%] border-l px-6 py-4 h-full overflow-y-auto bg-[#FAFAFA] divide-y divide-gray-100">
+    <div className="w-[27%] border-l px-6 py-4 h-full overflow-y-auto bg-[#FAFAFA] divide-y divide-gray-100">
       {workspaceSlug && caseData?.id ? (
         <CaseVersionCompareModal
           open={compareOpen}
@@ -252,11 +252,18 @@ export function SideInfoPanel({
         <div className="text-xs text-gray-500 mb-4">基础信息</div>
         <div className="space-y-4">
           <div className="flex items-center gap-3 md:gap-4">
-            <span className="text-sm text-gray-700 shrink-0 basis-28 md:basis-32">测试库</span>
-            <span className="text-sm text-gray-900 flex-1 min-w-0 truncate inline-flex items-center gap-2">
-              <FolderOutlined className="text-blue-500" />
-              <span className="truncate">{caseData?.repository_name ?? "-"}</span>
-            </span>
+            <span className="text-sm text-gray-700 shrink-0 basis-28 md:basis-32">用例库</span>
+            <Tooltip
+              title={caseData?.repository_name ?? "-"}
+              placement="top"
+              overlayStyle={{ zIndex: 2000 }}
+              getPopupContainer={(trigger) => trigger?.parentElement ?? document.body}
+            >
+              <span className="text-sm text-gray-900 flex-1 min-w-0 truncate inline-flex items-center gap-2">
+                <FolderOutlined className="text-blue-500" />
+                <span className="truncate">{caseData?.repository_name ?? "-"}</span>
+              </span>
+            </Tooltip>
           </div>
           <div className="flex items-center gap-3 md:gap-4">
             <span className="text-sm text-gray-700 shrink-0 basis-28 md:basis-32">创建人</span>

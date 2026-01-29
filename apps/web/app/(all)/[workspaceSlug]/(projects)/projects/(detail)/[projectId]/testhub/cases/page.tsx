@@ -5,7 +5,7 @@ import { useEffect, useState, useRef, useMemo } from "react";
 import type { ComponentPropsWithoutRef, CSSProperties, MouseEvent as ReactMouseEvent } from "react";
 import { PageHead } from "@/components/core/page-title";
 import { Table, Tag, Input, Button, Space, Modal, Dropdown, message, Pagination } from "antd";
-import { EllipsisOutlined, SearchOutlined, EditOutlined, DeleteOutlined } from "@ant-design/icons";
+import { EllipsisOutlined, SearchOutlined, EditOutlined, DeleteOutlined, DownOutlined } from "@ant-design/icons";
 import type { TableProps, InputRef, TableColumnType } from "antd";
 import { CaseService } from "@/services/qa/case.service";
 import { CreateCaseModal } from "@/components/qa/cases/create-modal";
@@ -1229,6 +1229,11 @@ export default function TestCasesPage() {
                 <Tree
                   showLine={false}
                   defaultExpandAll
+                  switcherIcon={
+                    <span className="inline-flex items-center justify-center w-5 h-5 text-custom-text-300">
+                      <DownOutlined />
+                    </span>
+                  }
                   onSelect={onSelect}
                   onExpand={onExpand}
                   expandedKeys={expandedKeys}

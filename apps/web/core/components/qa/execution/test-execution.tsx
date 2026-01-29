@@ -1038,7 +1038,7 @@ export default function TestExecutionPage() {
                             }`}
                           >
                             <LucideIcons.FileText size={16} aria-hidden="true" />
-                            产品需求
+                            需求
                           </button>
                           <button
                             type="button"
@@ -1236,7 +1236,7 @@ export default function TestExecutionPage() {
                           {activeTab === "requirement" && selectedCaseId && (
                             <div className="mt-4 min-h-[550px]">
                               <div className="flex items-center justify-between mb-3">
-                                <div className="text-sm text-gray-600">{currentCount}个产品需求</div>
+                                <div className="text-sm text-gray-600">{currentCount}个需求</div>
                               </div>
                               <WorkItemDisplayModal caseId={String(selectedCaseId)} defaultType="Requirement" />
                             </div>

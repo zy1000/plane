@@ -713,20 +713,22 @@ export default function ReviewsPage() {
       width: 220,
       ...getColumnSearchProps("name"),
       render: (name: string, record: ReviewItem) => (
-        <Button
-          type="link"
-          className="!text-custom-text-200 hover:!text-custom-text-100"
-          onClick={() => {
-            try {
-              sessionStorage.setItem("selectedReviewName", name || "");
-            } catch {}
-            router.push(
-              `/${workspaceSlug}/projects/${projectId}/testhub/caseManagementReviewDetail?review_id=${record.id}`
-            );
-          }}
-        >
-          <span className="text-inherit">{name}</span>
-        </Button>
+        <Tooltip title={name} placement="topLeft">
+          <Button
+            type="link"
+            className="!text-custom-text-200 hover:!text-custom-text-100 !p-0 !h-auto block w-full text-left"
+            onClick={() => {
+              try {
+                sessionStorage.setItem("selectedReviewName", name || "");
+              } catch {}
+              router.push(
+                `/${workspaceSlug}/projects/${projectId}/testhub/caseManagementReviewDetail?review_id=${record.id}`
+              );
+            }}
+          >
+            <div className="truncate">{name}</div>
+          </Button>
+        </Tooltip>
       ),
     },
     { title: "用例数量", dataIndex: "case_count", key: "case_count", width: 120 },

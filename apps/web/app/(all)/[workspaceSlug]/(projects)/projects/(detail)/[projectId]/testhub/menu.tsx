@@ -78,13 +78,20 @@ export const TestManagementMenuBar = () => {
               key={item.key}
               href={finalHref}
               className={cn(
-                "px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap",
+                "px-4 text-sm font-medium transition-colors whitespace-nowrap",
                 active
-                  ? "border-custom-text-100 text-custom-text-100"
-                  : "border-transparent text-custom-text-300 hover:text-custom-text-100"
+                  ? "text-custom-text-100"
+                  : "text-custom-text-300 hover:text-custom-text-100"
               )}
             >
-              {item.label}
+              <span
+                className={cn(
+                  "inline-block py-3 border-b-2",
+                  active ? "border-custom-text-100" : "border-transparent"
+                )}
+              >
+                {item.label}
+              </span>
             </Link>
           );
         })}
