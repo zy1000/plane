@@ -8,7 +8,7 @@ import { Breadcrumbs } from "@plane/ui";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { Row, Col, Card, Input, Pagination, Tag, Spin, message, Button, Table, Tooltip, Radio, Select, Tree, Modal } from "antd";
 import type { TreeProps } from "antd";
-import { AppstoreOutlined } from "@ant-design/icons";
+import { AppstoreOutlined, DownOutlined } from "@ant-design/icons";
 import * as LucideIcons from "lucide-react";
 import debounce from "lodash-es/debounce";
 import { CaseService as CaseApiService } from "@/services/qa/case.service";
@@ -790,7 +790,7 @@ export default function TestExecutionPage() {
           title: "预期结果",
           dataIndex: "result",
           key: "result",
-          width: "18%",
+          width: "30%",
           render: (text: any) => (
             <span className="whitespace-pre-wrap break-words text-custom-text-300">{String(text || "")}</span>
           ),
@@ -800,7 +800,7 @@ export default function TestExecutionPage() {
         {
           title: "实际结果",
           key: "actual_result",
-          width: "30%",
+          width: "25%",
           shouldCellUpdate: (record: any, prevRecord: any) => record.actualValue !== prevRecord.actualValue,
           render: (_: any, record: any, idx: number) => (
             <div className="w-full h-full">
@@ -812,12 +812,12 @@ export default function TestExecutionPage() {
         },
         {
           title: "执行结果",
-          width: "14%",
+          width: "10%",
           key: "exec_result",
           shouldCellUpdate: (record: any, prevRecord: any) => record.execValue !== prevRecord.execValue,
           render: (_: any, record: any, idx: number) => (
             <Select
-              placeholder="请选择执行结果"
+              placeholder="请选择"
               options={resultOptions}
               value={record.execValue || undefined}
               onChange={(v) => onChangeExec(idx, String(v))}
@@ -891,17 +891,38 @@ export default function TestExecutionPage() {
             flex="0 0 auto"
             style={{ width: leftWidth, minWidth: 200, maxWidth: 600, maxHeight: `calc(100dvh - ${topOffset}px)` }}
           >
+            <style
+              dangerouslySetInnerHTML={{
+                __html: `
+                .custom-tree-indent .ant-tree-indent-unit {
+                  width: 10px !important;
+                }
+                .custom-tree-indent .ant-tree-switcher {
+                  width: 14px !important;
+                  margin-inline-end: 2px !important;
+                }
+                .custom-tree-indent .ant-tree-node-content-wrapper {
+                  padding-inline: 4px !important;
+                }
+              `,
+              }}
+            />
             <div className="flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm">
               <Tree
                 showLine={false}
                 defaultExpandAll
+                switcherIcon={
+                  <span className="inline-flex items-center justify-center w-5 h-5 text-custom-text-300">
+                    <DownOutlined />
+                  </span>
+                }
                 onSelect={onSelect}
                 onExpand={onExpand}
                 expandedKeys={expandedKeys}
                 autoExpandParent={autoExpandParent}
                 treeData={treeData}
                 selectedKeys={treeData.length > 0 ? [selectedTreeKey] : []}
-                className="py-2"
+                className="py-2 pl-2 custom-tree-indent"
               />
             </div>
             {/* Resize Handle */}
@@ -979,19 +1000,28 @@ export default function TestExecutionPage() {
                       })
                     )}
                   </div>
-                  <div className="flex justify-center w-full">
+                  <div className="flex justify-between items-center w-full pt-2">
                     <Pagination
                       simple
                       size="small"
                       current={page}
                       pageSize={pageSize}
                       total={total}
-                      showSizeChanger
-                      pageSizeOptions={[10, 20, 50, 100] as any}
-                      onChange={(p, s) => {
+                      showSizeChanger={false}
+                      onChange={(p) => {
                         setPage(p);
+                        fetchCases(p, pageSize, keyword);
+                      }}
+                    />
+                    <Select
+                      size="small"
+                      value={pageSize}
+                      style={{ width: 100 }}
+                      options={[10, 20, 50, 100].map((size) => ({ label: `${size} 条/页`, value: size }))}
+                      onChange={(s) => {
+                        setPage(1);
                         setPageSize(s);
-                        fetchCases(p, s, keyword);
+                        fetchCases(1, s, keyword);
                       }}
                     />
                   </div>
@@ -1347,18 +1377,23 @@ export default function TestExecutionPage() {
                       </div>
                       <div>
                         <div className="flex items-center gap-2">
-                          <Button
-                            type="primary"
+                          <button
+                            type="button"
                             onClick={handleSubmitReview}
-                            loading={submitLoading}
-                            disabled={!selectedCaseId}
+                            disabled={!selectedCaseId || submitLoading}
+                            className="text-white bg-custom-primary-100 hover:bg-custom-primary-200 focus:text-custom-brand-40 focus:bg-custom-primary-200 px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                           >
-                            提交结果
-                          </Button>
+                            {submitLoading ? "提交中..." : "提交结果"}
+                          </button>
                           <Tooltip title="为当前用例创建一个缺陷工作项">
-                            <Button type="primary" onClick={handleOpenCreateDefect} disabled={!workspaceSlug}>
+                            <button
+                              type="button"
+                              onClick={handleOpenCreateDefect}
+                              disabled={!workspaceSlug}
+                              className="text-white bg-custom-primary-100 hover:bg-custom-primary-200 focus:text-custom-brand-40 focus:bg-custom-primary-200 px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
                               新增缺陷
-                            </Button>
+                            </button>
                           </Tooltip>
                         </div>
                       </div>

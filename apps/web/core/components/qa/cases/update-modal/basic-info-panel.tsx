@@ -2,7 +2,7 @@
 import React from "react";
 import { useParams } from "next/navigation";
 import { Button, Dropdown, Table, Tooltip, Modal, Input, Spin } from "antd";
-import { DownOutlined } from "@ant-design/icons";
+import { DownOutlined, EditOutlined } from "@ant-design/icons";
 import * as LucideIcons from "lucide-react";
 import { convertBytesToSize, renderFormattedDate } from "@plane/utils";
 import { StepsEditor } from "../util";
@@ -183,6 +183,7 @@ export function BasicInfoPanel(props: BasicInfoPanelProps) {
               onClick={() => setIsEditing(true)}
               className="transition-all"
             >
+              <EditOutlined />
               编辑
             </Button>
           )}
