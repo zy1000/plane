@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { PageHead } from "@/components/core/page-title";
 import { RepositoryService } from "@/services/qa/repository.service";
-import { Space, Table, Tag, Input, Button, Modal, message } from "antd";
+import { Space, Table, Tag, Input, Button, Modal, message, Tooltip } from "antd";
 import { SearchOutlined, EditOutlined, DeleteOutlined, PlusOutlined } from "@ant-design/icons";
 import type { TableProps, InputRef, TableColumnType } from "antd";
 import type { FilterDropdownProps } from "antd/es/table/interface";
@@ -154,12 +154,23 @@ export default function TestManagementHomePage() {
           }}
           style={{ cursor: "pointer" }}
         >
-          {text}
+          <Tooltip title={text || ""} placement="topLeft">
+            <span className="block max-w-[440px] truncate text-custom-text-200">{text || "-"}</span>
+          </Tooltip>
         </a>
       ),
       ...getColumnSearchProps("name"),
     },
-    { title: "描述", dataIndex: "description", key: "description" },
+    {
+      title: "描述",
+      dataIndex: "description",
+      key: "description",
+      render: (description: string) => (
+        <Tooltip title={description || ""} placement="topLeft">
+          <span className="block max-w-[420px] truncate">{description || "-"}</span>
+        </Tooltip>
+      ),
+    },
     {
       title: "项目",
       dataIndex: "project",

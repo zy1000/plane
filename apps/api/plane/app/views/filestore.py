@@ -187,11 +187,6 @@ class FilestoreAssetAPIView(BaseAPIView):
 
         if not name:
             return Response({"error": "name is required"}, status=status.HTTP_400_BAD_REQUEST)
-        if not file_type or file_type not in settings.ATTACHMENT_MIME_TYPES:
-            return Response(
-                {"error": "Invalid file type.", "status": False},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
 
         workspace = Workspace.objects.get(slug=slug)
         asset_key = f"{workspace.id}/{uuid.uuid4().hex}-{name}"
