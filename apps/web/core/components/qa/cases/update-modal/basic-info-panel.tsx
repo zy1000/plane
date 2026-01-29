@@ -184,7 +184,7 @@ export function BasicInfoPanel(props: BasicInfoPanelProps) {
               className="transition-all"
             >
               <EditOutlined />
-              编辑
+              编辑用例
             </Button>
           )}
         </div>
