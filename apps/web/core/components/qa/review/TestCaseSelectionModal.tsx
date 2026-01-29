@@ -7,7 +7,8 @@ import type { TableProps } from "antd";
 import type { TreeProps } from "antd";
 import { CaseService as QaCaseService } from "@/services/qa/case.service";
 import styles from "./TestCaseSelectionModal.module.css";
-import { AppstoreOutlined, DeploymentUnitOutlined } from "@ant-design/icons";
+import { AppstoreOutlined, DownOutlined } from "@ant-design/icons";
+import { Atom } from "lucide-react";
 
 type TTestCase = {
   id: string;
@@ -219,7 +220,7 @@ export default function TestCaseSelectionModal({
       kind === "root" ? (
         <AppstoreOutlined />
       ) : kind === "repository" ? (
-        <DeploymentUnitOutlined />
+        <Atom size={14} />
       ) : kind === "repository_modules_all" ? (
         <AppstoreOutlined />
       ) : (
@@ -365,9 +366,30 @@ export default function TestCaseSelectionModal({
         <div className={styles.content}>
           <div className={styles.leftPane}>
             <div className="px-2">
+              <style
+                dangerouslySetInnerHTML={{
+                  __html: `
+                .custom-tree-indent .ant-tree-indent-unit {
+                  width: 10px !important;
+                }
+                .custom-tree-indent .ant-tree-switcher {
+                  width: 14px !important;
+                  margin-inline-end: 8px !important;
+                }
+                .custom-tree-indent .ant-tree-node-content-wrapper {
+                  padding-inline: 4px !important;
+                }
+              `,
+                }}
+              />
               <Tree
                 showLine={false}
                 checkable
+                switcherIcon={
+                  <span className="inline-flex items-center justify-center w-5 h-5 text-custom-text-300">
+                    <DownOutlined />
+                  </span>
+                }
                 onSelect={onSelect}
                 onCheck={onCheck}
                 onExpand={onExpand}
@@ -376,6 +398,7 @@ export default function TestCaseSelectionModal({
                 treeData={treeData}
                 selectedKeys={treeData.length > 0 ? [selectedTreeKey] : []}
                 checkedKeys={checkedTreeKeys}
+                className="py-2 pl-2 custom-tree-indent"
               />
             </div>
           </div>

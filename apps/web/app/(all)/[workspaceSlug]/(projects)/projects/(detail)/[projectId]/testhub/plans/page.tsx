@@ -8,12 +8,14 @@ import { Space, Table, Tag, Input, Button, Dropdown, Modal, Tooltip, Pagination,
 import {
   SearchOutlined,
   PlusOutlined,
-  FolderOutlined,
+  AppstoreOutlined,
   EllipsisOutlined,
   DeleteOutlined,
   PlayCircleOutlined,
   EditOutlined,
+  DownOutlined,
 } from "@ant-design/icons";
+import { FolderOpenDot } from "lucide-react";
 import type { TableProps, InputRef, TableColumnType } from "antd";
 import type { TreeProps } from "antd";
 import type { FilterDropdownProps } from "antd/es/table/interface";
@@ -683,8 +685,8 @@ export default function TestPlanDetailPage() {
     return (
       <div className="group flex items-center justify-between gap-2 w-full">
         <div className="flex items-center gap-2">
-          <span className="text-custom-text-300">
-            <FolderOutlined />
+          <span className="inline-flex items-center justify-center w-5 h-5 text-custom-text-300">
+            <FolderOpenDot size={14} />
           </span>
           <span className="text-sm text-custom-text-200">{title}</span>
         </div>
@@ -774,8 +776,8 @@ export default function TestPlanDetailPage() {
       title: (
         <div className="group flex items-center justify-between gap-2 w-full">
           <div className="flex items-center gap-2">
-            <span className="text-custom-text-300">
-              <FolderOutlined />
+            <span className="inline-flex items-center justify-center w-5 h-5 text-custom-text-300">
+              <AppstoreOutlined />
             </span>
             <span className="text-sm font-medium text-custom-text-200">全部计划</span>
           </div>
@@ -901,6 +903,11 @@ export default function TestPlanDetailPage() {
                     blockNode
                     draggable
                     showIcon={false}
+                    switcherIcon={
+                      <span className="inline-flex items-center justify-center w-5 h-5 text-custom-text-300">
+                        <DownOutlined />
+                      </span>
+                    }
                     treeData={treeData as any}
                     selectedKeys={[selectedModuleId ?? "all"]}
                     expandedKeys={expandedKeys}
@@ -908,7 +915,7 @@ export default function TestPlanDetailPage() {
                     onExpand={onExpand}
                     onSelect={onSelect}
                     onDrop={onDrop}
-                    className="testhub-plan-module-tree"
+                    className="py-2 pl-2 custom-tree-indent testhub-plan-module-tree"
                   />
                 </div>
                 <div
@@ -1006,6 +1013,17 @@ export default function TestPlanDetailPage() {
 
                       .testhub-plan-module-tree .ant-tree-draggable-icon{
                         display: none !important;
+                      }
+
+                      .custom-tree-indent .ant-tree-indent-unit {
+                        width: 10px !important;
+                      }
+                      .custom-tree-indent .ant-tree-switcher {
+                        width: 14px !important;
+                        margin-inline-end: 2px !important;
+                      }
+                      .custom-tree-indent .ant-tree-node-content-wrapper {
+                        padding-inline: 4px !important;
                       }
                     `,
                   }}

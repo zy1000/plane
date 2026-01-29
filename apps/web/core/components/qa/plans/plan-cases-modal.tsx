@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Tree, Table, Row, Col, Tag, message, Tooltip } from "antd";
 import type { TreeProps } from "antd";
 import type { TableProps } from "antd";
-import { AppstoreOutlined, DeploymentUnitOutlined } from "@ant-design/icons";
+import { AppstoreOutlined, DownOutlined } from "@ant-design/icons";
 import { ModalCore, EModalPosition, EModalWidth } from "@plane/ui";
 import { Button } from "@plane/propel/button";
 import { CaseService } from "@/services/qa/case.service";
@@ -279,7 +279,7 @@ export const PlanCasesModal: React.FC<Props> = ({
       kind === "root" ? (
         <AppstoreOutlined />
       ) : kind === "repository" ? (
-        <DeploymentUnitOutlined />
+        <AppstoreOutlined />
       ) : kind === "repository_modules_all" ? (
         <AppstoreOutlined />
       ) : (
@@ -392,10 +392,31 @@ export const PlanCasesModal: React.FC<Props> = ({
               className="absolute right-0 top-0 h-full w-2"
               style={{ cursor: "col-resize", zIndex: 10 }}
             />
+            <style
+              dangerouslySetInnerHTML={{
+                __html: `
+                .custom-tree-indent .ant-tree-indent-unit {
+                  width: 10px !important;
+                }
+                .custom-tree-indent .ant-tree-switcher {
+                  width: 14px !important;
+                  margin-inline-end: 8px !important;
+                }
+                .custom-tree-indent .ant-tree-node-content-wrapper {
+                  padding-inline: 4px !important;
+                }
+              `,
+              }}
+            />
             <Tree
               showLine={false}
               defaultExpandAll
               checkable
+              switcherIcon={
+                <span className="inline-flex items-center justify-center w-5 h-5 text-custom-text-300">
+                  <DownOutlined />
+                </span>
+              }
               onSelect={onSelect}
               onCheck={onCheck}
               onExpand={onExpand}
@@ -404,7 +425,7 @@ export const PlanCasesModal: React.FC<Props> = ({
               treeData={treeData}
               selectedKeys={treeData.length > 0 ? [selectedTreeKey] : []}
               checkedKeys={checkedTreeKeys}
-              className="py-2"
+              className="py-2 pl-2 custom-tree-indent"
             />
           </Col>
           <Col flex="auto" className="overflow-y-auto">

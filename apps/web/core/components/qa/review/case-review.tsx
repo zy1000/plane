@@ -7,7 +7,7 @@ import { Breadcrumbs } from "@plane/ui";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { Row, Col, Card, Input, Pagination, Tag, Spin, message, Button, Table, Tooltip, Radio, Modal, Badge, Tree } from "antd";
 import type { TreeProps } from "antd";
-import { AppstoreOutlined, CheckCircleOutlined, CloseCircleOutlined, DeploymentUnitOutlined, ExclamationCircleOutlined } from "@ant-design/icons";
+import { AppstoreOutlined, CheckCircleOutlined, CloseCircleOutlined, ExclamationCircleOutlined } from "@ant-design/icons";
 import debounce from "lodash-es/debounce";
 import { CaseService as CaseApiService } from "@/services/qa/case.service";
 import { CaseService as ReviewApiService } from "@/services/qa/review.service";
@@ -507,7 +507,7 @@ export default function CaseReview() {
       kind === "root" ? (
         <AppstoreOutlined />
       ) : kind === "repository" ? (
-        <DeploymentUnitOutlined />
+        <LucideIcons.Atom size={14} />
       ) : kind === "repository_modules_all" ? (
         <AppstoreOutlined />
       ) : (

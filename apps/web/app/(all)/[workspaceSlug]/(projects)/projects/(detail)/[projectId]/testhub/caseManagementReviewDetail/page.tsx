@@ -7,11 +7,11 @@ import { Breadcrumbs } from "@plane/ui";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { Row, Col, Tree, Table, Button, Tag, message, Pagination, Popconfirm, Select } from "antd";
 import type { TreeProps, TableProps } from "antd";
-import { AppstoreOutlined, DeploymentUnitOutlined } from "@ant-design/icons";
+import { AppstoreOutlined, DownOutlined } from "@ant-design/icons";
 import { CaseService as CaseApiService } from "@/services/qa/case.service";
 import { CaseService as ReviewApiService } from "@/services/qa/review.service";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
-import { FolderOpenDot } from "lucide-react";
+import { FolderOpenDot, Atom } from "lucide-react";
 import UpdateModal from "@/components/qa/cases/update-modal";
 import TestCaseSelectionModal from "@/components/qa/review/TestCaseSelectionModal";
 import { useUser } from "@/hooks/store/user";
@@ -276,7 +276,7 @@ export default function CaseManagementReviewDetailPage() {
         kind === "root" ? (
           <AppstoreOutlined />
         ) : kind === "repository" ? (
-          <DeploymentUnitOutlined />
+          <Atom size={14} />
         ) : kind === "repository_modules_all" ? (
           <AppstoreOutlined />
         ) : (
@@ -541,6 +541,11 @@ export default function CaseManagementReviewDetailPage() {
               <Tree
                 showLine={false}
                 defaultExpandAll
+                switcherIcon={
+                  <span className="inline-flex items-center justify-center w-5 h-5 text-custom-text-300">
+                    <DownOutlined />
+                  </span>
+                }
                 onSelect={onSelect}
                 onExpand={onExpand}
                 expandedKeys={expandedKeys}
