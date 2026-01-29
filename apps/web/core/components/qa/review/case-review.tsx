@@ -5,9 +5,9 @@ import { useParams, useSearchParams, useRouter, usePathname } from "next/navigat
 import { PageHead } from "@/components/core/page-title";
 import { Breadcrumbs } from "@plane/ui";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
-import { Row, Col, Card, Input, Pagination, Tag, Spin, message, Button, Table, Tooltip, Radio, Modal, Badge, Tree } from "antd";
+import { Row, Col, Card, Input, Pagination, Tag, Spin, message, Button, Table, Tooltip, Radio, Select, Modal, Badge, Tree } from "antd";
 import type { TreeProps } from "antd";
-import { AppstoreOutlined, CheckCircleOutlined, CloseCircleOutlined, ExclamationCircleOutlined } from "@ant-design/icons";
+import { AppstoreOutlined, CheckCircleOutlined, CloseCircleOutlined, ExclamationCircleOutlined, DownOutlined } from "@ant-design/icons";
 import debounce from "lodash-es/debounce";
 import { CaseService as CaseApiService } from "@/services/qa/case.service";
 import { CaseService as ReviewApiService } from "@/services/qa/review.service";
@@ -16,6 +16,7 @@ import { getEnums } from "app/(all)/[workspaceSlug]/(projects)/projects/(detail)
 import * as LucideIcons from "lucide-react";
 import { useMember } from "@/hooks/store/use-member";
 import { useUser } from "@/hooks/store/user";
+import { useProjectNavigationPreferences } from "@/hooks/use-navigation-preferences";
 import { RichTextEditor } from "../cases/util";
 import { WorkItemDisplayModal } from "../cases/work-item-display-modal";
 import { ReviewRecordsPanel } from "./review-records";
@@ -87,6 +88,41 @@ export default function CaseReview() {
   const [isCurrentUserReviewer, setIsCurrentUserReviewer] = React.useState<boolean>(false);
   const [suggestionCounts, setSuggestionCounts] = React.useState<Record<string, number>>({});
 
+  const { preferences: projectPreferences } = useProjectNavigationPreferences();
+  const topOffset = projectPreferences.navigationMode === "horizontal" ? 180 : 130;
+
+  // Resize logic
+  const [leftWidth, setLeftWidth] = React.useState<number>(280);
+  const isDraggingRef = React.useRef<boolean>(false);
+  const startXRef = React.useRef<number>(0);
+  const startWidthRef = React.useRef<number>(0);
+
+  const onMouseMoveResize = React.useCallback((e: MouseEvent) => {
+    if (!isDraggingRef.current) return;
+    const delta = e.clientX - startXRef.current;
+    const next = Math.min(600, Math.max(200, startWidthRef.current + delta));
+    setLeftWidth(next);
+  }, []);
+
+  const onMouseUpResize = React.useCallback(() => {
+    isDraggingRef.current = false;
+    document.removeEventListener("mousemove", onMouseMoveResize);
+    document.removeEventListener("mouseup", onMouseUpResize);
+    document.body.style.cursor = "auto";
+    document.body.style.userSelect = "auto";
+  }, [onMouseMoveResize]);
+
+  const onMouseDownResize = (e: React.MouseEvent<HTMLDivElement>) => {
+    isDraggingRef.current = true;
+    startXRef.current = e.clientX;
+    startWidthRef.current = leftWidth;
+    document.addEventListener("mousemove", onMouseMoveResize);
+    document.addEventListener("mouseup", onMouseUpResize);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    e.preventDefault();
+  };
+
   type TCaseVersionItem = { id: string; version: number; created_at?: string };
   const [caseVersions, setCaseVersions] = React.useState<TCaseVersionItem[]>([]);
   const [loadingCaseVersions, setLoadingCaseVersions] = React.useState(false);
@@ -97,7 +133,9 @@ export default function CaseReview() {
   }, [caseVersions]);
 
   const currentVersionLabel = React.useMemo(() => {
-    return caseDetail?.version ? `V${caseDetail.version}` : "最新";
+    if (!caseDetail?.version) return "最新";
+    const truncated = Math.trunc(caseDetail.version * 10) / 10;
+    return `V${truncated.toFixed(1)}`;
   }, [caseDetail?.version]);
 
   const fetchReviewEnums = async () => {
@@ -689,27 +727,55 @@ export default function CaseReview() {
 
       <Row className="w-full rounded-md border border-custom-border-200 overflow-hidden" gutter={0} wrap={false}>
         <Col
-          className="relative border-r border-custom-border-200 overflow-y-auto vertical-scrollbar scrollbar-sm max-h-[calc(100dvh-52px-12px)]"
+          className="relative border-r border-custom-border-200 max-h-[calc(100dvh-130px)] flex flex-col group/left-col"
           flex="0 0 auto"
-          style={{ width: 280, minWidth: 200, maxWidth: 320 }}
+          style={{ width: leftWidth, minWidth: 200, maxWidth: 600, maxHeight: `calc(100dvh - ${topOffset}px)` }}
         >
-          <Tree
-            showLine={false}
-            defaultExpandAll
-            onSelect={onSelect}
-            onExpand={onExpand}
-            expandedKeys={expandedKeys}
-            autoExpandParent={autoExpandParent}
-            treeData={treeData}
-            selectedKeys={treeData.length > 0 ? [selectedTreeKey] : []}
-            className="py-2"
+          <style
+            dangerouslySetInnerHTML={{
+              __html: `
+              .custom-tree-indent .ant-tree-indent-unit {
+                width: 10px !important;
+              }
+              .custom-tree-indent .ant-tree-switcher {
+                width: 14px !important;
+                margin-inline-end: 2px !important;
+              }
+              .custom-tree-indent .ant-tree-node-content-wrapper {
+                padding-inline: 4px !important;
+              }
+            `,
+            }}
+          />
+          <div className="flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm">
+            <Tree
+              showLine={false}
+              defaultExpandAll
+              switcherIcon={
+                <span className="inline-flex items-center justify-center w-5 h-5 text-custom-text-300">
+                  <DownOutlined />
+                </span>
+              }
+              onSelect={onSelect}
+              onExpand={onExpand}
+              expandedKeys={expandedKeys}
+              autoExpandParent={autoExpandParent}
+              treeData={treeData}
+              selectedKeys={treeData.length > 0 ? [selectedTreeKey] : []}
+              className="py-2 pl-2 custom-tree-indent"
+            />
+          </div>
+          {/* Resize Handle */}
+          <div
+            onMouseDown={onMouseDownResize}
+            className="absolute top-0 right-[-3px] bottom-0 w-[6px] cursor-col-resize z-10"
           />
         </Col>
 
         <Col
           flex="0 0 auto"
-          className="border-r border-custom-border-200 max-h-[calc(100dvh-52px-12px)] overflow-hidden"
-          style={{ width: 390, minWidth: 320, maxWidth: 520 }}
+          className="border-r border-custom-border-200 max-h-[calc(100dvh-130px)] overflow-hidden"
+          style={{ width: 390, minWidth: 320, maxWidth: 520, maxHeight: `calc(100dvh - ${topOffset}px)` }}
         >
           <div className="p-4 flex flex-col gap-3">
             <Input.Search
@@ -787,46 +853,52 @@ export default function CaseReview() {
                     })
                   )}
                 </div>
-                <Pagination
-                  simple
-                  size="small"
-                  current={page}
-                  pageSize={pageSize}
-                  total={total}
-                  showSizeChanger
-                  pageSizeOptions={[10, 20, 50, 100] as any}
-                  onChange={(p, s) => {
-                    setPage(p);
-                    setPageSize(s);
-                    fetchCases(p, s, keyword);
-                  }}
-                />
+                <div className="flex justify-between items-center w-full pt-2">
+                  <Pagination
+                    simple
+                    size="small"
+                    current={page}
+                    pageSize={pageSize}
+                    total={total}
+                    showSizeChanger={false}
+                    onChange={(p) => {
+                      setPage(p);
+                      fetchCases(p, pageSize, keyword);
+                    }}
+                  />
+                  <Select
+                    size="small"
+                    value={pageSize}
+                    style={{ width: 100 }}
+                    options={[10, 20, 50, 100].map((size) => ({ label: `${size} 条/页`, value: size }))}
+                    onChange={(s) => {
+                      setPage(1);
+                      setPageSize(s);
+                      fetchCases(1, s, keyword);
+                    }}
+                  />
+                </div>
               </div>
             )}
           </div>
         </Col>
 
-        <Col
-          flex="auto"
-          className="min-w-0 overflow-y-auto vertical-scrollbar scrollbar-sm scroll-smooth max-h-[calc(100dvh-52px-12px)] min-h-[300px]"
-          style={{ scrollPaddingBottom: 16 }}
-        >
-          <div className="min-w-0 p-4 pb-16" style={{ scrollPaddingBottom: 16 }}>
-            {!selectedCaseId ? (
-              <div className="text-custom-text-300 py-12 text-center">请从左侧选择一个用例</div>
-            ) : detailLoading ? (
-              <div className="flex items-center justify-center py-12">
-                <Spin />
-              </div>
-            ) : !caseDetail ? (
-              <div className="text-custom-text-300 py-12 text-center">未获取到用例详情</div>
-            ) : (
-              <div className="flex flex-col gap-4">
-                <div className="border-b border-gray-200">
-                  <nav
-                    className="flex gap-4 overflow-x-auto horizontal-scrollbar scrollbar-sm"
-                    style={{ scrollbarGutter: "stable" }}
-                  >
+        <Col flex="auto" className="flex flex-col min-h-0" style={{ maxHeight: `calc(100dvh - ${topOffset}px)` }}>
+          <div className="flex flex-col flex-1 min-h-0">
+            <div className="flex-1 overflow-hidden">
+              <div className="min-w-0 p-4" style={{ scrollPaddingBottom: 16 }}>
+                {!selectedCaseId ? (
+                  <div className="text-custom-text-300 py-12 text-center">请从左侧选择一个用例</div>
+                ) : detailLoading ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Spin />
+                  </div>
+                ) : !caseDetail ? (
+                  <div className="text-custom-text-300 py-12 text-center">未获取到用例详情</div>
+                ) : (
+                  <div className="flex flex-col gap-4">
+                    <div className="border-b border-gray-200">
+                      <nav className="flex flex-wrap gap-4">
                     <button
                       type="button"
                       onClick={() => setActiveTab("basic")}
@@ -887,20 +959,20 @@ export default function CaseReview() {
                       <LucideIcons.History size={16} aria-hidden="true" />
                       评审历史
                     </button>
-                  </nav>
-                </div>
-                <div>
-                  <Transition
-                    show={activeTab === "basic"}
-                    enter="transition duration-150 ease-out"
-                    enterFrom="transform scale-95 opacity-0"
-                    enterTo="transform scale-100 opacity-100"
-                    leave="transition duration-100 ease-in"
-                    leaveFrom="transform scale-100 opacity-100"
-                    leaveTo="transform scale-95 opacity-0"
-                  >
-                    {activeTab === "basic" && (
-                      <div className="flex flex-col gap-4 h-[550px] overflow-y-auto vertical-scrollbar scrollbar-sm">
+                      </nav>
+                    </div>
+                    <div>
+                      <Transition
+                        show={activeTab === "basic"}
+                        enter="transition duration-150 ease-out"
+                        enterFrom="transform scale-95 opacity-0"
+                        enterTo="transform scale-100 opacity-100"
+                        leave="transition duration-100 ease-in"
+                        leaveFrom="transform scale-100 opacity-100"
+                        leaveTo="transform scale-95 opacity-0"
+                      >
+                        {activeTab === "basic" && (
+                          <div className="flex flex-col gap-4 h-[550px] overflow-y-auto vertical-scrollbar scrollbar-sm pb-20">
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0 flex flex-wrap items-center gap-2">
                             <div className="text-lg font-semibold min-w-0 break-words">{caseDetail?.name ?? "-"}</div>
@@ -910,7 +982,7 @@ export default function CaseReview() {
                             <Button
                               size="small"
                               type="link"
-                              className="px-0"
+                              className="px-0 ml-4"
                               disabled={loadingCaseVersions || (caseVersions || []).length <= 0 || !selectedCaseId}
                               onClick={() => setCompareOpen(true)}
                             >
@@ -1058,7 +1130,7 @@ export default function CaseReview() {
                     leaveTo="transform scale-95 opacity-0"
                   >
                     {activeTab === "requirement" && selectedCaseId && (
-                      <div className="mt-4 h-[550px] overflow-y-auto vertical-scrollbar scrollbar-sm">
+                      <div className="mt-4 h-[550px] overflow-y-auto vertical-scrollbar scrollbar-sm pb-20">
                         <div className="flex items-center justify-between mb-3">
                           <div className="text-sm text-gray-600">{currentCount}个需求</div>
                         </div>
@@ -1077,7 +1149,7 @@ export default function CaseReview() {
                     leaveTo="transform scale-95 opacity-0"
                   >
                     {activeTab === "work" && selectedCaseId && (
-                      <div className="mt-4 h-[550px] overflow-y-auto vertical-scrollbar scrollbar-sm">
+                      <div className="mt-4 h-[550px] overflow-y-auto vertical-scrollbar scrollbar-sm pb-20">
                         <div className="flex items-center justify-between mb-3">
                           <div className="text-sm text-gray-600">{currentCount}个工作项</div>
                         </div>
@@ -1096,36 +1168,55 @@ export default function CaseReview() {
                     leaveTo="transform scale-95 opacity-0"
                   >
                     {activeTab === "defect" && selectedCaseId && (
-                      <div className="mt-4 h-[550px] overflow-y-auto vertical-scrollbar scrollbar-sm">
+                      <div className="mt-4 h-[550px] overflow-y-auto vertical-scrollbar scrollbar-sm pb-20">
                         <div className="flex items-center justify-between mb-3">
                           <div className="text-sm text-gray-600">{currentCount}个缺陷</div>
                         </div>
                         <WorkItemDisplayModal caseId={String(selectedCaseId)} defaultType="Bug" />
                       </div>
                     )}
-                  </Transition>
+                      </Transition>
 
-                  <Transition
-                    show={activeTab === "history"}
-                    enter="transition duration-150 ease-out"
-                    enterFrom="transform scale-95 opacity-0"
-                    enterTo="transform scale-100 opacity-100"
-                    leave="transition duration-100 ease-in"
-                    leaveFrom="transform scale-100 opacity-100"
-                    leaveTo="transform scale-95 opacity-0"
-                  >
-                    {activeTab === "history" && (
-                      <ReviewRecordsPanel
-                        key={`${selectedCaseId}-${recordsRefreshKey}`}
-                        workspaceSlug={workspaceSlug}
-                        reviewId={reviewId}
-                        caseId={selectedCaseId}
-                        onRecordsUpdated={handleRecordsUpdated}
+                      <Transition
+                        show={activeTab === "history"}
+                        enter="transition duration-150 ease-out"
+                        enterFrom="transform scale-95 opacity-0"
+                        enterTo="transform scale-100 opacity-100"
+                        leave="transition duration-100 ease-in"
+                        leaveFrom="transform scale-100 opacity-100"
+                        leaveTo="transform scale-95 opacity-0"
+                      >
+                        {activeTab === "history" && (
+                          <ReviewRecordsPanel
+                            key={`${selectedCaseId}-${recordsRefreshKey}`}
+                            workspaceSlug={workspaceSlug}
+                            reviewId={reviewId}
+                            caseId={selectedCaseId}
+                            onRecordsUpdated={handleRecordsUpdated}
+                          />
+                        )}
+                      </Transition>
+                    </div>
+                    {selectedCaseId && (
+                      <CaseVersionCompareModal
+                        open={compareOpen}
+                        onClose={() => setCompareOpen(false)}
+                        workspaceSlug={String(workspaceSlug)}
+                        caseId={String(selectedCaseId)}
+                        caseVersions={caseVersions}
+                        latestVersion={latestVersion}
+                        currentVersionLabel={currentVersionLabel}
+                        enumsData={enumsData as any}
                       />
                     )}
-                  </Transition>
-                </div>
-                <div className="w-full" style={{ borderTop: "1px solid #f0f0f0" }}>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {selectedCaseId && !detailLoading && caseDetail ? (
+              <div className="sticky bottom-0 w-full shrink-0 bg-custom-background-100" style={{ borderTop: "1px solid #f0f0f0" }}>
+                <div className="p-4">
                   <div className="px-0 py-3 flex flex-col gap-3">
                     <div className="text-sm font-normal">开始评审</div>
                     <Radio.Group onChange={handleRadioChange} value={reviewValue} disabled={!selectedCaseId}>
@@ -1151,31 +1242,19 @@ export default function CaseReview() {
                       </Button>
                     </div>
                     <div>
-                      <Button
-                        type="primary"
+                      <button
+                        type="button"
                         onClick={handleSubmitReview}
-                        loading={submitLoading}
-                        disabled={!selectedCaseId}
+                        disabled={!selectedCaseId || submitLoading}
+                        className="text-white bg-custom-primary-100 hover:bg-custom-primary-200 focus:text-custom-brand-40 focus:bg-custom-primary-200 px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        提交评审
-                      </Button>
+                        {submitLoading ? "提交中..." : "提交评审"}
+                      </button>
                     </div>
                   </div>
                 </div>
-                {selectedCaseId && (
-                  <CaseVersionCompareModal
-                    open={compareOpen}
-                    onClose={() => setCompareOpen(false)}
-                    workspaceSlug={String(workspaceSlug)}
-                    caseId={String(selectedCaseId)}
-                    caseVersions={caseVersions}
-                    latestVersion={latestVersion}
-                    currentVersionLabel={currentVersionLabel}
-                    enumsData={enumsData as any}
-                  />
-                )}
               </div>
-            )}
+            ) : null}
           </div>
         </Col>
       </Row>
@@ -1189,7 +1268,7 @@ export default function CaseReview() {
           </Button>,
           <Button key="submit" type="primary" loading={submitLoading} onClick={handleSubmitReview}>
             提交评审
-          </Button>,
+          </Button>
         ]}
       >
         <Input.TextArea

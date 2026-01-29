@@ -157,7 +157,7 @@ export function SideInfoPanel({
                 disabled={loadingCaseVersions || (caseVersions || []).length <= 0}
                 onClick={() => setCompareOpen(true)}
               >
-                对比历史版本
+                版本对比
               </Button>
             </div>
           </div>
