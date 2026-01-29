@@ -244,7 +244,7 @@ class TestCaseVersion(BaseModel):
             .aggregate(max_version=Max("version"))
             .get("max_version")
         )
-        next_version = 1.0 if latest is None else latest + 0.1
+        next_version = 1.0 if latest is None else round(latest + 0.1, 1)
 
         label_ids = list(map(str, case.labels.values_list("id", flat=True)))
         issue_ids = list(map(str, case.issues.values_list("id", flat=True)))
