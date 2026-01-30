@@ -759,7 +759,7 @@ export default function TestExecutionPage() {
           autoSize={{ minRows: 1 }}
           style={{ maxHeight: 300, overflow: "auto" }}
           placeholder={placeholder || "点击输入结果"}
-          className="text-sm resize-none !p-3 !bg-transparent focus:!shadow-none"
+          className="text-sm leading-5 font-medium resize-none !p-3 !bg-transparent focus:!shadow-none"
         />
       );
     };
@@ -773,7 +773,7 @@ export default function TestExecutionPage() {
           title: "序号",
           key: "index",
           width: 60,
-          render: (_: any, __: any, idx: number) => idx + 1,
+          render: (_: any, __: any, idx: number) => <span className="text-sm leading-5 font-medium">{idx + 1}</span>,
           onHeaderCell: () => ({ style: headerStyle }),
           onCell: () => ({ style: cellStyle }),
         },
@@ -782,7 +782,9 @@ export default function TestExecutionPage() {
           dataIndex: "description",
           key: "description",
           width: "30%",
-          render: (text: any) => <span className="whitespace-pre-wrap break-words">{String(text || "")}</span>,
+          render: (text: any) => (
+            <span className="whitespace-pre-wrap break-words text-sm leading-5 font-medium">{String(text || "")}</span>
+          ),
           onHeaderCell: () => ({ style: headerStyle }),
           onCell: () => ({ style: cellStyle }),
         },
@@ -792,7 +794,9 @@ export default function TestExecutionPage() {
           key: "result",
           width: "30%",
           render: (text: any) => (
-            <span className="whitespace-pre-wrap break-words text-custom-text-300">{String(text || "")}</span>
+            <span className="whitespace-pre-wrap break-words text-custom-text-300 text-sm leading-5 font-medium">
+              {String(text || "")}
+            </span>
           ),
           onHeaderCell: () => ({ style: headerStyle }),
           onCell: () => ({ style: cellStyle }),
@@ -822,7 +826,7 @@ export default function TestExecutionPage() {
               value={record.execValue || undefined}
               onChange={(v) => onChangeExec(idx, String(v))}
               variant="borderless"
-              className="w-full text-sm [&_.ant-select-selector]:!p-0 [&_.ant-select-selection-item]:!flex [&_.ant-select-selection-item]:!justify-center"
+              className="w-full text-sm leading-5 font-medium [&_.ant-select-selector]:!p-0 [&_.ant-select-selection-item]:!flex [&_.ant-select-selection-item]:!justify-center"
               popupClassName="min-w-[100px]"
               suffixIcon={null}
             />
@@ -903,6 +907,9 @@ export default function TestExecutionPage() {
                 }
                 .custom-tree-indent .ant-tree-node-content-wrapper {
                   padding-inline: 4px !important;
+                  font-size: 0.875rem !important;
+                  line-height: 1.25rem !important;
+                  font-weight: 500 !important;
                 }
               `,
               }}
@@ -990,7 +997,7 @@ export default function TestExecutionPage() {
                             className={`${isActive ? "ring-2 ring-blue-500" : ""} rounded-md hover:shadow-sm transition-shadow`}
                           >
                             <div className="flex items-center justify-between">
-                              <div className="text-sm font-medium truncate">{item.name}</div>
+                              <div className="text-sm leading-5 font-medium truncate">{item.name}</div>
                               <Tag color={(enumsData?.plan_case_result || {})[String(item.result)]}>
                                 {item.result || "-"}
                               </Tag>
@@ -1053,7 +1060,7 @@ export default function TestExecutionPage() {
                           <button
                             type="button"
                             onClick={() => setActiveTab("basic")}
-                            className={`flex items-center gap-1.5 px-2 py-3 text-sm -mb-px border-b-2 transition-colors ${
+                            className={`flex items-center gap-1.5 px-2 py-3 text-sm leading-5 font-medium -mb-px border-b-2 transition-colors ${
                               activeTab === "basic"
                                 ? "text-blue-600 border-blue-600"
                                 : "text-black border-transparent hover:text-blue-600"
@@ -1065,7 +1072,7 @@ export default function TestExecutionPage() {
                           <button
                             type="button"
                             onClick={() => setActiveTab("requirement")}
-                            className={`flex items-center gap-1.5 px-2 py-3 text-sm -mb-px border-b-2 transition-colors ${
+                            className={`flex items-center gap-1.5 px-2 py-3 text-sm leading-5 font-medium -mb-px border-b-2 transition-colors ${
                               activeTab === "requirement"
                                 ? "text-blue-600 border-blue-600"
                                 : "text-black border-transparent hover:text-blue-600"
@@ -1077,7 +1084,7 @@ export default function TestExecutionPage() {
                           <button
                             type="button"
                             onClick={() => setActiveTab("work")}
-                            className={`flex items-center gap-1.5 px-2 py-3 text-sm -mb-px border-b-2 transition-colors ${
+                            className={`flex items-center gap-1.5 px-2 py-3 text-sm leading-5 font-medium -mb-px border-b-2 transition-colors ${
                               activeTab === "work" ? "text-blue-600 border-blue-600" : "text-black border-transparent hover:text-blue-600"
                             }`}
                           >
@@ -1087,7 +1094,7 @@ export default function TestExecutionPage() {
                           <button
                             type="button"
                             onClick={() => setActiveTab("defect")}
-                            className={`flex items-center gap-1.5 px-2 py-3 text-sm -mb-px border-b-2 transition-colors ${
+                            className={`flex items-center gap-1.5 px-2 py-3 text-sm leading-5 font-medium -mb-px border-b-2 transition-colors ${
                               activeTab === "defect"
                                 ? "text-blue-600 border-blue-600"
                                 : "text-black border-transparent hover:text-blue-600"
@@ -1108,7 +1115,7 @@ export default function TestExecutionPage() {
                                 });
                               } catch {}
                             }}
-                            className={`flex items-center gap-1.5 px-2 py-3 text-sm -mb-px border-b-2 transition-colors ${
+                            className={`flex items-center gap-1.5 px-2 py-3 text-sm leading-5 font-medium -mb-px border-b-2 transition-colors ${
                               activeTab === "history"
                                 ? "text-blue-600 border-blue-600"
                                 : "text-black border-transparent hover:text-blue-600"
@@ -1133,9 +1140,9 @@ export default function TestExecutionPage() {
                           {activeTab === "basic" && (
                             <div className="flex flex-col gap-4 min-h-[550px]">
                               <div className="text-lg font-semibold">{caseDetail?.name ?? "-"}</div>
-                              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
                                 <div className="col-span-1">
-                                  <div className="text-xs text-custom-text-300 mb-1">维护人</div>
+                                  <div className="text-sm leading-5 font-medium text-custom-text-300 mb-1">维护人</div>
                                   {caseDetail?.assignee ? (
                                     <MemberDropdown
                                       multiple={false}
@@ -1151,11 +1158,17 @@ export default function TestExecutionPage() {
                                       optionsClassName="z-[60]"
                                     />
                                   ) : (
-                                    <div className="p-2 text-sm text-custom-text-300 h-8 flex items-center">未设置维护人</div>
+                                    <div className="text-sm text-custom-text-300 h-8 flex items-center">未设置维护人</div>
                                   )}
                                 </div>
                                 <div className="col-span-1">
-                                  <div className="text-xs text-custom-text-300 mb-1">类型</div>
+                                  <div className="text-sm leading-5 font-medium text-custom-text-300 mb-1">用例编号</div>
+                                  <div className="h-8 flex items-center text-sm">
+                                    {caseDetail?.sequence_id ? `${caseDetail?.project_identifier ? caseDetail.project_identifier + "-" : ""}${caseDetail.sequence_id}` : (caseDetail?.code ?? "-")}
+                                  </div>
+                                </div>
+                                <div className="col-span-1">
+                                  <div className="text-sm leading-5 font-medium text-custom-text-300 mb-1">类型</div>
                                   <div className="h-8 flex items-center">
                                     <Tag>{enumsData.case_type?.[String(caseDetail?.type)] ?? "-"}</Tag>
                                   </div>
@@ -1166,11 +1179,24 @@ export default function TestExecutionPage() {
                                     <Tag>{enumsData.case_priority?.[String(caseDetail?.priority)] ?? "-"}</Tag>
                                   </div>
                                 </div>
+                                <div className="col-span-1">
+                                  <div className="text-sm leading-5 font-medium text-custom-text-300 mb-1">标签</div>
+                                  <div className="flex flex-wrap items-center gap-1 min-h-[32px]">
+                                     {Array.isArray(caseDetail?.labels) && caseDetail.labels.length > 0 ? (
+                                       caseDetail.labels.map((label: any) => (
+                                         <div key={label?.id || label} className="flex items-center gap-1 bg-blue-50 text-blue-600 px-2 py-0.5 rounded text-xs border border-blue-100">
+                                           {label?.name || label}
+                                         </div>
+                                       ))
+                                     ) : (
+                                       <span className="text-sm text-custom-text-300">-</span>
+                                     )}
+                                  </div>
+                                </div>
                               </div>
 
                               <div>
                                 <label className="mb-3 flex items-center gap-2 text-sm font-medium text-gray-700">
-                                  <LucideIcons.ListChecks size={16} aria-hidden="true" />
                                   前置条件
                                 </label>
                                 <RichTextEditor
@@ -1185,7 +1211,6 @@ export default function TestExecutionPage() {
 
                               <div>
                                 <label className="mb-2 flex items-center gap-2 text-sm font-medium text-gray-700">
-                                  <LucideIcons.ListOrdered size={16} aria-hidden="true" />
                                   测试步骤
                                 </label>
                                 <StepsTable
@@ -1199,7 +1224,6 @@ export default function TestExecutionPage() {
 
                               <div>
                                 <label className="mb-2 flex items-center gap-2 text-sm font-medium text-gray-700">
-                                  <LucideIcons.StickyNote size={16} aria-hidden="true" />
                                   备注
                                 </label>
                                 <RichTextEditor
@@ -1215,7 +1239,6 @@ export default function TestExecutionPage() {
                               <div id="attachments-section" className="scroll-mb-16">
                                 <div className="mb-2 flex items-center justify-between">
                                   <span className="flex items-center gap-2 text-sm font-medium text-gray-700">
-                                    <LucideIcons.Paperclip size={16} aria-hidden="true" />
                                     附件
                                   </span>
                                 </div>
