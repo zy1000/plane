@@ -990,9 +990,9 @@ export default function CaseReview() {
                             </Button>
                           </div>
                         </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
                           <div className="col-span-1">
-                            <div className="text-xs text-custom-text-300 mb-1">维护人</div>
+                            <div className="text-sm leading-5 font-medium text-custom-text-300 mb-1">维护人</div>
                             {caseDetail?.assignee ? (
                               <MemberDropdown
                                 multiple={false}
@@ -1008,37 +1008,45 @@ export default function CaseReview() {
                                 optionsClassName="z-[60]"
                               />
                             ) : (
-                              <div className="p-2 text-sm text-custom-text-300 h-8 flex items-center">未设置维护人</div>
+                              <div className="text-sm text-custom-text-300 h-8 flex items-center">未设置维护人</div>
                             )}
                           </div>
                           <div className="col-span-1">
-                            <div className="text-xs text-custom-text-300 mb-1">用例编号</div>
-                            <div className="w-full rounded-md border border-transparent text-sm">
-                              <input
-                                value={String(caseDetail?.code ?? "")}
-                                readOnly
-                                placeholder="-"
-                                className="w-full text-sm px-2 py-1 bg-transparent outline-none"
-                              />
+                            <div className="text-sm leading-5 font-medium text-custom-text-300 mb-1">用例编号</div>
+                            <div className="h-8 flex items-center text-sm">
+                              {caseDetail?.sequence_id ? `${caseDetail?.project_identifier ? caseDetail.project_identifier + "-" : ""}${caseDetail.sequence_id}` : (caseDetail?.code ?? "-")}
                             </div>
                           </div>
                           <div className="col-span-1">
-                            <div className="text-xs text-custom-text-300 mb-1">类型</div>
+                            <div className="text-sm leading-5 font-medium text-custom-text-300 mb-1">类型</div>
                             <div className="h-8 flex items-center">
                               <Tag>{enumsData.case_type?.[String(caseDetail?.type)] ?? "-"}</Tag>
                             </div>
                           </div>
                           <div className="col-span-1">
-                            <div className="text-xs text-custom-text-300 mb-1">等级</div>
+                            <div className="text-sm leading-5 font-medium text-custom-text-300 mb-1">等级</div>
                             <div className="h-8 flex items-center">
                               <Tag>{enumsData.case_priority?.[String(caseDetail?.priority)] ?? "-"}</Tag>
+                            </div>
+                          </div>
+                          <div className="col-span-1">
+                            <div className="text-sm leading-5 font-medium text-custom-text-300 mb-1">标签</div>
+                            <div className="flex flex-wrap items-center gap-1 min-h-[32px]">
+                               {Array.isArray(caseDetail?.labels) && caseDetail.labels.length > 0 ? (
+                                 caseDetail.labels.map((label: any) => (
+                                   <div key={label?.id || label} className="flex items-center gap-1 bg-blue-50 text-blue-600 px-2 py-0.5 rounded text-xs border border-blue-100">
+                                     {label?.name || label}
+                                   </div>
+                                 ))
+                               ) : (
+                                 <span className="text-sm text-custom-text-300">-</span>
+                               )}
                             </div>
                           </div>
                         </div>
 
                         <div>
                           <label className="mb-3 flex items-center gap-2 text-sm font-medium text-gray-700">
-                            <LucideIcons.ListChecks size={16} aria-hidden="true" />
                             前置条件
                           </label>
                           <RichTextEditor
@@ -1053,7 +1061,6 @@ export default function CaseReview() {
 
                         <div>
                           <label className="mb-2 flex items-center gap-2 text-sm font-medium text-gray-700">
-                            <LucideIcons.ListOrdered size={16} aria-hidden="true" />
                             测试步骤
                           </label>
                           <StepsTable steps={caseDetail?.steps as StepItem[]} />
@@ -1061,7 +1068,6 @@ export default function CaseReview() {
 
                         <div>
                           <label className="mb-2 flex items-center gap-2 text-sm font-medium text-gray-700">
-                            <LucideIcons.StickyNote size={16} aria-hidden="true" />
                             备注
                           </label>
                           <RichTextEditor
@@ -1077,7 +1083,6 @@ export default function CaseReview() {
                         <div id="attachments-section" className="scroll-mb-16">
                           <div className="mb-2 flex items-center justify-between">
                             <span className="flex items-center gap-2 text-sm font-medium text-gray-700">
-                              <LucideIcons.Paperclip size={16} aria-hidden="true" />
                               附件
                             </span>
                           </div>
