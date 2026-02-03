@@ -415,6 +415,27 @@ export class IssueService extends APIService {
       });
   }
 
+  async batchUpdateIssues(
+    workspaceSlug: string,
+    projectId: string,
+    data: {
+      issue_ids: string[];
+      properties: {
+        state_id?: string | null;
+        priority?: TIssue["priority"];
+        assignee_ids?: string[];
+        start_date?: string | null;
+        target_date?: string | null;
+      };
+    }
+  ): Promise<void> {
+    return this.post(`/api/workspaces/${workspaceSlug}/projects/${projectId}/batch-update/`, data)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
   async getIssueMetaFromURL(
     workspaceSlug: string,
     projectId: string,
