@@ -135,7 +135,7 @@ export const List = observer(function List(props: IList) {
         <MultipleSelectGroup
           containerRef={containerRef}
           entities={entities}
-          disabled={!isBulkOperationsEnabled || isEpic}
+          disabled={isEpic}
         >
           {(helpers) => (
             <>

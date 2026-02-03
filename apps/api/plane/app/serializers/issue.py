@@ -1085,8 +1085,8 @@ class IssueDescriptionVersionDetailSerializer(BaseSerializer):
         ]
         read_only_fields = ["workspace", "project", "issue"]
 
-class IssueWithTypeSerializer(BaseSerializer):
 
+class IssueWithTypeSerializer(BaseSerializer):
     class Meta:
         model = Issue
         fields = [
@@ -1100,8 +1100,144 @@ class IssueWithTypeSerializer(BaseSerializer):
         ]
         depth = 1
 
-class IssueAllSerializer(BaseSerializer):
 
+class IssueAllSerializer(BaseSerializer):
     class Meta:
         model = Issue
         fields = '__all__'
+
+
+class IssueBatchUpdateSerializer(BaseSerializer):
+
+    state_id = serializers.PrimaryKeyRelatedField(
+        source="state",
+        queryset=State.all_state_objects.all(),
+        required=False,
+        allow_null=True,
+    )
+    assignee_ids = serializers.ListField(
+        child=serializers.PrimaryKeyRelatedField(queryset=User.objects.all()),
+        write_only=True,
+        required=False,
+    )
+    label_ids = serializers.ListField(
+        child=serializers.PrimaryKeyRelatedField(queryset=Label.objects.all()),
+        write_only=True,
+        required=False,
+    )
+    cycle_id = serializers.PrimaryKeyRelatedField(
+        queryset=Cycle.objects.all(),
+        required=False,
+        allow_null=True,
+        write_only=True,
+    )
+    module_ids = serializers.ListField(
+        child=serializers.PrimaryKeyRelatedField(queryset=Module.objects.all()),
+        write_only=True,
+        required=False,
+    )
+
+    class Meta:
+        model = Issue
+        fields = [
+            "id",
+            "state_id",
+            "priority",
+            "start_date",
+            "target_date",
+            "assignee_ids",
+            "label_ids",
+            "cycle_id",
+            "module_ids",
+        ]
+
+    def update(self, instance, validated_data):
+        assignees = validated_data.pop("assignee_ids", None)
+        labels = validated_data.pop("label_ids", None)
+        cycle = validated_data.pop("cycle_id", None)
+        modules = validated_data.pop("module_ids", None)
+
+        project_id = instance.project_id
+        workspace_id = instance.workspace_id
+        created_by_id = instance.created_by_id
+        updated_by_id = instance.updated_by_id
+
+        if assignees is not None:
+            IssueAssignee.objects.filter(issue=instance).delete()
+            try:
+                IssueAssignee.objects.bulk_create(
+                    [
+                        IssueAssignee(
+                            assignee=assignee,
+                            issue=instance,
+                            project_id=project_id,
+                            workspace_id=workspace_id,
+                            created_by_id=created_by_id,
+                            updated_by_id=updated_by_id,
+                        )
+                        for assignee in assignees
+                    ],
+                    batch_size=10,
+                    ignore_conflicts=True,
+                )
+            except IntegrityError:
+                pass
+
+        if labels is not None:
+            IssueLabel.objects.filter(issue=instance).delete()
+            try:
+                IssueLabel.objects.bulk_create(
+                    [
+                        IssueLabel(
+                            label=label,
+                            issue=instance,
+                            project_id=project_id,
+                            workspace_id=workspace_id,
+                            created_by_id=created_by_id,
+                            updated_by_id=updated_by_id,
+                        )
+                        for label in labels
+                    ],
+                    batch_size=10,
+                    ignore_conflicts=True,
+                )
+            except IntegrityError:
+                pass
+
+        if cycle is not None:
+            CycleIssue.objects.filter(issue=instance).delete()
+            try:
+                CycleIssue.objects.create(
+                    cycle=cycle,
+                    issue=instance,
+                    project_id=project_id,
+                    workspace_id=workspace_id,
+                    created_by_id=created_by_id,
+                    updated_by_id=updated_by_id,
+                )
+            except IntegrityError:
+                pass
+
+        if modules is not None:
+            ModuleIssue.objects.filter(issue=instance).delete()
+            try:
+                ModuleIssue.objects.bulk_create(
+                    [
+                        ModuleIssue(
+                            module=module,
+                            issue=instance,
+                            project_id=project_id,
+                            workspace_id=workspace_id,
+                            created_by_id=created_by_id,
+                            updated_by_id=updated_by_id,
+                        )
+                        for module in modules
+                    ],
+                    batch_size=10,
+                    ignore_conflicts=True,
+                )
+            except IntegrityError:
+                pass
+
+        instance.updated_at = timezone.now()
+        return super().update(instance, validated_data)

@@ -369,19 +369,21 @@ export const useMultipleSelect = (props: Props) => {
   //   };
   // }, [clearSelection, router.events]);
 
-  // when entities list change, remove entityIds from the selected entities array, which are not present in the new list
+  // when groups change, remove selected entities that no longer belong to any active group
   useEffect(() => {
     if (disabled) return;
-    selectedEntityIds.map((entityID) => {
-      const isEntityPresent = entitiesList.find((en) => en?.entityID === entityID);
-      if (!isEntityPresent) {
-        const entityDetails = getEntityDetailsFromEntityID(entityID);
-        if (entityDetails) {
-          handleEntitySelection(entityDetails);
-        }
-      }
+
+    const groupSet = new Set(groups);
+    const entitiesToRemove: TEntityDetails[] = [];
+
+    selectedEntityIds.forEach((entityID) => {
+      const entityDetails = getEntityDetailsFromEntityID(entityID);
+      if (!entityDetails) return;
+      if (!groupSet.has(entityDetails.groupID)) entitiesToRemove.push(entityDetails);
     });
-  }, [disabled, entitiesList, getEntityDetailsFromEntityID, handleEntitySelection, selectedEntityIds]);
+
+    if (entitiesToRemove.length > 0) bulkUpdateSelectedEntityDetails(entitiesToRemove, "remove");
+  }, [bulkUpdateSelectedEntityDetails, disabled, getEntityDetailsFromEntityID, groups, selectedEntityIds]);
 
   /**
    * @description helper functions for selection

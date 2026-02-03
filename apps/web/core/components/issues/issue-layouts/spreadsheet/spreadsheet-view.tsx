@@ -86,7 +86,7 @@ export const SpreadsheetView = observer(function SpreadsheetView(props: Props) {
         entities={{
           [SPREADSHEET_SELECT_GROUP]: issueIds,
         }}
-        disabled={!isBulkOperationsEnabled || isEpic}
+        disabled={isEpic}
       >
         {(helpers) => (
           <>

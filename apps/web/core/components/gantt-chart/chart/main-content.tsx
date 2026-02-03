@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { combine } from "@atlaskit/pragmatic-drag-and-drop/combine";
 import { autoScrollForElements } from "@atlaskit/pragmatic-drag-and-drop-auto-scroll/element";
 import { observer } from "mobx-react";
@@ -22,6 +22,7 @@ import { GanttChartSidebar, MonthChartView, QuarterChartView, WeekChartView } fr
 // helpers
 // hooks
 import { useTimeLineChartStore } from "@/hooks/use-timeline-chart";
+import { useMultipleSelectStore } from "@/hooks/store/use-multiple-select-store";
 // plane web components
 import {
   TimelineDependencyPaths,
@@ -112,6 +113,7 @@ export const GanttChartMainContent = observer(function GanttChartMainContent(pro
   const [sidebarWidth, setSidebarWidth] = useState<number>(SIDEBAR_WIDTH);
   // chart hook
   const { currentView, currentViewData } = useTimeLineChartStore();
+  const { selectedEntityIds } = useMultipleSelectStore();
   // plane web hooks
   const isBulkOperationsEnabled = useBulkOperationStatus();
 
@@ -363,6 +365,10 @@ export const GanttChartMainContent = observer(function GanttChartMainContent(pro
 
   if (!currentView) return null;
   const ActiveChartView = CHART_VIEW_COMPONENTS[currentView];
+  const selectableBlockIds = useMemo(
+    () => Array.from(new Set([...(blockIds ?? []), ...(selectedEntityIds ?? [])])),
+    [blockIds, selectedEntityIds]
+  );
 
   return (
     <>
@@ -370,9 +376,9 @@ export const GanttChartMainContent = observer(function GanttChartMainContent(pro
       <MultipleSelectGroup
         containerRef={chartContainerRef}
         entities={{
-          [GANTT_SELECT_GROUP]: blockIds ?? [],
+          [GANTT_SELECT_GROUP]: selectableBlockIds,
         }}
-        disabled={!isBulkOperationsEnabled || isEpic}
+        disabled={isEpic}
       >
         {(helpers) => (
           <>

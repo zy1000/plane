@@ -33,6 +33,7 @@ from plane.app.views import (
     IssueMetaEndpoint,
     IssueDetailIdentifierEndpoint,
 )
+from plane.app.views.issue.batch import IssueBatchUpdate
 from plane.app.views.issue.custom import IssueAPI
 from plane.app.views.qa.review import CaseReviewView
 
@@ -41,6 +42,11 @@ router.register('issue', IssueAPI, basename='issue')
 
 urlpatterns = [
     path('workspaces/<str:slug>/projects/<uuid:project_id>/', include(router.urls)),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/batch-update/",
+        IssueBatchUpdate.as_view(),
+        name="work-item-versions",
+    ),
     path(
         "workspaces/<str:slug>/projects/<uuid:project_id>/issues/list/",
         IssueListEndpoint.as_view(),
