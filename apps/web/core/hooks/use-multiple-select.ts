@@ -174,7 +174,6 @@ export const useMultipleSelect = (props: Props) => {
 
       if (forceAction) {
         if (forceAction === "force-add") {
-          console.log("force adding");
           updateSelectedEntityDetails(entityDetails, "add");
           handleActiveEntityChange(entityDetails, shouldScroll);
         }
@@ -257,13 +256,33 @@ export const useMultipleSelect = (props: Props) => {
    */
   const isGroupSelected = useCallback(
     (groupID: string) => {
-      const groupEntities = entitiesList.filter((entity) => entity.groupID === groupID);
+      const root = containerRef.current;
+      const selector = `[data-entity-group-id="${groupID}"][data-entity-id]`;
+
+      const collectFromNodes = (nodes: NodeListOf<Element>) => {
+        const ids: string[] = [];
+        nodes.forEach((node) => {
+          const el = node as HTMLElement;
+          const entityId = el.dataset.entityId;
+          if (entityId) ids.push(entityId);
+        });
+        return ids;
+      };
+
+      const fromRoot = root ? collectFromNodes(root.querySelectorAll(selector)) : [];
+      const fromDocument = collectFromNodes(document.querySelectorAll(selector));
+      const uniqueEntityIds = Array.from(new Set([...fromRoot, ...fromDocument]));
+
+      const groupEntities =
+        uniqueEntityIds.length > 0
+          ? uniqueEntityIds.map((entityID) => ({ entityID, groupID }))
+          : entitiesList.filter((entity) => entity.groupID === groupID);
       const totalSelected = groupEntities.filter((entity) => getIsEntitySelected(entity?.entityID ?? "")).length;
       if (totalSelected === 0) return "empty";
       if (totalSelected === groupEntities.length) return "complete";
       return "partial";
     },
-    [entitiesList, getIsEntitySelected]
+    [containerRef, entitiesList, getIsEntitySelected]
   );
 
   /**
@@ -274,11 +293,60 @@ export const useMultipleSelect = (props: Props) => {
     (groupID: string) => {
       if (disabled) return;
 
-      const groupEntities = entitiesList.filter((entity) => entity.groupID === groupID);
-      const groupSelectionStatus = isGroupSelected(groupID);
-      handleEntitySelection(groupEntities, false, groupSelectionStatus === "empty" ? "force-add" : "force-remove");
+      const getRenderedGroupEntities = () => {
+        const root = containerRef.current;
+        const collectFromNodes = (nodes: NodeListOf<Element>) => {
+          const renderedEntityIds: string[] = [];
+          nodes.forEach((node) => {
+            const el = node as HTMLElement;
+            const entityId = el.dataset.entityId;
+            if (entityId) renderedEntityIds.push(entityId);
+          });
+          return renderedEntityIds;
+        };
+
+        const selector = `[data-entity-group-id="${groupID}"][data-entity-id]`;
+        const rootNodes = root ? root.querySelectorAll(selector) : ({} as NodeListOf<Element>);
+        const fromRoot = root ? collectFromNodes(rootNodes) : [];
+        const fromDocument = collectFromNodes(document.querySelectorAll(selector));
+
+        const uniqueEntityIds = Array.from(new Set([...fromRoot, ...fromDocument]));
+        return uniqueEntityIds.map((entityID) => ({ entityID, groupID }));
+      };
+
+      const renderedGroupEntities = getRenderedGroupEntities();
+      const groupEntities =
+        renderedGroupEntities.length > 0 ? renderedGroupEntities : entitiesList.filter((entity) => entity.groupID === groupID);
+      const totalSelected = groupEntities.filter((entity) => getIsEntitySelected(entity.entityID)).length;
+      const groupSelectionStatus: "empty" | "partial" | "complete" =
+        totalSelected === 0 ? "empty" : totalSelected === groupEntities.length ? "complete" : "partial";
+
+      if (groupSelectionStatus !== "complete") {
+        handleEntitySelection(groupEntities, false, "force-add");
+        return;
+      }
+
+      const selectedGroupEntities = selectedEntityIds
+        .map((entityID) => getEntityDetailsFromEntityID(entityID))
+        .filter((entityDetails): entityDetails is TEntityDetails => !!entityDetails && entityDetails.groupID === groupID);
+
+      if (selectedGroupEntities.length > 0) {
+        bulkUpdateSelectedEntityDetails(selectedGroupEntities, "remove");
+      } else {
+        handleEntitySelection(groupEntities, false, "force-remove");
+      }
     },
-    [disabled, entitiesList, handleEntitySelection, isGroupSelected]
+    [
+      bulkUpdateSelectedEntityDetails,
+      disabled,
+      containerRef,
+      entitiesList,
+      getEntityDetailsFromEntityID,
+      getIsEntitySelected,
+      handleEntitySelection,
+      isGroupSelected,
+      selectedEntityIds,
+    ]
   );
 
   // select entities on shift + arrow up/down key press

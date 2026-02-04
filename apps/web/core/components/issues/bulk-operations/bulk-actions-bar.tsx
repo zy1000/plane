@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check, Trash2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { runInAction } from "mobx";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
@@ -8,7 +8,7 @@ import { format } from "date-fns";
 // components
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import { AlertModalCore } from "@plane/ui";
+import { AlertModalCore, Checkbox } from "@plane/ui";
 import { StateDropdown } from "@/components/dropdowns/state/dropdown";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { ModuleDropdown } from "@/components/dropdowns/module/dropdown";
@@ -160,13 +160,16 @@ export const BulkOperationsActionBar = observer(function BulkOperationsActionBar
   };
 
   return (
-    <div className={cn("sticky bottom-0 left-0 h-20 z-[20] flex items-end justify-center", className)}>
+    <div className={cn("sticky bottom-0 left-0 z-[20] flex items-center justify-center", className)}>
       <div className="h-12 w-full bg-custom-background-100 border border-custom-border-200 rounded-md flex items-center gap-3 px-3 shadow-sm">
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2 pr-3 border-r border-custom-border-200">
-            <div className="size-4 rounded-[3px] border border-custom-primary-100 bg-custom-primary-100 grid place-items-center">
-              <Check className="size-3 text-white" />
-            </div>
+            <Checkbox
+              checked
+              onClick={clearSelection}
+              className="size-3.5 !outline-none"
+              iconClassName="size-3"
+            />
             <span className="text-xs text-custom-text-300">{selectedCount} selected</span>
           </div>
           <div className="flex items-center gap-1">
