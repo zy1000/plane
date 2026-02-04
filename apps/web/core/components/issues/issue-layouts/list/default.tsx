@@ -10,7 +10,6 @@ import { autoScrollForElements } from "@atlaskit/pragmatic-drag-and-drop-auto-sc
 import { observer } from "mobx-react";
 // plane constants
 import { ALL_ISSUES } from "@plane/constants";
-// types
 import type {
   GroupByColumnTypes,
   TGroupedIssues,
@@ -114,12 +113,12 @@ export const List = observer(function List(props: IList) {
 
   const is_list = group_by === null ? true : false;
 
-  // create groupIds array and entities object for bulk ops
   const groupIds = groups.map((g) => g.id);
   const orderedGroups: Record<string, string[]> = {};
   groupIds.forEach((gID) => {
     orderedGroups[gID] = [];
   });
+
   let entities: Record<string, string[]> = {};
 
   if (is_list) {

@@ -10,7 +10,6 @@ import { observer } from "mobx-react";
 import { SPREADSHEET_SELECT_GROUP, SPREADSHEET_PROPERTY_LIST } from "@plane/constants";
 // types
 import type { TIssue, IIssueDisplayFilterOptions, IIssueDisplayProperties } from "@plane/types";
-import { EIssueLayoutTypes } from "@plane/types";
 // components
 import { MultipleSelectGroup } from "@/components/core/multiple-select";
 // hooks
@@ -21,7 +20,6 @@ import { IssueBulkOperationsRoot } from "@/plane-web/components/issues/bulk-oper
 import { useBulkOperationStatus } from "@/plane-web/hooks/use-bulk-operation-status";
 // local imports
 import type { TRenderQuickActions } from "../list/list-view-types";
-import { QuickAddIssueRoot, SpreadsheetAddIssueButton } from "../quick-add";
 import { SpreadsheetTable } from "./spreadsheet-table";
 
 type Props = {
@@ -50,10 +48,7 @@ export const SpreadsheetView = observer(function SpreadsheetView(props: Props) {
     issueIds,
     quickActions,
     updateIssue,
-    quickAddCallback,
     canEditProperties,
-    enableQuickCreateIssue,
-    disableIssueCreation,
     canLoadMoreIssues,
     loadMoreIssues,
     isWorkspaceLevel = false,
@@ -108,18 +103,6 @@ export const SpreadsheetView = observer(function SpreadsheetView(props: Props) {
                 selectionHelpers={helpers}
                 isEpic={isEpic}
               />
-            </div>
-            <div className="border-t border-subtle">
-              <div className="sticky bottom-0 left-0 z-5">
-                {enableQuickCreateIssue && !disableIssueCreation && (
-                  <QuickAddIssueRoot
-                    layout={EIssueLayoutTypes.SPREADSHEET}
-                    QuickAddButton={SpreadsheetAddIssueButton}
-                    quickAddCallback={quickAddCallback}
-                    isEpic={isEpic}
-                  />
-                )}
-              </div>
             </div>
             <IssueBulkOperationsRoot selectionHelpers={helpers} />
           </>

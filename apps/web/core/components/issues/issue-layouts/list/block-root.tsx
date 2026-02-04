@@ -132,6 +132,7 @@ export const IssueBlockRoot = observer(function IssueBlockRoot(props: Props) {
   if (!issueId || !issuesMap[issueId]?.created_at) return null;
 
   const subIssues = subIssuesStore.subIssuesByIssueId(issueId);
+
   return (
     <div className="relative" ref={issueBlockRef} id={getIssueBlockId(issueId, groupId)}>
       <DropIndicator classNames={"absolute top-0 z-[2]"} isVisible={instruction === "DRAG_OVER"} />
