@@ -60,6 +60,7 @@ type TestCaseResponse = {
 
 import { MoveCaseModal } from "@/components/qa/cases/move-modal";
 import { CopyCaseModal } from "@/components/qa/cases/copy-modal";
+import CasesExportModal from "@/components/qa/cases/cases-export-modal";
 
 type ResizableHeaderCellProps = ComponentPropsWithoutRef<"th"> & {
   width?: number;
@@ -198,6 +199,7 @@ export default function TestCasesPage() {
   const [error, setError] = useState<string | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState<boolean>(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState<boolean>(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState<boolean>(false);
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
   const [activeCase, setActiveCase] = useState<any | null>(null);
   const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
@@ -1333,6 +1335,14 @@ export default function TestCasesPage() {
                     >
                       导入
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsExportModalOpen(true)}
+                      disabled={!repositoryId}
+                      className="text-custom-primary-100 bg-transparent border border-custom-primary-100 hover:bg-custom-primary-100/20 focus:text-custom-primary-100 focus:bg-custom-primary-100/30 px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      导出
+                    </button>
                   </div>
                 </div>
                 <div className="flex-1 min-h-0 overflow-hidden">
@@ -1518,6 +1528,16 @@ export default function TestCasesPage() {
           }}
         />
       )}
+      {repositoryId && (
+        <CasesExportModal
+          open={isExportModalOpen}
+          onClose={() => setIsExportModalOpen(false)}
+          workspaceSlug={workspaceSlug as string}
+          repositoryId={repositoryId as string}
+          moduleId={selectedModuleId || undefined}
+          selectedCaseIds={selectedCaseIds}
+        />
+      )}
       <UpdateModal
         open={isUpdateModalOpen}
         onClose={() => {
@@ -1554,6 +1574,7 @@ export default function TestCasesPage() {
           handleClose={() => setIsCopyModalOpen(false)}
           workspaceSlug={workspaceSlug as string}
           repositoryId={repositoryId}
+          projectId={projectId as string}
           selectedCaseIds={selectedCaseIds}
           onSuccess={() => {
             fetchModules();

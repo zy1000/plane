@@ -8,6 +8,7 @@ import { Button } from "antd";
 import { Tooltip } from "@plane/propel/tooltip";
 import PlanCasesModal from "@/components/qa/plans/plan-cases-modal";
 import PlanIterationModal from "@/components/qa/plans/plan-iteration-modal";
+import PlanCasesExportModal from "@/components/qa/plans/plan-cases-export-modal";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { Tree, Table, Space, Tag, message, Dropdown, Pagination, Popconfirm, Select } from "antd";
 import type { TableProps } from "antd";
@@ -18,6 +19,7 @@ import { AppstoreOutlined, DownOutlined } from "@ant-design/icons";
 import { FolderOpenDot, Atom } from "lucide-react";
 import { formatDateTime, globalEnums } from "../util";
 import { useUser } from "@/hooks/store/user";
+import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 
 type TLabel = { id?: string; name?: string } | string;
 type TestCase = {
@@ -34,6 +36,7 @@ type TestCase = {
   labels?: TLabel[];
   module?: string;
   repository_name?: string;
+  assignee?: { id?: string } | null;
 };
 type PlanCaseItem = {
   id: string;
@@ -79,6 +82,7 @@ export default function PlanCasesPage() {
   const [detailLoading, setDetailLoading] = useState<boolean>(false);
   const [isPlanModalOpen, setIsPlanModalOpen] = useState(false);
   const [isIterationModalOpen, setIsIterationModalOpen] = useState(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [selectedCaseIds, setSelectedCaseIds] = useState<string[]>([]);
   const [selectedPlanCaseToCaseIdMap, setSelectedPlanCaseToCaseIdMap] = useState<Record<string, string>>({});
   const [bulkExecuteLoading, setBulkExecuteLoading] = useState<boolean>(false);
@@ -561,6 +565,32 @@ export default function PlanCasesPage() {
         ),
     },
     {
+      title: "维护人",
+      dataIndex: "assignee",
+      key: "assignee",
+      width: 140,
+      render: (_: any, record: PlanCaseItem) => {
+        const assignee = (record?.case as any)?.assignee;
+        return assignee ? (
+          <MemberDropdown
+            multiple={false}
+            value={assignee ?? null}
+            onChange={() => {}}
+            disabled={true}
+            placeholder={""}
+            className="w-full text-sm"
+            buttonContainerClassName="w-full text-left p-0 cursor-default"
+            buttonVariant="transparent-with-text"
+            buttonClassName="text-sm p-0 hover:bg-transparent hover:bg-inherit"
+            showUserDetails={true}
+            optionsClassName="z-[60]"
+          />
+        ) : (
+          ""
+        );
+      },
+    },
+    {
       title: "类型",
       dataIndex: "type",
       key: "type",
@@ -610,6 +640,7 @@ export default function PlanCasesPage() {
       title: "操作",
       key: "actions",
       width: 140,
+      fixed: "right",
       render: (_: any, record: PlanCaseItem) => (
         <Space>
           <Button
@@ -713,7 +744,7 @@ export default function PlanCasesPage() {
                     />
                   </Breadcrumbs>
                 </div>
-                <div>
+                <div className="flex items-center gap-2">
                   <Dropdown.Button
                     type="primary"
                     icon={<DownOutlined />}
@@ -744,6 +775,14 @@ export default function PlanCasesPage() {
                   >
                     规划用例
                   </Dropdown.Button>
+                  <Button
+                    type="default"
+                    className="px-3 text-custom-primary-100 bg-transparent border border-custom-primary-100 hover:bg-custom-primary-100/20 focus:text-custom-primary-100 focus:bg-custom-primary-100/30 px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center disabled:opacity-50 disabled:cursor-not-allowed mr-4"
+                    onClick={() => setIsExportModalOpen(true)}
+                    disabled={!planId}
+                  >
+                    导出
+                  </Button>
                 </div>
               </div>
               <div className="flex-1 min-h-0 overflow-hidden px-0 pb-3 min-w-0">
@@ -933,6 +972,15 @@ export default function PlanCasesPage() {
           fetchPlanTree();
           fetchCases(currentPage, pageSize, selectedRepositoryId || undefined, selectedModuleId || undefined);
         }}
+      />
+      <PlanCasesExportModal
+        open={isExportModalOpen}
+        onClose={() => setIsExportModalOpen(false)}
+        workspaceSlug={String(workspaceSlug)}
+        planId={planId}
+        repositoryId={selectedRepositoryId}
+        moduleId={selectedModuleId}
+        selectedCaseIds={selectedCaseIds}
       />
     </div>
   );

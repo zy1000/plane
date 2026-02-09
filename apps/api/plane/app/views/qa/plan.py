@@ -27,6 +27,8 @@ from plane.settings.storage import S3Storage
 from plane.bgtasks.storage_metadata_task import get_asset_object_metadata
 from django.conf import settings
 from django.http import HttpResponseRedirect, FileResponse, StreamingHttpResponse
+import csv
+import io
 
 from urllib.parse import quote
 import uuid
@@ -404,6 +406,130 @@ class PlanView(BaseViewSet):
                 plan.state = TestPlan.State.PROGRESS
             plan.save()
         return Response(status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=['post'], url_path='export')
+    def export(self, request, slug):
+        plan_id = request.data.get('plan_id')
+        if not plan_id:
+            return Response({"error": "plan_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        fields = request.data.get('fields') or []
+        if not isinstance(fields, list) or not fields:
+            return Response({"error": "fields must be a non-empty list"}, status=status.HTTP_400_BAD_REQUEST)
+
+        ids = request.data.get('ids') or []
+        repository_id = request.data.get('repository_id')
+        module_id = request.data.get('module_id')
+
+        allowed = {
+            "code": "用例编号",
+            "name": "用例名称",
+            "repository_name": "用例库",
+            "module_name": "模块",
+            "type": "类型",
+            "priority": "优先级",
+            "test_type": "测试类型",
+            "state": "状态",
+            "precondition": "前置条件",
+            "steps": "步骤",
+            "text_description": "文本描述",
+            "text_result": "文本结果",
+            "remark": "备注",
+            "labels": "标签",
+            "issues": "关联缺陷",
+            "assignee": "维护人",
+            "created_at": "创建时间",
+            "updated_at": "更新时间",
+            "result": "执行结果",
+        }
+        fields = [f for f in fields if f in allowed.keys()]
+        if not fields:
+            return Response({"error": "no valid fields selected"}, status=status.HTTP_400_BAD_REQUEST)
+
+        qs = (
+            PlanCase.objects.select_related(
+                "case",
+                "case__repository",
+                "case__module",
+                "case__assignee",
+            )
+            .prefetch_related("case__labels", "case__issues")
+            .filter(plan_id=plan_id, deleted_at__isnull=True)
+        )
+        if ids:
+            qs = qs.filter(id__in=ids)
+        if repository_id:
+            qs = qs.filter(case__repository_id=repository_id)
+        if module_id:
+            expanded = {str(module_id)}
+            frontier = [str(module_id)]
+            while frontier:
+                children = list(
+                    CaseModule.objects.filter(parent_id__in=frontier, deleted_at__isnull=True).values_list("id", flat=True)
+                )
+                new_children = [str(c) for c in children if str(c) not in expanded]
+                if not new_children:
+                    break
+                expanded.update(new_children)
+                frontier = new_children
+            qs = qs.filter(case__module_id__in=list(expanded))
+
+        header = [allowed[f] for f in fields]
+        buffer = io.StringIO()
+        writer = csv.writer(buffer, delimiter=",", quoting=csv.QUOTE_ALL)
+        writer.writerow(header)
+
+        def val(pc, key):
+            c = pc.case
+            if key == "code":
+                return c.code or ""
+            if key == "name":
+                return c.name or ""
+            if key == "repository_name":
+                return getattr(getattr(c, "repository", None), "name", "") or ""
+            if key == "module_name":
+                return getattr(getattr(c, "module", None), "name", "") or ""
+            if key == "type":
+                return c.get_type_display() if hasattr(c, "get_type_display") else ""
+            if key == "priority":
+                return c.get_priority_display() if hasattr(c, "get_priority_display") else ""
+            if key == "test_type":
+                return c.get_test_type_display() if hasattr(c, "get_test_type_display") else ""
+            if key == "state":
+                return c.get_state_display() if hasattr(c, "get_state_display") else ""
+            if key == "precondition":
+                return c.precondition or ""
+            if key == "steps":
+                return c.steps or ""
+            if key == "text_description":
+                return c.text_description or ""
+            if key == "text_result":
+                return c.text_result or ""
+            if key == "remark":
+                return c.remark or ""
+            if key == "labels":
+                return ",".join([l.name for l in c.labels.all()]) if hasattr(c, "labels") else ""
+            if key == "issues":
+                return ",".join([str(i.id) for i in c.issues.all()]) if hasattr(c, "issues") else ""
+            if key == "assignee":
+                return getattr(getattr(c, "assignee", None), "display_name", "") or ""
+            if key == "created_at":
+                return timezone.localtime(c.created_at).strftime("%Y-%m-%d %H:%M:%S") if c.created_at else ""
+            if key == "updated_at":
+                return timezone.localtime(c.updated_at).strftime("%Y-%m-%d %H:%M:%S") if c.updated_at else ""
+            if key == "result":
+                return pc.result or ""
+            return ""
+
+        for pc in qs.iterator():
+            row = [val(pc, f) for f in fields]
+            writer.writerow(row)
+
+        content = "\ufeff" + buffer.getvalue()
+        resp = FileResponse(io.BytesIO(content.encode("utf-8")), content_type="text/csv; charset=utf-8")
+        filename = f"plan-cases-export-{timezone.now().strftime('%Y%m%d%H%M%S')}.csv"
+        resp["Content-Disposition"] = f"attachment; filename*=UTF-8''{quote(filename)}"
+        return resp
 
     @action(detail=False, methods=['get'], url_path='case-detail')
     def case_detail(self, request, slug):

@@ -1,6 +1,9 @@
 from pathlib import Path
 
 from collections import defaultdict
+import csv
+import io
+from urllib.parse import quote
 
 from django.core.files.uploadedfile import InMemoryUploadedFile
 from django.http import FileResponse
@@ -12,6 +15,7 @@ from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.db.utils import IntegrityError
 from django.core.exceptions import ValidationError
+from django.utils import timezone
 
 from plane.app.serializers.qa import CaseAttachmentSerializer, IssueListSerializer, CaseIssueSerializer, \
     TestCaseCommentSerializer, PlanCaseRecordSerializer, CaseListSerializer, CaseLabelListSerializer, \
@@ -176,6 +180,120 @@ class CaseAPI(BaseViewSet):
             serializer = CaseExecuteRecordSerializer(record)
             result.append(serializer.data)
         return list_response(data=result, count=len(result))
+
+    @action(detail=False, methods=['post'], url_path='export')
+    def export(self, request, slug):
+        fields = request.data.get('fields') or []
+        if not isinstance(fields, list) or not fields:
+            return Response({"error": "fields must be a non-empty list"}, status=status.HTTP_400_BAD_REQUEST)
+
+        ids = request.data.get('ids') or []
+        repository_id = request.data.get('repository_id')
+        module_id = request.data.get('module_id')
+
+        allowed = {
+            "code": "用例编号",
+            "name": "用例名称",
+            "repository_name": "用例库",
+            "module_name": "模块",
+            "type": "类型",
+            "priority": "优先级",
+            "test_type": "测试类型",
+            "state": "状态",
+            "precondition": "前置条件",
+            "steps": "步骤",
+            "mode": "步骤类型",
+            "text_description": "文本描述",
+            "text_result": "文本结果",
+            "remark": "备注",
+            "labels": "标签",
+            "issues": "关联缺陷",
+            "assignee": "维护人",
+            "created_at": "创建时间",
+            "updated_at": "更新时间",
+        }
+        fields = [f for f in fields if f in allowed.keys()]
+        if not fields:
+            return Response({"error": "no valid fields selected"}, status=status.HTTP_400_BAD_REQUEST)
+
+        qs = (
+            TestCase.objects.filter(deleted_at__isnull=True, repository__workspace__slug=slug)
+            .select_related("repository", "module", "assignee")
+            .prefetch_related("labels", "issues")
+        )
+        if ids:
+            qs = qs.filter(id__in=ids)
+        if repository_id:
+            qs = qs.filter(repository_id=repository_id)
+        if module_id:
+            expanded = {str(module_id)}
+            frontier = [str(module_id)]
+            while frontier:
+                children = list(
+                    CaseModule.objects.filter(parent_id__in=frontier, deleted_at__isnull=True).values_list("id", flat=True)
+                )
+                new_children = [str(c) for c in children if str(c) not in expanded]
+                if not new_children:
+                    break
+                expanded.update(new_children)
+                frontier = new_children
+            qs = qs.filter(module_id__in=list(expanded))
+
+        header = [allowed[f] for f in fields]
+        buffer = io.StringIO()
+        writer = csv.writer(buffer, delimiter=",", quoting=csv.QUOTE_ALL)
+        writer.writerow(header)
+
+        def val(c, key):
+            if key == "code":
+                return c.code or ""
+            if key == "name":
+                return c.name or ""
+            if key == "repository_name":
+                return getattr(getattr(c, "repository", None), "name", "") or ""
+            if key == "module_name":
+                return getattr(getattr(c, "module", None), "name", "") or ""
+            if key == "type":
+                return c.get_type_display() if hasattr(c, "get_type_display") else ""
+            if key == "priority":
+                return c.get_priority_display() if hasattr(c, "get_priority_display") else ""
+            if key == "test_type":
+                return c.get_test_type_display() if hasattr(c, "get_test_type_display") else ""
+            if key == "state":
+                return c.get_state_display() if hasattr(c, "get_state_display") else ""
+            if key == "precondition":
+                return c.precondition or ""
+            if key == "steps":
+                return c.steps or ""
+            if key == "mode":
+                return c.get_mode_display() if hasattr(c, "get_mode_display") else ""
+            if key == "text_description":
+                return c.text_description or ""
+            if key == "text_result":
+                return c.text_result or ""
+            if key == "remark":
+                return c.remark or ""
+            if key == "labels":
+                return ",".join([l.name for l in c.labels.all()]) if hasattr(c, "labels") else ""
+            if key == "issues":
+                return ",".join([str(i.id) for i in c.issues.all()]) if hasattr(c, "issues") else ""
+            if key == "assignee":
+                return getattr(getattr(c, "assignee", None), "display_name", "") or ""
+            if key == "created_at":
+                return timezone.localtime(c.created_at).strftime("%Y-%m-%d %H:%M:%S") if c.created_at else ""
+            if key == "updated_at":
+                return timezone.localtime(c.updated_at).strftime("%Y-%m-%d %H:%M:%S") if c.updated_at else ""
+            return ""
+
+        for c in qs.iterator():
+            row = [val(c, f) for f in fields]
+            writer.writerow(row)
+
+        content = "\ufeff" + buffer.getvalue()
+        resp = FileResponse(io.BytesIO(content.encode("utf-8")), content_type="text/csv; charset=utf-8")
+        filename = f"test-cases-export-{timezone.now().strftime('%Y%m%d%H%M%S')}.csv"
+        resp["Content-Disposition"] = f"attachment; filename*=UTF-8''{quote(filename)}"
+        return resp
 
     @action(detail=False, methods=['get'], url_path='plan-case-tree')
     def plan_case_tree(self, request, slug):
@@ -1267,10 +1385,8 @@ class CaseAPI(BaseViewSet):
         if source_cases.filter(repository_id__isnull=True).exists():
             return Response({"error": "Invalid source case repository"}, status=status.HTTP_400_BAD_REQUEST)
 
-        if source_cases.exclude(repository_id=target_module.repository_id).exists():
-            return Response({"error": "Target module repository mismatch"}, status=status.HTTP_400_BAD_REQUEST)
-
         created = []
+        target_repository_id = target_module.repository_id
         for source_case in source_cases:
             base_fields = dict(
                 name=source_case.name,
@@ -1281,30 +1397,29 @@ class CaseAPI(BaseViewSet):
                 type=source_case.type,
                 priority=source_case.priority,
                 test_type=getattr(source_case, "test_type", None),
-                repository_id=source_case.repository_id,
+                repository_id=target_repository_id,
                 module_id=target_module.id,
-                assignee_id=source_case.assignee_id,
+                assignee_id=getattr(request.user, "id", None),
             )
             base_fields = {k: v for k, v in base_fields.items() if v is not None}
 
             new_case = TestCase.objects.create(code="", **base_fields)
 
-            new_case.labels.set(list(source_case.labels.all()))
-            new_case.issues.set(list(source_case.issues.all()))
-
-            throughs = CaseReviewThrough.objects.filter(case=source_case).select_related("review")
-            if throughs.exists():
-                CaseReviewThrough.objects.bulk_create(
-                    [
-                        CaseReviewThrough(
-                            review_id=t.review_id,
-                            case_id=new_case.id,
-                            result=t.result,
-                        )
-                        for t in throughs
-                    ],
-                    batch_size=1000,
+            label_names = list(source_case.labels.values_list("name", flat=True))
+            target_labels = []
+            if label_names:
+                existing_labels = CaseLabel.objects.filter(
+                    repository_id=target_repository_id, name__in=label_names, deleted_at__isnull=True
                 )
+                existing_by_name = {label.name: label for label in existing_labels}
+                missing_names = [name for name in label_names if name not in existing_by_name]
+                for name in missing_names:
+                    target_labels.append(CaseLabel.objects.create(repository_id=target_repository_id, name=name))
+                target_labels.extend(list(existing_by_name.values()))
+
+            new_case.labels.set(target_labels)
+            # 不复制评审与执行记录；问题关联保持原样
+            new_case.issues.set(list(source_case.issues.all()))
 
             created.append(new_case)
 
