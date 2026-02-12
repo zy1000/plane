@@ -16,6 +16,7 @@ import { PlanService as PlanApiService } from "@/services/qa/plan.service";
 import { getEnums } from "app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/util";
 import { RichTextEditor } from "../cases/util";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
+import { ChevronDownIcon } from "@plane/propel/icons";
 import { useMember } from "@/hooks/store/use-member";
 import { useUser } from "@/hooks/store/user";
 import { useProjectNavigationPreferences } from "@/hooks/use-navigation-preferences";
@@ -902,11 +903,15 @@ export default function TestExecutionPage() {
                   width: 10px !important;
                 }
                 .custom-tree-indent .ant-tree-switcher {
-                  width: 14px !important;
-                  margin-inline-end: 2px !important;
+                  width: 20px !important;
+                  margin-inline-end: 0px !important;
+                  display: flex !important;
+                  align-items: center !important;
+                  justify-content: center !important;
+                  margin-top: 2px !important;
                 }
                 .custom-tree-indent .ant-tree-node-content-wrapper {
-                  padding-inline: 4px !important;
+                  padding-inline: 0px !important;
                   font-size: 0.875rem !important;
                   line-height: 1.25rem !important;
                   font-weight: 500 !important;
@@ -918,11 +923,14 @@ export default function TestExecutionPage() {
               <Tree
                 showLine={false}
                 defaultExpandAll
-                switcherIcon={
+                switcherIcon={(nodeProps) => (
                   <span className="inline-flex items-center justify-center w-5 h-5 text-custom-text-300">
-                    <DownOutlined />
+                    <ChevronDownIcon
+                      className={`size-4 transition-transform ${nodeProps.expanded ? "rotate-0" : "-rotate-90"}`}
+                      strokeWidth={2.5}
+                    />
                   </span>
-                }
+                )}
                 onSelect={onSelect}
                 onExpand={onExpand}
                 expandedKeys={expandedKeys}
