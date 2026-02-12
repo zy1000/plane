@@ -761,7 +761,6 @@ export default function PlanCasesPage() {
                       },
                     }}
                     onClick={() => setIsPlanModalOpen(true)}
-                    disabled={!repositoryId}
                     buttonsRender={(buttons) => [
                       cloneElement(buttons[0] as any, {
                         className:

@@ -178,28 +178,17 @@ export default function CaseManagementReviewDetailPage() {
   };
 
   useEffect(() => {
-    if (repositoryId) {
-      try {
-        if (repositoryIdFromUrl) sessionStorage.setItem("selectedRepositoryId", repositoryIdFromUrl);
-      } catch {}
-      setReviewTree(null);
-      fetchReviewTree();
-      fetchReviewEnums();
-      fetchReviewCaseList(1, pageSize);
-      setSelectedTreeKey("root");
-      setSelectedModuleId(null);
-    } else {
-      setLoading(false);
-    }
+    try {
+      if (repositoryIdFromUrl) sessionStorage.setItem("selectedRepositoryId", repositoryIdFromUrl);
+    } catch {}
+    setReviewTree(null);
+    fetchReviewTree();
+    fetchReviewEnums();
+    fetchReviewCaseList(1, pageSize);
+    setSelectedTreeKey("root");
+    setSelectedModuleId(null);
   }, [repositoryId, reviewId]);
 
-  useEffect(() => {
-    if (!repositoryId && workspaceSlug) {
-      const ws = String(workspaceSlug || "");
-      const current = `/${ws}/projects/${projectId}/testhub/caseManagementReviewDetail${searchParams.toString() ? `?${searchParams.toString()}` : ""}`;
-      router.push(`/${ws}/projects/${projectId}/testhub?redirect_to=${encodeURIComponent(current)}`);
-    }
-  }, [repositoryId, workspaceSlug, searchParams, router]);
 
   useEffect(() => {
     if (!workspaceSlug || !projectId) return;
@@ -534,27 +523,22 @@ export default function CaseManagementReviewDetailPage() {
               `,
               }}
             />
-            {!repositoryId && (
-              <div className="p-4 text-custom-text-300">未找到用例库ID，请先在顶部选择一个用例库</div>
-            )}
-            {repositoryId && (
-              <Tree
-                showLine={false}
-                defaultExpandAll
-                switcherIcon={
-                  <span className="inline-flex items-center justify-center w-5 h-5 text-custom-text-300">
-                    <DownOutlined />
-                  </span>
-                }
-                onSelect={onSelect}
-                onExpand={onExpand}
-                expandedKeys={expandedKeys}
-                autoExpandParent={autoExpandParent}
-                treeData={treeData as any}
-                selectedKeys={treeData.length > 0 ? [selectedTreeKey] : []}
-                className="py-2 pl-2 custom-tree-indent"
-              />
-            )}
+            <Tree
+              showLine={false}
+              defaultExpandAll
+              switcherIcon={
+                <span className="inline-flex items-center justify-center w-5 h-5 text-custom-text-300">
+                  <DownOutlined />
+                </span>
+              }
+              onSelect={onSelect}
+              onExpand={onExpand}
+              expandedKeys={expandedKeys}
+              autoExpandParent={autoExpandParent}
+              treeData={treeData as any}
+              selectedKeys={treeData.length > 0 ? [selectedTreeKey] : []}
+              className="py-2 pl-2 custom-tree-indent"
+            />
           </div>
           <div className="flex-1 overflow-hidden min-w-0">
             <div className="flex flex-col h-full min-h-0 overflow-hidden min-w-0">
@@ -591,17 +575,15 @@ export default function CaseManagementReviewDetailPage() {
                   </Breadcrumbs>
                 </div>
                 <div className="flex items-center gap-2">
-                  {repositoryId && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsCaseSelectionOpen(true);
-                      }}
-                      className="text-white bg-custom-primary-100 hover:bg-custom-primary-200 focus:text-custom-brand-40 focus:bg-custom-primary-200 px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center"
-                    >
-                      关联用例
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsCaseSelectionOpen(true);
+                    }}
+                    className="text-white bg-custom-primary-100 hover:bg-custom-primary-200 focus:text-custom-brand-40 focus:bg-custom-primary-200 px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center"
+                  >
+                    关联用例
+                  </button>
                 </div>
               </div>
               <div className="flex-1 min-h-0 overflow-hidden pt-0 px-4 pb-4 min-w-0">
@@ -615,7 +597,7 @@ export default function CaseManagementReviewDetailPage() {
                     <div className="text-red-800 text-sm">{error}</div>
                   </div>
                 )}
-                {repositoryId && !loading && !error && (
+                {!loading && !error && (
                   <div className="flex flex-col h-full overflow-hidden min-w-0">
                     <div className="testhub-review-detail-table-scroll flex-1 relative overflow-y-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar]:block [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-[rgb(var(--color-scrollbar))] [&::-webkit-scrollbar-thumb]:rounded-full">
                       <Table
@@ -774,11 +756,6 @@ export default function CaseManagementReviewDetailPage() {
                     `,
                       }}
                     />
-                  </div>
-                )}
-                {!repositoryId && !loading && (
-                  <div className="flex items-center justify-center py-12">
-                    <div className="text-custom-text-300">未找到用例库ID，请先在顶部选择一个用例库</div>
                   </div>
                 )}
               </div>
