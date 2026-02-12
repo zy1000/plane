@@ -11,6 +11,7 @@ import { AppstoreOutlined, DownOutlined } from "@ant-design/icons";
 import { CaseService as CaseApiService } from "@/services/qa/case.service";
 import { CaseService as ReviewApiService } from "@/services/qa/review.service";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
+import { ChevronDownIcon } from "@plane/propel/icons";
 import { FolderOpenDot, Atom } from "lucide-react";
 import UpdateModal from "@/components/qa/cases/update-modal";
 import TestCaseSelectionModal from "@/components/qa/review/TestCaseSelectionModal";
@@ -514,11 +515,15 @@ export default function CaseManagementReviewDetailPage() {
                   width: 10px !important;
                 }
                 .custom-tree-indent .ant-tree-switcher {
-                  width: 14px !important;
-                  margin-inline-end: 2px !important;
+                  width: 20px !important;
+                  margin-inline-end: 0px !important;
+                  display: flex !important;
+                  align-items: center !important;
+                  justify-content: center !important;
+                  margin-top: 2px !important;
                 }
                 .custom-tree-indent .ant-tree-node-content-wrapper {
-                  padding-inline: 4px !important;
+                  padding-inline: 0px !important;
                 }
               `,
               }}
@@ -526,11 +531,14 @@ export default function CaseManagementReviewDetailPage() {
             <Tree
               showLine={false}
               defaultExpandAll
-              switcherIcon={
+              switcherIcon={(nodeProps) => (
                 <span className="inline-flex items-center justify-center w-5 h-5 text-custom-text-300">
-                  <DownOutlined />
+                  <ChevronDownIcon
+                    className={`size-4 transition-transform ${nodeProps.expanded ? "rotate-0" : "-rotate-90"}`}
+                    strokeWidth={2.5}
+                  />
                 </span>
-              }
+              )}
               onSelect={onSelect}
               onExpand={onExpand}
               expandedKeys={expandedKeys}

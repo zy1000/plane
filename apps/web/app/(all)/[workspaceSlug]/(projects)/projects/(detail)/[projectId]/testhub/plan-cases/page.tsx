@@ -20,6 +20,7 @@ import { FolderOpenDot, Atom } from "lucide-react";
 import { formatDateTime, globalEnums } from "../util";
 import { useUser } from "@/hooks/store/user";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
+import { ChevronDownIcon } from "@plane/propel/icons";
 
 type TLabel = { id?: string; name?: string } | string;
 type TestCase = {
@@ -685,11 +686,15 @@ export default function PlanCasesPage() {
                   width: 10px !important;
                 }
                 .custom-tree-indent .ant-tree-switcher {
-                  width: 14px !important;
-                  margin-inline-end: 2px !important;
+                  width: 20px !important;
+                  margin-inline-end: 0px !important;
+                  display: flex !important;
+                  align-items: center !important;
+                  justify-content: center !important;
+                  margin-top: 2px !important;
                 }
                 .custom-tree-indent .ant-tree-node-content-wrapper {
-                  padding-inline: 4px !important;
+                  padding-inline: 0px !important;
                 }
               `,
               }}
@@ -697,11 +702,14 @@ export default function PlanCasesPage() {
             <Tree
               showLine={false}
               defaultExpandAll
-              switcherIcon={
+              switcherIcon={(nodeProps) => (
                 <span className="inline-flex items-center justify-center w-5 h-5 text-custom-text-300">
-                  <DownOutlined />
+                  <ChevronDownIcon
+                    className={`size-4 transition-transform ${nodeProps.expanded ? "rotate-0" : "-rotate-90"}`}
+                    strokeWidth={2.5}
+                  />
                 </span>
-              }
+              )}
               onSelect={onSelect}
               onExpand={onExpand}
               expandedKeys={expandedKeys}

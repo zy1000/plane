@@ -5,7 +5,7 @@ import { useEffect, useState, useRef, useMemo } from "react";
 import type { ComponentPropsWithoutRef, CSSProperties, MouseEvent as ReactMouseEvent } from "react";
 import { PageHead } from "@/components/core/page-title";
 import { Table, Tag, Input, Button, Space, Modal, Dropdown, message, Pagination } from "antd";
-import { EllipsisOutlined, SearchOutlined, EditOutlined, DeleteOutlined, DownOutlined } from "@ant-design/icons";
+import { EllipsisOutlined, SearchOutlined, EditOutlined, DeleteOutlined } from "@ant-design/icons";
 import type { TableProps, InputRef, TableColumnType } from "antd";
 import { CaseService } from "@/services/qa/case.service";
 import { CreateCaseModal } from "@/components/qa/cases/create-modal";
@@ -23,6 +23,7 @@ import { formatDateTime, globalEnums } from "../util";
 import { Breadcrumbs } from "@plane/ui";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { RepositorySelect } from "../repository-select";
+import { ChevronDownIcon } from "@plane/propel/icons";
 
 type TCreator = {
   display_name?: string;
@@ -704,14 +705,14 @@ export default function TestCasesPage() {
 
   const treeData = [
     {
-      // 修改：根节点“全部模块”仅显示添加，不显示删除
+      // 修改：根节点“全部用例”仅显示添加，不显示删除
       title: (
         <div className="group flex items-center justify-between gap-2 w-full">
           <div className="flex items-center gap-2">
             <span className="inline-flex items-center justify-center w-5 h-5 text-custom-text-300">
               <AppstoreOutlined />
             </span>
-            <span className="text-sm font-medium text-custom-text-200">全部模块</span>
+            <span className="text-sm font-medium text-custom-text-200">全部用例</span>
           </div>
           <div className="flex items-center gap-2">
             {typeof total === "number" && <span className="text-xs text-custom-text-300">{allTotal}</span>}
@@ -1218,11 +1219,15 @@ export default function TestCasesPage() {
                   width: 10px !important;
                 }
                 .custom-tree-indent .ant-tree-switcher {
-                  width: 14px !important;
-                  margin-inline-end: 2px !important;
+                  width: 20px !important;
+                  margin-inline-end: 0px !important;
+                  display: flex !important;
+                  align-items: center !important;
+                  justify-content: center !important;
+                  margin-top: 2px !important;
                 }
                 .custom-tree-indent .ant-tree-node-content-wrapper {
-                  padding-inline: 4px !important;
+                  padding-inline: 0px !important;
                 }
               `,
                 }}
@@ -1231,11 +1236,14 @@ export default function TestCasesPage() {
                 <Tree
                   showLine={false}
                   defaultExpandAll
-                  switcherIcon={
+                  switcherIcon={(nodeProps) => (
                     <span className="inline-flex items-center justify-center w-5 h-5 text-custom-text-300">
-                      <DownOutlined />
+                      <ChevronDownIcon
+                      className={`size-4 transition-transform ${nodeProps.expanded ? "rotate-0" : "-rotate-90"}`}
+                      strokeWidth={2.5}
+                    />
                     </span>
-                  }
+                  )}
                   onSelect={onSelect}
                   onExpand={onExpand}
                   expandedKeys={expandedKeys}

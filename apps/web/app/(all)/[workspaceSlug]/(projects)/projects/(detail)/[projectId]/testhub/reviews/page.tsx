@@ -19,6 +19,7 @@ import { FolderOpenDot } from "lucide-react";
 import styles from "./reviews.module.css";
 import { CaseService } from "@/services/qa/review.service";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
+import { ChevronDownIcon } from "@plane/propel/icons";
 import { formatCNDateTime } from "@/components/qa/cases/util";
 import { debounce } from "lodash-es";
 import CreateReviewModal from "@/components/qa/review/CreateReviewModal";
@@ -936,15 +937,38 @@ export default function ReviewsPage() {
             </Space>
           </div>
           <div className={`${styles.treeRoot} flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm`}>
+            <style
+              dangerouslySetInnerHTML={{
+                __html: `
+                .custom-tree-indent .ant-tree-indent-unit {
+                  width: 10px !important;
+                }
+                .custom-tree-indent .ant-tree-switcher {
+                  width: 20px !important;
+                  margin-inline-end: 0px !important;
+                  display: flex !important;
+                  align-items: center !important;
+                  justify-content: center !important;
+                  margin-top: 2px !important;
+                }
+                .custom-tree-indent .ant-tree-node-content-wrapper {
+                  padding-inline: 0px !important;
+                }
+              `,
+              }}
+            />
             <Tree
               blockNode
               draggable
               showIcon={false}
-              switcherIcon={
+              switcherIcon={(nodeProps) => (
                 <span className="inline-flex items-center justify-center w-5 h-5 text-custom-text-300">
-                  <DownOutlined />
+                  <ChevronDownIcon
+                    className={`size-4 transition-transform ${nodeProps.expanded ? "rotate-0" : "-rotate-90"}`}
+                    strokeWidth={2.5}
+                  />
                 </span>
-              }
+              )}
               treeData={treeData as any}
               selectedKeys={[selectedModuleId ?? "all"]}
               expandedKeys={expandedKeys}
