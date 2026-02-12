@@ -1374,7 +1374,7 @@ export default function TestExecutionPage() {
                 </div>
               </div>
 
-              {selectedCaseId && !detailLoading && caseDetail ? (
+              {selectedCaseId && !detailLoading && caseDetail && activeTab === "basic" ? (
                 <div className="sticky bottom-0 w-full shrink-0 bg-custom-background-100" style={{ borderTop: "1px solid #f0f0f0" }}>
                   <div className="p-4">
                     <div className="px-0 py-3 flex flex-col gap-3">
