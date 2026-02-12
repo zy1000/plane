@@ -733,9 +733,9 @@ export default function ReviewsPage() {
         </Tooltip>
       ),
     },
-    { title: "用例数量", dataIndex: "case_count", key: "case_count", width: 120 },
+    { title: "用例数", dataIndex: "case_count", key: "case_count", width: 120 },
     {
-      title: "评论状态",
+      title: "状态",
       dataIndex: "state",
       key: "state",
       width: 140,
