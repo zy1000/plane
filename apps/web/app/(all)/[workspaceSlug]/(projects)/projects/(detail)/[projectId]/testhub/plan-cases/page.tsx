@@ -937,6 +937,47 @@ export default function PlanCasesPage() {
                   .testhub-plan-cases-table-scroll.testhub-plan-cases-scrollbar-strong::-webkit-scrollbar-track{
                     background: transparent;
                   }
+
+                  .testhub-plan-cases-table-scroll .ant-table-content::-webkit-scrollbar,
+                  .testhub-plan-cases-table-scroll .ant-table-body::-webkit-scrollbar {
+                    height: 4px;
+                    background: transparent;
+                  }
+                  .testhub-plan-cases-table-scroll .ant-table-content::-webkit-scrollbar-thumb,
+                  .testhub-plan-cases-table-scroll .ant-table-body::-webkit-scrollbar-thumb {
+                    background-color: transparent;
+                    border-radius: 2px;
+                    transition: background-color 0.3s ease;
+                  }
+                  .testhub-plan-cases-table-scroll .ant-table-content::-webkit-scrollbar-track,
+                  .testhub-plan-cases-table-scroll .ant-table-body::-webkit-scrollbar-track {
+                    background: transparent;
+                  }
+                  .testhub-plan-cases-table-scroll .ant-table-content:hover::-webkit-scrollbar,
+                  .testhub-plan-cases-table-scroll .ant-table-body:hover::-webkit-scrollbar {
+                    height: 4px;
+                  }
+                  .testhub-plan-cases-table-scroll .ant-table-content:hover::-webkit-scrollbar-thumb,
+                  .testhub-plan-cases-table-scroll .ant-table-body:hover::-webkit-scrollbar-thumb {
+                    background-color: #dddde0;
+                  }
+
+                  .testhub-plan-cases-table-scroll .ant-table-content {
+                    scrollbar-width: thin;
+                    scrollbar-color: transparent transparent;
+                  }
+                  .testhub-plan-cases-table-scroll .ant-table-content:hover {
+                    scrollbar-width: thin;
+                    scrollbar-color: #dddde0 transparent;
+                  }
+                  .testhub-plan-cases-table-scroll .ant-table-body {
+                    scrollbar-width: thin;
+                    scrollbar-color: transparent transparent;
+                  }
+                  .testhub-plan-cases-table-scroll .ant-table-body:hover {
+                    scrollbar-width: thin;
+                    scrollbar-color: #dddde0 transparent;
+                  }
                 `,
                       }}
                     />
