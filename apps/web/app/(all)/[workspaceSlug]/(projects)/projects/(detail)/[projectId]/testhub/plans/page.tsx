@@ -370,7 +370,6 @@ export default function TestPlanDetailPage() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingPlan, setEditingPlan] = useState<TestPlan | null>(null);
   const openEditModal = (plan: TestPlan) => {
-    if (!repositoryId) return;
     setEditingPlan(plan);
     setShowEditModal(true);
   };
@@ -438,6 +437,7 @@ export default function TestPlanDetailPage() {
         </Button>
       ),
     },
+    { title: "用例数", dataIndex: "case_count", key: "case_count", render: (case_count: number) => (case_count ? case_count : 0) },
     { title: "状态", dataIndex: "state", key: "state", width: 120, render: (state: any) => renderState(state as any) },
     {
       title: "通过率",
@@ -453,7 +453,6 @@ export default function TestPlanDetailPage() {
       width: 140,
       render: (result: any) => renderResult(result),
     },
-    { title: "用例数", dataIndex: "case_count", key: "case_count", render: (case_count: number) => (case_count ? case_count : 0) },
     {
       title: "起止日期",
       key: "date_range",
@@ -497,7 +496,6 @@ export default function TestPlanDetailPage() {
             size="small"
             icon={<EditOutlined />}
             aria-label="编辑"
-            disabled={!repositoryId}
             onClick={() => openEditModal(record)}
           />
           <Button
