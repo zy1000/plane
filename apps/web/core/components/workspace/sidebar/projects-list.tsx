@@ -135,7 +135,7 @@ export const SidebarProjectsList = observer(function SidebarProjectsList() {
   }, [containerRef]);
   return (
     <>
-      <div
+      {/* <div
         ref={containerRef}
         className={cn({
           "border-t border-strong": isScrolled,
@@ -195,7 +195,7 @@ export const SidebarProjectsList = observer(function SidebarProjectsList() {
             {t("add_project")}
           </button>
         )}
-      </div>
+      </div> */}
     </>
   );
 });
