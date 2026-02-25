@@ -92,7 +92,7 @@ export function ProjectAppliedFiltersList(props: Props) {
         {/* Applied display filters */}
         {appliedDisplayFilters.length > 0 && (
           <Tag key="project_display_filters">
-            <span className="text-xs text-custom-text-300">{t("projects.label", { count: 2 })}</span>
+            <span className="text-xs text-custom-text-300">{t("workspace_projects.label", { count: 2 })}</span>
             <AppliedProjectDisplayFilters
               editable={isEditingAllowed}
               values={appliedDisplayFilters}

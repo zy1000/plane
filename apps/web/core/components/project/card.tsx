@@ -257,11 +257,7 @@ export const ProjectCard = observer(function ProjectCard(props: Props) {
           </div>
         </div>
 
-        <div
-          className={cn("flex h-[104px] w-full flex-col justify-between rounded-b p-4", {
-            "opacity-90": isArchived,
-          })}
-        >
+        <div className="flex h-[104px] w-full flex-col justify-between rounded-b p-4">
           <p className="line-clamp-2 break-words text-sm text-custom-text-300">
             {project.description && project.description.trim() !== ""
               ? project.description
@@ -293,7 +289,11 @@ export const ProjectCard = observer(function ProjectCard(props: Props) {
                   <span className="text-sm italic text-custom-text-400">No Member Yet</span>
                 )}
               </Tooltip>
-              {isArchived && <div className="text-xs text-custom-text-400 font-medium">Archived</div>}
+              {isArchived && (
+                <span className="inline-flex items-center rounded border border-custom-border-200 bg-custom-background-100 px-1.5 py-0.5 text-xs font-medium text-custom-text-400">
+                  已归档
+                </span>
+              )}
             </div>
             {isArchived ? (
               hasAdminRole && (

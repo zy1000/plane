@@ -60,6 +60,17 @@ export const ProjectFiltersSelection = observer(function ProjectFiltersSelection
             }
             title="My projects"
           />
+          {!displayFilters.archived_projects && (
+            <FilterOption
+              isChecked={!!displayFilters.show_archived_projects}
+              onClick={() =>
+                handleDisplayFiltersUpdate({
+                  show_archived_projects: !displayFilters.show_archived_projects,
+                })
+              }
+              title="显示已归档项目"
+            />
+          )}
         </div>
 
         {/* access */}

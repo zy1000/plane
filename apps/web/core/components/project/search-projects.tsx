@@ -10,6 +10,7 @@ import { CloseIcon } from "@plane/propel/icons";
 import { cn } from "@plane/utils";
 // hooks
 import { useProjectFilter } from "@/hooks/store/use-project-filter";
+import { ProjectsViewToggle } from "./view-toggle";
 
 export const ProjectSearch = observer(function ProjectSearch() {
   // i18n
@@ -46,6 +47,7 @@ export const ProjectSearch = observer(function ProjectSearch() {
           <Search className="h-3.5 w-3.5" />
         </button>
       )}
+      <ProjectsViewToggle className="ml-1" />
       <div
         className={cn(
           "ml-auto flex items-center justify-start gap-1 rounded-md border border-transparent bg-custom-background-100 text-custom-text-400 w-0 transition-[width] ease-linear overflow-hidden opacity-0",

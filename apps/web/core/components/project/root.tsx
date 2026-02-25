@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { observer } from "mobx-react";
 import { useParams, usePathname } from "next/navigation";
 // plane imports
@@ -14,6 +14,7 @@ import { useWorkspace } from "@/hooks/store/use-workspace";
 // local imports
 import { ProjectAppliedFiltersList } from "./applied-filters";
 import { ProjectCardList } from "./card-list";
+import { ProjectTableList } from "./table-list";
 
 export const ProjectRoot = observer(function ProjectRoot() {
   const { currentWorkspace } = useWorkspace();
@@ -29,6 +30,7 @@ export const ProjectRoot = observer(function ProjectRoot() {
     clearAllAppliedDisplayFilters,
     updateFilters,
     updateDisplayFilters,
+    viewMode,
   } = useProjectFilter();
   // derived values
   const pageTitle = currentWorkspace?.name
@@ -38,7 +40,8 @@ export const ProjectRoot = observer(function ProjectRoot() {
   const isArchived = pathname.includes("/archives");
 
   const allowedDisplayFilters =
-    currentWorkspaceAppliedDisplayFilters?.filter((filter) => filter !== "archived_projects") ?? [];
+    currentWorkspaceAppliedDisplayFilters?.filter((filter) => (isArchived ? true : filter !== "archived_projects")) ??
+    [];
 
   const handleRemoveFilter = useCallback(
     (key: keyof TProjectFilters, value: string | null) => {
@@ -66,11 +69,29 @@ export const ProjectRoot = observer(function ProjectRoot() {
     clearAllFilters(workspaceSlug.toString());
     clearAllAppliedDisplayFilters(workspaceSlug.toString());
     if (isArchived) updateDisplayFilters(workspaceSlug.toString(), { archived_projects: true });
-  }, [clearAllFilters, clearAllAppliedDisplayFilters, workspaceSlug]);
+  }, [clearAllFilters, clearAllAppliedDisplayFilters, isArchived, updateDisplayFilters, workspaceSlug]);
 
   useEffect(() => {
-    updateDisplayFilters(workspaceSlug.toString(), { archived_projects: isArchived });
-  }, [pathname]);
+    if (!workspaceSlug) return;
+    if (isArchived) {
+      updateDisplayFilters(workspaceSlug.toString(), { archived_projects: true, show_archived_projects: false });
+    } else {
+      updateDisplayFilters(workspaceSlug.toString(), { archived_projects: false });
+    }
+  }, [isArchived, updateDisplayFilters, workspaceSlug]);
+
+  const [renderedViewMode, setRenderedViewMode] = useState(viewMode);
+  const [viewOpacity, setViewOpacity] = useState<0 | 100>(100);
+
+  useEffect(() => {
+    if (viewMode === renderedViewMode) return;
+    setViewOpacity(0);
+    const timeoutId = window.setTimeout(() => {
+      setRenderedViewMode(viewMode);
+      window.setTimeout(() => setViewOpacity(100), 20);
+    }, 150);
+    return () => window.clearTimeout(timeoutId);
+  }, [renderedViewMode, viewMode]);
 
   return (
     <>
@@ -88,7 +109,13 @@ export const ProjectRoot = observer(function ProjectRoot() {
             alwaysAllowEditing
           />
         )}
-        <ProjectCardList />
+        <div
+          className={`flex-1 min-h-0 overflow-hidden transition-opacity duration-150 ease-linear ${
+            viewOpacity === 0 ? "opacity-0" : "opacity-100"
+          }`}
+        >
+          {renderedViewMode === "list" ? <ProjectTableList /> : <ProjectCardList />}
+        </div>
       </div>
     </>
   );

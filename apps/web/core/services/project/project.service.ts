@@ -39,7 +39,11 @@ export class ProjectService extends APIService {
   }
 
   async getProjectsLite(workspaceSlug: string): Promise<TPartialProject[]> {
-    return this.get(`/api/workspaces/${workspaceSlug}/projects/`)
+    return this.get(`/api/workspaces/${workspaceSlug}/projects/`, {
+      params: {
+        include_archived: true,
+      },
+    })
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
@@ -47,7 +51,11 @@ export class ProjectService extends APIService {
   }
 
   async getProjects(workspaceSlug: string): Promise<TProject[]> {
-    return this.get(`/api/workspaces/${workspaceSlug}/projects/details/`)
+    return this.get(`/api/workspaces/${workspaceSlug}/projects/details/`, {
+      params: {
+        include_archived: true,
+      },
+    })
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;

@@ -10,10 +10,11 @@ export type TProjectOrderByOptions =
 export type TProjectDisplayFilters = {
   my_projects?: boolean;
   archived_projects?: boolean;
+  show_archived_projects?: boolean;
   order_by?: TProjectOrderByOptions;
 };
 
-export type TProjectAppliedDisplayFilterKeys = "my_projects" | "archived_projects";
+export type TProjectAppliedDisplayFilterKeys = "my_projects" | "archived_projects" | "show_archived_projects";
 
 export type TProjectFilters = {
   access?: string[] | null;
