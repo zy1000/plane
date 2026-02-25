@@ -93,7 +93,7 @@ export const PagesListHeader = observer(function PagesListHeader() {
             loading={isCreatingPage}
             data-ph-element={PROJECT_TRACKER_ELEMENTS.CREATE_HEADER_BUTTON}
           >
-            {isCreatingPage ? "Adding" : "Add page"}
+            {isCreatingPage ? "Adding" : "添加笔记"}
           </Button>
         </Header.RightItem>
       ) : (
