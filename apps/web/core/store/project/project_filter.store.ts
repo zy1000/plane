@@ -14,7 +14,7 @@ import type { CoreRootStore } from "../root.store";
 
 export type TProjectViewMode = "card" | "list";
 
-const PROJECTS_VIEW_MODE_STORAGE_KEY = "plane_projects_view_mode";
+const PROJECTS_VIEW_MODE_STORAGE_KEY = "plane_projects_view_mode_v2";
 
 export interface IProjectFilterStore {
   // observables
@@ -43,7 +43,7 @@ export class ProjectFilterStore implements IProjectFilterStore {
   displayFilters: Record<string, TProjectDisplayFilters> = {};
   filters: Record<string, TProjectFilters> = {};
   searchQuery: string = "";
-  viewMode: TProjectViewMode = "card";
+  viewMode: TProjectViewMode = "list";
   // root store
   rootStore: CoreRootStore;
 

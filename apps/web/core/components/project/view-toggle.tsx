@@ -20,19 +20,6 @@ export const ProjectsViewToggle = observer(function ProjectsViewToggle(props: Pr
         className={cn(
           "grid place-items-center rounded-l px-2 py-2 text-custom-text-400 transition-colors hover:bg-custom-background-80",
           {
-            "bg-custom-background-80 text-custom-text-200": viewMode === "card",
-          }
-        )}
-        aria-pressed={viewMode === "card"}
-        onClick={() => updateViewMode("card")}
-      >
-        <LayoutGrid className="h-3.5 w-3.5" />
-      </button>
-      <button
-        type="button"
-        className={cn(
-          "grid place-items-center rounded-r px-2 py-2 text-custom-text-400 transition-colors hover:bg-custom-background-80",
-          {
             "bg-custom-background-80 text-custom-text-200": viewMode === "list",
           }
         )}
@@ -41,7 +28,19 @@ export const ProjectsViewToggle = observer(function ProjectsViewToggle(props: Pr
       >
         <List className="h-3.5 w-3.5" />
       </button>
+      <button
+        type="button"
+        className={cn(
+          "grid place-items-center rounded-r px-2 py-2 text-custom-text-400 transition-colors hover:bg-custom-background-80",
+          {
+            "bg-custom-background-80 text-custom-text-200": viewMode === "card",
+          }
+        )}
+        aria-pressed={viewMode === "card"}
+        onClick={() => updateViewMode("card")}
+      >
+        <LayoutGrid className="h-3.5 w-3.5" />
+      </button>
     </div>
   );
 });
-
