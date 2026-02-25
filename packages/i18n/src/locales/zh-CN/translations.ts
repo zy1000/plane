@@ -7,7 +7,7 @@
 export default {
   sidebar: {
     projects: "项目",
-    pages: "页面",
+    pages: "笔记",
     new_work_item: "新工作项",
     home: "主页",
     your_work: "我的工作",
@@ -374,7 +374,7 @@ export default {
   issues: "工作项",
   cycles: "迭代",
   modules: "发布",
-  pages: "页面",
+  pages: "笔记",
   intake: "收集",
   time_tracking: "时间跟踪",
   work_management: "工作管理",

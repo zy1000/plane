@@ -88,12 +88,12 @@ export default {
     pages: {
       title: "记录一切 — 从笔记到 PRD",
       description:
-        "页面让您在一个地方捕获和组织信息。编写会议笔记、项目文档和 PRD,嵌入工作项,并使用现成的组件进行结构化。",
-      cta_primary: "创建您的第一个页面",
+        "笔记让您在一个地方捕获和组织信息。编写会议笔记、项目文档和 PRD,嵌入工作项,并使用现成的组件进行结构化。",
+      cta_primary: "创建您的第一个笔记",
     },
     archive_pages: {
-      title: "暂无已归档页面",
-      description: "归档不在您关注范围内的页面。需要时在此处访问它们。",
+      title: "暂无已归档笔记",
+      description: "归档不在您关注范围内的笔记。需要时在此处访问它们。",
     },
     intake_sidebar: {
       title: "记录接收请求",

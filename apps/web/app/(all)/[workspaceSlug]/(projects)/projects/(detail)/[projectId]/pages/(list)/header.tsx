@@ -8,7 +8,7 @@ import { useState } from "react";
 import { observer } from "mobx-react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 // constants
-import { EPageAccess } from "@plane/constants";
+import { EPageAccess, PROJECT_TRACKER_ELEMENTS } from "@plane/constants";
 // plane types
 import { Button } from "@plane/propel/button";
 import { PageIcon } from "@plane/propel/icons";
@@ -78,8 +78,14 @@ export const PagesListHeader = observer(function PagesListHeader() {
       </Header.LeftItem>
       {canCurrentUserCreatePage && (
         <Header.RightItem>
-          <Button variant="primary" size="lg" onClick={handleCreatePage} loading={isCreatingPage}>
-            {isCreatingPage ? "Adding" : "Add page"}
+          <Button
+            variant="primary"
+            size="lg"
+            onClick={handleCreatePage}
+            loading={isCreatingPage}
+            data-ph-element={PROJECT_TRACKER_ELEMENTS.CREATE_HEADER_BUTTON}
+          >
+            {isCreatingPage ? "Adding" : "添加笔记"}
           </Button>
         </Header.RightItem>
       )}
