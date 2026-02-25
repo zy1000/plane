@@ -303,7 +303,7 @@ export default {
   new_issue: "新工作项",
   your_work: "我的工作",
   drafts: "草稿",
-  projects: "项目",
+  projects: "项目管理",
   views: "视图",
   workspace: "工作区",
   archives: "归档",
