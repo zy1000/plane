@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { observer } from "mobx-react";
+import useSWR from "swr";
 import Link from "next/link";
 import { useParams, usePathname } from "next/navigation";
 // plane imports
@@ -12,6 +13,7 @@ import { SidebarNavItem } from "@/components/sidebar/sidebar-navigation";
 // hooks
 import { useAppTheme } from "@/hooks/store/use-app-theme";
 import { useUser, useUserPermissions } from "@/hooks/store/user";
+import { useWorkspaceNotifications } from "@/hooks/store/notifications";
 import { useWorkspaceNavigationPreferences } from "@/hooks/use-navigation-preferences";
 // plane web imports
 import { getSidebarNavigationItemIcon } from "@/plane-web/components/workspace/sidebar/helper";
@@ -33,6 +35,7 @@ export const SidebarItemBase = observer(function SidebarItemBase({
   const { allowPermissions } = useUserPermissions();
   const { isWorkspaceItemPinned } = useWorkspaceNavigationPreferences();
   const { data } = useUser();
+  const { unreadNotificationsCount, getUnreadNotificationsCount } = useWorkspaceNotifications();
 
   const { toggleSidebar, isExtendedSidebarOpened, toggleExtendedSidebar } = useAppTheme();
 
@@ -44,6 +47,7 @@ export const SidebarItemBase = observer(function SidebarItemBase({
   const staticItems = [
     "home",
     "pi_chat",
+    "inbox",
     "projects",
     "your_work",
     "stickies",
@@ -51,6 +55,16 @@ export const SidebarItemBase = observer(function SidebarItemBase({
     ...(additionalStaticItems || []),
   ];
   const slug = workspaceSlug?.toString() || "";
+
+  useSWR(
+    slug ? "WORKSPACE_UNREAD_NOTIFICATION_COUNT" : null,
+    slug ? () => getUnreadNotificationsCount(slug) : null
+  );
+
+  const isMentionsEnabled = unreadNotificationsCount.mention_unread_notifications_count > 0;
+  const totalNotifications = isMentionsEnabled
+    ? unreadNotificationsCount.mention_unread_notifications_count
+    : unreadNotificationsCount.total_unread_notifications_count;
 
   if (!allowPermissions(item.access, EUserPermissionsLevel.WORKSPACE, slug)) return null;
 
@@ -60,12 +74,21 @@ export const SidebarItemBase = observer(function SidebarItemBase({
   const itemHref =
     item.key === "your_work" && data?.id ? joinUrlPath(slug, item.href, data?.id) : joinUrlPath(slug, item.href);
   const icon = getSidebarNavigationItemIcon(item.key);
+  const shouldShowInboxDot = item.key === "inbox" && totalNotifications > 0;
+  const renderedIcon = shouldShowInboxDot ? (
+    <div className="relative flex-shrink-0">
+      {icon}
+      <span className="absolute -top-0 -right-0 size-2 rounded-full bg-red-500" />
+    </div>
+  ) : (
+    icon
+  );
 
   return (
     <Link href={itemHref} onClick={handleLinkClick}>
       <SidebarNavItem isActive={item.highlight(pathname, itemHref)}>
         <div className="flex items-center gap-1.5 py-[1px]">
-          {icon}
+          {renderedIcon}
           <p className="text-sm leading-5 font-medium">{t(item.labelTranslationKey)}</p>
         </div>
         {additionalRender?.(item.key, slug)}

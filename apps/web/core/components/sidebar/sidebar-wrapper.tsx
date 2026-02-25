@@ -6,11 +6,12 @@ import { PreferencesIcon } from "@plane/propel/icons";
 import { ScrollArea } from "@plane/propel/scrollarea";
 // components
 import { CustomizeNavigationDialog } from "@/components/navigation/customize-navigation-dialog";
+import { WorkspaceMenuRoot } from "@/components/workspace/sidebar/workspace-menu-root";
+import { UserMenuRoot } from "@/components/workspace/sidebar/user-menu-root";
 // hooks
 import { useAppTheme } from "@/hooks/store/use-app-theme";
 import useSize from "@/hooks/use-window-size";
 // plane web components
-import { WorkspaceEditionBadge } from "@/plane-web/components/workspace/edition-badge";
 import { AppSidebarToggleButton } from "./sidebar-toggle-button";
 
 type TSidebarWrapperProps = {
@@ -48,7 +49,7 @@ export const SidebarWrapper = observer(function SidebarWrapper(props: TSidebarWr
           {/* Workspace switcher and settings */}
 
           <div className="flex items-center justify-between gap-2 px-2">
-            <span className="text-md text-custom-text-200 font-medium pt-1">{title}</span>
+            <WorkspaceMenuRoot variant="top-navigation" />
             {title === "Projects" && (
               <div className="flex items-center gap-2">
                 <button
@@ -77,7 +78,7 @@ export const SidebarWrapper = observer(function SidebarWrapper(props: TSidebarWr
         </ScrollArea>
         {/* Help Section */}
         <div className="flex items-center justify-between p-3 border-t border-custom-border-200 bg-custom-sidebar-background-100 h-12">
-          <WorkspaceEditionBadge />
+          <UserMenuRoot size="xs" showLabel />
           {/* TODO: To be checked if we need this */}
           {/* <div className="flex items-center gap-2">
           {!shouldRenderAppRail && <HelpMenu />}

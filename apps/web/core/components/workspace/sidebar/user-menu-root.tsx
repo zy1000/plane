@@ -16,10 +16,11 @@ import { useUser } from "@/hooks/store/user";
 
 type Props = {
   size?: "xs" | "sm" | "md";
+  showLabel?: boolean;
 };
 
 export const UserMenuRoot = observer(function UserMenuRoot(props: Props) {
-  const { size = "sm" } = props;
+  const { size = "sm", showLabel = false } = props;
   const { workspaceSlug } = useParams();
   // router
   const router = useRouter();
@@ -50,24 +51,48 @@ export const UserMenuRoot = observer(function UserMenuRoot(props: Props) {
     else toggleAnySidebarDropdown(false);
   }, [isUserMenuOpen]);
 
+  const displayLabel = currentUser?.display_name || currentUser?.email || "";
+
   return (
     <CustomMenu
       className="flex items-center"
       customButton={
-        <AppSidebarItem
-          variant="button"
-          item={{
-            icon: (
+        showLabel ? (
+          <button
+            type="button"
+            className="flex items-center gap-2 min-w-0 group "
+          >
+            <div
+              className={`flex items-center justify-center size-8 rounded-md text-custom-text-300 group-hover:text-custom-text-200"
+              }`}
+            >
               <Avatar
                 name={currentUser?.display_name}
                 src={getFileURL(currentUser?.avatar_url ?? "")}
                 size={size === "xs" ? 20 : size === "sm" ? 24 : 28}
                 shape="circle"
               />
-            ),
-            isActive: isUserMenuOpen,
-          }}
-        />
+            </div>
+            <span className="text-sm text-custom-text-200 truncate max-w-[160px] group-hover:text-custom-text-100">
+              {displayLabel}
+            </span>
+          </button>
+        ) : (
+          <AppSidebarItem
+            variant="button"
+            item={{
+              icon: (
+                <Avatar
+                  name={currentUser?.display_name}
+                  src={getFileURL(currentUser?.avatar_url ?? "")}
+                  size={size === "xs" ? 20 : size === "sm" ? 24 : 28}
+                  shape="circle"
+                />
+              ),
+              isActive: isUserMenuOpen,
+            }}
+          />
+        )
       }
       menuButtonOnClick={() => !isUserMenuOpen && setIsUserMenuOpen(true)}
       onMenuClose={() => setIsUserMenuOpen(false)}
