@@ -12,11 +12,16 @@ import type { TProjectDisplayFilters, TProjectFilters, TProjectAppliedDisplayFil
 // store
 import type { CoreRootStore } from "../root.store";
 
+export type TProjectViewMode = "card" | "list";
+
+const PROJECTS_VIEW_MODE_STORAGE_KEY = "plane_projects_view_mode";
+
 export interface IProjectFilterStore {
   // observables
   displayFilters: Record<string, TProjectDisplayFilters>;
   filters: Record<string, TProjectFilters>;
   searchQuery: string;
+  viewMode: TProjectViewMode;
   // computed
   currentWorkspaceDisplayFilters: TProjectDisplayFilters | undefined;
   currentWorkspaceAppliedDisplayFilters: TProjectAppliedDisplayFilterKeys[] | undefined;
@@ -28,6 +33,7 @@ export interface IProjectFilterStore {
   updateDisplayFilters: (workspaceSlug: string, displayFilters: TProjectDisplayFilters) => void;
   updateFilters: (workspaceSlug: string, filters: TProjectFilters) => void;
   updateSearchQuery: (query: string) => void;
+  updateViewMode: (mode: TProjectViewMode) => void;
   clearAllFilters: (workspaceSlug: string) => void;
   clearAllAppliedDisplayFilters: (workspaceSlug: string) => void;
 }
@@ -37,6 +43,7 @@ export class ProjectFilterStore implements IProjectFilterStore {
   displayFilters: Record<string, TProjectDisplayFilters> = {};
   filters: Record<string, TProjectFilters> = {};
   searchQuery: string = "";
+  viewMode: TProjectViewMode = "card";
   // root store
   rootStore: CoreRootStore;
 
@@ -46,6 +53,7 @@ export class ProjectFilterStore implements IProjectFilterStore {
       displayFilters: observable,
       filters: observable,
       searchQuery: observable.ref,
+      viewMode: observable.ref,
       // computed
       currentWorkspaceDisplayFilters: computed,
       currentWorkspaceAppliedDisplayFilters: computed,
@@ -54,11 +62,18 @@ export class ProjectFilterStore implements IProjectFilterStore {
       updateDisplayFilters: action,
       updateFilters: action,
       updateSearchQuery: action,
+      updateViewMode: action,
       clearAllFilters: action,
       clearAllAppliedDisplayFilters: action,
     });
     // root store
     this.rootStore = _rootStore;
+
+    if (typeof window !== "undefined") {
+      const storedViewMode = window.localStorage.getItem(PROJECTS_VIEW_MODE_STORAGE_KEY);
+      if (storedViewMode === "card" || storedViewMode === "list") this.viewMode = storedViewMode;
+    }
+
     // initialize display filters of the current workspace
     reaction(
       () => this.rootStore.router.workspaceSlug,
@@ -66,6 +81,14 @@ export class ProjectFilterStore implements IProjectFilterStore {
         if (!workspaceSlug) return;
         this.initWorkspaceFilters(workspaceSlug);
         this.searchQuery = "";
+      }
+    );
+
+    reaction(
+      () => this.viewMode,
+      (mode) => {
+        if (typeof window === "undefined") return;
+        window.localStorage.setItem(PROJECTS_VIEW_MODE_STORAGE_KEY, mode);
       }
     );
   }
@@ -90,7 +113,8 @@ export class ProjectFilterStore implements IProjectFilterStore {
     const displayFilters = this.displayFilters[workspaceSlug];
     return Object.keys(displayFilters).filter(
       (key): key is TProjectAppliedDisplayFilterKeys =>
-        ["my_projects", "archived_projects"].includes(key) && !!displayFilters[key as keyof TProjectDisplayFilters]
+        ["my_projects", "archived_projects", "show_archived_projects"].includes(key) &&
+        !!displayFilters[key as keyof TProjectDisplayFilters]
     );
   }
 
@@ -123,7 +147,7 @@ export class ProjectFilterStore implements IProjectFilterStore {
     const displayFilters = this.getDisplayFiltersByWorkspaceSlug(workspaceSlug);
     runInAction(() => {
       this.displayFilters[workspaceSlug] = {
-        order_by: displayFilters?.order_by || "created_at",
+        order_by: displayFilters?.order_by || "-created_at",
       };
       this.filters[workspaceSlug] = this.filters[workspaceSlug] ?? {};
     });
@@ -161,6 +185,8 @@ export class ProjectFilterStore implements IProjectFilterStore {
    */
   updateSearchQuery = (query: string) => (this.searchQuery = query);
 
+  updateViewMode = (mode: TProjectViewMode) => (this.viewMode = mode);
+
   /**
    * @description clear all filters of a workspace
    * @param {string} workspaceSlug
@@ -181,6 +207,7 @@ export class ProjectFilterStore implements IProjectFilterStore {
       this.currentWorkspaceAppliedDisplayFilters.forEach((key) => {
         set(this.displayFilters, [workspaceSlug, key], false);
       });
+      set(this.displayFilters, [workspaceSlug, "show_archived_projects"], false);
     });
   };
 }

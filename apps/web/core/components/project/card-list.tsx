@@ -35,7 +35,7 @@ export const ProjectCardList = observer(function ProjectCardList(props: TProject
   const {
     loader,
     fetchStatus,
-    workspaceProjectIds: storeWorkspaceProjectIds,
+    totalProjectIds: storeTotalProjectIds,
     filteredProjectIds: storeFilteredProjectIds,
     getProjectById,
   } = useProject();
@@ -43,7 +43,7 @@ export const ProjectCardList = observer(function ProjectCardList(props: TProject
   const { allowPermissions } = useUserPermissions();
 
   // derived values
-  const workspaceProjectIds = totalProjectIdsProps ?? storeWorkspaceProjectIds;
+  const totalProjectIds = totalProjectIdsProps ?? storeTotalProjectIds;
   const filteredProjectIds = filteredProjectIdsProps ?? storeFilteredProjectIds;
 
   // permissions
@@ -52,10 +52,10 @@ export const ProjectCardList = observer(function ProjectCardList(props: TProject
     EUserPermissionsLevel.WORKSPACE
   );
 
-  if (!filteredProjectIds || !workspaceProjectIds || loader === "init-loader" || fetchStatus !== "complete")
+  if (!filteredProjectIds || !totalProjectIds || loader === "init-loader" || fetchStatus !== "complete")
     return <ProjectsLoader />;
 
-  if (workspaceProjectIds?.length === 0 && !currentWorkspaceDisplayFilters?.archived_projects)
+  if (totalProjectIds?.length === 0 && !currentWorkspaceDisplayFilters?.archived_projects)
     return (
       <EmptyStateDetailed
         title={t("workspace_projects.empty_state.general.title")}

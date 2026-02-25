@@ -15,6 +15,7 @@ import { SearchIcon, CloseIcon } from "@plane/propel/icons";
 import { cn } from "@plane/utils";
 // hooks
 import { useProjectFilter } from "@/hooks/store/use-project-filter";
+import { ProjectsViewToggle } from "./view-toggle";
 import { IconButton } from "@plane/propel/icon-button";
 
 export const ProjectSearch = observer(function ProjectSearch() {
@@ -52,6 +53,7 @@ export const ProjectSearch = observer(function ProjectSearch() {
           icon={SearchIcon}
         />
       )}
+      <ProjectsViewToggle className="ml-1" />
       <div
         className={cn(
           "ml-auto flex w-0 items-center justify-start gap-1 overflow-hidden rounded-md border border-transparent bg-surface-1 text-placeholder opacity-0 transition-[width] ease-linear",

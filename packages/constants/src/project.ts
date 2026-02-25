@@ -100,6 +100,10 @@ export const PROJECT_DISPLAY_FILTER_OPTIONS: {
     key: "archived_projects",
     i18n_label: "workspace_projects.scope.archived_projects",
   },
+  {
+    key: "show_archived_projects",
+    i18n_label: "workspace_projects.scope.archived_projects",
+  },
 ];
 
 export const PROJECT_ERROR_MESSAGES = {
