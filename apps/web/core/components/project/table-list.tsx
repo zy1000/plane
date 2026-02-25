@@ -486,7 +486,7 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
                       <span className="text-custom-text-300">-</span>
                     )}
                   </td>
-                  <td className="px-4 py-3 hidden md:table-cell">
+                  <td className="px-4 py-3 pl-1 hidden md:table-cell">
                     <span
                       className={cn("inline-flex items-center rounded px-2 py-1 text-xs font-medium", {
                         "text-custom-text-200": !isArchived,
