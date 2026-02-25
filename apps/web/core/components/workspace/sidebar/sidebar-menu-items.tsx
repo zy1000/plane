@@ -78,8 +78,18 @@ export const SidebarMenuItems = observer(function SidebarMenuItems() {
     // Sort personal items by sort_order
     personalItems.sort((a, b) => a.sort_order - b.sort_order);
 
-    // Merge static items with sorted personal items
-    return [...items, ...personalItems];
+    const mergedItems = [...items, ...personalItems];
+    const inboxItem = WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS["inbox"];
+    if (inboxItem) {
+      const stickiesIndex = mergedItems.findIndex((item) => item.key === "stickies");
+      if (stickiesIndex >= 0) {
+        mergedItems.splice(stickiesIndex + 1, 0, inboxItem);
+      } else {
+        mergedItems.push(inboxItem);
+      }
+    }
+
+    return mergedItems;
   }, [personalPreferences]);
 
   const sortedNavigationItems = useMemo(
