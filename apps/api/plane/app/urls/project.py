@@ -16,6 +16,7 @@ from plane.app.views import (
     ProjectArchiveUnarchiveEndpoint,
     ProjectMemberPreferenceEndpoint,
 )
+from plane.app.views.project.announcement import AnnouncementAPIView
 from plane.app.views.project.base import ProjectAPI
 from plane.app.views.project.template import ProjectTemplateAPIView
 
@@ -132,5 +133,6 @@ urlpatterns = [
         name="project-member-preference",
     ),
     path('workspaces/<str:slug>/projects/template/', ProjectTemplateAPIView.as_view(), name='project-template'),
-
+    path("workspaces/<str:slug>/projects/<uuid:project_id>/announcement/", AnnouncementAPIView.as_view(),
+         name='project-announcement'),
 ]

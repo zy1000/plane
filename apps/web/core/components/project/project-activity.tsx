@@ -192,10 +192,12 @@ type TProjectActivity = {
   projectId: string;
   disabled?: boolean;
   description?: string;
+  showHeading?: boolean;
+  containerClassName?: string;
 };
 
 export const ProjectActivity: React.FC<TProjectActivity> = observer((props) => {
-  const { workspaceSlug, projectId, description } = props;
+  const { workspaceSlug, projectId, description, showHeading = true, containerClassName } = props;
   
   // states
   const [pageCount, setPageCount] = useState(1);
@@ -238,10 +240,12 @@ export const ProjectActivity: React.FC<TProjectActivity> = observer((props) => {
   if (isEmpty) {
     return (
       <div className="flex h-full w-full flex-col">
-        <SettingsHeading
-          title={t("account_settings.activity.heading")}
-          description={description ?? t("account_settings.activity.description")}
-        />
+        {showHeading && (
+          <SettingsHeading
+            title={t("account_settings.activity.heading")}
+            description={description ?? t("account_settings.activity.description")}
+          />
+        )}
         <DetailedEmptyState
           title={""}
           description={""}
@@ -254,11 +258,13 @@ export const ProjectActivity: React.FC<TProjectActivity> = observer((props) => {
   }
 
   return (
-    <div className="max-h-[600px] overflow-y-auto">
-      <SettingsHeading
-        title={t("account_settings.activity.heading")}
-        description={description ?? t("account_settings.activity.description")}
-      />
+    <div className={containerClassName ?? "max-h-[600px] overflow-y-auto"}>
+      {showHeading && (
+        <SettingsHeading
+          title={t("account_settings.activity.heading")}
+          description={description ?? t("account_settings.activity.description")}
+        />
+      )}
       <div className="w-full">{activityPages}</div>
       {isLoadMoreVisible && (
         <div className="flex w-full items-center justify-center text-xs pb-4">

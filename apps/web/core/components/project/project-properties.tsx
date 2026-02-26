@@ -51,7 +51,7 @@ export const ProjectProperties: FC<IProjectProperties> = observer((props) => {
   return (
     <div>
       <h5 className="text-sm font-medium">{t("common.properties")}</h5>
-      <div className={`w-full space-y-2 mt-3 ${disabled ? "opacity-60" : ""}`}>
+      <div className={`w-full grid grid-cols-2 gap-4 mt-3 ${disabled ? "opacity-60" : ""}`}>
         {/* 项目状态 */}
         <div className="flex w-full items-center gap-3 h-8">
           <div className="flex items-center gap-1 w-1/3 flex-shrink-0 text-sm text-custom-text-300">
@@ -176,30 +176,6 @@ export const ProjectProperties: FC<IProjectProperties> = observer((props) => {
             className="w-2/3 flex-grow group"
             buttonContainerClassName="w-full text-left"
             buttonClassName={`text-sm ${project?.created_at ? "" : "text-custom-text-400"}`}
-            hideIcon
-            clearIconClassName="h-3 w-3 hidden group-hover:inline"
-          />
-        </div>
-
-        {/* 更新时间 */}
-        <div className="flex w-full items-center gap-3 h-8">
-          <div className="flex items-center gap-1 w-1/3 flex-shrink-0 text-sm text-custom-text-300">
-            <CalendarCheck2 className="h-4 w-4 flex-shrink-0" />
-            <span>更新时间</span>
-          </div>
-          <DateDropdown
-            value={project.updated_at}
-            onChange={(val) =>
-              handleProjectUpdate({
-                updated_at: val ? renderFormattedPayloadDate(val) : null,
-              })
-            }
-            placeholder="选择更新时间"
-            buttonVariant="transparent-with-text"
-            disabled={true}
-            className="w-2/3 flex-grow group"
-            buttonContainerClassName="w-full text-left"
-            buttonClassName={`text-sm ${project?.updated_at ? "" : "text-custom-text-400"}`}
             hideIcon
             clearIconClassName="h-3 w-3 hidden group-hover:inline"
           />
