@@ -310,7 +310,12 @@ export const WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS: Record<string, IWorkspac
     labelTranslationKey: "projects",
     href: `/projects/`,
     access: [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER, EUserWorkspaceRoles.GUEST],
-    highlight: (pathname: string, url: string) => pathname === url,
+    highlight: (pathname: string, url: string) => {
+      const normalizedPathname = pathname.endsWith("/") ? pathname : `${pathname}/`;
+      const normalizedUrl = url.endsWith("/") ? url : `${url}/`;
+      if (!normalizedPathname.startsWith(normalizedUrl)) return false;
+      return !normalizedPathname.startsWith(`${normalizedUrl}archives/`);
+    },
   },
 };
 

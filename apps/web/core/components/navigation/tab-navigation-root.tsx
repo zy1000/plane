@@ -2,7 +2,7 @@ import type { FC } from "react";
 import React, { useEffect } from "react";
 import { observer } from "mobx-react";
 import { useParams, useLocation, Link, useNavigate } from "react-router";
-import { EUserPermissionsLevel, EUserPermissions } from "@plane/constants";
+import { EUserPermissions } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { TabNavigationList, TabNavigationItem } from "@plane/propel/tab-navigation";
 import type { EUserProjectRoles } from "@plane/types";
@@ -13,15 +13,11 @@ import { useUserPermissions } from "@/hooks/store/user";
 // plane web imports
 import { useNavigationItems } from "@/plane-web/components/navigations";
 // local imports
-import { LeaveProjectModal } from "../project/leave-project-modal";
-import { PublishProjectModal } from "../project/publish-project/modal";
-import { ProjectActionsMenu } from "./project-actions-menu";
 import { ProjectHeader } from "./project-header";
 import { TabNavigationOverflowMenu } from "./tab-navigation-overflow-menu";
 import { DEFAULT_TAB_KEY } from "./tab-navigation-utils";
 import { TabNavigationVisibleItem } from "./tab-navigation-visible-item";
 import { useActiveTab } from "./use-active-tab";
-import { useProjectActions } from "./use-project-actions";
 import { useResponsiveTabLayout } from "./use-responsive-tab-layout";
 import { useTabPreferences } from "./use-tab-preferences";
 
@@ -87,20 +83,6 @@ export const TabNavigationRoot = observer(function TabNavigationRoot(props: TTab
     projectId,
   });
 
-  // Project actions hook
-  const {
-    publishModalOpen,
-    leaveProjectModalOpen,
-    handleLeaveProject,
-    handleCopyText,
-    handlePublishModal,
-    handleLeaveProjectModal,
-  } = useProjectActions({
-    workspaceSlug,
-    projectId,
-    activeItem,
-  });
-
   // Filter and sort navigation items
   const allNavigationItems = navigationItems
     .filter((item) => item.shouldRender)
@@ -140,45 +122,12 @@ export const TabNavigationRoot = observer(function TabNavigationRoot(props: TTab
   if (allNavigationItems.length === 0) return null;
   if (!project) return null;
 
-  // Permission checks
-  const isAdmin = allowPermissions(
-    [EUserPermissions.ADMIN],
-    EUserPermissionsLevel.PROJECT,
-    workspaceSlug.toString(),
-    project?.id
-  );
-
-  const isAuthorized = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-    EUserPermissionsLevel.PROJECT,
-    workspaceSlug.toString(),
-    project?.id
-  );
-
   return (
     <>
-      <PublishProjectModal isOpen={publishModalOpen} projectId={projectId} onClose={() => handlePublishModal(false)} />
-      <LeaveProjectModal
-        project={project}
-        isOpen={leaveProjectModalOpen}
-        onClose={() => handleLeaveProjectModal(false)}
-      />
-
       {/* container for the tab navigation */}
       <div className="flex items-center gap-3 overflow-hidden size-full">
         <div className="flex items-center gap-2 shrink-0">
           <ProjectHeader workspaceSlug={workspaceSlug} projectId={projectId} />
-          <div className="shrink-0">
-            <ProjectActionsMenu
-              workspaceSlug={workspaceSlug}
-              project={project}
-              isAdmin={isAdmin}
-              isAuthorized={isAuthorized}
-              onCopyText={handleCopyText}
-              onLeaveProject={handleLeaveProject}
-              onPublishModal={() => handlePublishModal(true)}
-            />
-          </div>
         </div>
 
         <div className="shrink-0 h-5 w-1 border-l border-custom-border-200" />

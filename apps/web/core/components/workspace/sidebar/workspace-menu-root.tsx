@@ -107,7 +107,7 @@ export const WorkspaceMenuRoot = observer(function WorkspaceMenuRoot(props: Work
             {variant === "top-navigation" && (
               <Menu.Button
                 className={cn(
-                  "group/menu-button flex items-center gap-1 p-1 truncate rounded text-sm font-medium text-custom-sidebar-text-200 hover:bg-custom-sidebar-background-80 focus:outline-none justify-between flex-grow",
+                  "group/menu-button flex items-center gap-1 p-1 truncate rounded text-sm font-medium text-custom-sidebar-text-200 hover:bg-custom-sidebar-background-80 focus:outline-none justify-between w-auto",
                   {
                     "bg-custom-sidebar-background-80": open,
                   }
@@ -125,7 +125,7 @@ export const WorkspaceMenuRoot = observer(function WorkspaceMenuRoot(props: Work
                   </h4>
                 </div>
                 <ChevronDownIcon
-                  className={cn("flex-shrink-0 size-4 text-custom-sidebar-text-400 duration-300", {
+                  className={cn("ml-1 flex-shrink-0 size-4 text-custom-sidebar-text-400 duration-300", {
                     "rotate-180": open,
                   })}
                 />

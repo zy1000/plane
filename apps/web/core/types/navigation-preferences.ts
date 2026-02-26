@@ -54,7 +54,7 @@ export const DEFAULT_PERSONAL_PREFERENCES: TPersonalNavigationPreferences = {
 };
 
 export const DEFAULT_PROJECT_PREFERENCES: TProjectNavigationPreferences = {
-  navigationMode: "accordion",
+  navigationMode: "horizontal",
   showLimitedProjects: false,
   limitedProjectsCount: 10,
 };

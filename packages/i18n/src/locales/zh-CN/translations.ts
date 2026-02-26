@@ -1,6 +1,6 @@
 export default {
   sidebar: {
-    projects: "项目",
+    projects: "项目管理",
     pages: "笔记",
     new_work_item: "新工作项",
     home: "主页",
@@ -1400,7 +1400,7 @@ export default {
     total: "{entity}总数",
   },
   workspace_projects: {
-    label: "{count, plural, one {项目} other {项目}}",
+    label: "{count, plural, one {项目管理} other {项目管理}}",
     create: {
       label: "添加项目",
     },

@@ -27,6 +27,14 @@ export interface IPartialProject {
   guest_view_all_features?: boolean;
   project_lead?: IUserLite | string | null;
   network?: number;
+  bug_count?: number;
+  cycle_count?: number;
+  total_work_items?: number;
+  started_work_items?: number;
+  backlog_work_items?: number;
+  un_started_work_items?: number;
+  completed_work_items?: number;
+  cancelled_work_items?: number;
   // Timestamps
   created_at?: Date | string | null;
   updated_at?: Date | string | null;

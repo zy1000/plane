@@ -111,10 +111,10 @@ export const useProjectNavigationPreferences = () => {
   );
 
   const updateNavigationMode = useCallback(
-    (mode: TProjectNavigationMode) => {
+    (_mode: TProjectNavigationMode) => {
       const currentPreferences = storedValue || DEFAULT_PROJECT_PREFERENCES;
       setValue({
-        navigationMode: mode,
+        navigationMode: "horizontal",
         showLimitedProjects: currentPreferences.showLimitedProjects,
         limitedProjectsCount: currentPreferences.limitedProjectsCount,
       });
@@ -126,7 +126,7 @@ export const useProjectNavigationPreferences = () => {
     (show: boolean) => {
       const currentPreferences = storedValue || DEFAULT_PROJECT_PREFERENCES;
       setValue({
-        navigationMode: currentPreferences.navigationMode,
+        navigationMode: "horizontal",
         showLimitedProjects: show,
         limitedProjectsCount: currentPreferences.limitedProjectsCount,
       });
@@ -138,7 +138,7 @@ export const useProjectNavigationPreferences = () => {
     (count: number) => {
       const currentPreferences = storedValue || DEFAULT_PROJECT_PREFERENCES;
       setValue({
-        navigationMode: currentPreferences.navigationMode,
+        navigationMode: "horizontal",
         showLimitedProjects: currentPreferences.showLimitedProjects,
         limitedProjectsCount: count,
       });
@@ -146,8 +146,13 @@ export const useProjectNavigationPreferences = () => {
     [storedValue, setValue]
   );
 
+  const preferences = storedValue || DEFAULT_PROJECT_PREFERENCES;
+
   return {
-    preferences: storedValue || DEFAULT_PROJECT_PREFERENCES,
+    preferences: {
+      ...preferences,
+      navigationMode: "horizontal",
+    },
     updateNavigationMode,
     updateShowLimitedProjects,
     updateLimitedProjectsCount,
