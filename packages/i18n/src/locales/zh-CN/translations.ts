@@ -25,6 +25,7 @@ export default {
     upgrade: "升级",
     stickies: "便签",
     overview: "概览",
+    statistics: "统计",
     milestones: "里程碑",
     filestore: "文件",
   },

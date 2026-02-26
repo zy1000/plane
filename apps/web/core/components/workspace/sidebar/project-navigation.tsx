@@ -29,7 +29,7 @@ import { useAppTheme } from "@/hooks/store/use-app-theme";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useProject } from "@/hooks/store/use-project";
 import { useUserPermissions } from "@/hooks/store/user";
-import { Rss, Milestone, Folder } from "lucide-react";
+import { BarChart3, Rss, Milestone, Folder } from "lucide-react";
 
 export type TNavigationItem = {
   name: string;
@@ -89,6 +89,16 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
         access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
         shouldRender: true,
         sortOrder: 0,
+      },
+      {
+        i18n_key: "sidebar.statistics",
+        key: "statistics",
+        name: "统计",
+        href: `/${workspaceSlug}/projects/${projectId}/statistics`,
+        icon: BarChart3,
+        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
+        shouldRender: true,
+        sortOrder: 0.5,
       },
       {
         i18n_key: "sidebar.work_items",
