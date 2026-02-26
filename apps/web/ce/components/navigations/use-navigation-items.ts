@@ -4,7 +4,7 @@ import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 import { CycleIcon, IntakeIcon, ModuleIcon, PageIcon, TestManagementIcon, ViewsIcon, WorkItemsIcon } from "@plane/propel/icons";
 import type { EUserProjectRoles, IPartialProject } from "@plane/types";
 import type { TNavigationItem } from "@/components/navigation/tab-navigation-root";
-import { Folder, Milestone, Rss } from "lucide-react";
+import { BarChart3, Folder, Milestone, Rss } from "lucide-react";
 
 type UseNavigationItemsProps = {
   workspaceSlug: string;
@@ -36,6 +36,16 @@ export const useNavigationItems = ({
         access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
         shouldRender: true,
         sortOrder: 0,
+      },
+      {
+        i18n_key: "sidebar.statistics",
+        key: "statistics",
+        name: "统计",
+        href: `/${workspaceSlug}/projects/${projectId}/statistics`,
+        icon: BarChart3,
+        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
+        shouldRender: true,
+        sortOrder: 0.5,
       },
       {
         i18n_key: "sidebar.work_items",
