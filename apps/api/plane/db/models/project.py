@@ -396,3 +396,14 @@ class ProjectUserProperty(ProjectBaseModel):
     def __str__(self):
         """Return properties status of the project"""
         return str(self.user)
+
+
+class ProjectAnnouncement(BaseModel):
+    name = models.CharField(max_length=255, verbose_name="Project Announcement Name")
+    description = models.TextField(verbose_name="Project Announcement Description", blank=True, null=True)
+
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="project_%(class)s")
+
+    class Meta:
+        db_table = "project_announcement"
+        ordering = ("-created_at",)

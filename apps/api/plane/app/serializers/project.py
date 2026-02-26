@@ -25,6 +25,7 @@ from plane.db.models import (
 from plane.utils.content_validator import (
     validate_html_content,
 )
+from ...db.models.project import ProjectAnnouncement
 
 
 class ProjectSerializer(BaseSerializer):
@@ -234,3 +235,15 @@ class ProjectPublicMemberSerializer(BaseSerializer):
         model = ProjectPublicMember
         fields = "__all__"
         read_only_fields = ["workspace", "project", "member"]
+
+
+class ProjectAnnouncementListSerializer(BaseSerializer):
+    class Meta:
+        model = ProjectAnnouncement
+        fields = "__all__"
+
+
+class ProjectAnnouncementCreateSerializer(BaseSerializer):
+    class Meta:
+        model = ProjectAnnouncement
+        fields = ['name', 'description', 'project']
