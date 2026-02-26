@@ -5,14 +5,14 @@ import { observer } from "mobx-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { Pagination } from "antd";
-import { ArrowDown, ArrowUp, ArrowUpDown, Earth, Link as LinkIcon, Lock, Settings, Star } from "lucide-react";
+import { Archive, ArrowDown, ArrowUp, ArrowUpDown, Globe2, Link as LinkIcon, Settings, Star } from "lucide-react";
 import { EUserPermissions, EUserPermissionsLevel, PROJECT_TRACKER_ELEMENTS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { EmptyStateDetailed } from "@plane/propel/empty-state";
 import { Logo } from "@plane/propel/emoji-icon-picker";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Tooltip } from "@plane/propel/tooltip";
-import { Avatar, ContentWrapper, ERowVariant, LinearProgressIndicator } from "@plane/ui";
+import { Avatar, ContentWrapper, ERowVariant } from "@plane/ui";
 import { calculateTotalFilters, cn, copyUrlToClipboard, getFileURL, renderFormattedDate } from "@plane/utils";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { ProjectsLoader } from "@/components/ui/loader/projects-loader";
@@ -22,6 +22,8 @@ import { useMember } from "@/hooks/store/use-member";
 import { useProject } from "@/hooks/store/use-project";
 import { useProjectFilter } from "@/hooks/store/use-project-filter";
 import { useUserPermissions } from "@/hooks/store/user";
+import { PublishProjectModal } from "@/components/project/publish-project/modal";
+import { ArchiveRestoreProjectModal } from "@/components/project/settings/archive-project/archive-restore-modal";
 import type { TProject } from "@plane/types";
 
 type Props = {
@@ -34,15 +36,6 @@ type TSortDirection = "asc" | "desc";
 
 const isSortKey = (key: string): key is TSortKey =>
   key === "name" || key === "created_at" || key === "status";
-
-type TProjectAnalyze = {
-  total_work_items?: { count: number };
-  started_work_items?: { count: number };
-  backlog_work_items?: { count: number };
-  un_started_work_items?: { count: number };
-  completed_work_items?: { count: number };
-  cancelled_work_items?: { count: number };
-};
 
 export const ProjectTableList = observer(function ProjectTableList(props: Props) {
   const { totalProjectIds: totalProjectIdsProps, filteredProjectIds: filteredProjectIdsProps } = props;
@@ -57,9 +50,7 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
     totalProjectIds: storeTotalProjectIds,
     filteredProjectIds: storeFilteredProjectIds,
     getProjectById,
-    fetchProjectAnalyticsCount,
-    getProjectAnalyticsCountById,
-    fetchProjectAnalyze,
+    fetchPartialProjects,
     updateProject,
     addProjectToFavorites,
     removeProjectFromFavorites,
@@ -105,6 +96,13 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
   const [pageSize, setPageSize] = useState(10);
   const [sortKey, setSortKey] = useState<TSortKey>("created_at");
   const [sortDirection, setSortDirection] = useState<TSortDirection>("desc");
+  const [publishProjectId, setPublishProjectId] = useState<string | null>(null);
+  const [archiveProjectId, setArchiveProjectId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!workspaceSlugString) return;
+    void fetchPartialProjects(workspaceSlugString);
+  }, [fetchPartialProjects, workspaceSlugString]);
 
   useEffect(() => {
     const orderBy = currentWorkspaceDisplayFilters?.order_by?.toString();
@@ -154,10 +152,6 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
     () => sortedProjects.slice(startIndex, startIndex + pageSize),
     [sortedProjects, startIndex, pageSize]
   );
-  const currentPageProjectIds = useMemo(() => currentPageProjects.map((p) => p.id).join(","), [currentPageProjects]);
-  const currentPageProjectIdList = useMemo(() => currentPageProjects.map((p) => p.id), [currentPageProjects]);
-  const [workItemStatsMap, setWorkItemStatsMap] = useState<Record<string, TProjectAnalyze | null | undefined>>({});
-
   const handlePaginationChange = useCallback((page: number, size: number) => {
     setCurrentPage(page);
     setPageSize(size);
@@ -221,6 +215,18 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
     [addProjectToFavorites, getProjectById, removeProjectFromFavorites, workspaceSlugString]
   );
 
+  const handleOpenPublishModal = useCallback((e: React.MouseEvent<HTMLButtonElement>, projectId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setPublishProjectId(projectId);
+  }, []);
+
+  const handleOpenArchiveModal = useCallback((e: React.MouseEvent<HTMLButtonElement>, projectId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setArchiveProjectId(projectId);
+  }, []);
+
   const handleSort = useCallback(
     (key: TSortKey) => {
       const nextDirection: TSortDirection = key === sortKey ? (sortDirection === "asc" ? "desc" : "asc") : "asc";
@@ -244,45 +250,6 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
     },
     [sortDirection, sortKey]
   );
-
-  useEffect(() => {
-    if (!workspaceSlug || !currentPageProjectIds) return;
-    fetchProjectAnalyticsCount(workspaceSlug.toString(), {
-      project_ids: currentPageProjectIds,
-      fields: "total_issues,completed_issues",
-    }).catch(() => {});
-  }, [workspaceSlug, currentPageProjectIds, fetchProjectAnalyticsCount]);
-
-  useEffect(() => {
-    if (!workspaceSlug || currentPageProjectIdList.length === 0) return;
-
-    let active = true;
-
-    (async () => {
-      const results = await Promise.all(
-        currentPageProjectIdList.map(async (projectId) => {
-          try {
-            const data = (await fetchProjectAnalyze(workspaceSlug.toString(), projectId)) as TProjectAnalyze;
-            return [projectId, data] as const;
-          } catch {
-            return [projectId, null] as const;
-          }
-        })
-      );
-
-      if (!active) return;
-
-      setWorkItemStatsMap((prev) => {
-        const next = { ...prev };
-        for (const [projectId, data] of results) next[projectId] = data;
-        return next;
-      });
-    })();
-
-    return () => {
-      active = false;
-    };
-  }, [workspaceSlug, currentPageProjectIdList, fetchProjectAnalyze]);
 
   if (!filteredProjectIds || !totalProjectIds || loader === "init-loader" || fetchStatus !== "complete")
     return <ProjectsLoader />;
@@ -331,98 +298,107 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
     );
 
   return (
-    <ContentWrapper variant={ERowVariant.HUGGING} className="overflow-hidden">
-      <div className="w-full h-full rounded border border-custom-border-200 bg-custom-background-100 m-0 flex flex-col overflow-hidden">
-        <div className="flex-1 min-h-0 overflow-auto vertical-scrollbar scrollbar-lg">
-          <table className="min-w-[980px] w-full text-sm">
-            <thead className="border-b border-custom-border-200 bg-custom-background-100">
-              <tr>
-                <th className="px-4 py-3 text-left font-medium text-custom-text-300">
-                  <button
-                    type="button"
-                    className="flex items-center gap-1 transition-colors hover:text-custom-text-200"
-                    onClick={() => handleSort("name")}
-                  >
-                    项目名称
-                    {renderSortIcon("name")}
-                  </button>
-                </th>
-                <th className="px-4 py-3 text-left font-medium text-custom-text-300 hidden sm:table-cell">负责人</th>
-                <th className="px-4 py-3 text-left font-medium text-custom-text-300 hidden md:table-cell">
-                  <button
-                    type="button"
-                    className="flex items-center gap-1 transition-colors hover:text-custom-text-200"
-                    onClick={() => handleSort("status")}
-                  >
-                    状态
-                    {renderSortIcon("status")}
-                  </button>
-                </th>
-                <th className="px-4 py-3 text-left font-medium text-custom-text-300 hidden md:table-cell">权限</th>
-                <th className="px-4 py-3 text-left font-medium text-custom-text-300 hidden md:table-cell">
-                  工作项进度
-                </th>
-                <th className="px-4 py-3 text-left font-medium text-custom-text-300 hidden lg:table-cell">
-                  <button
-                    type="button"
-                    className="flex items-center gap-1 transition-colors hover:text-custom-text-200"
-                    onClick={() => handleSort("created_at")}
-                  >
-                    创建时间
-                    {renderSortIcon("created_at")}
-                  </button>
-                </th>
-                <th className="px-4 py-3 text-left font-medium text-custom-text-300">操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              {currentPageProjects.map((project) => {
-              const isArchived = !!project.archived_at;
-              const analytics = getProjectAnalyticsCountById(project.id) as
-                | {
-                    completed_issues?: number;
-                    total_issues?: number;
-                  }
-                | undefined;
-              const analyze = workItemStatsMap[project.id];
-              const projectLeadId =
-                typeof project.project_lead === "string" ? project.project_lead : project.project_lead?.id ?? null;
-              const projectLead =
-                typeof project.project_lead === "string"
-                  ? getUserDetails(project.project_lead)
-                  : project.project_lead ?? undefined;
+    <>
+      {publishProjectId && (
+        <PublishProjectModal
+          isOpen={!!publishProjectId}
+          projectId={publishProjectId}
+          onClose={() => setPublishProjectId(null)}
+        />
+      )}
+      {archiveProjectId && workspaceSlugString && (
+        <ArchiveRestoreProjectModal
+          isOpen={!!archiveProjectId}
+          projectId={archiveProjectId}
+          onClose={() => setArchiveProjectId(null)}
+          workspaceSlug={workspaceSlugString}
+          archive
+        />
+      )}
+      <ContentWrapper variant={ERowVariant.HUGGING} className="overflow-hidden">
+        <div className="w-full h-full rounded border border-custom-border-200 bg-custom-background-100 m-0 flex flex-col overflow-hidden">
+          <div className="flex-1 min-h-0 overflow-auto vertical-scrollbar scrollbar-lg">
+            <table className="min-w-[980px] w-full text-sm">
+              <thead className="border-b border-custom-border-200 bg-custom-background-100">
+                <tr>
+                  <th className="px-4 py-3 text-left font-medium text-custom-text-300">
+                    <button
+                      type="button"
+                      className="flex items-center gap-1 transition-colors hover:text-custom-text-200"
+                      onClick={() => handleSort("name")}
+                    >
+                      项目名称
+                      {renderSortIcon("name")}
+                    </button>
+                  </th>
+                  <th className="px-4 py-3 text-left font-medium text-custom-text-300 hidden sm:table-cell">负责人</th>
+                  <th className="px-4 py-3 text-left font-medium text-custom-text-300 hidden md:table-cell">
+                    <button
+                      type="button"
+                      className="flex items-center gap-1 transition-colors hover:text-custom-text-200"
+                      onClick={() => handleSort("status")}
+                    >
+                      状态
+                      {renderSortIcon("status")}
+                    </button>
+                  </th>
+                  <th className="px-4 py-3 text-left font-medium text-custom-text-300 hidden md:table-cell">
+                    进度
+                  </th>
+                  <th className="px-4 py-3 text-left font-medium text-custom-text-300 hidden md:table-cell">
+                    缺陷数量
+                  </th>
+                  <th className="px-4 py-3 text-left font-medium text-custom-text-300 hidden md:table-cell">
+                    迭代数量
+                  </th>
+                  <th className="px-4 py-3 text-left font-medium text-custom-text-300 hidden lg:table-cell">
+                    <button
+                      type="button"
+                      className="flex items-center gap-1 transition-colors hover:text-custom-text-200"
+                      onClick={() => handleSort("created_at")}
+                    >
+                      创建时间
+                      {renderSortIcon("created_at")}
+                    </button>
+                  </th>
+                  <th className="px-4 py-3 text-left font-medium text-custom-text-300">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                {currentPageProjects.map((project) => {
+                  const isArchived = !!project.archived_at;
+                  const canManageProject = allowPermissions(
+                    [EUserPermissions.ADMIN],
+                    EUserPermissionsLevel.PROJECT,
+                    workspaceSlugString,
+                    project.id
+                  );
+                  const projectLeadId =
+                    typeof project.project_lead === "string" ? project.project_lead : project.project_lead?.id ?? null;
+                  const projectLead =
+                    typeof project.project_lead === "string"
+                      ? getUserDetails(project.project_lead)
+                      : project.project_lead ?? undefined;
 
-              const completedWorkItems = Number(
-                analyze?.completed_work_items?.count ?? analytics?.completed_issues ?? 0
-              );
-              const totalWorkItems = Number(analyze?.total_work_items?.count ?? analytics?.total_issues ?? 0);
-              const completionPercentage =
-                totalWorkItems > 0
-                  ? Math.min(100, Math.max(0, Math.round((completedWorkItems / totalWorkItems) * 100)))
-                  : 0;
-              const startedCount = Number(analyze?.started_work_items?.count ?? 0);
-              const backlogCount = Number(analyze?.backlog_work_items?.count ?? 0);
-              const unstartedCount = Number(analyze?.un_started_work_items?.count ?? 0);
-              const cancelledCount = Number(analyze?.cancelled_work_items?.count ?? 0);
+                  const completedWorkItems = Number(project.completed_work_items ?? 0);
+                  const totalWorkItems = Number(project.total_work_items ?? 0);
+                  const completionPercentage =
+                    totalWorkItems > 0
+                      ? Math.min(100, Math.max(0, Math.round((completedWorkItems / totalWorkItems) * 100)))
+                      : 0;
+                  const startedCount = Number(project.started_work_items ?? 0);
+                  const backlogCount = Number(project.backlog_work_items ?? 0);
+                  const unstartedCount = Number(project.un_started_work_items ?? 0);
+                  const cancelledCount = Number(project.cancelled_work_items ?? 0);
 
-              const progressData = [
-                { id: "completed", name: "已完成", value: completedWorkItems, color: "#92eca7" },
-                {
-                  id: "remaining",
-                  name: "未完成",
-                  value: Math.max(totalWorkItems - completedWorkItems, 0),
-                  color: "#ebedf2",
-                },
-              ];
-
-              return (
-                <tr
-                  key={project.id}
-                  className={cn("border-b border-custom-border-200 last:border-b-0 hover:bg-custom-background-80", {
-                    "bg-custom-background-90": isArchived,
-                    "opacity-70": isArchived,
-                  })}
-                >
+                  return (
+                    <tr
+                      key={project.id}
+                      className={cn("border-b border-custom-border-200 last:border-b-0 hover:bg-custom-background-80", {
+                        "bg-custom-background-90": isArchived,
+                        "opacity-70": isArchived,
+                      })}
+                    >
                   <td className="px-4 py-3">
                     <Link
                       href={workspaceSlugString ? `/${workspaceSlugString}/projects/${project.id}/issues` : "#"}
@@ -497,96 +473,52 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
                     </span>
                   </td>
                   <td className="px-4 py-3 hidden md:table-cell">
-                    {project.network === 2 ? (
-                      <div className="flex items-center gap-2 truncate">
-                        <div className="grid w-5 flex-shrink-0 place-items-center">
-                          <Earth className="h-3 w-3" />
-                        </div>
-                        <div
-                          className={cn("flex-grow truncate text-xs", {
-                            "text-custom-text-200": !isArchived,
-                            "text-custom-text-400": isArchived,
-                          })}
-                        >
-                          公开
-                        </div>
-                      </div>
-                    ) : project.network === 0 ? (
-                      <div className="flex items-center gap-2 truncate">
-                        <div className="grid w-5 flex-shrink-0 place-items-center">
-                          <Lock className="h-3 w-3" />
-                        </div>
-                        <div
-                          className={cn("flex-grow truncate text-xs", {
-                            "text-custom-text-200": !isArchived,
-                            "text-custom-text-400": isArchived,
-                          })}
-                        >
-                          私有
-                        </div>
-                      </div>
+                    {totalWorkItems > 0 ? (
+                      <Tooltip
+                        tooltipContent={
+                          <div className="flex flex-col gap-1 text-xs">
+                            <div className="flex items-center justify-between gap-6">
+                              <span className="text-custom-text-200">Backlog</span>
+                              <span className="text-custom-text-300 tabular-nums">{backlogCount}</span>
+                            </div>
+                            <div className="flex items-center justify-between gap-6">
+                              <span className="text-custom-text-200">Unstarted</span>
+                              <span className="text-custom-text-300 tabular-nums">{unstartedCount}</span>
+                            </div>
+                            <div className="flex items-center justify-between gap-6">
+                              <span className="text-custom-text-200">Started</span>
+                              <span className="text-custom-text-300 tabular-nums">{startedCount}</span>
+                            </div>
+                            <div className="flex items-center justify-between gap-6">
+                              <span className="text-custom-text-200">Completed</span>
+                              <span className="text-custom-text-300 tabular-nums">{completedWorkItems}</span>
+                            </div>
+                            <div className="flex items-center justify-between gap-6">
+                              <span className="text-custom-text-200">Cancelled</span>
+                              <span className="text-custom-text-300 tabular-nums">{cancelledCount}</span>
+                            </div>
+                            <div className="h-px w-full bg-custom-border-200 my-1" />
+                            <div className="flex items-center justify-between gap-6">
+                              <span className="text-custom-text-200">Total</span>
+                              <span className="text-custom-text-300 tabular-nums">{totalWorkItems}</span>
+                            </div>
+                          </div>
+                        }
+                        position="top"
+                      >
+                        <span className="text-xs text-custom-text-300 tabular-nums">
+                          {completionPercentage}%
+                        </span>
+                      </Tooltip>
                     ) : (
                       <span className="text-custom-text-300">-</span>
                     )}
                   </td>
-                  <td className="px-4 py-3 hidden md:table-cell">
-                    {totalWorkItems > 0 ? (
-                      <div className="flex items-center gap-3">
-                        <div className="w-36">
-                          <Tooltip
-                            tooltipContent={
-                              analyze === undefined ? (
-                                <div className="text-xs text-custom-text-300">加载中...</div>
-                              ) : (
-                                <div className="flex flex-col gap-1 text-xs">
-                                  <div className="flex items-center justify-between gap-6">
-                                    <span className="text-custom-text-200">Backlog</span>
-                                    <span className="text-custom-text-300 tabular-nums">
-                                      {analyze ? backlogCount : "-"}
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center justify-between gap-6">
-                                    <span className="text-custom-text-200">Unstarted</span>
-                                    <span className="text-custom-text-300 tabular-nums">
-                                      {analyze ? unstartedCount : "-"}
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center justify-between gap-6">
-                                    <span className="text-custom-text-200">Started</span>
-                                    <span className="text-custom-text-300 tabular-nums">
-                                      {analyze ? startedCount : "-"}
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center justify-between gap-6">
-                                    <span className="text-custom-text-200">Completed</span>
-                                    <span className="text-custom-text-300 tabular-nums">{completedWorkItems}</span>
-                                  </div>
-                                  <div className="flex items-center justify-between gap-6">
-                                    <span className="text-custom-text-200">Cancelled</span>
-                                    <span className="text-custom-text-300 tabular-nums">
-                                      {analyze ? cancelledCount : "-"}
-                                    </span>
-                                  </div>
-                                  <div className="h-px w-full bg-custom-border-200 my-1" />
-                                  <div className="flex items-center justify-between gap-6">
-                                    <span className="text-custom-text-200">Total</span>
-                                    <span className="text-custom-text-300 tabular-nums">{totalWorkItems}</span>
-                                  </div>
-                                </div>
-                              )
-                            }
-                            position="top"
-                          >
-                            <div>
-                              <LinearProgressIndicator noTooltip size="sm" data={progressData} />
-                            </div>
-                          </Tooltip>
-                        </div>
-                        <span className="text-xs text-custom-text-300 tabular-nums">{completionPercentage}%</span>
-                      </div>
-                    ) : (
-                      <span className="text-custom-text-300">-</span>
-                    )}
+                  <td className="px-4 py-3 text-custom-text-300 hidden md:table-cell tabular-nums">
+                    {project.bug_count ?? "-"}
+                  </td>
+                  <td className="px-4 py-3 text-custom-text-300 hidden md:table-cell tabular-nums">
+                    {project.cycle_count ?? "-"}
                   </td>
                   <td className="px-4 py-3 text-custom-text-300 hidden lg:table-cell">
                     {project.created_at ? renderFormattedDate(project.created_at) : "-"}
@@ -635,22 +567,68 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
                           <Star className="transition-all h-3 w-3" fill={project.is_favorite ? "currentColor" : "none"} />
                         </button>
                       </Tooltip>
+                      <Tooltip
+                        tooltipContent={
+                          <div className="text-xs text-custom-text-200">
+                            {isArchived ? "已归档不可发布" : canManageProject ? "发布项目" : "无权限发布"}
+                          </div>
+                        }
+                        position="top"
+                      >
+                        <button
+                          type="button"
+                          disabled={isArchived || !canManageProject}
+                          className={cn(
+                            "grid h-6 w-6 place-items-center rounded text-custom-text-300 transition-colors",
+                            isArchived || !canManageProject
+                              ? "cursor-not-allowed opacity-50"
+                              : "hover:text-custom-text-200 hover:bg-custom-background-80"
+                          )}
+                          aria-label="发布项目"
+                          onClick={(e) => handleOpenPublishModal(e, project.id)}
+                        >
+                          <Globe2 className="h-3 w-3" />
+                        </button>
+                      </Tooltip>
+                      <Tooltip
+                        tooltipContent={
+                          <div className="text-xs text-custom-text-200">
+                            {isArchived ? "已归档" : canManageProject ? "归档" : "无权限归档"}
+                          </div>
+                        }
+                        position="top"
+                      >
+                        <button
+                          type="button"
+                          disabled={isArchived || !canManageProject}
+                          className={cn(
+                            "grid h-6 w-6 place-items-center rounded text-custom-text-300 transition-colors",
+                            isArchived || !canManageProject
+                              ? "cursor-not-allowed opacity-50"
+                              : "hover:text-custom-text-200 hover:bg-custom-background-80"
+                          )}
+                          aria-label="归档项目"
+                          onClick={(e) => handleOpenArchiveModal(e, project.id)}
+                        >
+                          <Archive className="h-3 w-3" />
+                        </button>
+                      </Tooltip>
                       <Tooltip tooltipContent={<div className="text-xs text-custom-text-200">设置</div>} position="top">
-                         <Link
-                            className="flex items-center justify-center rounded p-1 text-custom-text-400 hover:bg-custom-background-80 hover:text-custom-text-200"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                            }}
-                            href={`/${workspaceSlug}/settings/projects/${project.id}`}
-                    >
-                      <Settings className="h-3.5 w-3.5" />
-                    </Link>
+                        <Link
+                          className="flex items-center justify-center rounded p-1 text-custom-text-400 hover:bg-custom-background-80 hover:text-custom-text-200"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                          }}
+                          href={`/${workspaceSlug}/settings/projects/${project.id}`}
+                        >
+                          <Settings className="h-3.5 w-3.5" />
+                        </Link>
                       </Tooltip>
                     </div>
                   </td>
                 </tr>
               );
-              })}
+                })}
             </tbody>
           </table>
         </div>
@@ -674,5 +652,6 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
         </div>
       </div>
     </ContentWrapper>
+    </>
   );
 });

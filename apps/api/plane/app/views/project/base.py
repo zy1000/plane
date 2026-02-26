@@ -7,7 +7,8 @@ import json
 
 # Django imports
 from django.core.serializers.json import DjangoJSONEncoder
-from django.db.models import Exists, F, OuterRef, Prefetch, Q, Subquery, Count
+from django.db.models import Count, Exists, F, IntegerField, OuterRef, Prefetch, Q, Subquery, Value
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 from rest_framework.decorators import action
 
@@ -31,6 +32,7 @@ from plane.db.models import (
     DeployBoard,
     Intake,
     Project,
+    Cycle,
     ProjectIdentifier,
     ProjectMember,
     ProjectNetwork,
@@ -38,7 +40,7 @@ from plane.db.models import (
     State,
     DEFAULT_STATES,
     Workspace,
-    WorkspaceMember, IssueActivity,
+    WorkspaceMember, IssueActivity, Issue,
 )
 from plane.db.models.intake import IntakeIssueStatus
 from plane.utils.host import base_host
@@ -169,6 +171,94 @@ class ProjectViewSet(BaseViewSet):
             )
             .annotate(inbox_view=F("intake_view"))
             .annotate(sort_order=Subquery(sort_order))
+            .annotate(
+                bug_count=Coalesce(
+                    Subquery(
+                        Issue.objects.filter(project_id=OuterRef("pk"), type__name="缺陷")
+                        .values("project_id")
+                        .annotate(count=Count("id"))
+                        .values("count")
+                    ),
+                    Value(0, output_field=IntegerField()),
+                )
+            )
+            .annotate(
+                cycle_count=Coalesce(
+                    Subquery(
+                        Cycle.objects.filter(project_id=OuterRef("pk"), archived_at__isnull=True)
+                        .values("project_id")
+                        .annotate(count=Count("id"))
+                        .values("count")
+                    ),
+                    Value(0, output_field=IntegerField()),
+                )
+            )
+            .annotate(
+                total_work_items=Coalesce(
+                    Subquery(
+                        Issue.issue_objects.filter(project_id=OuterRef("pk"))
+                        .values("project_id")
+                        .annotate(count=Count("id"))
+                        .values("count")
+                    ),
+                    Value(0, output_field=IntegerField()),
+                )
+            )
+            .annotate(
+                started_work_items=Coalesce(
+                    Subquery(
+                        Issue.issue_objects.filter(project_id=OuterRef("pk"), state__group="started")
+                        .values("project_id")
+                        .annotate(count=Count("id"))
+                        .values("count")
+                    ),
+                    Value(0, output_field=IntegerField()),
+                )
+            )
+            .annotate(
+                backlog_work_items=Coalesce(
+                    Subquery(
+                        Issue.issue_objects.filter(project_id=OuterRef("pk"), state__group="backlog")
+                        .values("project_id")
+                        .annotate(count=Count("id"))
+                        .values("count")
+                    ),
+                    Value(0, output_field=IntegerField()),
+                )
+            )
+            .annotate(
+                un_started_work_items=Coalesce(
+                    Subquery(
+                        Issue.issue_objects.filter(project_id=OuterRef("pk"), state__group="unstarted")
+                        .values("project_id")
+                        .annotate(count=Count("id"))
+                        .values("count")
+                    ),
+                    Value(0, output_field=IntegerField()),
+                )
+            )
+            .annotate(
+                completed_work_items=Coalesce(
+                    Subquery(
+                        Issue.issue_objects.filter(project_id=OuterRef("pk"), state__group="completed")
+                        .values("project_id")
+                        .annotate(count=Count("id"))
+                        .values("count")
+                    ),
+                    Value(0, output_field=IntegerField()),
+                )
+            )
+            .annotate(
+                cancelled_work_items=Coalesce(
+                    Subquery(
+                        Issue.issue_objects.filter(project_id=OuterRef("pk"), state__group="cancelled")
+                        .values("project_id")
+                        .annotate(count=Count("id"))
+                        .values("count")
+                    ),
+                    Value(0, output_field=IntegerField()),
+                )
+            )
             .distinct()
         ).values(
             "id",
@@ -192,6 +282,14 @@ class ProjectViewSet(BaseViewSet):
             "updated_at",
             "created_by",
             "updated_by",
+            "bug_count",
+            "cycle_count",
+            "total_work_items",
+            "started_work_items",
+            "backlog_work_items",
+            "un_started_work_items",
+            "completed_work_items",
+            "cancelled_work_items",
         )
 
         if WorkspaceMember.objects.filter(

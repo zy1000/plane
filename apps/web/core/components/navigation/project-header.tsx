@@ -96,17 +96,27 @@ export const ProjectHeader = observer(function ProjectHeader(props: TProjectHead
     [currentProjectDetails?.id, router, workspaceSlug, validatedDefaultTabKey]
   );
 
+  const handleProjectsClick = useCallback(() => {
+    router.push(`/${workspaceSlug}/projects/`);
+  }, [router, workspaceSlug]);
+
   // Early return if no project details
   if (!currentProjectDetails) return null;
 
   return (
-    <CustomSearchSelect
-      options={switcherOptions}
-      value={currentProjectDetails.id}
-      onChange={handleProjectChange}
-      customButton={currentProjectDetails ? <ProjectHeaderButton project={currentProjectDetails} /> : null}
-      className="h-full rounded"
-      customButtonClassName="group flex items-center gap-0.5 rounded-sm hover:bg-surface-2 outline-none cursor-pointer h-full"
-    />
+    <>
+      <button type="button" onClick={handleProjectsClick} className="cursor-pointer">
+        项目管理
+      </button>
+      <div className="shrink-0 h-5 w-1 border-l border-custom-border-200 mx-2" />
+      <CustomSearchSelect
+        options={switcherOptions}
+        value={currentProjectDetails.id}
+        onChange={handleProjectChange}
+        customButton={currentProjectDetails ? <ProjectHeaderButton project={currentProjectDetails} /> : null}
+        className="h-full rounded"
+        customButtonClassName="group flex items-center gap-0.5 rounded-sm hover:bg-surface-2 outline-none cursor-pointer h-full"
+      />
+    </>
   );
 });

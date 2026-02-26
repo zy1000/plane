@@ -271,26 +271,9 @@ export const CustomizeNavigationDialog = observer(function CustomizeNavigationDi
                     <input
                       type="radio"
                       name="navigation-mode"
-                      value="ACCORDION"
-                      checked={projectPreferences.navigationMode === "ACCORDION"}
-                      onChange={() => updateNavigationMode("ACCORDION")}
-                      className="mt-1 size-4 text-accent-primary focus:ring-accent-strong"
-                    />
-                    <div className="flex-1">
-                      <div className="text-13 text-primary">{t("accordion_navigation_control")}</div>
-                      <div className="text-11 text-secondary">
-                        Feature tabs will appear as nested items under project and acts as accordion.
-                      </div>
-                    </div>
-                  </label>
-
-                  <label className="flex cursor-pointer gap-2 rounded-md px-2 py-1.5 hover:bg-surface-2">
-                    <input
-                      type="radio"
-                      name="navigation-mode"
-                      value="TABBED"
-                      checked={projectPreferences.navigationMode === "TABBED"}
-                      onChange={() => updateNavigationMode("TABBED")}
+                      value="horizontal"
+                      checked={projectPreferences.navigationMode === "horizontal"}
+                      onChange={() => updateNavigationMode("horizontal")}
                       className="mt-1 size-4 text-accent-primary focus:ring-accent-strong"
                     />
                     <div className="flex-1">
