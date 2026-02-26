@@ -401,7 +401,7 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
                     >
                   <td className="px-4 py-3">
                     <Link
-                      href={workspaceSlugString ? `/${workspaceSlugString}/projects/${project.id}/issues` : "#"}
+                      href={workspaceSlugString ? `/${workspaceSlugString}/projects/${project.id}/overview` : "#"}
                       className="flex items-center gap-2 text-custom-text-100"
                       data-prevent-progress={isArchived}
                       onClick={(e) => {
