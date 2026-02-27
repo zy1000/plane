@@ -90,10 +90,11 @@ export const ProjectHeader = observer(function ProjectHeader(props: TProjectHead
   const handleProjectChange = useCallback(
     (value: string) => {
       if (value !== currentProjectDetails?.id) {
-        router.push(getTabUrl(workspaceSlug, value, validatedDefaultTabKey));
+        const destinationTabKey = availableTabKeys.includes("overview") ? "overview" : validatedDefaultTabKey;
+        router.push(getTabUrl(workspaceSlug, value, destinationTabKey));
       }
     },
-    [currentProjectDetails?.id, router, workspaceSlug, validatedDefaultTabKey]
+    [currentProjectDetails?.id, router, workspaceSlug, availableTabKeys, validatedDefaultTabKey]
   );
 
   const handleProjectsClick = useCallback(() => {
