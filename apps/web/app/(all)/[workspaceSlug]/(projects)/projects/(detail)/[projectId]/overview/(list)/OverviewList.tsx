@@ -33,7 +33,7 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
   const [announcements, setAnnouncements] = useState<TProjectAnnouncement[]>([]);
   const [isLoadingAnnouncements, setIsLoadingAnnouncements] = useState(false);
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [pageSize] = useState(5);
   const [totalCount, setTotalCount] = useState(0);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
@@ -110,7 +110,7 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
     <div className="w-full p-2">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
         <div className="flex flex-col gap-6">
-          <div className="bg-custom-background-100 border border-custom-border-200 rounded-lg shadow-custom-shadow-md p-4 h-[300px] flex flex-col">
+          <div className="bg-custom-background-100 border border-custom-border-200 rounded-lg shadow-custom-shadow-md p-4 h-[340px] flex flex-col">
             <div className="flex-1 overflow-y-auto">
               <ProjectProperties workspaceSlug={workspaceSlug} projectId={project.id} />
             </div>
@@ -121,7 +121,7 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
             </div>
           </div>
 
-          <div className="bg-custom-background-100 border border-custom-border-200 rounded-lg shadow-custom-shadow-md p-4 h-[600px] flex flex-col">
+          <div className="bg-custom-background-100 border border-custom-border-200 rounded-lg shadow-custom-shadow-md p-4 h-[560px] flex flex-col">
             <div className="flex items-center justify-between mb-3">
               <h4 className="text-lg font-medium text-custom-text-200">项目描述</h4>
               {isSubmitting === "submitting" && <div className="text-xs text-custom-text-400">保存中...</div>}
@@ -140,7 +140,7 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
         </div>
 
         <div className="flex flex-col gap-6">
-                    <div className="bg-custom-background-100 border border-custom-border-200 rounded-lg shadow-custom-shadow-md p-4 min-h-[400px] flex flex-col">
+                    <div className="bg-custom-background-100 border border-custom-border-200 rounded-lg shadow-custom-shadow-md p-4 min-h-[300px] flex flex-col">
             <div className="flex items-center justify-between mb-3">
               <h4 className="text-lg font-medium text-custom-text-200">项目公告</h4>
               <Button
@@ -212,27 +212,29 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
                 </TableBody>
               </Table>
             </div>
-            <div className="mt-3 flex justify-end">
+            <div className="flex-shrink-0 border-t border-custom-border-200 px-4 py-3 bg-custom-background-100 flex items-center justify-between">
+              <div className="flex items-center gap-4 text-sm">
+                <span className="text-custom-text-300">
+                  {totalCount > 0
+                    ? `第 ${(page - 1) * pageSize + 1}-${Math.min(page * pageSize, totalCount)} 条，共 ${totalCount} 条`
+                    : ""}
+                </span>
+              </div>
               <Pagination
+                simple
                 current={page}
                 pageSize={pageSize}
                 total={totalCount}
-                showSizeChanger
                 showQuickJumper
-                onChange={(p, size) => {
+                onChange={(p) => {
                   setPage(p);
-                  if (size && size !== pageSize) setPageSize(size);
                 }}
-                onShowSizeChange={(_c, size) => {
-                  setPage(1);
-                  setPageSize(size);
-                }}
-                showTotal={(t, range) => `第 ${range[0]}-${range[1]} 条，共 ${t} 条`}
+                size="small"
               />
             </div>
           </div>
           
-          <div className="bg-custom-background-100 border border-custom-border-200 rounded-lg shadow-custom-shadow-md p-4 h-[500px] flex flex-col">
+          <div className="bg-custom-background-100 border border-custom-border-200 rounded-lg shadow-custom-shadow-md p-4 h-[560px] flex flex-col">
             <div className="flex items-center justify-between mb-3 flex-shrink-0">
               <h4 className="text-lg font-medium text-custom-text-200">活动</h4>
             </div>

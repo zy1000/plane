@@ -85,6 +85,7 @@ export const CreateAnnouncementModal = ({
             value={createForm.name}
             onChange={(e) => setCreateForm((prev) => ({ ...prev, name: e.target.value }))}
             placeholder="请输入公告标题"
+            className="w-full"
           />
         </div>
         <div className="space-y-2">

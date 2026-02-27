@@ -4,11 +4,14 @@
 
 # Python imports
 import json
+from datetime import date, timedelta
+
+import pytz
 
 # Django imports
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db.models import Count, Exists, F, IntegerField, OuterRef, Prefetch, Q, Subquery, Value
-from django.db.models.functions import Coalesce
+from django.db.models.functions import Coalesce, TruncDate
 from django.utils import timezone
 from rest_framework.decorators import action
 
@@ -40,7 +43,14 @@ from plane.db.models import (
     State,
     DEFAULT_STATES,
     Workspace,
-    WorkspaceMember, IssueActivity, Issue,
+    WorkspaceMember,
+    IssueActivity,
+    Issue,
+    Module,
+    TestPlan,
+    CaseReview,
+    TestCaseRepository,
+    TestCase,
 )
 from plane.db.models.intake import IntakeIssueStatus
 from plane.utils.host import base_host
@@ -711,4 +721,340 @@ class ProjectAPI(BaseViewSet):
             request=request,
             queryset=queryset,
             on_results=lambda issue_activities: IssueActivitySerializer(issue_activities, many=True).data,
+        )
+
+    @action(detail=False, methods=['get'], url_path='statistic')
+    def get_statistic(self, request, slug):
+        project_id = request.query_params.get('project_id')
+        if not project_id:
+            return Response({'error': 'project_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not ProjectMember.objects.filter(
+                workspace__slug=slug,
+                project_id=project_id,
+                member_id=request.user.id,
+                is_active=True,
+        ).exists():
+            return Response({'error': 'forbidden'}, status=status.HTTP_403_FORBIDDEN)
+
+        start_date_param = request.query_params.get('start_date')
+        end_date_param = request.query_params.get('end_date')
+
+        today = timezone.now().date()
+        try:
+            end_date = date.fromisoformat(end_date_param) if end_date_param else today
+            start_date = date.fromisoformat(start_date_param) if start_date_param else (end_date - timedelta(days=29))
+        except ValueError:
+            return Response({'error': 'invalid start_date/end_date'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if start_date > end_date:
+            return Response({'error': 'start_date must be <= end_date'}, status=status.HTTP_400_BAD_REQUEST)
+
+        defect_type_names = ['缺陷', 'Bug', 'bug']
+
+        base_issue_qs = Issue.objects.filter(
+            workspace__slug=slug,
+            project_id=project_id,
+            archived_at__isnull=True,
+            deleted_at__isnull=True,
+            is_draft=False,
+        ).select_related('type', 'state')
+
+        in_progress_requirements = base_issue_qs.exclude(type__name__in=defect_type_names).exclude(
+            state__group='completed'
+        ).count()
+        total_requirements = base_issue_qs.exclude(type__name__in=defect_type_names).count()
+        pending_defects = base_issue_qs.filter(type__name__in=defect_type_names).exclude(state__group='completed').count()
+
+        requirement_qs = base_issue_qs.exclude(type__name__in=defect_type_names)
+        defect_qs = base_issue_qs.filter(type__name__in=defect_type_names)
+        total_defects = defect_qs.count()
+
+        test_repository_ids = list(
+            TestCaseRepository.objects.filter(
+                project_id=project_id,
+                workspace__slug=slug,
+                deleted_at__isnull=True,
+            ).values_list('id', flat=True)
+        )
+        total_cases = (
+            TestCase.objects.filter(repository_id__in=test_repository_ids, deleted_at__isnull=True).count()
+            if test_repository_ids
+            else 0
+        )
+
+        req_created_before = requirement_qs.filter(created_at__date__lt=start_date).count()
+        req_completed_before = requirement_qs.filter(completed_at__isnull=False, completed_at__date__lt=start_date).count()
+
+        req_created_daily = {
+            row['day']: row['count']
+            for row in requirement_qs.filter(created_at__date__range=(start_date, end_date))
+            .annotate(day=TruncDate('created_at'))
+            .values('day')
+            .annotate(count=Count('id'))
+        }
+        req_completed_daily = {
+            row['day']: row['count']
+            for row in requirement_qs.filter(completed_at__isnull=False, completed_at__date__range=(start_date, end_date))
+            .annotate(day=TruncDate('completed_at'))
+            .values('day')
+            .annotate(count=Count('id'))
+        }
+
+        requirement_daily_status = []
+        cum_created = req_created_before
+        cum_completed = req_completed_before
+        d = start_date
+        while d <= end_date:
+            cum_created += req_created_daily.get(d, 0)
+            cum_completed += req_completed_daily.get(d, 0)
+            requirement_daily_status.append(
+                {
+                    'date': d.isoformat(),
+                    'completed': cum_completed,
+                    'incomplete': max(cum_created - cum_completed, 0),
+                }
+            )
+            d += timedelta(days=1)
+
+        defect_created_daily = {
+            row['day']: row['count']
+            for row in defect_qs.filter(created_at__date__range=(start_date, end_date))
+            .annotate(day=TruncDate('created_at'))
+            .values('day')
+            .annotate(count=Count('id'))
+        }
+
+        defect_daily_created = []
+        d = start_date
+        while d <= end_date:
+            defect_daily_created.append({'date': d.isoformat(), 'created': defect_created_daily.get(d, 0)})
+            d += timedelta(days=1)
+
+        work_item_type_rows = (
+            base_issue_qs.values('type_id', 'type__name', 'type__logo_props', 'state__group')
+            .annotate(count=Count('id'))
+            .order_by()
+        )
+        work_item_stats_map = {}
+        for row in work_item_type_rows:
+            type_id = row.get('type_id') or 'none'
+            name = row.get('type__name') or '未指定类型'
+            logo_props = row.get('type__logo_props') or {}
+            group = row.get('state__group') or 'unstarted'
+
+            if group == 'completed':
+                bucket = 'completed'
+            elif group == 'started':
+                bucket = 'started'
+            else:
+                bucket = 'unstarted'
+
+            if type_id not in work_item_stats_map:
+                work_item_stats_map[type_id] = {
+                    'type_id': type_id,
+                    'name': name,
+                    'logo_props': logo_props,
+                    'unstarted': 0,
+                    'started': 0,
+                    'completed': 0,
+                    'total': 0,
+                }
+
+            work_item_stats_map[type_id][bucket] += row.get('count') or 0
+            work_item_stats_map[type_id]['total'] += row.get('count') or 0
+
+        work_item_stats = sorted(work_item_stats_map.values(), key=lambda x: x['total'], reverse=True)
+
+        project = Project.objects.filter(workspace__slug=slug, id=project_id).first()
+        project_timezone = (project.timezone if project and project.timezone else 'UTC')
+        local_tz = pytz.timezone(project_timezone)
+        current_time_in_project_tz = timezone.now().astimezone(local_tz)
+        current_time_in_utc = current_time_in_project_tz.astimezone(pytz.utc)
+
+        cycles_queryset = (
+            Cycle.objects.filter(
+                workspace__slug=slug,
+                project_id=project_id,
+                archived_at__isnull=True,
+                project__project_projectmember__member=request.user,
+                project__project_projectmember__is_active=True,
+            )
+            .filter(start_date__lte=current_time_in_utc, end_date__gte=current_time_in_utc)
+            .annotate(
+                work_item_count=Count(
+                    'issue_cycle__issue__id',
+                    distinct=True,
+                    filter=Q(
+                        issue_cycle__issue__archived_at__isnull=True,
+                        issue_cycle__issue__is_draft=False,
+                        issue_cycle__deleted_at__isnull=True,
+                        issue_cycle__issue__deleted_at__isnull=True,
+                    ),
+                )
+            )
+            .order_by('start_date', 'name')
+        )
+
+        cycles_paginator = CustomPaginator()
+        cycles_paginator.page_size = 5
+        cycles_paginator.max_page_size = 5
+        paginated_cycles = cycles_paginator.paginate_queryset(cycles_queryset, request)
+
+        cycles_data = [
+            {
+                'id': str(cycle.id),
+                'name': cycle.name,
+                'start_date': cycle.start_date.isoformat() if cycle.start_date else None,
+                'end_date': cycle.end_date.isoformat() if cycle.end_date else None,
+                'status': 'CURRENT',
+                'work_item_count': getattr(cycle, 'work_item_count', 0) or 0,
+            }
+            for cycle in (paginated_cycles or [])
+        ]
+
+        release_page_param = request.query_params.get('release_page')
+        try:
+            release_page = int(release_page_param) if release_page_param else 1
+            if release_page < 1:
+                raise ValueError
+        except ValueError:
+            return Response({'error': 'invalid release_page'}, status=status.HTTP_400_BAD_REQUEST)
+
+        release_page_size = 5
+        release_offset = (release_page - 1) * release_page_size
+        release_limit = release_offset + release_page_size
+
+        releases_queryset = (
+            Module.objects.filter(
+                project_id=project_id,
+                deleted_at__isnull=True,
+                archived_at__isnull=True,
+                status__in=['planned','in-progress']
+            )
+            .annotate(
+                work_item_count=Count(
+                    'issue_module__issue__id',
+                    distinct=True,
+                    filter=Q(
+                        issue_module__issue__archived_at__isnull=True,
+                        issue_module__issue__is_draft=False,
+                        issue_module__deleted_at__isnull=True,
+                        issue_module__issue__deleted_at__isnull=True,
+                    ),
+                )
+            )
+            .order_by('start_date', 'name')
+        )
+        releases_data = [
+            {
+                'id': str(module.id),
+                'name': module.name,
+                'start_date': module.start_date.isoformat() if module.start_date else None,
+                'end_date': module.target_date.isoformat() if module.target_date else None,
+                'status': module.status,
+                'work_item_count': getattr(module, 'work_item_count', 0) or 0,
+            }
+            for module in releases_queryset[release_offset:release_limit]
+        ]
+
+        plan_page_param = request.query_params.get('plan_page')
+        try:
+            plan_page = int(plan_page_param) if plan_page_param else 1
+            if plan_page < 1:
+                raise ValueError
+        except ValueError:
+            return Response({'error': 'invalid plan_page'}, status=status.HTTP_400_BAD_REQUEST)
+
+        plan_page_size = 5
+        plan_offset = (plan_page - 1) * plan_page_size
+        plan_limit = plan_offset + plan_page_size
+
+        test_plan_queryset = (
+            TestPlan.objects.filter(
+                project_id=project_id,
+                deleted_at__isnull=True,
+                state=TestPlan.State.PROGRESS,
+            )
+            .annotate(case_count=Count('cases', distinct=True))
+            .order_by('begin_time', 'name')
+        )
+
+        test_plan_data = [
+            {
+                'id': str(plan.id),
+                'name': plan.name,
+                'start_date': plan.begin_time.isoformat() if plan.begin_time else None,
+                'end_date': plan.end_time.isoformat() if plan.end_time else None,
+                'status': plan.state,
+                'case_count': getattr(plan, 'case_count', 0) or 0,
+            }
+            for plan in test_plan_queryset[plan_offset:plan_limit]
+        ]
+
+        review_page_param = request.query_params.get('review_page')
+        try:
+            review_page = int(review_page_param) if review_page_param else 1
+            if review_page < 1:
+                raise ValueError
+        except ValueError:
+            return Response({'error': 'invalid review_page'}, status=status.HTTP_400_BAD_REQUEST)
+
+        review_page_size = 5
+        review_offset = (review_page - 1) * review_page_size
+        review_limit = review_offset + review_page_size
+
+        case_review_queryset = (
+            CaseReview.objects.filter(
+                project_id=project_id,
+                deleted_at__isnull=True,
+                state=CaseReview.State.PROGRESS,
+            )
+            .annotate(case_count=Count('cases', distinct=True))
+            .order_by('started_at', 'name')
+        )
+
+        case_review_data = [
+            {
+                'id': str(review.id),
+                'name': review.name,
+                'start_date': review.started_at.isoformat() if review.started_at else None,
+                'end_date': review.ended_at.isoformat() if review.ended_at else None,
+                'status': review.state,
+                'case_count': getattr(review, 'case_count', 0) or 0,
+            }
+            for review in case_review_queryset[review_offset:review_limit]
+        ]
+
+        return Response(
+            {
+                'counts': {
+                    'in_progress_requirements': in_progress_requirements,
+                    'total_requirements': total_requirements,
+                    'pending_defects': pending_defects,
+                    'total_defects': total_defects,
+                    'total_cases': total_cases,
+                },
+                'cycles': {
+                    'count': cycles_queryset.count(),
+                    'data': cycles_data,
+                },
+                'releases': {
+                    'count': releases_queryset.count(),
+                    'data': releases_data,
+                },
+                'test_plans': {
+                    'count': test_plan_queryset.count(),
+                    'data': test_plan_data,
+                },
+                'case_reviews': {
+                    'count': case_review_queryset.count(),
+                    'data': case_review_data,
+                },
+                'requirement_daily_status': requirement_daily_status,
+                'defect_daily_created': defect_daily_created,
+                'work_item_stats': work_item_stats,
+                'range': {'start_date': start_date.isoformat(), 'end_date': end_date.isoformat()},
+            },
+            status=status.HTTP_200_OK,
         )
