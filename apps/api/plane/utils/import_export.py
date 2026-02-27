@@ -188,8 +188,32 @@ def parser_issue_file(files: list[InMemoryUploadedFile]) -> list:
         if (suffix := get_extension_without_dot(file.name)) in ['json']:
             result.extend(json.load(file))
         elif suffix in ['xlsx']:
-            data = parser_excel_issue(BytesIO(file.read()))
+            data = parser_issue_excel(BytesIO(file.read()),sheet_name='需求')
             result.extend(issue_data_build(data))
         else:
             raise Exception('不是支持的文件类型')
     return result
+
+
+def parser_issue_excel(file_path, mapping: dict = None, sheet_name='case') -> list[dict]:
+    mapping = mapping or {}
+    workbook = load_workbook(file_path)
+
+    # 选择工作表
+    if sheet_name:
+        worksheet = workbook[sheet_name]
+    else:
+        worksheet = workbook.active  # 默认活动工作表
+
+    # 获取第一行作为列标题
+    headers = [(mapping.get(cell.value) or cell.value) for cell in worksheet[1]]
+
+    # 读取数据行
+    data = []
+    for row in worksheet.iter_rows(min_row=2, values_only=True):
+        # 创建字典，跳过空行
+        if any(cell is not None for cell in row):
+            row_dict = dict(zip(headers, row))
+            data.append({key: value for key, value in row_dict.items() if (not mapping or (key in mapping.values()))})
+
+    return data

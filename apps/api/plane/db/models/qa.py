@@ -115,7 +115,9 @@ class TestCase(BaseModel):
         USABILITY = 3, '可用性测试'
         COMPATIBILITY = 4, '兼容性测试'
         REGRESSION = 5, '回归测试'
-        OTHER = 6, '其他'
+        INTEGRATION = 7, '集成测试'
+        OTHER = 99, '其他'
+
 
     class Priority(models.IntegerChoices):
         LOW = 0, '低'
