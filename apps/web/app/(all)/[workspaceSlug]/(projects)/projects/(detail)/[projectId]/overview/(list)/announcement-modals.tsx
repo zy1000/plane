@@ -94,7 +94,7 @@ export const CreateAnnouncementModal = ({
             onChange={(e) => setCreateForm((prev) => ({ ...prev, description: e.target.value }))}
             placeholder="请输入公告描述"
             rows={5}
-            className="min-h-[320px]"
+            className="min-h-[320px] max-h-[320px] overflow-y-auto vertical-scrollbar scrollbar-sm"
           />
         </div>
         <div className="flex justify-end gap-2">
@@ -148,7 +148,7 @@ export const AnnouncementDetailModal = ({
             value={localAnnouncement?.description?.trim() || ""}
             readOnly
             rows={5}
-            className="min-h-[120px]"
+            className="min-h-[120px] max-h-[320px] overflow-y-auto vertical-scrollbar scrollbar-sm"
           />
         </div>
         <div className="flex justify-end">
