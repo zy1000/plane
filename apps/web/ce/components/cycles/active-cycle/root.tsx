@@ -140,7 +140,6 @@ export const ActiveCycleRoot: React.FC<IActiveCycleDetails> = observer((props) =
           <DetailedEmptyState
             title={t("project_cycles.empty_state.active.title")}
             description={t("project_cycles.empty_state.active.description")}
-            assetPath={activeCycleResolvedPath}
           />
         ) : (
           <div className="flex flex-col">
