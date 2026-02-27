@@ -662,7 +662,7 @@ export default function CaseManagementReviewDetailPage() {
                             >
                               清除选择
                             </span>
-                            {/* <Popconfirm
+                            <Popconfirm
                               title="确定通过选中用例？"
                               onConfirm={async () => {
                                 if (!workspaceSlug || !reviewId) return;
@@ -697,7 +697,7 @@ export default function CaseManagementReviewDetailPage() {
                               >
                                 通过
                               </span>
-                            </Popconfirm> */}
+                            </Popconfirm>
                             <Popconfirm
                               title="确定取消关联选中用例？"
                               onConfirm={async () => {
