@@ -2,17 +2,15 @@
 
 import type { FC } from "react";
 import { observer } from "mobx-react";
-import { CalendarClock, CalendarCheck2, Users, UserCircle2, Globe, Lock, Signal } from "lucide-react";
+import { CalendarClock, Users, UserCircle2 } from "lucide-react";
 // i18n
 import { useTranslation } from "@plane/i18n";
 // ui icons
 import { DoubleCircleIcon } from "@plane/propel/icons";
-import { cn, getDate, renderFormattedPayloadDate } from "@plane/utils";
+import { renderFormattedPayloadDate } from "@plane/utils";
 // components
 import { DateDropdown } from "@/components/dropdowns/date";
-import { PriorityDropdown } from "@/components/dropdowns/priority";
 import { StateDropdown } from "@/components/dropdowns/state/dropdown";
-import { ButtonAvatars } from "@/components/dropdowns/member/avatar";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 // helpers
 import { useMember } from "@/hooks/store/use-member";
@@ -32,15 +30,10 @@ export const ProjectProperties: FC<IProjectProperties> = observer((props) => {
 
   // store hooks
   const { getProjectById, updateProject } = useProject();
-  const { getUserDetails } = useMember();
 
   // derived values
   const project = getProjectById(projectId);
   if (!project) return <></>;
-
-  const createdByDetails = project?.created_by ? getUserDetails(project.created_by) : null;
-  const projectLeadDetails =
-    typeof project.project_lead === "string" ? getUserDetails(project.project_lead) : project.project_lead;
 
   const handleProjectUpdate = async (data: Partial<TProject>) => {
     if (!disabled) {
@@ -50,7 +43,7 @@ export const ProjectProperties: FC<IProjectProperties> = observer((props) => {
 
   return (
     <div>
-      <h5 className="text-sm font-medium">{t("common.properties")}</h5>
+      <h5 className="text-lg font-medium">{t("common.properties")}</h5>
       <div className={`w-full grid grid-cols-2 gap-4 mt-3 ${disabled ? "opacity-60" : ""}`}>
         {/* 项目状态 */}
         <div className="flex w-full items-center gap-3 h-8">
@@ -71,25 +64,6 @@ export const ProjectProperties: FC<IProjectProperties> = observer((props) => {
             dropdownArrowClassName="h-3.5 w-3.5 hidden group-hover:inline"
           />
         </div>
-
-        {/* 项目优先级 */}
-        {/* <div className="flex w-full items-center gap-3 h-8">
-          <div className="flex items-center gap-1 w-1/3 flex-shrink-0 text-sm text-custom-text-300">
-            <Signal className="h-4 w-4 flex-shrink-0" />
-            <span>优先级</span>
-          </div>
-          <PriorityDropdown
-            value={project?.priority || "none"}
-            onChange={(val) => handleProjectUpdate({ priority: val })}
-            disabled={disabled}
-            buttonVariant="transparent-with-text"
-            className="w-2/3 flex-grow group"
-            buttonContainerClassName="w-full text-left"
-            buttonClassName="text-sm"
-            dropdownArrow
-            dropdownArrowClassName="h-3.5 w-3.5 hidden group-hover:inline"
-          />
-        </div> */}
 
         {/* 项目负责人 */}
         <div className="flex w-full items-center gap-3 h-8">

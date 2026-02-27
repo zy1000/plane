@@ -99,7 +99,7 @@ export const WorkItemStats: FC<TWorkItemStats> = observer((props) => {
     <div className="space-y-4">
       {/* 标题 */}
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium text-gray-700">进度</h3>
+        <h3 className="text-lg font-medium text-gray-700">进度</h3>
       </div>
 
       {/* 进度条 - 分离式设计 */}

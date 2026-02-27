@@ -123,7 +123,7 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
 
           <div className="bg-custom-background-100 border border-custom-border-200 rounded-lg shadow-custom-shadow-md p-4 h-[600px] flex flex-col">
             <div className="flex items-center justify-between mb-3">
-              <h4 className="text-sm font-medium text-custom-text-200">项目描述</h4>
+              <h4 className="text-lg font-medium text-custom-text-200">项目描述</h4>
               {isSubmitting === "submitting" && <div className="text-xs text-custom-text-400">保存中...</div>}
             </div>
             <div className="flex-1 min-h-0">
@@ -140,23 +140,9 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
         </div>
 
         <div className="flex flex-col gap-6">
-          <div className="bg-custom-background-100 border border-custom-border-200 rounded-lg shadow-custom-shadow-md p-4 h-[500px] flex flex-col">
-            <div className="flex items-center justify-between mb-3 flex-shrink-0">
-              <h4 className="text-sm font-medium text-custom-text-200">活动</h4>
-            </div>
-            <div className="flex-1 min-h-0 overflow-hidden">
-              <ProjectActivity
-                workspaceSlug={workspaceSlug}
-                projectId={project.id}
-                showHeading={false}
-                containerClassName="h-full overflow-y-auto vertical-scrollbar scrollbar-sm"
-              />
-            </div>
-          </div>
-
-          <div className="bg-custom-background-100 border border-custom-border-200 rounded-lg shadow-custom-shadow-md p-4 min-h-[400px] flex flex-col">
+                    <div className="bg-custom-background-100 border border-custom-border-200 rounded-lg shadow-custom-shadow-md p-4 min-h-[400px] flex flex-col">
             <div className="flex items-center justify-between mb-3">
-              <h4 className="text-sm font-medium text-custom-text-200">项目公告</h4>
+              <h4 className="text-lg font-medium text-custom-text-200">项目公告</h4>
               <Button
                 variant="primary"
                 size="sm"
@@ -171,10 +157,10 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-2/5">标题</TableHead>
-                    <TableHead className="w-1/5">创建人</TableHead>
-                    <TableHead className="w-1/4">创建时间</TableHead>
-                    <TableHead className="w-16 text-right">操作</TableHead>
+                    <TableHead className="w-2/5 text-left">标题</TableHead>
+                    <TableHead className="w-1/5 text-left">创建人</TableHead>
+                    <TableHead className="w-1/4 text-left">创建时间</TableHead>
+                    <TableHead className="w-16 text-left">操作</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -205,7 +191,7 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
                         </TableCell>
                         <TableCell>{creatorLabel(item.created_by)}</TableCell>
                         <TableCell>
-                          {item.created_at ? renderFormattedDate(getDate(item.created_at), "yyyy-MM-dd HH:mm:ss") : "-"}
+                          {item.created_at ? renderFormattedDate(getDate(item.created_at), "yyyy-MM-dd") : "-"}
                         </TableCell>
                         <TableCell className="text-right">
                           <Button
@@ -245,6 +231,22 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
               />
             </div>
           </div>
+          
+          <div className="bg-custom-background-100 border border-custom-border-200 rounded-lg shadow-custom-shadow-md p-4 h-[500px] flex flex-col">
+            <div className="flex items-center justify-between mb-3 flex-shrink-0">
+              <h4 className="text-lg font-medium text-custom-text-200">活动</h4>
+            </div>
+            <div className="flex-1 min-h-0 overflow-hidden">
+              <ProjectActivity
+                workspaceSlug={workspaceSlug}
+                projectId={project.id}
+                showHeading={false}
+                containerClassName="h-full overflow-y-auto vertical-scrollbar scrollbar-sm"
+              />
+            </div>
+          </div>
+
+
         </div>
       </div>
       <CreateAnnouncementModal
