@@ -93,7 +93,7 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
   );
 
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [pageSize, setPageSize] = useState(20);
   const [sortKey, setSortKey] = useState<TSortKey>("created_at");
   const [sortDirection, setSortDirection] = useState<TSortDirection>("desc");
   const [publishProjectId, setPublishProjectId] = useState<string | null>(null);

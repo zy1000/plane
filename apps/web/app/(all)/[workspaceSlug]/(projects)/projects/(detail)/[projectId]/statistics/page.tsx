@@ -172,13 +172,13 @@ export default function ProjectStatisticsPage() {
 
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
               <div className="bg-custom-background-100 border border-custom-border-200 rounded-lg shadow-custom-shadow-md p-4 min-h-[300px] flex flex-col">
-                <div>
+                <div className="flex items-baseline gap-2">
                   <div className="text-lg font-medium text-custom-text-200">进行中的迭代</div>
-                  <div className="mt-0.5 text-xs text-custom-text-400">{`共 ${data?.cycles?.count ?? 0} 个进行中的迭代`}</div>
+                  <div className="text-xs text-custom-text-400">{`共 ${data?.cycles?.count ?? 0} 个进行中的迭代`}</div>
                 </div>
                 <div className="mt-3 flex-1 min-h-0 overflow-hidden">
                   <Table>
-                    <TableHeader>
+                    <TableHeader className="bg-transparent border-b border-custom-border-200 border-t-0">
                       <TableRow>
                         <TableHead className="w-1/3 text-left">名称</TableHead>
                         <TableHead className="w-1/3 text-left">日期</TableHead>
@@ -246,13 +246,13 @@ export default function ProjectStatisticsPage() {
               </div>
 
               <div className="bg-custom-background-100 border border-custom-border-200 rounded-lg shadow-custom-shadow-md p-4 min-h-[300px] flex flex-col">
-                <div>
+                <div className="flex items-baseline gap-2">
                   <div className="text-lg font-medium text-custom-text-200">进行中的发布</div>
-                  <div className="mt-0.5 text-xs text-custom-text-400">{`共 ${data?.releases?.count ?? 0} 个进行中的发布`}</div>
+                  <div className="text-xs text-custom-text-400">{`共 ${data?.releases?.count ?? 0} 个进行中的发布`}</div>
                 </div>
                 <div className="mt-3 flex-1 min-h-0 overflow-hidden">
                   <Table>
-                    <TableHeader>
+                    <TableHeader className="bg-transparent border-b border-custom-border-200 border-t-0">
                       <TableRow>
                         <TableHead className="w-1/3 text-left">名称</TableHead>
                         <TableHead className="w-1/3 text-left">日期</TableHead>
@@ -322,13 +322,13 @@ export default function ProjectStatisticsPage() {
 
             <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2">
               <div className="bg-custom-background-100 border border-custom-border-200 rounded-lg shadow-custom-shadow-md p-4 min-h-[300px] flex flex-col">
-                <div>
+                <div className="flex items-baseline gap-2">
                   <div className="text-lg font-medium text-custom-text-200">进行中的测试计划</div>
-                  <div className="mt-0.5 text-xs text-custom-text-400">{`共 ${data?.test_plans?.count ?? 0} 个进行中的测试计划`}</div>
+                  <div className="text-xs text-custom-text-400">{`共 ${data?.test_plans?.count ?? 0} 个进行中的测试计划`}</div>
                 </div>
                 <div className="mt-3 flex-1 min-h-0 overflow-hidden">
                   <Table>
-                    <TableHeader>
+                    <TableHeader className="bg-transparent border-b border-custom-border-200 border-t-0">
                       <TableRow>
                         <TableHead className="w-1/3 text-left">名称</TableHead>
                         <TableHead className="w-1/3 text-left">日期</TableHead>
@@ -396,13 +396,13 @@ export default function ProjectStatisticsPage() {
               </div>
 
               <div className="bg-custom-background-100 border border-custom-border-200 rounded-lg shadow-custom-shadow-md p-4 min-h-[300px] flex flex-col">
-                <div>
+                <div className="flex items-baseline gap-2">
                   <div className="text-lg font-medium text-custom-text-200">进行中的评审</div>
-                  <div className="mt-0.5 text-xs text-custom-text-400">{`共 ${data?.case_reviews?.count ?? 0} 个进行中的评审`}</div>
+                  <div className="text-xs text-custom-text-400">{`共 ${data?.case_reviews?.count ?? 0} 个进行中的评审`}</div>
                 </div>
                 <div className="mt-3 flex-1 min-h-0 overflow-hidden">
                   <Table>
-                    <TableHeader>
+                    <TableHeader className="bg-transparent border-b border-custom-border-200 border-t-0">
                       <TableRow>
                         <TableHead className="w-1/3 text-left">名称</TableHead>
                         <TableHead className="w-1/3 text-left">日期</TableHead>
