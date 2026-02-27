@@ -25,7 +25,7 @@ import {
 } from "@plane/propel/icons";
 import { cn, getDate, renderFormattedPayloadDate, shouldHighlightIssueDueDate } from "@plane/utils";
 // components
-import { DateRangeDropdown } from "@/components/dropdowns/date-range";
+import { DateDropdown } from "@/components/dropdowns/date";
 import { EstimateDropdown } from "@/components/dropdowns/estimate";
 import { ButtonAvatars } from "@/components/dropdowns/member/avatar";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
@@ -158,38 +158,54 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
             <span>{t("project_cycles.date_range")}</span>
           </div>
           <div className="flex items-center gap-2 w-3/4 flex-grow min-w-0">
-            <DateRangeDropdown
-              value={{
-                from: getDate(issue.start_date) || undefined,
-                to: getDate(issue.target_date) || undefined,
-              }}
-              onSelect={(range) =>
-                issueOperations.update(workspaceSlug, projectId, issueId, {
-                  start_date: range?.from ? renderFormattedPayloadDate(range.from) : null,
-                  target_date: range?.to ? renderFormattedPayloadDate(range.to) : null,
-                })
-              }
-              mergeDates
-              isClearable
-              renderInPortal
-              placeholder={{
-                from: t("issue.add.start_date"),
-                to: t("issue.add.due_date"),
-              }}
-              buttonVariant="transparent-with-text"
-              disabled={disabled}
-              className="flex-grow min-w-0 group"
-              buttonContainerClassName="w-full text-left"
-              buttonClassName={cn(
-                "text-sm justify-between",
-                shouldHighlightIssueDueDate(issue.target_date, stateDetails?.group)
-                  ? "text-red-500"
-                  : !issue.start_date && !issue.target_date
-                    ? "text-custom-text-400"
-                    : ""
-              )}
-              clearIconClassName="hidden group-hover:inline !text-custom-text-100"
-            />
+            <div className="flex items-center gap-1 w-1/3">
+              <div className="h-7 flex-1 min-w-0">
+                <DateDropdown
+                  value={issue.start_date ?? null}
+                  onChange={(date) =>
+                    issueOperations.update(workspaceSlug, projectId, issueId, {
+                      start_date: date ? renderFormattedPayloadDate(date) : null,
+                    })
+                  }
+                  maxDate={getDate(issue.target_date)}
+                  placeholder={t("issue.add.start_date")}
+                  buttonVariant="transparent-with-text"
+                  disabled={disabled}
+                  className="group w-full"
+                  buttonContainerClassName="w-full text-left"
+                  buttonClassName={cn("text-sm justify-between", !issue.start_date ? "text-custom-text-400" : "")}
+                  clearIconClassName="hidden group-hover:inline !text-custom-text-100"
+                  hideIcon
+                />
+              </div>
+              <span className="text-custom-text-300">→</span>
+              <div className="h-7 flex-1 min-w-0">
+                <DateDropdown
+                  value={issue.target_date ?? null}
+                  onChange={(date) =>
+                    issueOperations.update(workspaceSlug, projectId, issueId, {
+                      target_date: date ? renderFormattedPayloadDate(date) : null,
+                    })
+                  }
+                  minDate={getDate(issue.start_date)}
+                  placeholder={t("issue.add.due_date")}
+                  buttonVariant="transparent-with-text"
+                  disabled={disabled}
+                  className="group w-full"
+                  buttonContainerClassName="w-full text-left"
+                  buttonClassName={cn(
+                    "text-sm justify-between",
+                    shouldHighlightIssueDueDate(issue.target_date, stateDetails?.group)
+                      ? "text-red-500"
+                      : !issue.target_date
+                        ? "text-custom-text-400"
+                        : ""
+                  )}
+                  clearIconClassName="hidden group-hover:inline !text-custom-text-100"
+                  hideIcon
+                />
+              </div>
+            </div>
             {issue.target_date && <DateAlert date={issue.target_date} workItem={issue} projectId={projectId} />}
           </div>
         </div>

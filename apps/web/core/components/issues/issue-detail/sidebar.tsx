@@ -22,7 +22,7 @@ import {
 } from "@plane/propel/icons";
 import { cn, getDate, renderFormattedPayloadDate, shouldHighlightIssueDueDate } from "@plane/utils";
 // components
-import { DateRangeDropdown } from "@/components/dropdowns/date-range";
+import { DateDropdown } from "@/components/dropdowns/date";
 import { EstimateDropdown } from "@/components/dropdowns/estimate";
 import { ButtonAvatars } from "@/components/dropdowns/member/avatar";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
@@ -41,7 +41,6 @@ import { IssueParentSelectRoot } from "@/plane-web/components/issues/issue-detai
 import { DateAlert } from "@/plane-web/components/issues/issue-details/sidebar/date-alert";
 import { TransferHopInfo } from "@/plane-web/components/issues/issue-details/sidebar/transfer-hop-info";
 import { IssueWorklogProperty } from "@/plane-web/components/issues/worklog/property";
-import { SidebarPropertyListItem } from "@/components/common/layout/sidebar/property-list-item";
 import { IssueCycleSelect } from "./cycle-select";
 import { IssueLabel } from "./label";
 import { IssueModuleSelect } from "./module-select";
@@ -83,31 +82,36 @@ export const IssueDetailsSidebar = observer(function IssueDetailsSidebar(props: 
     <>
       <div className="flex h-full w-full flex-col items-center divide-y-2 divide-subtle-1 overflow-hidden">
         <div className="h-full w-full overflow-y-auto px-6">
-          <h5 className="mt-5 text-body-xs-medium">{t("common.properties")}</h5>
-          <div className={`mt-4 mb-2 space-y-2.5 truncate ${!isEditable ? "opacity-60" : ""}`}>
-            <SidebarPropertyListItem icon={StatePropertyIcon} label={t("common.state")}>
+          <h5 className="mt-6 text-sm font-medium">{t("common.properties")}</h5>
+          {/* TODO: render properties using a common component */}
+          <div className={`mb-2 mt-3 space-y-2.5 ${!isEditable ? "opacity-60" : ""}`}>
+            <div className="flex h-8 items-center gap-1">
+              <div className="flex w-1/3 flex-shrink-0 items-center gap-1 text-sm text-custom-text-300">
+                <StatePropertyIcon className="h-4 w-4 flex-shrink-0" />
+                <span>{t("common.state")}</span>
+              </div>
               <StateDropdown
                 value={issue?.state_id}
                 onChange={(val) => issueOperations.update(workspaceSlug, projectId, issueId, { state_id: val })}
                 projectId={projectId?.toString() ?? ""}
                 disabled={!isEditable}
                 buttonVariant="transparent-with-text"
-                className="group w-full grow"
-                buttonContainerClassName="w-full text-left h-7.5"
-                buttonClassName="text-body-xs-regular"
+                className="group w-2/3 flex-grow"
+                buttonContainerClassName="w-full text-left"
+                buttonClassName="text-sm"
                 dropdownArrow
                 dropdownArrowClassName="h-3.5 w-3.5 hidden group-hover:inline"
               />
-            </SidebarPropertyListItem>
+            </div>
 
             {/* type */}
             {projectIssueTypesMap && issue?.type_id && projectIssueTypesMap[issue.type_id] && (
-              <div className="flex h-8 items-center gap-2">
-                <div className="flex w-2/5 flex-shrink-0 items-center gap-1 text-sm text-tertiary">
+              <div className="flex h-8 items-center gap-1">
+                <div className="flex w-1/3 flex-shrink-0 items-center gap-1 text-sm text-custom-text-300">
                   <LucideIcons.Type className="h-4 w-4 flex-shrink-0" />
                   <span>类型</span>
                 </div>
-                <div className="w-3/5 flex-grow flex items-center gap-2 rounded px-2 py-0.5 text-sm">
+                <div className="w-2/3 flex-grow flex items-center gap-2 rounded px-2 py-0.5 text-sm">
                   {(() => {
                     const issueType = projectIssueTypesMap[issue.type_id];
                     const { name, color, background_color } = issueType.logo_props?.icon || {};
@@ -139,8 +143,8 @@ export const IssueDetailsSidebar = observer(function IssueDetailsSidebar(props: 
               </div>
             )}
 
-            <div className="flex h-8 items-center gap-2">
-              <div className="flex w-2/5 flex-shrink-0 items-center gap-1 text-sm text-tertiary">
+            <div className="flex h-8 items-center gap-1">
+              <div className="flex w-1/3 flex-shrink-0 items-center gap-1 text-sm text-custom-text-300">
                 <MembersPropertyIcon className="h-4 w-4 flex-shrink-0" />
                 <span>{t("common.assignees")}</span>
               </div>
@@ -152,80 +156,108 @@ export const IssueDetailsSidebar = observer(function IssueDetailsSidebar(props: 
                 placeholder={t("issue.add.assignee")}
                 multiple
                 buttonVariant={issue?.assignee_ids?.length > 1 ? "transparent-without-text" : "transparent-with-text"}
-                className="group w-full grow"
-                buttonContainerClassName="w-full text-left h-7.5"
-                buttonClassName={`text-body-xs-regular justify-between ${issue?.assignee_ids?.length > 0 ? "" : "text-placeholder"}`}
+                className="group w-2/3 flex-grow"
+                buttonContainerClassName="w-full text-left"
+                buttonClassName={`text-sm justify-between ${
+                  issue?.assignee_ids?.length > 0 ? "" : "text-custom-text-400"
+                }`}
                 hideIcon={issue.assignee_ids?.length === 0}
                 dropdownArrow
                 dropdownArrowClassName="h-3.5 w-3.5 hidden group-hover:inline"
               />
             </div>
 
-            <div className="flex h-8 items-center gap-2">
-              <div className="flex w-2/5 flex-shrink-0 items-center gap-1 text-sm text-custom-text-300">
+            <div className="flex h-8 items-center gap-1">
+              <div className="flex w-1/3 flex-shrink-0 items-center gap-1 text-sm text-custom-text-300">
                 <StartDatePropertyIcon className="h-4 w-4 flex-shrink-0" />
                 <span>{t("project_cycles.date_range")}</span>
               </div>
-              <div className="flex items-center gap-2 w-3/5 flex-grow min-w-0">
-                <DateRangeDropdown
-                  value={{
-                    from: getDate(issue.start_date) || undefined,
-                    to: getDate(issue.target_date) || undefined,
-                  }}
-                  onSelect={(range) =>
-                    issueOperations.update(workspaceSlug, projectId, issueId, {
-                      start_date: range?.from ? renderFormattedPayloadDate(range.from) : null,
-                      target_date: range?.to ? renderFormattedPayloadDate(range.to) : null,
-                    })
-                  }
-                  mergeDates
-                  isClearable
-                  renderInPortal
-                  placeholder={{
-                    from: t("issue.add.start_date"),
-                    to: t("issue.add.due_date"),
-                  }}
-                  buttonVariant="transparent-with-text"
-                  disabled={!isEditable}
-                  className="flex-grow min-w-0 group"
-                  buttonContainerClassName="w-full text-left"
-                  buttonClassName={cn(
-                    "text-sm justify-between",
-                    shouldHighlightIssueDueDate(issue.target_date, stateDetails?.group)
-                      ? "text-red-500"
-                      : !issue.start_date && !issue.target_date
-                        ? "text-custom-text-400"
-                        : ""
-                  )}
-                  clearIconClassName="hidden group-hover:inline !text-custom-text-100"
-                />
+              <div className="flex items-center gap-2 w-2/3 flex-grow min-w-0">
+                <div className="h-7 flex-1 min-w-0">
+                  <DateDropdown
+                    value={issue.start_date ?? null}
+                    onChange={(date) =>
+                      issueOperations.update(workspaceSlug, projectId, issueId, {
+                        start_date: date ? renderFormattedPayloadDate(date) : null,
+                      })
+                    }
+                    maxDate={getDate(issue.target_date)}
+                    placeholder={t("issue.add.start_date")}
+                    buttonVariant="transparent-with-text"
+                    disabled={!isEditable}
+                    className="group w-full"
+                    buttonContainerClassName="w-full text-left"
+                    buttonClassName={cn("text-sm justify-between", !issue.start_date ? "text-custom-text-400" : "")}
+                    clearIconClassName="hidden group-hover:inline !text-custom-text-100"
+                    hideIcon
+                  />
+                </div>
+                <span className="text-custom-text-300">→</span>
+                <div className="h-7 flex-1 min-w-0">
+                  <DateDropdown
+                    value={issue.target_date ?? null}
+                    onChange={(date) =>
+                      issueOperations.update(workspaceSlug, projectId, issueId, {
+                        target_date: date ? renderFormattedPayloadDate(date) : null,
+                      })
+                    }
+                    minDate={getDate(issue.start_date)}
+                    placeholder={t("issue.add.due_date")}
+                    buttonVariant="transparent-with-text"
+                    disabled={!isEditable}
+                    className="group w-full"
+                    buttonContainerClassName="w-full text-left"
+                    buttonClassName={cn(
+                      "text-sm justify-between",
+                      shouldHighlightIssueDueDate(issue.target_date, stateDetails?.group)
+                        ? "text-red-500"
+                        : !issue.target_date
+                          ? "text-custom-text-400"
+                          : ""
+                    )}
+                    clearIconClassName="hidden group-hover:inline !text-custom-text-100"
+                    hideIcon
+                  />
+                </div>
                 {issue.target_date && <DateAlert date={issue.target_date} workItem={issue} projectId={projectId} />}
               </div>
             </div>
 
-            <SidebarPropertyListItem icon={PriorityPropertyIcon} label={t("common.priority")}>
+            <div className="flex h-8 items-center gap-1">
+              <div className="flex w-1/3 flex-shrink-0 items-center gap-1 text-sm text-custom-text-300">
+                <PriorityPropertyIcon className="h-4 w-4 flex-shrink-0" />
+                <span>{t("common.priority")}</span>
+              </div>
               <PriorityDropdown
                 value={issue?.priority}
                 onChange={(val) => issueOperations.update(workspaceSlug, projectId, issueId, { priority: val })}
                 disabled={!isEditable}
-                buttonVariant="transparent-with-text"
-                className="h-7.5 w-full grow rounded-sm"
-                buttonContainerClassName="size-full text-left"
-                buttonClassName="size-full px-2 py-0.5 whitespace-nowrap [&_svg]:size-3.5"
+                buttonVariant="border-with-text"
+                className="w-2/3 flex-grow rounded px-2 hover:bg-custom-background-80"
+                buttonContainerClassName="w-full text-left"
+                buttonClassName="w-min h-auto whitespace-nowrap"
               />
-            </SidebarPropertyListItem>
+            </div>
 
             {createdByDetails && (
-              <SidebarPropertyListItem icon={UserCirclePropertyIcon} label={t("common.created_by")}>
-                <div className="flex gap-2 px-2">
+              <div className="flex h-8 items-center gap-1">
+                <div className="flex w-1/3 flex-shrink-0 items-center gap-1 text-sm text-custom-text-300">
+                  <UserCirclePropertyIcon className="h-4 w-4 flex-shrink-0" />
+                  <span>{t("common.created_by")}</span>
+                </div>
+                <div className="w-2/3 h-full flex items-center gap-1.5 rounded px-2 py-0.5 text-sm justify-between cursor-not-allowed">
                   <ButtonAvatars showTooltip userIds={createdByDetails.id} />
                   <span className="grow truncate text-body-xs-regular leading-5">{createdByDetails?.display_name}</span>
                 </div>
-              </SidebarPropertyListItem>
+              </div>
             )}
 
             {projectId && areEstimateEnabledByProjectId(projectId) && (
-              <SidebarPropertyListItem icon={EstimatePropertyIcon} label={t("common.estimate")}>
+              <div className="flex h-8 items-center gap-1">
+                <div className="flex w-1/3 flex-shrink-0 items-center gap-1 text-sm text-custom-text-300">
+                  <EstimatePropertyIcon className="h-4 w-4 flex-shrink-0" />
+                  <span>{t("common.estimate")}</span>
+                </div>
                 <EstimateDropdown
                   value={issue?.estimate_point ?? undefined}
                   onChange={(val: string | undefined) =>
@@ -234,66 +266,81 @@ export const IssueDetailsSidebar = observer(function IssueDetailsSidebar(props: 
                   projectId={projectId}
                   disabled={!isEditable}
                   buttonVariant="transparent-with-text"
-                  className="group w-full grow"
-                  buttonContainerClassName="w-full text-left h-7.5"
-                  buttonClassName={`text-body-xs-regular ${issue?.estimate_point !== null ? "" : "text-placeholder"}`}
+                  className="group w-2/3 flex-grow"
+                  buttonContainerClassName="w-full text-left"
+                  buttonClassName={`text-sm ${issue?.estimate_point !== null ? "" : "text-custom-text-400"}`}
                   placeholder={t("common.none")}
                   hideIcon
                   dropdownArrow
                   dropdownArrowClassName="h-3.5 w-3.5 hidden group-hover:inline"
                 />
-              </SidebarPropertyListItem>
+              </div>
             )}
 
             {projectDetails?.module_view && (
-              <SidebarPropertyListItem icon={ModuleIcon} label={t("common.modules")}>
+              <div className="flex min-h-8 gap-1">
+                <div className="flex w-1/3 flex-shrink-0 gap-1 pt-2 text-sm text-custom-text-300">
+                  <ModuleIcon className="h-4 w-4 flex-shrink-0" />
+                  <span>{t("common.modules")}</span>
+                </div>
                 <IssueModuleSelect
-                  className="w-full grow"
+                  className="w-2/3 flex-grow"
                   workspaceSlug={workspaceSlug}
                   projectId={projectId}
                   issueId={issueId}
                   issueOperations={issueOperations}
                   disabled={!isEditable}
                 />
-              </SidebarPropertyListItem>
+              </div>
             )}
 
             {projectDetails?.cycle_view && (
-              <SidebarPropertyListItem
-                icon={CycleIcon}
-                label={t("common.cycle")}
-                appendElement={<TransferHopInfo workItem={issue} />}
-              >
+              <div className="flex h-8 items-center gap-1">
+                <div className="flex w-1/3 flex-shrink-0 items-center gap-1 text-sm text-custom-text-300">
+                  <CycleIcon className="h-4 w-4 flex-shrink-0" />
+                  <span>{t("common.cycle")}</span>
+                  <TransferHopInfo workItem={issue} />
+                </div>
                 <IssueCycleSelect
-                  className="h-7.5 w-full grow"
+                  className="w-2/3 flex-grow"
                   workspaceSlug={workspaceSlug}
                   projectId={projectId}
                   issueId={issueId}
                   issueOperations={issueOperations}
                   disabled={!isEditable}
                 />
-              </SidebarPropertyListItem>
+              </div>
             )}
 
-            <SidebarPropertyListItem icon={ParentPropertyIcon} label={t("common.parent")}>
+            <div className="flex h-8 items-center gap-1">
+              <div className="flex w-1/3 flex-shrink-0 items-center gap-1 text-sm text-custom-text-300">
+                <ParentPropertyIcon className="h-4 w-4 flex-shrink-0" />
+                <span>{t("common.parent")}</span>
+              </div>
               <IssueParentSelectRoot
-                className="h-7.5 w-full grow"
+                className="h-full w-2/3 flex-grow"
                 workspaceSlug={workspaceSlug}
                 projectId={projectId}
                 issueId={issueId}
                 issueOperations={issueOperations}
                 disabled={!isEditable}
               />
-            </SidebarPropertyListItem>
+            </div>
 
-            <SidebarPropertyListItem icon={LabelPropertyIcon} label={t("common.labels")}>
-              <IssueLabel
-                workspaceSlug={workspaceSlug}
-                projectId={projectId}
-                issueId={issueId}
-                disabled={!isEditable}
-              />
-            </SidebarPropertyListItem>
+            <div className="flex min-h-8 gap-1">
+              <div className="flex w-1/3 flex-shrink-0 gap-1 pt-2 text-sm text-custom-text-300">
+                <LabelPropertyIcon className="h-4 w-4 flex-shrink-0" />
+                <span>{t("common.labels")}</span>
+              </div>
+              <div className="h-full min-h-8 w-2/3 flex-grow">
+                <IssueLabel
+                  workspaceSlug={workspaceSlug}
+                  projectId={projectId}
+                  issueId={issueId}
+                  disabled={!isEditable}
+                />
+              </div>
+            </div>
 
             <IssueWorklogProperty
               workspaceSlug={workspaceSlug}
