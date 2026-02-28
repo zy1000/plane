@@ -199,7 +199,7 @@ export default function ProjectStatisticsPage() {
                       <TableRow>
                         <TableHead className="w-1/3 h-9 text-left">名称</TableHead>
                         <TableHead className="w-1/3 h-9 text-left">日期</TableHead>
-                        <TableHead className="w-1/6 h-9 text-left">状态</TableHead>
+                        <TableHead className="w-1/6 h-9 text-left pl-3">状态</TableHead>
                         <TableHead className="w-1/6 h-9 text-left whitespace-nowrap">工作项</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -272,7 +272,7 @@ export default function ProjectStatisticsPage() {
                       <TableRow>
                         <TableHead className="w-1/3 h-9 text-left">名称</TableHead>
                         <TableHead className="w-1/3 h-9 text-left">日期</TableHead>
-                        <TableHead className="w-1/6 h-9 text-left">状态</TableHead>
+                        <TableHead className="w-1/6 h-9 text-left pl-3">状态</TableHead>
                         <TableHead className="w-1/6 h-9 text-left whitespace-nowrap">工作项</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -328,7 +328,6 @@ export default function ProjectStatisticsPage() {
                     current={releasePage}
                     pageSize={5}
                     total={data?.releases?.count ?? 0}
-                    showQuickJumper
                     onChange={(p) => setReleasePage(p)}
                     size="small"
                   />
@@ -348,7 +347,7 @@ export default function ProjectStatisticsPage() {
                       <TableRow>
                         <TableHead className="w-1/3 h-9 text-left">名称</TableHead>
                         <TableHead className="w-1/3 h-9 text-left">日期</TableHead>
-                        <TableHead className="w-1/6 h-9 text-left">状态</TableHead>
+                        <TableHead className="w-1/6 h-9 text-left pl-3">状态</TableHead>
                         <TableHead className="w-1/6 h-9 text-left whitespace-nowrap">用例</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -404,7 +403,6 @@ export default function ProjectStatisticsPage() {
                     current={planPage}
                     pageSize={5}
                     total={data?.test_plans?.count ?? 0}
-                    showQuickJumper
                     onChange={(p) => setPlanPage(p)}
                     size="small"
                   />
@@ -422,7 +420,7 @@ export default function ProjectStatisticsPage() {
                       <TableRow>
                         <TableHead className="w-1/3 h-9 text-left">名称</TableHead>
                         <TableHead className="w-1/3 h-9 text-left">日期</TableHead>
-                        <TableHead className="w-1/6 h-9 text-left">状态</TableHead>
+                        <TableHead className="w-1/6 h-9 text-left pl-3">状态</TableHead>
                         <TableHead className="w-1/6 h-9 text-left">类型</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -478,7 +476,6 @@ export default function ProjectStatisticsPage() {
                     current={reviewPage}
                     pageSize={5}
                     total={data?.case_reviews?.count ?? 0}
-                    showQuickJumper
                     onChange={(p) => setReviewPage(p)}
                     size="small"
                   />
@@ -497,7 +494,7 @@ export default function ProjectStatisticsPage() {
                       label: "已完成",
                       fill: "#19803833",
                       fillOpacity: 1,
-                      stackId: "requirement",
+                      stackId: "已完成",
                       showDot: false,
                       smoothCurves: true,
                       strokeColor: "#198038",
@@ -508,7 +505,7 @@ export default function ProjectStatisticsPage() {
                       label: "未完成",
                       fill: "#F59E0B33",
                       fillOpacity: 1,
-                      stackId: "requirement",
+                      stackId: "未完成",
                       showDot: false,
                       smoothCurves: true,
                       strokeColor: "#F59E0B",
