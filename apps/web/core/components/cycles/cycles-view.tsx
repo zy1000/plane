@@ -4,7 +4,6 @@
  * See the LICENSE file for details.
  */
 
-import type { FC } from "react";
 import { observer } from "mobx-react";
 // components
 import { useTranslation } from "@plane/i18n";
@@ -26,24 +25,15 @@ export interface ICyclesView {
 export const CyclesView = observer(function CyclesView(props: ICyclesView) {
   const { workspaceSlug, projectId } = props;
   // store hooks
-  const { getFilteredCycleIds, getFilteredCompletedCycleIds, loader, currentProjectActiveCycleId } = useCycle();
+  const { getFilteredCycleIds, loader } = useCycle();
   const { searchQuery } = useCycleFilter();
   const { t } = useTranslation();
   // derived values
   const filteredCycleIds = getFilteredCycleIds(projectId, false);
-  const filteredCompletedCycleIds = getFilteredCompletedCycleIds(projectId);
-  const { getCycleById } = useCycle();
-
-  const filteredUpcomingCycleIds = (filteredCycleIds ?? []).filter(
-    (cycleId) => {
-      const cycle = getCycleById(cycleId);
-      return cycle?.status?.toLowerCase() !== "current";
-    }
-  );
 
   if (loader || !filteredCycleIds) return <CycleModuleListLayoutLoader />;
 
-  if (filteredCycleIds.length === 0 && filteredCompletedCycleIds?.length === 0)
+  if (filteredCycleIds.length === 0)
     return (
       <div className="grid h-full w-full place-items-center">
         <div className="text-center">
@@ -64,8 +54,6 @@ export const CyclesView = observer(function CyclesView(props: ICyclesView) {
 
   return (
     <CyclesList
-      completedCycleIds={filteredCompletedCycleIds ?? []}
-      upcomingCycleIds={filteredUpcomingCycleIds}
       cycleIds={filteredCycleIds}
       workspaceSlug={workspaceSlug}
       projectId={projectId}

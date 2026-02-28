@@ -75,7 +75,7 @@ export const CycleLayoutRoot = observer(function CycleLayoutRoot() {
   );
 
   const cycleDetails = cycleId ? getCycleById(cycleId) : undefined;
-  const cycleStatus = cycleDetails?.status?.toLocaleLowerCase() ?? "draft";
+  const cycleStatus = cycleDetails?.status ?? "not_started";
   const isCompletedCycle = cycleStatus === "completed";
   const isProgressSnapshotEmpty = isEmpty(cycleDetails?.progress_snapshot);
   const transferableIssuesCount = cycleDetails

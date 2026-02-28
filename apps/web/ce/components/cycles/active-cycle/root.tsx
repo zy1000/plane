@@ -32,6 +32,8 @@ interface IActiveCycleDetails {
   cycleId?: string;
   cycleIds?: string[];
   showHeader?: boolean;
+  filterToInProgress?: boolean;
+  showEmptyState?: boolean;
 }
 
 interface ISingleActiveCycleProps {
@@ -49,7 +51,7 @@ const SingleActiveCycle: React.FC<ISingleActiveCycleProps> = observer((props) =>
     handleFiltersUpdate,
     cycle: activeCycle,
     cycleIssueDetails,
-  } = useCyclesDetails({ workspaceSlug, projectId, cycleId });
+  } = useCyclesDetails({ workspaceSlug, projectId, cycleId, enabled: isOpen });
 
   if (!activeCycle) return null;
 
@@ -107,7 +109,15 @@ const SingleActiveCycle: React.FC<ISingleActiveCycleProps> = observer((props) =>
 });
 
 export const ActiveCycleRoot: React.FC<IActiveCycleDetails> = observer((props) => {
-  const { workspaceSlug, projectId, cycleId: propsCycleId, cycleIds: propsCycleIds, showHeader = true } = props;
+  const {
+    workspaceSlug,
+    projectId,
+    cycleId: propsCycleId,
+    cycleIds: propsCycleIds,
+    showHeader = true,
+    filterToInProgress = true,
+    showEmptyState = true,
+  } = props;
   // plane hooks
   const { t } = useTranslation();
   // store hooks
@@ -115,35 +125,38 @@ export const ActiveCycleRoot: React.FC<IActiveCycleDetails> = observer((props) =
   // derived values
   const activeCycleResolvedPath = useResolvedAssetPath({ basePath: "/empty-state/cycle/active" });
 
-  // Determine active cycle IDs
-  const activeCycleIds = useMemo(() => {
-    if (propsCycleIds && propsCycleIds.length > 0) {
-      return propsCycleIds.filter((id) => {
-        const cycle = getCycleById(id);
-        return cycle?.status?.toLowerCase() === "current";
-      });
+  const cycleIds = useMemo(() => {
+    if (propsCycleIds) {
+      const existing = propsCycleIds.filter((id) => !!getCycleById(id));
+      if (!filterToInProgress) return existing;
+      return existing.filter((id) => getCycleById(id)?.status === "in_progress");
     }
+
     if (propsCycleId) {
       const cycle = getCycleById(propsCycleId);
-      return cycle?.status?.toLowerCase() === "current" ? [propsCycleId] : [];
+      if (!cycle) return [];
+      if (!filterToInProgress) return [propsCycleId];
+      return cycle.status === "in_progress" ? [propsCycleId] : [];
     }
-    if (currentProjectActiveCycleId) {
-      return [currentProjectActiveCycleId];
-    }
+
+    if (currentProjectActiveCycleId) return [currentProjectActiveCycleId];
+
     return [];
-  }, [propsCycleIds, propsCycleId, currentProjectActiveCycleId, getCycleById]);
+  }, [propsCycleIds, propsCycleId, currentProjectActiveCycleId, getCycleById, filterToInProgress]);
 
   const ActiveCyclesComponent = useMemo(
     () => (
       <>
-        {activeCycleIds.length === 0 ? (
-          <DetailedEmptyState
-            title={t("project_cycles.empty_state.active.title")}
-            description={t("project_cycles.empty_state.active.description")}
-          />
+        {cycleIds.length === 0 ? (
+          showEmptyState && filterToInProgress ? (
+            <DetailedEmptyState
+              title={t("project_cycles.empty_state.active.title")}
+              description={t("project_cycles.empty_state.active.description")}
+            />
+          ) : null
         ) : (
           <div className="flex flex-col">
-            {activeCycleIds.map((id) => (
+            {cycleIds.map((id) => (
               <SingleActiveCycle
                 key={id}
                 workspaceSlug={workspaceSlug}
@@ -156,7 +169,7 @@ export const ActiveCycleRoot: React.FC<IActiveCycleDetails> = observer((props) =
         )}
       </>
     ),
-    [activeCycleIds, workspaceSlug, projectId, activeCycleResolvedPath, t]
+    [cycleIds, workspaceSlug, projectId, activeCycleResolvedPath, t, showEmptyState, filterToInProgress]
   );
 
   return (
@@ -168,9 +181,9 @@ export const ActiveCycleRoot: React.FC<IActiveCycleDetails> = observer((props) =
               <Disclosure.Button className="sticky top-0 z-[2] w-full flex-shrink-0 border-b border-subtle bg-layer-1 cursor-pointer">
                 <CycleListGroupHeader
                   title={t("project_cycles.active_cycle.label")}
-                  type="current"
+                  type="in_progress"
                   isExpanded={open}
-                  count={activeCycleIds.length}
+                  count={cycleIds.length}
                   showCount
                 />
               </Disclosure.Button>

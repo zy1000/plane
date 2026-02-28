@@ -4,7 +4,6 @@
  * See the LICENSE file for details.
  */
 
-import type { FC } from "react";
 import React from "react";
 import { isEmpty } from "lodash-es";
 import { observer } from "mobx-react";
@@ -36,7 +35,7 @@ export const CycleSidebarDetails = observer(function CycleSidebarDetails(props: 
   const { t } = useTranslation();
 
   const areEstimateEnabled = projectId && areEstimateEnabledByProjectId(projectId.toString());
-  const cycleStatus = cycleDetails?.status?.toLocaleLowerCase();
+  const cycleStatus = cycleDetails?.status;
   const isCompleted = cycleStatus === "completed";
 
   const issueCount =

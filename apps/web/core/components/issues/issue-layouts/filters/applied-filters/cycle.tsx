@@ -30,7 +30,7 @@ export const AppliedCycleFilters = observer(function AppliedCycleFilters(props: 
 
         if (!cycleDetails) return null;
 
-        const cycleStatus = (cycleDetails?.status ? cycleDetails?.status.toLocaleLowerCase() : "draft") as TCycleGroups;
+        const cycleStatus = cycleDetails?.status ?? "not_started";
 
         return (
           <div key={cycleId} className="flex items-center gap-1 truncate rounded-sm bg-layer-1 p-1 text-11">

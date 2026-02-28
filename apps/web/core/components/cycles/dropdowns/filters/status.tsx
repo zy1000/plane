@@ -27,7 +27,10 @@ export const FilterStatus = observer(function FilterStatus(props: Props) {
   //hooks
   const { t } = useTranslation();
   const appliedFiltersCount = appliedFilters?.length ?? 0;
-  const filteredOptions = CYCLE_STATUS.filter((p) => p.value.includes(searchQuery.toLowerCase()));
+  const query = searchQuery.trim().toLowerCase();
+  const filteredOptions = CYCLE_STATUS.filter(
+    (p) => p.value.includes(query) || t(p.i18n_title).toLowerCase().includes(query)
+  );
 
   return (
     <>

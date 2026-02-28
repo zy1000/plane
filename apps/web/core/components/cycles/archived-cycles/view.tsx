@@ -4,7 +4,6 @@
  * See the LICENSE file for details.
  */
 
-import type { FC } from "react";
 import { observer } from "mobx-react";
 // assets
 import AllFiltersImage from "@/app/assets/empty-state/cycle/all-filters.svg?url";
@@ -53,7 +52,6 @@ export const ArchivedCyclesView = observer(function ArchivedCyclesView(props: IA
 
   return (
     <CyclesList
-      completedCycleIds={[]}
       cycleIds={filteredArchivedCycleIds}
       workspaceSlug={workspaceSlug}
       projectId={projectId}
