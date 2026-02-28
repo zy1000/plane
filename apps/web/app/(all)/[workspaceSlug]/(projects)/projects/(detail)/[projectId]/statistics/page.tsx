@@ -31,8 +31,9 @@ const KpiCard: React.FC<{
   value: string | number;
   unit?: string;
   className?: string;
+  valueClassName?: string;
 }> = (props) => {
-  const { title, value, unit = "个", className } = props;
+  const { title, value, unit = "个", className, valueClassName } = props;
   const shouldShowUnit = typeof value === "number";
   return (
     <div
@@ -45,7 +46,7 @@ const KpiCard: React.FC<{
       </div>
       <div className="flex-1 grid place-items-center">
         <div className="flex items-end gap-2">
-          <div className="text-5xl font-semibold leading-none text-custom-text-200">{value}</div>
+          <div className={`text-5xl font-semibold leading-none text-custom-text-200 ${valueClassName ?? ""}`}>{value}</div>
           {shouldShowUnit && <div className="pb-1 text-xs text-custom-text-300">{unit}</div>}
         </div>
       </div>
@@ -155,6 +156,7 @@ export default function ProjectStatisticsPage() {
               <KpiCard
                 title="进行中的需求"
                 value={isLoading ? "-" : (data?.counts?.in_progress_requirements ?? 0)}
+                valueClassName="text-[#ef9d13]"
               />
               <KpiCard
                 title="全部缺陷"
@@ -163,6 +165,7 @@ export default function ProjectStatisticsPage() {
               <KpiCard
                 title="待处理的缺陷"
                 value={isLoading ? "-" : (data?.counts?.pending_defects ?? 0)}
+                valueClassName="text-[#dc2626]"
               />
               <KpiCard
                 title="全部用例"
