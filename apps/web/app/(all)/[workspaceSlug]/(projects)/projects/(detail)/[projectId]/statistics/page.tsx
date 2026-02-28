@@ -46,7 +46,11 @@ const KpiCard: React.FC<{
       </div>
       <div className="flex-1 grid place-items-center">
         <div className="flex items-end gap-2">
-          <div className={`text-5xl font-semibold leading-none text-custom-text-200 ${valueClassName ?? ""}`}>{value}</div>
+          <div
+            className={`text-5xl font-semibold leading-none ${valueClassName ? "" : "text-custom-text-200"} ${valueClassName ?? ""}`}
+          >
+            {value}
+          </div>
           {shouldShowUnit && <div className="pb-1 text-xs text-custom-text-300">{unit}</div>}
         </div>
       </div>
@@ -193,10 +197,10 @@ export default function ProjectStatisticsPage() {
                   <Table>
                     <TableHeader className="bg-transparent border-b border-custom-border-200 border-t-0">
                       <TableRow>
-                        <TableHead className="w-1/3 text-left">名称</TableHead>
-                        <TableHead className="w-1/3 text-left">日期</TableHead>
-                        <TableHead className="w-1/6 text-left">状态</TableHead>
-                        <TableHead className="w-1/6 text-left whitespace-nowrap">工作项</TableHead>
+                        <TableHead className="w-1/3 h-9 text-left">名称</TableHead>
+                        <TableHead className="w-1/3 h-9 text-left">日期</TableHead>
+                        <TableHead className="w-1/6 h-9 text-left">状态</TableHead>
+                        <TableHead className="w-1/6 h-9 text-left whitespace-nowrap">工作项</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -251,7 +255,6 @@ export default function ProjectStatisticsPage() {
                     current={cyclePage}
                     pageSize={5}
                     total={data?.cycles?.count ?? 0}
-                    showQuickJumper
                     onChange={(p) => setCyclePage(p)}
                     size="small"
                   />
@@ -267,10 +270,10 @@ export default function ProjectStatisticsPage() {
                   <Table>
                     <TableHeader className="bg-transparent border-b border-custom-border-200 border-t-0">
                       <TableRow>
-                        <TableHead className="w-1/3 text-left">名称</TableHead>
-                        <TableHead className="w-1/3 text-left">日期</TableHead>
-                        <TableHead className="w-1/6 text-left">状态</TableHead>
-                        <TableHead className="w-1/6 text-left whitespace-nowrap">工作项</TableHead>
+                        <TableHead className="w-1/3 h-9 text-left">名称</TableHead>
+                        <TableHead className="w-1/3 h-9 text-left">日期</TableHead>
+                        <TableHead className="w-1/6 h-9 text-left">状态</TableHead>
+                        <TableHead className="w-1/6 h-9 text-left whitespace-nowrap">工作项</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -333,7 +336,7 @@ export default function ProjectStatisticsPage() {
               </div>
             </div>
 
-            <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2">
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
               <div className="bg-custom-background-100 border border-custom-border-200 rounded-lg shadow-custom-shadow-md p-4 min-h-[300px] flex flex-col">
                 <div className="flex items-baseline gap-2">
                   <div className="text-lg font-medium text-custom-text-200">进行中的测试计划</div>
@@ -343,10 +346,10 @@ export default function ProjectStatisticsPage() {
                   <Table>
                     <TableHeader className="bg-transparent border-b border-custom-border-200 border-t-0">
                       <TableRow>
-                        <TableHead className="w-1/3 text-left">名称</TableHead>
-                        <TableHead className="w-1/3 text-left">日期</TableHead>
-                        <TableHead className="w-1/6 text-left">状态</TableHead>
-                        <TableHead className="w-1/6 text-left whitespace-nowrap">用例</TableHead>
+                        <TableHead className="w-1/3 h-9 text-left">名称</TableHead>
+                        <TableHead className="w-1/3 h-9 text-left">日期</TableHead>
+                        <TableHead className="w-1/6 h-9 text-left">状态</TableHead>
+                        <TableHead className="w-1/6 h-9 text-left whitespace-nowrap">用例</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -417,10 +420,10 @@ export default function ProjectStatisticsPage() {
                   <Table>
                     <TableHeader className="bg-transparent border-b border-custom-border-200 border-t-0">
                       <TableRow>
-                        <TableHead className="w-1/3 text-left">名称</TableHead>
-                        <TableHead className="w-1/3 text-left">日期</TableHead>
-                        <TableHead className="w-1/6 text-left">状态</TableHead>
-                        <TableHead className="w-1/6 text-left">类型</TableHead>
+                        <TableHead className="w-1/3 h-9 text-left">名称</TableHead>
+                        <TableHead className="w-1/3 h-9 text-left">日期</TableHead>
+                        <TableHead className="w-1/6 h-9 text-left">状态</TableHead>
+                        <TableHead className="w-1/6 h-9 text-left">类型</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>

@@ -764,7 +764,8 @@ class ProjectAPI(BaseViewSet):
             state__group='completed'
         ).count()
         total_requirements = base_issue_qs.exclude(type__name__in=defect_type_names).count()
-        pending_defects = base_issue_qs.filter(type__name__in=defect_type_names).exclude(state__group='completed').count()
+        pending_defects = base_issue_qs.filter(type__name__in=defect_type_names).exclude(
+            state__group='completed').count()
 
         requirement_qs = base_issue_qs.exclude(type__name__in=defect_type_names)
         defect_qs = base_issue_qs.filter(type__name__in=defect_type_names)
@@ -784,7 +785,8 @@ class ProjectAPI(BaseViewSet):
         )
 
         req_created_before = requirement_qs.filter(created_at__date__lt=start_date).count()
-        req_completed_before = requirement_qs.filter(completed_at__isnull=False, completed_at__date__lt=start_date).count()
+        req_completed_before = requirement_qs.filter(completed_at__isnull=False,
+                                                     completed_at__date__lt=start_date).count()
 
         req_created_daily = {
             row['day']: row['count']
@@ -795,7 +797,8 @@ class ProjectAPI(BaseViewSet):
         }
         req_completed_daily = {
             row['day']: row['count']
-            for row in requirement_qs.filter(completed_at__isnull=False, completed_at__date__range=(start_date, end_date))
+            for row in
+            requirement_qs.filter(completed_at__isnull=False, completed_at__date__range=(start_date, end_date))
             .annotate(day=TruncDate('completed_at'))
             .values('day')
             .annotate(count=Count('id'))
@@ -880,7 +883,7 @@ class ProjectAPI(BaseViewSet):
                 project__project_projectmember__member=request.user,
                 project__project_projectmember__is_active=True,
             )
-            .filter(start_date__lte=current_time_in_utc, end_date__gte=current_time_in_utc)
+            .filter(status__in=[Cycle.Status.NOT_STARTED, Cycle.Status.IN_PROGRESS, Cycle.Status.DELAYED])
             .annotate(
                 work_item_count=Count(
                     'issue_cycle__issue__id',
@@ -907,7 +910,7 @@ class ProjectAPI(BaseViewSet):
                 'name': cycle.name,
                 'start_date': cycle.start_date.isoformat() if cycle.start_date else None,
                 'end_date': cycle.end_date.isoformat() if cycle.end_date else None,
-                'status': 'CURRENT',
+                'status': cycle.status,
                 'work_item_count': getattr(cycle, 'work_item_count', 0) or 0,
             }
             for cycle in (paginated_cycles or [])
@@ -930,7 +933,7 @@ class ProjectAPI(BaseViewSet):
                 project_id=project_id,
                 deleted_at__isnull=True,
                 archived_at__isnull=True,
-                status__in=['planned','in-progress']
+                status__in=['planned', 'in-progress']
             )
             .annotate(
                 work_item_count=Count(

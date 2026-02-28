@@ -155,12 +155,12 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
             </div>
             <div className="flex-1 min-h-0">
               <Table>
-                <TableHeader className="bg-transparent border-b border-custom-border-200 border-t-0">
+                <TableHeader className="bg-transparent border-b border-custom-border-200 border-t-0 py-2">
                   <TableRow>
-                    <TableHead className="w-2/5 h-11 text-left font-medium text-custom-text-200">标题</TableHead>
-                    <TableHead className="w-1/5 h-11 text-left font-medium text-custom-text-200">创建人</TableHead>
-                    <TableHead className="w-1/4 h-11 text-left font-medium text-custom-text-200">创建时间</TableHead>
-                    <TableHead className="w-16 h-11 text-left font-medium text-custom-text-200">操作</TableHead>
+                    <TableHead className="w-2/5 h-9 text-left font-medium text-custom-text-200">标题</TableHead>
+                    <TableHead className="w-1/5 h-9 text-left font-medium text-custom-text-200">创建人</TableHead>
+                    <TableHead className="w-1/4 h-9 text-left font-medium text-custom-text-200">创建时间</TableHead>
+                    <TableHead className="w-16 h-9 text-left font-medium text-custom-text-200">操作</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
