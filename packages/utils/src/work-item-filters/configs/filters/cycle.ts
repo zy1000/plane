@@ -25,7 +25,7 @@ export const getCycleMultiSelectConfig = (params: TCreateCycleFilterParams, sing
       getId: (cycle) => cycle.id,
       getLabel: (cycle) => cycle.name,
       getValue: (cycle) => cycle.id,
-      getIconData: (cycle) => cycle.status || "draft",
+      getIconData: (cycle) => cycle.status || "not_started",
     },
     {
       singleValueOperator,

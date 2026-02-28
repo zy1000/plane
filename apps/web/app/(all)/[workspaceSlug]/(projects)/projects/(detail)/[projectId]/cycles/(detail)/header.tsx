@@ -99,7 +99,7 @@ export const CycleIssuesHeader = observer(function CycleIssuesHeader() {
 
   // derived values
   const cycleDetails = cycleId ? getCycleById(cycleId.toString()) : undefined;
-  const isCompletedCycle = cycleDetails?.status?.toLocaleLowerCase() === "completed";
+  const isCompletedCycle = cycleDetails?.status === "completed";
   const canUserCreateIssue = allowPermissions(
     [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
     EUserPermissionsLevel.PROJECT

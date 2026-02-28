@@ -4,7 +4,6 @@ import { observer } from "mobx-react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Check } from "lucide-react";
 // plane imports
-import type { TCycleGroups } from "@plane/types";
 import { CircularProgressIndicator } from "@plane/ui";
 // components
 import { generateQueryParams, calculateCycleProgress } from "@plane/utils";
@@ -47,9 +46,8 @@ export const CyclesListItem = observer(function CyclesListItem(props: TCyclesLis
   if (!cycleDetails) return null;
 
   // computed
-  // TODO: change this logic once backend fix the response
-  const cycleStatus = cycleDetails.status ? (cycleDetails.status.toLocaleLowerCase() as TCycleGroups) : "draft";
-  const isActive = cycleStatus === "current";
+  const cycleStatus = cycleDetails.status ?? "not_started";
+  const isActive = cycleStatus === "in_progress";
 
   // handlers
   const openCycleOverview = (e: MouseEvent<HTMLButtonElement | HTMLAnchorElement>) => {

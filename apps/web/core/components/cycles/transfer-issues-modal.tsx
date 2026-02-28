@@ -3,6 +3,7 @@ import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 import { AlertCircle, Search } from "lucide-react";
 import { Dialog, Transition } from "@headlessui/react";
+import { CYCLE_STATUS } from "@plane/constants";
 import { CycleIcon, TransferIcon, CloseIcon } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { EIssuesStoreType } from "@plane/types";
@@ -29,6 +30,7 @@ export const TransferIssuesModal = observer(function TransferIssuesModal(props: 
   } = useIssues(EIssuesStoreType.CYCLE);
 
   const { workspaceSlug, projectId } = useParams();
+  const getStatusLabel = (status: string | undefined) => CYCLE_STATUS.find((s) => s.value === status)?.i18n_title ?? status;
 
   const transferIssue = async (payload: { new_cycle_id: string }) => {
     if (!workspaceSlug || !projectId || !cycleId) return;
@@ -150,7 +152,7 @@ export const TransferIssuesModal = observer(function TransferIssuesModal(props: 
                                 <span className="truncate">{cycleDetails?.name}</span>
                                 {cycleDetails.status && (
                                   <span className="flex-shrink-0 flex items-center rounded-full bg-custom-background-80  px-2 capitalize">
-                                    {cycleDetails.status.toLocaleLowerCase()}
+                                    {getStatusLabel(cycleDetails.status)}
                                   </span>
                                 )}
                               </div>

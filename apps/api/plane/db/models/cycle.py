@@ -54,6 +54,13 @@ def get_default_display_properties():
 
 
 class Cycle(ProjectBaseModel):
+    class Status(models.TextChoices):
+        NOT_STARTED = '未开始'
+        IN_PROGRESS = '进行中'
+        DELAYED = '已延期'
+        COMPLETED = '已完成'
+        CANCELLED = '已取消'
+
     name = models.CharField(max_length=255, verbose_name="Cycle Name")
     description = models.TextField(verbose_name="Cycle Description", blank=True)
     start_date = models.DateTimeField(verbose_name="Start Date", blank=True, null=True)
@@ -74,6 +81,9 @@ class Cycle(ProjectBaseModel):
     TIMEZONE_CHOICES = tuple(zip(pytz.common_timezones, pytz.common_timezones))
     timezone = models.CharField(max_length=255, default="UTC", choices=TIMEZONE_CHOICES)
     version = models.IntegerField(default=1)
+    sub_issue = models.BooleanField(default=False, verbose_name="Sub Issue Flag")
+    status = models.CharField(choices=Status.choices, default=Status.NOT_STARTED, verbose_name="TestCase Status", blank=True,
+                            null=True)
 
     module = models.ForeignKey("Module", on_delete=models.DO_NOTHING, related_name="cycles", null=True, blank=True)
 

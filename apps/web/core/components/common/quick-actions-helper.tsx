@@ -1,3 +1,4 @@
+import { CheckCircle2, CirclePlay, XCircle } from "lucide-react";
 // types
 import type { ICycle, IModule, IProjectView, IWorkspaceView } from "@plane/types";
 import type { TContextMenuItem } from "@plane/ui";
@@ -12,6 +13,9 @@ interface UseCycleMenuItemsProps {
   projectId: string;
   cycleId: string;
   handleEdit: () => void;
+  handleMarkAsCompleted: () => void;
+  handleMarkAsCancelled: () => void;
+  handleMarkAsInProgress: () => void;
   handleArchive: () => void;
   handleRestore: () => void;
   handleDelete: () => void;
@@ -63,13 +67,38 @@ export const useCycleMenuItems = (props: UseCycleMenuItemsProps): MenuResult => 
   const { cycleDetails, isEditingAllowed, ...handlers } = props;
 
   const isArchived = !!cycleDetails?.archived_at;
-  const isCompleted = cycleDetails?.status?.toLowerCase() === "completed";
+  const isCompleted = cycleDetails?.status === "completed";
+  const cycleStatus = cycleDetails?.status;
+
+  const canMarkCompletedOrCancelled = !isArchived && isEditingAllowed && (cycleStatus === "in_progress" || cycleStatus === "delayed");
+  const canMarkInProgress = !isArchived && isEditingAllowed && (cycleStatus === "completed" || cycleStatus === "cancelled");
 
   // Assemble final menu items - order defined here
   const items = [
     factory.createEditMenuItem(handlers.handleEdit, isEditingAllowed && !isCompleted && !isArchived),
     factory.createOpenInNewTabMenuItem(handlers.handleOpenInNewTab),
     factory.createCopyLinkMenuItem(handlers.handleCopyLink),
+    {
+      key: "mark-as-completed",
+      title: "标记为已完成",
+      icon: CheckCircle2,
+      action: handlers.handleMarkAsCompleted,
+      shouldRender: canMarkCompletedOrCancelled,
+    },
+    {
+      key: "mark-as-cancelled",
+      title: "标记为已取消",
+      icon: XCircle,
+      action: handlers.handleMarkAsCancelled,
+      shouldRender: canMarkCompletedOrCancelled,
+    },
+    {
+      key: "mark-as-in-progress",
+      title: "标记为进行中",
+      icon: CirclePlay,
+      action: handlers.handleMarkAsInProgress,
+      shouldRender: canMarkInProgress,
+    },
     factory.createArchiveMenuItem(handlers.handleArchive, {
       shouldRender: isEditingAllowed && !isArchived,
       disabled: !isCompleted,

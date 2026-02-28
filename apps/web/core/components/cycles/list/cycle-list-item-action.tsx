@@ -17,7 +17,7 @@ import { useTranslation } from "@plane/i18n";
 import { TransferIcon, WorkItemsIcon, MembersPropertyIcon } from "@plane/propel/icons";
 import { setPromiseToast } from "@plane/propel/toast";
 import { Tooltip } from "@plane/propel/tooltip";
-import type { ICycle, TCycleGroups } from "@plane/types";
+import type { ICycle } from "@plane/types";
 import { Avatar, AvatarGroup, FavoriteStar } from "@plane/ui";
 import { getDate, getFileURL, generateQueryParams } from "@plane/utils";
 // components
@@ -85,9 +85,9 @@ export const CycleListItemAction = observer(function CycleListItemAction(props: 
   });
 
   // derived values
-  const cycleStatus = cycleDetails.status ? (cycleDetails.status.toLocaleLowerCase() as TCycleGroups) : "draft";
+  const cycleStatus = cycleDetails.status ?? "not_started";
 
-  const showIssueCount = useMemo(() => cycleStatus === "draft" || cycleStatus === "upcoming", [cycleStatus]);
+  const showIssueCount = useMemo(() => cycleStatus !== "completed" && cycleStatus !== "cancelled", [cycleStatus]);
 
   const transferableIssuesCount = cycleDetails
     ? cycleDetails.total_issues - (cycleDetails.cancelled_issues + cycleDetails.completed_issues)
@@ -287,7 +287,7 @@ export const CycleListItemAction = observer(function CycleListItemAction(props: 
                 </span>
               }
               mergeDates
-              required={cycleDetails.status !== "draft"}
+              required={cycleStatus !== "not_started"}
               disabled
               hideIcon={{
                 from: false,

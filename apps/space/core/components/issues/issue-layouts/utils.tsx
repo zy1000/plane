@@ -5,7 +5,6 @@ import { CycleGroupIcon, CycleIcon, ModuleIcon, PriorityIcon, StateGroupIcon } f
 import type {
   GroupByColumnTypes,
   IGroupByColumn,
-  TCycleGroups,
   IIssueDisplayProperties,
   TGroupedIssues,
 } from "@plane/types";
@@ -61,7 +60,7 @@ const getCycleColumns = (cycleStore: ICycleStore): IGroupByColumn[] | undefined 
 
   cycles.map((cycle) => {
     if (cycle) {
-      const cycleStatus = cycle?.status ? (cycle.status.toLocaleLowerCase() as TCycleGroups) : "draft";
+      const cycleStatus = cycle?.status ?? "not_started";
       cycleGroups.push({
         id: cycle.id,
         name: cycle.name,

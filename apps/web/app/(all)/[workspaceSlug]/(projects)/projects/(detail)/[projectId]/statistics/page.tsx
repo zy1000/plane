@@ -120,7 +120,17 @@ export default function ProjectStatisticsPage() {
   }, [data]);
 
   const getCycleStatusDetails = (status?: string) => {
-    const normalizedStatus = status?.toLowerCase() ?? "draft";
+    const normalizedStatusMap: Record<string, string> = {
+      未开始: "not_started",
+      进行中: "in_progress",
+      已延期: "delayed",
+      已完成: "completed",
+      已取消: "cancelled",
+      current: "in_progress",
+      upcoming: "not_started",
+      draft: "not_started",
+    };
+    const normalizedStatus = status ? (normalizedStatusMap[status] ?? status.toLowerCase()) : "not_started";
     return CYCLE_STATUS.find((item) => item.value === normalizedStatus) ?? CYCLE_STATUS[CYCLE_STATUS.length - 1];
   };
 

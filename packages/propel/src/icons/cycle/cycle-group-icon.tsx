@@ -1,5 +1,5 @@
 import * as React from "react";
-import { CircleDotDashed, Circle } from "lucide-react";
+import { CircleDotDashed, CircleAlert, CircleX } from "lucide-react";
 
 import { CycleIcon } from "../project/cycle-icon";
 import { CircleDotFullIcon } from "./circle-dot-full-icon";
@@ -7,10 +7,11 @@ import type { ICycleGroupIcon } from "./helper";
 import { CYCLE_GROUP_COLORS } from "./helper";
 
 const iconComponents = {
-  current: CycleIcon,
-  upcoming: CircleDotDashed,
+  in_progress: CycleIcon,
+  not_started: CircleDotDashed,
+  delayed: CircleAlert,
   completed: CircleDotFullIcon,
-  draft: Circle,
+  cancelled: CircleX,
 };
 
 export function CycleGroupIcon({

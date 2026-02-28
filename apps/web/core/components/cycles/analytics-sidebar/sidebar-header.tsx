@@ -15,6 +15,7 @@ import { useTranslation } from "@plane/i18n";
 import { ChevronRightIcon } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { ICycle } from "@plane/types";
+import { CustomSelect } from "@plane/ui";
 import { getDate, renderFormattedPayloadDate } from "@plane/utils";
 // components
 import { DateRangeDropdown } from "@/components/dropdowns/date-range";
@@ -37,6 +38,7 @@ type Props = {
 const defaultValues: Partial<ICycle> = {
   start_date: null,
   end_date: null,
+  status: undefined,
 };
 
 const cycleService = new CycleService();
@@ -57,7 +59,7 @@ export const CycleSidebarHeader = observer(function CycleSidebarHeader(props: Pr
     defaultValues,
   });
 
-  const cycleStatus = cycleDetails?.status?.toLocaleLowerCase();
+  const cycleStatus = cycleDetails?.status;
   const isCompleted = cycleStatus === "completed";
 
   const currentCycle = CYCLE_STATUS.find((status) => status.value === cycleStatus);
@@ -65,7 +67,7 @@ export const CycleSidebarHeader = observer(function CycleSidebarHeader(props: Pr
   const submitChanges = async (data: Partial<ICycle>) => {
     if (!workspaceSlug || !projectId || !cycleDetails.id) return;
 
-    await updateCycleDetails(workspaceSlug.toString(), projectId.toString(), cycleDetails.id.toString(), data)
+    return await updateCycleDetails(workspaceSlug.toString(), projectId.toString(), cycleDetails.id.toString(), data)
       .then(() => {
         captureElementAndEvent({
           element: {
@@ -79,6 +81,7 @@ export const CycleSidebarHeader = observer(function CycleSidebarHeader(props: Pr
             },
           },
         });
+        return true;
       })
 
       .catch(() => {
@@ -94,6 +97,7 @@ export const CycleSidebarHeader = observer(function CycleSidebarHeader(props: Pr
             },
           },
         });
+        return false;
       });
   };
 
@@ -151,6 +155,15 @@ export const CycleSidebarHeader = observer(function CycleSidebarHeader(props: Pr
     EUserPermissionsLevel.PROJECT
   );
 
+  const statusOptions =
+    cycleStatus === "in_progress" || cycleStatus === "delayed"
+      ? ["completed", "cancelled"]
+      : cycleStatus === "completed" || cycleStatus === "cancelled"
+        ? ["in_progress"]
+        : [];
+
+  const canChangeStatus = isEditingAllowed && !isArchived && statusOptions.length > 0;
+
   return (
     <>
       <div className="sticky z-10 top-0 pt-2 flex items-center justify-between bg-custom-sidebar-background-100">
@@ -166,17 +179,72 @@ export const CycleSidebarHeader = observer(function CycleSidebarHeader(props: Pr
       <div className="flex flex-col gap-2 w-full">
         <div className="flex items-start justify-between gap-3 pt-2">
           <h4 className="w-full break-words text-xl font-semibold text-custom-text-100">{cycleDetails.name}</h4>
-          {currentCycle && (
-            <span
-              className="flex h-6 min-w-20 px-3 items-center justify-center rounded text-center text-xs font-medium"
-              style={{
-                color: currentCycle.color,
-                backgroundColor: `${currentCycle.color}20`,
-              }}
-            >
-              {t(currentCycle.i18n_title)}
-            </span>
-          )}
+          {currentCycle &&
+            (canChangeStatus ? (
+              <Controller
+                control={control}
+                name="status"
+                render={({ field: { value } }) => (
+                  <CustomSelect
+                    customButton={
+                      <span
+                        className={`flex h-6 min-w-20 px-3 items-center justify-center rounded text-center text-xs font-medium ${
+                          canChangeStatus ? "cursor-pointer" : "cursor-not-allowed"
+                        }`}
+                        style={{
+                          color: currentCycle.color,
+                          backgroundColor: `${currentCycle.color}20`,
+                        }}
+                      >
+                        {t(currentCycle.i18n_title)}
+                      </span>
+                    }
+                    value={value}
+                    onChange={(nextStatus: any) => {
+                      void (async () => {
+                        const didSucceed = await submitChanges({ status: nextStatus });
+                        if (didSucceed) {
+                          setToast({
+                            type: TOAST_TYPE.SUCCESS,
+                            title: t("project_cycles.action.update.success.title"),
+                            message: t("project_cycles.action.update.success.description"),
+                          });
+                        } else {
+                          setToast({
+                            type: TOAST_TYPE.ERROR,
+                            title: t("project_cycles.action.update.failed.title"),
+                            message: t("something_went_wrong_please_try_again"),
+                          });
+                        }
+                      })();
+                    }}
+                    disabled={!canChangeStatus}
+                  >
+                    {CYCLE_STATUS.filter((s) => statusOptions.includes(s.value)).map((status) => (
+                      <CustomSelect.Option key={status.value} value={status.value}>
+                        <div className="flex items-center gap-2">
+                          <span
+                            className="h-2 w-2 flex-shrink-0 rounded-full"
+                            style={{ backgroundColor: status.color }}
+                          />
+                          {t(status.i18n_title)}
+                        </div>
+                      </CustomSelect.Option>
+                    ))}
+                  </CustomSelect>
+                )}
+              />
+            ) : (
+              <span
+                className="flex h-6 min-w-20 px-3 items-center justify-center rounded text-center text-xs font-medium"
+                style={{
+                  color: currentCycle.color,
+                  backgroundColor: `${currentCycle.color}20`,
+                }}
+              >
+                {t(currentCycle.i18n_title)}
+              </span>
+            ))}
         </div>
 
         <Controller
@@ -217,7 +285,6 @@ export const CycleSidebarHeader = observer(function CycleSidebarHeader(props: Pr
                     }
                     mergeDates
                     showTooltip={!!cycleDetails.start_date && !!cycleDetails.end_date} // show tooltip only if both start and end date are present
-                    required={cycleDetails.status !== "draft"}
                     disabled={!isEditingAllowed || isArchived || isCompleted}
                   />
                 )}

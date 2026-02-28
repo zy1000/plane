@@ -11,7 +11,6 @@ import { Combobox } from "@headlessui/react";
 import { useTranslation } from "@plane/i18n";
 // icon
 import { CycleGroupIcon, CycleIcon } from "@plane/propel/icons";
-import type { TCycleGroups } from "@plane/types";
 // ui
 // store hooks
 import { useCycle } from "@/hooks/store/use-cycle";
@@ -73,7 +72,7 @@ export const CycleOptions = observer(function CycleOptions(props: CycleOptionsPr
   const cycleIds = (getProjectCycleIds(projectId) ?? [])?.filter((cycleId) => {
     const cycleDetails = getCycleById(cycleId);
     if (currentCycleId && currentCycleId === cycleId) return false;
-    return cycleDetails?.status ? (cycleDetails?.status.toLowerCase() != "completed" ? true : false) : true;
+    return cycleDetails?.status ? cycleDetails.status !== "completed" : true;
   });
 
   const onOpen = () => {
@@ -89,7 +88,7 @@ export const CycleOptions = observer(function CycleOptions(props: CycleOptionsPr
 
   const options: DropdownOptions = cycleIds?.map((cycleId) => {
     const cycleDetails = getCycleById(cycleId);
-    const cycleStatus = cycleDetails?.status ? (cycleDetails.status.toLocaleLowerCase() as TCycleGroups) : "draft";
+    const cycleStatus = cycleDetails?.status ?? "not_started";
 
     return {
       value: cycleId,

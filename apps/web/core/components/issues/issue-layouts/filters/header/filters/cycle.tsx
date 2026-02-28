@@ -51,8 +51,7 @@ export const FilterCycle = observer(function FilterCycle(props: Props) {
     else setItemsToRender(sortedOptions.length);
   };
 
-  const cycleStatus = (status: TCycleGroups | undefined) =>
-    (status ? status.toLocaleLowerCase() : "draft") as TCycleGroups;
+  const cycleStatus = (status: TCycleGroups | undefined) => status ?? "not_started";
 
   return (
     <>
@@ -75,7 +74,7 @@ export const FilterCycle = observer(function FilterCycle(props: Props) {
                       <CycleGroupIcon cycleGroup={cycleStatus(cycle?.status)} className="h-3.5 w-3.5 flex-shrink-0" />
                     }
                     title={cycle.name}
-                    activePulse={cycleStatus(cycle?.status) === "current" ? true : false}
+                    activePulse={cycleStatus(cycle?.status) === "in_progress" ? true : false}
                   />
                 ))}
                 {sortedOptions.length > 5 && (

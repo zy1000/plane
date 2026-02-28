@@ -1,4 +1,3 @@
-import { isPast, isToday } from "date-fns";
 import { sortBy, set, isEmpty } from "lodash-es";
 import { action, computed, observable, makeObservable, runInAction } from "mobx";
 import { computedFn } from "mobx-utils";
@@ -10,9 +9,10 @@ import type {
   TCycleEstimateDistribution,
   TCycleDistribution,
   TCycleEstimateType,
+  TCycleGroups,
 } from "@plane/types";
 import type { DistributionUpdates } from "@plane/utils";
-import { orderCycles, shouldFilterCycle, getDate, updateDistribution } from "@plane/utils";
+import { orderCycles, shouldFilterCycle, updateDistribution } from "@plane/utils";
 // helpers
 // services
 import { CycleService } from "@/services/cycle.service";
@@ -21,6 +21,81 @@ import { IssueService } from "@/services/issue";
 import { ProjectService } from "@/services/project";
 // store
 import type { CoreRootStore } from "./root.store";
+
+const normalizeCycleStatus = (status: string | null | undefined): TCycleGroups | undefined => {
+  if (!status) return undefined;
+
+  const raw = String(status).trim();
+  const lower = raw.toLowerCase();
+  const map: Record<string, TCycleGroups> = {
+    未开始: "not_started",
+    进行中: "in_progress",
+    已延期: "delayed",
+    已完成: "completed",
+    已取消: "cancelled",
+    not_started: "not_started",
+    in_progress: "in_progress",
+    delayed: "delayed",
+    completed: "completed",
+    cancelled: "cancelled",
+    canceled: "cancelled",
+    current: "in_progress",
+    upcoming: "not_started",
+    draft: "not_started",
+  };
+
+  return map[raw] ?? map[lower] ?? "not_started";
+};
+
+const normalizeOutgoingCyclePatchForApi = (data: Partial<ICycle>): Partial<ICycle> => {
+  if (!("status" in data)) return data;
+  const status = (data as any).status as unknown;
+  if (status === null || status === undefined) return data;
+
+  const raw = String(status).trim();
+  const lower = raw.toLowerCase();
+  const upper = raw.toUpperCase();
+
+  const map: Record<string, string> = {
+    未开始: "未开始",
+    进行中: "进行中",
+    已延期: "已延期",
+    已完成: "已完成",
+    已取消: "已取消",
+    not_started: "未开始",
+    in_progress: "进行中",
+    delayed: "已延期",
+    completed: "已完成",
+    cancelled: "已取消",
+    canceled: "已取消",
+    NOT_STARTED: "未开始",
+    IN_PROGRESS: "进行中",
+    DELAYED: "已延期",
+    COMPLETED: "已完成",
+    CANCELLED: "已取消",
+    CANCELED: "已取消",
+    current: "进行中",
+    upcoming: "未开始",
+    draft: "未开始",
+  };
+
+  const mapped = map[raw] ?? map[lower] ?? map[upper];
+  if (!mapped) return data;
+  return { ...data, status: mapped as any };
+};
+
+const normalizeIncomingCycle = (cycle: ICycle): ICycle => ({
+  ...cycle,
+  status: normalizeCycleStatus(cycle.status) ?? cycle.status,
+});
+
+const normalizeIncomingCyclePatch = (data: Partial<ICycle>): Partial<ICycle> => {
+  if (!("status" in data)) return data;
+  return {
+    ...data,
+    status: normalizeCycleStatus(data.status as string | null | undefined),
+  };
+};
 
 export interface ICycleStore {
   // loaders
@@ -172,12 +247,7 @@ export class CycleStore implements ICycleStore {
     const projectId = this.rootStore.router.projectId;
     if (!projectId || !this.fetchedMap[projectId]) return null;
     let completedCycles = Object.values(this.cycleMap ?? {}).filter((c) => {
-      const endDate = getDate(c.end_date);
-      const hasEndDatePassed = endDate && isPast(endDate);
-      const isEndDateToday = endDate && isToday(endDate);
-      return (
-        c.project_id === projectId && ((hasEndDatePassed && !isEndDateToday) || c.status?.toLowerCase() === "completed")
-      );
+      return c.project_id === projectId && c.status === "completed";
     });
     completedCycles = sortBy(completedCycles, [(c) => c.sort_order]);
     const completedCycleIds = completedCycles.map((c) => c.id);
@@ -191,11 +261,7 @@ export class CycleStore implements ICycleStore {
     const projectId = this.rootStore.router.projectId;
     if (!projectId || !this.fetchedMap[projectId]) return null;
     let incompleteCycles = Object.values(this.cycleMap ?? {}).filter((c) => {
-      const endDate = getDate(c.end_date);
-      const hasEndDatePassed = endDate && isPast(endDate);
-      return (
-        c.project_id === projectId && !hasEndDatePassed && !c?.archived_at && c.status?.toLowerCase() !== "completed"
-      );
+      return c.project_id === projectId && !c?.archived_at && c.status !== "completed";
     });
     incompleteCycles = sortBy(incompleteCycles, [(c) => c.sort_order]);
     const incompleteCycleIds = incompleteCycles.map((c) => c.id);
@@ -211,7 +277,7 @@ export class CycleStore implements ICycleStore {
     const activeCycle = Object.keys(this.cycleMap ?? {}).find(
       (cycleId) =>
         this.cycleMap?.[cycleId]?.project_id === projectId &&
-        this.cycleMap?.[cycleId]?.status?.toLowerCase() === "current"
+        this.cycleMap?.[cycleId]?.status === "in_progress"
     );
     return activeCycle || null;
   }
@@ -282,7 +348,7 @@ export class CycleStore implements ICycleStore {
       (c) =>
         c.project_id === projectId &&
         !c.archived_at &&
-        c.status?.toLowerCase() === "completed" &&
+        c.status === "completed" &&
         c.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
         shouldFilterCycle(c, filters ?? {})
     );
@@ -392,8 +458,9 @@ export class CycleStore implements ICycleStore {
     await this.cycleService.getWorkspaceCycles(workspaceSlug).then((response) => {
       runInAction(() => {
         response.forEach((cycle) => {
-          set(this.cycleMap, [cycle.id], { ...this.cycleMap[cycle.id], ...cycle });
-          set(this.fetchedMap, cycle.project_id, true);
+          const normalizedCycle = normalizeIncomingCycle(cycle);
+          set(this.cycleMap, [normalizedCycle.id], { ...this.cycleMap[normalizedCycle.id], ...normalizedCycle });
+          set(this.fetchedMap, normalizedCycle.project_id, true);
         });
       });
       return response;
@@ -411,9 +478,10 @@ export class CycleStore implements ICycleStore {
       await this.cycleService.getCyclesWithParams(workspaceSlug, projectId).then((response) => {
         runInAction(() => {
           response.forEach((cycle) => {
-            set(this.cycleMap, [cycle.id], cycle);
-            if (cycle.status?.toLowerCase() === "current") {
-              set(this.activeCycleIdMap, [cycle.id], true);
+            const normalizedCycle = normalizeIncomingCycle(cycle);
+            set(this.cycleMap, [normalizedCycle.id], normalizedCycle);
+            if (normalizedCycle.status === "in_progress") {
+              set(this.activeCycleIdMap, [normalizedCycle.id], true);
             }
           });
           set(this.fetchedMap, projectId, true);
@@ -440,7 +508,8 @@ export class CycleStore implements ICycleStore {
       .then((response) => {
         runInAction(() => {
           response.forEach((cycle) => {
-            set(this.cycleMap, [cycle.id], cycle);
+            const normalizedCycle = normalizeIncomingCycle(cycle);
+            set(this.cycleMap, [normalizedCycle.id], normalizedCycle);
           });
           this.loader = false;
         });
@@ -462,8 +531,9 @@ export class CycleStore implements ICycleStore {
     await this.cycleService.getCyclesWithParams(workspaceSlug, projectId, "current").then((response) => {
       runInAction(() => {
         response.forEach((cycle) => {
-          set(this.activeCycleIdMap, [cycle.id], true);
-          set(this.cycleMap, [cycle.id], cycle);
+          const normalizedCycle = normalizeIncomingCycle(cycle);
+          set(this.activeCycleIdMap, [normalizedCycle.id], true);
+          set(this.cycleMap, [normalizedCycle.id], normalizedCycle);
         });
       });
       return response;
@@ -529,7 +599,8 @@ export class CycleStore implements ICycleStore {
   fetchArchivedCycleDetails = async (workspaceSlug: string, projectId: string, cycleId: string) =>
     await this.cycleArchiveService.getArchivedCycleDetails(workspaceSlug, projectId, cycleId).then((response) => {
       runInAction(() => {
-        set(this.cycleMap, [response.id], { ...this.cycleMap?.[response.id], ...response });
+        const normalizedCycle = normalizeIncomingCycle(response);
+        set(this.cycleMap, [normalizedCycle.id], { ...this.cycleMap?.[normalizedCycle.id], ...normalizedCycle });
       });
       return response;
     });
@@ -544,7 +615,8 @@ export class CycleStore implements ICycleStore {
   fetchCycleDetails = async (workspaceSlug: string, projectId: string, cycleId: string) =>
     await this.cycleService.getCycleDetails(workspaceSlug, projectId, cycleId).then((response) => {
       runInAction(() => {
-        set(this.cycleMap, [response.id], { ...this.cycleMap?.[response.id], ...response });
+        const normalizedCycle = normalizeIncomingCycle(response);
+        set(this.cycleMap, [normalizedCycle.id], { ...this.cycleMap?.[normalizedCycle.id], ...normalizedCycle });
       });
       return response;
     });
@@ -575,7 +647,8 @@ export class CycleStore implements ICycleStore {
     async (workspaceSlug: string, projectId: string, data: Partial<ICycle>) =>
       await this.cycleService.createCycle(workspaceSlug, projectId, data).then((response) => {
         runInAction(() => {
-          set(this.cycleMap, [response.id], response);
+          const normalizedCycle = normalizeIncomingCycle(response);
+          set(this.cycleMap, [normalizedCycle.id], normalizedCycle);
         });
         return response;
       })
@@ -592,9 +665,11 @@ export class CycleStore implements ICycleStore {
   updateCycleDetails = async (workspaceSlug: string, projectId: string, cycleId: string, data: Partial<ICycle>) => {
     try {
       runInAction(() => {
-        set(this.cycleMap, [cycleId], { ...this.cycleMap?.[cycleId], ...data });
+        const normalizedPatch = normalizeIncomingCyclePatch(data);
+        set(this.cycleMap, [cycleId], { ...this.cycleMap?.[cycleId], ...normalizedPatch });
       });
-      const response = await this.cycleService.patchCycle(workspaceSlug, projectId, cycleId, data);
+      const apiPatch = normalizeOutgoingCyclePatchForApi(data);
+      const response = await this.cycleService.patchCycle(workspaceSlug, projectId, cycleId, apiPatch);
       this.fetchCycleDetails(workspaceSlug, projectId, cycleId);
       return response;
     } catch (error) {

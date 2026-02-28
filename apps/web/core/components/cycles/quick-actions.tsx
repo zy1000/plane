@@ -43,7 +43,7 @@ export const CycleQuickActions = observer(function CycleQuickActions(props: Prop
   const [deleteModal, setDeleteModal] = useState(false);
   // store hooks
   const { allowPermissions } = useUserPermissions();
-  const { getCycleById, restoreCycle } = useCycle();
+  const { getCycleById, restoreCycle, updateCycleDetails } = useCycle();
   const { t } = useTranslation();
   // derived values
   const cycleDetails = getCycleById(cycleId);
@@ -65,6 +65,39 @@ export const CycleQuickActions = observer(function CycleQuickActions(props: Prop
       });
     });
   const handleOpenInNewTab = () => window.open(`/${cycleLink}`, "_blank");
+
+  const handleUpdateCycleStatus = async (nextStatus: "in_progress" | "completed" | "cancelled") => {
+    if (!cycleDetails) return;
+    if (cycleDetails.status === nextStatus) return;
+
+    await updateCycleDetails(workspaceSlug, projectId, cycleId, { status: nextStatus })
+      .then(() => {
+        setToast({
+          type: TOAST_TYPE.SUCCESS,
+          title: t("project_cycles.action.update.success.title"),
+          message: t("project_cycles.action.update.success.description"),
+        });
+        captureSuccess({
+          eventName: CYCLE_TRACKER_EVENTS.update,
+          payload: {
+            id: cycleId,
+          },
+        });
+      })
+      .catch(() => {
+        setToast({
+          type: TOAST_TYPE.ERROR,
+          title: t("project_cycles.action.update.failed.title"),
+          message: t("something_went_wrong_please_try_again"),
+        });
+        captureError({
+          eventName: CYCLE_TRACKER_EVENTS.update,
+          payload: {
+            id: cycleId,
+          },
+        });
+      });
+  };
 
   const handleRestoreCycle = async () =>
     await restoreCycle(workspaceSlug, projectId, cycleId)
@@ -103,6 +136,9 @@ export const CycleQuickActions = observer(function CycleQuickActions(props: Prop
     cycleId,
     isEditingAllowed,
     handleEdit: () => setUpdateModal(true),
+    handleMarkAsCompleted: () => handleUpdateCycleStatus("completed"),
+    handleMarkAsCancelled: () => handleUpdateCycleStatus("cancelled"),
+    handleMarkAsInProgress: () => handleUpdateCycleStatus("in_progress"),
     handleArchive: () => setArchiveCycleModal(true),
     handleRestore: handleRestoreCycle,
     handleDelete: () => setDeleteModal(true),

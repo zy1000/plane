@@ -155,7 +155,7 @@ const getCycleColumns = (): IGroupByColumn[] | undefined => {
   // Map the cycle details to the group by columns
   const cycles: IGroupByColumn[] = [];
   cycleDetails?.map((cycle) => {
-    const cycleStatus = cycle.status ? (cycle.status.toLocaleLowerCase() as TCycleGroups) : "draft";
+    const cycleStatus = cycle.status ?? "not_started";
     const isDropDisabled = cycleStatus === "completed";
     cycles.push({
       id: cycle.id,

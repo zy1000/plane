@@ -149,22 +149,6 @@ class CycleViewSet(BaseViewSet):
                 )
             )
             .annotate(
-                status=Case(
-                    When(
-                        Q(start_date__lte=current_time_in_utc) & Q(end_date__gte=current_time_in_utc),
-                        then=Value("CURRENT"),
-                    ),
-                    When(start_date__gt=current_time_in_utc, then=Value("UPCOMING")),
-                    When(end_date__lt=current_time_in_utc, then=Value("COMPLETED")),
-                    When(
-                        Q(start_date__isnull=True) & Q(end_date__isnull=True),
-                        then=Value("DRAFT"),
-                    ),
-                    default=Value("DRAFT"),
-                    output_field=CharField(),
-                )
-            )
-            .annotate(
                 assignee_ids=Coalesce(
                     ArrayAgg(
                         "issue_cycle__issue__assignees__id",
@@ -207,6 +191,30 @@ class CycleViewSet(BaseViewSet):
 
         # Convert project local time back to UTC for comparison (start_date is stored in UTC)
         current_time_in_utc = current_time_in_project_tz.astimezone(pytz.utc)
+
+        base_update_queryset = (
+            Cycle.objects.filter(
+                workspace__slug=slug,
+                project_id=project_id,
+                archived_at__isnull=True,
+                deleted_at__isnull=True,
+                start_date__isnull=False,
+                end_date__isnull=False,
+                project__project_projectmember__member=request.user,
+                project__project_projectmember__is_active=True,
+                project__archived_at__isnull=True,
+            )
+            .exclude(status__in=[Cycle.Status.COMPLETED, Cycle.Status.CANCELLED])
+        )
+
+        base_update_queryset.filter(start_date__gt=current_time_in_utc).update(status=Cycle.Status.NOT_STARTED)
+        base_update_queryset.filter(
+            start_date__lte=current_time_in_utc,
+            end_date__gte=current_time_in_utc,
+        ).update(status=Cycle.Status.IN_PROGRESS)
+        base_update_queryset.filter(end_date__lt=current_time_in_utc).update(status=Cycle.Status.DELAYED)
+
+
 
         # Current Cycle
         if cycle_view == "current":
@@ -393,15 +401,15 @@ class CycleViewSet(BaseViewSet):
 
         request_data = request.data
 
-        if cycle.end_date is not None and cycle.end_date < timezone.now():
-            if "sort_order" in request_data:
-                # Can only change sort order for a completed cycle``
-                request_data = {"sort_order": request_data.get("sort_order", cycle.sort_order)}
-            else:
-                return Response(
-                    {"error": "The Cycle has already been completed so it cannot be edited"},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
+        # if cycle.end_date is not None and cycle.end_date < timezone.now():
+        #     if "sort_order" in request_data:
+        #         # Can only change sort order for a completed cycle``
+        #         request_data = {"sort_order": request_data.get("sort_order", cycle.sort_order)}
+        #     else:
+        #         return Response(
+        #             {"error": "The Cycle has already been completed so it cannot be edited"},
+        #             status=status.HTTP_400_BAD_REQUEST,
+        #         )
 
         serializer = CycleWriteSerializer(cycle, data=request.data, partial=True, context={"project_id": project_id})
         if serializer.is_valid():
@@ -457,6 +465,23 @@ class CycleViewSet(BaseViewSet):
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
     def retrieve(self, request, slug, project_id, pk):
         queryset = self.get_queryset().filter(archived_at__isnull=True).filter(pk=pk)
+        project = Project.objects.get(id=self.kwargs.get("project_id"))
+
+        # Fetch project for the specific record or pass project_id dynamically
+        project_timezone = project.timezone
+
+        # Convert the current time (timezone.now()) to the project's timezone
+        local_tz = pytz.timezone(project_timezone)
+        current_time_in_project_tz = timezone.now().astimezone(local_tz)
+        current_time_in_utc = current_time_in_project_tz.astimezone(pytz.utc)
+        update_query = Cycle.objects.filter(pk=pk).exclude(status__in=[Cycle.Status.COMPLETED, Cycle.Status.CANCELLED])
+        update_query.filter(
+            start_date__lte=current_time_in_utc,
+            end_date__gte=current_time_in_utc,
+        ).update(status=Cycle.Status.IN_PROGRESS)
+        update_query.filter(end_date__lt=current_time_in_utc).update(status=Cycle.Status.DELAYED)
+        update_query.filter(start_date__gt=current_time_in_utc).update(status=Cycle.Status.NOT_STARTED)
+
         data = (
             self.get_queryset()
             .filter(pk=pk)

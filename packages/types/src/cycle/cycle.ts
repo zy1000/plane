@@ -1,7 +1,7 @@
 import type { TIssue } from "../issues/issue";
 import type { IIssueFilterOptions } from "../view-props";
 
-export type TCycleGroups = "current" | "upcoming" | "completed" | "draft";
+export type TCycleGroups = "not_started" | "in_progress" | "delayed" | "completed" | "cancelled";
 
 export type TCycleCompletionChartDistribution = {
   [key: string]: number | null;

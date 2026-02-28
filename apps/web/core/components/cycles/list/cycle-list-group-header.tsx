@@ -1,4 +1,3 @@
-import type { FC } from "react";
 import React from "react";
 // types
 import { CycleGroupIcon, ChevronDownIcon } from "@plane/propel/icons";
