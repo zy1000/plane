@@ -68,6 +68,10 @@ export default function IssueCaseSelectionModal({ open, workspaceSlug, issueId, 
   const { projectId } = useParams();
   const qaCaseService = useMemo(() => new QaCaseService(), []);
   const repositoryService = useMemo(() => new RepositoryService(), []);
+  const RESIZER_WIDTH = 8;
+  const MIN_LEFT_PANE_WIDTH = 240;
+  const MAX_LEFT_PANE_WIDTH = 640;
+  const MIN_RIGHT_PANE_WIDTH = 520;
 
   const emitIssueCasesRefresh = useCallback(() => {
     if (typeof window === "undefined") return;
@@ -103,6 +107,57 @@ export default function IssueCaseSelectionModal({ open, workspaceSlug, issueId, 
   const [selectedModuleId, setSelectedModuleId] = useState<string | null>(null);
   const [expandedKeys, setExpandedKeys] = useState<string[] | undefined>(undefined);
   const [autoExpandParent, setAutoExpandParent] = useState(true);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [leftPaneWidth, setLeftPaneWidth] = useState<number>(320);
+  const leftPaneWidthRef = useRef<number>(leftPaneWidth);
+  const resizeStateRef = useRef<{
+    move?: (ev: PointerEvent) => void;
+    up?: () => void;
+    prevUserSelect?: string;
+    prevCursor?: string;
+  } | null>(null);
+  const leftPaneStorageKey = useMemo(
+    () => `IssueCaseSelectionModal:leftPaneWidth:${workspaceSlug || "unknown"}`,
+    [workspaceSlug]
+  );
+
+  const getMaxLeftPaneWidth = useCallback(() => {
+    const rect = containerRef.current?.getBoundingClientRect();
+    const contentWidth = rect?.width;
+    if (!contentWidth || Number.isNaN(contentWidth)) return MAX_LEFT_PANE_WIDTH;
+    return Math.min(MAX_LEFT_PANE_WIDTH, Math.max(MIN_LEFT_PANE_WIDTH, contentWidth - MIN_RIGHT_PANE_WIDTH - RESIZER_WIDTH));
+  }, [MAX_LEFT_PANE_WIDTH, MIN_LEFT_PANE_WIDTH, MIN_RIGHT_PANE_WIDTH, RESIZER_WIDTH]);
+
+  const clampLeftPaneWidth = useCallback(
+    (width: number) => Math.max(MIN_LEFT_PANE_WIDTH, Math.min(width, getMaxLeftPaneWidth())),
+    [MIN_LEFT_PANE_WIDTH, getMaxLeftPaneWidth]
+  );
+
+  useEffect(() => {
+    if (!open) return;
+    try {
+      const raw = window.localStorage.getItem(leftPaneStorageKey);
+      const parsed = raw ? Number(raw) : NaN;
+      if (!Number.isFinite(parsed)) return;
+      setLeftPaneWidth(clampLeftPaneWidth(parsed));
+    } catch {}
+  }, [open, leftPaneStorageKey, clampLeftPaneWidth]);
+
+  useEffect(() => {
+    leftPaneWidthRef.current = leftPaneWidth;
+  }, [leftPaneWidth]);
+
+  useEffect(() => {
+    return () => {
+      const s = resizeStateRef.current;
+      if (!s) return;
+      if (s.move) window.removeEventListener("pointermove", s.move);
+      if (s.up) window.removeEventListener("pointerup", s.up);
+      if (typeof s.prevUserSelect === "string") document.body.style.userSelect = s.prevUserSelect;
+      if (typeof s.prevCursor === "string") document.body.style.cursor = s.prevCursor;
+      resizeStateRef.current = null;
+    };
+  }, []);
 
   useEffect(() => {
     if (!open || !workspaceSlug) return;
@@ -252,8 +307,27 @@ export default function IssueCaseSelectionModal({ open, workspaceSlug, issueId, 
   } as any;
 
   const caseColumns: TableProps<TTestCase>["columns"] = [
-    { title: "名称", dataIndex: "name", key: "name", render: (v) => <span className={styles.nameCell}>{v}</span> },
-    { title: "模块", dataIndex: "module", key: "module", render: (m) => m?.name || "-", width: 160 },
+    {
+      title: "名称",
+      dataIndex: "name",
+      key: "name",
+      render: (v) => (
+        <span className={styles.nameCell} title={v || "-"}>
+          {v || "-"}
+        </span>
+      ),
+    },
+    {
+      title: "模块",
+      dataIndex: "module",
+      key: "module",
+      render: (m) => (
+        <span className={styles.nameCell} title={m?.name}>
+          {m?.name || "-"}
+        </span>
+      ),
+      width: 160,
+    },
     { title: "用例库", dataIndex: "repository_name", key: "repository_name", render: (r) => r || "-", width: 160 },
     {
       title: "类型",
@@ -356,8 +430,25 @@ export default function IssueCaseSelectionModal({ open, workspaceSlug, issueId, 
       }
     >
       <div className={styles.modalBody} style={{ height: "calc(60vh + 50px)", maxHeight: "calc(60vh + 50px)" }}>
-        <div className={styles.content}>
-          <div className={styles.leftPane} style={{ width: "25%", paddingTop: "12px" }}>
+        <div
+          className={styles.content}
+          ref={containerRef}
+          style={{
+            display: "grid",
+            gridTemplateColumns: `${leftPaneWidth}px ${RESIZER_WIDTH}px 1fr`,
+            gap: 0,
+          }}
+        >
+          <div
+            className={styles.leftPane}
+            style={{
+              width: leftPaneWidth,
+              minWidth: leftPaneWidth,
+              maxWidth: leftPaneWidth,
+              paddingTop: "12px",
+              borderRight: "none",
+            }}
+          >
             <div className="px-2">
               <Tree
                 defaultExpandAll
@@ -373,7 +464,66 @@ export default function IssueCaseSelectionModal({ open, workspaceSlug, issueId, 
               />
             </div>
           </div>
-          <div className={styles.rightPane} style={{ width: "75%" }}>
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            tabIndex={0}
+            className="relative group"
+            style={{
+              width: RESIZER_WIDTH,
+              cursor: "col-resize",
+              touchAction: "none",
+              outline: "none",
+            }}
+            onPointerDown={(e) => {
+              e.preventDefault();
+              const startX = e.clientX;
+              const startWidth = leftPaneWidth;
+              const prevUserSelect = document.body.style.userSelect;
+              const prevCursor = document.body.style.cursor;
+              document.body.style.userSelect = "none";
+              document.body.style.cursor = "col-resize";
+
+              const onMove = (ev: PointerEvent) => {
+                const next = clampLeftPaneWidth(startWidth + (ev.clientX - startX));
+                leftPaneWidthRef.current = next;
+                setLeftPaneWidth(next);
+              };
+
+              const onUp = () => {
+                window.removeEventListener("pointermove", onMove);
+                window.removeEventListener("pointerup", onUp);
+                document.body.style.userSelect = prevUserSelect;
+                document.body.style.cursor = prevCursor;
+                try {
+                  window.localStorage.setItem(leftPaneStorageKey, String(leftPaneWidthRef.current));
+                } catch {}
+                resizeStateRef.current = null;
+              };
+
+              resizeStateRef.current = { move: onMove, up: onUp, prevUserSelect, prevCursor };
+              window.addEventListener("pointermove", onMove);
+              window.addEventListener("pointerup", onUp);
+            }}
+            onKeyDown={(e) => {
+              if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+              e.preventDefault();
+              const delta = e.key === "ArrowLeft" ? -12 : 12;
+              const next = clampLeftPaneWidth(leftPaneWidth + delta);
+              leftPaneWidthRef.current = next;
+              setLeftPaneWidth(next);
+              try {
+                window.localStorage.setItem(leftPaneStorageKey, String(next));
+              } catch {}
+            }}
+          >
+            <div className="absolute inset-0 rounded group-hover:bg-custom-background-80" />
+            <div
+              className="absolute inset-y-0 left-1/2 -translate-x-1/2"
+              style={{ width: 1, background: "var(--color-border, #e5e7eb)" }}
+            />
+          </div>
+          <div className={styles.rightPane}>
             <div className="flex items-center justify-between mb-2">
               <Input
                 placeholder="按名称搜索"

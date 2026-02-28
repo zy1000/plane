@@ -14,10 +14,8 @@ import { ActiveCycleProgress } from "@/components/cycles/active-cycle/progress";
 import useCyclesDetails from "@/components/cycles/active-cycle/use-cycles-details";
 import { CycleListGroupHeader } from "@/components/cycles/list/cycle-list-group-header";
 import { CyclesListItem } from "@/components/cycles/list/cycles-list-item";
-import { DetailedEmptyState } from "@/components/empty-state/detailed-empty-state-root";
 // hooks
 import { useCycle } from "@/hooks/store/use-cycle";
-import { useResolvedAssetPath } from "@/hooks/use-resolved-asset-path";
 import type { ActiveCycleIssueDetails } from "@/store/issue/cycle";
 
 interface IActiveCycleDetails {
@@ -111,14 +109,11 @@ export const ActiveCycleRoot: React.FC<IActiveCycleDetails> = observer((props) =
     cycleIds: propsCycleIds,
     showHeader = true,
     filterToInProgress = true,
-    showEmptyState = true,
   } = props;
   // plane hooks
   const { t } = useTranslation();
   // store hooks
   const { currentProjectActiveCycleId, getCycleById } = useCycle();
-  // derived values
-  const activeCycleResolvedPath = useResolvedAssetPath({ basePath: "/empty-state/cycle/active" });
 
   const cycleIds = useMemo(() => {
     if (propsCycleIds) {
@@ -142,14 +137,7 @@ export const ActiveCycleRoot: React.FC<IActiveCycleDetails> = observer((props) =
   const ActiveCyclesComponent = useMemo(
     () => (
       <>
-        {cycleIds.length === 0 ? (
-          showEmptyState && filterToInProgress ? (
-            <DetailedEmptyState
-              title={t("project_cycles.empty_state.active.title")}
-              description={t("project_cycles.empty_state.active.description")}
-            />
-          ) : null
-        ) : (
+        {cycleIds.length === 0 ? null : (
           <div className="flex flex-col">
             {cycleIds.map((id) => (
               <SingleActiveCycle
@@ -164,7 +152,7 @@ export const ActiveCycleRoot: React.FC<IActiveCycleDetails> = observer((props) =
         )}
       </>
     ),
-    [cycleIds, workspaceSlug, projectId, activeCycleResolvedPath, t, showEmptyState, filterToInProgress]
+    [cycleIds, workspaceSlug, projectId]
   );
 
   return (
