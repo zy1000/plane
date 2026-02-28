@@ -1,10 +1,11 @@
 "use client";
 import { useParams } from "next/navigation";
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { Modal, Space, Button, Input, Table, Tag, message, Tree, Select } from "antd";
 import type { TableProps } from "antd";
 import { CaseService as QaCaseService } from "@/services/qa/case.service";
 import { RepositoryService } from "@/services/qa/repository.service";
+import useDebounce from "@/hooks/use-debounce";
 import styles from "../../../qa/review/TestCaseSelectionModal.module.css";
 import {
   globalEnums,
@@ -89,6 +90,7 @@ export default function IssueCaseSelectionModal({ open, workspaceSlug, issueId, 
   const [total, setTotal] = useState<number>(0);
   const [loadingCases, setLoadingCases] = useState(false);
   const [searchName, setSearchName] = useState<string>("");
+  const debouncedSearchName = useDebounce(searchName, 300);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selectedMap, setSelectedMap] = useState<Record<string, TTestCase>>({});
   const [currentPage, setCurrentPage] = useState<number>(1);
@@ -153,18 +155,17 @@ export default function IssueCaseSelectionModal({ open, workspaceSlug, issueId, 
       });
   }, [open, workspaceSlug, selectedRepositoryId, qaCaseService]);
 
-  const fetchCases = useCallback(async (page: number, size: number) => {
+  const fetchCases = useCallback(async (page: number, size: number, keyword?: string) => {
     if (!open || !workspaceSlug || !issueId || !selectedRepositoryId) return;
     setLoadingCases(true);
     try {
       const query: any = { page, page_size: size, issue_id: issueId, repository_id: selectedRepositoryId };
       if (selectedModuleId) query.module_id = selectedModuleId;
-      if (searchName) query.name__icontains = searchName;
+      const trimmedKeyword = (keyword ?? "").trim();
+      if (trimmedKeyword) query.name__icontains = trimmedKeyword;
       const res: TTestCaseResponse = await qaCaseService.getUnselectIssueCase(String(workspaceSlug), query);
       setCases(res?.data || []);
       setTotal(res?.count || 0);
-      setCurrentPage(page);
-      setPageSize(size);
     } catch (err: any) {
       message.error(err?.message || "获取未关联用例失败");
       setCases([]);
@@ -172,21 +173,42 @@ export default function IssueCaseSelectionModal({ open, workspaceSlug, issueId, 
     } finally {
       setLoadingCases(false);
     }
-  }, [open, workspaceSlug, issueId, selectedRepositoryId, selectedModuleId, searchName, qaCaseService]);
+  }, [open, workspaceSlug, issueId, selectedRepositoryId, selectedModuleId, qaCaseService]);
 
   useEffect(() => {
     if (!open) return;
     setSelectedIds(new Set());
     setSelectedMap({});
     setSearchName("");
+    setCases([]);
+    setTotal(0);
     setCurrentPage(1);
-    fetchCases(1, pageSize);
-  }, [open, pageSize, fetchCases]);
+    setSelectedRepositoryId(null);
+    setSelectedModuleId(null);
+  }, [open]);
 
+  const filterKeyRef = useRef<string>("");
   useEffect(() => {
     if (!open || !selectedRepositoryId) return;
-    fetchCases(1, pageSize);
-  }, [open, selectedRepositoryId, selectedModuleId, searchName, pageSize, fetchCases]);
+    const filterKey = `${selectedRepositoryId ?? ""}::${selectedModuleId ?? ""}::${debouncedSearchName ?? ""}`;
+    const filterChanged = filterKeyRef.current !== filterKey;
+    filterKeyRef.current = filterKey;
+
+    if (filterChanged && currentPage !== 1) {
+      setCurrentPage(1);
+      return;
+    }
+
+    fetchCases(currentPage, pageSize, debouncedSearchName);
+  }, [
+    open,
+    selectedRepositoryId,
+    selectedModuleId,
+    debouncedSearchName,
+    currentPage,
+    pageSize,
+    fetchCases,
+  ]);
 
   const orderedCases = useMemo(() => {
     const list = cases || [];
@@ -232,7 +254,7 @@ export default function IssueCaseSelectionModal({ open, workspaceSlug, issueId, 
   const caseColumns: TableProps<TTestCase>["columns"] = [
     { title: "名称", dataIndex: "name", key: "name", render: (v) => <span className={styles.nameCell}>{v}</span> },
     { title: "模块", dataIndex: "module", key: "module", render: (m) => m?.name || "-", width: 160 },
-    { title: "用例库", dataIndex: "repository", key: "repository", render: (r) => r?.name || "-", width: 160 },
+    { title: "用例库", dataIndex: "repository_name", key: "repository_name", render: (r) => r || "-", width: 160 },
     {
       title: "类型",
       dataIndex: "type",
@@ -374,10 +396,12 @@ export default function IssueCaseSelectionModal({ open, workspaceSlug, issueId, 
                 showSizeChanger: true,
                 pageSizeOptions: ["10", "20", "50", "100"],
                 onChange: (page, size) => {
-                  fetchCases(page, size ?? pageSize);
+                  setCurrentPage(page);
+                  if (typeof size === "number" && size !== pageSize) setPageSize(size);
                 },
                 onShowSizeChange: (_current, size) => {
-                  fetchCases(1, size);
+                  setCurrentPage(1);
+                  setPageSize(size);
                 },
                 showTotal: (t, r) => `第 ${r[0]}-${r[1]} 条，共 ${t} 条`,
               }}
