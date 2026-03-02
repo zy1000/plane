@@ -564,10 +564,10 @@ export function BasicInfoPanel(props: BasicInfoPanelProps) {
             />
             <button
               type="button"
-              className="text-white bg-custom-primary-100 hover:bg-custom-primary-200 focus:text-custom-brand-40 focus:bg-custom-primary-200 px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center shrink-0"
+              className="mt-0.5 text-white bg-custom-primary-100 hover:bg-custom-primary-200 focus:text-custom-brand-40 focus:bg-custom-primary-200 px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center shrink-0"
               onClick={onCreateComment}
             >
-              发送
+              评论
             </button>
           </div>
         </div>
