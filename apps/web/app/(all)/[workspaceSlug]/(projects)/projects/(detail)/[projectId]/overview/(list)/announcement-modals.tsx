@@ -75,9 +75,10 @@ export const CreateAnnouncementModal = ({
       isOpen={isOpen}
       handleClose={handleClose}
       position={EModalPosition.CENTER}
-      width={EModalWidth.XXXL}
+      width={EModalWidth.VIXL}
+      className="h-[80vh] max-h-[80vh]"
     >
-      <div className="p-5 space-y-5">
+      <div className="p-5 h-full flex flex-col gap-5">
         <div className="text-lg font-medium">新增公告</div>
         <div className="space-y-2">
           <div className="text-sm text-custom-text-200">标题</div>
@@ -88,14 +89,13 @@ export const CreateAnnouncementModal = ({
             className="w-full"
           />
         </div>
-        <div className="space-y-2">
-          <div className="text-sm text-custom-text-200">描述</div>
+        <div className="flex-1 flex flex-col gap-2 min-h-0">
           <TextArea
             value={createForm.description}
             onChange={(e) => setCreateForm((prev) => ({ ...prev, description: e.target.value }))}
             placeholder="请输入公告描述"
             rows={5}
-            className="min-h-[320px] max-h-[320px] overflow-y-auto vertical-scrollbar scrollbar-sm"
+            className="flex-1 min-h-0 overflow-y-auto vertical-scrollbar scrollbar-sm"
           />
         </div>
         <div className="flex justify-end gap-2">
@@ -135,21 +135,22 @@ export const AnnouncementDetailModal = ({
       isOpen={isOpen}
       handleClose={onClose}
       position={EModalPosition.CENTER}
-      width={EModalWidth.XXXL}
+      width={EModalWidth.VIXL}
+      className="h-[80vh] max-h-[80vh]"
     >
-      <div className="p-5 space-y-5">
+      <div className="p-5 h-full flex flex-col gap-5">
         <div className="text-lg font-medium">公告详情</div>
         <div className="space-y-2">
-          <div className="text-sm text-custom-text-200">标题</div>
-          <div className="text-sm text-custom-text-100 break-all">{localAnnouncement?.name || "-"}</div>
+          <div className="text-sm text-custom-text-200">
+            <span className="text-xl font-semibold text-custom-text-100 break-all pl-3">{localAnnouncement?.name || "-"}</span>
+          </div>
         </div>
-        <div className="space-y-2">
-          <div className="text-sm text-custom-text-200">描述</div>
+        <div className="flex-1 flex flex-col gap-2 min-h-0">
           <TextArea
             value={localAnnouncement?.description?.trim() || ""}
             readOnly
             rows={5}
-            className="min-h-[120px] max-h-[320px] overflow-y-auto vertical-scrollbar scrollbar-sm"
+            className="flex-1 min-h-0 overflow-y-auto vertical-scrollbar scrollbar-sm border-none bg-transparent shadow-none ring-0"
           />
         </div>
         <div className="flex justify-end">
