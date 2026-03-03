@@ -6,13 +6,15 @@ from io import BytesIO
 
 from django.core.files.uploadedfile import InMemoryUploadedFile
 from openpyxl import load_workbook
-
-TABLE_FORMAT = '''<p class="editor-paragraph-block" data-id="{uuid_1}">需求：</p>
+REQUIREMENT_FORMAT = '''
+<p class="editor-paragraph-block" data-id="{uuid_1}">需求：</p>
 <table data-id="{uuid_2}">
 <tbody data-id="{uuid_3}">
 {table_rows}
 </tbody>
 </table>
+'''
+TABLE_FORMAT = '''
 <p class="editor-paragraph-block" data-id="{uuid_4}">说明：</p>
 <p class="editor-paragraph-block" data-id="{uuid_5}">{description}</p>'''
 
@@ -171,8 +173,12 @@ def issue_data_build(excel_data) -> list[dict]:
                        (key and key.startswith('Type:') and value != '')}
         note = data.get('Note')
         table_html = build_html_table(requirement)
+        if table_html:
+            FORMAT = REQUIREMENT_FORMAT + TABLE_FORMAT
+        else:
+            FORMAT = TABLE_FORMAT
         # 插入到主模板中
-        final_html = TABLE_FORMAT.format(table_rows=table_html, description=note, uuid_1=str(uuid.uuid4()),
+        final_html = FORMAT.format(table_rows=table_html, description=note, uuid_1=str(uuid.uuid4()),
                                          uuid_2=str(uuid.uuid4()), uuid_3=str(uuid.uuid4()), uuid_4=str(uuid.uuid4()),
                                          uuid_5=str(uuid.uuid4()))
         data['description_html'] = final_html
