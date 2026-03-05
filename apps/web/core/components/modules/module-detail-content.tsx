@@ -291,12 +291,17 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
   };
 
   useEffect(() => {
-    if (isOpen) {
-      fetchCycles();
-      fetchModuleStatistics();
-      fetchModuleFiles(1);
-    }
-  }, [isOpen]);
+    if (!isOpen || !workspaceSlug || !projectId || !moduleId) return;
+
+    setAssociateOpen(false);
+    setSelectedCycleIds([]);
+    setModuleFilesPage(1);
+
+    fetchModuleDetails(workspaceSlug.toString(), projectId.toString(), moduleId);
+    fetchCycles();
+    fetchModuleStatistics();
+    fetchModuleFiles(1);
+  }, [fetchModuleDetails, isOpen, moduleId, projectId, workspaceSlug]);
 
   const handleNoteOpen = () => {
     setNoteHtml(moduleDetails?.note || "");
@@ -592,7 +597,7 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
         </div>
         <div className="relative bg-white border border-gray-200 p-4 group">
           <div className="flex items-center justify-between">
-            <div className="text-lg font-semibold text-gray-800">迭代</div>
+            <div className="text-lg font-semibold text-gray-800">关联迭代</div>
             <div className="flex">
               <Button
                 variant="link-neutral"
@@ -764,7 +769,7 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
           </div>
         </div>
         <div className="h-[350px] relative bg-white border border-gray-200 p-4 group">
-          <div className="text-lg font-semibold text-gray-800">动态</div>
+          <div className="text-lg font-semibold text-gray-800">发布动态</div>
         </div>
       </div>
       <Transition.Root show={associateOpen} as={Fragment}>
