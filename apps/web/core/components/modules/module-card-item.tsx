@@ -204,7 +204,10 @@ export const ModuleCardItem = observer(function ModuleCardItem(props: Props) {
 
   return (
     <div className="relative" data-prevent-progress>
-      <Link ref={parentRef} href={`/${workspaceSlug}/projects/${moduleDetails.project_id}/modules/${moduleDetails.id}`}>
+      <Link
+        ref={parentRef}
+        href={`/${workspaceSlug}/projects/${moduleDetails.project_id}/modules/${moduleDetails.id}/overview`}
+      >
         <Card>
           <div>
             <div className="flex items-center justify-between gap-2">

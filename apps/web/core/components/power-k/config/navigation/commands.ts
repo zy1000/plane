@@ -352,6 +352,7 @@ export const usePowerKNavigationCommandsRecord = (): Record<TPowerKNavigationCom
           ctx.params.projectId?.toString(),
           "modules",
           moduleDetails.id,
+          "overview",
         ]);
       },
       isEnabled: (ctx) =>

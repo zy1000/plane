@@ -477,7 +477,7 @@ const activityDetails: {
           <>
             added {showIssue ? <IssueLink activity={activity} /> : "this work item"} to the module{" "}
             <a
-              href={`/${workspaceSlug}/projects/${activity.project}/modules/${activity.new_identifier}`}
+              href={`/${workspaceSlug}/projects/${activity.project}/modules/${activity.new_identifier}/overview`}
               target="_blank"
               rel="noopener noreferrer"
               className="inline items-center gap-1 font-medium text-custom-text-100 hover:underline"
@@ -491,7 +491,7 @@ const activityDetails: {
           <>
             set the module to{" "}
             <a
-              href={`/${workspaceSlug}/projects/${activity.project}/modules/${activity.new_identifier}`}
+              href={`/${workspaceSlug}/projects/${activity.project}/modules/${activity.new_identifier}/overview`}
               target="_blank"
               rel="noopener noreferrer"
               className="inline items-center gap-1 font-medium text-custom-text-100 hover:underline"
@@ -505,7 +505,7 @@ const activityDetails: {
           <>
             removed <IssueLink activity={activity} /> from the module{" "}
             <a
-              href={`/${workspaceSlug}/projects/${activity.project}/modules/${activity.old_identifier}`}
+              href={`/${workspaceSlug}/projects/${activity.project}/modules/${activity.old_identifier}/overview`}
               target="_blank"
               rel="noopener noreferrer"
               className="inline items-center gap-1 font-medium text-custom-text-100 hover:underline"

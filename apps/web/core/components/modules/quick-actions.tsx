@@ -55,7 +55,7 @@ export const ModuleQuickActions = observer(function ModuleQuickActions(props: Pr
     projectId
   );
 
-  const moduleLink = `${workspaceSlug}/projects/${projectId}/modules/${moduleId}`;
+  const moduleLink = `${workspaceSlug}/projects/${projectId}/modules/${moduleId}/overview`;
   const handleCopyText = () =>
     copyUrlToClipboard(moduleLink).then(() => {
       setToast({

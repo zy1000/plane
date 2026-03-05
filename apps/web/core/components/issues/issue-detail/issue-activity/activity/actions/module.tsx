@@ -29,7 +29,7 @@ export const IssueModuleActivity = observer(function IssueModuleActivity(props: 
           <>
             <span>added this work item to the module </span>
             <a
-              href={`/${activity.workspace_detail?.slug}/projects/${activity.project}/modules/${activity.new_identifier}`}
+              href={`/${activity.workspace_detail?.slug}/projects/${activity.project}/modules/${activity.new_identifier}/overview`}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1 truncate font-medium text-custom-text-100 hover:underline"
@@ -41,7 +41,7 @@ export const IssueModuleActivity = observer(function IssueModuleActivity(props: 
           <>
             <span>set the module to </span>
             <a
-              href={`/${activity.workspace_detail?.slug}/projects/${activity.project}/modules/${activity.new_identifier}`}
+              href={`/${activity.workspace_detail?.slug}/projects/${activity.project}/modules/${activity.new_identifier}/overview`}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1 truncate font-medium text-custom-text-100 hover:underline"
@@ -53,7 +53,7 @@ export const IssueModuleActivity = observer(function IssueModuleActivity(props: 
           <>
             <span>removed the work item from the module </span>
             <a
-              href={`/${activity.workspace_detail?.slug}/projects/${activity.project}/modules/${activity.old_identifier}`}
+              href={`/${activity.workspace_detail?.slug}/projects/${activity.project}/modules/${activity.old_identifier}/overview`}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1 truncate font-medium text-custom-text-100 hover:underline"
