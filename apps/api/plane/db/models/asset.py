@@ -44,7 +44,6 @@ class FileAsset(BaseModel):
         DRAFT_ISSUE_DESCRIPTION = "DRAFT_ISSUE_DESCRIPTION"
         CASE_ATTACHMENT = "CASE_ATTACHMENT"
 
-
     attributes = models.JSONField(default=dict)
     asset = models.FileField(upload_to=get_upload_path, max_length=800)
     user = models.ForeignKey("db.User", on_delete=models.CASCADE, null=True, related_name="assets")
@@ -83,10 +82,10 @@ class FileAsset(BaseModel):
     @property
     def asset_url(self):
         if (
-            self.entity_type == self.EntityTypeContext.WORKSPACE_LOGO
-            or self.entity_type == self.EntityTypeContext.USER_AVATAR
-            or self.entity_type == self.EntityTypeContext.USER_COVER
-            or self.entity_type == self.EntityTypeContext.PROJECT_COVER
+                self.entity_type == self.EntityTypeContext.WORKSPACE_LOGO
+                or self.entity_type == self.EntityTypeContext.USER_AVATAR
+                or self.entity_type == self.EntityTypeContext.USER_COVER
+                or self.entity_type == self.EntityTypeContext.PROJECT_COVER
         ):
             return f"/api/assets/v2/static/{self.id}/"
 
@@ -110,5 +109,12 @@ class FileAsset(BaseModel):
 
 
 class File(BaseModel):
-    name = models.CharField(max_length=255, blank=True, verbose_name="原始文件名")
+    name = models.CharField(max_length=50, null=True, verbose_name="原始文件名")
+    path = models.CharField(max_length=255, null=True, verbose_name='文件存储路径')
     size = models.PositiveBigIntegerField(verbose_name="文件大小 (bytes)")
+    is_uploaded = models.BooleanField(default=False)
+    storage_metadata = models.JSONField(default=dict, null=True, blank=True)
+
+    class Meta:
+        db_table = "files"
+        ordering = ("-created_at",)

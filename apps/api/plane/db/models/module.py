@@ -92,13 +92,13 @@ class Module(ProjectBaseModel):
         through="ModuleMember",
         through_fields=("module", "member"),
     )
+    files = models.ManyToManyField("db.File", blank=True, related_name="modules")
     view_props = models.JSONField(default=dict)
     sort_order = models.FloatField(default=65535)
     external_source = models.CharField(max_length=255, null=True, blank=True)
     external_id = models.CharField(max_length=255, blank=True, null=True)
     archived_at = models.DateTimeField(null=True)
     logo_props = models.JSONField(default=dict)
-
 
     class Meta:
         unique_together = ["name", "project", "deleted_at"]
@@ -127,6 +127,10 @@ class Module(ProjectBaseModel):
 
     def __str__(self):
         return f"{self.name} {self.start_date} {self.target_date}"
+
+    def get_file_path(self, filename: str = None):
+        path = f'{self.workspace.slug}/{self.project.id}/module/{self.id}/'
+        return path + filename if filename else path
 
 
 class ModuleMember(ProjectBaseModel):

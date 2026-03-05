@@ -14,9 +14,11 @@ from plane.app.views import (
     ModuleArchiveUnarchiveEndpoint,
 )
 from plane.app.views.module.base import ModuleAPI
+from plane.app.views.module.file import ModuleFileAPI
 
 router = SimpleRouter()
 router.register('module', ModuleAPI, basename='module')
+router.register('module/file', ModuleFileAPI, basename='module-file')
 
 urlpatterns = [
     path(

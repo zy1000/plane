@@ -7,9 +7,10 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 
+from plane.utils.minio_utils import get_minio_utils
 # Module imports
 from ..base import BaseAPIView, BaseViewSet
-from plane.db.models import FileAsset, Workspace
+from plane.db.models import FileAsset, Workspace, File
 from plane.app.serializers import FileAssetSerializer
 
 
@@ -84,3 +85,14 @@ class UserAssetsEndpoint(BaseAPIView):
         file_asset.is_deleted = True
         file_asset.save(update_fields=["is_deleted"])
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class FileAPIView(BaseAPIView):
+
+    def delete(self, request):
+        minio = get_minio_utils()
+        file_id = request.query_params.get('file_id')
+        file = File.objects.get(id=file_id)
+        file.delete(soft=False)
+        minio.remove_object(object_name=file.path + file.name)
+        return Response(status=status.HTTP_200_OK)
