@@ -426,18 +426,18 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
           </div>
         </div>
 
-        <div className="h-[400px] bg-white border border-gray-200 flex flex-col">
+        <div className="h-[430px] bg-white border border-gray-200 flex flex-col">
           <div className="p-4 ">
             <div className="text-lg font-semibold text-gray-800">发布进度</div>
           </div>
-          <div className="p-4 flex-1 min-h-0 overflow-y-auto vertical-scrollbar scrollbar-sm">
+          <div className="px-4 pb-4">
             {statsLoading ? (
               <div className="flex items-center justify-center py-8 text-sm text-custom-text-300">加载中...</div>
             ) : statsError ? (
               <div className="bg-red-50 border border-red-200 rounded-md p-3 text-sm text-red-800">{statsError}</div>
             ) : (
               <>
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-3">
                   {[
                     {
                       label: "全部",
@@ -467,13 +467,13 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
                       color: "text-red-600",
                     },
                   ].map((item) => (
-                    <div key={item.label} className="rounded-md border border-gray-200 p-3">
+                    <div key={item.label} className="rounded-md border border-gray-200 p-2">
                       <div className="text-xs text-custom-text-300">{item.label}</div>
-                      <div className={`mt-1 text-2xl font-semibold ${item.color}`}>{item.value}</div>
+                      <div className={`mt-1 text-xl font-semibold ${item.color}`}>{item.value}</div>
                     </div>
                   ))}
                 </div>
-                <div className="h-[320px]">
+                <div className="h-[300px]">
                   <BarChart
                     className="h-full w-full"
                     data={(stats?.type_distribution ?? []).map((t: any) => ({
@@ -545,7 +545,7 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
                     yAxis={{
                       key: "count",
                     }}
-                    margin={{ left: -20, bottom: 30 }}
+                    margin={{ left: -20, bottom: 16 }}
                     legend={{
                       align: "left",
                       verticalAlign: "bottom",
@@ -557,7 +557,7 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
                         paddingTop: "8px",
                       },
                     }}
-                    barSize={24}
+                    barSize={18}
                     showTooltip={showTypeDistributionTooltip}
                     onBarClick={({ barKey, payload, label }) => {
                       const typeId = payload?.typeId;
@@ -570,7 +570,7 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
             )}
           </div>
         </div>
-        <div className="h-[400px] relative bg-white border border-gray-200 p-4 group flex flex-col">
+        <div className="h-[430px] relative bg-white border border-gray-200 p-4 group flex flex-col overflow-hidden">
           <div className="flex items-center justify-between">
             <div className="text-lg font-semibold text-gray-800">发布日志</div>
             <div className="flex">
@@ -579,7 +579,7 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
               </Button>
             </div>
           </div>
-          <div className="mt-3 flex-1 min-h-0 overflow-y-auto vertical-scrollbar scrollbar-sm">
+          <div className="mt-3 flex-1 min-h-0 overflow-hidden">
             {moduleDetails?.note ? (
               <div
                 className="prose max-w-none text-sm text-gray-700"
