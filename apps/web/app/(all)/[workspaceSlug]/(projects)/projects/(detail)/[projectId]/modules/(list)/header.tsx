@@ -45,8 +45,8 @@ export const ModulesListHeader = observer(function ModulesListHeader() {
             <Breadcrumbs.Item
               component={
                 <BreadcrumbLink
-                  label="Modules"
-                  href={`/${workspaceSlug}/projects/${projectId}/modules/`}
+                  label="Releases"
+                  href={`/${workspaceSlug}/projects/${projectId}/modules`}
                   icon={<ModuleIcon className="h-4 w-4 text-custom-text-300" />}
                   isLast
                 />

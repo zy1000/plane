@@ -158,7 +158,7 @@ export const ModuleIssuesHeader = observer(function ModuleIssuesHeader() {
               <Breadcrumbs.Item
                 component={
                   <BreadcrumbLink
-                    label="Modules"
+                    label="Releases"
                     href={`/${workspaceSlug}/projects/${projectId}/modules/`}
                     icon={<ModuleIcon className="h-4 w-4 text-custom-text-300" />}
                     isLast
@@ -172,7 +172,7 @@ export const ModuleIssuesHeader = observer(function ModuleIssuesHeader() {
                     selectedItem={moduleId?.toString() ?? ""}
                     navigationItems={switcherOptions}
                     onChange={(value: string) => {
-                      router.push(`/${workspaceSlug}/projects/${projectId}/modules/${value}`);
+                      router.push(`/${workspaceSlug}/projects/${projectId}/modules/${value}/overview/`);
                     }}
                     title={moduleDetails?.name}
                     icon={<ModuleIcon className="size-3.5 flex-shrink-0 text-custom-text-300" />}
