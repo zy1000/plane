@@ -35,7 +35,7 @@ export const FAVORITE_ITEM_LINKS: {
   },
   module: {
     itemLevel: "project",
-    getLink: (favorite) => `modules/${favorite.entity_identifier}`,
+    getLink: (favorite) => `modules/${favorite.entity_identifier}/overview`,
   },
   view: {
     itemLevel: "project",

@@ -57,7 +57,7 @@ export const ModuleGanttBlock = observer(function ModuleGanttBlock(props: Props)
         style={blockStyle}
         onClick={() =>
           router.push(
-            `/${workspaceSlug?.toString()}/projects/${moduleDetails?.project_id}/modules/${moduleDetails?.id}`
+            `/${workspaceSlug?.toString()}/projects/${moduleDetails?.project_id}/modules/${moduleDetails?.id}/overview`
           )
         }
       >
@@ -84,7 +84,7 @@ export const ModuleGanttSidebarBlock = observer(function ModuleGanttSidebarBlock
   return (
     <Link
       className="relative flex h-full w-max items-center gap-2 whitespace-nowrap"
-      href={`/${workspaceSlug?.toString()}/projects/${moduleDetails?.project_id}/modules/${moduleDetails?.id}`}
+      href={`/${workspaceSlug?.toString()}/projects/${moduleDetails?.project_id}/modules/${moduleDetails?.id}/overview`}
       draggable={false}
     >
       <ModuleStatusIcon status={moduleDetails?.status ?? "backlog"} height="16px" width="16px" />
