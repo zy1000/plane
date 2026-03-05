@@ -1198,6 +1198,7 @@ class CaseAPI(BaseViewSet):
             case_data = parser_case_file(files)
         except Exception as e:
             return Response({'error': f'用例导入失败:{str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
+        module_name_max_length = CaseModule._meta.get_field('name').max_length
         total_count = len(case_data)
         success_count = 0
         fail_list = []
@@ -1232,8 +1233,32 @@ class CaseAPI(BaseViewSet):
 
                 # 创建模块
                 if data.get('module'):
-                    case_module, _ = CaseModule.objects.get_or_create(repository_id=repository_id, name=data['module'])
-                    instance.module = case_module
+                    module_path = str(data['module']).strip()
+                    if module_path:
+                        module_path = module_path.strip("/")
+                        module_names = [name.strip() for name in module_path.split("/")]
+                        if not module_names or any(not name for name in module_names):
+                            raise ValueError(f"模块路径格式错误:{data['module']}")
+                        if module_name_max_length and any(len(name) > module_name_max_length for name in module_names):
+                            raise ValueError(f"模块名称长度不能超过{module_name_max_length}")
+
+                        parent = None
+                        for name in module_names:
+                            try:
+                                module = CaseModule.objects.get(
+                                    repository_id=repository_id,
+                                    name=name,
+                                    parent=parent,
+                                    deleted_at__isnull=True,
+                                )
+                            except CaseModule.DoesNotExist:
+                                module = CaseModule.objects.create(
+                                    repository_id=repository_id,
+                                    name=name,
+                                    parent=parent,
+                                )
+                            parent = module
+                        instance.module = parent
                 # 创建标签
                 # if data.get('label'):
                 #     for label in data['label']:
@@ -1303,8 +1328,13 @@ class CaseAPI(BaseViewSet):
                 if module not in (None, ''):
                     if not isinstance(module, str):
                         errors.append('模块格式错误')
-                    elif module_max_length and len(module) > module_max_length:
-                        errors.append(f'模块长度不能超过{module_max_length}')
+                    else:
+                        module_path = module.strip().strip("/")
+                        module_names = [name.strip() for name in module_path.split("/")] if module_path else []
+                        if not module_names or any(not name for name in module_names):
+                            errors.append('模块路径格式错误')
+                        elif module_max_length and any(len(name) > module_max_length for name in module_names):
+                            errors.append(f'模块名称长度不能超过{module_max_length}')
 
                 steps = data.get('steps')
                 if steps not in (None, ''):

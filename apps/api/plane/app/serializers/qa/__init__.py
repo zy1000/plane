@@ -255,6 +255,9 @@ class CaseModuleCreateUpdateSerializer(ModelSerializer):
     class Meta:
         model = CaseModule
         fields = ['name', 'sort_order', 'parent', 'repository']
+        extra_kwargs = {
+            'parent': {'required': False, 'allow_null': True, 'default': None}
+        }
 
 
 class CaseLabelCreateSerializer(serializers.ModelSerializer):

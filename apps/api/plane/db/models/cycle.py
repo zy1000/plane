@@ -86,6 +86,7 @@ class Cycle(ProjectBaseModel):
                             null=True)
 
     module = models.ForeignKey("Module", on_delete=models.DO_NOTHING, related_name="cycles", null=True, blank=True)
+    files = models.ManyToManyField("db.File", blank=True, related_name="cycles")
 
     class Meta:
         verbose_name = "Cycle"
@@ -107,6 +108,10 @@ class Cycle(ProjectBaseModel):
     def __str__(self):
         """Return name of the cycle"""
         return f"{self.name} <{self.project.name}>"
+
+    def get_file_path(self, filename: str = None):
+        path = f'{self.workspace.slug}/{self.project.id}/cycle/{self.id}/'
+        return path + filename if filename else path
 
 
 class CycleIssue(ProjectBaseModel):
