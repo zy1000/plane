@@ -1,6 +1,5 @@
 from django.urls import path
 
-
 from plane.app.views import (
     FileAssetEndpoint,
     UserAssetsEndpoint,
@@ -17,6 +16,7 @@ from plane.app.views import (
     WorkspaceAssetDownloadEndpoint,
     ProjectAssetDownloadEndpoint,
 )
+from plane.app.views.asset.base import FileAPIView
 from plane.app.views.asset.v2 import WorkspaceBulkAssetEndpoint
 
 urlpatterns = [
@@ -24,6 +24,11 @@ urlpatterns = [
         "workspaces/<str:slug>/file-assets/",
         FileAssetEndpoint.as_view(),
         name="file-assets",
+    ),
+    path(
+        "file/",
+        FileAPIView.as_view(),
+        name="file",
     ),
     path(
         "workspaces/file-assets/<uuid:workspace_id>/<str:asset_key>/",

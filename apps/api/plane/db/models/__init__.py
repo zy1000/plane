@@ -1,6 +1,6 @@
 from .analytic import AnalyticView
 from .api import APIActivityLog, APIToken
-from .asset import FileAsset
+from .asset import FileAsset, File
 from .base import BaseModel
 from .cycle import Cycle, CycleIssue, CycleUserProperties
 from .deploy_board import DeployBoard
