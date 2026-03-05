@@ -89,6 +89,23 @@ class UserAssetsEndpoint(BaseAPIView):
 
 class FileAPIView(BaseAPIView):
 
+    def post(self, request):
+        minio = get_minio_utils()
+        file_id = request.data.get("file_id") or request.query_params.get("file_id")
+        if not file_id:
+            return Response({"error": "file_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+        file = File.objects.filter(id=file_id).first()
+        if not file:
+            return Response({"error": "File not found"}, status=status.HTTP_404_NOT_FOUND)
+        download_url = minio.generate_presigned_get_url(
+            object_name=file.path + file.name,
+            bucket_name="file",
+            response_headers={"response-content-disposition": f'attachment; filename="{file.name}"'},
+        )
+        if not download_url:
+            return Response({"error": "Failed to generate download url"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response({"url": download_url}, status=status.HTTP_200_OK)
+
     def delete(self, request):
         minio = get_minio_utils()
         file_id = request.query_params.get('file_id')

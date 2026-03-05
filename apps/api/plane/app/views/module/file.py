@@ -8,10 +8,13 @@ from plane.app.views import BaseViewSet
 from plane.db.models import Module
 from plane.db.models.asset import File
 from plane.utils.minio_utils import get_minio_utils
+from plane.utils.paginator import CustomPaginator
+from plane.utils.response import list_response
 
 
 class ModuleFileAPI(BaseViewSet):
     model = Module
+    pagination_class = CustomPaginator
 
     @action(detail=False, methods=['post'], url_path='upload')
     def upload(self, request, slug, project_id):
@@ -33,6 +36,8 @@ class ModuleFileAPI(BaseViewSet):
     @action(detail=False, methods=['get'], url_path='list')
     def file_list(self, request, slug, project_id):
         module_id = request.query_params.get('module_id')
+        paginator = self.pagination_class()
         files = Module.objects.get(id=module_id).files.all()
-        serializer = FileSerializer(files, many=True)
-        return Response(data=serializer.data)
+        paginated_queryset = paginator.paginate_queryset(files, request)
+        serializer = FileSerializer(paginated_queryset, many=True)
+        return list_response(data=serializer.data, count=files.count())

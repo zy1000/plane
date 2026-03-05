@@ -290,5 +290,49 @@ export class ModuleService extends APIService {
         throw error?.response?.data;
       });
   }
+
+  async uploadModuleFile(workspaceSlug: string, projectId: string, data: FormData): Promise<any> {
+    return this.post(`/api/workspaces/${workspaceSlug}/projects/${projectId}/module/file/upload/`, data)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async getModuleFileList(
+    workspaceSlug: string,
+    projectId: string,
+    moduleId: string,
+    queries?: { page?: number; page_size?: number }
+  ): Promise<any> {
+    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/module/file/list/`, {
+      params: {
+        module_id: moduleId,
+        ...queries,
+      },
+    })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async deleteModuleFile(fileId: string): Promise<any> {
+    return this.delete(`/api/file/`, undefined, {
+      params: { file_id: fileId },
+    })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async downloadModuleFile(fileId: string): Promise<{ url: string }> {
+    return this.post(`/api/file/`, { file_id: fileId })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
  
 }

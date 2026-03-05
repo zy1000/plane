@@ -2,13 +2,14 @@
 import React, { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { observer } from "mobx-react";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
-import { Plus, Unlink, Pencil } from "lucide-react";
+import { Plus, Unlink, Pencil, Download, Trash2 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { Button } from "@plane/propel/button";
 import { BarChart } from "@plane/propel/charts/bar-chart";
 import { STATE_GROUPS } from "@plane/constants";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Dialog, Transition } from "@headlessui/react";
+import { Pagination, Popconfirm } from "antd";
 import { ReadonlyDate } from "@/components/readonly/date";
 import { ModuleService } from "@/services/module.service";
 import { renderFormattedPayloadDate, findTotalDaysInRange } from "@plane/utils";
@@ -19,6 +20,13 @@ type Props = {
   moduleId: string;
   isArchived?: boolean;
   isOpen?: boolean;
+};
+
+type TModuleFile = {
+  id: string;
+  name: string;
+  size: number;
+  created_at: string;
 };
 
 const InlineQuillEditor: React.FC<{ value: string; onChange: (v: string) => void }> = ({ value, onChange }) => {
@@ -131,6 +139,17 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
   const [noteOpen, setNoteOpen] = useState(false);
   const [noteHtml, setNoteHtml] = useState<string>("");
   const [noteSubmitting, setNoteSubmitting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [moduleFiles, setModuleFiles] = useState<TModuleFile[]>([]);
+  const [moduleFilesLoading, setModuleFilesLoading] = useState(false);
+  const [moduleFilesError, setModuleFilesError] = useState<string | null>(null);
+  const [moduleFilesPage, setModuleFilesPage] = useState(1);
+  const [moduleFilesTotal, setModuleFilesTotal] = useState(0);
+  const [moduleFilesUploading, setModuleFilesUploading] = useState(false);
+  const [moduleFilesDeletingId, setModuleFilesDeletingId] = useState<string | null>(null);
+  const [moduleFilesDownloadingId, setModuleFilesDownloadingId] = useState<string | null>(null);
+
+  const moduleFilesPageSize = 5;
 
   const fetchModuleStatistics = async () => {
     if (!workspaceSlug || !projectId || !moduleId) return;
@@ -161,6 +180,94 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
     }
   };
 
+  const fetchModuleFiles = async (page = moduleFilesPage) => {
+    if (!workspaceSlug || !projectId || !moduleId) return;
+    try {
+      setModuleFilesLoading(true);
+      setModuleFilesError(null);
+      const res = await moduleService.getModuleFileList(workspaceSlug.toString(), projectId.toString(), moduleId, {
+        page,
+        page_size: moduleFilesPageSize,
+      });
+      const list = Array.isArray(res?.data) ? res.data : [];
+      const count = Number(res?.count ?? 0);
+      const totalPages = Math.max(Math.ceil(count / moduleFilesPageSize), 1);
+      const safePage = Math.min(Math.max(page, 1), totalPages);
+      if (safePage !== page) {
+        await fetchModuleFiles(safePage);
+        return;
+      }
+      setModuleFiles(list);
+      setModuleFilesTotal(count);
+      setModuleFilesPage(page);
+    } catch (e: any) {
+      setModuleFilesError(e?.detail || e?.error || "获取文件列表失败");
+    } finally {
+      setModuleFilesLoading(false);
+    }
+  };
+
+  const handleUploadModuleFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (!workspaceSlug || !projectId || !moduleId) return;
+    const file = event.target.files?.[0];
+    if (!file) return;
+    try {
+      setModuleFilesUploading(true);
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("module_id", moduleId);
+      await moduleService.uploadModuleFile(workspaceSlug.toString(), projectId.toString(), formData);
+      setToast({ type: TOAST_TYPE.SUCCESS, title: "上传成功", message: "文件已上传" });
+      await fetchModuleFiles(1);
+    } catch (e: any) {
+      setToast({ type: TOAST_TYPE.ERROR, title: "上传失败", message: e?.detail || e?.error || "请稍后重试" });
+    } finally {
+      event.target.value = "";
+      setModuleFilesUploading(false);
+    }
+  };
+
+  const handleDeleteModuleFile = async (fileId: string) => {
+    try {
+      setModuleFilesDeletingId(fileId);
+      await moduleService.deleteModuleFile(fileId);
+      setToast({ type: TOAST_TYPE.SUCCESS, title: "删除成功", message: "文件已删除" });
+      await fetchModuleFiles(moduleFilesPage);
+    } catch (e: any) {
+      setToast({ type: TOAST_TYPE.ERROR, title: "删除失败", message: e?.detail || e?.error || "请稍后重试" });
+    } finally {
+      setModuleFilesDeletingId(null);
+    }
+  };
+
+  const handleDownloadModuleFile = async (fileId: string) => {
+    try {
+      setModuleFilesDownloadingId(fileId);
+      const res = await moduleService.downloadModuleFile(fileId);
+      if (!res?.url) {
+        setToast({ type: TOAST_TYPE.ERROR, title: "下载失败", message: "下载地址不存在" });
+        return;
+      }
+      const link = document.createElement("a");
+      link.href = res.url;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (e: any) {
+      setToast({ type: TOAST_TYPE.ERROR, title: "下载失败", message: e?.detail || e?.error || "请稍后重试" });
+    } finally {
+      setModuleFilesDownloadingId(null);
+    }
+  };
+
+  const formatFileSize = (size = 0) => {
+    if (size < 1024) return `${size} B`;
+    if (size < 1024 * 1024) return `${(size / 1024).toFixed(2)} KB`;
+    return `${(size / (1024 * 1024)).toFixed(2)} MB`;
+  };
+
   const fetchSelectable = async (page = selectPage, pageSize = selectPageSize) => {
     if (!workspaceSlug || !projectId) return;
     try {
@@ -187,6 +294,7 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
     if (isOpen) {
       fetchCycles();
       fetchModuleStatistics();
+      fetchModuleFiles(1);
     }
   }, [isOpen]);
 
@@ -261,7 +369,7 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
   });
 
   return (
-    <>
+    <div className="h-full overflow-y-auto vertical-scrollbar scrollbar-sm">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-[#fafafa]">
         <div className="md:col-span-2 bg-white border border-gray-200 p-4">
           <div className="text-sm font-medium text-gray-700 mb-3">基本信息</div>
@@ -318,11 +426,11 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
           </div>
         </div>
 
-        <div className="bg-white border border-gray-200">
+        <div className="h-[400px] bg-white border border-gray-200 flex flex-col">
           <div className="p-4 ">
             <div className="text-lg font-semibold text-gray-800">发布进度</div>
           </div>
-          <div className="p-4">
+          <div className="p-4 flex-1 min-h-0 overflow-y-auto vertical-scrollbar scrollbar-sm">
             {statsLoading ? (
               <div className="flex items-center justify-center py-8 text-sm text-custom-text-300">加载中...</div>
             ) : statsError ? (
@@ -462,7 +570,7 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
             )}
           </div>
         </div>
-        <div className="relative bg-white border border-gray-200 p-4 group">
+        <div className="h-[400px] relative bg-white border border-gray-200 p-4 group flex flex-col">
           <div className="flex items-center justify-between">
             <div className="text-lg font-semibold text-gray-800">发布日志</div>
             <div className="flex">
@@ -471,7 +579,7 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
               </Button>
             </div>
           </div>
-          <div className="mt-3 max-h-[500px] overflow-y-auto vertical-scrollbar scrollbar-sm">
+          <div className="mt-3 flex-1 min-h-0 overflow-y-auto vertical-scrollbar scrollbar-sm">
             {moduleDetails?.note ? (
               <div
                 className="prose max-w-none text-sm text-gray-700"
@@ -557,6 +665,106 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
         </div>
         <div className="h-[300px] relative bg-white border border-gray-200 p-4 group">
           <div className="text-lg font-semibold text-gray-800">测试计划</div>
+        </div>
+        <div className="h-[350px] relative bg-white border border-gray-200 p-4 group flex flex-col">
+          <div className="flex items-center justify-between">
+            <div className="text-lg font-semibold text-gray-800">文件</div>
+            <div className="flex">
+              <Button
+                variant="link-neutral"
+                className="p-0"
+                onClick={() => fileInputRef.current?.click()}
+                loading={moduleFilesUploading}
+                disabled={moduleFilesUploading}
+              >
+                <Plus className="h-3.5 w-3.5" />
+              </Button>
+              <input ref={fileInputRef} type="file" className="hidden" onChange={handleUploadModuleFile} />
+            </div>
+          </div>
+          <div className="mt-3 flex-1 min-h-0 overflow-y-auto vertical-scrollbar scrollbar-sm">
+            {moduleFilesLoading && (
+              <div className="flex items-center justify-center py-8 text-sm text-custom-text-300">加载中...</div>
+            )}
+            {moduleFilesError && (
+              <div className="bg-red-50 border border-red-200 rounded-md p-3 text-sm text-red-800">{moduleFilesError}</div>
+            )}
+            {!moduleFilesLoading && !moduleFilesError && (
+              <div className="overflow-x-auto">
+                <table className="min-w-full table-fixed">
+                  <thead>
+                    <tr className="text-left text-xs text-custom-text-300 border-b">
+                      <th className="w-2/5 px-2 py-2">文件名</th>
+                      <th className="w-1/5 px-2 py-2">大小</th>
+                      <th className="w-1/5 px-2 py-2">上传时间</th>
+                      <th className="w-1/5 px-2 py-2 text-right">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {moduleFiles.length === 0 && (
+                      <tr>
+                        <td className="px-2 py-6 text-sm text-custom-text-300" colSpan={4}>
+                          暂无文件
+                        </td>
+                      </tr>
+                    )}
+                    {moduleFiles.map((file) => (
+                      <tr key={file.id} className="border-b hover:bg-custom-background-90">
+                        <td className="px-2 py-2 truncate text-sm text-gray-800" title={file.name}>
+                          {file.name}
+                        </td>
+                        <td className="px-2 py-2 text-sm text-custom-text-200">{formatFileSize(Number(file.size ?? 0))}</td>
+                        <td className="px-2 py-2 text-sm text-custom-text-200">
+                          <ReadonlyDate value={file.created_at} formatToken="yyyy-MM-dd" hideIcon={true} />
+                        </td>
+                        <td className="px-2 py-2">
+                          <div className="flex items-center justify-end gap-2">
+                            <Button
+                              variant="link-neutral"
+                              className="p-0"
+                              disabled={moduleFilesDownloadingId === file.id}
+                              onClick={() => handleDownloadModuleFile(file.id)}
+                            >
+                              <Download className="h-3.5 w-3.5" />
+                            </Button>
+                            <Popconfirm
+                              title="确认删除该文件？"
+                              okText="删除"
+                              cancelText="取消"
+                              onConfirm={() => void handleDeleteModuleFile(file.id)}
+                            >
+                              <Button
+                                variant="link-neutral"
+                                className="p-0 text-red-500 hover:text-red-600"
+                                disabled={moduleFilesDeletingId === file.id}
+                                loading={moduleFilesDeletingId === file.id}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </Popconfirm>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+          <div className="flex-shrink-0 border-t border-custom-border-200 px-2 py-2 bg-custom-background-100 flex items-center justify-between mt-2">
+            <div className="text-sm text-custom-text-300">{moduleFilesTotal > 0 ? `共 ${moduleFilesTotal} 条` : ""}</div>
+            <Pagination
+              simple
+              current={moduleFilesPage}
+              pageSize={moduleFilesPageSize}
+              total={moduleFilesTotal}
+              onChange={(p) => fetchModuleFiles(p)}
+              size="small"
+            />
+          </div>
+        </div>
+        <div className="h-[350px] relative bg-white border border-gray-200 p-4 group">
+          <div className="text-lg font-semibold text-gray-800">动态</div>
         </div>
       </div>
       <Transition.Root show={associateOpen} as={Fragment}>
@@ -748,6 +956,6 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
           </div>
         </Dialog>
       </Transition.Root>
-    </>
+    </div>
   );
 });
