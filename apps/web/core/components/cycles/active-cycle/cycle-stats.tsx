@@ -4,12 +4,12 @@
  * See the LICENSE file for details.
  */
 
-import type { FC } from "react";
+import type { ChangeEvent, FC } from "react";
 import { Fragment, useCallback, useRef, useState, useEffect } from "react";
 import { isEmpty } from "lodash-es";
 import { observer } from "mobx-react";
 import { useTheme } from "next-themes";
-import { CalendarCheck } from "lucide-react";
+import { CalendarCheck, Download, Plus, Trash2 } from "lucide-react";
 // headless ui
 import { Tab } from "@headlessui/react";
 // plane imports
@@ -20,17 +20,15 @@ import type { TWorkItemFilterCondition } from "@plane/shared-state";
 import type { ICycle } from "@plane/types";
 import { EIssuesStoreType } from "@plane/types";
 // ui
-import { Loader, Avatar } from "@plane/ui";
+import { Loader, Avatar, Button } from "@plane/ui";
 import { cn, renderFormattedDate, renderFormattedDateWithoutYear, getFileURL } from "@plane/utils";
 // assets
 import darkAssigneeAsset from "@/app/assets/empty-state/active-cycle/assignee-dark.webp?url";
 import lightAssigneeAsset from "@/app/assets/empty-state/active-cycle/assignee-light.webp?url";
-import darkLabelAsset from "@/app/assets/empty-state/active-cycle/label-dark.webp?url";
-import lightLabelAsset from "@/app/assets/empty-state/active-cycle/label-light.webp?url";
 import darkPriorityAsset from "@/app/assets/empty-state/active-cycle/priority-dark.webp?url";
 import lightPriorityAsset from "@/app/assets/empty-state/active-cycle/priority-light.webp?url";
 import userImage from "@/app/assets/user.png?url";
-import { Tag, Tooltip } from "antd";
+import { Pagination, Popconfirm, Tag, Tooltip } from "antd";
 // components
 import { SingleProgressStats } from "@/components/core/sidebar/single-progress-stats";
 import { StateDropdown } from "@/components/dropdowns/state/dropdown";
@@ -42,6 +40,7 @@ import { useIntersectionObserver } from "@/hooks/use-intersection-observer";
 import useLocalStorage from "@/hooks/use-local-storage";
 // plane web components
 import { IssueIdentifier } from "@/plane-web/components/issues/issue-details/issue-identifier";
+import { CycleService } from "@/services/cycle.service";
 // store
 import type { ActiveCycleIssueDetails } from "@/store/issue/cycle";
 
@@ -56,16 +55,27 @@ export type ActiveCycleStatsProps = {
 
 export const ActiveCycleStats = observer(function ActiveCycleStats(props: ActiveCycleStatsProps) {
   const { workspaceSlug, projectId, cycle, cycleId, handleFiltersUpdate, cycleIssueDetails } = props;
-    const router = useRouter();
-    const [testPlans, setTestPlans] = useState<any[]>([]);
-    const [loading, setLoading] = useState<boolean>(true);
-    const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
+  const cycleService = useRef(new CycleService());
+  const [testPlans, setTestPlans] = useState<any[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+  const [cycleFiles, setCycleFiles] = useState<any[]>([]);
+  const [cycleFilesLoading, setCycleFilesLoading] = useState(false);
+  const [cycleFilesError, setCycleFilesError] = useState<string | null>(null);
+  const [cycleFilesPage, setCycleFilesPage] = useState(1);
+  const [cycleFilesTotal, setCycleFilesTotal] = useState(0);
+  const [cycleFilesDownloadingId, setCycleFilesDownloadingId] = useState<string | null>(null);
+  const [cycleFilesDeletingId, setCycleFilesDeletingId] = useState<string | null>(null);
+  const [cycleFilesUploading, setCycleFilesUploading] = useState(false);
+  const cycleFilesPageSize = 5;
   // local storage
   const { storedValue: tab, setValue: setTab } = useLocalStorage("activeCycleTab", "Assignees");
   // refs
   const issuesContainerRef = useRef<HTMLDivElement | null>(null);
   // states
   const [issuesLoaderElement, setIssueLoaderElement] = useState<HTMLDivElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   // theme hook
   const { resolvedTheme } = useTheme();
   // plane hooks
@@ -73,7 +83,6 @@ export const ActiveCycleStats = observer(function ActiveCycleStats(props: Active
   // derived values
   const priorityResolvedPath = resolvedTheme === "light" ? lightPriorityAsset : darkPriorityAsset;
   const assigneesResolvedPath = resolvedTheme === "light" ? lightAssigneeAsset : darkAssigneeAsset;
-  const labelsResolvedPath = resolvedTheme === "light" ? lightLabelAsset : darkLabelAsset;
 
   const currentValue = (tab: string | null) => {
     switch (tab) {
@@ -81,7 +90,7 @@ export const ActiveCycleStats = observer(function ActiveCycleStats(props: Active
         return 0;
       case "Assignees":
         return 1;
-      case "Labels":
+      case "Files":
         return 2;
       default:
         return 0;
@@ -101,6 +110,91 @@ export const ActiveCycleStats = observer(function ActiveCycleStats(props: Active
   }, [workspaceSlug, projectId, cycleId, issuesLoaderElement, cycleIssueDetails?.nextPageResults]);
 
   useIntersectionObserver(issuesContainerRef, issuesLoaderElement, loadMoreIssues, `0% 0% 100% 0%`);
+
+  const fetchCycleFiles = useCallback(
+    async (page = 1) => {
+      if (!workspaceSlug || !projectId || !cycleId) return;
+      try {
+        setCycleFilesLoading(true);
+        setCycleFilesError(null);
+        const res = await cycleService.current.getCycleFileList(workspaceSlug, projectId, cycleId, {
+          page,
+          page_size: cycleFilesPageSize,
+        });
+        const list = Array.isArray(res?.data) ? res.data : [];
+        const count = Number(res?.count ?? 0);
+        const totalPages = Math.max(Math.ceil(count / cycleFilesPageSize), 1);
+        const safePage = Math.min(Math.max(page, 1), totalPages);
+        if (safePage !== page) {
+          await fetchCycleFiles(safePage);
+          return;
+        }
+        setCycleFiles(list);
+        setCycleFilesTotal(count);
+        setCycleFilesPage(page);
+      } catch (e: any) {
+        setCycleFilesError(e?.detail || e?.error || "获取文件列表失败");
+      } finally {
+        setCycleFilesLoading(false);
+      }
+    },
+    [workspaceSlug, projectId, cycleId]
+  );
+
+  const handleDownloadCycleFile = async (fileId: string) => {
+    try {
+      setCycleFilesDownloadingId(fileId);
+      const res = await cycleService.current.downloadCycleFile(fileId);
+      if (!res?.url) return;
+      const link = document.createElement("a");
+      link.href = res.url;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } finally {
+      setCycleFilesDownloadingId(null);
+    }
+  };
+
+  const handleUploadCycleFile = async (event: ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = event.target.files?.[0];
+    if (!selectedFile || !cycleId) return;
+    try {
+      setCycleFilesUploading(true);
+      setCycleFilesError(null);
+      const formData = new FormData();
+      formData.append("file", selectedFile);
+      formData.append("cycle_id", cycleId);
+      await cycleService.current.uploadCycleFile(workspaceSlug, projectId, formData);
+      await fetchCycleFiles(1);
+    } catch (e: any) {
+      setCycleFilesError(e?.detail || e?.error || "上传失败");
+    } finally {
+      setCycleFilesUploading(false);
+      event.target.value = "";
+    }
+  };
+
+  const handleDeleteCycleFile = async (fileId: string) => {
+    try {
+      setCycleFilesDeletingId(fileId);
+      setCycleFilesError(null);
+      await cycleService.current.deleteCycleFile(fileId);
+      await fetchCycleFiles(cycleFilesPage);
+    } catch (e: any) {
+      setCycleFilesError(e?.detail || e?.error || "删除失败");
+    } finally {
+      setCycleFilesDeletingId(null);
+    }
+  };
+
+  const formatFileSize = (size = 0) => {
+    if (size < 1024) return `${size} B`;
+    if (size < 1024 * 1024) return `${(size / 1024).toFixed(2)} KB`;
+    return `${(size / (1024 * 1024)).toFixed(2)} MB`;
+  };
 
     // 渲染测试计划状态
   const renderState = (state: any) => {
@@ -207,6 +301,11 @@ export const ActiveCycleStats = observer(function ActiveCycleStats(props: Active
     }
   }, [cycle]);
 
+  useEffect(() => {
+    if (!cycleId) return;
+    fetchCycleFiles(1);
+  }, [cycleId, fetchCycleFiles]);
+
   const loaders = (
     <Loader className="space-y-3">
       <Loader.Item height="30px" />
@@ -227,7 +326,7 @@ export const ActiveCycleStats = observer(function ActiveCycleStats(props: Active
             case 1:
               return setTab("Assignees");
             case 2:
-              return setTab("Labels");
+              return setTab("Files");
 
             default:
               return setTab("Priority-Issues");
@@ -278,7 +377,7 @@ export const ActiveCycleStats = observer(function ActiveCycleStats(props: Active
               )
             }
           >
-            {t("project_cycles.active_cycle.labels")}
+            文件
           </Tab>
         </Tab.List>
 
@@ -396,44 +495,104 @@ export const ActiveCycleStats = observer(function ActiveCycleStats(props: Active
 
           <Tab.Panel
             as="div"
-            className="vertical-scrollbar flex scrollbar-sm h-52 w-full flex-col gap-1 overflow-y-auto text-secondary"
+            className="flex h-52 w-full flex-col text-custom-text-200"
           >
-            {cycle && !isEmpty(cycle.distribution) ? (
-              cycle?.distribution?.labels && cycle.distribution.labels.length > 0 ? (
-                cycle.distribution.labels?.map((label, index) => (
-                  <SingleProgressStats
-                    key={label.label_id ?? `no-label-${index}`}
-                    title={
-                      <div className="flex items-center gap-2 truncate">
-                        <span
-                          className="block h-3 w-3 flex-shrink-0 rounded-full"
-                          style={{
-                            backgroundColor: label.color ?? "#000000",
-                          }}
-                        />
-                        <span className="truncate text-11 text-ellipsis">{label.label_name ?? "No labels"}</span>
-                      </div>
-                    }
-                    completed={label.completed_issues}
-                    total={label.total_issues}
-                    onClick={
-                      label.label_id
-                        ? () => {
-                            if (label.label_id) {
-                              handleFiltersUpdate([{ property: "label_id", operator: "in", value: [label.label_id] }]);
-                            }
-                          }
-                        : undefined
-                    }
-                  />
-                ))
-              ) : (
-                <div className="flex h-full w-full items-center justify-center">
-                  <SimpleEmptyState title={t("active_cycle.empty_state.label.title")} assetPath={labelsResolvedPath} />
-                </div>
-              )
+            <div className="flex items-center justify-between px-2 py-1">
+              <div className="text-xs font-medium text-custom-text-300">文件</div>
+              <div className="flex">
+                <Button
+                  variant="link-neutral"
+                  className="p-0"
+                  onClick={() => fileInputRef.current?.click()}
+                  loading={cycleFilesUploading}
+                  disabled={cycleFilesUploading}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                </Button>
+                <input ref={fileInputRef} type="file" className="hidden" onChange={handleUploadCycleFile} />
+              </div>
+            </div>
+            {cycleFilesLoading ? (
+              <div className="flex items-center justify-center py-8 text-sm text-custom-text-300">加载中...</div>
+            ) : cycleFilesError ? (
+              <div className="bg-red-50 border border-red-200 rounded-md p-3 text-sm text-red-800">{cycleFilesError}</div>
             ) : (
-              loaders
+              <div className="flex h-full min-h-0 flex-col">
+                <div className="min-h-0 flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm">
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full table-fixed">
+                      <thead>
+                        <tr className="text-left text-xs text-custom-text-300 border-b">
+                          <th className="w-2/5 px-2 py-2">文件名</th>
+                          <th className="w-1/5 px-2 py-2">大小</th>
+                          <th className="w-1/5 px-2 py-2">上传时间</th>
+                          <th className="w-1/5 px-2 py-2 text-right">操作</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {cycleFiles.length === 0 && (
+                          <tr>
+                            <td className="px-2 py-6 text-sm text-custom-text-300" colSpan={4}>
+                              暂无文件
+                            </td>
+                          </tr>
+                        )}
+                        {cycleFiles.map((file) => (
+                          <tr key={file.id} className="border-b hover:bg-custom-background-90">
+                            <td className="px-2 py-2 truncate text-sm text-gray-800" title={file.name}>
+                              {file.name}
+                            </td>
+                            <td className="px-2 py-2 text-sm text-custom-text-200">
+                              {formatFileSize(Number(file.size ?? 0))}
+                            </td>
+                            <td className="px-2 py-2 text-sm text-custom-text-200">
+                              {renderFormattedDateWithoutYear(file.created_at)}
+                            </td>
+                            <td className="px-2 py-2">
+                              <div className="flex items-center justify-end gap-2">
+                                <Button
+                                  variant="link-neutral"
+                                  className="p-0"
+                                  disabled={cycleFilesDownloadingId === file.id}
+                                  onClick={() => handleDownloadCycleFile(file.id)}
+                                >
+                                  <Download className="h-3.5 w-3.5" />
+                                </Button>
+                                <Popconfirm
+                                  title="确认删除该文件？"
+                                  okText="删除"
+                                  cancelText="取消"
+                                  onConfirm={() => void handleDeleteCycleFile(file.id)}
+                                >
+                                  <Button
+                                    variant="link-neutral"
+                                    className="p-0 text-red-500 hover:text-red-600"
+                                    disabled={cycleFilesDeletingId === file.id}
+                                    loading={cycleFilesDeletingId === file.id}
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </Button>
+                                </Popconfirm>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+                <div className="flex-shrink-0 border-t border-custom-border-200 px-2 py-2 bg-custom-background-100 flex items-center justify-between mt-2">
+                  <div className="text-sm text-custom-text-300">{cycleFilesTotal > 0 ? `共 ${cycleFilesTotal} 条` : ""}</div>
+                  <Pagination
+                    simple
+                    current={cycleFilesPage}
+                    pageSize={cycleFilesPageSize}
+                    total={cycleFilesTotal}
+                    onChange={(p) => fetchCycleFiles(p)}
+                    size="small"
+                  />
+                </div>
+              </div>
             )}
           </Tab.Panel>
         </Tab.Panels>

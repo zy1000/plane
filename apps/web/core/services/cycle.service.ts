@@ -198,6 +198,50 @@ export class CycleService extends APIService {
       });
   }
 
+  async getCycleFileList(
+    workspaceSlug: string,
+    projectId: string,
+    cycleId: string,
+    queries?: { page?: number; page_size?: number }
+  ): Promise<any> {
+    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/cycles/file/list/`, {
+      params: {
+        cycle_id: cycleId,
+        ...queries,
+      },
+    })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async uploadCycleFile(workspaceSlug: string, projectId: string, data: FormData): Promise<any> {
+    return this.post(`/api/workspaces/${workspaceSlug}/projects/${projectId}/cycles/file/upload/`, data)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async downloadCycleFile(fileId: string): Promise<{ url: string }> {
+    return this.post(`/api/file/`, { file_id: fileId })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async deleteCycleFile(fileId: string): Promise<any> {
+    return this.delete(`/api/file/`, undefined, {
+      params: { file_id: fileId },
+    })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
   async removeCycleFromFavorites(workspaceSlug: string, projectId: string, cycleId: string): Promise<any> {
     return this.delete(`/api/workspaces/${workspaceSlug}/projects/${projectId}/user-favorite-cycles/${cycleId}/`)
       .then((response) => response?.data)

@@ -880,11 +880,7 @@ class CycleAnalyticsEndpoint(BaseAPIView):
             .first()
         )
 
-        if not cycle.start_date or not cycle.end_date:
-            return Response(
-                {"error": "Cycle has no start or end date"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+
 
         # this will tell whether the issues were transferred to the new cycle
         """ 

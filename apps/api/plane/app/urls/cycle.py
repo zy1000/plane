@@ -15,10 +15,21 @@ from plane.app.views import (
     TransferCycleIssueEndpoint,
     CycleUserPropertiesEndpoint,
     CycleArchiveUnarchiveEndpoint,
+    CycleFileAPI,
 )
 
 
 urlpatterns = [
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/cycles/file/upload/",
+        CycleFileAPI.as_view({"post": "upload"}),
+        name="cycle-file-upload",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/cycles/file/list/",
+        CycleFileAPI.as_view({"get": "file_list"}),
+        name="cycle-file-list",
+    ),
     path(
         "workspaces/<str:slug>/projects/<uuid:project_id>/cycles/",
         CycleViewSet.as_view({"get": "list", "post": "create"}),
