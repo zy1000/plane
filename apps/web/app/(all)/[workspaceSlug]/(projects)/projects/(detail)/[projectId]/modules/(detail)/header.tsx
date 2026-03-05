@@ -215,7 +215,7 @@ export const ModuleIssuesHeader = observer(function ModuleIssuesHeader() {
                 ))}
               </div>
             )}
-            {workItemsCount && workItemsCount > 0 ? (
+            {!isOverviewActive && workItemsCount && workItemsCount > 0 ? (
               <Tooltip
                 isMobile={isMobile}
                 tooltipContent={`There are ${workItemsCount} ${
