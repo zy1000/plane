@@ -1199,7 +1199,7 @@ function UpdateModal({ open, onClose, caseId, workspaceSlug: propWorkspaceSlug, 
               />
             )}
             {activeTab === "execution" && caseId && (
-              <div className="mt-4">
+              <div>
                 <div className="rounded  border-gray-200 overflow-hidden">
                   <div className="overflow-x-auto">
                     <Table
@@ -1300,7 +1300,7 @@ function UpdateModal({ open, onClose, caseId, workspaceSlug: propWorkspaceSlug, 
               workspaceSlug={workspaceSlug}
             />
             {activeTab === "review" && caseId && (
-              <div className="mt-4">
+              <div>
                 <div className="rounded  border-gray-200 overflow-hidden">
                   <div className="overflow-x-auto">
                     <Table
@@ -1327,7 +1327,14 @@ function UpdateModal({ open, onClose, caseId, workspaceSlug: propWorkspaceSlug, 
                       }}
                       columns={[
                         {
-                          title: "评审",
+                          title: "评审结果",
+                          dataIndex: "result",
+                          key: "result",
+                          width: 160,
+                          render: (label: string) => <Tag color={getReviewResultTagColor(label)}>{label || "-"}</Tag>,
+                        },
+                        {
+                          title: "评审意见",
                           dataIndex: "reason",
                           key: "reason",
                           render: (v: string | null | undefined, record: TReviewRecord) => {
@@ -1360,13 +1367,6 @@ function UpdateModal({ open, onClose, caseId, workspaceSlug: propWorkspaceSlug, 
                               optionsClassName="z-[1200]"
                             />
                           ),
-                        },
-                        {
-                          title: "评审结果",
-                          dataIndex: "result",
-                          key: "result",
-                          width: 160,
-                          render: (label: string) => <Tag color={getReviewResultTagColor(label)}>{label || "-"}</Tag>,
                         },
                         {
                           title: "评审时间",

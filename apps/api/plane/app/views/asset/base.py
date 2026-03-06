@@ -97,6 +97,7 @@ class FileAPIView(BaseAPIView):
             object_name=file.path + file.name,
             bucket_name="file",
             response_headers={"response-content-disposition": f'attachment; filename="{file.name}"'},
+            request=request,
         )
         if not download_url:
             return Response({"error": "Failed to generate download url"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
