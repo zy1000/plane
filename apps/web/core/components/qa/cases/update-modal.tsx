@@ -1200,9 +1200,6 @@ function UpdateModal({ open, onClose, caseId, workspaceSlug: propWorkspaceSlug, 
             )}
             {activeTab === "execution" && caseId && (
               <div className="mt-4">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="text-sm text-gray-600">{execTotal}条执行记录</div>
-                </div>
                 <div className="rounded  border-gray-200 overflow-hidden">
                   <div className="overflow-x-auto">
                     <Table
@@ -1304,9 +1301,6 @@ function UpdateModal({ open, onClose, caseId, workspaceSlug: propWorkspaceSlug, 
             />
             {activeTab === "review" && caseId && (
               <div className="mt-4">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="text-sm text-gray-600">{reviewTotal}条评审记录</div>
-                </div>
                 <div className="rounded  border-gray-200 overflow-hidden">
                   <div className="overflow-x-auto">
                     <Table
@@ -1391,8 +1385,7 @@ function UpdateModal({ open, onClose, caseId, workspaceSlug: propWorkspaceSlug, 
             )}
             {activeTab === "requirement" && caseId && (
               <div className="mt-4">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="text-sm text-gray-600">{currentCount}个需求</div>
+                <div className="flex items-center justify-end mb-3">
                   <button
                     type="button"
                     onClick={() => handleOpenSelectModal("Requirement")}
@@ -1411,8 +1404,7 @@ function UpdateModal({ open, onClose, caseId, workspaceSlug: propWorkspaceSlug, 
             )}
             {activeTab === "work" && caseId && (
               <div className="mt-4">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="text-sm text-gray-600">{currentCount}个工作项</div>
+                <div className="flex items-center justify-end mb-3">
                   <button
                     type="button"
                     onClick={() => handleOpenSelectModal("Task")}
@@ -1431,8 +1423,7 @@ function UpdateModal({ open, onClose, caseId, workspaceSlug: propWorkspaceSlug, 
             )}
             {activeTab === "defect" && caseId && (
               <div className="mt-4">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="text-sm text-gray-600">{currentCount}个缺陷</div>
+                <div className="flex items-center justify-end mb-3">
                   <button
                     type="button"
                     onClick={() => handleOpenSelectModal("Bug")}
