@@ -2,20 +2,18 @@
 
 import React, { useRef } from "react";
 import { observer } from "mobx-react";
-import { useParams, usePathname, useSearchParams } from "next/navigation";
+import { useParams } from "next/navigation";
 // icons
-import { Check, Info } from "lucide-react";
+import { Check } from "lucide-react";
 // ui
 import { CircularProgressIndicator } from "@plane/ui";
 // components
-import { generateQueryParams } from "@plane/utils";
 import { ListItem } from "@/components/core/list";
 import { ModuleDetailDrawer } from "@/components/modules/module-detail-drawer";
 import { ModuleListItemAction, ModuleQuickActions } from "@/components/modules";
 // helpers
 // hooks
 import { useModule } from "@/hooks/store/use-module";
-import { useAppRouter } from "@/hooks/use-app-router";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 import { useState } from "react";
 
@@ -27,11 +25,7 @@ export const ModuleListItem: React.FC<Props> = observer((props) => {
   const { moduleId } = props;
   // refs
   const parentRef = useRef(null);
-  // router
-  const router = useAppRouter();
   const { workspaceSlug, projectId } = useParams();
-  const searchParams = useSearchParams();
-  const pathname = usePathname();
   // store hooks
   const { getModuleById } = useModule();
   const { isMobile } = usePlatformOS();
@@ -54,19 +48,7 @@ export const ModuleListItem: React.FC<Props> = observer((props) => {
   const openModuleOverview = (e: React.MouseEvent<HTMLButtonElement | HTMLAnchorElement>) => {
     e.stopPropagation();
     e.preventDefault();
-
-    // Trigger Drawer display
     setIsDrawerOpen(true);
-
-    // Original logic commented out as requested
-    /*
-    const query = generateQueryParams(searchParams, ["peekModule"]);
-    if (searchParams.has("peekModule") && searchParams.get("peekModule") === moduleId) {
-      router.push(`${pathname}?${query}`);
-    } else {
-      router.push(`${pathname}?${query && `${query}&`}peekModule=${moduleId}`);
-    }
-    */
   };
 
   const handleArchivedModuleClick = (e: React.MouseEvent<HTMLButtonElement | HTMLAnchorElement>) => {
@@ -95,15 +77,6 @@ export const ModuleListItem: React.FC<Props> = observer((props) => {
               <span className="text-[9px] text-custom-text-300">{`${progress}%`}</span>
             )}
           </CircularProgressIndicator>
-        }
-        appendTitleElement={
-          <button
-            onClick={openModuleOverview}
-            data-prevent-progress
-            className={`z-[5] flex-shrink-0 ${isMobile ? "flex" : "hidden group-hover:flex"}`}
-          >
-            <Info className="h-4 w-4 text-custom-text-400" />
-          </button>
         }
         actionableItems={
           <ModuleListItemAction moduleId={moduleId} moduleDetails={moduleDetails} parentRef={parentRef} />

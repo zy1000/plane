@@ -2,8 +2,8 @@ import type { SyntheticEvent } from "react";
 import React, { useRef } from "react";
 import { observer } from "mobx-react";
 import Link from "next/link";
-import { useParams, usePathname, useSearchParams } from "next/navigation";
-import { Info, SquareUser } from "lucide-react";
+import { useParams } from "next/navigation";
+import { SquareUser } from "lucide-react";
 // plane package imports
 import {
   MODULE_STATUS,
@@ -20,7 +20,7 @@ import { TOAST_TYPE, setPromiseToast, setToast } from "@plane/propel/toast";
 import { Tooltip } from "@plane/propel/tooltip";
 import type { IModule } from "@plane/types";
 import { Card, FavoriteStar, LinearProgressIndicator } from "@plane/ui";
-import { getDate, renderFormattedPayloadDate, generateQueryParams } from "@plane/utils";
+import { getDate, renderFormattedPayloadDate } from "@plane/utils";
 // components
 import { DateRangeDropdown } from "@/components/dropdowns/date-range";
 import { ButtonAvatars } from "@/components/dropdowns/member/avatar";
@@ -32,7 +32,6 @@ import { captureElementAndEvent } from "@/helpers/event-tracker.helper";
 import { useMember } from "@/hooks/store/use-member";
 import { useModule } from "@/hooks/store/use-module";
 import { useUserPermissions } from "@/hooks/store/user";
-import { useAppRouter } from "@/hooks/use-app-router";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 
 type Props = {
@@ -43,11 +42,7 @@ export const ModuleCardItem = observer(function ModuleCardItem(props: Props) {
   const { moduleId } = props;
   // refs
   const parentRef = useRef(null);
-  // router
-  const router = useAppRouter();
   const { workspaceSlug, projectId } = useParams();
-  const searchParams = useSearchParams();
-  const pathname = usePathname();
   // store hooks
   const { allowPermissions } = useUserPermissions();
   const { getModuleById, addModuleToFavorites, removeModuleFromFavorites, updateModuleDetails } = useModule();
@@ -158,18 +153,6 @@ export const ModuleCardItem = observer(function ModuleCardItem(props: Props) {
       });
   };
 
-  const openModuleOverview = (e: React.MouseEvent<HTMLButtonElement>) => {
-    e.stopPropagation();
-    e.preventDefault();
-
-    const query = generateQueryParams(searchParams, ["peekModule"]);
-    if (searchParams.has("peekModule") && searchParams.get("peekModule") === moduleId) {
-      router.push(`${pathname}?${query}`);
-    } else {
-      router.push(`${pathname}?${query && `${query}&`}peekModule=${moduleId}`);
-    }
-  };
-
   if (!moduleDetails) return null;
 
   const moduleTotalIssues =
@@ -222,9 +205,6 @@ export const ModuleCardItem = observer(function ModuleCardItem(props: Props) {
                     handleModuleDetailsChange={handleModuleDetailsChange}
                   />
                 )}
-                <button onClick={openModuleOverview}>
-                  <Info className="h-4 w-4 text-custom-text-400" />
-                </button>
               </div>
             </div>
           </div>
