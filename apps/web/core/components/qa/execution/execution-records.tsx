@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Spin, message, Tag, Modal, Table, Tooltip, Upload, Button, Pagination, Popconfirm, Menu } from "antd";
+import { Spin, message, Tag, Modal, Table, Tooltip, Upload, Pagination, Popconfirm, Menu } from "antd";
 import * as LucideIcons from "lucide-react";
 import { Download, Trash2 } from "lucide-react";
 import { Button as PropelButton } from "@plane/propel/button";
@@ -164,15 +164,15 @@ export const ExecutionRecordDetailModal: React.FC<ExecutionRecordDetailModalProp
     async (fileId: string, fileName: string) => {
       if (!workspaceSlug) return;
       try {
-        const url = await planService.getExecutionFileDownloadUrl(String(workspaceSlug), fileId);
+        const blob = await planService.downloadExecutionFile(String(workspaceSlug), fileId);
+        const objectUrl = URL.createObjectURL(blob);
         const a = document.createElement("a");
-        a.href = url;
+        a.href = objectUrl;
         a.download = fileName;
-        a.target = "_blank";
-        a.rel = "noopener noreferrer";
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
+        URL.revokeObjectURL(objectUrl);
       } catch (e: any) {
         message.error(e?.message || e?.error || "下载失败");
       }
@@ -291,8 +291,7 @@ export const ExecutionRecordDetailModal: React.FC<ExecutionRecordDetailModalProp
             />
           ) : (
             <div className="flex flex-col gap-3">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-custom-text-200">附件</span>
+              <div className="flex items-center justify-end">
                 <Upload
                   showUploadList={false}
                   beforeUpload={(file) => {
@@ -301,14 +300,14 @@ export const ExecutionRecordDetailModal: React.FC<ExecutionRecordDetailModalProp
                   }}
                   disabled={uploadLoading}
                 >
-                  <Button
-                    size="small"
-                    icon={<LucideIcons.Upload size={13} />}
-                    loading={uploadLoading}
-                    type="default"
+                  <button
+                    type="button"
+                    disabled={uploadLoading}
+                    className="text-white bg-custom-primary-100 hover:bg-custom-primary-200 focus:text-custom-brand-40 focus:bg-custom-primary-200 px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                   >
+                    <LucideIcons.Upload size={13} />
                     上传
-                  </Button>
+                  </button>
                 </Upload>
               </div>
               {attachmentLoading ? (
@@ -320,8 +319,8 @@ export const ExecutionRecordDetailModal: React.FC<ExecutionRecordDetailModalProp
                   <div className="overflow-x-auto">
                     <table className="min-w-full table-fixed">
                       <thead>
-                        <tr className="text-left text-xs text-custom-text-300 border-b">
-                          <th className="w-2/5 px-2 py-2">文件名</th>
+                      <tr className="text-left text-sm text-custom-text-300 border-b">
+                      <th className="w-2/5 px-2 py-2">文件名</th>
                           <th className="w-1/5 px-2 py-2">大小</th>
                           <th className="w-1/5 px-2 py-2">上传时间</th>
                           <th className="w-1/5 px-2 py-2 text-right">操作</th>

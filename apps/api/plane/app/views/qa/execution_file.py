@@ -1,4 +1,7 @@
+import urllib.parse
+
 from django.db import transaction
+from django.http import StreamingHttpResponse
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -64,15 +67,10 @@ class PlanCaseRecordFileAPI(BaseViewSet):
         file_obj = File.objects.get(id=file_id)
         object_name = file_obj.path + file_obj.name
         minio = get_minio_utils()
-        url = minio.generate_presigned_get_url(
-            object_name=object_name,
-            expires_seconds=300,
-            bucket_name='file',
-            response_headers={
-                'response-content-disposition': f'attachment; filename="{file_obj.name}"',
-            },
-            request=request,
-        )
-        if not url:
-            return Response({'error': '生成下载链接失败'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        return Response({'url': url}, status=status.HTTP_200_OK)
+        response_obj = minio.get_object(object_name=object_name, bucket_name='file')
+        if not response_obj:
+            return Response({'error': '获取文件失败'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        encoded_filename = urllib.parse.quote(file_obj.name)
+        resp = StreamingHttpResponse(response_obj, content_type='application/octet-stream')
+        resp['Content-Disposition'] = f"attachment; filename*=UTF-8''{encoded_filename}"
+        return resp

@@ -1,4 +1,7 @@
 # Third party imports
+import urllib.parse
+
+from django.http import StreamingHttpResponse
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
@@ -93,15 +96,13 @@ class FileAPIView(BaseAPIView):
         file = File.objects.filter(id=file_id).first()
         if not file:
             return Response({"error": "File not found"}, status=status.HTTP_404_NOT_FOUND)
-        download_url = minio.generate_presigned_get_url(
-            object_name=file.path + file.name,
-            bucket_name="file",
-            response_headers={"response-content-disposition": f'attachment; filename="{file.name}"'},
-            request=request,
-        )
-        if not download_url:
-            return Response({"error": "Failed to generate download url"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        return Response({"url": download_url}, status=status.HTTP_200_OK)
+        response_obj = minio.get_object(object_name=file.path + file.name, bucket_name="file")
+        if not response_obj:
+            return Response({"error": "获取文件失败"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        encoded_filename = urllib.parse.quote(file.name)
+        resp = StreamingHttpResponse(response_obj, content_type="application/octet-stream")
+        resp["Content-Disposition"] = f"attachment; filename*=UTF-8''{encoded_filename}"
+        return resp
 
     def delete(self, request):
         minio = get_minio_utils()
