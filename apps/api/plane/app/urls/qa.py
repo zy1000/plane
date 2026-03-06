@@ -12,11 +12,13 @@ from plane.app.views.qa.plan import PlanModuleDetailAPIView, PlanListAPIView, Ca
 from plane.app.views.qa.mindmap import MindmapAssetAPIView, MindmapAssetDetailAPIView, MindmapAssetDownloadAPIView
 from plane.app.views.qa.review import ReviewModuleAPIView, ReviewModuleDetailAPIView, CaseReviewAPIView, CaseReviewView, \
     ReviewListAPIView
+from plane.app.views.qa.execution_file import PlanCaseRecordFileAPI
 
 router = SimpleRouter()
 router.register('review', CaseReviewView, basename='review')
 router.register('plan', PlanView, basename='plan')
 router.register('case', CaseAPI, basename='case')
+router.register('execution-file', PlanCaseRecordFileAPI, basename='execution-file')
 
 urlpatterns = [
     path('workspaces/<str:slug>/test/plane/', PlanAPIView.as_view(), name='test-plan'),

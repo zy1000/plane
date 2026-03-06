@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { useParams } from "next/navigation";
 import { CaseService } from "../../../services/qa/case.service";
 import { CaseService as ReviewApiService } from "../../../services/qa/review.service";
-import { Tag, Spin, Tooltip, message, Input, Table, Select } from "antd";
+import { Tag, Spin, Tooltip, message, Input, Table, Select, Button } from "antd";
 import { getEnums } from "../../../../app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/util";
 import { useMember } from "@/hooks/store/use-member";
 import * as LucideIcons from "lucide-react";
@@ -24,6 +24,7 @@ import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { IssuePeekOverview } from "@/components/issues/peek-overview";
 import { formatCNDateTime } from "./util";
 import styles from "./update-modal.module.css";
+import { ExecutionRecordDetailModal } from "../execution/execution-records";
 
 type UpdateModalProps = {
   open: boolean;
@@ -146,7 +147,10 @@ function UpdateModal({ open, onClose, caseId, workspaceSlug: propWorkspaceSlug, 
     result?: string;
     created_by?: string | null;
     created_at?: string;
+    steps?: any;
   };
+  const [execDetailModalOpen, setExecDetailModalOpen] = React.useState<boolean>(false);
+  const [execDetailRecord, setExecDetailRecord] = React.useState<TExecRecord | null>(null);
   const [execLoading, setExecLoading] = React.useState<boolean>(false);
   const [execError, setExecError] = React.useState<string | null>(null);
   const [execList, setExecList] = React.useState<TExecRecord[]>([]);
@@ -1260,6 +1264,23 @@ function UpdateModal({ open, onClose, caseId, workspaceSlug: propWorkspaceSlug, 
                           key: "created_at",
                           render: (v: string) => formatCNDateTime(v),
                         },
+                        {
+                          title: "",
+                          key: "detail",
+                          width: 80,
+                          render: (_: unknown, record: TExecRecord) => (
+                            <Button
+                              type="link"
+                              size="small"
+                              onClick={() => {
+                                setExecDetailRecord(record);
+                                setExecDetailModalOpen(true);
+                              }}
+                            >
+                              详情
+                            </Button>
+                          ),
+                        },
                       ]}
                     />
                   </div>
@@ -1268,6 +1289,19 @@ function UpdateModal({ open, onClose, caseId, workspaceSlug: propWorkspaceSlug, 
                 </div>
               </div>
             )}
+            <ExecutionRecordDetailModal
+              open={execDetailModalOpen}
+              onClose={() => {
+                setExecDetailModalOpen(false);
+                setExecDetailRecord(null);
+              }}
+              record={
+                execDetailRecord && execDetailRecord.id != null
+                  ? { id: String(execDetailRecord.id), steps: execDetailRecord.steps }
+                  : null
+              }
+              workspaceSlug={workspaceSlug}
+            />
             {activeTab === "review" && caseId && (
               <div className="mt-4">
                 <div className="flex items-center justify-between mb-3">
