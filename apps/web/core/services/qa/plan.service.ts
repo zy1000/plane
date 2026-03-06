@@ -211,4 +211,46 @@ export class PlanService extends APIService {
       });
   }
 
+  async getExecutionFiles(workspaceSlug: string, recordId: string): Promise<any[]> {
+    return this.get(`/api/workspaces/${workspaceSlug}/test/execution-file/list/`, {
+      params: { record_id: recordId },
+    })
+      .then((response) => response?.data?.data ?? [])
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async uploadExecutionFile(workspaceSlug: string, recordId: string, file: File): Promise<any> {
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("record_id", recordId);
+    return this.post(`/api/workspaces/${workspaceSlug}/test/execution-file/upload/`, formData)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async deleteExecutionFile(workspaceSlug: string, recordId: string, fileId: string): Promise<void> {
+    return this.delete(`/api/workspaces/${workspaceSlug}/test/execution-file/delete/`, {
+      record_id: recordId,
+      file_id: fileId,
+    })
+      .then(() => undefined)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async getExecutionFileDownloadUrl(workspaceSlug: string, fileId: string): Promise<string> {
+    return this.get(`/api/workspaces/${workspaceSlug}/test/execution-file/download/`, {
+      params: { file_id: fileId },
+    })
+      .then((response) => response?.data?.url as string)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
 }

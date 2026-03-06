@@ -1,8 +1,11 @@
 "use client";
 
 import React from "react";
-import { Spin, message, Tag, Modal, Table, Tooltip } from "antd";
+import { Spin, message, Tag, Modal, Table, Tooltip, Upload, Button, Pagination, Popconfirm } from "antd";
 import * as LucideIcons from "lucide-react";
+import { Download, Trash2 } from "lucide-react";
+import { Button as PropelButton } from "@plane/propel/button";
+import { ReadonlyDate } from "@/components/readonly/date";
 import { cn, renderFormattedDate } from "@plane/utils";
 import { PlanService as PlanApiService } from "@/services/qa/plan.service";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
@@ -27,6 +30,14 @@ type StepItem = {
   exec_result?: string;
 };
 
+type FileItem = {
+  id: string;
+  name: string;
+  size: number;
+  path: string;
+  created_at?: string;
+};
+
 type Props = {
   workspaceSlug: string | undefined;
   reviewId: string | undefined;
@@ -34,46 +45,143 @@ type Props = {
   className?: string;
 };
 
-export const ExecutionRecordsPanel: React.FC<Props> = (props) => {
-  const { workspaceSlug, reviewId, caseId, className = "" } = props;
+export type ExecutionRecordDetailRecord = {
+  id: string;
+  steps?: any;
+};
+
+type ExecutionRecordDetailModalProps = {
+  open: boolean;
+  onClose: () => void;
+  record: ExecutionRecordDetailRecord | null;
+  workspaceSlug: string | undefined;
+};
+
+const normalizeStepsForDetail = (steps: any): StepItem[] => {
+  if (!Array.isArray(steps)) return [];
+  return steps.map((s: any) => ({
+    description: String(s?.description ?? s?.desc ?? ""),
+    result: String(s?.result ?? s?.expected_result ?? ""),
+    actual_result: String(s?.actual_result ?? ""),
+    exec_result: String(s?.exec_result ?? ""),
+  }));
+};
+
+const formatFileSizeForDetail = (bytes: number) => {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+export const ExecutionRecordDetailModal: React.FC<ExecutionRecordDetailModalProps> = ({
+  open,
+  onClose,
+  record,
+  workspaceSlug,
+}) => {
   const planService = React.useMemo(() => new PlanApiService(), []);
-  const { getUserDetails } = useMember();
-  const searchParams = useSearchParams();
-  const planId = searchParams.get("plan_id") ?? searchParams.get("planId") ?? "";
-
-  const [loading, setLoading] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
-  const [records, setRecords] = React.useState<ExecRecord[]>([]);
   const [resultColorMap, setResultColorMap] = React.useState<Record<string, string>>({});
+  const [attachmentFiles, setAttachmentFiles] = React.useState<FileItem[]>([]);
+  const [attachmentLoading, setAttachmentLoading] = React.useState(false);
+  const [uploadLoading, setUploadLoading] = React.useState(false);
+  const [attachmentPage, setAttachmentPage] = React.useState(1);
+  const attachmentPageSize = 5;
 
-  const [stepsModalOpen, setStepsModalOpen] = React.useState(false);
-  const [stepsModalSteps, setStepsModalSteps] = React.useState<StepItem[]>([]);
+  React.useEffect(() => {
+    const maxPage = Math.max(1, Math.ceil(attachmentFiles.length / attachmentPageSize));
+    if (attachmentPage > maxPage) setAttachmentPage(maxPage);
+  }, [attachmentFiles.length, attachmentPage, attachmentPageSize]);
 
-  const normalizeSteps = React.useCallback((steps: any): StepItem[] => {
-    if (!Array.isArray(steps)) return [];
-    return steps.map((s) => ({
-      description: String(s?.description ?? s?.desc ?? ""),
-      result: String(s?.result ?? s?.expected_result ?? ""),
-      actual_result: String(s?.actual_result ?? ""),
-      exec_result: String(s?.exec_result ?? ""),
-    }));
-  }, []);
+  React.useEffect(() => {
+    if (!open || !workspaceSlug) return;
+    getEnums(String(workspaceSlug))
+      .then((enums) => setResultColorMap(enums?.plan_case_result || {}))
+      .catch(() => {});
+  }, [open, workspaceSlug]);
 
-  const openStepsModal = React.useCallback(
-    (rec: ExecRecord) => {
+  React.useEffect(() => {
+    if (!open || !record?.id || !workspaceSlug) return;
+    let cancelled = false;
+    setAttachmentLoading(true);
+    planService
+      .getExecutionFiles(String(workspaceSlug), record.id)
+      .then((files) => {
+        if (!cancelled) setAttachmentFiles(Array.isArray(files) ? (files as FileItem[]) : []);
+      })
+      .catch(() => {
+        if (!cancelled) setAttachmentFiles([]);
+      })
+      .finally(() => {
+        if (!cancelled) setAttachmentLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, record?.id, workspaceSlug, planService]);
+
+  const handleClose = React.useCallback(() => {
+    setAttachmentFiles([]);
+    setAttachmentPage(1);
+    onClose();
+  }, [onClose]);
+
+  const handleUpload = React.useCallback(
+    async (file: File) => {
+      if (!workspaceSlug || !record?.id) return false;
       try {
-        const steps = normalizeSteps(rec?.steps ?? []);
-        setStepsModalSteps(steps);
-        setStepsModalOpen(true);
+        setUploadLoading(true);
+        await planService.uploadExecutionFile(String(workspaceSlug), record.id, file);
+        message.success("上传成功");
+        const files = await planService.getExecutionFiles(String(workspaceSlug), record.id);
+        setAttachmentFiles(Array.isArray(files) ? (files as FileItem[]) : []);
       } catch (e: any) {
-        const msg = e?.message || "加载步骤详情失败";
-        message.error(msg);
+        message.error(e?.message || e?.error || "上传失败");
+      } finally {
+        setUploadLoading(false);
       }
+      return false;
     },
-    [normalizeSteps]
+    [workspaceSlug, record?.id, planService]
   );
 
-  const StepsDetailTable: React.FC<{ steps?: StepItem[] }> = ({ steps }) => {
+  const handleDeleteFile = React.useCallback(
+    async (fileId: string) => {
+      if (!workspaceSlug || !record?.id) return;
+      try {
+        await planService.deleteExecutionFile(String(workspaceSlug), record.id, fileId);
+        message.success("删除成功");
+        setAttachmentFiles((prev) => prev.filter((f) => f.id !== fileId));
+      } catch (e: any) {
+        message.error(e?.message || e?.error || "删除失败");
+      }
+    },
+    [workspaceSlug, record?.id, planService]
+  );
+
+  const handleDownloadFile = React.useCallback(
+    async (fileId: string, fileName: string) => {
+      if (!workspaceSlug) return;
+      try {
+        const url = await planService.getExecutionFileDownloadUrl(String(workspaceSlug), fileId);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = fileName;
+        a.target = "_blank";
+        a.rel = "noopener noreferrer";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      } catch (e: any) {
+        message.error(e?.message || e?.error || "下载失败");
+      }
+    },
+    [workspaceSlug, planService]
+  );
+
+  const StepsDetailTableInner: React.FC<{ steps: StepItem[]; resultColorMap: Record<string, string> }> = ({
+    steps,
+    resultColorMap: colorMap,
+  }) => {
     if (!Array.isArray(steps) || steps.length === 0) {
       return <span className="text-custom-text-300">暂无内容</span>;
     }
@@ -120,7 +228,7 @@ export const ExecutionRecordsPanel: React.FC<Props> = (props) => {
         key: "exec_result",
         render: (text: any) => {
           const val = String(text || "");
-          const color = resultColorMap[val] || undefined;
+          const color = colorMap[val] || undefined;
           return <Tag color={color}>{val || "-"}</Tag>;
         },
         onHeaderCell: () => ({ style: headerStyle }),
@@ -142,6 +250,175 @@ export const ExecutionRecordsPanel: React.FC<Props> = (props) => {
       </div>
     );
   };
+
+  if (!open) return null;
+
+  return (
+    <Modal
+      title="步骤详情"
+      open={open}
+      onCancel={handleClose}
+      footer={null}
+      width={1200}
+      style={{ maxWidth: "95vw" }}
+      destroyOnClose
+      getContainer={() => document.body}
+      zIndex={1200}
+    >
+      <div className="flex gap-4" style={{ minHeight: 360 }}>
+        <div className="flex-1 min-w-0">
+          <StepsDetailTableInner
+            steps={record ? normalizeStepsForDetail(record.steps) : []}
+            resultColorMap={resultColorMap}
+          />
+        </div>
+        <div className="w-96 flex-shrink-0 border-l border-custom-border-200 pl-4 flex flex-col gap-3 min-h-0">
+          <div className="flex items-center justify-between flex-shrink-0">
+            <span className="text-sm font-medium text-custom-text-200">附件</span>
+            <Upload
+              showUploadList={false}
+              beforeUpload={(file) => {
+                handleUpload(file as unknown as File);
+                return false;
+              }}
+              disabled={uploadLoading}
+            >
+              <Button
+                size="small"
+                icon={<LucideIcons.Upload size={13} />}
+                loading={uploadLoading}
+                type="default"
+              >
+                上传
+              </Button>
+            </Upload>
+          </div>
+          {attachmentLoading ? (
+            <div className="flex items-center justify-center py-6">
+              <Spin size="small" />
+            </div>
+          ) : (
+            <>
+              <div className="flex-1 min-h-0 overflow-x-auto vertical-scrollbar scrollbar-sm">
+                <table className="min-w-full table-fixed">
+                  <thead>
+                    <tr className="text-left text-xs text-custom-text-300 border-b">
+                      <th className="w-2/5 px-2 py-2">文件名</th>
+                      <th className="w-1/5 px-2 py-2">大小</th>
+                      <th className="w-1/5 px-2 py-2">上传时间</th>
+                      <th className="w-1/5 px-2 py-2 text-right">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {attachmentFiles.length === 0 && (
+                      <tr>
+                        <td className="px-2 py-6 text-sm text-custom-text-300" colSpan={4}>
+                          暂无附件
+                        </td>
+                      </tr>
+                    )}
+                    {attachmentFiles
+                      .slice((attachmentPage - 1) * attachmentPageSize, attachmentPage * attachmentPageSize)
+                      .map((f) => (
+                        <tr key={f.id} className="border-b hover:bg-custom-background-90">
+                          <td className="px-2 py-2 truncate text-sm text-gray-800" title={f.name}>
+                            {f.name}
+                          </td>
+                          <td className="px-2 py-2 text-sm text-custom-text-200">{formatFileSizeForDetail(f.size)}</td>
+                          <td className="px-2 py-2 text-sm text-custom-text-200">
+                            {f.created_at ? (
+                              <ReadonlyDate value={f.created_at} formatToken="yyyy-MM-dd" hideIcon={true} />
+                            ) : (
+                              "-"
+                            )}
+                          </td>
+                          <td className="px-2 py-2">
+                            <div className="flex items-center justify-end gap-2">
+                              <PropelButton
+                                variant="link-neutral"
+                                className="p-0"
+                                onClick={() => handleDownloadFile(f.id, f.name)}
+                              >
+                                <Download className="h-3.5 w-3.5" />
+                              </PropelButton>
+                              <Popconfirm
+                                title="确认删除该文件？"
+                                okText="删除"
+                                cancelText="取消"
+                                onConfirm={() => void handleDeleteFile(f.id)}
+                              >
+                                <PropelButton variant="link-neutral" className="p-0 text-red-500 hover:text-red-600">
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </PropelButton>
+                              </Popconfirm>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="flex-shrink-0 border-t border-custom-border-200 px-2 py-2 bg-custom-background-100 flex items-center justify-between mt-2">
+                <div className="text-sm text-custom-text-300">
+                  {attachmentFiles.length > 0 ? `共 ${attachmentFiles.length} 条` : ""}
+                </div>
+                <Pagination
+                  simple
+                  current={attachmentPage}
+                  pageSize={attachmentPageSize}
+                  total={attachmentFiles.length}
+                  onChange={(p) => setAttachmentPage(p)}
+                  size="small"
+                />
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </Modal>
+  );
+};
+
+export const ExecutionRecordsPanel: React.FC<Props> = (props) => {
+  const { workspaceSlug, reviewId, caseId, className = "" } = props;
+  const planService = React.useMemo(() => new PlanApiService(), []);
+  const { getUserDetails } = useMember();
+  const searchParams = useSearchParams();
+  const planId = searchParams.get("plan_id") ?? searchParams.get("planId") ?? "";
+
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [records, setRecords] = React.useState<ExecRecord[]>([]);
+  const [resultColorMap, setResultColorMap] = React.useState<Record<string, string>>({});
+
+  const [stepsModalOpen, setStepsModalOpen] = React.useState(false);
+  const [stepsModalSteps, setStepsModalSteps] = React.useState<StepItem[]>([]);
+  const [stepsModalRecordId, setStepsModalRecordId] = React.useState<string | null>(null);
+
+  const normalizeSteps = React.useCallback((steps: any): StepItem[] => {
+    if (!Array.isArray(steps)) return [];
+    return steps.map((s) => ({
+      description: String(s?.description ?? s?.desc ?? ""),
+      result: String(s?.result ?? s?.expected_result ?? ""),
+      actual_result: String(s?.actual_result ?? ""),
+      exec_result: String(s?.exec_result ?? ""),
+    }));
+  }, []);
+
+  const openStepsModal = React.useCallback(
+    (rec: ExecRecord) => {
+      try {
+        const steps = normalizeSteps(rec?.steps ?? []);
+        setStepsModalSteps(steps);
+        setStepsModalRecordId(rec.id);
+        setStepsModalOpen(true);
+      } catch (e: any) {
+        const msg = e?.message || "加载步骤详情失败";
+        message.error(msg);
+      }
+    },
+    [normalizeSteps]
+  );
 
   const fetchEnums = async () => {
     if (!workspaceSlug) return;
@@ -265,17 +542,20 @@ export const ExecutionRecordsPanel: React.FC<Props> = (props) => {
           </div>
         )}
       </div>
-      <Modal
-        title="步骤详情"
+      <ExecutionRecordDetailModal
         open={stepsModalOpen}
-        onCancel={() => setStepsModalOpen(false)}
-        footer={null}
-        width={800}
-        style={{ maxWidth: "95vw" }}
-        destroyOnClose
-      >
-        <StepsDetailTable steps={stepsModalSteps} />
-      </Modal>
+        onClose={() => {
+          setStepsModalOpen(false);
+          setStepsModalRecordId(null);
+          setStepsModalSteps([]);
+        }}
+        record={
+          stepsModalRecordId
+            ? { id: stepsModalRecordId, steps: stepsModalSteps }
+            : null
+        }
+        workspaceSlug={workspaceSlug}
+      />
     </>
   );
 };
