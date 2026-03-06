@@ -240,21 +240,18 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
     }
   };
 
-  const handleDownloadModuleFile = async (fileId: string) => {
+  const handleDownloadModuleFile = async (fileId: string, fileName: string) => {
     try {
       setModuleFilesDownloadingId(fileId);
-      const res = await moduleService.downloadModuleFile(fileId);
-      if (!res?.url) {
-        setToast({ type: TOAST_TYPE.ERROR, title: "下载失败", message: "下载地址不存在" });
-        return;
-      }
+      const blob = await moduleService.downloadModuleFile(fileId);
+      const objectUrl = URL.createObjectURL(blob);
       const link = document.createElement("a");
-      link.href = res.url;
-      link.target = "_blank";
-      link.rel = "noopener noreferrer";
+      link.href = objectUrl;
+      link.download = fileName;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+      URL.revokeObjectURL(objectUrl);
     } catch (e: any) {
       setToast({ type: TOAST_TYPE.ERROR, title: "下载失败", message: e?.detail || e?.error || "请稍后重试" });
     } finally {
@@ -702,7 +699,7 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
                       <th className="w-2/5 px-2 py-2">文件名</th>
                       <th className="w-1/5 px-2 py-2">大小</th>
                       <th className="w-1/5 px-2 py-2">上传时间</th>
-                      <th className="w-1/5 px-2 py-2 text-right">操作</th>
+                      <th className="w-1/5 px-5 py-2  text-right">操作</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -728,7 +725,7 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
                               variant="link-neutral"
                               className="p-0"
                               disabled={moduleFilesDownloadingId === file.id}
-                              onClick={() => handleDownloadModuleFile(file.id)}
+                              onClick={() => handleDownloadModuleFile(file.id, file.name)}
                             >
                               <Download className="h-3.5 w-3.5" />
                             </Button>

@@ -224,9 +224,9 @@ export class CycleService extends APIService {
       });
   }
 
-  async downloadCycleFile(fileId: string): Promise<{ url: string }> {
-    return this.post(`/api/file/`, { file_id: fileId })
-      .then((response) => response?.data)
+  async downloadCycleFile(fileId: string): Promise<Blob> {
+    return this.post(`/api/file/`, { file_id: fileId }, { responseType: "blob" })
+      .then((response) => response?.data as Blob)
       .catch((error) => {
         throw error?.response?.data;
       });

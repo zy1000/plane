@@ -141,18 +141,18 @@ export const ActiveCycleStats = observer(function ActiveCycleStats(props: Active
     [workspaceSlug, projectId, cycleId]
   );
 
-  const handleDownloadCycleFile = async (fileId: string) => {
+  const handleDownloadCycleFile = async (fileId: string, fileName: string) => {
     try {
       setCycleFilesDownloadingId(fileId);
-      const res = await cycleService.current.downloadCycleFile(fileId);
-      if (!res?.url) return;
+      const blob = await cycleService.current.downloadCycleFile(fileId);
+      const objectUrl = URL.createObjectURL(blob);
       const link = document.createElement("a");
-      link.href = res.url;
-      link.target = "_blank";
-      link.rel = "noopener noreferrer";
+      link.href = objectUrl;
+      link.download = fileName;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+      URL.revokeObjectURL(objectUrl);
     } finally {
       setCycleFilesDownloadingId(null);
     }
@@ -554,7 +554,7 @@ export const ActiveCycleStats = observer(function ActiveCycleStats(props: Active
                                   variant="link-neutral"
                                   className="p-0"
                                   disabled={cycleFilesDownloadingId === file.id}
-                                  onClick={() => handleDownloadCycleFile(file.id)}
+                                  onClick={() => handleDownloadCycleFile(file.id, file.name)}
                                 >
                                   <Download className="h-3.5 w-3.5" />
                                 </Button>

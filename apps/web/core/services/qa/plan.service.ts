@@ -243,11 +243,12 @@ export class PlanService extends APIService {
       });
   }
 
-  async getExecutionFileDownloadUrl(workspaceSlug: string, fileId: string): Promise<string> {
+  async downloadExecutionFile(workspaceSlug: string, fileId: string): Promise<Blob> {
     return this.get(`/api/workspaces/${workspaceSlug}/test/execution-file/download/`, {
       params: { file_id: fileId },
+      responseType: "blob",
     })
-      .then((response) => response?.data?.url as string)
+      .then((response) => response?.data as Blob)
       .catch((error) => {
         throw error?.response?.data;
       });
