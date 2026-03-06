@@ -86,15 +86,52 @@ class InstanceConfiguration(BaseModel):
 class ChangeLog(BaseModel):
     """Change Log model to store the release changelogs made in the application."""
 
+    class UpdateType(models.TextChoices):
+        ADDED = "added", "Added"
+        FIXED = "fixed", "Fixed"
+        IMPROVED = "improved", "Improved"
+
     title = models.CharField(max_length=255)
+    summary = models.TextField(blank=True)
     description = models.TextField(blank=True)
+    update_type = models.CharField(
+        max_length=20,
+        choices=UpdateType.choices,
+        default=UpdateType.IMPROVED,
+    )
+    content = models.TextField(blank=True)
     version = models.CharField(max_length=255)
     tags = models.JSONField(default=list)
+    links = models.JSONField(default=list)
+    screenshots = models.JSONField(default=list)
     release_date = models.DateTimeField(null=True)
+    is_pinned = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=True)
     is_release_candidate = models.BooleanField(default=False)
 
     class Meta:
         verbose_name = "Change Log"
         verbose_name_plural = "Change Logs"
         db_table = "changelogs"
-        ordering = ("-created_at",)
+        ordering = ("-is_pinned", "-release_date", "-created_at")
+
+
+class ChangeLogRead(BaseModel):
+    changelog = models.ForeignKey(
+        ChangeLog,
+        on_delete=models.CASCADE,
+        related_name="read_statuses",
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="changelog_reads",
+    )
+    viewed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Change Log Read"
+        verbose_name_plural = "Change Log Reads"
+        db_table = "changelog_reads"
+        ordering = ("-viewed_at",)
+        unique_together = ["changelog", "user"]

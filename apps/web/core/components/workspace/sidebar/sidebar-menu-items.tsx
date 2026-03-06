@@ -6,12 +6,17 @@
 
 import React, { useMemo } from "react";
 import { observer } from "mobx-react";
+import Link from "next/link";
+import { useParams, usePathname } from "next/navigation";
+import { BookText } from "lucide-react";
 // plane imports
 import {
   WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS,
   WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS_LINKS,
   WORKSPACE_SIDEBAR_STATIC_PINNED_NAVIGATION_ITEMS_LINKS,
 } from "@plane/constants";
+import { useTranslation } from "@plane/i18n";
+import { SidebarNavItem } from "@/components/sidebar/sidebar-navigation";
 import { usePersonalNavigationPreferences } from "@/hooks/use-navigation-preferences";
 // plane-web imports
 import { SidebarItem } from "@/plane-web/components/workspace/sidebar/sidebar-item";
@@ -19,6 +24,9 @@ import { SidebarItem } from "@/plane-web/components/workspace/sidebar/sidebar-it
 export const SidebarMenuItems = observer(function SidebarMenuItems() {
   // hooks
   const { preferences: personalPreferences } = usePersonalNavigationPreferences();
+  const { workspaceSlug } = useParams();
+  const pathname = usePathname();
+  const { t } = useTranslation();
 
   // Filter static navigation items based on personal preferences
   const filteredStaticNavigationItems = useMemo(() => {
@@ -69,18 +77,33 @@ export const SidebarMenuItems = observer(function SidebarMenuItems() {
   );
 
   return (
-    <>
-      <div className="flex flex-col gap-0.5">
-        {filteredStaticNavigationItems.map((item, _index) => (
-          <SidebarItem key={`static_${_index}`} item={item} />
-        ))}
-      </div>
-      <hr className="my-1 border-custom-border-200" />
-      {projectsSidebarItem && (
+    <div className="flex h-full flex-col">
+      <div>
         <div className="flex flex-col gap-0.5">
-          <SidebarItem key="pinned_projects" item={projectsSidebarItem} />
+          {filteredStaticNavigationItems.map((item, _index) => (
+            <SidebarItem key={`static_${_index}`} item={item} />
+          ))}
         </div>
-      )}
-    </>
+
+        <hr className="my-1 border-custom-border-200" />
+        {projectsSidebarItem && (
+          <div className="flex flex-col gap-0.5">
+            <SidebarItem key="pinned_projects" item={projectsSidebarItem} />
+          </div>
+        )}
+      </div>
+
+      <div className="mt-auto">
+        <hr className="border-custom-border-200" />
+        <Link href={`/${workspaceSlug}/changelog`}>
+          <SidebarNavItem isActive={pathname?.startsWith(`/${workspaceSlug}/changelog`)}>
+            <div className="flex items-center gap-1.5 py-[1px]">
+              <BookText className="size-4 flex-shrink-0" />
+              <p className="text-sm leading-5 font-medium">更新日志</p>
+            </div>
+          </SidebarNavItem>
+        </Link>
+      </div>
+    </div>
   );
 });

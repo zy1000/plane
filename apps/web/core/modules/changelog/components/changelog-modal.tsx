@@ -1,0 +1,59 @@
+import { useRouter } from "next/navigation";
+import { EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
+import { RichTextEditor } from "@/components/editor/rich-text";
+import { useWorkspace } from "@/hooks/store/use-workspace";
+import { useChangelogModal } from "../hooks/use-changelog-modal";
+import { useUser } from "@/hooks/store/user";
+
+type Props = {
+  workspaceSlug: string;
+};
+
+export const ChangelogModal = ({ workspaceSlug }: Props) => {
+  const router = useRouter();
+  const { data: currentUser } = useUser();
+  const { currentWorkspace } = useWorkspace();
+  const { isOpen, latest, closeModal } = useChangelogModal({
+    userId: currentUser?.id,
+  });
+
+  const handleViewDetail = async () => {
+    await closeModal();
+    router.push(`/${workspaceSlug}/changelog`);
+  };
+
+  return (
+    <ModalCore isOpen={isOpen} handleClose={closeModal} position={EModalPosition.CENTER} width={EModalWidth.LG}>
+      <div className="p-5">
+        <p className="text-sm text-custom-text-300">更新日志</p>
+        <h3 className="mt-1 text-lg font-semibold text-custom-text-100">{latest?.title}</h3>
+        {latest?.summary && <p className="mt-3 text-sm text-custom-text-200">{latest.summary}</p>}
+        <div className="mt-3 rounded border border-custom-border-100 bg-custom-background-90 p-2">
+          <RichTextEditor
+            id={`changelog-modal-content-${latest?.id ?? "latest"}`}
+            editable={false}
+            initialValue={latest?.content || latest?.description || ""}
+            workspaceSlug={workspaceSlug}
+            workspaceId={currentWorkspace?.id ?? ""}
+          />
+        </div>
+        <div className="mt-5 flex items-center justify-end gap-2">
+          <button
+            type="button"
+            className="rounded border border-custom-border-200 px-3 py-1.5 text-sm text-custom-text-200"
+            onClick={closeModal}
+          >
+            关闭
+          </button>
+          <button
+            type="button"
+            className="rounded bg-custom-primary-100 px-3 py-1.5 text-sm text-white"
+            onClick={handleViewDetail}
+          >
+            查看详情
+          </button>
+        </div>
+      </div>
+    </ModalCore>
+  );
+};

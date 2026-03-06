@@ -7,7 +7,8 @@
 import { useState, useEffect } from "react";
 import { observer } from "mobx-react";
 import { useRouter } from "next/navigation";
-import { LogOut, Settings, Settings2 } from "lucide-react";
+// icons
+import { BookText, LogOut, Settings, Settings2 } from "lucide-react";
 // plane imports
 import { GOD_MODE_URL } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";

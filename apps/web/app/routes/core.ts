@@ -81,6 +81,9 @@ export const coreRoutes: RouteConfigEntry[] = [
         layout("./(all)/[workspaceSlug]/(projects)/drafts/layout.tsx", [
           route(":workspaceSlug/drafts", "./(all)/[workspaceSlug]/(projects)/drafts/page.tsx"),
         ]),
+        layout("./(all)/[workspaceSlug]/(projects)/changelog/layout.tsx", [
+          route(":workspaceSlug/changelog", "./(all)/[workspaceSlug]/(projects)/changelog/page.tsx"),
+        ]),
 
         // Notifications
         layout("./(all)/[workspaceSlug]/(projects)/notifications/layout.tsx", [
@@ -364,6 +367,10 @@ export const coreRoutes: RouteConfigEntry[] = [
           route(
             ":workspaceSlug/settings/webhooks/:webhookId",
             "./(all)/[workspaceSlug]/(settings)/settings/(workspace)/webhooks/[webhookId]/page.tsx"
+          ),
+          route(
+            ":workspaceSlug/settings/changelog",
+            "./(all)/[workspaceSlug]/(settings)/settings/(workspace)/changelog/page.tsx"
           ),
         ]),
 

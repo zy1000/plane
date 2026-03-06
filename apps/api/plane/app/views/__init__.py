@@ -241,3 +241,9 @@ from .user.base import AccountEndpoint, ProfileEndpoint, UserSessionEndpoint
 from .timezone.base import TimezoneEndpoint
 
 from .qa import *
+from .changelog import (
+    ChangeLogDetailEndpoint,
+    ChangeLogLatestEndpoint,
+    ChangeLogListCreateEndpoint,
+    ChangeLogReadEndpoint,
+)
