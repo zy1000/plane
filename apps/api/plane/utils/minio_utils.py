@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import os
 from datetime import timedelta
 from io import BytesIO
 from typing import Optional
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlunparse
 
 from django.conf import settings
 from minio import Minio
@@ -62,6 +63,24 @@ class MinIOUtils:
         parsed = urlparse(endpoint)
         netloc = parsed.netloc or parsed.path
         return netloc.rstrip("/"), parsed.scheme == "https"
+
+    @staticmethod
+    def _resolve_external_endpoint(request=None) -> tuple[Optional[str], Optional[str]]:
+        """解析可被外部访问的 scheme/netloc，用于覆盖容器内网地址。"""
+        if not getattr(settings, "USE_MINIO", False):
+            return None, None
+
+        if request and hasattr(request, "get_host"):
+            scheme = "https" if os.environ.get("MINIO_ENDPOINT_SSL") == "1" else getattr(request, "scheme", "http")
+            return scheme, request.get_host()
+
+        web_url = os.environ.get("WEB_URL")
+        if web_url:
+            parsed_web = urlparse(web_url)
+            if parsed_web.netloc:
+                return parsed_web.scheme or "http", parsed_web.netloc
+
+        return None, None
 
     def ensure_bucket(self, bucket_name: Optional[str] = None) -> bool:
         """确保目标 bucket 存在，不存在时自动创建。"""
@@ -180,16 +199,23 @@ class MinIOUtils:
         expires_seconds: int = 3600,
         bucket_name: Optional[str] = None,
         response_headers: Optional[dict] = None,
+        request=None,
     ) -> Optional[str]:
         """生成对象下载的预签名访问地址。"""
         target_bucket = bucket_name or self.bucket_name
         try:
-            return self.client.presigned_get_object(
+            presigned_url = self.client.presigned_get_object(
                 bucket_name=target_bucket,
                 object_name=object_name,
                 expires=timedelta(seconds=expires_seconds),
                 response_headers=response_headers,
             )
+            target_scheme, target_netloc = self._resolve_external_endpoint(request=request)
+            if not target_scheme or not target_netloc:
+                return presigned_url
+
+            parsed = urlparse(presigned_url)
+            return urlunparse(parsed._replace(scheme=target_scheme, netloc=target_netloc))
         except S3Error as exc:
             log_exception(exc)
             return None

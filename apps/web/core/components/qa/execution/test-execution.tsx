@@ -1299,10 +1299,7 @@ export default function TestExecutionPage() {
                           leaveTo="transform scale-95 opacity-0"
                         >
                           {activeTab === "requirement" && selectedCaseId && (
-                            <div className="mt-4 min-h-[550px]">
-                              <div className="flex items-center justify-between mb-3">
-                                <div className="text-sm text-gray-600">{currentCount}个需求</div>
-                              </div>
+                            <div className="-mt-7 min-h-[550px]">
                               <WorkItemDisplayModal caseId={String(selectedCaseId)} defaultType="Requirement" />
                             </div>
                           )}
@@ -1318,10 +1315,7 @@ export default function TestExecutionPage() {
                           leaveTo="transform scale-95 opacity-0"
                         >
                           {activeTab === "work" && selectedCaseId && (
-                            <div className="mt-4 min-h-[550px]">
-                              <div className="flex items-center justify-between mb-3">
-                                <div className="text-sm text-gray-600">{currentCount}个工作项</div>
-                              </div>
+                            <div className="-mt-7 min-h-[550px]">
                               <WorkItemDisplayModal caseId={String(selectedCaseId)} defaultType="Task" />
                             </div>
                           )}
@@ -1337,10 +1331,7 @@ export default function TestExecutionPage() {
                           leaveTo="transform scale-95 opacity-0"
                         >
                           {activeTab === "defect" && selectedCaseId && (
-                            <div className="mt-4 min-h-[550px]">
-                              <div className="flex items-center justify-between mb-3">
-                                <div className="text-sm text-gray-600">{currentCount}个缺陷</div>
-                              </div>
+                            <div className="-mt-7 min-h-[550px]">
                               <WorkItemDisplayModal
                                 caseId={String(selectedCaseId)}
                                 defaultType="Bug"

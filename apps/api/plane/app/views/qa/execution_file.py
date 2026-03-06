@@ -71,6 +71,7 @@ class PlanCaseRecordFileAPI(BaseViewSet):
             response_headers={
                 'response-content-disposition': f'attachment; filename="{file_obj.name}"',
             },
+            request=request,
         )
         if not url:
             return Response({'error': '生成下载链接失败'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
