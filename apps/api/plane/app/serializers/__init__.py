@@ -131,3 +131,4 @@ from .draft import (
 )
 
 from .qa import TestPlanCreateUpdateSerializer,TestCaseRepositorySerializer,TestCaseRepositoryDetailSerializer
+from .changelog import ChangeLogSerializer, ChangeLogReadRequestSerializer

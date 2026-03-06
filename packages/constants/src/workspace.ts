@@ -99,6 +99,13 @@ export const WORKSPACE_SETTINGS = {
     access: [EUserWorkspaceRoles.ADMIN],
     highlight: (pathname: string, baseUrl: string) => pathname === `${baseUrl}/settings/webhooks/`,
   },
+  changelog: {
+    key: "changelog",
+    i18n_label: "更新日志管理",
+    href: `/settings/changelog`,
+    access: [EUserWorkspaceRoles.ADMIN],
+    highlight: (pathname: string, baseUrl: string) => pathname === `${baseUrl}/settings/changelog/`,
+  },
 };
 
 export const WORKSPACE_SETTINGS_ACCESS = Object.fromEntries(
@@ -116,6 +123,7 @@ export const WORKSPACE_SETTINGS_LINKS: {
   WORKSPACE_SETTINGS["members"],
   WORKSPACE_SETTINGS["export"],
   WORKSPACE_SETTINGS["webhooks"],
+  WORKSPACE_SETTINGS["changelog"],
 ];
 
 export const ROLE = {

@@ -23,6 +23,7 @@ from .issue_type import urlpatterns as issue_type_urls
 from .qa import urlpatterns as qa_urls
 from .milestone import urlpatterns as milestone_urls
 from .filestore import urlpatterns as filestore_urls
+from .changelog import urlpatterns as changelog_urls
 
 urlpatterns = [
     *analytic_urls,
@@ -50,4 +51,5 @@ urlpatterns = [
     *qa_urls,
     *milestone_urls,
     *filestore_urls,
+    *changelog_urls,
 ]

@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { observer } from "mobx-react";
 import { useParams, useRouter } from "next/navigation";
 // icons
-import { LogOut, Settings, Settings2 } from "lucide-react";
+import { BookText, LogOut, Settings, Settings2 } from "lucide-react";
 // plane imports
 import { GOD_MODE_URL } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
@@ -114,6 +114,7 @@ export const UserMenuRoot = observer(function UserMenuRoot(props: Props) {
             <span>Preferences</span>
           </div>
         </CustomMenu.MenuItem>
+
       </div>
       <div className="my-1 border-t border-custom-border-200" />
       <div className={`${isUserInstanceAdmin ? "pb-2" : ""}`}>
