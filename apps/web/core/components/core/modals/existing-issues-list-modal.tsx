@@ -4,8 +4,9 @@
  * See the LICENSE file for details.
  */
 
-import { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { Rocket } from "lucide-react";
+import * as LucideIcons from "lucide-react";
 import { Combobox } from "@headlessui/react";
 // i18n
 import { useTranslation } from "@plane/i18n";
@@ -25,7 +26,7 @@ import { usePlatformOS } from "@/hooks/use-platform-os";
 // plane web components
 import { IssueIdentifier } from "@/plane-web/components/issues/issue-details/issue-identifier";
 // services
-import { ProjectService } from "@/services/project";
+import { ProjectService, projectIssueTypesCache } from "@/services/project";
 // components
 import { IssueSearchModalEmptyState } from "./issue-search-modal-empty-state";
 
@@ -67,6 +68,7 @@ export function ExistingIssuesListModal(props: Props) {
   const [isSearching, setIsSearching] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isWorkspaceLevel, setIsWorkspaceLevel] = useState(false);
+  const [selectedTypeIds, setSelectedTypeIds] = useState<string[]>([]);
   const { isMobile } = usePlatformOS();
   const debouncedSearchTerm: string = useDebounce(searchTerm, 500);
   const { baseTabIndex } = getTabIndex(undefined, isMobile);
@@ -77,6 +79,7 @@ export function ExistingIssuesListModal(props: Props) {
     setSearchTerm("");
     setSelectedIssues([]);
     setIsWorkspaceLevel(false);
+    setSelectedTypeIds([]);
     hasInitializedSelection.current = false;
   };
 
@@ -123,6 +126,9 @@ export function ExistingIssuesListModal(props: Props) {
     setSelectedIssues((prevData) => (prevData.length === filteredIssues.length ? [] : [...filteredIssues]));
   };
 
+  // 获取项目工作项类型映射
+  const projectIssueTypesMap = projectId ? projectIssueTypesCache.get(projectId) : undefined;
+
   useEffect(() => {
     if (isOpen && !hasInitializedSelection.current && selectedWorkItemIds && issues.length > 0) {
       setSelectedIssues(issues.filter((issue) => selectedWorkItemIds.includes(issue.id)));
@@ -134,7 +140,11 @@ export function ExistingIssuesListModal(props: Props) {
     handleSearch();
   }, [debouncedSearchTerm, isOpen, isWorkspaceLevel, projectId, workspaceSlug]);
 
-  const filteredIssues = issues.filter((issue) => !shouldHideIssue?.(issue));
+  const filteredIssues = issues.filter((issue) => {
+    if (shouldHideIssue?.(issue)) return false;
+    if (selectedTypeIds.length > 0 && !selectedTypeIds.includes(issue.type_id)) return false;
+    return true;
+  });
 
   return (
     <ModalCore isOpen={isOpen} handleClose={handleClose} position={EModalPosition.CENTER} width={EModalWidth.XXL}>
@@ -211,6 +221,62 @@ export function ExistingIssuesListModal(props: Props) {
           )}
         </div>
 
+        {/* 工作项类型筛选 */}
+        {projectIssueTypesMap && Object.keys(projectIssueTypesMap).length > 0 && (
+          <div className="border-b border-subtle px-2 py-2">
+            <div className="flex items-center gap-2 overflow-x-auto scrollbar-sm">
+              <button
+                type="button"
+                onClick={() => setSelectedTypeIds([])}
+                className={`flex-shrink-0 rounded-md border px-2 py-1 text-xs font-medium transition-colors ${
+                  selectedTypeIds.length === 0
+                    ? "border-accent-primary bg-accent-primary text-white"
+                    : "border-transparent bg-layer-1 text-secondary hover:bg-layer-2"
+                }`}
+              >
+                全部
+              </button>
+              {Object.values(projectIssueTypesMap).map((type) => {
+                const isSelected = selectedTypeIds.includes(type.id);
+                const IconComp = type.logo_props?.icon?.name
+                  ? ((LucideIcons as any)[type.logo_props.icon.name] as React.FC<any> | undefined)
+                  : undefined;
+                return (
+                  <button
+                    key={type.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedTypeIds((prev) =>
+                        prev.includes(type.id) ? prev.filter((id) => id !== type.id) : [...prev, type.id]
+                      );
+                    }}
+                    className={`flex flex-shrink-0 items-center gap-1.5 rounded-md border px-2 py-1 text-xs transition-colors ${
+                      isSelected
+                        ? "border-accent-primary bg-accent-primary/20 text-accent-primary"
+                        : "border-transparent bg-layer-1 text-secondary hover:bg-layer-2"
+                    }`}
+                  >
+                    {IconComp && (
+                      <span
+                        className="inline-flex items-center justify-center rounded-sm"
+                        style={{
+                          backgroundColor: type.logo_props?.icon?.background_color || "transparent",
+                          color: type.logo_props?.icon?.color || "currentColor",
+                          width: "14px",
+                          height: "14px",
+                        }}
+                      >
+                        <IconComp className="h-3 w-3" strokeWidth={2} />
+                      </span>
+                    )}
+                    <span>{type.name}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         <Combobox.Options static className="vertical-scrollbar scrollbar-md max-h-80 scroll-py-2 overflow-y-auto">
           {/* TODO: Translate here */}
           {searchTerm !== "" && (
@@ -266,6 +332,31 @@ export function ExistingIssuesListModal(props: Props) {
                               backgroundColor: issue.state__color,
                             }}
                           />
+                          {projectIssueTypesMap &&
+                            issue?.type_id &&
+                            projectIssueTypesMap[issue.type_id]?.logo_props?.icon &&
+                            (() => {
+                              const { name, color, background_color } =
+                                projectIssueTypesMap[issue.type_id].logo_props!.icon!;
+                              const IconComp = (LucideIcons as any)[name] as React.FC<any> | undefined;
+                              return (
+                                <span
+                                  className="inline-flex flex-shrink-0 items-center justify-center rounded-sm"
+                                  style={{
+                                    backgroundColor: background_color || "transparent",
+                                    color: color || "currentColor",
+                                    width: "16px",
+                                    height: "16px",
+                                  }}
+                                >
+                                  {IconComp ? (
+                                    <IconComp className="h-3.5 w-3.5" strokeWidth={2} />
+                                  ) : (
+                                    <span className="h-3.5 w-3.5" />
+                                  )}
+                                </span>
+                              );
+                            })()}
                           <span className="flex-shrink-0">
                             <IssueIdentifier
                               projectId={issue.project_id}
