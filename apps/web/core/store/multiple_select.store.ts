@@ -26,6 +26,10 @@ export type IMultipleSelectStore = {
   updateNextActiveEntity: (entityDetails: TEntityDetails | null) => void;
   updateActiveEntityDetails: (entityDetails: TEntityDetails | null) => void;
   clearSelection: () => void;
+  // extended selection actions (for parent-child selection)
+  isExtendedSelection: (entityID: string) => boolean;
+  toggleExtendedSelection: (entityID: string) => void;
+  clearExtendedSelection: () => void;
 };
 
 /**
@@ -42,6 +46,7 @@ export class MultipleSelectStore implements IMultipleSelectStore {
   previousActiveEntity: TEntityDetails | null = null;
   nextActiveEntity: TEntityDetails | null = null;
   activeEntityDetails: TEntityDetails | null = null;
+  extendedSelectionEntityIds: string[] = []; // tracks which parent entities have been extended to include sub-issues
   // service
   issueService;
 
@@ -53,6 +58,7 @@ export class MultipleSelectStore implements IMultipleSelectStore {
       previousActiveEntity: observable,
       nextActiveEntity: observable,
       activeEntityDetails: observable,
+      extendedSelectionEntityIds: observable,
       // computed functions
       isSelectionActive: computed,
       selectedEntityIds: computed,
@@ -64,6 +70,8 @@ export class MultipleSelectStore implements IMultipleSelectStore {
       updateNextActiveEntity: action,
       updateActiveEntityDetails: action,
       clearSelection: action,
+      toggleExtendedSelection: action,
+      clearExtendedSelection: action,
     });
 
     this.issueService = new IssueService();
@@ -227,6 +235,39 @@ export class MultipleSelectStore implements IMultipleSelectStore {
       this.previousActiveEntity = null;
       this.nextActiveEntity = null;
       this.activeEntityDetails = null;
+      this.extendedSelectionEntityIds = [];
+    });
+  };
+
+  /**
+   * @description check if entity has extended selection (includes sub-issues)
+   * @param {string} entityID
+   * @returns {boolean}
+   */
+  isExtendedSelection = computedFn((entityID: string): boolean =>
+    this.extendedSelectionEntityIds.includes(entityID)
+  );
+
+  /**
+   * @description toggle extended selection state for an entity
+   * @param {string} entityID
+   */
+  toggleExtendedSelection = (entityID: string) => {
+    runInAction(() => {
+      if (this.extendedSelectionEntityIds.includes(entityID)) {
+        this.extendedSelectionEntityIds = this.extendedSelectionEntityIds.filter((id) => id !== entityID);
+      } else {
+        this.extendedSelectionEntityIds.push(entityID);
+      }
+    });
+  };
+
+  /**
+   * @description clear all extended selection states
+   */
+  clearExtendedSelection = () => {
+    runInAction(() => {
+      this.extendedSelectionEntityIds = [];
     });
   };
 }

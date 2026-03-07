@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import * as React from "react";
 import { Spin, message, Tag, Modal, Table, Tooltip, Upload, Pagination, Popconfirm, Menu } from "antd";
 import * as LucideIcons from "lucide-react";
 import { Download, Trash2 } from "lucide-react";

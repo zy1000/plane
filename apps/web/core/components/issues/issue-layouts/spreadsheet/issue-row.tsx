@@ -327,6 +327,7 @@ const IssueRowDetails = observer(function IssueRowDetails(props: IssueRowDetails
                       id={issueDetail.id}
                       selectionHelpers={selectionHelpers}
                       disabled={issueDetail.project_id !== projectId}
+                      isEpic={isEpic}
                     />
                   </div>
                 </Tooltip>
