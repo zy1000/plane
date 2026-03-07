@@ -34,6 +34,14 @@ export type TSelectionHelper = {
   handleGroupClick: (groupID: string) => void;
   isGroupSelected: (groupID: string) => "empty" | "partial" | "complete";
   isSelectionDisabled: boolean;
+  // extended selection helpers for parent-child selection
+  getIsExtendedSelection: (entityID: string) => boolean;
+  handleEntityClickWithSubIssues: (
+    event: React.MouseEvent,
+    entityID: string,
+    groupId: string,
+    subIssueIds: string[]
+  ) => void;
 };
 
 export const useMultipleSelect = (props: Props) => {
@@ -56,6 +64,8 @@ export const useMultipleSelect = (props: Props) => {
     getIsEntitySelected,
     getIsEntityActive,
     getEntityDetailsFromEntityID,
+    isExtendedSelection,
+    toggleExtendedSelection,
   } = useMultipleSelectStore();
 
   useReloadConfirmations(
@@ -253,6 +263,65 @@ export const useMultipleSelect = (props: Props) => {
       handleEntitySelection({ entityID, groupID }, false);
     },
     [disabled, entitiesList, handleEntitySelection, getLastSelectedEntityDetails]
+  );
+
+  /**
+   * @description three-state toggle for entity selection with sub-issues
+   * First click: select only the parent entity
+   * Second click: select parent and all sub-issues
+   * Third click: deselect all
+   * @param {React.MouseEvent} event
+   * @param {string} entityID
+   * @param {string} groupID
+   * @param {string[]} subIssueIds
+   */
+  const handleEntityClickWithSubIssues = useCallback(
+    (e: React.MouseEvent, entityID: string, groupID: string, subIssueIds: string[]) => {
+      if (disabled) return;
+
+      // Handle shift+click for range selection (existing behavior)
+      const lastSelectedEntityDetails = getLastSelectedEntityDetails();
+      if (e.shiftKey && lastSelectedEntityDetails) {
+        handleEntityClick(e, entityID, groupID);
+        return;
+      }
+
+      const isSelected = getIsEntitySelected(entityID);
+      const isExtended = isExtendedSelection(entityID);
+      const hasSubIssues = subIssueIds && subIssueIds.length > 0;
+
+      if (!isSelected) {
+        // First click: select only the current entity
+        handleEntitySelection({ entityID, groupID }, false);
+      } else if (isSelected && !isExtended && hasSubIssues) {
+        // Second click: extend selection to include sub-issues
+        const entitiesToAdd: TEntityDetails[] = [{ entityID, groupID }];
+        subIssueIds.forEach((subIssueId) => {
+          entitiesToAdd.push({ entityID: subIssueId, groupID });
+        });
+        handleEntitySelection(entitiesToAdd, false, "force-add");
+        toggleExtendedSelection(entityID);
+      } else {
+        // Third click or no sub-issues: deselect all (parent + sub-issues)
+        const entitiesToRemove: TEntityDetails[] = [{ entityID, groupID }];
+        subIssueIds.forEach((subIssueId) => {
+          entitiesToRemove.push({ entityID: subIssueId, groupID });
+        });
+        handleEntitySelection(entitiesToRemove, false, "force-remove");
+        if (isExtended) {
+          toggleExtendedSelection(entityID);
+        }
+      }
+    },
+    [
+      disabled,
+      getIsEntitySelected,
+      isExtendedSelection,
+      handleEntitySelection,
+      handleEntityClick,
+      getLastSelectedEntityDetails,
+      toggleExtendedSelection,
+    ]
   );
 
   /**
@@ -465,6 +534,8 @@ export const useMultipleSelect = (props: Props) => {
       handleGroupClick,
       isGroupSelected,
       isSelectionDisabled: disabled,
+      getIsExtendedSelection: isExtendedSelection,
+      handleEntityClickWithSubIssues,
     }),
     [
       clearSelection,
@@ -474,6 +545,8 @@ export const useMultipleSelect = (props: Props) => {
       handleEntityClick,
       handleGroupClick,
       isGroupSelected,
+      isExtendedSelection,
+      handleEntityClickWithSubIssues,
     ]
   );
 

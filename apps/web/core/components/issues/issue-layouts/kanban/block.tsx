@@ -23,6 +23,7 @@ import { ControlLink, DropIndicator } from "@plane/ui";
 import { cn, generateWorkItemLink } from "@plane/utils";
 // components
 import RenderIfVisible from "@/components/core/render-if-visible-HOC";
+import { MultipleSelectEntityAction } from "@/components/core/multiple-select";
 import { HIGHLIGHT_CLASS, getIssueBlockId } from "@/components/issues/issue-layouts/utils";
 // helpers
 // hooks
@@ -30,6 +31,7 @@ import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useKanbanView } from "@/hooks/store/use-kanban-view";
 import { useProject } from "@/hooks/store/use-project";
 import useIssuePeekOverviewRedirection from "@/hooks/use-issue-peek-overview-redirection";
+import type { TSelectionHelper } from "@/hooks/use-multiple-select";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 // plane web components
 import { IssueIdentifier } from "@/plane-web/components/issues/issue-details/issue-identifier";
@@ -56,6 +58,7 @@ interface IssueBlockProps {
   scrollableContainerRef?: MutableRefObject<HTMLDivElement | null>;
   shouldRenderByDefault?: boolean;
   isEpic?: boolean;
+  selectionHelpers?: TSelectionHelper;
 }
 
 interface IssueDetailsBlockProps {
@@ -196,6 +199,7 @@ export const KanbanIssueBlock = observer(function KanbanIssueBlock(props: IssueB
     scrollableContainerRef,
     shouldRenderByDefault,
     isEpic = false,
+    selectionHelpers,
   } = props;
 
   const cardRef = useRef<HTMLAnchorElement | null>(null);
@@ -219,6 +223,8 @@ export const KanbanIssueBlock = observer(function KanbanIssueBlock(props: IssueB
   const [isCurrentBlockDragging, setIsCurrentBlockDragging] = useState(false);
 
   const canEditIssueProperties = canEditProperties(issue?.project_id ?? undefined);
+  const canSelectIssues = canEditIssueProperties && selectionHelpers && !selectionHelpers.isSelectionDisabled;
+  const isIssueSelected = selectionHelpers?.getIsEntitySelected(issue.id) ?? false;
 
   const isDragAllowed = canDragIssuesInCurrentGrouping && !issue?.tempId && canEditIssueProperties;
   const projectIdentifier = getProjectIdentifierById(issue?.project_id);
@@ -319,6 +325,24 @@ export const KanbanIssueBlock = observer(function KanbanIssueBlock(props: IssueB
             verticalOffset={200}
             defaultValue={shouldRenderByDefault}
           >
+            {/* select checkbox */}
+            {canSelectIssues && (
+              <div className="flex items-center gap-2">
+                <MultipleSelectEntityAction
+                  className={cn(
+                    "opacity-0 pointer-events-none group-hover/kanban-block:opacity-100 group-hover/kanban-block:pointer-events-auto transition-opacity",
+                    {
+                      "opacity-100 pointer-events-auto": isIssueSelected,
+                    }
+                  )}
+                  groupId={groupId}
+                  id={issue.id}
+                  selectionHelpers={selectionHelpers}
+                  disabled={false}
+                  isEpic={isEpic}
+                />
+              </div>
+            )}
             <KanbanIssueDetailsBlock
               cardRef={cardRef}
               issue={issue}

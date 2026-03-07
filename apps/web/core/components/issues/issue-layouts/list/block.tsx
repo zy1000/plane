@@ -219,7 +219,7 @@ export const IssueBlock = observer(function IssueBlock(props: IssueBlockProps) {
           <div className="flex flex-grow items-center gap-0.5 truncate">
             <div className="flex items-center gap-1" style={isSubIssue ? { marginLeft } : {}}>
               {/* select checkbox */}
-              {projectId && canSelectIssues && !isEpic && (
+              {projectId && canSelectIssues && (
                 <Tooltip
                   tooltipContent={
                     <>
@@ -242,6 +242,7 @@ export const IssueBlock = observer(function IssueBlock(props: IssueBlockProps) {
                       id={issue.id}
                       selectionHelpers={selectionHelpers}
                       disabled={issue.project_id !== projectId}
+                      isEpic={isEpic}
                     />
                   </div>
                 </Tooltip>
