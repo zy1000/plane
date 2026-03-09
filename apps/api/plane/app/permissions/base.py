@@ -12,6 +12,7 @@ class ROLE(Enum):
     GUEST = 5
 
 
+
 def allow_permission(allowed_roles, level="PROJECT", creator=False, model=None):
     def decorator(view_func):
         @wraps(view_func)
