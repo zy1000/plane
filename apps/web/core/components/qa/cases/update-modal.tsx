@@ -1327,6 +1327,17 @@ function UpdateModal({ open, onClose, caseId, workspaceSlug: propWorkspaceSlug, 
                       }}
                       columns={[
                         {
+                          title: "评审名称",
+                          dataIndex: "review_name",
+                          key: "review_name",
+                          width: 200,
+                          render: (v: string | null | undefined) => (
+                            <Tooltip title={v || "-"} zIndex={1300}>
+                              <span className="truncate block max-w-[200px]">{v || "-"}</span>
+                            </Tooltip>
+                          ),
+                        },
+                        {
                           title: "评审结果",
                           dataIndex: "result",
                           key: "result",
@@ -1341,7 +1352,7 @@ function UpdateModal({ open, onClose, caseId, workspaceSlug: propWorkspaceSlug, 
                             const isPassed = record.result === "通过" || record.result === "passed";
                             const text = isPassed && !v ? "OK" : v || "-";
                             return (
-                              <Tooltip title={text}>
+                              <Tooltip title={text} zIndex={1300}>
                                 <span className="truncate block max-w-[420px]">{text}</span>
                               </Tooltip>
                             );
