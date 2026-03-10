@@ -1,4 +1,5 @@
 import React, { useMemo } from "react";
+import { isEmpty } from "lodash-es";
 import { observer } from "mobx-react";
 import Link from "next/link";
 import { useParams, usePathname } from "next/navigation";
@@ -8,9 +9,14 @@ import {
   WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS,
   WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS_LINKS,
   WORKSPACE_SIDEBAR_STATIC_PINNED_NAVIGATION_ITEMS_LINKS,
+  EUserPermissions,
+  EUserPermissionsLevel,
 } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { SidebarNavItem } from "@/components/sidebar/sidebar-navigation";
+import { SidebarFavoritesMenu } from "@/components/workspace/sidebar/favorites/favorites-menu";
+import { useFavorite } from "@/hooks/store/use-favorite";
+import { useUserPermissions } from "@/hooks/store/user";
 import { usePersonalNavigationPreferences } from "@/hooks/use-navigation-preferences";
 // plane-web imports
 import { SidebarItem } from "@/plane-web/components/workspace/sidebar/sidebar-item";
@@ -21,6 +27,15 @@ export const SidebarMenuItems = observer(function SidebarMenuItems() {
   const { workspaceSlug } = useParams();
   const pathname = usePathname();
   const { t } = useTranslation();
+  const { allowPermissions } = useUserPermissions();
+  const { groupedFavorites } = useFavorite();
+
+  // derived values
+  const canPerformWorkspaceMemberActions = allowPermissions(
+    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
+    EUserPermissionsLevel.WORKSPACE
+  );
+  const isFavoriteEmpty = isEmpty(groupedFavorites);
 
   // Filter static navigation items based on personal preferences
   const filteredStaticNavigationItems = useMemo(() => {
@@ -85,6 +100,8 @@ export const SidebarMenuItems = observer(function SidebarMenuItems() {
             <SidebarItem key="pinned_projects" item={projectsSidebarItem} />
           </div>
         )}
+        {/* Favorites Menu */}
+        {canPerformWorkspaceMemberActions && !isFavoriteEmpty && <SidebarFavoritesMenu />}
       </div>
 
       <div className="mt-auto">
