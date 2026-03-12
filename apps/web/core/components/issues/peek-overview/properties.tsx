@@ -287,13 +287,13 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
 
         {/* parent */}
         {isMetaExpanded && (
-          <div className="flex w-full items-center gap-3 h-8">
-            <div className="flex items-center gap-1 w-1/4 flex-shrink-0 text-sm text-secondary">
-              <ParentPropertyIcon className="h-4 w-4 flex-shrink-0" />
+          <div className="flex w-full items-center gap-2 h-8">
+            <div className="flex h-7.5 w-30 shrink-0 items-center gap-1.5 text-body-xs-regular text-tertiary">
+              <ParentPropertyIcon className="size-4 shrink-0" />
               <p>{t("common.parent")}</p>
             </div>
             <IssueParentSelectRoot
-              className="w-3/4 flex-grow h-full"
+              className="grow h-full"
               disabled={disabled}
               issueId={issueId}
               issueOperations={issueOperations}
@@ -306,19 +306,19 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
         {/* label + toggle */}
         <div className="flex w-full flex-col gap-1">
           {isMetaExpanded && (
-            <div className="flex w-full items-center gap-3 min-h-8">
-              <div className="flex items-center gap-1 w-1/4 flex-shrink-0 text-sm text-secondary">
-                <LabelPropertyIcon className="h-4 w-4 flex-shrink-0" />
+            <div className="flex w-full items-start gap-2 min-h-8">
+              <div className="flex h-7.5 w-30 shrink-0 items-center gap-1.5 text-body-xs-regular text-tertiary">
+                <LabelPropertyIcon className="size-4 shrink-0" />
                 <span>{t("common.labels")}</span>
               </div>
-              <div className="flex w-full flex-col gap-3 truncate">
+              <div className="flex grow flex-wrap items-center gap-1 truncate">
                 <IssueLabel workspaceSlug={workspaceSlug} projectId={projectId} issueId={issueId} disabled={disabled} />
               </div>
             </div>
           )}
           <div className="flex w-full items-center justify-start h-6">
             <Button
-              variant="link-neutral"
+              variant="ghost"
               size="sm"
               className="h-6 px-0"
               onClick={(e) => {
