@@ -5,7 +5,7 @@ import { observer } from "mobx-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { Pagination } from "antd";
-import { Archive, ArrowDown, ArrowUp, ArrowUpDown, Globe2, Link as LinkIcon, Settings, Star } from "lucide-react";
+import { Archive, ArchiveRestoreIcon, ArrowDown, ArrowUp, ArrowUpDown, Globe2, Link as LinkIcon, Settings, Star } from "lucide-react";
 import { EUserPermissions, EUserPermissionsLevel, PROJECT_TRACKER_ELEMENTS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { EmptyStateDetailed } from "@plane/propel/empty-state";
@@ -98,6 +98,7 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
   const [sortDirection, setSortDirection] = useState<TSortDirection>("desc");
   const [publishProjectId, setPublishProjectId] = useState<string | null>(null);
   const [archiveProjectId, setArchiveProjectId] = useState<string | null>(null);
+  const [restoreProjectId, setRestoreProjectId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!workspaceSlugString) return;
@@ -227,6 +228,12 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
     setArchiveProjectId(projectId);
   }, []);
 
+  const handleOpenRestoreModal = useCallback((e: React.MouseEvent<HTMLButtonElement>, projectId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setRestoreProjectId(projectId);
+  }, []);
+
   const handleSort = useCallback(
     (key: TSortKey) => {
       const nextDirection: TSortDirection = key === sortKey ? (sortDirection === "asc" ? "desc" : "asc") : "asc";
@@ -313,6 +320,15 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
           onClose={() => setArchiveProjectId(null)}
           workspaceSlug={workspaceSlugString}
           archive
+        />
+      )}
+      {restoreProjectId && workspaceSlugString && (
+        <ArchiveRestoreProjectModal
+          isOpen={!!restoreProjectId}
+          projectId={restoreProjectId}
+          onClose={() => setRestoreProjectId(null)}
+          workspaceSlug={workspaceSlugString}
+          archive={false}
         />
       )}
       <ContentWrapper variant={ERowVariant.HUGGING} className="overflow-hidden">
@@ -590,29 +606,55 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
                           <Globe2 className="h-3 w-3" />
                         </button>
                       </Tooltip>
-                      <Tooltip
-                        tooltipContent={
-                          <div className="text-xs text-primary">
-                            {isArchived ? "已归档" : canManageProject ? "归档" : "无权限归档"}
-                          </div>
-                        }
-                        position="top"
-                      >
-                        <button
-                          type="button"
-                          disabled={isArchived || !canManageProject}
-                          className={cn(
-                            "grid h-6 w-6 place-items-center rounded text-secondary transition-colors",
-                            isArchived || !canManageProject
-                              ? "cursor-not-allowed opacity-50"
-                              : "hover:text-primary hover:bg-layer-1-hover"
-                          )}
-                          aria-label="归档项目"
-                          onClick={(e) => handleOpenArchiveModal(e, project.id)}
+                      {isArchived ? (
+                        <Tooltip
+                          tooltipContent={
+                            <div className="text-xs text-primary">
+                              {canManageProject ? "恢复项目" : "无权限恢复"}
+                            </div>
+                          }
+                          position="top"
                         >
-                          <Archive className="h-3 w-3" />
-                        </button>
-                      </Tooltip>
+                          <button
+                            type="button"
+                            disabled={!canManageProject}
+                            className={cn(
+                              "grid h-6 w-6 place-items-center rounded text-secondary transition-colors",
+                              !canManageProject
+                                ? "cursor-not-allowed opacity-50"
+                                : "hover:text-primary hover:bg-layer-1-hover"
+                            )}
+                            aria-label="恢复项目"
+                            onClick={(e) => handleOpenRestoreModal(e, project.id)}
+                          >
+                            <ArchiveRestoreIcon className="h-3 w-3" />
+                          </button>
+                        </Tooltip>
+                      ) : (
+                        <Tooltip
+                          tooltipContent={
+                            <div className="text-xs text-primary">
+                              {canManageProject ? "归档" : "无权限归档"}
+                            </div>
+                          }
+                          position="top"
+                        >
+                          <button
+                            type="button"
+                            disabled={!canManageProject}
+                            className={cn(
+                              "grid h-6 w-6 place-items-center rounded text-secondary transition-colors",
+                              !canManageProject
+                                ? "cursor-not-allowed opacity-50"
+                                : "hover:text-primary hover:bg-layer-1-hover"
+                            )}
+                            aria-label="归档项目"
+                            onClick={(e) => handleOpenArchiveModal(e, project.id)}
+                          >
+                            <Archive className="h-3 w-3" />
+                          </button>
+                        </Tooltip>
+                      )}
                       <Tooltip tooltipContent={<div className="text-xs text-primary">设置</div>} position="top">
                         <Link
                           className="flex items-center justify-center rounded p-1 text-placeholder hover:bg-layer-1-hover hover:text-primary"
