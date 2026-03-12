@@ -132,7 +132,7 @@ export const WorkItemStats: FC<TWorkItemStats> = observer((props) => {
             {/* 下行：数量和百分比 */}
             <div className="flex gap-3">
               <span className="text-md font-bold">{item.count}</span>
-              <span className="text-sm font-medium text-custom-text-350 my-auto">{item.percentage.toFixed(0)}%</span>
+              <span className="text-sm font-medium text-tertiary my-auto">{item.percentage.toFixed(0)}%</span>
             </div>
           </div>
         ))}

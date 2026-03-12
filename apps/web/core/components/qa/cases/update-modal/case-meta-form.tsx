@@ -84,8 +84,8 @@ export function CaseMetaForm(props: CaseMetaFormProps) {
     <div className="mb-5">
       <div className="grid grid-cols-5 gap-2 ml-[10px]">
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700 ml-[10px]">维护人</label>
-          <div className="w-full rounded-md border border-transparent text-sm  hover:border-blue-300 focus-within:border-blue-400 focus-within:ring-1 focus-within:ring-blue-300">
+          <label className="mb-1 block text-sm font-medium text-secondary ml-[10px]">维护人</label>
+          <div className="w-full rounded-md border border-transparent text-sm hover:border-accent-subtle ring-1 ring-transparent focus-within:border-accent-subtle focus-within:ring-accent-subtle transition-colors">
             <MemberDropdown
               multiple={false}
               projectId={projectId ? String(projectId) : undefined}
@@ -107,8 +107,8 @@ export function CaseMetaForm(props: CaseMetaFormProps) {
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700 ml-[6px]">用例编号</label>
-          <div className="w-full rounded-md border border-transparent text-sm hover:border-blue-300 focus-within:border-blue-400 focus-within:ring-1 focus-within:ring-blue-300">
+          <label className="mb-1 block text-sm font-medium text-secondary ml-[6px]">用例编号</label>
+          <div className="w-full rounded-md border border-transparent text-sm hover:border-accent-subtle ring-1 ring-transparent focus-within:border-accent-subtle focus-within:ring-accent-subtle transition-colors">
             <input
               value={code ?? ""}
               onChange={(e) => onCodeChange?.(e.target.value)}
@@ -120,8 +120,8 @@ export function CaseMetaForm(props: CaseMetaFormProps) {
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700 ml-[6px]">用例类型</label>
-          <div className="w-full rounded-md border border-transparent text-sm  hover:border-blue-300 focus-within:border-blue-400 focus-within:ring-1 focus-within:ring-blue-300">
+          <label className="mb-1 block text-sm font-medium text-secondary ml-[6px]">用例类型</label>
+          <div className="w-full rounded-md border border-transparent text-sm hover:border-accent-subtle ring-1 ring-transparent focus-within:border-accent-subtle focus-within:ring-accent-subtle transition-colors">
             <Select
               placeholder="请选择用例类型"
               options={caseTypeOptions}
@@ -142,8 +142,8 @@ export function CaseMetaForm(props: CaseMetaFormProps) {
           </div>
         </div>
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700 ml-[10px]">优先级</label>
-          <div className="w-full rounded-md border border-transparent text-sm  hover:border-blue-300 focus-within:border-blue-400 focus-within:ring-1 focus-within:ring-blue-300">
+          <label className="mb-1 block text-sm font-medium text-secondary ml-[10px]">优先级</label>
+          <div className="w-full rounded-md border border-transparent text-sm hover:border-accent-subtle ring-1 ring-transparent focus-within:border-accent-subtle focus-within:ring-accent-subtle transition-colors">
             <Select
               placeholder="请选择优先级"
               options={casePriorityOptions}
@@ -165,9 +165,9 @@ export function CaseMetaForm(props: CaseMetaFormProps) {
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700 ml-[10px]">标签</label>
+          <label className="mb-1 block text-sm font-medium text-secondary ml-[10px]">标签</label>
           <div
-            className="flex flex-wrap items-center gap-2 min-h-[32px] p-1 border border-transparent focus-within:border-custom-border-200 rounded cursor-text bg-white transition-colors"
+            className="flex flex-wrap items-center gap-2 min-h-[32px] p-1 border border-transparent focus-within:border-subtle rounded cursor-text bg-white transition-colors"
             onClick={() => {
               const input = document.getElementById("meta-label-input");
               input?.focus();
@@ -176,11 +176,11 @@ export function CaseMetaForm(props: CaseMetaFormProps) {
             {labelList.map((label) => (
               <div
                 key={label.id}
-                className="flex items-center gap-1 bg-blue-50 text-blue-600 px-2 py-0.5 rounded text-xs border border-blue-100 group"
+                className="flex items-center gap-1 bg-accent-subtle text-accent-primary px-2 py-0.5 rounded text-xs border border-accent-subtle group"
               >
                 <span>{label.name}</span>
                 <span
-                  className="cursor-pointer opacity-50 group-hover:opacity-100 hover:text-red-500 transition-opacity"
+                  className="cursor-pointer opacity-50 group-hover:opacity-100 hover:text-danger-primary transition-opacity"
                   onClick={(e) => {
                     e.stopPropagation();
                     onDeleteLabel?.(label.id);

@@ -15,7 +15,7 @@ import { SidebarTeamsList } from "@/plane-web/components/workspace/sidebar/teams
 
 export const AppSidebar = observer(function AppSidebar() {
   return (
-    <SidebarWrapper title="Projects" quickActions={<div className="border-t border-custom-sidebar-border-300" />}>
+    <SidebarWrapper title="Projects" quickActions={<div className="border-t border-subtle-1" />}>
       <SidebarMenuItems />
       {/* Teams List */}
       <SidebarTeamsList />

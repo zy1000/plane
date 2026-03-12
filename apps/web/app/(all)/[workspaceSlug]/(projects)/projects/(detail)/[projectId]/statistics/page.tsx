@@ -16,11 +16,31 @@ import { ProjectStatisticService, type TProjectStatisticResponse } from "@/servi
 
 const projectStatisticService = new ProjectStatisticService();
 
+const LEGACY_STATUS_CLASS_MAP: Record<string, string> = {
+  "bg-indigo-50": "bg-accent-subtle",
+  "text-blue-500": "text-accent-primary",
+  "bg-amber-50": "bg-warning-subtle",
+  "text-amber-500": "text-warning-primary",
+  "bg-red-50": "bg-danger-subtle",
+  "text-red-600": "text-danger-primary",
+  "bg-green-50": "bg-success-subtle",
+  "text-green-600": "text-success-primary",
+};
+
+const getStatusTagClassName = (bgColor?: string, textColor?: string) =>
+  [
+    "inline-flex items-center rounded-md px-2 py-0.5 text-xs",
+    bgColor ? (LEGACY_STATUS_CLASS_MAP[bgColor] ?? bgColor) : "",
+    textColor ? (LEGACY_STATUS_CLASS_MAP[textColor] ?? textColor) : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
 const Card: React.FC<{ title: string; children: React.ReactNode; className?: string }> = (props) => {
   const { title, children, className } = props;
   return (
-    <div className={`bg-custom-background-100 border border-custom-border-200 rounded-lg shadow-custom-shadow-md p-4 ${className ?? ""}`}>
-      <h4 className="text-lg font-medium text-custom-text-200">{title}</h4>
+    <div className={`bg-surface-1 border border-subtle rounded-lg shadow-md p-4 ${className ?? ""}`}>
+      <h4 className="text-lg font-medium text-primary">{title}</h4>
       <div className="mt-3">{children}</div>
     </div>
   );
@@ -37,21 +57,21 @@ const KpiCard: React.FC<{
   const shouldShowUnit = typeof value === "number";
   return (
     <div
-      className={`bg-custom-background-100 border border-custom-border-200 rounded-lg shadow-custom-shadow-md p-3 min-h-[150px] flex flex-col ${
+      className={`bg-surface-1 border border-subtle rounded-lg shadow-md p-3 min-h-[150px] flex flex-col ${
         className ?? ""
       }`}
     >
       <div>
-        <div className="text-lg font-medium text-custom-text-200">{title}</div>
+        <div className="text-lg font-medium text-primary">{title}</div>
       </div>
       <div className="flex-1 grid place-items-center">
         <div className="flex items-end gap-2">
           <div
-            className={`text-5xl font-semibold leading-none ${valueClassName ? "" : "text-custom-text-200"} ${valueClassName ?? ""}`}
+            className={`text-5xl font-semibold leading-none ${valueClassName ? "" : "text-primary"} ${valueClassName ?? ""}`}
           >
             {value}
           </div>
-          {shouldShowUnit && <div className="pb-1 text-xs text-custom-text-300">{unit}</div>}
+          {shouldShowUnit && <div className="pb-1 text-xs text-secondary">{unit}</div>}
         </div>
       </div>
     </div>
@@ -135,12 +155,41 @@ export default function ProjectStatisticsPage() {
       draft: "not_started",
     };
     const normalizedStatus = status ? (normalizedStatusMap[status] ?? status.toLowerCase()) : "not_started";
-    return CYCLE_STATUS.find((item) => item.value === normalizedStatus) ?? CYCLE_STATUS[CYCLE_STATUS.length - 1];
+    const statusDetails =
+      CYCLE_STATUS.find((item) => item.value === normalizedStatus) ?? CYCLE_STATUS[CYCLE_STATUS.length - 1];
+
+    if (normalizedStatus === "in_progress") {
+      return {
+        ...statusDetails,
+        bgColor: "bg-indigo-50",
+        textColor: "text-blue-500",
+      };
+    }
+
+    if (normalizedStatus === "not_started") {
+      return {
+        ...statusDetails,
+        bgColor: "bg-layer-1",
+        textColor: "text-secondary",
+      };
+    }
+
+    return statusDetails;
   };
 
   const getModuleStatusDetails = (status?: string) => {
     const normalizedStatus = status?.toLowerCase() ?? "planned";
-    return MODULE_STATUS.find((item) => item.value === normalizedStatus) ?? MODULE_STATUS[0];
+    const statusDetails = MODULE_STATUS.find((item) => item.value === normalizedStatus) ?? MODULE_STATUS[0];
+
+    if (normalizedStatus === "in-progress") {
+      return {
+        ...statusDetails,
+        bgColor: "bg-indigo-50",
+        textColor: "text-blue-500",
+      };
+    }
+
+    return statusDetails;
   };
 
   const getQaStatusDetails = (status?: string) => {
@@ -151,9 +200,9 @@ export default function ProjectStatisticsPage() {
       return { bgColor: "bg-green-50", textColor: "text-green-600" };
     }
     if (status === "未开始") {
-      return { bgColor: "bg-custom-background-90", textColor: "text-custom-text-300" };
+      return { bgColor: "bg-layer-1", textColor: "text-secondary" };
     }
-    return { bgColor: "bg-custom-background-90", textColor: "text-custom-text-300" };
+    return { bgColor: "bg-layer-1", textColor: "text-secondary" };
   };
 
   return (
@@ -170,7 +219,7 @@ export default function ProjectStatisticsPage() {
               <KpiCard
                 title="进行中的需求"
                 value={isLoading ? "-" : (data?.counts?.in_progress_requirements ?? 0)}
-                valueClassName="text-[#ef9d13]"
+                valueClassName="text-[#006399]"
               />
               <KpiCard
                 title="全部缺陷"
@@ -188,14 +237,14 @@ export default function ProjectStatisticsPage() {
             </div>
 
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-              <div className="bg-custom-background-100 border border-custom-border-200 rounded-lg shadow-custom-shadow-md p-4 min-h-[300px] flex flex-col">
+              <div className="bg-surface-1 border border-subtle rounded-lg shadow-md p-4 min-h-[300px] flex flex-col">
                 <div className="flex items-baseline gap-2">
-                  <div className="text-lg font-medium text-custom-text-200">进行中的迭代</div>
-                  <div className="text-xs text-custom-text-400">{`共 ${data?.cycles?.count ?? 0} 个进行中的迭代`}</div>
+                  <div className="text-lg font-medium text-primary">进行中的迭代</div>
+                  <div className="text-xs text-placeholder">{`共 ${data?.cycles?.count ?? 0} 个进行中的迭代`}</div>
                 </div>
                 <div className="mt-3 flex-1 min-h-0 overflow-hidden">
                   <Table>
-                    <TableHeader className="bg-transparent border-b border-custom-border-200 border-t-0">
+                    <TableHeader className="bg-transparent border-b border-subtle border-t-0">
                       <TableRow>
                         <TableHead className="w-1/3 h-9 text-left">名称</TableHead>
                         <TableHead className="w-1/3 h-9 text-left">日期</TableHead>
@@ -207,23 +256,23 @@ export default function ProjectStatisticsPage() {
                       {isLoading ? (
                         <TableRow>
                           <TableCell colSpan={4}>
-                            <div className="h-20 grid place-items-center text-sm text-custom-text-300">加载中...</div>
+                            <div className="h-20 grid place-items-center text-sm text-secondary">加载中...</div>
                           </TableCell>
                         </TableRow>
                       ) : (data?.cycles?.data?.length ?? 0) === 0 ? (
                         <TableRow>
                           <TableCell colSpan={4}>
-                            <div className="h-20 grid place-items-center text-sm text-custom-text-300">暂无进行中的迭代</div>
+                            <div className="h-20 grid place-items-center text-sm text-secondary">暂无进行中的迭代</div>
                           </TableCell>
                         </TableRow>
                       ) : (
                         (data?.cycles?.data ?? []).map((cycle) => (
                           <TableRow key={cycle.id} className="hover:bg-[#f7f7f7]">
-                            <TableCell className="max-w-[320px] truncate text-custom-text-200" title={cycle.name}>
+                            <TableCell className="max-w-[320px] truncate text-primary" title={cycle.name}>
                               {cycle.name}
                             </TableCell>
                             <TableCell>
-                              <div className="text-sm text-custom-text-200">
+                              <div className="text-sm text-primary">
                                 {(cycle.start_date ? renderFormattedDate(getDate(cycle.start_date), "yyyy-MM-dd") : "-") +
                                   " ~ " +
                                   (cycle.end_date ? renderFormattedDate(getDate(cycle.end_date), "yyyy-MM-dd") : "-")}
@@ -233,9 +282,7 @@ export default function ProjectStatisticsPage() {
                               {(() => {
                                 const statusDetails = getCycleStatusDetails(cycle.status);
                                 return (
-                                  <span
-                                    className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs ${statusDetails.bgColor} ${statusDetails.textColor}`}
-                                  >
+                                  <span className={getStatusTagClassName(statusDetails.bgColor, statusDetails.textColor)}>
                                     {t(statusDetails.i18n_title)}
                                   </span>
                                 );
@@ -248,8 +295,8 @@ export default function ProjectStatisticsPage() {
                     </TableBody>
                   </Table>
                 </div>
-                <div className="flex-shrink-0 border-t border-custom-border-200 px-4 py-3 bg-custom-background-100 flex items-center justify-between">
-                  <div className="text-sm text-custom-text-300">{(data?.cycles?.count ?? 0) > 0 ? `共 ${data?.cycles?.count ?? 0} 条` : ""}</div>
+                <div className="flex-shrink-0 border-t border-subtle px-4 py-3 bg-surface-1 flex items-center justify-between">
+                  <div className="text-sm text-secondary">{(data?.cycles?.count ?? 0) > 0 ? `共 ${data?.cycles?.count ?? 0} 条` : ""}</div>
                   <Pagination
                     simple
                     current={cyclePage}
@@ -261,14 +308,14 @@ export default function ProjectStatisticsPage() {
                 </div>
               </div>
 
-              <div className="bg-custom-background-100 border border-custom-border-200 rounded-lg shadow-custom-shadow-md p-4 min-h-[300px] flex flex-col">
+              <div className="bg-surface-1 border border-subtle rounded-lg shadow-md p-4 min-h-[300px] flex flex-col">
                 <div className="flex items-baseline gap-2">
-                  <div className="text-lg font-medium text-custom-text-200">进行中的发布</div>
-                  <div className="text-xs text-custom-text-400">{`共 ${data?.releases?.count ?? 0} 个进行中的发布`}</div>
+                  <div className="text-lg font-medium text-primary">进行中的发布</div>
+                  <div className="text-xs text-placeholder">{`共 ${data?.releases?.count ?? 0} 个进行中的发布`}</div>
                 </div>
                 <div className="mt-3 flex-1 min-h-0 overflow-hidden">
                   <Table>
-                    <TableHeader className="bg-transparent border-b border-custom-border-200 border-t-0">
+                    <TableHeader className="bg-transparent border-b border-subtle border-t-0">
                       <TableRow>
                         <TableHead className="w-1/3 h-9 text-left">名称</TableHead>
                         <TableHead className="w-1/3 h-9 text-left">日期</TableHead>
@@ -280,23 +327,23 @@ export default function ProjectStatisticsPage() {
                       {isLoading ? (
                         <TableRow>
                           <TableCell colSpan={4}>
-                            <div className="h-20 grid place-items-center text-sm text-custom-text-300">加载中...</div>
+                            <div className="h-20 grid place-items-center text-sm text-secondary">加载中...</div>
                           </TableCell>
                         </TableRow>
                       ) : (data?.releases?.data?.length ?? 0) === 0 ? (
                         <TableRow>
                           <TableCell colSpan={4}>
-                            <div className="h-20 grid place-items-center text-sm text-custom-text-300">暂无进行中的发布</div>
+                            <div className="h-20 grid place-items-center text-sm text-secondary">暂无进行中的发布</div>
                           </TableCell>
                         </TableRow>
                       ) : (
                         (data?.releases?.data ?? []).map((release) => (
                           <TableRow key={release.id} className="hover:bg-[#f7f7f7]">
-                            <TableCell className="max-w-[320px] truncate text-custom-text-200" title={release.name}>
+                            <TableCell className="max-w-[320px] truncate text-primary" title={release.name}>
                               {release.name}
                             </TableCell>
                             <TableCell>
-                              <div className="text-sm text-custom-text-200">
+                              <div className="text-sm text-primary">
                                 {(release.start_date ? renderFormattedDate(getDate(release.start_date), "yyyy-MM-dd") : "-") +
                                   " ~ " +
                                   (release.end_date ? renderFormattedDate(getDate(release.end_date), "yyyy-MM-dd") : "-")}
@@ -306,9 +353,7 @@ export default function ProjectStatisticsPage() {
                               {(() => {
                                 const statusDetails = getModuleStatusDetails(release.status);
                                 return (
-                                  <span
-                                    className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs ${statusDetails.bgColor} ${statusDetails.textColor}`}
-                                  >
+                                  <span className={getStatusTagClassName(statusDetails.bgColor, statusDetails.textColor)}>
                                     {t(statusDetails.i18n_label)}
                                   </span>
                                 );
@@ -321,8 +366,8 @@ export default function ProjectStatisticsPage() {
                     </TableBody>
                   </Table>
                 </div>
-                <div className="flex-shrink-0 border-t border-custom-border-200 px-4 py-3 bg-custom-background-100 flex items-center justify-between">
-                  <div className="text-sm text-custom-text-300">{(data?.releases?.count ?? 0) > 0 ? `共 ${data?.releases?.count ?? 0} 条` : ""}</div>
+                <div className="flex-shrink-0 border-t border-subtle px-4 py-3 bg-surface-1 flex items-center justify-between">
+                  <div className="text-sm text-secondary">{(data?.releases?.count ?? 0) > 0 ? `共 ${data?.releases?.count ?? 0} 条` : ""}</div>
                   <Pagination
                     simple
                     current={releasePage}
@@ -336,14 +381,14 @@ export default function ProjectStatisticsPage() {
             </div>
 
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-              <div className="bg-custom-background-100 border border-custom-border-200 rounded-lg shadow-custom-shadow-md p-4 min-h-[300px] flex flex-col">
+              <div className="bg-surface-1 border border-subtle rounded-lg shadow-md p-4 min-h-[300px] flex flex-col">
                 <div className="flex items-baseline gap-2">
-                  <div className="text-lg font-medium text-custom-text-200">进行中的测试计划</div>
-                  <div className="text-xs text-custom-text-400">{`共 ${data?.test_plans?.count ?? 0} 个进行中的测试计划`}</div>
+                  <div className="text-lg font-medium text-primary">进行中的测试计划</div>
+                  <div className="text-xs text-placeholder">{`共 ${data?.test_plans?.count ?? 0} 个进行中的测试计划`}</div>
                 </div>
                 <div className="mt-3 flex-1 min-h-0 overflow-hidden">
                   <Table>
-                    <TableHeader className="bg-transparent border-b border-custom-border-200 border-t-0">
+                    <TableHeader className="bg-transparent border-b border-subtle border-t-0">
                       <TableRow>
                         <TableHead className="w-1/3 h-9 text-left">名称</TableHead>
                         <TableHead className="w-1/3 h-9 text-left">日期</TableHead>
@@ -355,23 +400,23 @@ export default function ProjectStatisticsPage() {
                       {isLoading ? (
                         <TableRow>
                           <TableCell colSpan={4}>
-                            <div className="h-20 grid place-items-center text-sm text-custom-text-300">加载中...</div>
+                            <div className="h-20 grid place-items-center text-sm text-secondary">加载中...</div>
                           </TableCell>
                         </TableRow>
                       ) : (data?.test_plans?.data?.length ?? 0) === 0 ? (
                         <TableRow>
                           <TableCell colSpan={4}>
-                            <div className="h-20 grid place-items-center text-sm text-custom-text-300">暂无进行中的测试计划</div>
+                            <div className="h-20 grid place-items-center text-sm text-secondary">暂无进行中的测试计划</div>
                           </TableCell>
                         </TableRow>
                       ) : (
                         (data?.test_plans?.data ?? []).map((plan) => (
                           <TableRow key={plan.id} className="hover:bg-[#f7f7f7]">
-                            <TableCell className="max-w-[320px] truncate text-custom-text-200" title={plan.name}>
+                            <TableCell className="max-w-[320px] truncate text-primary" title={plan.name}>
                               {plan.name}
                             </TableCell>
                             <TableCell>
-                              <div className="text-sm text-custom-text-200">
+                              <div className="text-sm text-primary">
                                 {(plan.start_date ? renderFormattedDate(getDate(plan.start_date), "yyyy-MM-dd") : "-") +
                                   " ~ " +
                                   (plan.end_date ? renderFormattedDate(getDate(plan.end_date), "yyyy-MM-dd") : "-")}
@@ -381,9 +426,7 @@ export default function ProjectStatisticsPage() {
                               {(() => {
                                 const statusDetails = getQaStatusDetails(plan.status);
                                 return (
-                                  <span
-                                    className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs ${statusDetails.bgColor} ${statusDetails.textColor}`}
-                                  >
+                                  <span className={getStatusTagClassName(statusDetails.bgColor, statusDetails.textColor)}>
                                     {plan.status ?? "-"}
                                   </span>
                                 );
@@ -396,8 +439,8 @@ export default function ProjectStatisticsPage() {
                     </TableBody>
                   </Table>
                 </div>
-                <div className="flex-shrink-0 border-t border-custom-border-200 px-4 py-3 bg-custom-background-100 flex items-center justify-between">
-                  <div className="text-sm text-custom-text-300">{(data?.test_plans?.count ?? 0) > 0 ? `共 ${data?.test_plans?.count ?? 0} 条` : ""}</div>
+                <div className="flex-shrink-0 border-t border-subtle px-4 py-3 bg-surface-1 flex items-center justify-between">
+                  <div className="text-sm text-secondary">{(data?.test_plans?.count ?? 0) > 0 ? `共 ${data?.test_plans?.count ?? 0} 条` : ""}</div>
                   <Pagination
                     simple
                     current={planPage}
@@ -409,14 +452,14 @@ export default function ProjectStatisticsPage() {
                 </div>
               </div>
 
-              <div className="bg-custom-background-100 border border-custom-border-200 rounded-lg shadow-custom-shadow-md p-4 min-h-[300px] flex flex-col">
+              <div className="bg-surface-1 border border-subtle rounded-lg shadow-md p-4 min-h-[300px] flex flex-col">
                 <div className="flex items-baseline gap-2">
-                  <div className="text-lg font-medium text-custom-text-200">进行中的评审</div>
-                  <div className="text-xs text-custom-text-400">{`共 ${data?.case_reviews?.count ?? 0} 个进行中的评审`}</div>
+                  <div className="text-lg font-medium text-primary">进行中的评审</div>
+                  <div className="text-xs text-placeholder">{`共 ${data?.case_reviews?.count ?? 0} 个进行中的评审`}</div>
                 </div>
                 <div className="mt-3 flex-1 min-h-0 overflow-hidden">
                   <Table>
-                    <TableHeader className="bg-transparent border-b border-custom-border-200 border-t-0">
+                    <TableHeader className="bg-transparent border-b border-subtle border-t-0">
                       <TableRow>
                         <TableHead className="w-1/3 h-9 text-left">名称</TableHead>
                         <TableHead className="w-1/3 h-9 text-left">日期</TableHead>
@@ -428,23 +471,23 @@ export default function ProjectStatisticsPage() {
                       {isLoading ? (
                         <TableRow>
                           <TableCell colSpan={4}>
-                            <div className="h-20 grid place-items-center text-sm text-custom-text-300">加载中...</div>
+                            <div className="h-20 grid place-items-center text-sm text-secondary">加载中...</div>
                           </TableCell>
                         </TableRow>
                       ) : (data?.case_reviews?.data?.length ?? 0) === 0 ? (
                         <TableRow>
                           <TableCell colSpan={4}>
-                            <div className="h-20 grid place-items-center text-sm text-custom-text-300">暂无进行中的用例评审</div>
+                            <div className="h-20 grid place-items-center text-sm text-secondary">暂无进行中的用例评审</div>
                           </TableCell>
                         </TableRow>
                       ) : (
                         (data?.case_reviews?.data ?? []).map((review) => (
                           <TableRow key={review.id} className="hover:bg-[#f7f7f7]">
-                            <TableCell className="max-w-[320px] truncate text-custom-text-200" title={review.name}>
+                            <TableCell className="max-w-[320px] truncate text-primary" title={review.name}>
                               {review.name}
                             </TableCell>
                             <TableCell>
-                              <div className="text-sm text-custom-text-200">
+                              <div className="text-sm text-primary">
                                 {(review.start_date ? renderFormattedDate(getDate(review.start_date), "yyyy-MM-dd") : "-") +
                                   " ~ " +
                                   (review.end_date ? renderFormattedDate(getDate(review.end_date), "yyyy-MM-dd") : "-")}
@@ -454,9 +497,7 @@ export default function ProjectStatisticsPage() {
                               {(() => {
                                 const statusDetails = getQaStatusDetails(review.status);
                                 return (
-                                  <span
-                                    className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs ${statusDetails.bgColor} ${statusDetails.textColor}`}
-                                  >
+                                  <span className={getStatusTagClassName(statusDetails.bgColor, statusDetails.textColor)}>
                                     {review.status ?? "-"}
                                   </span>
                                 );
@@ -469,8 +510,8 @@ export default function ProjectStatisticsPage() {
                     </TableBody>
                   </Table>
                 </div>
-                <div className="flex-shrink-0 border-t border-custom-border-200 px-4 py-3 bg-custom-background-100 flex items-center justify-between">
-                  <div className="text-sm text-custom-text-300">{(data?.case_reviews?.count ?? 0) > 0 ? `共 ${data?.case_reviews?.count ?? 0} 条` : ""}</div>
+                <div className="flex-shrink-0 border-t border-subtle px-4 py-3 bg-surface-1 flex items-center justify-between">
+                  <div className="text-sm text-secondary">{(data?.case_reviews?.count ?? 0) > 0 ? `共 ${data?.case_reviews?.count ?? 0} 条` : ""}</div>
                   <Pagination
                     simple
                     current={reviewPage}

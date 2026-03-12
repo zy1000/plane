@@ -267,12 +267,12 @@ function StatisticsRoot() {
       <div className="flex h-full gap-4 overflow-hidden">
         <div className="w-[320px] flex-shrink-0 overflow-hidden">
           <Card className="h-full overflow-hidden">
-            <div className="p-4 border-b border-custom-border-200">
-              <div className="text-sm font-medium text-custom-text-200">项目</div>
-              <div className="mt-3 flex items-center gap-1.5 rounded border border-custom-border-200 bg-custom-background-90 px-2 py-1.5">
-                <Search className="h-3.5 w-3.5 text-custom-text-400" />
+            <div className="p-4 border-b border-subtle">
+              <div className="text-sm font-medium text-primary">项目</div>
+              <div className="mt-3 flex items-center gap-1.5 rounded border border-subtle bg-layer-1 px-2 py-1.5">
+                <Search className="h-3.5 w-3.5 text-placeholder" />
                 <input
-                  className="w-full border-none bg-transparent text-sm text-custom-text-100 placeholder:text-custom-text-400 focus:outline-none"
+                  className="w-full border-none bg-transparent text-sm text-primary placeholder:text-placeholder focus:outline-none"
                   placeholder={t("common.search.label")}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
@@ -297,9 +297,9 @@ function StatisticsRoot() {
                     key={project.id}
                     type="button"
                     className={cn(
-                      "w-full flex items-center gap-2 rounded-md px-2.5 py-2 text-left hover:bg-custom-background-90 transition-colors",
+                      "w-full flex items-center gap-2 rounded-md px-2.5 py-2 text-left hover:bg-layer-1 transition-colors",
                       {
-                        "bg-custom-primary-100/10 border border-custom-primary-200": isActive,
+                        "bg-accent-subtle border border-accent-strong-200": isActive,
                       }
                     )}
                     onClick={() => {
@@ -307,18 +307,18 @@ function StatisticsRoot() {
                       updateSelectedProjects([project.id]);
                     }}
                   >
-                    <div className="flex h-7 w-7 items-center justify-center rounded bg-custom-background-90 overflow-hidden">
+                    <div className="flex h-7 w-7 items-center justify-center rounded bg-layer-1 overflow-hidden">
                       {project.logo_props ? <Logo logo={project.logo_props} size={18} /> : <ProjectIcon className="h-4 w-4" />}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-medium text-custom-text-200">{project.name}</div>
-                      <div className="truncate text-xs text-custom-text-400">{project.identifier}</div>
+                      <div className="truncate text-sm font-medium text-primary">{project.name}</div>
+                      <div className="truncate text-xs text-placeholder">{project.identifier}</div>
                     </div>
                   </button>
                 );
               })}
               {filteredProjects.length === 0 && (
-                <div className="px-2 py-3 text-sm text-custom-text-400">没有匹配的项目</div>
+                <div className="px-2 py-3 text-sm text-placeholder">没有匹配的项目</div>
               )}
             </div>
           </Card>
@@ -326,13 +326,13 @@ function StatisticsRoot() {
 
         <div className="flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm pr-2">
           {!selectedProjectId ? (
-            <div className="grid place-items-center h-full text-custom-text-300">请选择一个项目查看统计</div>
+            <div className="grid place-items-center h-full text-secondary">请选择一个项目查看统计</div>
           ) : isLoading ? (
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
               {Array.from({ length: 8 }).map((_, idx) => (
                 <Loader
                   key={idx}
-                  className="min-h-[92px] gap-2 border border-custom-border-200 rounded-lg bg-custom-background-100 p-4"
+                  className="min-h-[92px] gap-2 border border-subtle rounded-lg bg-surface-1 p-4"
                 >
                   <Loader.Item width="60%" height="12px" />
                   <Loader.Item width="40%" height="22px" />
@@ -344,52 +344,52 @@ function StatisticsRoot() {
             <div className="flex flex-col gap-6">
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0">
-                  <div className="text-xl font-semibold text-custom-text-200 truncate">{data.project.name}</div>
-                  <div className="text-sm text-custom-text-400 truncate">{data.project.identifier}</div>
+                  <div className="text-xl font-semibold text-primary truncate">{data.project.name}</div>
+                  <div className="text-sm text-placeholder truncate">{data.project.identifier}</div>
                 </div>
               </div>
 
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <Card className="p-4 border border-custom-border-200">
-                  <div className="text-xs text-custom-text-400">工作项总数</div>
-                  <div className="mt-1 text-2xl font-semibold text-custom-text-200">{kpis?.total_work_items ?? 0}</div>
-                  <div className="mt-1 text-xs text-custom-text-400">近 7 天新增 {kpis?.created_last_7d ?? 0}</div>
+                <Card className="p-4 border border-subtle">
+                  <div className="text-xs text-placeholder">工作项总数</div>
+                  <div className="mt-1 text-2xl font-semibold text-primary">{kpis?.total_work_items ?? 0}</div>
+                  <div className="mt-1 text-xs text-placeholder">近 7 天新增 {kpis?.created_last_7d ?? 0}</div>
                 </Card>
-                <Card className="p-4 border border-custom-border-200">
-                  <div className="text-xs text-custom-text-400">完成率</div>
-                  <div className="mt-1 text-2xl font-semibold text-custom-text-200">{completionRate}%</div>
-                  <div className="mt-1 text-xs text-custom-text-400">近 7 天完成 {kpis?.completed_last_7d ?? 0}</div>
+                <Card className="p-4 border border-subtle">
+                  <div className="text-xs text-placeholder">完成率</div>
+                  <div className="mt-1 text-2xl font-semibold text-primary">{completionRate}%</div>
+                  <div className="mt-1 text-xs text-placeholder">近 7 天完成 {kpis?.completed_last_7d ?? 0}</div>
                 </Card>
-                <Card className="p-4 border border-custom-border-200">
-                  <div className="text-xs text-custom-text-400">逾期工作项</div>
-                  <div className="mt-1 text-2xl font-semibold text-custom-text-200">{kpis?.overdue_work_items ?? 0}</div>
-                  <div className="mt-1 text-xs text-custom-text-400">今日到期 {kpis?.due_today_work_items ?? 0}</div>
+                <Card className="p-4 border border-subtle">
+                  <div className="text-xs text-placeholder">逾期工作项</div>
+                  <div className="mt-1 text-2xl font-semibold text-primary">{kpis?.overdue_work_items ?? 0}</div>
+                  <div className="mt-1 text-xs text-placeholder">今日到期 {kpis?.due_today_work_items ?? 0}</div>
                 </Card>
-                <Card className="p-4 border border-custom-border-200">
-                  <div className="text-xs text-custom-text-400">缺陷工作项</div>
-                  <div className="mt-1 text-2xl font-semibold text-custom-text-200">{kpis?.defect_work_items ?? 0}</div>
-                  <div className="mt-1 text-xs text-custom-text-400">进行中 {kpis?.in_progress_work_items ?? 0}</div>
+                <Card className="p-4 border border-subtle">
+                  <div className="text-xs text-placeholder">缺陷工作项</div>
+                  <div className="mt-1 text-2xl font-semibold text-primary">{kpis?.defect_work_items ?? 0}</div>
+                  <div className="mt-1 text-xs text-placeholder">进行中 {kpis?.in_progress_work_items ?? 0}</div>
                 </Card>
               </div>
 
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <Card className="p-4 border border-custom-border-200">
-                  <div className="text-xs text-custom-text-400">成员</div>
-                  <div className="mt-1 text-2xl font-semibold text-custom-text-200">{kpis?.total_members ?? 0}</div>
+                <Card className="p-4 border border-subtle">
+                  <div className="text-xs text-placeholder">成员</div>
+                  <div className="mt-1 text-2xl font-semibold text-primary">{kpis?.total_members ?? 0}</div>
                 </Card>
-                <Card className="p-4 border border-custom-border-200">
-                  <div className="text-xs text-custom-text-400">迭代（进行中/总数）</div>
-                  <div className="mt-1 text-2xl font-semibold text-custom-text-200">
+                <Card className="p-4 border border-subtle">
+                  <div className="text-xs text-placeholder">迭代（进行中/总数）</div>
+                  <div className="mt-1 text-2xl font-semibold text-primary">
                     {kpis?.active_cycles ?? 0}/{kpis?.total_cycles ?? 0}
                   </div>
                 </Card>
-                <Card className="p-4 border border-custom-border-200">
-                  <div className="text-xs text-custom-text-400">模块</div>
-                  <div className="mt-1 text-2xl font-semibold text-custom-text-200">{kpis?.total_modules ?? 0}</div>
+                <Card className="p-4 border border-subtle">
+                  <div className="text-xs text-placeholder">模块</div>
+                  <div className="mt-1 text-2xl font-semibold text-primary">{kpis?.total_modules ?? 0}</div>
                 </Card>
-                <Card className="p-4 border border-custom-border-200">
-                  <div className="text-xs text-custom-text-400">用例（用例库/用例）</div>
-                  <div className="mt-1 text-2xl font-semibold text-custom-text-200">
+                <Card className="p-4 border border-subtle">
+                  <div className="text-xs text-placeholder">用例（用例库/用例）</div>
+                  <div className="mt-1 text-2xl font-semibold text-primary">
                     {kpis?.test_repository_count ?? 0}/{kpis?.test_case_count ?? 0}
                   </div>
                 </Card>
@@ -702,7 +702,7 @@ function StatisticsRoot() {
               </div>
             </div>
           ) : (
-            <div className="grid place-items-center h-full text-custom-text-300">暂无统计数据</div>
+            <div className="grid place-items-center h-full text-secondary">暂无统计数据</div>
           )}
         </div>
       </div>

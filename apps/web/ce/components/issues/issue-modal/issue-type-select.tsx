@@ -230,7 +230,7 @@ export const IssueTypeSelect = observer(<T extends Partial<TIssueFields>>(props:
             className={cn(
               "clickable block h-full max-w-full outline-none",
               {
-                "cursor-not-allowed text-custom-text-200": disabled || isLoading,
+                "cursor-not-allowed text-primary": disabled || isLoading,
                 "cursor-pointer": !disabled && !isLoading,
               },
               buttonContainerClassName
@@ -273,17 +273,17 @@ export const IssueTypeSelect = observer(<T extends Partial<TIssueFields>>(props:
               {isOpen && (
                 <Combobox.Options className="fixed z-10" static>
                   <div
-                    className="my-1 w-48 rounded border-[0.5px] border-custom-border-300 bg-custom-background-100 px-2 py-2.5 text-xs shadow-custom-shadow-rg focus:outline-none"
+                    className="my-1 w-48 rounded border-[0.5px] border-subtle-1 bg-surface-1 px-2 py-2.5 text-xs shadow-raised-200 focus:outline-none"
                     ref={setPopperElement}
                     style={styles.popper}
                     {...attributes.popper}
                   >
-                    <div className="flex items-center gap-1.5 rounded border border-custom-border-100 bg-custom-background-90 px-2">
-                      <Search className="h-3.5 w-3.5 text-custom-text-400" strokeWidth={1.5} />
+                    <div className="flex items-center gap-1.5 rounded border border-subtle-1 bg-layer-1 px-2">
+                      <Search className="h-3.5 w-3.5 text-placeholder" strokeWidth={1.5} />
                       <Combobox.Input
                         as="input"
                         ref={inputRef}
-                        className="w-full bg-transparent py-1 text-xs text-custom-text-200 placeholder:text-custom-text-400 focus:outline-none"
+                        className="w-full bg-transparent py-1 text-xs text-primary placeholder:text-placeholder focus:outline-none"
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
                         placeholder={t("search") || "Search"}
@@ -293,7 +293,7 @@ export const IssueTypeSelect = observer(<T extends Partial<TIssueFields>>(props:
                     <div className="mt-2 max-h-48 overflow-auto">
                       {isLoading ? (
                         <div className="flex items-center justify-center py-2">
-                          <div className="w-4 h-4 border-2 border-custom-primary border-t-transparent rounded-full animate-spin" />
+                          <div className="w-4 h-4 border-2 border-accent-strong border-t-transparent rounded-full animate-spin" />
                         </div>
                       ) : filteredOptions.length > 0 ? (
                         filteredOptions.map((option) => (
@@ -304,9 +304,8 @@ export const IssueTypeSelect = observer(<T extends Partial<TIssueFields>>(props:
                               cn(
                                 "flex cursor-pointer select-none items-center justify-between gap-2 truncate rounded px-1 py-1.5",
                                 {
-                                  "bg-custom-background-80": active,
-                                  "text-custom-text-100": selected,
-                                  "text-custom-text-200": !selected,
+                                  "bg-layer-1-hover": active,
+                                  "text-primary": true,
                                 }
                               )
                             }
@@ -320,7 +319,7 @@ export const IssueTypeSelect = observer(<T extends Partial<TIssueFields>>(props:
                           </Combobox.Option>
                         ))
                       ) : (
-                        <div className="flex items-center justify-center py-2 text-custom-text-400">
+                        <div className="flex items-center justify-center py-2 text-placeholder">
                           {t("no_results_found") || "No results found"}
                         </div>
                       )}

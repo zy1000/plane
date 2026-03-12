@@ -20,6 +20,6 @@
 .noHover :global(.clickable) {
   cursor: default;
 }
-.noHover :global(.hover\:bg-custom-background-80:hover) {
+.noHover :global(.hover\:bg-layer-1-hover:hover) {
   background-color: transparent !important;
 }

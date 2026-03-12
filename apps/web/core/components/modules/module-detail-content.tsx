@@ -12,9 +12,13 @@ import { Dialog, Transition } from "@headlessui/react";
 import { Pagination, Popconfirm } from "antd";
 import { ReadonlyDate } from "@/components/readonly/date";
 import { ModuleService } from "@/services/module.service";
+import { WorkspaceService } from "@/services/workspace.service";
 import { renderFormattedPayloadDate, findTotalDaysInRange } from "@plane/utils";
+import { EFileAssetType } from "@plane/types";
 import { useModule } from "@/hooks/store/use-module";
-import "quill/dist/quill.snow.css";
+import { useWorkspace } from "@/hooks/store/use-workspace";
+import { useEditorAsset } from "@/hooks/store/use-editor-asset";
+import { RichTextEditor } from "@/components/editor/rich-text";
 
 type Props = {
   moduleId: string;
@@ -29,72 +33,16 @@ type TModuleFile = {
   created_at: string;
 };
 
-const InlineQuillEditor: React.FC<{ value: string; onChange: (v: string) => void }> = ({ value, onChange }) => {
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const quillRef = useRef<any>(null);
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (!containerRef.current) return;
-    if (!quillRef.current) {
-      (async () => {
-        const mod = await import("quill");
-        const Quill = mod.default || (mod as any);
-        const q = new Quill(containerRef.current!, { theme: "snow" });
-        quillRef.current = q;
-        q.on("text-change", () => {
-          const html = (containerRef.current?.querySelector(".ql-editor") as HTMLElement | null)?.innerHTML || "";
-          onChange(html);
-        });
-        q.clipboard.dangerouslyPasteHTML(value || "");
-      })();
-    }
-  }, []);
-
-  // Prevent global shortcuts when typing in editor
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-
-    const handler = (e: KeyboardEvent) => {
-      const q = quillRef.current;
-      // Check if editor has focus
-      const isFocused = !!q?.hasFocus() || (document.activeElement && el.contains(document.activeElement as Node));
-
-      if (!isFocused) return;
-
-      // Allow meta keys and navigation keys
-      if (e.ctrlKey || e.metaKey || e.altKey || e.key === "Escape" || e.key === "Tab") return;
-
-      // Stop propagation for other keys to prevent global shortcuts
-      e.stopPropagation();
-    };
-
-    el.addEventListener("keydown", handler, { capture: true });
-    return () => el.removeEventListener("keydown", handler, { capture: true });
-  }, []);
-
-  useEffect(() => {
-    if (!quillRef.current) return;
-    const editor = quillRef.current;
-    const currentContent = containerRef.current?.querySelector(".ql-editor")?.innerHTML || "";
-    if (value !== currentContent) {
-      const range = editor.getSelection();
-      editor.clipboard.dangerouslyPasteHTML(value || "");
-      if (range) editor.setSelection(range);
-    }
-  }, [value]);
-  return (
-    <div className="border border-gray-300 rounded-md">
-      <div ref={containerRef} style={{ minHeight: 180 }} />
-    </div>
-  );
-};
 
 export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen }) => {
   const { workspaceSlug, projectId } = useParams();
   const router = useRouter();
   const { getModuleById, fetchModuleDetails } = useModule();
   const moduleDetails = getModuleById(moduleId);
+  const { getWorkspaceBySlug } = useWorkspace();
+  const workspaceId = workspaceSlug ? getWorkspaceBySlug(workspaceSlug.toString())?.id : undefined;
+  const { uploadEditorAsset, duplicateEditorAsset } = useEditorAsset();
+  const workspaceService = useMemo(() => new WorkspaceService(), []);
 
   const todayStr = renderFormattedPayloadDate(new Date());
   const rawDays =
@@ -110,10 +58,10 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
   const isCancelled = status === "cancelled";
   const progressLabelClass =
     isProgress || isCompleted || isCancelled
-      ? "text-amber-500 bg-amber-50"
-      : "text-custom-text-300 bg-custom-background-90";
-  const line1BorderClass = isBacklog ? "border-gray-300" : "border-amber-400";
-  const line2BorderClass = isCompleted ? "border-green-600" : isCancelled ? "border-red-500" : "border-gray-300";
+      ? "text-warning-primary bg-warning-subtle"
+      : "text-secondary bg-layer-1";
+  const line1BorderClass = isBacklog ? "border-subtle" : "border-warning-strong";
+  const line2BorderClass = isCompleted ? "border-success-strong" : isCancelled ? "border-danger-strong" : "border-subtle";
   const line1BorderStyle = isBacklog ? "border-dashed" : "border-solid";
   const line2BorderStyle = isCompleted || isCancelled ? "border-solid" : "border-dashed";
 
@@ -300,6 +248,33 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
     fetchModuleFiles(1);
   }, [fetchModuleDetails, isOpen, moduleId, projectId, workspaceSlug]);
 
+  const handleNoteEditorUploadFile = async (blockId: string | undefined, file: File) => {
+    if (!workspaceSlug || !projectId) throw new Error("Missing context");
+    const { asset_id } = await uploadEditorAsset({
+      blockId: blockId ?? "",
+      data: {
+        entity_identifier: projectId.toString(),
+        entity_type: EFileAssetType.PROJECT_DESCRIPTION,
+      },
+      file,
+      projectId: projectId.toString(),
+      workspaceSlug: workspaceSlug.toString(),
+    });
+    return asset_id;
+  };
+
+  const handleNoteEditorDuplicateFile = async (assetId: string) => {
+    if (!workspaceSlug || !projectId) throw new Error("Missing context");
+    const { asset_id } = await duplicateEditorAsset({
+      assetId,
+      entityId: projectId.toString(),
+      entityType: EFileAssetType.PROJECT_DESCRIPTION,
+      projectId: projectId.toString(),
+      workspaceSlug: workspaceSlug.toString(),
+    });
+    return asset_id;
+  };
+
   const handleNoteOpen = () => {
     setNoteHtml(moduleDetails?.note || "");
     setNoteOpen(true);
@@ -372,15 +347,15 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
 
   return (
     <div className="h-full overflow-y-auto vertical-scrollbar scrollbar-sm">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-[#fafafa]">
-        <div className="md:col-span-2 bg-white border border-gray-200 p-4">
-          <div className="text-sm font-medium text-gray-700 mb-3">基本信息</div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-canvas">
+        <div className="md:col-span-2 bg-surface-1 border border-subtle shadow-md p-4">
+          <div className="text-sm font-medium text-secondary mb-3">基本信息</div>
           <div className="flex flex-col md:flex-row md:items-stretch md:justify-between gap-3">
             <div className="md:w-1/3">
               <div className="grid grid-cols-2 gap-2">
-                <div className="text-sm text-gray-700">距离发布还有：</div>
-                <div className="text-sm text-gray-700">负责人：</div>
-                <div className="text-base font-medium text-custom-text-200">
+                <div className="text-sm text-secondary">距离发布还有：</div>
+                <div className="text-sm text-secondary">负责人：</div>
+                <div className="text-base font-medium text-primary">
                   {moduleDetails?.target_date ? `${daysLeft ?? 0}天` : "--"}
                 </div>
                 <div>
@@ -405,13 +380,13 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
               </div>
             </div>
             <div className="hidden md:flex items-center flex-shrink-0">
-              <div className="h-12 w-px bg-custom-background-80"></div>
+              <div className="h-12 border-l border-subtle"></div>
             </div>
 
             <div className="md:w-2/3 flex md:items-center">
               <div className="flex items-center gap-2 md:gap-3 w-full">
                 <div
-                  className={`px-3 py-1 rounded-full text-xs font-medium ${isBacklog ? "text-custom-text-400 bg-custom-background-80" : "text-custom-text-300 bg-custom-background-90"}`}
+                  className={`px-3 py-1 rounded-full text-xs font-medium ${isBacklog ? "text-primary bg-layer-1-active" : "text-secondary bg-layer-1"}`}
                 >
                   未开始
                 </div>
@@ -419,7 +394,7 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
                 <div className={`px-3 py-1 rounded-full text-xs font-medium ${progressLabelClass}`}>进行中</div>
                 <div className={`flex-1 h-0 border-t-2 ${line2BorderStyle} ${line2BorderClass}`}></div>
                 <div
-                  className={`px-3 py-1 rounded-full text-xs font-medium ${isCompleted ? "text-green-600 bg-green-100" : isCancelled ? "text-red-500 bg-red-50" : "text-custom-text-300 bg-custom-background-90"}`}
+                  className={`px-3 py-1 rounded-full text-xs font-medium ${isCompleted ? "text-success-primary bg-success-subtle" : isCancelled ? "text-danger-primary bg-danger-subtle" : "text-secondary bg-layer-1"}`}
                 >
                   {isCancelled ? "已取消" : "已完成"}
                 </div>
@@ -428,13 +403,13 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
           </div>
         </div>
 
-        <div className="h-[430px] bg-white border border-gray-200 flex flex-col">
+        <div className="h-[430px] bg-surface-1 border border-subtle shadow-md flex flex-col">
           <div className="p-4 ">
-            <div className="text-lg font-semibold text-gray-800">发布进度</div>
+            <div className="text-base font-semibold text-primary">发布进度</div>
           </div>
           <div className="px-4 pb-4">
             {statsLoading ? (
-              <div className="flex items-center justify-center py-8 text-sm text-custom-text-300">加载中...</div>
+              <div className="flex items-center justify-center py-8 text-sm text-secondary">加载中...</div>
             ) : statsError ? (
               <div className="bg-red-50 border border-red-200 rounded-md p-3 text-sm text-red-800">{statsError}</div>
             ) : (
@@ -444,33 +419,33 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
                     {
                       label: "全部",
                       value: Number(stats?.total_issues ?? 0),
-                      color: "text-black",
+                      color: "text-primary",
                     },
                     {
                       label: "未开始",
                       value: Number(stats?.state_distribution?.backlog ?? 0),
-                      color: "text-black",
+                      color: "text-primary",
                     },
                     {
                       label: "进行中",
                       value: Number(
                         (stats?.state_distribution?.unstarted ?? 0) + (stats?.state_distribution?.started ?? 0)
                       ),
-                      color: "text-yellow-500",
+                      color: "text-warning-primary",
                     },
                     {
                       label: "已完成",
                       value: Number(stats?.state_distribution?.completed ?? 0),
-                      color: "text-green-600",
+                      color: "text-success-primary",
                     },
                     {
                       label: "已取消",
                       value: Number(stats?.state_distribution?.cancelled ?? 0),
-                      color: "text-red-600",
+                      color: "text-danger-primary",
                     },
                   ].map((item) => (
-                    <div key={item.label} className="rounded-md border border-gray-200 p-2">
-                      <div className="text-xs text-custom-text-300">{item.label}</div>
+                    <div key={item.label} className="rounded-md border border-subtle p-2">
+                      <div className="text-xs text-secondary">{item.label}</div>
                       <div className={`mt-1 text-xl font-semibold ${item.color}`}>{item.value}</div>
                     </div>
                   ))}
@@ -557,6 +532,7 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
                         alignContent: "start",
                         paddingLeft: "20px",
                         paddingTop: "8px",
+                        paddingBottom: "12px",
                       },
                     }}
                     barSize={18}
@@ -572,11 +548,11 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
             )}
           </div>
         </div>
-        <div className="h-[430px] relative bg-white border border-gray-200 p-4 group flex flex-col overflow-hidden">
+        <div className="h-[430px] relative bg-surface-1 border border-subtle shadow-md p-4 group flex flex-col overflow-hidden">
           <div className="flex items-center justify-between">
-            <div className="text-lg font-semibold text-gray-800">发布日志</div>
+            <div className="text-base font-semibold text-primary">发布日志</div>
             <div className="flex">
-              <Button variant="link-neutral" className="p-0 opacity-0 group-hover:opacity-100" onClick={handleNoteOpen}>
+              <Button variant="ghost" className="p-0 opacity-0 group-hover:opacity-100" onClick={handleNoteOpen}>
                 <Pencil className="h-3.5 w-3.5" />
               </Button>
             </div>
@@ -584,20 +560,20 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
           <div className="mt-3 flex-1 min-h-0 overflow-hidden">
             {moduleDetails?.note ? (
               <div
-                className="prose max-w-none text-sm text-gray-700"
+                className="prose max-w-none text-sm text-secondary"
                 dangerouslySetInnerHTML={{ __html: moduleDetails.note }}
               />
             ) : (
-              <div className="text-sm text-custom-text-300">暂无发布日志</div>
+              <div className="text-sm text-secondary">暂无发布日志</div>
             )}
           </div>
         </div>
-        <div className="relative bg-white border border-gray-200 p-4 group">
+        <div className="relative bg-surface-1 border border-subtle shadow-md p-4 group">
           <div className="flex items-center justify-between">
-            <div className="text-lg font-semibold text-gray-800">关联迭代</div>
+            <div className="text-base font-semibold text-primary">关联迭代</div>
             <div className="flex">
               <Button
-                variant="link-neutral"
+                variant="ghost"
                 className="p-0"
                 onClick={() => {
                   setAssociateOpen(true);
@@ -610,7 +586,7 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
           </div>
           <div className="mt-3 max-h-[220px] overflow-y-auto vertical-scrollbar scrollbar-sm">
             {cyclesLoading && (
-              <div className="flex items-center justify-center py-8 text-sm text-custom-text-300">加载中...</div>
+              <div className="flex items-center justify-center py-8 text-sm text-secondary">加载中...</div>
             )}
             {cyclesError && (
               <div className="bg-red-50 border border-red-200 rounded-md p-3 text-sm text-red-800">{cyclesError}</div>
@@ -619,7 +595,7 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
               <div className="overflow-x-auto">
                 <table className="min-w-full table-fixed">
                   <thead>
-                    <tr className="text-left text-xs text-custom-text-300 border-b">
+                    <tr className="text-left text-xs text-secondary border-b border-subtle">
                       <th className="w-2/5 px-2 py-2">名称</th>
                       <th className="w-1/5 px-2 py-2">开始时间</th>
                       <th className="w-1/5 px-2 py-2">结束时间</th>
@@ -629,7 +605,7 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
                   <tbody>
                     {cycles.length === 0 && (
                       <tr>
-                        <td className="px-2 py-6 text-sm text-custom-text-300" colSpan={4}>
+                        <td className="px-2 py-6 text-sm text-secondary" colSpan={4}>
                           暂无关联迭代
                         </td>
                       </tr>
@@ -637,13 +613,13 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
                     {cycles.map((c) => (
                       <tr
                         key={c.id}
-                        className="border-b hover:bg-custom-background-90"
+                        className="border-b border-subtle hover:bg-layer-1-hover"
                         onMouseEnter={() => setHoverRowId(c.id)}
                         onMouseLeave={() => setHoverRowId((prev) => (prev === c.id ? null : prev))}
                       >
                         <td className="px-2 py-2">
                           <div className="flex items-center gap-2">
-                            <span className="truncate text-sm text-gray-800">{c.name}</span>
+                            <span className="truncate text-sm text-primary">{c.name}</span>
                           </div>
                         </td>
                         <td className="px-2 py-2">
@@ -653,7 +629,7 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
                           <ReadonlyDate value={c.end_date} formatToken="yyyy-MM-dd" hideIcon={true} />
                         </td>
                         <td className="px-2 py-2 text-right">
-                          <Button variant="link-neutral" className="p-0" onClick={() => handleCancelAssociation(c.id)}>
+                          <Button variant="ghost" className="p-0" onClick={() => handleCancelAssociation(c.id)}>
                             <Unlink className="h-3.5 w-3.5" />
                           </Button>
                         </td>
@@ -665,15 +641,15 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
             )}
           </div>
         </div>
-        <div className="h-[300px] relative bg-white border border-gray-200 p-4 group">
-          <div className="text-lg font-semibold text-gray-800">测试计划</div>
+        <div className="h-[300px] relative bg-surface-1 border border-subtle shadow-md p-4 group">
+          <div className="text-base font-semibold text-primary">测试计划</div>
         </div>
-        <div className="h-[350px] relative bg-white border border-gray-200 p-4 group flex flex-col">
+        <div className="h-[360px] relative bg-surface-1 border border-subtle shadow-md p-4 group flex flex-col">
           <div className="flex items-center justify-between">
-            <div className="text-lg font-semibold text-gray-800">文件</div>
+            <div className="text-base font-semibold text-primary">文件</div>
             <div className="flex">
               <Button
-                variant="link-neutral"
+                variant="ghost"
                 className="p-0"
                 onClick={() => fileInputRef.current?.click()}
                 loading={moduleFilesUploading}
@@ -686,7 +662,7 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
           </div>
           <div className="mt-3 flex-1 min-h-0 overflow-y-auto vertical-scrollbar scrollbar-sm">
             {moduleFilesLoading && (
-              <div className="flex items-center justify-center py-8 text-sm text-custom-text-300">加载中...</div>
+              <div className="flex items-center justify-center py-8 text-sm text-secondary">加载中...</div>
             )}
             {moduleFilesError && (
               <div className="bg-red-50 border border-red-200 rounded-md p-3 text-sm text-red-800">{moduleFilesError}</div>
@@ -695,7 +671,7 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
               <div className="overflow-x-auto">
                 <table className="min-w-full table-fixed">
                   <thead>
-                    <tr className="text-left text-xs text-custom-text-300 border-b">
+                    <tr className="text-left text-xs text-secondary border-b border-subtle">
                       <th className="w-2/5 px-2 py-2">文件名</th>
                       <th className="w-1/5 px-2 py-2">大小</th>
                       <th className="w-1/5 px-2 py-2">上传时间</th>
@@ -705,24 +681,24 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
                   <tbody>
                     {moduleFiles.length === 0 && (
                       <tr>
-                        <td className="px-2 py-6 text-sm text-custom-text-300" colSpan={4}>
+                        <td className="px-2 py-6 text-sm text-secondary" colSpan={4}>
                           暂无文件
                         </td>
                       </tr>
                     )}
                     {moduleFiles.map((file) => (
-                      <tr key={file.id} className="border-b hover:bg-custom-background-90">
-                        <td className="px-2 py-2 truncate text-sm text-gray-800" title={file.name}>
+                      <tr key={file.id} className="border-b border-subtle hover:bg-layer-1-hover">
+                        <td className="px-2 py-2 truncate text-sm text-primary" title={file.name}>
                           {file.name}
                         </td>
-                        <td className="px-2 py-2 text-sm text-custom-text-200">{formatFileSize(Number(file.size ?? 0))}</td>
-                        <td className="px-2 py-2 text-sm text-custom-text-200">
+                        <td className="px-2 py-2 text-sm text-primary">{formatFileSize(Number(file.size ?? 0))}</td>
+                        <td className="px-2 py-2 text-sm text-primary">
                           <ReadonlyDate value={file.created_at} formatToken="yyyy-MM-dd" hideIcon={true} />
                         </td>
                         <td className="px-2 py-2">
                           <div className="flex items-center justify-end gap-2">
                             <Button
-                              variant="link-neutral"
+                              variant="ghost"
                               className="p-0"
                               disabled={moduleFilesDownloadingId === file.id}
                               onClick={() => handleDownloadModuleFile(file.id, file.name)}
@@ -736,8 +712,8 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
                               onConfirm={() => void handleDeleteModuleFile(file.id)}
                             >
                               <Button
-                                variant="link-neutral"
-                                className="p-0 text-red-500 hover:text-red-600"
+                                variant="ghost"
+                                className="p-0"
                                 disabled={moduleFilesDeletingId === file.id}
                                 loading={moduleFilesDeletingId === file.id}
                               >
@@ -753,8 +729,8 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
               </div>
             )}
           </div>
-          <div className="flex-shrink-0 border-t border-custom-border-200 px-2 py-2 bg-custom-background-100 flex items-center justify-between mt-2">
-            <div className="text-sm text-custom-text-300">{moduleFilesTotal > 0 ? `共 ${moduleFilesTotal} 条` : ""}</div>
+          <div className="flex-shrink-0 border-t border-subtle px-2 py-2 bg-surface-1 flex items-center justify-between mt-2">
+            <div className="text-sm text-secondary">{moduleFilesTotal > 0 ? `共 ${moduleFilesTotal} 条` : ""}</div>
             <Pagination
               simple
               current={moduleFilesPage}
@@ -765,8 +741,8 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
             />
           </div>
         </div>
-        <div className="h-[350px] relative bg-white border border-gray-200 p-4 group">
-          <div className="text-lg font-semibold text-gray-800">发布动态</div>
+        <div className="h-[360px] relative bg-surface-1 border border-subtle shadow-md p-4 group">
+          <div className="text-base font-semibold text-primary">发布动态</div>
         </div>
       </div>
       <Transition.Root show={associateOpen} as={Fragment}>
@@ -780,7 +756,7 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
             leaveFrom="opacity-100"
             leaveTo="opacity-0"
           >
-            <div className="fixed inset-0 bg-custom-backdrop transition-opacity" />
+            <div className="fixed inset-0 bg-backdrop transition-opacity" />
           </Transition.Child>
           <div className="fixed inset-0 z-10 overflow-y-auto">
             <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
@@ -793,17 +769,17 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
                 leaveFrom="opacity-100 translate-y-0 sm:scale-100"
                 leaveTo="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
               >
-                <Dialog.Panel className="relative transform overflow-hidden rounded-lg bg-custom-background-100 text-left shadow-custom-shadow-md transition-all sm:my-8 sm:w-full sm:max-w-2xl">
+                <Dialog.Panel className="relative transform overflow-hidden rounded-lg bg-surface-1 text-left shadow-overlay-100 transition-all sm:my-8 sm:w-full sm:max-w-2xl">
                   <div className="px-5 py-4">
                     <div className="flex items-center justify-between">
                       <h3 className="text-lg font-medium">选择迭代</h3>
-                      <Button variant="neutral-primary" size="sm" onClick={handleAssociateClose}>
+                      <Button variant="secondary" onClick={handleAssociateClose}>
                         关闭
                       </Button>
                     </div>
                     <div className="mt-3">
                       {selectLoading && (
-                        <div className="flex items-center justify-center py-8 text-sm text-custom-text-300">
+                        <div className="flex items-center justify-center py-8 text-sm text-secondary">
                           加载中...
                         </div>
                       )}
@@ -816,7 +792,7 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
                         <div className="overflow-x-auto">
                           <table className="min-w-full table-fixed">
                             <thead>
-                              <tr className="text-left text-xs text-custom-text-300 border-b">
+                              <tr className="text-left text-xs text-secondary border-b border-subtle">
                                 <th className="w-10 px-2 py-2"></th>
                                 <th className="w-2/5 px-2 py-2">名称</th>
                                 <th className="w-1/5 px-2 py-2">开始时间</th>
@@ -826,7 +802,7 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
                             <tbody>
                               {selectData.length === 0 && (
                                 <tr>
-                                  <td className="px-2 py-6 text-sm text-custom-text-300" colSpan={4}>
+                                  <td className="px-2 py-6 text-sm text-secondary" colSpan={4}>
                                     暂无可选迭代
                                   </td>
                                 </tr>
@@ -834,7 +810,7 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
                               {selectData.map((c) => {
                                 const checked = selectedCycleIds.includes(c.id);
                                 return (
-                                  <tr key={c.id} className="border-b">
+                                  <tr key={c.id} className="border-b border-subtle hover:bg-layer-1-hover">
                                     <td className="px-2 py-2">
                                       <input
                                         type="checkbox"
@@ -850,7 +826,7 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
                                       />
                                     </td>
                                     <td className="px-2 py-2">
-                                      <span className="truncate text-sm text-gray-800">{c.name}</span>
+                                      <span className="truncate text-sm text-primary">{c.name}</span>
                                     </td>
                                     <td className="px-2 py-2">
                                       <ReadonlyDate value={c.start_date} formatToken="yyyy-MM-dd" hideIcon={true} />
@@ -864,11 +840,10 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
                             </tbody>
                           </table>
                           <div className="mt-3 flex items-center justify-between">
-                            <div className="text-sm text-custom-text-300">共 {selectTotal} 条</div>
+                            <div className="text-sm text-secondary">共 {selectTotal} 条</div>
                             <div className="flex items-center gap-2">
                               <Button
-                                variant="neutral-primary"
-                                size="sm"
+                                variant="secondary"
                                 disabled={selectPage <= 1}
                                 onClick={() => fetchSelectable(selectPage - 1, selectPageSize)}
                               >
@@ -876,8 +851,7 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
                               </Button>
                               <div className="text-sm">第 {selectPage} 页</div>
                               <Button
-                                variant="neutral-primary"
-                                size="sm"
+                                variant="secondary"
                                 disabled={selectPage * selectPageSize >= selectTotal}
                                 onClick={() => fetchSelectable(selectPage + 1, selectPageSize)}
                               >
@@ -889,10 +863,10 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
                       )}
                     </div>
                     <div className="mt-4 flex justify-end gap-2">
-                      <Button variant="neutral-primary" size="sm" onClick={handleAssociateClose}>
+                      <Button variant="secondary" onClick={handleAssociateClose}>
                         取消
                       </Button>
-                      <Button size="sm" onClick={handleAssociateConfirm} disabled={selectedCycleIds.length === 0}>
+                      <Button variant="primary" onClick={handleAssociateConfirm} disabled={selectedCycleIds.length === 0}>
                         确定
                       </Button>
                     </div>
@@ -904,7 +878,7 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
         </Dialog>
       </Transition.Root>
       <Transition.Root show={noteOpen} as={Fragment}>
-        <Dialog as="div" className="relative z-[11000]" onClose={() => setNoteOpen(false)}>
+        <Dialog as="div" className="relative z-[100]" onClose={() => setNoteOpen(false)}>
           <Transition.Child
             as={Fragment}
             enter="ease-out duration-300"
@@ -914,7 +888,7 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
             leaveFrom="opacity-100"
             leaveTo="opacity-0"
           >
-            <div className="fixed inset-0 bg-custom-backdrop transition-opacity" />
+            <div className="fixed inset-0 bg-backdrop transition-opacity" />
           </Transition.Child>
           <div className="fixed inset-0 z-10 overflow-y-auto">
             <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
@@ -927,27 +901,43 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
                 leaveFrom="opacity-100 translate-y-0 sm:scale-100"
                 leaveTo="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
               >
-                <Dialog.Panel className="relative transform overflow-hidden rounded-lg bg-custom-background-100 text-left shadow-custom-shadow-md transition-all sm:my-8 sm:w-full sm:max-w-2xl">
+                <Dialog.Panel className="relative transform overflow-hidden rounded-lg bg-surface-1 text-left shadow-overlay-100 transition-all sm:my-8 sm:w-full sm:max-w-2xl">
                   <div className="px-5 py-4">
                     <div className="flex items-center justify-between">
                       <h3 className="text-lg font-medium">编辑发布日志</h3>
-                      <Button variant="neutral-primary" size="sm" onClick={() => setNoteOpen(false)}>
+                      <Button variant="secondary" onClick={() => setNoteOpen(false)}>
                         关闭
                       </Button>
                     </div>
                     <div className="mt-3">
-                      <InlineQuillEditor value={noteHtml} onChange={setNoteHtml} />
+                      <RichTextEditor
+                        id="module-note-editor"
+                        editable
+                        initialValue={noteHtml ?? ""}
+                        workspaceSlug={workspaceSlug?.toString() ?? ""}
+                        workspaceId={workspaceId ?? ""}
+                        projectId={projectId?.toString() ?? ""}
+                        onChange={(_: any, val: string) => setNoteHtml(val)}
+                        uploadFile={handleNoteEditorUploadFile}
+                        duplicateFile={handleNoteEditorDuplicateFile}
+                        searchMentionCallback={async (payload) =>
+                          await workspaceService.searchEntity(workspaceSlug?.toString() ?? "", {
+                            ...payload,
+                            project_id: projectId?.toString() ?? "",
+                          })
+                        }
+                        containerClassName="min-h-[180px] rounded-md"
+                      />
                     </div>
                     <div className="mt-4 flex justify-end gap-2">
                       <Button
-                        variant="neutral-primary"
-                        size="sm"
+                        variant="secondary"
                         onClick={() => setNoteOpen(false)}
                         disabled={noteSubmitting}
                       >
                         取消
                       </Button>
-                      <Button size="sm" onClick={handleNoteSubmit} disabled={noteSubmitting} loading={noteSubmitting}>
+                      <Button onClick={handleNoteSubmit} disabled={noteSubmitting} loading={noteSubmitting}>
                         确定
                       </Button>
                     </div>

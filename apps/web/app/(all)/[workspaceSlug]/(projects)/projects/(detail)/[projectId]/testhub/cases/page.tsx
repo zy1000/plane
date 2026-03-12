@@ -631,13 +631,13 @@ export default function TestCasesPage() {
     return (
       <div className="group flex items-center justify-between gap-2 w-full">
         <div className="flex items-center gap-2">
-          <span className="inline-flex items-center justify-center w-5 h-5 text-custom-text-300">
+          <span className="inline-flex items-center justify-center w-5 h-5 text-secondary">
             <FolderOpenDot size={14} />
           </span>
-          <span className="text-sm text-custom-text-200">{title}</span>
+          <span className="text-sm text-primary">{title}</span>
         </div>
         <div className="flex items-center gap-2">
-          {typeof count === "number" && <span className="text-xs text-custom-text-300">{count}</span>}
+          {typeof count === "number" && <span className="text-xs text-secondary">{count}</span>}
           {repositoryId && (
             <Dropdown trigger={["hover"]} menu={{ items }}>
               <Button
@@ -709,13 +709,13 @@ export default function TestCasesPage() {
       title: (
         <div className="group flex items-center justify-between gap-2 w-full">
           <div className="flex items-center gap-2">
-            <span className="inline-flex items-center justify-center w-5 h-5 text-custom-text-300">
+            <span className="inline-flex items-center justify-center w-5 h-5 text-secondary">
               <AppstoreOutlined />
             </span>
-            <span className="text-sm font-medium text-custom-text-200">全部用例</span>
+            <span className="text-sm font-medium text-primary">全部用例</span>
           </div>
           <div className="flex items-center gap-2">
-            {typeof total === "number" && <span className="text-xs text-custom-text-300">{allTotal}</span>}
+            {typeof total === "number" && <span className="text-xs text-secondary">{allTotal}</span>}
             {repositoryId && (
               <Dropdown
                 trigger={["hover"]}
@@ -986,7 +986,7 @@ export default function TestCasesPage() {
   };
 
   const renderLabels = (labels?: TLabel[]) => {
-    if (!labels || labels.length === 0) return <span className="text-custom-text-400">-</span>;
+    if (!labels || labels.length === 0) return <span className="text-placeholder">-</span>;
     return (
       <div className="flex flex-wrap gap-1">
         {labels.map((l, idx) => {
@@ -1015,7 +1015,7 @@ export default function TestCasesPage() {
     color: "default" | "processing" | "success" | "warning" | "magenta" = "default"
   ) => {
     const label = getEnumLabel(group, value);
-    if (label === "-" || label === undefined) return <span className="text-custom-text-400">-</span>;
+    if (label === "-" || label === undefined) return <span className="text-placeholder">-</span>;
     return <Tag color={color}>{label}</Tag>;
   };
 
@@ -1065,7 +1065,7 @@ export default function TestCasesPage() {
       render: (v: string) => {
         const color = reviewEnums?.CaseReviewThrough_Result?.[v]?.color || "default";
         return (
-          <Tag color={color} className="inline-flex justify-center w-[55px]">
+          <Tag color={color} className="!inline-flex justify-center w-[55px]">
             {v || "-"}
           </Tag>
         );
@@ -1203,7 +1203,7 @@ export default function TestCasesPage() {
         <div className="flex h-full w-full flex-col">
           <Row wrap={false} className="flex-1 overflow-hidden pb-0" gutter={[0, 16]}>
             <Col
-              className="relative flex flex-col h-full border-r border-custom-border-200"
+              className="relative flex flex-col h-full border-r border-subtle"
               flex="0 0 auto"
               style={{ width: leftWidth, minWidth: 200, maxWidth: 300 }}
             >
@@ -1232,12 +1232,12 @@ export default function TestCasesPage() {
               `,
                 }}
               />
-              <div className="flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm">
+              <div className="flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm pt-3">
                 <Tree
                   showLine={false}
                   defaultExpandAll
                   switcherIcon={(nodeProps) => (
-                    <span className="inline-flex items-center justify-center w-5 h-5 text-custom-text-300">
+                    <span className="inline-flex items-center justify-center w-5 h-5 text-secondary">
                       <ChevronDownIcon
                       className={`size-4 transition-transform ${nodeProps.expanded ? "rotate-0" : "-rotate-90"}`}
                       strokeWidth={2.5}
@@ -1273,7 +1273,7 @@ export default function TestCasesPage() {
                             workspaceSlug={String(workspaceSlug || "")}
                             projectId={String(projectId || "")}
                             className="inline-flex"
-                            buttonClassName="min-w-0 border-0 px-1.5 py-1 text-sm font-medium text-custom-text-300 hover:text-custom-text-100 hover:bg-custom-background-90 cursor-pointer gap-2 h-full"
+                            buttonClassName="min-w-0 border-0 px-1.5 py-1 text-sm font-medium text-secondary hover:text-primary hover:bg-layer-1 cursor-pointer gap-2 h-full"
                             labelClassName="max-w-[150px] leading-4"
                             hideChevron
                             defaultRepositoryId={repositoryId}
@@ -1305,7 +1305,7 @@ export default function TestCasesPage() {
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      className="h-8 w-8 rounded border border-custom-primary-100 bg-custom-primary-100/10 text-custom-primary-100 flex items-center justify-center"
+                      className="h-8 w-8 rounded border border-accent-strong bg-accent-subtle text-accent-primary flex items-center justify-center"
                       aria-label="列表视图"
                     >
                       <UnorderedListOutlined />
@@ -1322,7 +1322,7 @@ export default function TestCasesPage() {
                         router.push(`/${ws}/projects/${pid}/testhub/cases/mind?${params.toString()}`);
                       }}
                       disabled={!repositoryId}
-                      className="h-8 w-8 rounded border border-custom-border-200 text-custom-text-300 hover:text-custom-text-100 hover:bg-custom-background-90 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="h-8 w-8 rounded border border-subtle text-secondary hover:text-primary hover:bg-layer-1 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                       aria-label="脑图视图"
                     >
                       <ShareAltOutlined />
@@ -1331,7 +1331,7 @@ export default function TestCasesPage() {
                       type="button"
                       onClick={() => setIsCreateModalOpen(true)}
                       disabled={!repositoryId}
-                      className="text-white bg-custom-primary-100 hover:bg-custom-primary-200 focus:text-custom-brand-40 focus:bg-custom-primary-200 px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="text-on-color bg-accent-primary hover:bg-accent-primary-hover focus:text-on-color focus:bg-accent-primary-hover px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       新建用例
                     </button>
@@ -1339,7 +1339,7 @@ export default function TestCasesPage() {
                       type="button"
                       onClick={() => setIsImportModalOpen(true)}
                       disabled={!repositoryId}
-                      className="text-custom-primary-100 bg-transparent border border-custom-primary-100 hover:bg-custom-primary-100/20 focus:text-custom-primary-100 focus:bg-custom-primary-100/30 px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="text-accent-primary bg-transparent border border-accent-strong hover:bg-accent-subtle focus:text-accent-primary focus:bg-accent-subtle-hover px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       导入
                     </button>
@@ -1347,7 +1347,7 @@ export default function TestCasesPage() {
                       type="button"
                       onClick={() => setIsExportModalOpen(true)}
                       disabled={!repositoryId}
-                      className="text-custom-primary-100 bg-transparent border border-custom-primary-100 hover:bg-custom-primary-100/20 focus:text-custom-primary-100 focus:bg-custom-primary-100/30 px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="text-accent-primary bg-transparent border border-accent-strong hover:bg-accent-subtle focus:text-accent-primary focus:bg-accent-subtle-hover px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       导出
                     </button>
@@ -1357,7 +1357,7 @@ export default function TestCasesPage() {
                   {/* 加载/错误/空状态 */}
                   {loading && (
                     <div className="flex items-center justify-center py-12">
-                      <div className="text-custom-text-300">加载中...</div>
+                      <div className="text-secondary">加载中...</div>
                     </div>
                   )}
 
@@ -1369,14 +1369,14 @@ export default function TestCasesPage() {
 
                   {!repositoryId && !loading && (
                     <div className="flex items-center justify-center py-12">
-                      <div className="text-custom-text-300">未找到用例库ID，请先在顶部选择一个用例库</div>
+                      <div className="text-secondary">未找到用例库ID，请先在顶部选择一个用例库</div>
                     </div>
                   )}
 
                   {repositoryId && !loading && !error && (
                     <div className="flex flex-col h-full overflow-hidden">
                       <div
-                        className={`testhub-cases-table-scroll flex-1 relative overflow-y-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar]:block [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-[rgb(var(--color-scrollbar))] [&::-webkit-scrollbar-thumb]:rounded-full ${
+                        className={`testhub-cases-table-scroll flex-1 relative overflow-y-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar]:block [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-[var(--scrollbar-thumb)] [&::-webkit-scrollbar-thumb]:rounded-full ${
                           pageSize === 100 ? "testhub-cases-scrollbar-strong" : ""
                         }`}
                       >
@@ -1408,11 +1408,11 @@ export default function TestCasesPage() {
                           pagination={false}
                         />
                       </div>
-                      <div className="flex-shrink-0 border-t border-custom-border-200 px-4 py-3 bg-custom-background-100 flex items-center justify-between">
+                      <div className="flex-shrink-0 border-t border-subtle px-4 py-3 bg-surface-1 flex items-center justify-between">
                         <div className="flex items-center gap-4 text-sm">
                           {selectedCaseIds.length > 0 && (
                             <div className="flex items-center gap-2">
-                              <span className="text-custom-text-300">已选择 {selectedCaseIds.length} 条</span>
+                              <span className="text-secondary">已选择 {selectedCaseIds.length} 条</span>
                               <span
                                 className="cursor-pointer text-sm transition-colors"
                                 style={{ color: "#2a83ff" }}
@@ -1442,7 +1442,7 @@ export default function TestCasesPage() {
                               </span>
                             </div>
                           )}
-                          <span className="text-custom-text-300">
+                          <span className="text-secondary">
                             {total > 0
                               ? `第 ${(currentPage - 1) * pageSize + 1}-${Math.min(
                                   currentPage * pageSize,
@@ -1477,7 +1477,7 @@ export default function TestCasesPage() {
                       .testhub-cases-table-scroll .ant-table-pagination {
                         margin: 0 !important;
                         padding: 12px 16px !important;
-                        border-top: 1px solid rgb(var(--color-border-200));
+                        border-top: 1px solid var(--border-subtle);
                       }
 
                       .testhub-cases-table-scroll ::-webkit-scrollbar {
@@ -1486,7 +1486,7 @@ export default function TestCasesPage() {
                       }
 
                       .testhub-cases-table-scroll ::-webkit-scrollbar-thumb {
-                        background-color: rgba(var(--color-scrollbar), 0.85);
+                        background-color: color-mix(in oklch, var(--scrollbar-thumb) 85%, transparent);
                         border-radius: 999px;
                         border: 3px solid transparent;
                         background-clip: content-box;

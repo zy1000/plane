@@ -17,7 +17,7 @@ import { useEditorAsset } from "@/hooks/store/use-editor-asset";
 import { useWorkspace } from "@/hooks/store/use-workspace";
 import { useProject } from "@/hooks/store/use-project";
 // plane web services
-import { WorkspaceService } from "@/plane-web/services";
+import { WorkspaceService } from "@/services/workspace.service";
 const workspaceService = new WorkspaceService();
 
 export type ProjectDescriptionInputProps = {

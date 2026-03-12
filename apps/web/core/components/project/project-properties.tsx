@@ -47,7 +47,7 @@ export const ProjectProperties: FC<IProjectProperties> = observer((props) => {
       <div className={`w-full grid grid-cols-2 gap-4 mt-3 ${disabled ? "opacity-60" : ""}`}>
         {/* 项目状态 */}
         <div className="flex w-full items-center gap-3 h-8">
-          <div className="flex items-center gap-1 w-1/3 flex-shrink-0 text-sm text-custom-text-300">
+          <div className="flex items-center gap-1 w-1/3 flex-shrink-0 text-sm text-secondary">
             <DoubleCircleIcon className="h-4 w-4 flex-shrink-0" />
             <span>状态</span>
           </div>
@@ -67,7 +67,7 @@ export const ProjectProperties: FC<IProjectProperties> = observer((props) => {
 
         {/* 项目负责人 */}
         <div className="flex w-full items-center gap-3 h-8">
-          <div className="flex items-center gap-1 w-1/3 flex-shrink-0 text-sm text-custom-text-300">
+          <div className="flex items-center gap-1 w-1/3 flex-shrink-0 text-sm text-secondary">
             <UserCircle2 className="h-4 w-4 flex-shrink-0" />
             <span>项目负责人</span>
           </div>
@@ -82,7 +82,7 @@ export const ProjectProperties: FC<IProjectProperties> = observer((props) => {
             buttonVariant="transparent-with-text"
             className="w-2/3 flex-grow group"
             buttonContainerClassName="w-full text-left"
-            buttonClassName={`text-sm ${project?.project_lead ? "" : "text-custom-text-400"}`}
+            buttonClassName={`text-sm ${project?.project_lead ? "" : "text-placeholder"}`}
             hideIcon={!project.project_lead}
             dropdownArrow
             dropdownArrowClassName="h-3.5 w-3.5 hidden group-hover:inline"
@@ -93,7 +93,7 @@ export const ProjectProperties: FC<IProjectProperties> = observer((props) => {
 
         {/* 项目成员 */}
         <div className="flex w-full items-center gap-3 h-8">
-          <div className="flex items-center gap-1 w-1/3 flex-shrink-0 text-sm text-custom-text-300">
+          <div className="flex items-center gap-1 w-1/3 flex-shrink-0 text-sm text-secondary">
             <Users className="h-4 w-4 flex-shrink-0" />
             <span>成员数量</span>
           </div>
@@ -105,7 +105,7 @@ export const ProjectProperties: FC<IProjectProperties> = observer((props) => {
         {/* 创建者 */}
         {/* {createdByDetails && (
           <div className="flex w-full items-center gap-3 h-8">
-            <div className="flex items-center gap-1 w-1/3 flex-shrink-0 text-sm text-custom-text-300">
+            <div className="flex items-center gap-1 w-1/3 flex-shrink-0 text-sm text-secondary">
               <UserCircle2 className="h-4 w-4 flex-shrink-0" />
               <span>创建者</span>
             </div>
@@ -118,7 +118,7 @@ export const ProjectProperties: FC<IProjectProperties> = observer((props) => {
 
         {/* 项目可见性 */}
         {/* <div className="flex w-full items-center gap-3 h-8">
-          <div className="flex items-center gap-1 w-1/3 flex-shrink-0 text-sm text-custom-text-300">
+          <div className="flex items-center gap-1 w-1/3 flex-shrink-0 text-sm text-secondary">
             {project.network === 0 ? (
               <Lock className="h-4 w-4 flex-shrink-0" />
             ) : (
@@ -133,7 +133,7 @@ export const ProjectProperties: FC<IProjectProperties> = observer((props) => {
 
         {/* 创建时间 */}
         <div className="flex w-full items-center gap-3 h-8">
-          <div className="flex items-center gap-1 w-1/3 flex-shrink-0 text-sm text-custom-text-300">
+          <div className="flex items-center gap-1 w-1/3 flex-shrink-0 text-sm text-secondary">
             <CalendarClock className="h-4 w-4 flex-shrink-0" />
             <span>创建时间</span>
           </div>
@@ -149,7 +149,7 @@ export const ProjectProperties: FC<IProjectProperties> = observer((props) => {
             disabled={true}
             className="w-2/3 flex-grow group"
             buttonContainerClassName="w-full text-left"
-            buttonClassName={`text-sm ${project?.created_at ? "" : "text-custom-text-400"}`}
+            buttonClassName={`text-sm ${project?.created_at ? "" : "text-placeholder"}`}
             hideIcon
             clearIconClassName="h-3 w-3 hidden group-hover:inline"
           />

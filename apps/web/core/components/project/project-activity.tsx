@@ -75,36 +75,36 @@ const ProjectActivityListPage = observer((props: ProjectActivityListPageProps) =
               <div className="relative flex items-start space-x-3">
                 <div className="relative px-1">
                   {activityItem.field ? (
-                    activityItem.new_value === "restore" && <History className="h-3.5 w-3.5 text-custom-text-200" />
+                    activityItem.new_value === "restore" && <History className="h-3.5 w-3.5 text-primary" />
                   ) : activityItem.actor_detail.avatar_url && activityItem.actor_detail.avatar_url !== "" ? (
                     <img
                       src={getFileURL(activityItem.actor_detail.avatar_url)}
                       alt={activityItem.actor_detail.display_name}
-                      height={30}
-                      width={30}
-                      className="grid h-7 w-7 place-items-center rounded-full border-2 border-white bg-gray-500 text-white"
+                      height={24}
+                      width={24}
+                      className="grid h-6 w-6 place-items-center rounded-full border-2 border-white bg-gray-500 text-white"
                     />
                   ) : (
-                    <div className="grid h-7 w-7 place-items-center rounded-full border-2 border-white bg-gray-700 text-xs capitalize text-white">
+                    <div className="grid h-6 w-6 place-items-center rounded-full border-2 border-white bg-gray-700 text-xs capitalize text-white">
                       {activityItem.actor_detail.display_name?.[0]}
                     </div>
                   )}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="text-sm text-custom-text-200">
-                    <span className="font-medium text-custom-text-100">{activityItem.actor_detail.display_name}</span>
-                    <span className="ml-2 text-xs text-custom-text-400">
+                  <div className="text-[0.7875rem] text-primary">
+                    <span className="font-medium text-primary">{activityItem.actor_detail.display_name}</span>
+                    <span className="ml-2 text-[0.7875rem] text-placeholder">
                       {calculateTimeAgo(activityItem.created_at)}
                     </span>
                   </div>
-                  <div className="mt-2 text-sm text-custom-text-200">
+                  <div className="mt-2 text-[0.7875rem] text-primary">
                     <RichTextEditor
                       editable={false}
                       id={activityItem.id}
                       initialValue={
                         activityItem?.new_value !== "" ? activityItem.new_value : activityItem.old_value
                       }
-                      containerClassName="text-xs bg-custom-background-100"
+                      containerClassName="text-xs bg-surface-1"
                       workspaceId={activityItem?.workspace_detail?.id?.toString() ?? ""}
                       workspaceSlug={activityItem?.workspace_detail?.slug?.toString() ?? ""}
                       projectId={activityItem.project ?? ""}
@@ -126,10 +126,10 @@ const ProjectActivityListPage = observer((props: ProjectActivityListPageProps) =
                     <div>
                       <div className="relative px-1.5 mt-4">
                         <div className="mt-1.5">
-                          <div className="flex h-6 w-6 items-center justify-center">
+                          <div className="flex h-5 w-5 items-center justify-center">
                             {activityItem.field ? (
                               activityItem.new_value === "restore" ? (
-                                <History className="h-5 w-5 text-custom-text-200" />
+                                <History className="h-4 w-4 text-primary" />
                               ) : (
                                 <ActivityIcon activity={activityItem} />
                               )
@@ -138,12 +138,12 @@ const ProjectActivityListPage = observer((props: ProjectActivityListPageProps) =
                               <img
                                 src={getFileURL(activityItem.actor_detail.avatar_url)}
                                 alt={activityItem.actor_detail.display_name}
-                                height={24}
-                                width={24}
+                                height={20}
+                                width={20}
                                 className="h-full w-full rounded-full object-cover"
                               />
                             ) : (
-                              <div className="grid h-6 w-6 place-items-center rounded-full border-2 border-white bg-gray-700 text-xs capitalize text-white">
+                              <div className="grid h-5 w-5 place-items-center rounded-full border-2 border-white bg-gray-700 text-xs capitalize text-white">
                                 {activityItem.actor_detail.display_name?.[0]}
                               </div>
                             )}
@@ -151,8 +151,8 @@ const ProjectActivityListPage = observer((props: ProjectActivityListPageProps) =
                         </div>
                       </div>
                     </div>
-                    <div className="min-w-0 flex-1 border-b border-custom-border-100 py-4">
-                      <div className="break-words text-sm text-custom-text-200">
+                    <div className="min-w-0 flex-1 border-b border-subtle-1 py-4">
+                      <div className="break-words text-[0.7875rem] text-primary">
                         {activityItem.field === "archived_at" && activityItem.new_value !== "restore" ? (
                           <span className="text-gray font-medium">Plane</span>
                         ) : activityItem.actor_detail.is_bot ? (

@@ -36,7 +36,7 @@ export const ProjectWorkItemDetailsHeader = observer(function ProjectWorkItemDet
 
   return (
     <>
-      {projectPreferences.navigationMode === "TABBED" && (
+      {projectPreferences.navigationMode === "horizontal" && (
         <div className="z-20">
           <Row className="flex h-header w-full items-center gap-2 border-b border-subtle bg-surface-1">
             <div className="flex h-full w-full items-center gap-2 divide-x divide-subtle">

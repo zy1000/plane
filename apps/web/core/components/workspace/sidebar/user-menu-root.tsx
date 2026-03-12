@@ -72,7 +72,7 @@ export const UserMenuRoot = observer(function UserMenuRoot(props: Props) {
             className="flex items-center gap-2 min-w-0 group "
           >
             <div
-              className={`flex items-center justify-center size-8 rounded-md text-custom-text-300 group-hover:text-custom-text-200"
+              className={`flex items-center justify-center size-8 rounded-md text-secondary group-hover:text-primary"
               }`}
             >
               <Avatar
@@ -82,7 +82,7 @@ export const UserMenuRoot = observer(function UserMenuRoot(props: Props) {
                 shape="circle"
               />
             </div>
-            <span className="text-sm text-custom-text-200 truncate max-w-[160px] group-hover:text-custom-text-100">
+            <span className="text-sm text-primary truncate max-w-[160px] group-hover:text-primary">
               {displayLabel}
             </span>
           </button>

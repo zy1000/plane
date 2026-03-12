@@ -120,7 +120,7 @@ export function CaseVersionCompareModal({
     (item: any, side: "from" | "to") => {
       const field = String(item?.field || "");
       const value = side === "from" ? item?.from : item?.to;
-      if (value === null || value === undefined) return <span className="text-gray-400">-</span>;
+      if (value === null || value === undefined) return <span className="text-placeholder">-</span>;
 
       if (field === "type" || field === "priority" || field === "state" || field === "test_type") {
         const label = enumLabel(field, value);
@@ -130,7 +130,7 @@ export function CaseVersionCompareModal({
       if (field === "label_ids") {
         const list = side === "from" ? item?.from_display : item?.to_display;
         const items = Array.isArray(list) ? list : [];
-        if (items.length === 0) return <span className="text-gray-400">-</span>;
+        if (items.length === 0) return <span className="text-placeholder">-</span>;
         return (
           <div className="flex flex-wrap gap-2">
             {items.map((l: any) => (
@@ -157,7 +157,7 @@ export function CaseVersionCompareModal({
               缺陷: [],
             };
         const total = groupOrder.reduce((sum, k) => sum + ((itemsByGroup[k] || []).length as number), 0);
-        if (total === 0) return <span className="text-gray-400">-</span>;
+        if (total === 0) return <span className="text-placeholder">-</span>;
         return (
           <div className="space-y-2">
             {groupOrder.map((g) => {
@@ -165,7 +165,7 @@ export function CaseVersionCompareModal({
               if (list.length === 0) return null;
               return (
                 <div key={g}>
-                  <div className="text-xs text-gray-600 mb-1">{g}</div>
+                  <div className="text-xs text-tertiary mb-1">{g}</div>
                   <div className="flex flex-wrap gap-2">
                     {list.map((it: any) => {
                       const text = String(it?.name ?? it?.id ?? "-");
@@ -202,7 +202,7 @@ export function CaseVersionCompareModal({
 
       if (field === "precondition" || field === "remark") {
         return (
-          <div className="text-gray-800">
+          <div className="text-primary">
             <RichTextEditor value={String(value || "")} onChange={() => {}} editable={false} placeholder="-" />
           </div>
         );
@@ -210,24 +210,24 @@ export function CaseVersionCompareModal({
 
       if (field === "steps") {
         const rows = Array.isArray(value) ? value : [];
-        if (rows.length === 0) return <span className="text-gray-400">-</span>;
+        if (rows.length === 0) return <span className="text-placeholder">-</span>;
         return (
           <div className="overflow-x-auto">
-            <table className="w-full border border-gray-300 border-collapse table-fixed">
+            <table className="w-full border border-subtle border-collapse table-fixed">
               <colgroup>
                 <col style={{ width: 64 }} />
                 <col />
                 <col style={{ width: "35%" }} />
               </colgroup>
               <thead>
-                <tr className="bg-gray-50">
-                  <th className="border border-gray-300 px-2 py-2 text-center text-xs font-medium text-gray-700">
+                <tr className="bg-layer-1">
+                  <th className="border border-subtle px-2 py-2 text-center text-xs font-medium text-secondary">
                     编号
                   </th>
-                  <th className="border border-gray-300 px-2 py-2 text-center text-xs font-medium text-gray-700">
+                  <th className="border border-subtle px-2 py-2 text-center text-xs font-medium text-secondary">
                     步骤描述
                   </th>
-                  <th className="border border-gray-300 px-2 py-2 text-center text-xs font-medium text-gray-700">
+                  <th className="border border-subtle px-2 py-2 text-center text-xs font-medium text-secondary">
                     预期结果
                   </th>
                 </tr>
@@ -235,14 +235,14 @@ export function CaseVersionCompareModal({
               <tbody>
                 {rows.map((r: any, i: number) => (
                   <tr key={i} className="align-top">
-                    <td className="border border-gray-300 px-2 py-2 text-center text-xs text-gray-700">{i + 1}</td>
-                    <td className="border border-gray-300 px-2 py-2">
-                      <pre className="whitespace-pre-wrap break-words text-xs leading-5 text-gray-800">
+                    <td className="border border-subtle px-2 py-2 text-center text-xs text-secondary">{i + 1}</td>
+                    <td className="border border-subtle px-2 py-2">
+                      <pre className="whitespace-pre-wrap break-words text-xs leading-5 text-primary">
                         {String(r?.description ?? "").trim() || "-"}
                       </pre>
                     </td>
-                    <td className="border border-gray-300 px-2 py-2">
-                      <pre className="whitespace-pre-wrap break-words text-xs leading-5 text-gray-800">
+                    <td className="border border-subtle px-2 py-2">
+                      <pre className="whitespace-pre-wrap break-words text-xs leading-5 text-primary">
                         {String(r?.result ?? "").trim() || "-"}
                       </pre>
                     </td>
@@ -297,7 +297,7 @@ export function CaseVersionCompareModal({
           <div className="flex items-center gap-2 -mr-2">
             <button
               type="button"
-              className="inline-flex items-center justify-center rounded p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex items-center justify-center rounded p-1 text-tertiary hover:bg-layer-1-hover hover:text-secondary disabled:cursor-not-allowed disabled:opacity-50"
               onClick={handleOpenFullscreen}
               disabled={!canOpenFullscreen}
               aria-label="全屏打开版本对比"
@@ -306,7 +306,7 @@ export function CaseVersionCompareModal({
             </button>
             <button
               type="button"
-              className="inline-flex items-center justify-center rounded p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+              className="inline-flex items-center justify-center rounded p-1 text-tertiary hover:bg-layer-1-hover hover:text-secondary"
               onClick={onClose}
               aria-label="关闭"
             >
@@ -325,11 +325,11 @@ export function CaseVersionCompareModal({
     >
       <div className="flex flex-col" style={{ height: contentHeight, maxHeight: contentHeight }}>
         {historyVersionOptions.length === 0 ? (
-          <div className="text-sm text-gray-600">暂无历史版本可对比</div>
+          <div className="text-sm text-tertiary">暂无历史版本可对比</div>
         ) : (
           <>
             <div className="flex items-center gap-3 mb-4">
-              <span className="text-sm text-gray-700 shrink-0 w-20">历史版本</span>
+              <span className="text-sm text-secondary shrink-0 w-20">历史版本</span>
               <Select
                 className="flex-1"
                 value={compareBaseVersion}
@@ -337,8 +337,8 @@ export function CaseVersionCompareModal({
                 onChange={(v) => setCompareBaseVersion(Number(v))}
                 dropdownStyle={{ zIndex: 1300 }}
               />
-              <span className="text-sm text-gray-700 shrink-0">当前版本</span>
-              <span className="text-sm text-gray-900">{currentVersionLabel}</span>
+              <span className="text-sm text-secondary shrink-0">当前版本</span>
+              <span className="text-sm text-primary">{currentVersionLabel}</span>
             </div>
 
             <div className="flex-1 min-h-0 vertical-scrollbar scrollbar-md overflow-y-scroll pr-1">
@@ -347,16 +347,16 @@ export function CaseVersionCompareModal({
                   <Spin />
                 </div>
               ) : changedFields.length === 0 ? (
-                <div className="text-sm text-gray-600">没有差异</div>
+                <div className="text-sm text-tertiary">没有差异</div>
               ) : (
                 <div className="space-y-3">
-                  <div className="text-sm text-gray-600">共 {changedFields.length} 处差异</div>
+                  <div className="text-sm text-tertiary">共 {changedFields.length} 处差异</div>
                   {changedFields.map((item, idx) => (
-                    <div key={`${item?.field || "field"}_${idx}`} className="rounded border bg-white p-3">
+                    <div key={`${item?.field || "field"}_${idx}`} className="rounded border border-subtle bg-surface-1 p-3">
                       <div className="flex items-center justify-between gap-2 mb-2">
-                        <div className="text-sm font-medium text-gray-900">{item?.label || item?.field}</div>
+                        <div className="text-sm font-medium text-primary">{item?.label || item?.field}</div>
                         {item?.added || item?.removed ? (
-                          <div className="text-xs text-gray-500">
+                          <div className="text-xs text-tertiary">
                             {Array.isArray(item?.added) && item.added.length > 0 ? (
                               <span className="mr-3">新增 {item.added.length}</span>
                             ) : null}
@@ -367,12 +367,12 @@ export function CaseVersionCompareModal({
                         ) : null}
                       </div>
                       <div className="grid grid-cols-2 gap-3">
-                        <div className="rounded bg-red-50 p-3">
-                          <div className="text-xs text-gray-600 mb-1">{baseLabel}</div>
+                        <div className="rounded bg-danger-subtle p-3">
+                          <div className="text-xs text-tertiary mb-1">{baseLabel}</div>
                           {renderValue(item, "from")}
                         </div>
-                        <div className="rounded bg-green-50 p-3">
-                          <div className="text-xs text-gray-600 mb-1">{currentVersionLabel}</div>
+                        <div className="rounded bg-success-subtle p-3">
+                          <div className="text-xs text-tertiary mb-1">{currentVersionLabel}</div>
                           {renderValue(item, "to")}
                         </div>
                       </div>

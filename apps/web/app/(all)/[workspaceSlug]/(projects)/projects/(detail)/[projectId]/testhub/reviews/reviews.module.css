@@ -14,7 +14,7 @@
 .rowSelected { background-color: #f0faff; }
 .rowLeft { display: flex; align-items: center; gap: 8px; }
 .icon { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; color: #8c8c8c; }
-.name { font-size: 13px; color: var(--color-text, #333); }
+.name { font-size: 13px; color: var(--text-color-primary); }
 .rowRight { display: flex; align-items: center; gap: 8px; width: 140px; justify-content: flex-end; }
 .count { font-size: 12px; color: #8c8c8c; }
 .actionIcon { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; color: #1677ff; }
@@ -27,11 +27,11 @@
 .progressWrap { flex: 0 0 75%; min-width: 120px; }
 .progressBar { width: 100%; height: 6px; border: 1px solid #e8e8e8; border-radius: 6px; overflow: hidden; display: flex; }
 .progressSegment { height: 100%; }
-.progressPercent { font-size: 12px; color: var(--color-text, #333); }
+.progressPercent { font-size: 12px; color: var(--text-color-primary); }
 .legend { display: flex; flex-direction: column; gap: 6px; }
 .legendItem { display: flex; align-items: center; gap: 8px; }
 .legendColor { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
-.legendLabel { font-size: 12px; color: var(--color-text, #333); }
+.legendLabel { font-size: 12px; color: var(--text-color-primary); }
 .legendCount { margin-left: auto; font-size: 12px; color: #8c8c8c; }
 .lightTooltip :global(.ant-tooltip-inner) { background-color: #ffffff; color: #333; }
 .lightTooltip :global(.ant-tooltip-arrow) { border-color: #ffffff; }

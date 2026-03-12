@@ -3,7 +3,7 @@
 import { observer } from "mobx-react";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Button, Input, Popconfirm, Select, Table, Tag } from "antd";
+import { Button, Input, Pagination, Popconfirm, Select, Table, Tag } from "antd";
 import type { TableProps } from "antd";
 
 // components
@@ -98,10 +98,14 @@ function ProjectMilestonesPage() {
     return () => window.removeEventListener(OPEN_MILESTONE_MODAL_EVENT, handler as EventListener);
   }, []);
 
-  const handleTableChange: TableProps<IMilestone>["onChange"] = (pagination, filters) => {
-    const newPage = pagination.current || 1;
-    const newPageSize = pagination.pageSize || 10;
+  const handlePaginationChange = (page: number, size?: number) => {
+    const newPageSize = size || pageSize;
+    const nextPage = newPageSize !== pageSize ? 1 : page;
+    setPageSize(newPageSize);
+    setCurrentPage(nextPage);
+  };
 
+  const handleTableChange: TableProps<IMilestone>["onChange"] = (_pagination, filters) => {
     const nextStateFilter = Array.isArray(filters?.state)
       ? (filters.state as any[]).map((v) => String(v)).sort()
       : [];
@@ -112,14 +116,8 @@ function ProjectMilestonesPage() {
 
     if (isStateFilterChanged) {
       setStateFilter(nextStateFilter);
+      setCurrentPage(1);
     }
-
-    if (newPageSize !== pageSize) {
-      setPageSize(newPageSize);
-    }
-
-    const nextPage = isStateFilterChanged || newPageSize !== pageSize ? 1 : newPage;
-    if (nextPage !== currentPage) setCurrentPage(nextPage);
   };
 
   const updateMilestoneState = async (milestoneId: string, nextState: string) => {
@@ -354,21 +352,37 @@ function ProjectMilestonesPage() {
     <>
       <PageHead title="Milestones" />
       <div className="flex h-full w-full flex-col min-h-0">
-        <div className="vertical-scrollbar scrollbar-md flex-1 min-h-0">
-          <Table
-            columns={columns}
-            dataSource={data}
-            rowKey="id"
-            loading={loading}
-            pagination={{
-              current: currentPage,
-              pageSize: pageSize,
-              total: total,
-              showSizeChanger: true,
-              showTotal: (total) => `共 ${total} 条`,
-            }}
-            onChange={handleTableChange}
-          />
+        <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+          <div className="vertical-scrollbar scrollbar-md flex-1 min-h-0 overflow-y-auto">
+            <Table
+              columns={columns}
+              dataSource={data}
+              rowKey="id"
+              loading={loading}
+              pagination={false}
+              onChange={handleTableChange}
+            />
+          </div>
+          <div className="flex-shrink-0 border-t border-subtle px-4 py-3 bg-surface-1 flex items-center justify-between">
+            <div className="flex items-center gap-4 text-sm">
+              <span className="text-secondary">
+                {total > 0
+                  ? `第 ${(currentPage - 1) * pageSize + 1}-${Math.min(currentPage * pageSize, total)} 条，共 ${total} 条`
+                  : ""}
+              </span>
+            </div>
+            <Pagination
+              simple
+              current={currentPage}
+              pageSize={pageSize}
+              total={total}
+              showSizeChanger
+              pageSizeOptions={["10", "20", "50", "100"]}
+              onChange={handlePaginationChange}
+              onShowSizeChange={handlePaginationChange}
+              size="small"
+            />
+          </div>
         </div>
       </div>
       <MilestoneCreateUpdateModal

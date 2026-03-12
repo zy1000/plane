@@ -100,10 +100,10 @@ export const MoveCaseModal: React.FC<Props> = ({
     return (
       <div className="group flex items-center justify-between gap-2 w-full">
         <div className="flex items-center gap-2">
-          <span className="inline-flex items-center justify-center w-5 h-5 text-custom-text-300">
+          <span className="inline-flex items-center justify-center w-5 h-5 text-secondary">
             <FolderOpenDot size={14} />
           </span>
-          <span className="text-sm text-custom-text-200">{title}</span>
+          <span className="text-sm text-primary">{title}</span>
         </div>
       </div>
     );
@@ -149,10 +149,10 @@ export const MoveCaseModal: React.FC<Props> = ({
       title: (
         <div className="group flex items-center justify-between gap-2 w-full">
           <div className="flex items-center gap-2">
-            <span className="inline-flex items-center justify-center w-5 h-5 text-custom-text-300">
+            <span className="inline-flex items-center justify-center w-5 h-5 text-secondary">
               <AppstoreOutlined />
             </span>
-            <span className="text-sm font-medium text-custom-text-200">全部模块</span>
+            <span className="text-sm font-medium text-primary">全部模块</span>
           </div>
         </div>
       ),

@@ -122,12 +122,23 @@ export default function CreateReviewModal({ open, onClose, mode = "create", init
       destroyOnClose
       maskClosable={false}
       footer={
-        <Space>
-          <Button onClick={onClose}>取消</Button>
-          <Button type="primary" onClick={handleSubmit} loading={submitting}>
-            保存
-          </Button>
-        </Space>
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            className="rounded bg-layer-1 text-secondary hover:bg-layer-1-hover px-3 py-1.5 text-sm transition-colors"
+            onClick={onClose}
+          >
+            取消
+          </button>
+          <button
+            type="button"
+            className="rounded bg-accent-primary text-on-color hover:bg-accent-primary-hover px-3 py-1.5 text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={handleSubmit}
+            disabled={submitting}
+          >
+            {submitting ? "保存中..." : "保存"}
+          </button>
+        </div>
       }
     >
       <Form form={form} layout="vertical" initialValues={{ name: "", description: "" }}>

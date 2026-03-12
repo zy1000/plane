@@ -615,7 +615,7 @@ export default function FilestorePage() {
     return (
       <>
         <PageHead title="在线编辑" />
-        <div className="fixed inset-0 z-50 bg-custom-background-100">
+        <div className="fixed inset-0 z-50 bg-surface-1">
           {onlyOfficeError && (
             <div className="absolute left-0 right-0 top-0 z-20 p-3">
               <Alert
@@ -670,7 +670,7 @@ export default function FilestorePage() {
                   type="button"
                   onClick={openPicker}
                   disabled={uploading}
-                  className="text-white bg-custom-primary-100 hover:bg-custom-primary-200 focus:text-custom-brand-40 focus:bg-custom-primary-200 px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="text-white bg-accent-primary hover:bg-accent-primary-hover focus:text-on-color focus:bg-accent-primary-hover px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {uploading ? "上传中..." : "上传文件"}
                 </button>
@@ -702,9 +702,9 @@ export default function FilestorePage() {
               size="small"
             />
           </div>
-          <div className="flex-shrink-0 border-t border-custom-border-200 px-4 py-3 bg-custom-background-100 flex items-center justify-between">
+          <div className="flex-shrink-0 border-t border-subtle px-4 py-3 bg-surface-1 flex items-center justify-between">
             <div className="flex items-center gap-4 text-sm">
-              <span className="text-custom-text-300">
+              <span className="text-secondary">
                 {total > 0 ? `第 ${(currentPage - 1) * pageSize + 1}-${Math.min(currentPage * pageSize, total)} 条，共 ${total} 条` : ""}
               </span>
             </div>

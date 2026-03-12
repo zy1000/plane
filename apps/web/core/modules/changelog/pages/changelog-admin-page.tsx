@@ -174,7 +174,7 @@ export const ChangelogAdminPage = ({ workspaceSlug }: Props) => {
           <div className="flex items-center gap-2">
             <button
               type="button"
-              className="text-custom-text-200 hover:text-custom-text-100"
+              className="text-primary hover:text-primary"
               onClick={() => {
                 setEditingItem(row);
                 setIsModalOpen(true);
@@ -238,8 +238,8 @@ export const ChangelogAdminPage = ({ workspaceSlug }: Props) => {
           }}
         />
         <div className="mb-3 flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-2 rounded border border-custom-border-200 px-2 py-1.5">
-            <Search className="size-4 text-custom-text-300" />
+          <div className="flex items-center gap-2 rounded border border-subtle px-2 py-1.5">
+            <Search className="size-4 text-secondary" />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -248,7 +248,7 @@ export const ChangelogAdminPage = ({ workspaceSlug }: Props) => {
             />
           </div>
           <select
-            className="h-9 rounded border border-custom-border-200 bg-custom-background-100 px-2 text-sm"
+            className="h-9 rounded border border-subtle bg-surface-1 px-2 text-sm"
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value as "" | TChangelogUpdateType)}
           >
@@ -259,7 +259,7 @@ export const ChangelogAdminPage = ({ workspaceSlug }: Props) => {
           </select>
           <button
             type="button"
-            className="rounded border border-custom-border-200 px-3 py-1.5 text-sm"
+            className="rounded border border-subtle px-3 py-1.5 text-sm"
             onClick={handleSearch}
           >
             查询
@@ -278,33 +278,33 @@ export const ChangelogAdminPage = ({ workspaceSlug }: Props) => {
             <Loader.Item height="200px" />
           </Loader>
         ) : (
-          <div className="rounded border border-custom-border-200">
+          <div className="rounded border border-subtle">
             <Table
               columns={columns}
               data={items}
               keyExtractor={(rowData) => rowData.id}
-              tHeadClassName="border-b border-custom-border-100"
-              thClassName="text-left font-medium text-custom-text-400"
+              tHeadClassName="border-b border-subtle-1"
+              thClassName="text-left font-medium text-placeholder"
               tBodyClassName="divide-y-0"
-              tBodyTrClassName="h-[42px] text-custom-text-200"
+              tBodyTrClassName="h-[42px] text-primary"
             />
           </div>
         )}
         <div className="mt-3 flex items-center justify-end gap-2">
           <button
             type="button"
-            className="rounded border border-custom-border-200 px-3 py-1.5 text-sm disabled:opacity-50"
+            className="rounded border border-subtle px-3 py-1.5 text-sm disabled:opacity-50"
             disabled={page <= 1}
             onClick={() => setPage((prev) => prev - 1)}
           >
             上一页
           </button>
-          <span className="text-sm text-custom-text-300">
+          <span className="text-sm text-secondary">
             {page} / {totalPages}
           </span>
           <button
             type="button"
-            className="rounded border border-custom-border-200 px-3 py-1.5 text-sm disabled:opacity-50"
+            className="rounded border border-subtle px-3 py-1.5 text-sm disabled:opacity-50"
             disabled={page >= totalPages}
             onClick={() => setPage((prev) => prev + 1)}
           >

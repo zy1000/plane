@@ -110,7 +110,7 @@ export default function CasesExportModal({
       ]}
     >
       <div className="space-y-2">
-        <div className="text-sm text-custom-text-300">选择需要导出的字段：</div>
+        <div className="text-sm text-secondary">选择需要导出的字段：</div>
         <div className="grid grid-cols-2 gap-y-2">
           {EXPORT_FIELD_OPTIONS.map((opt) => (
             <label key={opt.key} className="flex items-center gap-2 text-sm">

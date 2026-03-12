@@ -270,7 +270,7 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
         <div className="grid grid-cols-1 gap-4 mt-4">
           {/* 计划名称（必填，红色星号） */}
           <div className="col-span-1">
-            <label className="text-sm text-custom-text-300 mb-1 block">
+            <label className="text-sm text-secondary mb-1 block">
               计划名称<span className="text-red-500">*</span>
             </label>
             <Input
@@ -284,7 +284,7 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
 
           {/* 描述（可选） */}
           <div className="col-span-1">
-            <label className="text-sm text-custom-text-300 mb-1 block">描述</label>
+            <label className="text-sm text-secondary mb-1 block">描述</label>
             <TextArea
               rows={3}
               placeholder="请输入描述"
@@ -296,7 +296,7 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
 
           {/* 所属模块（下拉选择，可搜索，必选） */}
           <div className="col-span-1">
-            <label className="text-sm text-custom-text-300 mb-1 block">
+            <label className="text-sm text-secondary mb-1 block">
               所属模块<span className="text-red-500">*</span>
             </label>
             <CustomSearchSelect
@@ -307,10 +307,10 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
               multiple={false}
               customButtonClassName="w-full hover:bg-transparent focus:bg-transparent active:bg-transparent"
               customButton={
-                <div className="flex w-full max-w-[320px] items-center justify-between gap-1 rounded border-[0.5px] border-custom-border-300 px-3 py-2 text-sm">
+                <div className="flex w-full max-w-[320px] items-center justify-between gap-1 rounded border-[0.5px] border-subtle-1 px-3 py-2 text-sm">
                   <span className="flex-grow truncate">
                     {moduleOptions.find((o) => o.value === moduleId)?.content || (
-                      <span className="text-custom-text-400">请选择所属模块</span>
+                      <span className="text-placeholder">请选择所属模块</span>
                     )}
                   </span>
                 </div>
@@ -321,7 +321,7 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
 
           {/* 关联迭代（下拉选择，可搜索，单选） */}
           <div className="col-span-1">
-            <label className="text-sm text-custom-text-300 mb-1 block">关联迭代</label>
+            <label className="text-sm text-secondary mb-1 block">关联迭代</label>
             <CustomSearchSelect
               className="w-[320px]"
               value={cycleId ?? undefined}
@@ -330,10 +330,10 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
               multiple={false}
               customButtonClassName="w-full hover:bg-transparent focus:bg-transparent active:bg-transparent"
               customButton={
-                <div className="flex w-full max-w-[320px] items-center justify-between gap-1 rounded border-[0.5px] border-custom-border-300 px-3 py-2 text-sm">
+                <div className="flex w-full max-w-[320px] items-center justify-between gap-1 rounded border-[0.5px] border-subtle-1 px-3 py-2 text-sm">
                   <span className="flex-grow truncate">
                     {cycleOptions.find((o) => o.value === cycleId)?.content || (
-                      <span className="text-custom-text-400">请选择关联迭代</span>
+                      <span className="text-placeholder">请选择关联迭代</span>
                     )}
                   </span>
                 </div>
@@ -342,7 +342,7 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
           </div>
 
           <div className="col-span-1">
-            <label className="text-sm text-custom-text-300 mb-1 block">
+            <label className="text-sm text-secondary mb-1 block">
               执行人<span className="text-red-500">*</span>
             </label>
             <div className="h-9 w-full max-w-[320px]">
@@ -364,7 +364,7 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
 
           {/* 计划起止时间样式参照 CreateReviewModal.tsx L177-200 */}
           <div className="col-span-1">
-            <label className="text-sm text-custom-text-300 mb-1 block">计划周期</label>
+            <label className="text-sm text-secondary mb-1 block">计划周期</label>
             <div className="flex items-center gap-2">
               <div className="h-9 w-56">
                 <DateDropdown
@@ -373,7 +373,7 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
                   placeholder="开始日期"
                   icon={<CalendarDays className="h-3 w-3 flex-shrink-0" />}
                   buttonVariant="border-with-text"
-                  buttonClassName="border-custom-border-300 px-3 py-2.5 text-left"
+                  buttonClassName="border-subtle-1 px-3 py-2.5 text-left"
                   buttonContainerClassName="w-full text-left"
                   optionsClassName="z-[50]"
                   maxDate={endTime ?? undefined}
@@ -389,7 +389,7 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
                   placeholder="结束日期"
                   icon={<CalendarDays className="h-3 w-3 flex-shrink-0" />}
                   buttonVariant="border-with-text"
-                  buttonClassName="border-custom-border-300 px-3 py-2.5 text-left"
+                  buttonClassName="border-subtle-1 px-3 py-2.5 text-left"
                   buttonContainerClassName="w-full text-left"
                   optionsClassName="z-[50]"
                   minDate={beginTime ?? undefined}
@@ -403,7 +403,7 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
 
           {/* 通过阀值（数字输入，带加减按钮，范围 0-100） */}
           <div className="col-span-1">
-            <label className="text-sm text-custom-text-300 mb-1 block">通过阀值</label>
+            <label className="text-sm text-secondary mb-1 block">通过阀值</label>
             <div className="flex items-center gap-2">
               <Button
                 variant="primary"
@@ -429,7 +429,7 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
               >
                 +
               </Button>
-              <span className="text-sm text-custom-text-400">范围 0 - 100%</span>
+              <span className="text-sm text-placeholder">范围 0 - 100%</span>
             </div>
             {errors.threshold && <p className="text-xs text-red-500 mt-1">{errors.threshold}</p>}
           </div>

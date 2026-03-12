@@ -346,10 +346,10 @@ function ProjectMilestoneIssuesPage() {
       <div className="relative size-full flex flex-col gap-3 overflow-hidden">
         <div
           ref={listContainerRef}
-          className="size-full vertical-scrollbar scrollbar-lg relative overflow-auto vertical-scrollbar-margin-top-md bg-custom-background-90 rounded"
+          className="size-full vertical-scrollbar scrollbar-lg relative overflow-auto vertical-scrollbar-margin-top-md bg-surface-1 rounded"
         >
           {issueIds.length === 0 && !loading ? (
-            <div className="flex items-center justify-center py-10 text-custom-text-300">暂无工作项</div>
+            <div className="flex items-center justify-center py-10 text-secondary">暂无工作项</div>
           ) : (
             issueIds.map((issueId, index) => (
               <IssueBlockRoot
@@ -373,7 +373,7 @@ function ProjectMilestoneIssuesPage() {
             ))
           )}
           {loading && (
-            <div className="flex items-center justify-center py-6 text-custom-text-300">{issueIds.length ? "加载中..." : "加载中..."}</div>
+            <div className="flex items-center justify-center py-6 text-secondary">{issueIds.length ? "加载中..." : "加载中..."}</div>
           )}
         </div>
 

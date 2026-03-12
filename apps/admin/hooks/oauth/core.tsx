@@ -94,7 +94,7 @@ export const getCoreAuthenticationModesMap: (
     key: "ldap",
     name: "LDAP",
     description: "Allow members to log in or sign up to plane with their LDAP accounts.",
-    icon: <BookUser className="h-6 w-6 p-0.5 text-custom-text-300/80" />,
+    icon: <BookUser className="h-6 w-6 p-0.5 text-secondary/80" />,
     config: <LdapConfiguration disabled={disabled} updateConfig={updateConfig} />,
     enabledConfigKey: "IS_LDAP_ENABLED",
   },

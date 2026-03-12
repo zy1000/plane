@@ -95,7 +95,7 @@ export const IssuesSidebarBlock = observer(function IssuesSidebarBlock(props: Pr
               {showExpandButton && (
                 <button
                   type="button"
-                  className="size-4 grid place-items-center rounded-sm text-custom-text-400 hover:text-custom-text-300"
+                  className="size-4 grid place-items-center rounded-sm text-placeholder hover:text-secondary"
                   onClick={(e) => {
                     e.stopPropagation();
                     e.preventDefault();

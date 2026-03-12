@@ -46,11 +46,11 @@ const InstanceLdapAuthenticationPage = observer(function InstanceLdapAuthenticat
   return (
     <>
       <div className="relative container mx-auto w-full h-full p-4 py-4 space-y-6 flex flex-col">
-        <div className="border-b border-custom-border-100 mx-4 py-4 space-y-1 flex-shrink-0">
+        <div className="border-b border-subtle-1 mx-4 py-4 space-y-1 flex-shrink-0">
           <AuthenticationMethodCard
             name="LDAP"
             description="Allow members to login or sign up to plane with their LDAP accounts."
-            icon={<BookUser className="h-6 w-6 p-0.5 text-custom-text-300/80" />}
+            icon={<BookUser className="h-6 w-6 p-0.5 text-secondary/80" />}
             config={
               <ToggleSwitch
                 value={config?.is_active ?? false}

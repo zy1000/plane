@@ -1,4 +1,6 @@
 @import "@plane/tailwind-config/index.css";
+@import "@fontsource-variable/inter/wght.css";
+@import "@fontsource-variable/inter/wght-italic.css";
 @import "@plane/editor/styles";
 @import "@plane/propel/styles/react-day-picker.css";
 @import "./power-k.css";

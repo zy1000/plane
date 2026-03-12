@@ -296,7 +296,7 @@ const IssueRowDetails = observer(function IssueRowDetails(props: IssueRowDetails
             {/* Identifier section - conditionally rendered */}
             {/* {displayProperties?.key && (
               <div className="flex-shrink-0 flex items-center h-full min-w-24">
-                <div className="relative flex cursor-pointer items-center text-xs hover:text-custom-text-100">
+                <div className="relative flex cursor-pointer items-center text-xs hover:text-primary">
      
                 </div>
               </div>
@@ -393,7 +393,7 @@ const IssueRowDetails = observer(function IssueRowDetails(props: IssueRowDetails
                       <IssueIdentifier
                         issueId={issueDetail.id}
                         projectId={issueDetail.project_id}
-                        textContainerClassName="text-sm md:text-xs text-custom-text-300"
+                        textContainerClassName="text-sm md:text-xs text-secondary"
                         displayProperties={displayProperties}
                       />
                     )}

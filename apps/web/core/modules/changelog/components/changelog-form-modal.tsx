@@ -90,7 +90,7 @@ export const ChangelogFormModal = ({ isOpen, workspaceSlug, workspaceId, initial
   return (
     <ModalCore isOpen={isOpen} handleClose={onClose} position={EModalPosition.CENTER} width={EModalWidth.XXXL}>
       <div className="max-h-[80vh] overflow-y-auto p-5">
-        <h3 className="text-lg font-semibold text-custom-text-100">{isEdit ? "编辑更新日志" : "新增更新日志"}</h3>
+        <h3 className="text-lg font-semibold text-primary">{isEdit ? "编辑更新日志" : "新增更新日志"}</h3>
         <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Input
             value={form.version}
@@ -103,7 +103,7 @@ export const ChangelogFormModal = ({ isOpen, workspaceSlug, workspaceId, initial
             onChange={(e) => setForm((prev) => ({ ...prev, release_date: e.target.value }))}
           />
           <select
-            className="h-9 rounded border border-custom-border-200 bg-custom-background-100 px-2 text-sm text-custom-text-200"
+            className="h-9 rounded border border-subtle bg-surface-1 px-2 text-sm text-primary"
             value={form.update_type}
             onChange={(e) => setForm((prev) => ({ ...prev, update_type: e.target.value as TChangelogUpdateType }))}
           >
@@ -111,7 +111,7 @@ export const ChangelogFormModal = ({ isOpen, workspaceSlug, workspaceId, initial
             <option value="fixed">修复</option>
             <option value="improved">优化</option>
           </select>
-          <label className="flex items-center gap-2 text-sm text-custom-text-200">
+          <label className="flex items-center gap-2 text-sm text-primary">
             <input
               type="checkbox"
               checked={form.is_pinned}
@@ -131,7 +131,7 @@ export const ChangelogFormModal = ({ isOpen, workspaceSlug, workspaceId, initial
             onChange={(e) => setForm((prev) => ({ ...prev, summary: e.target.value }))}
             placeholder="摘要"
           />
-          <div className="rounded border border-custom-border-200 p-2">
+          <div className="rounded border border-subtle p-2">
             <RichTextEditor
               id="changelog-rich-editor"
               editable
@@ -159,7 +159,7 @@ export const ChangelogFormModal = ({ isOpen, workspaceSlug, workspaceId, initial
         <div className="mt-4 flex justify-end gap-2">
           <button
             type="button"
-            className="rounded border border-custom-border-200 px-3 py-1.5 text-sm text-custom-text-200"
+            className="rounded border border-subtle px-3 py-1.5 text-sm text-primary"
             onClick={onClose}
             disabled={isSubmitting}
           >
@@ -167,7 +167,7 @@ export const ChangelogFormModal = ({ isOpen, workspaceSlug, workspaceId, initial
           </button>
           <button
             type="button"
-            className="rounded bg-custom-primary-100 px-3 py-1.5 text-sm text-white disabled:opacity-60"
+            className="rounded bg-accent-primary px-3 py-1.5 text-sm text-white disabled:opacity-60"
             onClick={handleSave}
             disabled={isSubmitting || !form.title || !form.version}
           >

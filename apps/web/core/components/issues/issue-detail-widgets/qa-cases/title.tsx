@@ -18,7 +18,7 @@ export const QaCasesCollapsibleTitle: FC<Props> = observer((props) => {
   const indicatorElement =
     typeof count === "number" ? (
       <span className="flex items-center justify-center ">
-        <p className="text-base text-custom-text-300 !leading-3">{count}</p>
+        <p className="text-base text-secondary !leading-3">{count}</p>
       </span>
     ) : undefined;
 

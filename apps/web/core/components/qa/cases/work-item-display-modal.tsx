@@ -195,7 +195,7 @@ export const WorkItemDisplayModal: React.FC<WorkItemDisplayModalProps> = ({
               projectId={String((record as any)?.project_id ?? (record as any)?.project ?? "")}
               multiple
               buttonVariant={assignees.length > 1 ? "transparent-without-text" : "transparent-with-text"}
-              buttonClassName={`text-sm justify-between ${assignees.length > 0 ? "" : "text-custom-text-400"}`}
+              buttonClassName={`text-sm justify-between ${assignees.length > 0 ? "" : "text-placeholder"}`}
               hideIcon={assignees.length === 0}
               buttonContainerClassName="w-full text-left"
             />

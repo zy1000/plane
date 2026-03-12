@@ -2,6 +2,7 @@
 
 import React from "react";
 import { Modal, Form, Input, Select, message } from "antd";
+import { Button } from "@plane/propel/button";
 import { RepositoryService } from "@/services/qa/repository.service";
 import { WorkspaceService } from "@/services/workspace.service";
 import { ProjectService } from "@/services/project/project.service";
@@ -145,15 +146,23 @@ export const RepositoryModal: React.FC<Props> = ({
     }
   };
 
+  const footer = (
+    <div className="flex items-center justify-end gap-2">
+      <Button variant="secondary" size="lg" onClick={onCancel}>
+        取消
+      </Button>
+      <Button variant="primary" size="lg" onClick={handleSubmit} loading={submitting}>
+        {initialValues?.id ? "更新" : "创建"}
+      </Button>
+    </div>
+  );
+
   return (
     <Modal
       open={open}
       onCancel={onCancel}
       title={initialValues?.id ? "编辑用例库" : "新增用例库"}
-      okText={initialValues?.id ? "更新" : "创建"}
-      cancelText="取消"
-      confirmLoading={submitting}
-      onOk={handleSubmit}
+      footer={footer}
       destroyOnClose
     >
       <Form form={form} layout="vertical">

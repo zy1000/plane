@@ -157,7 +157,7 @@ export function MilestoneAddIssuesModal<TIssueRow extends { id: string }>(props:
           }}
         />
       </div>
-      <div className="flex justify-end pt-3 border-t border-custom-border-100 mt-0">
+      <div className="flex justify-end pt-3 border-t border-subtle-1 mt-0">
         <Pagination
           current={currentPage}
           pageSize={pageSize}

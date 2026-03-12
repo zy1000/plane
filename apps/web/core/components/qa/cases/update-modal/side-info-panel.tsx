@@ -70,9 +70,9 @@ export function SideInfoPanel({
   }, [caseData?.test_type, optionsReady]);
 
   const colorForLabel = (text: string) => {
-    if (text && text.includes("手动")) return "bg-blue-500";
-    if (text && text.includes("自动")) return "bg-green-500";
-    return "bg-gray-300";
+    if (text && text.includes("手动")) return "bg-accent-primary";
+    if (text && text.includes("自动")) return "bg-success-primary";
+    return "bg-[--border-subtle]";
   };
 
   const buildLabelNode = (text: string) => (
@@ -97,7 +97,7 @@ export function SideInfoPanel({
   };
 
   return (
-    <div className="w-[27%] border-l px-6 py-4 h-full overflow-y-auto bg-[#FAFAFA] divide-y divide-gray-100">
+    <div className="w-[27%] border-l px-6 py-4 h-full overflow-y-auto bg-[#FAFAFA] divide-y divide-subtle">
       {workspaceSlug && caseData?.id ? (
         <CaseVersionCompareModal
           open={compareOpen}
@@ -111,14 +111,14 @@ export function SideInfoPanel({
         />
       ) : null}
       <div className="py-5">
-        <div className="text-xs text-gray-500 mb-4">属性</div>
+        <div className="text-xs text-tertiary mb-4">属性</div>
         <div className="space-y-4">
           <div className="flex items-center gap-3 md:gap-4">
-            <span className="text-sm font-medium text-gray-700 shrink-0 basis-28 md:basis-32">测试类型</span>
+            <span className="text-sm font-medium text-secondary shrink-0 basis-28 md:basis-32">测试类型</span>
             {optionsReady ? (
               <div
                 className={
-                  "flex-1 min-w-0 rounded-md border border-transparent transition-colors duration-200 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-100"
+                  "flex-1 min-w-0 rounded-md border border-transparent transition-colors duration-200 ring-1 ring-transparent focus-within:border-accent-subtle focus-within:ring-accent-subtle"
                 }
               >
                 <Select
@@ -143,12 +143,12 @@ export function SideInfoPanel({
       </div>
 
       <div className="py-5">
-        <div className="text-xs text-gray-500 mb-4">变更</div>
+        <div className="text-xs text-tertiary mb-4">变更</div>
         <div className="space-y-4">
           <div className="flex items-center gap-3 md:gap-4">
-            <span className="text-sm text-gray-700 shrink-0 basis-28 md:basis-32">版本</span>
+            <span className="text-sm text-secondary shrink-0 basis-28 md:basis-32">版本</span>
             <div className="flex-1 min-w-0 flex items-center justify-between gap-3">
-              <span className="text-sm text-gray-900 truncate">
+              <span className="text-sm text-primary truncate">
                 {loadingCaseVersions ? "加载中..." : currentVersionLabel}
               </span>
               <Button
@@ -162,8 +162,8 @@ export function SideInfoPanel({
             </div>
           </div>
           <div className="flex items-center gap-3 md:gap-4">
-            <span className="text-sm text-gray-700 shrink-0 basis-28 md:basis-32">评审状态</span>
-            <span className="text-sm text-gray-900 flex-1 min-w-0 truncate">
+            <span className="text-sm text-secondary shrink-0 basis-28 md:basis-32">评审状态</span>
+            <span className="text-sm text-primary flex-1 min-w-0 truncate">
               {(() => {
                 const v = String(caseData?.review ?? "-");
                 const color = (reviewEnums?.CaseReviewThrough_Result?.[v]?.color as any) || "default";
@@ -172,22 +172,22 @@ export function SideInfoPanel({
             </span>
           </div>
           <div className="flex items-center gap-3 md:gap-4">
-            <span className="text-sm text-gray-700 shrink-0 basis-28 md:basis-32">基线</span>
-            <span className="text-sm text-gray-900 flex-1 min-w-0 truncate">-</span>
+            <span className="text-sm text-secondary shrink-0 basis-28 md:basis-32">基线</span>
+            <span className="text-sm text-primary flex-1 min-w-0 truncate">-</span>
           </div>
         </div>
       </div>
 
       <div className="py-5">
-        <div className="text-xs text-gray-500 mb-4">最近执行</div>
+        <div className="text-xs text-tertiary mb-4">最近执行</div>
         <div className="space-y-4">
           <div className="flex items-center gap-3 md:gap-4">
-            <span className="text-sm text-gray-700 shrink-0 basis-28 md:basis-32">计划</span>
-            <span className="text-sm text-gray-900 flex-1 min-w-0 truncate">{latestExec?.name ?? "-"}</span>
+            <span className="text-sm text-secondary shrink-0 basis-28 md:basis-32">计划</span>
+            <span className="text-sm text-primary flex-1 min-w-0 truncate">{latestExec?.name ?? "-"}</span>
           </div>
           <div className="flex items-center gap-3 md:gap-4">
-            <span className="text-sm text-gray-700 shrink-0 basis-28 md:basis-32">结果</span>
-            <span className="text-sm text-gray-900 flex-1 min-w-0 truncate">
+            <span className="text-sm text-secondary shrink-0 basis-28 md:basis-32">结果</span>
+            <span className="text-sm text-primary flex-1 min-w-0 truncate">
               {(() => {
                 const label = latestExec?.result ?? "";
                 const color = (enumsData?.plan_case_result || {})[label];
@@ -196,8 +196,8 @@ export function SideInfoPanel({
             </span>
           </div>
           <div className="flex items-center gap-3 md:gap-4">
-            <span className="text-sm text-gray-700 shrink-0 basis-28 md:basis-32">执行人</span>
-            <span className="text-sm text-gray-900 flex-1 min-w-0 truncate">
+            <span className="text-sm text-secondary shrink-0 basis-28 md:basis-32">执行人</span>
+            <span className="text-sm text-primary flex-1 min-w-0 truncate">
               {latestExec?.created_by ? (
                 <MemberDropdown
                   multiple={false}
@@ -218,8 +218,8 @@ export function SideInfoPanel({
             </span>
           </div>
           <div className="flex items-center gap-3 md:gap-4">
-            <span className="text-sm text-gray-700 shrink-0 basis-28 md:basis-32">时间</span>
-            <span className="text-sm text-gray-900 flex-1 min-w-0 truncate">
+            <span className="text-sm text-secondary shrink-0 basis-28 md:basis-32">时间</span>
+            <span className="text-sm text-primary flex-1 min-w-0 truncate">
               {latestExec?.created_at ? formatCNDateTime(latestExec.created_at) : "-"}
             </span>
           </div>
@@ -227,47 +227,47 @@ export function SideInfoPanel({
       </div>
 
       <div className="py-5">
-        <div className="text-xs text-gray-500 mb-4">工时</div>
+        <div className="text-xs text-tertiary mb-4">工时</div>
         <div className="space-y-4">
           <div className="flex items-center gap-3 md:gap-4">
-            <span className="text-sm text-gray-700 shrink-0 basis-28 md:basis-32">预估工时</span>
-            <span className="text-sm text-gray-900 flex-1 min-w-0 truncate">-</span>
+            <span className="text-sm text-secondary shrink-0 basis-28 md:basis-32">预估工时</span>
+            <span className="text-sm text-primary flex-1 min-w-0 truncate">-</span>
           </div>
           <div className="flex items-center gap-3 md:gap-4">
-            <span className="text-sm text-gray-700 shrink-0 basis-28 md:basis-32">登记工时</span>
-            <span className="text-sm text-gray-900 flex-1 min-w-0 truncate">-</span>
+            <span className="text-sm text-secondary shrink-0 basis-28 md:basis-32">登记工时</span>
+            <span className="text-sm text-primary flex-1 min-w-0 truncate">-</span>
           </div>
           <div className="flex items-center gap-3 md:gap-4">
-            <span className="text-sm text-gray-700 shrink-0 basis-28 md:basis-32">剩余工时</span>
-            <span className="text-sm text-gray-900 flex-1 min-w-0 truncate">-</span>
+            <span className="text-sm text-secondary shrink-0 basis-28 md:basis-32">剩余工时</span>
+            <span className="text-sm text-primary flex-1 min-w-0 truncate">-</span>
           </div>
           <div className="flex items-center gap-3 md:gap-4">
-            <span className="text-sm text-gray-700 shrink-0 basis-28 md:basis-32">工时进度</span>
-            <span className="text-sm text-gray-900 flex-1 min-w-0 truncate">-</span>
+            <span className="text-sm text-secondary shrink-0 basis-28 md:basis-32">工时进度</span>
+            <span className="text-sm text-primary flex-1 min-w-0 truncate">-</span>
           </div>
         </div>
       </div>
 
       <div className="py-5">
-        <div className="text-xs text-gray-500 mb-4">基础信息</div>
+        <div className="text-xs text-tertiary mb-4">基础信息</div>
         <div className="space-y-4">
           <div className="flex items-center gap-3 md:gap-4">
-            <span className="text-sm text-gray-700 shrink-0 basis-28 md:basis-32">用例库</span>
+            <span className="text-sm text-secondary shrink-0 basis-28 md:basis-32">用例库</span>
             <Tooltip
               title={caseData?.repository_name ?? "-"}
               placement="top"
               overlayStyle={{ zIndex: 2000 }}
               getPopupContainer={(trigger) => trigger?.parentElement ?? document.body}
             >
-              <span className="text-sm text-gray-900 flex-1 min-w-0 truncate inline-flex items-center gap-2">
+              <span className="text-sm text-primary flex-1 min-w-0 truncate inline-flex items-center gap-2">
                 <FolderOutlined className="text-blue-500" />
                 <span className="truncate">{caseData?.repository_name ?? "-"}</span>
               </span>
             </Tooltip>
           </div>
           <div className="flex items-center gap-3 md:gap-4">
-            <span className="text-sm text-gray-700 shrink-0 basis-28 md:basis-32">创建人</span>
-            <span className="text-sm text-gray-900 flex-1 min-w-0 truncate">
+            <span className="text-sm text-secondary shrink-0 basis-28 md:basis-32">创建人</span>
+            <span className="text-sm text-primary flex-1 min-w-0 truncate">
               {
                 <MemberDropdown
                   multiple={false}
@@ -286,14 +286,14 @@ export function SideInfoPanel({
             </span>
           </div>
           <div className="flex items-center gap-3 md:gap-4">
-            <span className="text-sm text-gray-700 shrink-0 basis-28 md:basis-32">创建时间</span>
-            <span className="text-sm text-gray-900 flex-1 min-w-0 truncate">
+            <span className="text-sm text-secondary shrink-0 basis-28 md:basis-32">创建时间</span>
+            <span className="text-sm text-primary flex-1 min-w-0 truncate">
               {formatCNDateTime(caseData?.created_at)}
             </span>
           </div>
           <div className="flex items-center gap-3 md:gap-4">
-            <span className="text-sm text-gray-700 shrink-0 basis-28 md:basis-32">更新人</span>
-            <span className="text-sm text-gray-900 flex-1 min-w-0 truncate">
+            <span className="text-sm text-secondary shrink-0 basis-28 md:basis-32">更新人</span>
+            <span className="text-sm text-primary flex-1 min-w-0 truncate">
               {
                 <MemberDropdown
                   multiple={false}
@@ -312,8 +312,8 @@ export function SideInfoPanel({
             </span>
           </div>
           <div className="flex items-center gap-3 md:gap-4">
-            <span className="text-sm text-gray-700 shrink-0 basis-28 md:basis-32">更新时间</span>
-            <span className="text-sm text-gray-900 flex-1 min-w-0 truncate">
+            <span className="text-sm text-secondary shrink-0 basis-28 md:basis-32">更新时间</span>
+            <span className="text-sm text-primary flex-1 min-w-0 truncate">
               {formatCNDateTime(caseData?.updated_at)}
             </span>
           </div>

@@ -6,7 +6,7 @@ import { useParams } from "next/navigation";
 import { CaseService } from "../../../services/qa/case.service";
 import { CaseService as ReviewApiService } from "../../../services/qa/review.service";
 import { Tag, Spin, Tooltip, message, Input, Table, Select, Button } from "antd";
-import { getEnums } from "../../../../app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/util";
+import { getEnums } from "@/app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/util";
 import { useMember } from "@/hooks/store/use-member";
 import * as LucideIcons from "lucide-react";
 import { useUser } from "@/hooks/store/user";
@@ -609,14 +609,14 @@ function UpdateModal({ open, onClose, caseId, workspaceSlug: propWorkspaceSlug, 
               <div className="mt-2 flex gap-2">
                 <button
                   type="button"
-                  className="rounded bg-blue-600 text-white px-3 py-1.5 text-sm"
+                  className="rounded bg-accent-primary text-on-color hover:bg-accent-primary-hover px-3 py-1.5 text-sm transition-colors"
                   onClick={() => handleReply(String(c?.id))}
                 >
                   回复
                 </button>
                 <button
                   type="button"
-                  className="rounded bg-gray-100 text-gray-700 px-3 py-1.5 text-sm hover:bg-gray-200"
+                  className="rounded bg-layer-1 text-secondary hover:bg-layer-1-hover px-3 py-1.5 text-sm transition-colors"
                   onClick={() => {
                     setReplyContent((prev) => ({ ...prev, [String(c?.id)]: "" }));
                     setReplyTargetId(undefined);

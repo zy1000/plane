@@ -27,7 +27,7 @@ type Props = {
 };
 
 const actionPillClassName =
-  "flex items-center gap-1.5 rounded-md border border-custom-border-200 bg-custom-background-90 px-2 py-1 text-xs text-custom-text-200 hover:bg-custom-background-80 transition-colors whitespace-nowrap";
+  "flex items-center gap-1.5 rounded-md border border-subtle bg-layer-1 px-2 py-1 text-xs text-primary hover:bg-layer-1-hover transition-colors whitespace-nowrap";
 
 export const BulkOperationsActionBar = observer(function BulkOperationsActionBar(props: Props) {
   const { className } = props;
@@ -161,21 +161,21 @@ export const BulkOperationsActionBar = observer(function BulkOperationsActionBar
 
   return (
     <div className={cn("sticky bottom-0 left-0 z-[20] flex items-center justify-center", className)}>
-      <div className="h-12 w-full bg-custom-background-100 border border-custom-border-200 rounded-md flex items-center gap-3 px-3 shadow-sm">
+      <div className="h-12 w-full bg-surface-1 border border-subtle rounded-md flex items-center gap-3 px-3 shadow-sm">
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 pr-3 border-r border-custom-border-200">
+          <div className="flex items-center gap-2 pr-3 border-r border-subtle">
             <Checkbox
               checked
               onClick={clearSelection}
               className="size-3.5 !outline-none"
               iconClassName="size-3"
             />
-            <span className="text-xs text-custom-text-300">{selectedCount} selected</span>
+            <span className="text-xs text-secondary">{selectedCount} selected</span>
           </div>
           <div className="flex items-center gap-1">
             <button
               type="button"
-              className="size-7 grid place-items-center rounded-md text-custom-text-300 hover:text-custom-text-200 hover:bg-custom-background-90 transition-colors"
+              className="size-7 grid place-items-center rounded-md text-secondary hover:text-primary hover:bg-layer-1 transition-colors"
               onClick={handleOpenDeleteModal}
               disabled={selectedCount === 0}
             >
@@ -199,7 +199,7 @@ export const BulkOperationsActionBar = observer(function BulkOperationsActionBar
             multiple
             placeholder="Assignees"
             buttonVariant={selectedAssigneeIds.length > 1 ? "transparent-without-text" : "transparent-with-text"}
-            buttonClassName="text-left rounded-md border border-custom-border-200 bg-custom-background-90 px-2 py-1 text-xs text-custom-text-200 hover:bg-custom-background-80 transition-colors whitespace-nowrap"
+            buttonClassName="text-left rounded-md border border-subtle bg-layer-1 px-2 py-1 text-xs text-primary hover:bg-layer-1-hover transition-colors whitespace-nowrap"
             buttonContainerClassName="w-full"
             optionsClassName="z-[20]"
           />
@@ -230,7 +230,7 @@ export const BulkOperationsActionBar = observer(function BulkOperationsActionBar
             value={selectedLabelIds}
             onChange={(data) => setSelectedLabelIds(data)}
             className="h-full"
-            buttonClassName="h-full w-full flex items-center gap-1.5 text-xs px-2 py-0.5 hover:bg-custom-background-80 rounded-md border border-custom-border-200 bg-custom-background-90 text-left"
+            buttonClassName="h-full w-full flex items-center gap-1.5 text-xs px-2 py-0.5 hover:bg-layer-1-hover rounded-md border border-subtle bg-layer-1 text-left"
             maxRender={1}
             placeholderText="Select labels"
             noLabelBorder
@@ -262,7 +262,7 @@ export const BulkOperationsActionBar = observer(function BulkOperationsActionBar
           />
           
           {hasChanges && (
-            <div className="ml-auto pl-2 border-l border-custom-border-200">
+            <div className="ml-auto pl-2 border-l border-subtle">
               <Button
                 variant="primary"
                 size="sm"

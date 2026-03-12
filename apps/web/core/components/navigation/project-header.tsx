@@ -106,10 +106,10 @@ export const ProjectHeader = observer(function ProjectHeader(props: TProjectHead
 
   return (
     <>
-      <button type="button" onClick={handleProjectsClick} className="cursor-pointer">
+      <button type="button" onClick={handleProjectsClick} className="cursor-pointer text-13 font-medium">
         项目管理
       </button>
-      <div className="shrink-0 h-5 w-1 border-l border-custom-border-200 mx-2" />
+      <div className="shrink-0 h-5 w-1 border-l border-subtle mx-2" />
       <CustomSearchSelect
         options={switcherOptions}
         value={currentProjectDetails.id}

@@ -8,7 +8,7 @@ export default function ProjectMilestoneIssuesLayout() {
   return (
     <>
       <AppHeader header={<MilestoneIssuesHeader />} />
-      <ContentWrapper>
+      <ContentWrapper className="bg-surface-1">
         <Outlet />
         <IssuePeekOverview />
       </ContentWrapper>

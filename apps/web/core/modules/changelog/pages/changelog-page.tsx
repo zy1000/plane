@@ -35,7 +35,7 @@ export const ChangelogPage = ({ workspaceSlug }: Props) => {
         <div className="mx-auto w-full max-w-5xl">
           <div className="mb-5 flex items-end justify-between gap-3">
             <div>
-              <h1 className="text-xl font-semibold text-custom-text-100">更新日志</h1>
+              <h1 className="text-xl font-semibold text-primary">更新日志</h1>
             </div>
           </div>
           {isLoading ? (
@@ -45,7 +45,7 @@ export const ChangelogPage = ({ workspaceSlug }: Props) => {
               <Loader.Item height="90px" />
             </Loader>
           ) : items.length === 0 ? (
-            <div className="rounded border border-custom-border-200 p-6 text-sm text-custom-text-300">暂无更新日志</div>
+            <div className="rounded border border-subtle p-6 text-sm text-secondary">暂无更新日志</div>
           ) : (
             <ChangelogTimeline items={items} />
           )}

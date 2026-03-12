@@ -79,9 +79,9 @@ export const CreateAnnouncementModal = ({
       className="h-[80vh] max-h-[80vh]"
     >
       <div className="p-5 h-full flex flex-col gap-5">
-        <div className="text-lg font-medium">新增公告</div>
+        <div className="text-base font-medium">新增公告</div>
         <div className="space-y-2">
-          <div className="text-sm text-custom-text-200">标题</div>
+          <div className="text-sm text-primary">标题</div>
           <Input
             value={createForm.name}
             onChange={(e) => setCreateForm((prev) => ({ ...prev, name: e.target.value }))}
@@ -99,10 +99,10 @@ export const CreateAnnouncementModal = ({
           />
         </div>
         <div className="flex justify-end gap-2">
-          <Button variant="neutral-primary" size="sm" onClick={handleClose}>
+          <Button variant="secondary" onClick={handleClose}>
             取消
           </Button>
-          <Button variant="primary" size="sm" loading={isCreating} onClick={handleCreateAnnouncement}>
+          <Button variant="primary" loading={isCreating} onClick={handleCreateAnnouncement}>
             保存
           </Button>
         </div>
@@ -139,10 +139,10 @@ export const AnnouncementDetailModal = ({
       className="h-[80vh] max-h-[80vh]"
     >
       <div className="p-5 h-full flex flex-col gap-5">
-        <div className="text-lg font-medium">公告详情</div>
+        <div className="text-base font-medium">公告详情</div>
         <div className="space-y-2">
-          <div className="text-sm text-custom-text-200">
-            <span className="text-xl font-semibold text-custom-text-100 break-all pl-3">{localAnnouncement?.name || "-"}</span>
+          <div className="text-sm text-primary">
+            <span className="text-xl font-semibold text-primary break-all pl-3">{localAnnouncement?.name || "-"}</span>
           </div>
         </div>
         <div className="flex-1 flex flex-col gap-2 min-h-0">
@@ -154,7 +154,7 @@ export const AnnouncementDetailModal = ({
           />
         </div>
         <div className="flex justify-end">
-          <Button variant="neutral-primary" size="sm" onClick={onClose}>
+          <Button variant="secondary" onClick={onClose}>
             关闭
           </Button>
         </div>

@@ -295,7 +295,7 @@ export default function MindmapPage() {
     <>
       <PageHead title="文件存储" />
       <div className="h-full w-full overflow-hidden flex flex-col">
-        <div className="px-3 pt-2 pb-2 flex items-center justify-between flex-shrink-0 border-b border-custom-border-200">
+        <div className="px-3 pt-2 pb-2 flex items-center justify-between flex-shrink-0 border-b border-subtle">
           <Breadcrumbs>
             <Breadcrumbs.Item
               component={<BreadcrumbLink href={`/${workspaceSlug}/projects/${projectId}/testhub`} label="测试用例库" />}
@@ -337,9 +337,9 @@ export default function MindmapPage() {
               size="small"
             />
           </div>
-          <div className="flex-shrink-0 border-t border-custom-border-200 px-4 py-3 bg-custom-background-100 flex items-center justify-between">
+          <div className="flex-shrink-0 border-t border-subtle px-4 py-3 bg-surface-1 flex items-center justify-between">
             <div className="flex items-center gap-4 text-sm">
-              <span className="text-custom-text-300">
+              <span className="text-secondary">
                 {total > 0
                   ? `第 ${(currentPage - 1) * pageSize + 1}-${Math.min(currentPage * pageSize, total)} 条，共 ${total} 条`
                   : ""}

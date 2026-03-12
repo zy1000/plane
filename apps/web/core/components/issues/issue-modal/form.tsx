@@ -397,7 +397,7 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
                     disabled={!!data?.id || !!data?.sourceIssueId || isProjectSelectionDisabled}
                     handleFormChange={handleFormChange}
                   />
-                  <ChevronRight className="h-3 w-3 text-custom-text-400 flex-shrink-0" />
+                  <ChevronRight className="h-3 w-3 text-placeholder flex-shrink-0" />
                   {projectId && (
                     <IssueTypeSelect
                       control={control}

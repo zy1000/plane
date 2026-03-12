@@ -55,13 +55,13 @@ export const QaCasesCollapsibleContent: React.FC<Props> = (props) => {
             {loading ? (
               <TableRow>
                 <TableCell colSpan={4}>
-                  <div className="h-20 grid place-items-center text-sm text-custom-text-300">加载中...</div>
+                  <div className="h-20 grid place-items-center text-sm text-secondary">加载中...</div>
                 </TableCell>
               </TableRow>
             ) : data.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={4}>
-                  <div className="h-20 grid place-items-center text-sm text-custom-text-300">暂无相关用例</div>
+                  <div className="h-20 grid place-items-center text-sm text-secondary">暂无相关用例</div>
                 </TableCell>
               </TableRow>
             ) : (

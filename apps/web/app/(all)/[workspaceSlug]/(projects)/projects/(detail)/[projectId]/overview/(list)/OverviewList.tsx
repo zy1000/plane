@@ -110,21 +110,21 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
     <div className="w-full p-2">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
         <div className="flex flex-col gap-6">
-          <div className="bg-custom-background-100 border border-custom-border-200 rounded-lg shadow-custom-shadow-md p-4 h-[340px] flex flex-col">
+          <div className="bg-surface-1 border border-subtle rounded-lg shadow-md p-4 h-[340px] flex flex-col">
             <div className="flex-1 overflow-y-auto">
               <ProjectProperties workspaceSlug={workspaceSlug} projectId={project.id} />
             </div>
-            <div className="mt-4 pt-4 border-t border-custom-border-200 flex-shrink-0">
+            <div className="mt-4 pt-4 border-t border-subtle flex-shrink-0">
               <div className="overflow-x-auto">
                 <WorkItemStats workspaceSlug={workspaceSlug} projectId={project.id} />
               </div>
             </div>
           </div>
 
-          <div className="bg-custom-background-100 border border-custom-border-200 rounded-lg shadow-custom-shadow-md p-4 h-[480px] flex flex-col">
+          <div className="bg-surface-1 border border-subtle rounded-lg shadow-md p-4 h-[480px] flex flex-col">
             <div className="flex items-center justify-between mb-3">
-              <h4 className="text-lg font-medium text-custom-text-200">项目描述</h4>
-              {isSubmitting === "submitting" && <div className="text-xs text-custom-text-400">保存中...</div>}
+              <h4 className="text-lg font-medium text-primary">项目描述</h4>
+              {isSubmitting === "submitting" && <div className="text-xs text-placeholder">保存中...</div>}
             </div>
             <div className="flex-1 min-h-0">
               <ProjectDescriptionInput
@@ -140,12 +140,11 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
         </div>
 
         <div className="flex flex-col gap-6">
-                    <div className="bg-custom-background-100 border border-custom-border-200 rounded-lg shadow-custom-shadow-md p-4 min-h-[340px] flex flex-col">
+                    <div className="bg-surface-1 border border-subtle rounded-lg shadow-md p-4 min-h-[340px] flex flex-col">
             <div className="flex items-center justify-between mb-3">
-              <h4 className="text-lg font-medium text-custom-text-200">项目公告</h4>
+              <h4 className="text-lg font-medium text-primary">项目公告</h4>
               <Button
                 variant="primary"
-                size="sm"
                 onClick={() => setIsCreateModalOpen(true)}
                 className="flex items-center gap-1"
               >
@@ -155,32 +154,32 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
             </div>
             <div className="flex-1 min-h-0">
               <Table>
-                <TableHeader className="bg-transparent border-b border-custom-border-200 border-t-0 py-2">
+                <TableHeader className="bg-transparent border-b border-subtle border-t-0 py-2">
                   <TableRow>
-                    <TableHead className="w-2/5 h-9 text-left font-medium text-custom-text-200">标题</TableHead>
-                    <TableHead className="w-1/5 h-9 text-left font-medium text-custom-text-200">创建人</TableHead>
-                    <TableHead className="w-1/4 h-9 text-left font-medium text-custom-text-200">创建时间</TableHead>
-                    <TableHead className="w-16 h-9 text-left font-medium text-custom-text-200">操作</TableHead>
+                    <TableHead className="w-2/5 h-9 text-left font-medium text-primary">标题</TableHead>
+                    <TableHead className="w-1/5 h-9 text-left font-medium text-primary">创建人</TableHead>
+                    <TableHead className="w-1/4 h-9 text-left font-medium text-primary">创建时间</TableHead>
+                    <TableHead className="w-16 h-9 text-left font-medium text-primary">操作</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {isLoadingAnnouncements ? (
                     <TableRow>
                       <TableCell colSpan={4}>
-                        <div className="h-20 grid place-items-center text-sm text-custom-text-300">加载中...</div>
+                        <div className="h-20 grid place-items-center text-sm text-secondary">加载中...</div>
                       </TableCell>
                     </TableRow>
                   ) : announcements.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={4}>
-                        <div className="h-20 grid place-items-center text-sm text-custom-text-300">暂无公告</div>
+                        <div className="h-20 grid place-items-center text-sm text-secondary">暂无公告</div>
                       </TableCell>
                     </TableRow>
                   ) : (
                     announcements.map((item) => (
                       <TableRow key={item.id} className="hover:bg-[#f7f7f7]">
                         <TableCell
-                          className="max-w-[320px] truncate cursor-pointer text-custom-text-200"
+                          className="max-w-[320px] truncate cursor-pointer text-primary"
                           title={item.name}
                           onClick={() => {
                             setActiveAnnouncement(item);
@@ -193,9 +192,8 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
                         <TableCell>
                           {item.created_at ? renderFormattedDate(getDate(item.created_at), "yyyy-MM-dd") : "-"}
                         </TableCell>
-                        <TableCell className="text-right">
+                        <TableCell className="text-left">
                           <Button
-                            variant="neutral-primary"
                             size="sm"
                             className="p-1 rounded-md border-none !bg-transparent shadow-none hover:!bg-transparent"
                             onClick={(e) => {
@@ -203,7 +201,7 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
                               confirmDeleteAnnouncement(item.id);
                             }}
                           >
-                            <Trash2 className="h-4 w-4 text-custom-text-300" />
+                            <Trash2 className="h-4 w-4 text-secondary" />
                           </Button>
                         </TableCell>
                       </TableRow>
@@ -212,9 +210,9 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
                 </TableBody>
               </Table>
             </div>
-            <div className="flex-shrink-0 border-t border-custom-border-200 px-4 py-3 bg-custom-background-100 flex items-center justify-between">
+            <div className="flex-shrink-0 border-t border-subtle px-4 py-3 bg-surface-1 flex items-center justify-between">
               <div className="flex items-center gap-4 text-sm">
-                <span className="text-custom-text-300">
+                <span className="text-secondary">
                   {totalCount > 0
                     ? `第 ${(page - 1) * pageSize + 1}-${Math.min(page * pageSize, totalCount)} 条，共 ${totalCount} 条`
                     : ""}
@@ -234,9 +232,9 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
             </div>
           </div>
           
-          <div className="bg-custom-background-100 border border-custom-border-200 rounded-lg shadow-custom-shadow-md p-4 h-[480px] flex flex-col">
+          <div className="bg-surface-1 border border-subtle rounded-lg shadow-md p-4 h-[480px] flex flex-col">
             <div className="flex items-center justify-between mb-3 flex-shrink-0">
-              <h4 className="text-lg font-medium text-custom-text-200">活动</h4>
+              <h4 className="text-lg font-medium text-primary">活动</h4>
             </div>
             <div className="flex-1 min-h-0 overflow-hidden">
               <ProjectActivity

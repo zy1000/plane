@@ -27,12 +27,12 @@ export const ChangelogTimeline = ({ items }: Props) => (
   <div className="flex flex-col gap-4">
     {items.map((item) => (
       <div key={item.id} className="relative pl-6">
-        <span className="absolute left-1 top-2 h-2.5 w-2.5 rounded-full bg-custom-primary-100" />
-        <span className="absolute left-[7px] top-5 bottom-[-20px] w-px bg-custom-border-200" />
+        <span className="absolute left-1 top-2 h-2.5 w-2.5 rounded-full bg-accent-primary" />
+        <span className="absolute left-[7px] top-5 bottom-[-20px] w-px bg-[var(--border-subtle)]" />
         <Card className="p-4">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm font-semibold text-custom-text-100">{item.title}</span>
-            <span className="rounded bg-custom-background-80 px-2 py-0.5 text-xs text-custom-text-300">
+            <span className="text-sm font-semibold text-primary">{item.title}</span>
+            <span className="rounded bg-layer-1-hover px-2 py-0.5 text-xs text-secondary">
               v{item.version}
             </span>
             <span className={`rounded px-2 py-0.5 text-xs ${TYPE_CLASS[item.update_type]}`}>
@@ -42,9 +42,9 @@ export const ChangelogTimeline = ({ items }: Props) => (
               <span className="rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-700">置顶</span>
             )}
           </div>
-          <p className="mt-2 text-xs text-custom-text-300">发布日期：{formatDate(item.release_date)}</p>
-          {item.summary && <p className="mt-2 text-sm text-custom-text-200">{item.summary}</p>}
-          <div className="mt-3 rounded border border-custom-border-100 bg-custom-background-90 p-2">
+          <p className="mt-2 text-xs text-secondary">发布日期：{formatDate(item.release_date)}</p>
+          {item.summary && <p className="mt-2 text-sm text-primary">{item.summary}</p>}
+          <div className="mt-3 rounded border border-subtle-1 bg-layer-1 p-2">
             <RichTextEditor
               id={`changelog-content-${item.id}`}
               editable={false}
@@ -61,7 +61,7 @@ export const ChangelogTimeline = ({ items }: Props) => (
                   href={link}
                   target="_blank"
                   rel="noreferrer"
-                  className="text-xs text-custom-primary-100 hover:underline"
+                  className="text-xs text-accent-primary hover:underline"
                 >
                   {link}
                 </a>

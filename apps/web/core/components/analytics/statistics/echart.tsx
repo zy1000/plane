@@ -46,7 +46,7 @@ export function EChart({ option, className, style, loading, onEvents }: EChartPr
   const mergedStyle = useMemo<CSSProperties>(() => ({ height: "100%", width: "100%", ...style }), [style]);
 
   if (!EChartsComponent || !echarts) {
-    return <div className={cn("h-full w-full animate-pulse rounded bg-custom-background-90", className)} style={mergedStyle} />;
+    return <div className={cn("h-full w-full animate-pulse rounded bg-layer-1", className)} style={mergedStyle} />;
   }
 
   return (

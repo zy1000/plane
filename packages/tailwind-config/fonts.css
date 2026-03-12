@@ -1,0 +1,5 @@
+/* Font loading is handled by each app via @fontsource-variable packages.
+   Example (apps/web/styles/globals.css):
+     @import "@fontsource-variable/inter/wght.css";
+     @import "@fontsource-variable/inter/wght-italic.css";
+*/

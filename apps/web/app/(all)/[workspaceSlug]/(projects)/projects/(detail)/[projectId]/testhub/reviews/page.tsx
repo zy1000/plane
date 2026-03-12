@@ -497,13 +497,13 @@ export default function ReviewsPage() {
     return (
       <div className="group flex items-center justify-between gap-2 w-full">
         <div className="flex items-center gap-2">
-          <span className="inline-flex items-center justify-center w-5 h-5 text-custom-text-300">
+          <span className="inline-flex items-center justify-center w-5 h-5 text-secondary">
             <FolderOpenDot size={14} />
           </span>
-          <span className="text-sm text-custom-text-200">{title}</span>
+          <span className="text-sm text-primary">{title}</span>
         </div>
         <div className="flex items-center gap-2">
-          {typeof count === "number" && <span className="text-xs text-custom-text-300">{count}</span>}
+          {typeof count === "number" && <span className="text-xs text-secondary">{count}</span>}
           <Dropdown
             trigger={["hover"]}
             menu={{
@@ -588,13 +588,13 @@ export default function ReviewsPage() {
       title: (
         <div className="group flex items-center justify-between gap-2 w-full">
           <div className="flex items-center gap-2">
-            <span className="inline-flex items-center justify-center w-5 h-5 text-custom-text-300">
+            <span className="inline-flex items-center justify-center w-5 h-5 text-secondary">
               <AppstoreOutlined />
             </span>
-            <span className="text-sm font-medium text-custom-text-200">全部评审</span>
+            <span className="text-sm font-medium text-primary">全部评审</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-xs text-custom-text-300">{totalReviews}</span>
+            <span className="text-xs text-secondary">{totalReviews}</span>
             <Dropdown
               trigger={["hover"]}
               menu={{
@@ -714,12 +714,13 @@ export default function ReviewsPage() {
       dataIndex: "name",
       key: "name",
       width: 220,
+      align: "left",
       ...getColumnSearchProps("name"),
       render: (name: string, record: ReviewItem) => (
         <Tooltip title={name} placement="topLeft">
           <Button
             type="link"
-            className="!text-custom-text-200 hover:!text-custom-text-100 !p-0 !h-auto block w-full text-left"
+            className="!text-primary hover:!text-primary !p-0 !h-auto block w-full !text-left"
             onClick={() => {
               try {
                 sessionStorage.setItem("selectedReviewName", name || "");
@@ -930,7 +931,7 @@ export default function ReviewsPage() {
                   setCreateReviewInitialValues(selectedModuleId ? { module_id: selectedModuleId } : undefined);
                   setCreateReviewOpen(true);
                 }}
-                className="text-white bg-custom-primary-100 hover:bg-custom-primary-200 focus:text-custom-brand-40 focus:bg-custom-primary-200 px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center"
+                className="text-on-color bg-accent-primary hover:bg-accent-primary-hover focus:text-on-color focus:bg-accent-primary-hover px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center"
               >
                 新建评审
               </button>
@@ -962,7 +963,7 @@ export default function ReviewsPage() {
               draggable
               showIcon={false}
               switcherIcon={(nodeProps) => (
-                <span className="inline-flex items-center justify-center w-5 h-5 text-custom-text-300">
+                <span className="inline-flex items-center justify-center w-5 h-5 text-secondary">
                   <ChevronDownIcon
                     className={`size-4 transition-transform ${nodeProps.expanded ? "rotate-0" : "-rotate-90"}`}
                     strokeWidth={2.5}
@@ -984,7 +985,7 @@ export default function ReviewsPage() {
         <div className={`${styles.right} !py-0 overflow-hidden`}>
           <div className="flex flex-col h-full overflow-hidden">
             <div
-              className={`testhub-reviews-table-scroll flex-1 relative overflow-y-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar]:block [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-[rgb(var(--color-scrollbar))] [&::-webkit-scrollbar-thumb]:rounded-full ${
+              className={`testhub-reviews-table-scroll flex-1 relative overflow-y-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar]:block [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-[var(--scrollbar-thumb)] [&::-webkit-scrollbar-thumb]:rounded-full ${
                 pageSize === 100 ? "testhub-reviews-scrollbar-strong" : ""
               }`}
             >
@@ -1011,9 +1012,9 @@ export default function ReviewsPage() {
                 pagination={false}
               />
             </div>
-            <div className="flex-shrink-0 border-t border-custom-border-200 px-4 py-3 bg-custom-background-100 flex items-center justify-between">
+            <div className="flex-shrink-0 border-t border-subtle px-4 py-3 bg-surface-1 flex items-center justify-between">
               <div className="flex items-center gap-4 text-sm">
-                <span className="text-custom-text-300">
+                <span className="text-secondary">
                   {totalForCurrent > 0
                     ? `第 ${(currentPage - 1) * pageSize + 1}-${Math.min(
                         currentPage * pageSize,
@@ -1046,13 +1047,13 @@ export default function ReviewsPage() {
                   position: sticky;
                   top: 0;
                   z-index: 5;
-                  background: rgb(var(--color-background-100));
+                  background: var(--bg-surface-1);
                 }
 
                 .testhub-reviews-table-scroll.testhub-reviews-scrollbar-strong{
                   overflow-y: scroll;
                   scrollbar-width: auto;
-                  scrollbar-color: rgb(var(--color-scrollbar)) transparent;
+                  scrollbar-color: var(--scrollbar-thumb) transparent;
                 }
 
                 .testhub-reviews-table-scroll.testhub-reviews-scrollbar-strong::-webkit-scrollbar{
@@ -1061,9 +1062,9 @@ export default function ReviewsPage() {
                 }
 
                 .testhub-reviews-table-scroll.testhub-reviews-scrollbar-strong::-webkit-scrollbar-thumb{
-                  background-color: rgba(var(--color-scrollbar), 0.85);
+                  background-color: color-mix(in oklch, var(--scrollbar-thumb) 85%, transparent);
                   border-radius: 999px;
-                  border: 3px solid rgba(var(--color-background-100), 1);
+                  border: 3px solid var(--bg-surface-1);
                 }
 
                 .testhub-reviews-table-scroll.testhub-reviews-scrollbar-strong::-webkit-scrollbar-track{

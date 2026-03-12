@@ -56,7 +56,7 @@ export const GanttChartSidebar = observer(function GanttChartSidebar(props: Prop
       <Row
         // DO NOT REMOVE THE ID
         id="gantt-sidebar"
-      className="min-h-full h-max min-w-full w-max flex-shrink-0 border-r-[0.5px] border-custom-border-200 bg-custom-background-100"
+      className="min-h-full h-max min-w-full w-max flex-shrink-0 border-r-[0.5px] border-subtle bg-surface-1"
       variant={ERowVariant.HUGGING}
     >
       <Row

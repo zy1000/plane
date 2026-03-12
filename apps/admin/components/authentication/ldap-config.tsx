@@ -50,7 +50,7 @@ export const LdapConfiguration = observer(function LdapConfiguration(props: Prop
     }
   };
 
-  if (isLoading) return <div className="h-6 w-12 bg-custom-background-90 rounded animate-pulse" />;
+  if (isLoading) return <div className="h-6 w-12 bg-layer-1 rounded animate-pulse" />;
 
   const isConfigured = config && config.server_url;
   const isActive = config?.is_active ?? false;
@@ -72,9 +72,9 @@ export const LdapConfiguration = observer(function LdapConfiguration(props: Prop
       ) : (
         <Link
           href="/authentication/ldap"
-          className={cn(getButtonStyling("neutral-primary", "sm"), "text-custom-text-300")}
+          className={cn(getButtonStyling("neutral-primary", "sm"), "text-secondary")}
         >
-          <Settings2 className="h-4 w-4 p-0.5 text-custom-text-300/80" />
+          <Settings2 className="h-4 w-4 p-0.5 text-secondary/80" />
           Configure
         </Link>
       )}

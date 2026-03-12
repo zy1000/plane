@@ -25,10 +25,10 @@ export const ChangelogModal = ({ workspaceSlug }: Props) => {
   return (
     <ModalCore isOpen={isOpen} handleClose={closeModal} position={EModalPosition.CENTER} width={EModalWidth.LG}>
       <div className="p-5">
-        <p className="text-sm text-custom-text-300">更新日志</p>
-        <h3 className="mt-1 text-lg font-semibold text-custom-text-100">{latest?.title}</h3>
-        {latest?.summary && <p className="mt-3 text-sm text-custom-text-200">{latest.summary}</p>}
-        <div className="mt-3 rounded border border-custom-border-100 bg-custom-background-90 p-2">
+        <p className="text-sm text-secondary">更新日志</p>
+        <h3 className="mt-1 text-lg font-semibold text-primary">{latest?.title}</h3>
+        {latest?.summary && <p className="mt-3 text-sm text-primary">{latest.summary}</p>}
+        <div className="mt-3 rounded border border-subtle-1 bg-layer-1 p-2">
           <RichTextEditor
             id={`changelog-modal-content-${latest?.id ?? "latest"}`}
             editable={false}
@@ -40,14 +40,14 @@ export const ChangelogModal = ({ workspaceSlug }: Props) => {
         <div className="mt-5 flex items-center justify-end gap-2">
           <button
             type="button"
-            className="rounded border border-custom-border-200 px-3 py-1.5 text-sm text-custom-text-200"
+            className="rounded border border-subtle px-3 py-1.5 text-sm text-primary"
             onClick={closeModal}
           >
             关闭
           </button>
           <button
             type="button"
-            className="rounded bg-custom-primary-100 px-3 py-1.5 text-sm text-white"
+            className="rounded bg-accent-primary px-3 py-1.5 text-sm text-white"
             onClick={handleViewDetail}
           >
             查看详情

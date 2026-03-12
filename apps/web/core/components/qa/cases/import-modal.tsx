@@ -64,7 +64,7 @@ export function ImportCaseModal(props: Props) {
         key: "passed",
         width: 120,
         render: (v: boolean) => (
-          <span className={v ? "text-emerald-600 font-medium" : "text-red-600 font-medium"}>
+          <span className={v ? "text-success-primary font-medium" : "text-danger-primary font-medium"}>
             {v ? "通过" : "不通过"}
           </span>
         ),
@@ -73,7 +73,7 @@ export function ImportCaseModal(props: Props) {
         title: "错误原因",
         dataIndex: "error_reason",
         key: "error_reason",
-        render: (v: string) => (v ? <span className="text-red-600">{v}</span> : <span className="text-custom-text-400">-</span>),
+        render: (v: string) => (v ? <span className="text-danger-primary">{v}</span> : <span className="text-placeholder">-</span>),
       },
     ],
     []
@@ -220,28 +220,28 @@ export function ImportCaseModal(props: Props) {
       destroyOnClose
     >
       {currentStep === 0 && (
-        <div className="rounded-lg border border-custom-border-200 bg-custom-background-100 p-4">
+        <div className="rounded-lg border border-subtle bg-surface-1 p-4">
           <div className="flex flex-col gap-4">
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
-                <div className="text-base font-medium text-custom-text-100">1. 下载模板</div>
-                <div className="mt-1 text-sm text-custom-text-300">请先下载模板并按模板格式填写测试用例。</div>
+                <div className="text-base font-medium text-primary">1. 下载模板</div>
+                <div className="mt-1 text-sm text-secondary">请先下载模板并按模板格式填写测试用例。</div>
               </div>
               <Button icon={<DownloadOutlined />} onClick={downloadTemplate} loading={downloadingTemplate}>
                 下载模板
               </Button>
             </div>
 
-            <div className="h-px bg-custom-border-200" />
+            <div className="h-px bg-[var(--border-subtle)]" />
 
             <div>
-              <div className="text-base font-medium text-custom-text-100">2. 上传文件</div>
-              <div className="mt-1 text-sm text-custom-text-300">支持 .xlsx 文件（与模板保持一致）。</div>
+              <div className="text-base font-medium text-primary">2. 上传文件</div>
+              <div className="mt-1 text-sm text-secondary">支持 .xlsx 文件（与模板保持一致）。</div>
 
               <div className="mt-4 flex items-center justify-between gap-3">
                 <div className="min-w-0 flex-1">
-                  <div className="text-sm text-custom-text-200">已选择文件</div>
-                  <div className="mt-1 truncate text-sm text-custom-text-300">{file ? file.name : "-"}</div>
+                  <div className="text-sm text-primary">已选择文件</div>
+                  <div className="mt-1 truncate text-sm text-secondary">{file ? file.name : "-"}</div>
                 </div>
                 <div className="flex items-center gap-2">
                   <Button type="primary" icon={<UploadOutlined />} onClick={openPicker}>
@@ -262,11 +262,11 @@ export function ImportCaseModal(props: Props) {
       )}
 
       {currentStep === 1 && (
-        <div className="rounded-lg border border-custom-border-200 bg-custom-background-100 p-4">
+        <div className="rounded-lg border border-subtle bg-surface-1 p-4">
           <div className="flex items-center justify-between gap-4">
             <div>
-              <div className="text-base font-medium text-custom-text-100">校验结果</div>
-              <div className="mt-1 text-sm text-custom-text-300">
+              <div className="text-base font-medium text-primary">校验结果</div>
+              <div className="mt-1 text-sm text-secondary">
                 {validation
                   ? `通过 ${validation.passed_count}/${validation.total_count} 行`
                   : "暂无结果"}
@@ -276,8 +276,8 @@ export function ImportCaseModal(props: Props) {
               <div
                 className={
                   validation.all_passed
-                    ? "px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-sm font-medium"
-                    : "px-3 py-1 rounded-full bg-red-50 text-red-700 text-sm font-medium"
+                    ? "px-3 py-1 rounded-full bg-success-subtle text-success-primary text-sm font-medium"
+                    : "px-3 py-1 rounded-full bg-danger-subtle text-danger-primary text-sm font-medium"
                 }
               >
                 {validation.all_passed ? "全部通过，可开始导入" : "存在未通过项，请返回重新上传"}
@@ -306,7 +306,7 @@ export function ImportCaseModal(props: Props) {
               pagination={false}
               bordered
               scroll={{ y: 360 }}
-              rowClassName={(r) => (r.passed ? "bg-emerald-50/30" : "bg-red-50/30")}
+              rowClassName={(r) => (r.passed ? "bg-success-subtle/30" : "bg-danger-subtle/30")}
             />
           </div>
         </div>

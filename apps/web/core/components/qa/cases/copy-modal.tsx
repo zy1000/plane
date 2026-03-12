@@ -147,10 +147,10 @@ export const CopyCaseModal: React.FC<Props> = ({
     return (
       <div className="group flex items-center justify-between gap-2 w-full">
         <div className="flex items-center gap-2">
-          <span className="inline-flex items-center justify-center w-5 h-5 text-custom-text-300">
+          <span className="inline-flex items-center justify-center w-5 h-5 text-secondary">
             {icon}
           </span>
-          <span className="text-sm text-custom-text-200">{title}</span>
+          <span className="text-sm text-primary">{title}</span>
         </div>
       </div>
     );

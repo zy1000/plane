@@ -55,7 +55,7 @@ export const OverviewListHeader = observer(() => {
       {canCurrentUserCreatePage ? (
         <Header.RightItem>
           <button
-            className="flex items-center justify-center size-6 rounded-md text-custom-text-400 hover:text-custom-primary-100 hover:bg-custom-background-90"
+            className="flex items-center justify-center size-6 rounded-md text-placeholder hover:text-accent-primary hover:bg-layer-1"
             onClick={() => {
               overviewSidebarPeek(!overviewPeek);
             }}

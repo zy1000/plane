@@ -37,7 +37,7 @@ export const MilestonesListHeader = observer(function MilestonesListHeader() {
               <BreadcrumbLink
                 label="里程碑"
                 href={`/${workspaceSlug}/projects/${currentProjectDetails?.id}/milestones/`}
-                icon={<Milestone className="h-4 w-4 text-custom-text-300" />}
+                icon={<Milestone className="h-4 w-4 text-secondary" />}
                 isLast
               />
             }
@@ -49,7 +49,6 @@ export const MilestonesListHeader = observer(function MilestonesListHeader() {
         <Header.RightItem>
           <Button
             variant="primary"
-            size="sm"
             onClick={() => {
               window.dispatchEvent(new CustomEvent(OPEN_MILESTONE_MODAL_EVENT, { detail: { mode: "create" } }));
             }}

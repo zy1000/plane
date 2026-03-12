@@ -91,7 +91,7 @@ const PlanIterationModal: React.FC<Props> = (props) => {
       width={EModalWidth.VIXL}
     >
       <div className="w-full">
-        <div className="flex items-center justify-between gap-4 border-b border-custom-border-200 px-6 py-4">
+        <div className="flex items-center justify-between gap-4 border-b border-subtle px-6 py-4">
           <h3 className="text-lg font-medium">迭代规划</h3>
           <Button
             variant="primary"
@@ -108,7 +108,7 @@ const PlanIterationModal: React.FC<Props> = (props) => {
           <Col flex="auto" className="h-full overflow-y-auto">
             <div className="w-full h-full">
               {cyclesLoading && (
-                <div className="flex items-center justify-center py-12 text-custom-text-300">加载中...</div>
+                <div className="flex items-center justify-center py-12 text-secondary">加载中...</div>
               )}
               {cyclesError && (
                 <div className="bg-red-50 border border-red-200 rounded-md p-3 text-red-800 text-sm m-6">
@@ -116,7 +116,7 @@ const PlanIterationModal: React.FC<Props> = (props) => {
                 </div>
               )}
               {!cyclesLoading && !cyclesError && cycles.length === 0 && (
-                <div className="flex items-center justify-center py-12 text-custom-text-300">暂无迭代</div>
+                <div className="flex items-center justify-center py-12 text-secondary">暂无迭代</div>
               )}
               {!cyclesLoading && !cyclesError && cycles.length > 0 && (
                 <Table
@@ -133,7 +133,7 @@ const PlanIterationModal: React.FC<Props> = (props) => {
                       title: "名称",
                       dataIndex: "name",
                       key: "name",
-                      render: (name) => <span className="text-sm text-custom-text-100">{name}</span>,
+                      render: (name) => <span className="text-sm text-primary">{name}</span>,
                     },
                     {
                       title: "状态",
@@ -198,7 +198,7 @@ const PlanIterationModal: React.FC<Props> = (props) => {
                       dataIndex: "start_date",
                       key: "start_date",
                       render: (date: string | null) => (
-                        <span className="text-xs text-custom-text-200">
+                        <span className="text-xs text-primary">
                           {date ? dayjs(date).format("YYYY-MM-DD") : "-"}
                         </span>
                       ),
@@ -208,7 +208,7 @@ const PlanIterationModal: React.FC<Props> = (props) => {
                       dataIndex: "end_date",
                       key: "end_date",
                       render: (date: string | null) => (
-                        <span className="text-xs text-custom-text-200">
+                        <span className="text-xs text-primary">
                           {date ? dayjs(date).format("YYYY-MM-DD") : "-"}
                         </span>
                       ),
@@ -219,7 +219,7 @@ const PlanIterationModal: React.FC<Props> = (props) => {
             </div>
           </Col>
         </Row>
-        <div className="sticky bottom-0 w-full bg-custom-background-100 border-t border-custom-border-200 px-6 py-3 flex items-center justify-end gap-3">
+        <div className="sticky bottom-0 w-full bg-surface-1 border-t border-subtle px-6 py-3 flex items-center justify-end gap-3">
           <Button
             variant="primary"
             size="sm"

@@ -67,7 +67,7 @@ export const MilestoneIssuesHeader = observer(function MilestoneIssuesHeader() {
               <BreadcrumbLink
                 label="里程碑"
                 href={`/${workspaceSlug}/projects/${currentProjectDetails?.id}/milestones`}
-                icon={<Milestone className="h-4 w-4 text-custom-text-300" />}
+                icon={<Milestone className="h-4 w-4 text-secondary" />}
               />
             }
           />
@@ -78,7 +78,6 @@ export const MilestoneIssuesHeader = observer(function MilestoneIssuesHeader() {
         {canAddIssues ? (
           <Button
             variant="primary"
-            size="sm"
             onClick={() => window.dispatchEvent(new CustomEvent(OPEN_ADD_ISSUES_MODAL_EVENT))}
           >
             关联工作项

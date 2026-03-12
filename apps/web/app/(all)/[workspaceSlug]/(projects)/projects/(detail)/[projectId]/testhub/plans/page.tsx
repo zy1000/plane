@@ -356,7 +356,7 @@ export default function TestPlanDetailPage() {
     );
   };
 
-  const renderResult = (result: any) => <span className="text-sm text-custom-text-500">{result ?? "-"}</span>;
+  const renderResult = (result: any) => <span className="text-sm text-tertiary">{result ?? "-"}</span>;
 
   const handleTableChange: TableProps<TestPlan>["onChange"] = (_pagination, tableFilters) => {
     const selectedStates = (tableFilters?.state as number[] | undefined) || [];
@@ -422,7 +422,7 @@ export default function TestPlanDetailPage() {
       render: (_name: string, record: TestPlan) => (
         <Button
           type="link"
-          className="!p-0 !text-custom-text-200 hover:!text-custom-text-100"
+          className="!p-0 !text-primary hover:!text-primary"
           onClick={() => {
             if (!record?.id) return;
             try {
@@ -684,13 +684,13 @@ export default function TestPlanDetailPage() {
     return (
       <div className="group flex items-center justify-between gap-2 w-full">
         <div className="flex items-center gap-2">
-          <span className="inline-flex items-center justify-center w-5 h-5 text-custom-text-300">
+          <span className="inline-flex items-center justify-center w-5 h-5 text-secondary">
             <FolderOpenDot size={14} />
           </span>
-          <span className="text-sm text-custom-text-200">{title}</span>
+          <span className="text-sm text-primary">{title}</span>
         </div>
         <div className="flex items-center gap-2">
-          {typeof count === "number" && <span className="text-xs text-custom-text-300">{count}</span>}
+          {typeof count === "number" && <span className="text-xs text-secondary">{count}</span>}
           <Dropdown
             trigger={["hover"]}
             menu={{
@@ -775,13 +775,13 @@ export default function TestPlanDetailPage() {
       title: (
         <div className="group flex items-center justify-between gap-2 w-full">
           <div className="flex items-center gap-2">
-            <span className="inline-flex items-center justify-center w-5 h-5 text-custom-text-300">
+            <span className="inline-flex items-center justify-center w-5 h-5 text-secondary">
               <AppstoreOutlined />
             </span>
-            <span className="text-sm font-medium text-custom-text-200">全部计划</span>
+            <span className="text-sm font-medium text-primary">全部计划</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-xs text-custom-text-300">
+            <span className="text-xs text-secondary">
               {typeof allTotal === "number" ? allTotal : totalPlansFromModules}
             </span>
             <Dropdown
@@ -872,7 +872,7 @@ export default function TestPlanDetailPage() {
           <div className="flex-1 overflow-hidden p-0">
             <div className="flex h-[calc(100%-0px)] w-full">
               <div
-                className="relative flex flex-col h-full border-r border-custom-border-200 min-w-[200px] max-w-[300px]"
+                className="relative flex flex-col h-full border-r border-subtle min-w-[200px] max-w-[300px]"
                 style={{ width: leftWidth }}
               >
                 <div
@@ -891,7 +891,7 @@ export default function TestPlanDetailPage() {
                     <button
                       type="button"
                       onClick={() => setShowCreateModal(true)}
-                      className="text-white bg-custom-primary-100 hover:bg-custom-primary-200 focus:text-custom-brand-40 focus:bg-custom-primary-200 px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center"
+                      className="text-on-color bg-accent-primary hover:bg-accent-primary-hover focus:text-on-color focus:bg-accent-primary-hover px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center"
                     >
                       新建计划
                     </button>
@@ -923,7 +923,7 @@ export default function TestPlanDetailPage() {
                     draggable
                     showIcon={false}
                     switcherIcon={(nodeProps) => (
-                      <span className="inline-flex items-center justify-center w-5 h-5 text-custom-text-300">
+                      <span className="inline-flex items-center justify-center w-5 h-5 text-secondary">
                         <ChevronDownIcon
                           className={`size-4 transition-transform ${nodeProps.expanded ? "rotate-0" : "-rotate-90"}`}
                           strokeWidth={2.5}
@@ -948,7 +948,7 @@ export default function TestPlanDetailPage() {
               <div className="flex-1 overflow-hidden p-0">
                 {loading && (
                   <div className="flex items-center justify-center py-12">
-                    <div className="text-custom-text-300">加载中...</div>
+                    <div className="text-secondary">加载中...</div>
                   </div>
                 )}
                 {error && (
@@ -959,7 +959,7 @@ export default function TestPlanDetailPage() {
                 {!loading && !error && (
                   <div className="flex flex-col h-full overflow-hidden">
                     <div
-                      className={`testhub-plans-table-scroll flex-1 relative overflow-y-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar]:block [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-[rgb(var(--color-scrollbar))] [&::-webkit-scrollbar-thumb]:rounded-full ${
+                      className={`testhub-plans-table-scroll flex-1 relative overflow-y-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar]:block [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-[var(--scrollbar-thumb)] [&::-webkit-scrollbar-thumb]:rounded-full ${
                         pageSize === 100 ? "testhub-plans-scrollbar-strong" : ""
                       }`}
                     >
@@ -973,9 +973,9 @@ export default function TestPlanDetailPage() {
                         pagination={false}
                       />
                     </div>
-                    <div className="flex-shrink-0 border-t border-custom-border-200 px-4 py-3 bg-custom-background-100 flex items-center justify-between">
+                    <div className="flex-shrink-0 border-t border-subtle px-4 py-3 bg-surface-1 flex items-center justify-between">
                       <div className="flex items-center gap-4 text-sm">
-                        <span className="text-custom-text-300">
+                        <span className="text-secondary">
                           {total > 0
                             ? `第 ${(currentPage - 1) * pageSize + 1}-${Math.min(
                                 currentPage * pageSize,
@@ -1009,13 +1009,13 @@ export default function TestPlanDetailPage() {
                         position: sticky;
                         top: 0;
                         z-index: 5;
-                        background: rgb(var(--color-background-100));
+                        background: var(--bg-surface-1);
                       }
 
                       .testhub-plans-table-scroll.testhub-plans-scrollbar-strong{
                         overflow-y: scroll;
                         scrollbar-width: auto;
-                        scrollbar-color: rgb(var(--color-scrollbar)) transparent;
+                        scrollbar-color: var(--scrollbar-thumb) transparent;
                       }
 
                       .testhub-plans-table-scroll.testhub-plans-scrollbar-strong::-webkit-scrollbar{
@@ -1024,9 +1024,9 @@ export default function TestPlanDetailPage() {
                       }
 
                       .testhub-plans-table-scroll.testhub-plans-scrollbar-strong::-webkit-scrollbar-thumb{
-                        background-color: rgba(var(--color-scrollbar), 0.85);
+                        background-color: color-mix(in oklch, var(--scrollbar-thumb) 85%, transparent);
                         border-radius: 999px;
-                        border: 3px solid rgba(var(--color-background-100), 1);
+                        border: 3px solid var(--bg-surface-1);
                       }
 
                       .testhub-plans-table-scroll.testhub-plans-scrollbar-strong::-webkit-scrollbar-track{

@@ -11,7 +11,7 @@ import { EFileAssetType } from "@plane/types";
 import { RichTextEditor } from "@/components/editor/rich-text";
 import { useWorkspace } from "@/hooks/store/use-workspace";
 import { useEditorAsset } from "@/hooks/store/use-editor-asset";
-import { WorkspaceService } from "@/plane-web/services";
+import { WorkspaceService } from "@/services/workspace.service";
 
 type BasicInfoPanelProps = {
   caseId: string;
@@ -171,10 +171,10 @@ export function BasicInfoPanel(props: BasicInfoPanelProps) {
   };
 
   return (
-    <div className="space-y-8 rounded-b-md border-gray-200 px-6 py-6 transition-colors focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-100">
+      <div className="space-y-8 rounded-b-md border-subtle px-6 py-6 transition-colors ring-1 ring-transparent focus-within:border-accent-subtle focus-within:ring-accent-subtle">
       <div>
         <div className="mb-3 flex items-center justify-between">
-          <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+          <label className="flex items-center gap-2 text-sm font-semibold text-secondary">
             前置条件
           </label>
           {!isEditing && (
@@ -214,7 +214,7 @@ export function BasicInfoPanel(props: BasicInfoPanelProps) {
           <div className="space-y-8">
             <div>
               <div className="mb-3 flex items-center justify-between gap-6">
-                <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">文本描述</label>
+                <label className="flex items-center gap-2 text-sm font-semibold text-secondary">文本描述</label>
                 <Dropdown
                   trigger={["click"]}
                   overlayStyle={{ zIndex: 1200 }}
@@ -233,7 +233,7 @@ export function BasicInfoPanel(props: BasicInfoPanelProps) {
                   <Button
                     type="text"
                     size="small"
-                    className="px-0 text-sm font-medium text-gray-500 hover:text-gray-700"
+                    className="px-0 text-sm font-medium text-tertiary hover:text-secondary"
                   >
                     更改类型 <DownOutlined />
                   </Button>
@@ -261,7 +261,7 @@ export function BasicInfoPanel(props: BasicInfoPanelProps) {
               />
             </div>
             <div>
-              <label className="mb-3 flex items-center gap-2 text-sm font-semibold text-gray-700">预期结果</label>
+              <label className="mb-3 flex items-center gap-2 text-sm font-semibold text-secondary">预期结果</label>
               <RichTextEditor
                 id="qa-text-result-editor"
                 editable={isEditing}
@@ -287,7 +287,7 @@ export function BasicInfoPanel(props: BasicInfoPanelProps) {
         ) : (
           <>
             <div className="mb-3 flex items-center justify-between gap-6">
-              <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">测试步骤</label>
+              <label className="flex items-center gap-2 text-sm font-semibold text-secondary">测试步骤</label>
               <Dropdown
                 trigger={["click"]}
                 overlayStyle={{ zIndex: 1200 }}
@@ -306,7 +306,7 @@ export function BasicInfoPanel(props: BasicInfoPanelProps) {
                 <Button
                   type="text"
                   size="small"
-                  className="px-0 text-sm font-medium text-gray-500 hover:text-gray-700"
+                    className="px-0 text-sm font-medium text-tertiary hover:text-secondary"
                 >
                   更改类型 <DownOutlined />
                 </Button>
@@ -317,7 +317,7 @@ export function BasicInfoPanel(props: BasicInfoPanelProps) {
         )}
       </div>
       <div>
-        <label className="mb-3 flex items-center gap-2 text-sm font-semibold text-gray-700">
+        <label className="mb-3 flex items-center gap-2 text-sm font-semibold text-secondary">
           备注
         </label>
         <RichTextEditor
@@ -356,14 +356,14 @@ export function BasicInfoPanel(props: BasicInfoPanelProps) {
         role="group"
       >
         <div className="mb-3 flex items-center justify-between">
-          <span id="attachments-title" className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+          <span id="attachments-title" className="flex items-center gap-2 text-sm font-semibold text-secondary">
             附件
           </span>
           <Tooltip title="上传文件">
             <Button
               type="text"
               aria-label="上传附件"
-              icon={<LucideIcons.Upload size={16} className="text-gray-600 hover:text-blue-600" aria-hidden="true" />}
+              icon={<LucideIcons.Upload size={16} className="text-secondary hover:text-accent-primary" aria-hidden="true" />}
               onClick={onPickAttachments}
             />
           </Tooltip>
@@ -383,7 +383,7 @@ export function BasicInfoPanel(props: BasicInfoPanelProps) {
             rowKey={(r: any) => String(r?.id ?? "")}
             dataSource={caseAttachments}
             pagination={false}
-            rowClassName={() => "hover:bg-gray-50 focus:bg-blue-50"}
+            rowClassName={() => "hover:bg-layer-1-hover"}
             onRow={(record: any) => ({
               tabIndex: 0,
               onKeyDown: (e) => {
@@ -407,17 +407,17 @@ export function BasicInfoPanel(props: BasicInfoPanelProps) {
                   const mime: string = String(record?.attributes?.type ?? "");
                   const icon = (() => {
                     if (mime.startsWith("image/"))
-                      return <LucideIcons.Image size={16} className="text-gray-500" aria-hidden="true" />;
+                      return <LucideIcons.Image size={16} className="text-tertiary" aria-hidden="true" />;
                     if (mime.startsWith("video/"))
-                      return <LucideIcons.Video size={16} className="text-gray-500" aria-hidden="true" />;
+                      return <LucideIcons.Video size={16} className="text-tertiary" aria-hidden="true" />;
                     if (mime.startsWith("audio/"))
-                      return <LucideIcons.Music size={16} className="text-gray-500" aria-hidden="true" />;
+                      return <LucideIcons.Music size={16} className="text-tertiary" aria-hidden="true" />;
                     if (
                       mime === "text/plain" ||
                       mime === "application/pdf" ||
                       mime === "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                     )
-                      return <LucideIcons.FileText size={16} className="text-gray-500" aria-hidden="true" />;
+                      return <LucideIcons.FileText size={16} className="text-tertiary" aria-hidden="true" />;
                     if (
                       [
                         "application/zip",
@@ -430,14 +430,14 @@ export function BasicInfoPanel(props: BasicInfoPanelProps) {
                         "application/gzip",
                       ].includes(mime)
                     )
-                      return <LucideIcons.Archive size={16} className="text-gray-500" aria-hidden="true" />;
-                    return <LucideIcons.File size={16} className="text-gray-500" aria-hidden="true" />;
+                      return <LucideIcons.Archive size={16} className="text-tertiary" aria-hidden="true" />;
+                    return <LucideIcons.File size={16} className="text-tertiary" aria-hidden="true" />;
                   })();
                   return (
                     <div className="flex items-center gap-2 min-w-0">
                       {icon}
-                      <span className="truncate max-w-[360px] text-sm text-gray-700">{name}</span>
-                      <span className="text-xs text-gray-500">{sizeText}</span>
+                      <span className="truncate max-w-[360px] text-sm text-secondary">{name}</span>
+                      <span className="text-xs text-tertiary">{sizeText}</span>
                     </div>
                   );
                 },
@@ -480,7 +480,7 @@ export function BasicInfoPanel(props: BasicInfoPanelProps) {
                         icon={
                           <LucideIcons.Download
                             size={16}
-                            className="text-gray-600 hover:text-blue-600"
+                            className="text-secondary hover:text-accent-primary"
                             aria-hidden="true"
                           />
                         }
@@ -501,7 +501,7 @@ export function BasicInfoPanel(props: BasicInfoPanelProps) {
                         icon={
                           <LucideIcons.Trash2
                             size={16}
-                            className="text-gray-600 hover:text-red-600"
+                            className="text-secondary hover:text-danger-primary"
                             aria-hidden="true"
                           />
                         }
@@ -522,7 +522,7 @@ export function BasicInfoPanel(props: BasicInfoPanelProps) {
         </div>
       </section>
       <div className="mt-6 h-[420px] flex flex-col rounded bg-white">
-        <span id="attachments-title" className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+        <span id="attachments-title" className="flex items-center gap-2 text-sm font-semibold text-secondary">
           评论
         </span>
         <div className="flex-1 min-h-0 overflow-y-auto px-3 py-2">
@@ -531,7 +531,7 @@ export function BasicInfoPanel(props: BasicInfoPanelProps) {
               <Spin />
             </div>
           ) : comments.length === 0 ? (
-            <div className="text-sm text-gray-500">暂无评论</div>
+            <div className="text-sm text-tertiary">暂无评论</div>
           ) : (
             <div>
               {comments.map((c) => renderComment(c))}
@@ -539,7 +539,7 @@ export function BasicInfoPanel(props: BasicInfoPanelProps) {
                 <div className="mt-3">
                   <button
                     type="button"
-                    className="rounded bg-gray-100 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-200"
+                    className="rounded bg-layer-1 px-3 py-1.5 text-sm text-secondary hover:bg-layer-1-hover"
                     onClick={() => {
                       const nextPage = commentPage + 1;
                       setCommentPage(nextPage);
@@ -564,7 +564,7 @@ export function BasicInfoPanel(props: BasicInfoPanelProps) {
             />
             <button
               type="button"
-              className="mt-0.5 text-white bg-custom-primary-100 hover:bg-custom-primary-200 focus:text-custom-brand-40 focus:bg-custom-primary-200 px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center shrink-0"
+              className="mt-0.5 text-on-color bg-accent-primary hover:bg-accent-primary-hover focus:text-on-color focus:bg-accent-primary-hover px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center shrink-0"
               onClick={onCreateComment}
             >
               评论

@@ -170,7 +170,7 @@ export default function FilestoreOnlyOfficePage() {
   }, [triggerForceSave]);
 
   return (
-    <div className="fixed inset-0 z-50 bg-custom-background-100">
+    <div className="fixed inset-0 z-50 bg-surface-1">
       {error && (
         <div className="absolute left-0 right-0 top-0 z-20 p-3">
           <Alert

@@ -20,12 +20,12 @@ import { useMember } from "@/hooks/store/use-member";
 import { useWorkspace } from "@/hooks/store/use-workspace";
 import { useEditorAsset } from "@/hooks/store/use-editor-asset";
 import { useUser } from "@/hooks/store/user";
-import { WorkspaceService } from "@/plane-web/services";
+import { WorkspaceService } from "@/services/workspace.service";
 import { EFileAssetType, type TIssue, type TPartialProject } from "@plane/types";
 import { Logo } from "@plane/propel/emoji-icon-picker";
 import { IssueService } from "@/services/issue/issue.service";
 import { projectIssueTypesCache, ProjectIssueTypeService, ProjectService, type TIssueType } from "@/services/project";
-import { getEnums } from "app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/util";
+import { getEnums } from "@/app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/util";
 import { WorkItemSelectModal } from "./work-item-select-modal";
 
 // 内联 AutoResizeTextarea
@@ -1525,7 +1525,7 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
             {/* 标签 */}
             <Form.Item label={<span className="font-bold">标签</span>} className="mb-3">
               <div
-                className="flex flex-wrap items-center gap-2 min-h-[32px] p-1 border border-custom-border-200 rounded cursor-text bg-white"
+                className="flex flex-wrap items-center gap-2 min-h-[32px] p-1 border border-subtle rounded cursor-text bg-white"
                 onClick={() => {
                   const input = document.getElementById("label-input");
                   input?.focus();

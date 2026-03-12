@@ -99,7 +99,7 @@ export default function TestCasesMindPage() {
       title: (
         <div className="flex items-center justify-between gap-2 min-w-0">
           <span className="truncate">{String(m.name ?? "")}</span>
-          <span className="text-xs text-custom-text-400 flex-shrink-0">{Number(m.total ?? 0)}</span>
+          <span className="text-xs text-placeholder flex-shrink-0">{Number(m.total ?? 0)}</span>
         </div>
       ),
       children: buildTreeNodes(m.children || []),
@@ -136,7 +136,7 @@ export default function TestCasesMindPage() {
           title: (
             <div className="flex items-center justify-between gap-2 min-w-0">
               <span className="truncate">全部用例</span>
-              <span className="text-xs text-custom-text-400 flex-shrink-0">{total}</span>
+              <span className="text-xs text-placeholder flex-shrink-0">{total}</span>
             </div>
           ),
           children: nodes,
@@ -808,7 +808,7 @@ export default function TestCasesMindPage() {
       <PageHead title={`测试用例${repositoryName ? " - " + repositoryName : ""} - 脑图`} />
       <div className="h-full w-full">
         <div className="flex h-full w-full flex-col">
-          <div className="px-3 pt-2 pb-2 sm:pt-2 flex items-center justify-between flex-shrink-0 border-b border-custom-border-200">
+          <div className="px-3 pt-2 pb-2 sm:pt-2 flex items-center justify-between flex-shrink-0 border-b border-subtle">
             <div>
               <Breadcrumbs>
                 <Breadcrumbs.Item
@@ -822,7 +822,7 @@ export default function TestCasesMindPage() {
                       workspaceSlug={String(workspaceSlug || "")}
                       projectId={String(projectId || "")}
                       className="inline-flex"
-                      buttonClassName="min-w-0 border-0 px-1.5 py-1 text-sm font-medium text-custom-text-300 hover:text-custom-text-100 hover:bg-custom-background-90 cursor-pointer gap-2 h-full"
+                      buttonClassName="min-w-0 border-0 px-1.5 py-1 text-sm font-medium text-secondary hover:text-primary hover:bg-layer-1 cursor-pointer gap-2 h-full"
                       labelClassName="max-w-[150px] leading-4"
                       hideChevron
                       defaultRepositoryId={repositoryId}
@@ -845,14 +845,14 @@ export default function TestCasesMindPage() {
               <button
                 type="button"
                 onClick={() => router.push(listUrl)}
-                className="h-8 w-8 rounded border border-custom-border-200 text-custom-text-300 hover:text-custom-text-100 hover:bg-custom-background-90 flex items-center justify-center"
+                className="h-8 w-8 rounded border border-subtle text-secondary hover:text-primary hover:bg-layer-1 flex items-center justify-center"
                 aria-label="列表视图"
               >
                 <UnorderedListOutlined />
               </button>
               <button
                 type="button"
-                className="h-8 w-8 rounded border border-custom-primary-100 bg-custom-primary-100/10 text-custom-primary-100 flex items-center justify-center"
+                className="h-8 w-8 rounded border border-accent-strong bg-accent-subtle text-accent-primary flex items-center justify-center"
                 aria-label="脑图视图"
               >
                 <ShareAltOutlined />
@@ -861,7 +861,7 @@ export default function TestCasesMindPage() {
           </div>
           <Row wrap={false} className="flex-1 overflow-hidden pb-0" gutter={[0, 16]}>
             <Col
-              className="relative flex flex-col h-full border-r border-custom-border-200"
+              className="relative flex flex-col h-full border-r border-subtle"
               flex="0 0 auto"
               style={{ width: leftWidth, minWidth: 200, maxWidth: 300 }}
             >
@@ -981,10 +981,10 @@ export default function TestCasesMindPage() {
             <Col flex="auto" className="h-full overflow-hidden">
               <div className="h-full w-full overflow-hidden">
                 {!repositoryId && (
-                  <div className="flex h-full items-center justify-center text-custom-text-300">请先选择一个用例库</div>
+                  <div className="flex h-full items-center justify-center text-secondary">请先选择一个用例库</div>
                 )}
                 {repositoryId && loadingMind && (
-                  <div className="flex h-full items-center justify-center text-custom-text-300">加载中...</div>
+                  <div className="flex h-full items-center justify-center text-secondary">加载中...</div>
                 )}
                 {repositoryId && !loadingMind && mindData && (
                   <CaseMindmap
@@ -996,7 +996,7 @@ export default function TestCasesMindPage() {
                   />
                 )}
                 {repositoryId && !loadingMind && !mindData && (
-                  <div className="flex h-full items-center justify-center text-custom-text-300">暂无数据</div>
+                  <div className="flex h-full items-center justify-center text-secondary">暂无数据</div>
                 )}
               </div>
             </Col>

@@ -327,8 +327,8 @@ export const BugIssueFormRoot: FC<BugIssueFormProps> = observer((props) => {
             onSubmit={handleSubmit((d) => handleFormSubmit(d))}
             className="flex flex-col w-full h-full"
           >
-            <div className="p-5 rounded-t-lg bg-custom-background-100">
-              <h3 className="text-xl font-medium text-custom-text-200 pb-2">{modalTitle}</h3>
+            <div className="p-5 rounded-t-lg bg-surface-1">
+              <h3 className="text-xl font-medium text-primary pb-2">{modalTitle}</h3>
               <div className="flex items-center justify-between pt-2 pb-4">
                 <div className="flex items-center gap-x-1">
                   <IssueProjectSelect
@@ -336,7 +336,7 @@ export const BugIssueFormRoot: FC<BugIssueFormProps> = observer((props) => {
                     disabled={!!data?.id || !!data?.sourceIssueId || isProjectSelectionDisabled}
                     handleFormChange={handleFormChange}
                   />
-                  <ChevronRight className="h-3 w-3 text-custom-text-400 flex-shrink-0" />
+                  <ChevronRight className="h-3 w-3 text-placeholder flex-shrink-0" />
                   {projectId && (
                     <IssueTypeSelect
                       control={control as any}
@@ -397,7 +397,7 @@ export const BugIssueFormRoot: FC<BugIssueFormProps> = observer((props) => {
             </div>
             <div
               className={cn(
-                "pb-4 space-y-3 bg-custom-background-100 flex-1",
+                "pb-4 space-y-3 bg-surface-1 flex-1",
                 activeAdditionalPropertiesLength > 4 &&
                   "max-h-[65vh] overflow-hidden overflow-y-auto vertical-scrollbar scrollbar-sm"
               )}
@@ -429,11 +429,11 @@ export const BugIssueFormRoot: FC<BugIssueFormProps> = observer((props) => {
             </div>
             <div
               className={cn(
-                "px-4 py-3 border-t-[0.5px] border-custom-border-200 rounded-b-lg bg-custom-background-100",
-                activeAdditionalPropertiesLength > 0 && "shadow-custom-shadow-xs"
+                "px-4 py-3 border-t-[0.5px] border-subtle rounded-b-lg bg-surface-1",
+                activeAdditionalPropertiesLength > 0 && "shadow-raised-100"
               )}
             >
-              <div className="pb-3 border-b-[0.5px] border-custom-border-200">
+              <div className="pb-3 border-b-[0.5px] border-subtle">
                 <IssueDefaultProperties
                   control={control}
                   id={data?.id}
@@ -451,7 +451,7 @@ export const BugIssueFormRoot: FC<BugIssueFormProps> = observer((props) => {
               </div>
               {showActionButtons && (
                 <div
-                  className="flex items-center justify-end gap-4 pb-3 pt-6 border-t-[0.5px] border-custom-border-200"
+                  className="flex items-center justify-end gap-4 pb-3 pt-6 border-t-[0.5px] border-subtle"
                   tabIndex={getIndex("create_more")}
                 >
                   <div className="flex items-center gap-2">

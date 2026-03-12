@@ -188,13 +188,13 @@ export const ModuleIssuesHeader = observer(function ModuleIssuesHeader() {
                 }
               />
             </Breadcrumbs>
-            <span className="h-4 w-px flex-shrink-0 bg-custom-border-300" />
+            <span className="h-4 w-px flex-shrink-0 bg-[var(--border-subtle-1)]" />
             {moduleId && (
               <div className="flex h-full items-center gap-0.5">
                 {moduleTabs.map((tab) => (
                   <div key={tab.key} className="relative flex h-full items-center transition-all duration-300">
                     {tab.isActive && (
-                      <span className="pointer-events-none absolute bottom-[-8px] left-1/2 z-20 h-0.5 w-[80%] -translate-x-1/2 rounded-t-md bg-black transition-all duration-300" />
+                      <span className="pointer-events-none absolute bottom-[-4px] left-1/2 z-20 h-0.5 w-[80%] -translate-x-1/2 rounded-t-md bg-black transition-all duration-300" />
                     )}
                     <button
                       type="button"
@@ -203,8 +203,8 @@ export const ModuleIssuesHeader = observer(function ModuleIssuesHeader() {
                     >
                       <div
                         className={cn(
-                          "relative flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium transition-colors z-10",
-                          tab.isActive ? "text-custom-text-100" : "text-custom-text-200 hover:text-custom-text-100"
+                          "relative flex items-center gap-2 rounded-md px-2 py-1.5 text-13 font-medium transition-colors z-10",
+                          tab.isActive ? "text-primary" : "text-primary hover:text-primary"
                         )}
                       >
                         {tab.isActive && <div className="absolute inset-0 -z-10 rounded-md bg-[#f6f6f6]" />}

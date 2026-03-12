@@ -64,7 +64,7 @@ export const TestManagementMenuBar = () => {
   const repositoryIdForLinks = repositoryIdFromStorage || repositoryIdFromUrl;
 
   return (
-    <div className="w-full border-b border-custom-border-200 bg-custom-background-100">
+    <div className="w-full border-b border-subtle bg-surface-1">
       <div className="flex items-center px-4 overflow-x-auto no-scrollbar">
         {MENU_ITEMS.map((item) => {
           const href = item.href(ws, pid);
@@ -78,16 +78,16 @@ export const TestManagementMenuBar = () => {
               key={item.key}
               href={finalHref}
               className={cn(
-                "px-4 text-sm font-medium transition-colors whitespace-nowrap",
+                "px-4 text-13 font-medium transition-colors whitespace-nowrap",
                 active
-                  ? "text-custom-text-100"
-                  : "text-custom-text-300 hover:text-custom-text-100"
+                  ? "text-primary"
+                  : "text-secondary hover:text-primary"
               )}
             >
               <span
                 className={cn(
                   "inline-block py-3 border-b-2",
-                  active ? "border-custom-text-100" : "border-transparent"
+                  active ? "border-black" : "border-transparent"
                 )}
               >
                 {item.label}

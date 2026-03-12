@@ -79,11 +79,11 @@ export default function TestManagementLayout() {
         {/* 左侧共享侧边栏（仅非“测试用例库”时展示） */}
         {/* {!isOverviewActive && (
           <aside
-            className="relative h-full flex-shrink-0 overflow-hidden bg-custom-background-90 border-r border-custom-border-200"
+            className="relative h-full flex-shrink-0 overflow-hidden bg-layer-1 border-r border-subtle"
             style={{ width: sidebarWidth }}
           >
             <TestManagementSidebar />
-            <div className="absolute top-0 right-0 h-full w-[1px] bg-custom-border-200 pointer-events-none" />
+            <div className="absolute top-0 right-0 h-full w-[1px] bg-[var(--border-subtle)] pointer-events-none" />
             <div
               className="absolute top-0 right-[-4px] h-full w-[8px] cursor-col-resize"
               onMouseDown={startDrag}
@@ -93,7 +93,7 @@ export default function TestManagementLayout() {
         )} */}
 
         {/* 右侧内容区域（子页面） */}
-        <main className="relative h-full w-full overflow-hidden bg-custom-background-100">
+        <main className="relative h-full w-full overflow-hidden bg-surface-1">
           <Outlet />
         </main>
       </div>

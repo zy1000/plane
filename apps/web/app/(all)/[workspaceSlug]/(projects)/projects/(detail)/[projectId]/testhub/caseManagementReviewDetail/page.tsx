@@ -215,13 +215,13 @@ export default function CaseManagementReviewDetailPage() {
     return (
       <div className="group flex items-center justify-between gap-2 w-full">
         <div className="flex items-center gap-2">
-          <span className="inline-flex items-center justify-center w-5 h-5 text-custom-text-300">
+          <span className="inline-flex items-center justify-center w-5 h-5 text-secondary">
             {icon}
           </span>
-          <span className={`text-sm text-custom-text-200 ${fontMedium ? "font-medium" : ""}`}>{title}</span>
+          <span className={`text-sm text-primary ${fontMedium ? "font-medium" : ""}`}>{title}</span>
         </div>
         <div className="flex items-center gap-2">
-          {typeof count === "number" && <span className="text-xs text-custom-text-300">{count}</span>}
+          {typeof count === "number" && <span className="text-xs text-secondary">{count}</span>}
         </div>
       </div>
     );
@@ -326,7 +326,7 @@ export default function CaseManagementReviewDetailPage() {
         <Button
           type="link"
           size="small"
-          className="p-0 h-auto !text-custom-text-200 hover:!text-custom-text-100"
+          className="p-0 h-auto !text-primary hover:!text-primary"
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -351,7 +351,7 @@ export default function CaseManagementReviewDetailPage() {
         <Button
           type="link"
           size="small"
-          className="p-0 h-auto !text-custom-text-200 hover:!text-custom-text-100"
+          className="p-0 h-auto !text-primary hover:!text-primary"
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -498,9 +498,9 @@ export default function CaseManagementReviewDetailPage() {
     <>
       <div className="flex flex-col pt-4 px-4 pb-0 w-full h-full overflow-hidden">
         <PageHead title="评审详情" />
-        <div className="w-full flex-1 min-h-0 flex rounded-md border border-custom-border-200 overflow-hidden">
+        <div className="w-full flex-1 min-h-0 flex rounded-md border border-subtle overflow-hidden">
           <div
-            className="relative h-full min-h-0 border-r border-custom-border-200 overflow-y-auto flex-shrink-0"
+            className="relative h-full min-h-0 border-r border-subtle overflow-y-auto flex-shrink-0 pt-4 pl-4"
             style={{ width: leftWidth, minWidth: 200, maxWidth: 320 }}
           >
             <div
@@ -532,7 +532,7 @@ export default function CaseManagementReviewDetailPage() {
               showLine={false}
               defaultExpandAll
               switcherIcon={(nodeProps) => (
-                <span className="inline-flex items-center justify-center w-5 h-5 text-custom-text-300">
+                <span className="inline-flex items-center justify-center w-5 h-5 text-secondary">
                   <ChevronDownIcon
                     className={`size-4 transition-transform ${nodeProps.expanded ? "rotate-0" : "-rotate-90"}`}
                     strokeWidth={2.5}
@@ -570,7 +570,7 @@ export default function CaseManagementReviewDetailPage() {
                             loading={reviewListLoading}
                             showSearch
                             optionFilterProp="label"
-                            className="min-w-[200px] h-full !cursor-pointer [&_.ant-select-selector]:!p-0 [&_.ant-select-selector]:!h-full [&_.ant-select-selector]:!min-h-full [&_.ant-select-selector]:!items-center [&_.ant-select-selector]:!cursor-pointer [&_.ant-select-selection-wrap]:!h-full [&_.ant-select-selection-wrap]:!items-center [&_.ant-select-selection-wrap]:!flex [&_.ant-select-selection-search]:!h-full [&_.ant-select-selection-search-input]:!h-full [&_.ant-select-selection-item]:!leading-4 [&_.ant-select-selection-item]:!text-sm [&_.ant-select-selection-item]:!text-custom-text-200 [&_.ant-select-selection-placeholder]:!leading-4 [&_.ant-select-selection-placeholder]:!text-sm [&_.ant-select-selection-placeholder]:!text-custom-text-300"
+                            className="min-w-[200px] h-full !cursor-pointer [&_.ant-select-selector]:!p-0 [&_.ant-select-selector]:!h-full [&_.ant-select-selector]:!min-h-full [&_.ant-select-selector]:!items-center [&_.ant-select-selector]:!cursor-pointer [&_.ant-select-selection-wrap]:!h-full [&_.ant-select-selection-wrap]:!items-center [&_.ant-select-selection-wrap]:!flex [&_.ant-select-selection-search]:!h-full [&_.ant-select-selection-search-input]:!h-full [&_.ant-select-selection-item]:!leading-4 [&_.ant-select-selection-item]:!text-sm [&_.ant-select-selection-item]:!text-primary [&_.ant-select-selection-placeholder]:!leading-4 [&_.ant-select-selection-placeholder]:!text-sm [&_.ant-select-selection-placeholder]:!text-secondary"
                             variant="borderless"
                             suffixIcon={null}
                             showArrow={false}
@@ -588,7 +588,7 @@ export default function CaseManagementReviewDetailPage() {
                     onClick={() => {
                       setIsCaseSelectionOpen(true);
                     }}
-                    className="text-white bg-custom-primary-100 hover:bg-custom-primary-200 focus:text-custom-brand-40 focus:bg-custom-primary-200 px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center"
+                    className="text-on-color bg-accent-primary hover:bg-accent-primary-hover focus:text-on-color focus:bg-accent-primary-hover px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center"
                   >
                     关联用例
                   </button>
@@ -597,7 +597,7 @@ export default function CaseManagementReviewDetailPage() {
               <div className="flex-1 min-h-0 overflow-hidden pt-0 px-4 pb-4 min-w-0">
                 {loading && (
                   <div className="flex items-center justify-center py-12">
-                    <div className="text-custom-text-300">加载中...</div>
+                    <div className="text-secondary">加载中...</div>
                   </div>
                 )}
                 {error && (
@@ -607,7 +607,7 @@ export default function CaseManagementReviewDetailPage() {
                 )}
                 {!loading && !error && (
                   <div className="flex flex-col h-full overflow-hidden min-w-0">
-                    <div className="testhub-review-detail-table-scroll flex-1 relative overflow-y-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar]:block [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-[rgb(var(--color-scrollbar))] [&::-webkit-scrollbar-thumb]:rounded-full">
+                    <div className="testhub-review-detail-table-scroll flex-1 relative overflow-y-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar]:block [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-[var(--scrollbar-thumb)] [&::-webkit-scrollbar-thumb]:rounded-full">
                       <Table
                         dataSource={reviewCases}
                         columns={columns as any}
@@ -647,11 +647,11 @@ export default function CaseManagementReviewDetailPage() {
                         }}
                       />
                     </div>
-                    <div className="flex-shrink-0 border-t border-custom-border-200 px-4 py-3 bg-custom-background-100 flex items-center justify-between">
+                    <div className="flex-shrink-0 border-t border-subtle px-4 py-3 bg-surface-1 flex items-center justify-between">
                       <div className="flex items-center gap-4 text-sm">
                         {selectedCaseIds.length > 0 && (
                           <div className="flex items-center gap-2">
-                            <span className="text-custom-text-300">已选择 {selectedCaseIds.length} 条</span>
+                            <span className="text-secondary">已选择 {selectedCaseIds.length} 条</span>
                             <span
                               className="cursor-pointer text-sm transition-colors"
                               style={{ color: "#2a83ff" }}
@@ -721,7 +721,7 @@ export default function CaseManagementReviewDetailPage() {
                             </Popconfirm>
                           </div>
                         )}
-                        <span className="text-custom-text-300">
+                        <span className="text-secondary">
                           {total > 0
                             ? `第 ${(currentPage - 1) * pageSize + 1}-${Math.min(currentPage * pageSize, total)} 条，共 ${total} 条`
                             : ""}
@@ -752,7 +752,7 @@ export default function CaseManagementReviewDetailPage() {
                       }
 
                       .testhub-review-detail-table-scroll ::-webkit-scrollbar-thumb {
-                        background-color: rgba(var(--color-scrollbar), 0.85);
+                        background-color: color-mix(in oklch, var(--scrollbar-thumb) 85%, transparent);
                         border-radius: 999px;
                         border: 3px solid transparent;
                         background-clip: content-box;

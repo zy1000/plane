@@ -182,7 +182,6 @@ export const IssuesHeader = observer(function IssuesHeader() {
           <>
             <Button
               variant="primary"
-              size="sm"
               onClick={() => {
                 toggleCreateIssueModal(true, EIssuesStoreType.PROJECT);
               }}
@@ -191,7 +190,7 @@ export const IssuesHeader = observer(function IssuesHeader() {
               <div className="block sm:hidden">{t("issue.label", { count: 1 })}</div>
               <div className="hidden sm:block">{t("issue.add.label")}</div>
             </Button>
-            <Button onClick={() => fileInputRef.current?.click()} size="sm" variant="outline-primary">
+            <Button onClick={() => fileInputRef.current?.click()}  variant="secondary">
               导入
             </Button>
             <input

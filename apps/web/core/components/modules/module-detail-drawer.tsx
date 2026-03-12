@@ -38,8 +38,8 @@ export const ModuleDetailDrawer: React.FC<Props> = observer((props) => {
       open={isOpen}
       width="70vw"
       styles={{
-        body: { padding: 0, backgroundColor: "var(--color-background-100)" },
-        header: { backgroundColor: "var(--color-background-100)", borderBottom: "1px solid var(--color-border-200)" },
+        body: { padding: 0, backgroundColor: "var(--background-color-surface-1)" },
+        header: { backgroundColor: "var(--background-color-surface-1)", borderBottom: "1px solid var(--border-color-subtle)" },
       }}
     >
       <div className="h-full overflow-y-auto px-6 py-4">

@@ -21,7 +21,7 @@ import type { ICycle } from "@plane/types";
 import { EIssuesStoreType } from "@plane/types";
 // ui
 import { Loader, Avatar, Button } from "@plane/ui";
-import { cn, renderFormattedDate, renderFormattedDateWithoutYear, getFileURL } from "@plane/utils";
+import { cn, getDate, renderFormattedDate, renderFormattedDateWithoutYear, getFileURL } from "@plane/utils";
 // assets
 import darkAssigneeAsset from "@/app/assets/empty-state/active-cycle/assignee-dark.webp?url";
 import lightAssigneeAsset from "@/app/assets/empty-state/active-cycle/assignee-light.webp?url";
@@ -255,7 +255,7 @@ export const ActiveCycleStats = observer(function ActiveCycleStats(props: Active
                 display: "inline-block",
               }}
             />
-            <span style={{ fontSize: "12px", color: "var(--color-text, #333)" }}>{k}</span>
+            <span style={{ fontSize: "12px", color: "var(--text-color-primary)" }}>{k}</span>
             <span style={{ marginLeft: "auto", fontSize: "12px", color: "#8c8c8c" }}>{Number(passRate?.[k] || 0)}</span>
           </div>
         ))}
@@ -284,7 +284,7 @@ export const ActiveCycleStats = observer(function ActiveCycleStats(props: Active
               ))}
             </div>
           </div>
-          <span style={{ fontSize: "11px", color: "var(--color-text, #333)", minWidth: "25px" }}>{percent}%</span>
+          <span style={{ fontSize: "11px", color: "var(--text-color-primary)", minWidth: "25px" }}>{percent}%</span>
         </div>
       </Tooltip>
     );
@@ -495,10 +495,10 @@ export const ActiveCycleStats = observer(function ActiveCycleStats(props: Active
 
           <Tab.Panel
             as="div"
-            className="flex h-52 w-full flex-col text-custom-text-200"
+            className="flex h-52 w-full flex-col text-primary"
           >
             <div className="flex items-center justify-between px-2 py-1">
-              <div className="text-xs font-medium text-custom-text-300">文件</div>
+              <div className="text-xs font-medium text-secondary">文件</div>
               <div className="flex">
                 <Button
                   variant="link-neutral"
@@ -513,7 +513,7 @@ export const ActiveCycleStats = observer(function ActiveCycleStats(props: Active
               </div>
             </div>
             {cycleFilesLoading ? (
-              <div className="flex items-center justify-center py-8 text-sm text-custom-text-300">加载中...</div>
+              <div className="flex items-center justify-center py-8 text-sm text-secondary">加载中...</div>
             ) : cycleFilesError ? (
               <div className="bg-red-50 border border-red-200 rounded-md p-3 text-sm text-red-800">{cycleFilesError}</div>
             ) : (
@@ -522,31 +522,31 @@ export const ActiveCycleStats = observer(function ActiveCycleStats(props: Active
                   <div className="overflow-x-auto">
                     <table className="min-w-full table-fixed">
                       <thead>
-                        <tr className="text-left text-xs text-custom-text-300 border-b">
+                        <tr className="text-left text-xs text-secondary border-b border-subtle">
                           <th className="w-2/5 px-2 py-2">文件名</th>
                           <th className="w-1/5 px-2 py-2">大小</th>
-                          <th className="w-1/5 px-2 py-2">上传时间</th>
-                          <th className="w-1/5 px-2 py-2 text-right">操作</th>
+                          <th className="w-2/5 px-2 py-2">上传时间</th>
+                          <th className="w-1/5 px-2 py-2 text-left">操作</th>
                         </tr>
                       </thead>
                       <tbody>
                         {cycleFiles.length === 0 && (
                           <tr>
-                            <td className="px-2 py-6 text-sm text-custom-text-300" colSpan={4}>
+                            <td className="px-2 py-6 text-sm text-secondary" colSpan={4}>
                               暂无文件
                             </td>
                           </tr>
                         )}
                         {cycleFiles.map((file) => (
-                          <tr key={file.id} className="border-b hover:bg-custom-background-90">
-                            <td className="px-2 py-2 truncate text-sm text-gray-800" title={file.name}>
+                          <tr key={file.id} className="border-b border-subtle hover:bg-layer-1-hover">
+                            <td className="px-2 py-2 truncate text-sm text-primary" title={file.name}>
                               {file.name}
                             </td>
-                            <td className="px-2 py-2 text-sm text-custom-text-200">
+                            <td className="px-2 py-2 text-sm text-primary">
                               {formatFileSize(Number(file.size ?? 0))}
                             </td>
-                            <td className="px-2 py-2 text-sm text-custom-text-200">
-                              {renderFormattedDateWithoutYear(file.created_at)}
+                            <td className="px-2 py-2 text-sm text-primary">
+                              {file.created_at ? renderFormattedDate(getDate(file.created_at), "yyyy-MM-dd") ?? "-" : "-"}
                             </td>
                             <td className="px-2 py-2">
                               <div className="flex items-center justify-end gap-2">
@@ -565,8 +565,8 @@ export const ActiveCycleStats = observer(function ActiveCycleStats(props: Active
                                   onConfirm={() => void handleDeleteCycleFile(file.id)}
                                 >
                                   <Button
-                                    variant="link-neutral"
-                                    className="p-0 text-red-500 hover:text-red-600"
+                                    variant="link-danger"
+                                    className="p-0"
                                     disabled={cycleFilesDeletingId === file.id}
                                     loading={cycleFilesDeletingId === file.id}
                                   >
@@ -581,8 +581,8 @@ export const ActiveCycleStats = observer(function ActiveCycleStats(props: Active
                     </table>
                   </div>
                 </div>
-                <div className="flex-shrink-0 border-t border-custom-border-200 px-2 py-2 bg-custom-background-100 flex items-center justify-between mt-2">
-                  <div className="text-sm text-custom-text-300">{cycleFilesTotal > 0 ? `共 ${cycleFilesTotal} 条` : ""}</div>
+                <div className="flex-shrink-0 border-t border-subtle px-2 py-2 bg-surface-1 flex items-center justify-between mt-2">
+                  <div className="text-sm text-secondary">{cycleFilesTotal > 0 ? `共 ${cycleFilesTotal} 条` : ""}</div>
                   <Pagination
                     simple
                     current={cycleFilesPage}

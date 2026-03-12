@@ -23,7 +23,7 @@ import { useProject } from "@/hooks/store/use-project";
 import { useProjectFilter } from "@/hooks/store/use-project-filter";
 import { useUserPermissions } from "@/hooks/store/user";
 import { PublishProjectModal } from "@/components/project/publish-project/modal";
-import { ArchiveRestoreProjectModal } from "@/components/project/settings/archive-project/archive-restore-modal";
+import { ArchiveRestoreProjectModal } from "@/components/project/archive-restore-modal";
 import type { TProject } from "@plane/types";
 
 type Props = {
@@ -244,9 +244,9 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
 
   const renderSortIcon = useCallback(
     (key: TSortKey) => {
-      if (sortKey !== key) return <ArrowUpDown className="h-3 w-3 text-custom-text-400" />;
-      if (sortDirection === "asc") return <ArrowUp className="h-3 w-3 text-custom-text-200" />;
-      return <ArrowDown className="h-3 w-3 text-custom-text-200" />;
+      if (sortKey !== key) return <ArrowUpDown className="h-3 w-3 text-placeholder" />;
+      if (sortDirection === "asc") return <ArrowUp className="h-3 w-3 text-primary" />;
+      return <ArrowDown className="h-3 w-3 text-primary" />;
     },
     [sortDirection, sortKey]
   );
@@ -316,52 +316,52 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
         />
       )}
       <ContentWrapper variant={ERowVariant.HUGGING} className="overflow-hidden">
-        <div className="w-full h-full rounded border border-custom-border-200 bg-custom-background-100 m-0 flex flex-col overflow-hidden">
+        <div className="w-full h-full rounded border border-subtle bg-surface-1 m-0 flex flex-col overflow-hidden">
           <div className="flex-1 min-h-0 overflow-auto vertical-scrollbar scrollbar-lg">
             <table className="min-w-[980px] w-full text-sm">
-              <thead className="border-b border-custom-border-200 bg-custom-background-100">
+              <thead className="border-b border-subtle bg-surface-1">
                 <tr>
-                  <th className="px-4 py-3 text-left font-medium text-custom-text-300">
+                  <th className="px-4 py-3 text-left font-medium text-secondary">
                     <button
                       type="button"
-                      className="flex items-center gap-1 transition-colors hover:text-custom-text-200"
+                      className="flex items-center gap-1 transition-colors hover:text-primary"
                       onClick={() => handleSort("name")}
                     >
                       项目名称
                       {renderSortIcon("name")}
                     </button>
                   </th>
-                  <th className="px-4 py-3 text-left font-medium text-custom-text-300 hidden sm:table-cell">负责人</th>
-                  <th className="px-4 py-3 text-left font-medium text-custom-text-300 hidden md:table-cell">
+                  <th className="px-4 py-3 text-left font-medium text-secondary hidden sm:table-cell">负责人</th>
+                  <th className="px-4 py-3 text-left font-medium text-secondary hidden md:table-cell">
                     <button
                       type="button"
-                      className="flex items-center gap-1 transition-colors hover:text-custom-text-200"
+                      className="flex items-center gap-1 transition-colors hover:text-primary"
                       onClick={() => handleSort("status")}
                     >
                       状态
                       {renderSortIcon("status")}
                     </button>
                   </th>
-                  <th className="px-4 py-3 text-left font-medium text-custom-text-300 hidden md:table-cell">
+                  <th className="px-4 py-3 text-left font-medium text-secondary hidden md:table-cell">
                     进度
                   </th>
-                  <th className="px-4 py-3 text-left font-medium text-custom-text-300 hidden md:table-cell">
+                  <th className="px-4 py-3 text-left font-medium text-secondary hidden md:table-cell">
                     缺陷数量
                   </th>
-                  <th className="px-4 py-3 text-left font-medium text-custom-text-300 hidden md:table-cell">
+                  <th className="px-4 py-3 text-left font-medium text-secondary hidden md:table-cell">
                     迭代数量
                   </th>
-                  <th className="px-4 py-3 text-left font-medium text-custom-text-300 hidden lg:table-cell">
+                  <th className="px-4 py-3 text-left font-medium text-secondary hidden lg:table-cell">
                     <button
                       type="button"
-                      className="flex items-center gap-1 transition-colors hover:text-custom-text-200"
+                      className="flex items-center gap-1 transition-colors hover:text-primary"
                       onClick={() => handleSort("created_at")}
                     >
                       创建时间
                       {renderSortIcon("created_at")}
                     </button>
                   </th>
-                  <th className="px-4 py-3 text-left font-medium text-custom-text-300">操作</th>
+                  <th className="px-4 py-3 text-left font-medium text-secondary">操作</th>
                 </tr>
               </thead>
               <tbody>
@@ -394,15 +394,15 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
                   return (
                     <tr
                       key={project.id}
-                      className={cn("border-b border-custom-border-200 last:border-b-0 hover:bg-custom-background-80", {
-                        "bg-custom-background-90": isArchived,
+                      className={cn("border-b border-subtle last:border-b-0 hover:bg-layer-1-hover", {
+                        "bg-layer-1": isArchived,
                         "opacity-70": isArchived,
                       })}
                     >
                   <td className="px-4 py-3">
                     <Link
                       href={workspaceSlugString ? `/${workspaceSlugString}/projects/${project.id}/overview` : "#"}
-                      className="flex items-center gap-2 text-custom-text-100"
+                      className="flex items-center gap-2 text-primary"
                       data-prevent-progress={isArchived}
                       onClick={(e) => {
                         if (isArchived) {
@@ -416,7 +416,7 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
                           <Logo logo={project.logo_props} size={14} />
                         </div>
                         <div className="flex min-w-0 flex-grow items-center gap-2">
-                          <p className="min-w-0 truncate text-sm font-medium text-custom-text-200">{project.name}</p>
+                          <p className="min-w-0 truncate text-sm font-medium text-primary">{project.name}</p>
                         </div>
                       </div>
                     </Link>
@@ -433,8 +433,8 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
                         buttonContainerClassName="w-full text-left p-0"
                         buttonVariant="transparent-with-text"
                         buttonClassName={cn("text-xs p-0 hover:bg-transparent hover:bg-inherit", {
-                          "text-custom-text-200": !isArchived,
-                          "text-custom-text-400": isArchived,
+                          "text-primary": !isArchived,
+                          "text-placeholder": isArchived,
                         })}
                         showUserDetails={true}
                         hideIcon={!projectLeadId}
@@ -451,22 +451,22 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
                         />
                         <span
                           className={cn("truncate text-xs", {
-                            "text-custom-text-200": !isArchived,
-                            "text-custom-text-400": isArchived,
+                            "text-primary": !isArchived,
+                            "text-placeholder": isArchived,
                           })}
                         >
                           {projectLead.display_name ?? projectLead.email ?? "-"}
                         </span>
                       </div>
                     ) : (
-                      <span className="text-custom-text-300">-</span>
+                      <span className="text-secondary">-</span>
                     )}
                   </td>
                   <td className="px-4 py-3 pl-1 hidden md:table-cell">
                     <span
                       className={cn("inline-flex items-center rounded px-2 py-1 text-xs font-medium", {
-                        "text-custom-text-200": !isArchived,
-                        "text-custom-text-400": isArchived,
+                        "text-primary": !isArchived,
+                        "text-placeholder": isArchived,
                       })}
                     >
                       {isArchived ? "已归档" : "进行中"}
@@ -478,56 +478,56 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
                         tooltipContent={
                           <div className="flex flex-col gap-1 text-xs">
                             <div className="flex items-center justify-between gap-6">
-                              <span className="text-custom-text-200">Backlog</span>
-                              <span className="text-custom-text-300 tabular-nums">{backlogCount}</span>
+                              <span className="text-primary">Backlog</span>
+                              <span className="text-secondary tabular-nums">{backlogCount}</span>
                             </div>
                             <div className="flex items-center justify-between gap-6">
-                              <span className="text-custom-text-200">Unstarted</span>
-                              <span className="text-custom-text-300 tabular-nums">{unstartedCount}</span>
+                              <span className="text-primary">Unstarted</span>
+                              <span className="text-secondary tabular-nums">{unstartedCount}</span>
                             </div>
                             <div className="flex items-center justify-between gap-6">
-                              <span className="text-custom-text-200">Started</span>
-                              <span className="text-custom-text-300 tabular-nums">{startedCount}</span>
+                              <span className="text-primary">Started</span>
+                              <span className="text-secondary tabular-nums">{startedCount}</span>
                             </div>
                             <div className="flex items-center justify-between gap-6">
-                              <span className="text-custom-text-200">Completed</span>
-                              <span className="text-custom-text-300 tabular-nums">{completedWorkItems}</span>
+                              <span className="text-primary">Completed</span>
+                              <span className="text-secondary tabular-nums">{completedWorkItems}</span>
                             </div>
                             <div className="flex items-center justify-between gap-6">
-                              <span className="text-custom-text-200">Cancelled</span>
-                              <span className="text-custom-text-300 tabular-nums">{cancelledCount}</span>
+                              <span className="text-primary">Cancelled</span>
+                              <span className="text-secondary tabular-nums">{cancelledCount}</span>
                             </div>
-                            <div className="h-px w-full bg-custom-border-200 my-1" />
+                            <div className="h-px w-full bg-[var(--border-subtle)] my-1" />
                             <div className="flex items-center justify-between gap-6">
-                              <span className="text-custom-text-200">Total</span>
-                              <span className="text-custom-text-300 tabular-nums">{totalWorkItems}</span>
+                              <span className="text-primary">Total</span>
+                              <span className="text-secondary tabular-nums">{totalWorkItems}</span>
                             </div>
                           </div>
                         }
                         position="top"
                       >
-                        <span className="text-xs text-custom-text-300 tabular-nums">
+                        <span className="text-xs text-secondary tabular-nums">
                           {completionPercentage}%
                         </span>
                       </Tooltip>
                     ) : (
-                      <span className="text-custom-text-300">-</span>
+                      <span className="text-secondary">-</span>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-custom-text-300 hidden md:table-cell tabular-nums">
+                  <td className="px-4 py-3 text-secondary hidden md:table-cell tabular-nums">
                     {project.bug_count ?? "-"}
                   </td>
-                  <td className="px-4 py-3 text-custom-text-300 hidden md:table-cell tabular-nums">
+                  <td className="px-4 py-3 text-secondary hidden md:table-cell tabular-nums">
                     {project.cycle_count ?? "-"}
                   </td>
-                  <td className="px-4 py-3 text-custom-text-300 hidden lg:table-cell">
+                  <td className="px-4 py-3 text-secondary hidden lg:table-cell">
                     {project.created_at ? renderFormattedDate(project.created_at) : "-"}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-start gap-2">
                       <Tooltip
                         tooltipContent={
-                          <div className="text-xs text-custom-text-200">{isArchived ? "已归档不可复制链接" : "复制链接"}</div>
+                          <div className="text-xs text-primary">{isArchived ? "已归档不可复制链接" : "复制链接"}</div>
                         }
                         position="top"
                       >
@@ -535,10 +535,10 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
                           type="button"
                           disabled={isArchived}
                           className={cn(
-                            "grid h-6 w-6 place-items-center rounded text-custom-text-300 transition-colors",
+                            "grid h-6 w-6 place-items-center rounded text-secondary transition-colors",
                             isArchived
                               ? "cursor-not-allowed opacity-50"
-                              : "hover:text-custom-text-200 hover:bg-custom-background-80"
+                              : "hover:text-primary hover:bg-layer-1-hover"
                           )}
                           aria-label="复制链接"
                           onClick={(e) => handleCopyProjectLink(e, project.id)}
@@ -548,7 +548,7 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
                       </Tooltip>
                       <Tooltip
                         tooltipContent={
-                          <div className="text-xs text-custom-text-200">{isArchived ? "已归档不可收藏" : "收藏"}</div>
+                          <div className="text-xs text-primary">{isArchived ? "已归档不可收藏" : "收藏"}</div>
                         }
                         position="top"
                       >
@@ -556,10 +556,10 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
                           type="button"
                           disabled={isArchived}
                           className={cn(
-                            "grid h-6 w-6 place-items-center rounded text-custom-text-300 transition-colors",
+                            "grid h-6 w-6 place-items-center rounded text-secondary transition-colors",
                             isArchived
                               ? "cursor-not-allowed opacity-50"
-                              : "hover:text-custom-text-200 hover:bg-custom-background-80"
+                              : "hover:text-primary hover:bg-layer-1-hover"
                           )}
                           aria-label="收藏"
                           onClick={(e) => handleToggleProjectFavorite(e, project.id)}
@@ -569,7 +569,7 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
                       </Tooltip>
                       <Tooltip
                         tooltipContent={
-                          <div className="text-xs text-custom-text-200">
+                          <div className="text-xs text-primary">
                             {isArchived ? "已归档不可发布" : canManageProject ? "发布项目" : "无权限发布"}
                           </div>
                         }
@@ -579,10 +579,10 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
                           type="button"
                           disabled={isArchived || !canManageProject}
                           className={cn(
-                            "grid h-6 w-6 place-items-center rounded text-custom-text-300 transition-colors",
+                            "grid h-6 w-6 place-items-center rounded text-secondary transition-colors",
                             isArchived || !canManageProject
                               ? "cursor-not-allowed opacity-50"
-                              : "hover:text-custom-text-200 hover:bg-custom-background-80"
+                              : "hover:text-primary hover:bg-layer-1-hover"
                           )}
                           aria-label="发布项目"
                           onClick={(e) => handleOpenPublishModal(e, project.id)}
@@ -592,7 +592,7 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
                       </Tooltip>
                       <Tooltip
                         tooltipContent={
-                          <div className="text-xs text-custom-text-200">
+                          <div className="text-xs text-primary">
                             {isArchived ? "已归档" : canManageProject ? "归档" : "无权限归档"}
                           </div>
                         }
@@ -602,10 +602,10 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
                           type="button"
                           disabled={isArchived || !canManageProject}
                           className={cn(
-                            "grid h-6 w-6 place-items-center rounded text-custom-text-300 transition-colors",
+                            "grid h-6 w-6 place-items-center rounded text-secondary transition-colors",
                             isArchived || !canManageProject
                               ? "cursor-not-allowed opacity-50"
-                              : "hover:text-custom-text-200 hover:bg-custom-background-80"
+                              : "hover:text-primary hover:bg-layer-1-hover"
                           )}
                           aria-label="归档项目"
                           onClick={(e) => handleOpenArchiveModal(e, project.id)}
@@ -613,9 +613,9 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
                           <Archive className="h-3 w-3" />
                         </button>
                       </Tooltip>
-                      <Tooltip tooltipContent={<div className="text-xs text-custom-text-200">设置</div>} position="top">
+                      <Tooltip tooltipContent={<div className="text-xs text-primary">设置</div>} position="top">
                         <Link
-                          className="flex items-center justify-center rounded p-1 text-custom-text-400 hover:bg-custom-background-80 hover:text-custom-text-200"
+                          className="flex items-center justify-center rounded p-1 text-placeholder hover:bg-layer-1-hover hover:text-primary"
                           onClick={(e) => {
                             e.stopPropagation();
                           }}
@@ -632,9 +632,9 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
             </tbody>
           </table>
         </div>
-        <div className="flex-shrink-0 border-t border-custom-border-200 px-4 py-3 bg-custom-background-100 flex items-center justify-between">
+        <div className="flex-shrink-0 border-t border-subtle px-4 py-3 bg-surface-1 flex items-center justify-between">
           <div className="flex items-center gap-4 text-sm">
-            <span className="text-custom-text-300">
+            <span className="text-secondary">
               {total > 0 ? `第 ${startIndex + 1}-${endIndex} 条，共 ${total} 条` : ""}
             </span>
           </div>

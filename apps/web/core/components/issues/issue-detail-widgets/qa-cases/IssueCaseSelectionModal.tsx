@@ -10,7 +10,7 @@ import styles from "../../../qa/review/TestCaseSelectionModal.module.css";
 import {
   globalEnums,
   getEnums,
-} from "app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/util";
+} from "@/app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/util";
 
 type TModuleNode = { id: string; name: string; children?: TModuleNode[]; total?: number };
 type TTestCase = {
@@ -60,7 +60,7 @@ const renderEnumTag = (
   color: "default" | "processing" | "success" | "warning" | "magenta" = "default"
 ) => {
   const label = getEnumLabel(group, value);
-  if (label === "-" || label === undefined) return <span className="text-custom-text-400">-</span>;
+  if (label === "-" || label === undefined) return <span className="text-placeholder">-</span>;
   return <Tag color={color}>{label}</Tag>;
 };
 
@@ -377,12 +377,12 @@ export default function IssueCaseSelectionModal({ open, workspaceSlug, issueId, 
 
   const treeData = [
     {
-      title: <span className="text-sm text-custom-text-200">全部模块</span>,
+      title: <span className="text-sm text-primary">全部模块</span>,
       key: "all",
       children: (modules || []).map((m) => ({
         title: (
           <div className="flex items-center justify-between gap-2 w-full">
-            <span className="text-sm text-custom-text-200">{m.name}</span>
+            <span className="text-sm text-primary">{m.name}</span>
           </div>
         ),
         key: m.id,
@@ -517,10 +517,10 @@ export default function IssueCaseSelectionModal({ open, workspaceSlug, issueId, 
               } catch {}
             }}
           >
-            <div className="absolute inset-0 rounded group-hover:bg-custom-background-80" />
+            <div className="absolute inset-0 rounded group-hover:bg-layer-1-hover" />
             <div
               className="absolute inset-y-0 left-1/2 -translate-x-1/2"
-              style={{ width: 1, background: "var(--color-border, #e5e7eb)" }}
+              style={{ width: 1, background: "var(--border-color-subtle)" }}
             />
           </div>
           <div className={styles.rightPane}>

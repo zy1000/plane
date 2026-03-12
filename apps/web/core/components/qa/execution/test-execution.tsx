@@ -13,7 +13,7 @@ import * as LucideIcons from "lucide-react";
 import debounce from "lodash-es/debounce";
 import { CaseService as CaseApiService } from "@/services/qa/case.service";
 import { PlanService as PlanApiService } from "@/services/qa/plan.service";
-import { getEnums } from "app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/util";
+import { getEnums } from "@/app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/util";
 import { RichTextEditor } from "../cases/util";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { ChevronDownIcon } from "@plane/propel/icons";
@@ -382,11 +382,11 @@ export default function TestExecutionPage() {
   const renderNodeTitle = (title: string, icon: React.ReactNode, count?: number, fontMedium?: boolean) => (
     <div className="group flex items-center justify-between gap-2 w-full">
       <div className="flex items-center gap-2">
-        <span className="inline-flex items-center justify-center w-5 h-5 text-custom-text-300">{icon}</span>
-        <span className={`text-sm text-custom-text-200 ${fontMedium ? "font-medium" : ""}`}>{title}</span>
+        <span className="inline-flex items-center justify-center w-5 h-5 text-secondary">{icon}</span>
+        <span className={`text-sm text-primary ${fontMedium ? "font-medium" : ""}`}>{title}</span>
       </div>
       <div className="flex items-center gap-2">
-        {typeof count === "number" && <span className="text-xs text-custom-text-300">{count}</span>}
+        {typeof count === "number" && <span className="text-xs text-secondary">{count}</span>}
       </div>
     </div>
   );
@@ -712,10 +712,10 @@ export default function TestExecutionPage() {
     onChangeExec: (idx: number, val: string) => void;
   }> = ({ steps, actualMap, execMap, onChangeActual, onChangeExec }) => {
     if (!Array.isArray(steps) || steps.length === 0) {
-      return <span className="text-custom-text-300">暂无内容</span>;
+      return <span className="text-secondary">暂无内容</span>;
     }
-    const headerStyle = { backgroundColor: "#f5f5f5", padding: 12, border: "1px solid #e8e8e8" } as const;
-    const cellStyle = { padding: 12, border: "1px solid #e8e8e8" } as const;
+    const headerStyle = { backgroundColor: "var(--bg-layer-1)", padding: 12, border: "1px solid var(--border-subtle)" } as const;
+    const cellStyle = { padding: 12, border: "1px solid var(--border-subtle)" } as const;
     const resultOptions = React.useMemo(() => {
       const map = enumsData?.plan_case_result || {};
       const options = Object.keys(map).map((key) => ({
@@ -795,7 +795,7 @@ export default function TestExecutionPage() {
           key: "result",
           width: "30%",
           render: (text: any) => (
-            <span className="whitespace-pre-wrap break-words text-custom-text-300 text-sm leading-5 font-medium">
+            <span className="whitespace-pre-wrap break-words text-secondary text-sm leading-5 font-medium">
               {String(text || "")}
             </span>
           ),
@@ -839,7 +839,7 @@ export default function TestExecutionPage() {
       [resultOptions, onChangeActual, onChangeExec]
     );
     return (
-      <div className="rounded border border-custom-border-200">
+      <div className="rounded border border-subtle">
         <Table
           size="small"
           pagination={false}
@@ -890,9 +890,9 @@ export default function TestExecutionPage() {
       </Breadcrumbs>
 
       <Transition show={mounted} enter="transition-opacity duration-200" enterFrom="opacity-0" enterTo="opacity-100">
-        <Row className="w-full rounded-md border border-custom-border-200 overflow-hidden" gutter={0} wrap={false}>
+        <Row className="w-full rounded-md border border-subtle overflow-hidden" gutter={0} wrap={false}>
           <Col
-            className="relative border-r border-custom-border-200 max-h-[calc(100dvh-130px)] flex flex-col group/left-col"
+            className="relative border-r border-subtle max-h-[calc(100dvh-130px)] flex flex-col group/left-col"
             flex="0 0 auto"
             style={{ width: leftWidth, minWidth: 200, maxWidth: 600, maxHeight: `calc(100dvh - ${topOffset}px)` }}
           >
@@ -919,12 +919,12 @@ export default function TestExecutionPage() {
               `,
               }}
             />
-            <div className="flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm">
+            <div className="flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm pt-2 pl-1">
               <Tree
                 showLine={false}
                 defaultExpandAll
                 switcherIcon={(nodeProps) => (
-                  <span className="inline-flex items-center justify-center w-5 h-5 text-custom-text-300">
+                  <span className="inline-flex items-center justify-center w-5 h-5 text-secondary">
                     <ChevronDownIcon
                       className={`size-4 transition-transform ${nodeProps.expanded ? "rotate-0" : "-rotate-90"}`}
                       strokeWidth={2.5}
@@ -937,7 +937,7 @@ export default function TestExecutionPage() {
                 autoExpandParent={autoExpandParent}
                 treeData={treeData}
                 selectedKeys={treeData.length > 0 ? [selectedTreeKey] : []}
-                className="py-2 pl-2 custom-tree-indent"
+                className="pb-2 pl-2 custom-tree-indent"
               />
             </div>
             {/* Resize Handle */}
@@ -949,7 +949,7 @@ export default function TestExecutionPage() {
 
           <Col
             flex="0 0 auto"
-            className="border-r border-custom-border-200 max-h-[calc(100dvh-130px)] overflow-hidden"
+            className="border-r border-subtle max-h-[calc(100dvh-130px)] overflow-hidden"
             style={{ width: 360, minWidth: 280, maxWidth: 520, maxHeight: `calc(100dvh - ${topOffset}px)` }}
           >
             <div className="p-4 flex flex-col gap-3">
@@ -988,7 +988,7 @@ export default function TestExecutionPage() {
                     style={{ scrollbarGutter: "stable" }}
                   >
                     {cases.length === 0 ? (
-                      <div className="text-custom-text-300 py-12 text-center">暂无数据</div>
+                      <div className="text-secondary py-12 text-center">暂无数据</div>
                     ) : (
                       cases.map((item) => {
                         const caseId = String(item.case);
@@ -1054,13 +1054,13 @@ export default function TestExecutionPage() {
               >
                 <div className="p-4" style={{ scrollPaddingBottom: 16 }}>
                   {!selectedCaseId ? (
-                    <div className="text-custom-text-300 py-12 text-center">请从左侧选择一个用例</div>
+                    <div className="text-secondary py-12 text-center">请从左侧选择一个用例</div>
                   ) : detailLoading ? (
                     <div className="flex items-center justify-center py-12">
                       <Spin />
                     </div>
                   ) : !caseDetail ? (
-                    <div className="text-custom-text-300 py-12 text-center">未获取到用例详情</div>
+                    <div className="text-secondary py-12 text-center">未获取到用例详情</div>
                   ) : (
                     <div className="flex flex-col gap-4">
                       <div className="border-b border-gray-200">
@@ -1070,8 +1070,8 @@ export default function TestExecutionPage() {
                             onClick={() => setActiveTab("basic")}
                             className={`flex items-center gap-1.5 px-2 py-3 text-sm leading-5 font-medium -mb-px border-b-2 transition-colors ${
                               activeTab === "basic"
-                                ? "text-blue-600 border-blue-600"
-                                : "text-black border-transparent hover:text-blue-600"
+                                ? "text-accent-primary border-accent-strong"
+                                : "text-secondary border-transparent hover:text-accent-primary"
                             }`}
                           >
                             <LucideIcons.Info size={16} aria-hidden="true" />
@@ -1082,8 +1082,8 @@ export default function TestExecutionPage() {
                             onClick={() => setActiveTab("requirement")}
                             className={`flex items-center gap-1.5 px-2 py-3 text-sm leading-5 font-medium -mb-px border-b-2 transition-colors ${
                               activeTab === "requirement"
-                                ? "text-blue-600 border-blue-600"
-                                : "text-black border-transparent hover:text-blue-600"
+                                ? "text-accent-primary border-accent-strong"
+                                : "text-secondary border-transparent hover:text-accent-primary"
                             }`}
                           >
                             <LucideIcons.FileText size={16} aria-hidden="true" />
@@ -1093,7 +1093,9 @@ export default function TestExecutionPage() {
                             type="button"
                             onClick={() => setActiveTab("work")}
                             className={`flex items-center gap-1.5 px-2 py-3 text-sm leading-5 font-medium -mb-px border-b-2 transition-colors ${
-                              activeTab === "work" ? "text-blue-600 border-blue-600" : "text-black border-transparent hover:text-blue-600"
+                              activeTab === "work"
+                                ? "text-accent-primary border-accent-strong"
+                                : "text-secondary border-transparent hover:text-accent-primary"
                             }`}
                           >
                             <LucideIcons.ListTodo size={16} aria-hidden="true" />
@@ -1104,8 +1106,8 @@ export default function TestExecutionPage() {
                             onClick={() => setActiveTab("defect")}
                             className={`flex items-center gap-1.5 px-2 py-3 text-sm leading-5 font-medium -mb-px border-b-2 transition-colors ${
                               activeTab === "defect"
-                                ? "text-blue-600 border-blue-600"
-                                : "text-black border-transparent hover:text-blue-600"
+                                ? "text-accent-primary border-accent-strong"
+                                : "text-secondary border-transparent hover:text-accent-primary"
                             }`}
                           >
                             <LucideIcons.Bug size={16} aria-hidden="true" />
@@ -1125,8 +1127,8 @@ export default function TestExecutionPage() {
                             }}
                             className={`flex items-center gap-1.5 px-2 py-3 text-sm leading-5 font-medium -mb-px border-b-2 transition-colors ${
                               activeTab === "history"
-                                ? "text-blue-600 border-blue-600"
-                                : "text-black border-transparent hover:text-blue-600"
+                                ? "text-accent-primary border-accent-strong"
+                                : "text-secondary border-transparent hover:text-accent-primary"
                             }`}
                           >
                             <LucideIcons.History size={16} aria-hidden="true" />
@@ -1150,7 +1152,7 @@ export default function TestExecutionPage() {
                               <div className="text-lg font-semibold">{caseDetail?.name ?? "-"}</div>
                               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
                                 <div className="col-span-1">
-                                  <div className="text-sm leading-5 font-medium text-custom-text-300 mb-1">维护人</div>
+                                  <div className="text-sm leading-5 font-medium text-secondary mb-1">维护人</div>
                                   {caseDetail?.assignee ? (
                                     <MemberDropdown
                                       multiple={false}
@@ -1166,29 +1168,29 @@ export default function TestExecutionPage() {
                                       optionsClassName="z-[60]"
                                     />
                                   ) : (
-                                    <div className="text-sm text-custom-text-300 h-8 flex items-center">未设置维护人</div>
+                                    <div className="text-sm text-secondary h-8 flex items-center">未设置维护人</div>
                                   )}
                                 </div>
                                 <div className="col-span-1">
-                                  <div className="text-sm leading-5 font-medium text-custom-text-300 mb-1">用例编号</div>
+                                  <div className="text-sm leading-5 font-medium text-secondary mb-1">用例编号</div>
                                   <div className="h-8 flex items-center text-sm">
                                     {caseDetail?.sequence_id ? `${caseDetail?.project_identifier ? caseDetail.project_identifier + "-" : ""}${caseDetail.sequence_id}` : (caseDetail?.code ?? "-")}
                                   </div>
                                 </div>
                                 <div className="col-span-1">
-                                  <div className="text-sm leading-5 font-medium text-custom-text-300 mb-1">类型</div>
+                                  <div className="text-sm leading-5 font-medium text-secondary mb-1">类型</div>
                                   <div className="h-8 flex items-center">
                                     <Tag>{enumsData.case_type?.[String(caseDetail?.type)] ?? "-"}</Tag>
                                   </div>
                                 </div>
                                 <div className="col-span-1">
-                                  <div className="text-xs text-custom-text-300 mb-1">等级</div>
+                                  <div className="text-xs text-secondary mb-1">等级</div>
                                   <div className="h-8 flex items-center">
                                     <Tag>{enumsData.case_priority?.[String(caseDetail?.priority)] ?? "-"}</Tag>
                                   </div>
                                 </div>
                                 <div className="col-span-1">
-                                  <div className="text-sm leading-5 font-medium text-custom-text-300 mb-1">标签</div>
+                                  <div className="text-sm leading-5 font-medium text-secondary mb-1">标签</div>
                                   <div className="flex flex-wrap items-center gap-1 min-h-[32px]">
                                      {Array.isArray(caseDetail?.labels) && caseDetail.labels.length > 0 ? (
                                        caseDetail.labels.map((label: any) => (
@@ -1197,7 +1199,7 @@ export default function TestExecutionPage() {
                                          </div>
                                        ))
                                      ) : (
-                                       <span className="text-sm text-custom-text-300">-</span>
+                                       <span className="text-sm text-secondary">-</span>
                                      )}
                                   </div>
                                 </div>
@@ -1251,7 +1253,7 @@ export default function TestExecutionPage() {
                                   </span>
                                 </div>
                                 {attachments.length === 0 ? (
-                                  <div className="p-3 text-sm text-custom-text-300">暂无附件</div>
+                                  <div className="p-3 text-sm text-secondary">暂无附件</div>
                                 ) : (
                                   <Table
                                     size="small"
@@ -1366,7 +1368,7 @@ export default function TestExecutionPage() {
               </div>
 
               {selectedCaseId && !detailLoading && caseDetail && activeTab === "basic" ? (
-                <div className="sticky bottom-0 w-full shrink-0 bg-custom-background-100" style={{ borderTop: "1px solid #f0f0f0" }}>
+                <div className="sticky bottom-0 w-full shrink-0 bg-surface-1" style={{ borderTop: "1px solid #f0f0f0" }}>
                   <div className="p-4">
                     <div className="px-0 py-3 flex flex-col gap-3">
                       <Radio.Group onChange={handleRadioChange} value={reviewValue} disabled={!selectedCaseId}>
@@ -1403,7 +1405,7 @@ export default function TestExecutionPage() {
                             type="button"
                             onClick={handleSubmitReview}
                             disabled={!selectedCaseId || submitLoading}
-                            className="text-white bg-custom-primary-100 hover:bg-custom-primary-200 focus:text-custom-brand-40 focus:bg-custom-primary-200 px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="text-on-color bg-accent-primary hover:bg-accent-primary-hover focus:text-on-color focus:bg-accent-primary-hover px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             {submitLoading ? "提交中..." : "提交结果"}
                           </button>
@@ -1412,7 +1414,7 @@ export default function TestExecutionPage() {
                               type="button"
                               onClick={handleOpenCreateDefect}
                               disabled={!workspaceSlug}
-                              className="text-white bg-custom-primary-100 hover:bg-custom-primary-200 focus:text-custom-brand-40 focus:bg-custom-primary-200 px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                              className="text-on-color bg-accent-primary hover:bg-accent-primary-hover focus:text-on-color focus:bg-accent-primary-hover px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               新增缺陷
                             </button>

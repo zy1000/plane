@@ -22,7 +22,7 @@ import {
 } from "@plane/propel/icons";
 import { cn, getDate, renderFormattedPayloadDate, shouldHighlightIssueDueDate } from "@plane/utils";
 // components
-import { DateDropdown } from "@/components/dropdowns/date";
+import { DateRangeDropdown } from "@/components/dropdowns/date-range";
 import { EstimateDropdown } from "@/components/dropdowns/estimate";
 import { ButtonAvatars } from "@/components/dropdowns/member/avatar";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
@@ -86,7 +86,7 @@ export const IssueDetailsSidebar = observer(function IssueDetailsSidebar(props: 
           {/* TODO: render properties using a common component */}
           <div className={`mb-2 mt-3 space-y-2.5 ${!isEditable ? "opacity-60" : ""}`}>
             <div className="flex h-8 items-center gap-1">
-              <div className="flex w-1/3 flex-shrink-0 items-center gap-1 text-sm text-custom-text-300">
+              <div className="flex w-1/3 flex-shrink-0 items-center gap-1 text-sm text-secondary">
                 <StatePropertyIcon className="h-4 w-4 flex-shrink-0" />
                 <span>{t("common.state")}</span>
               </div>
@@ -107,7 +107,7 @@ export const IssueDetailsSidebar = observer(function IssueDetailsSidebar(props: 
             {/* type */}
             {projectIssueTypesMap && issue?.type_id && projectIssueTypesMap[issue.type_id] && (
               <div className="flex h-8 items-center gap-1">
-                <div className="flex w-1/3 flex-shrink-0 items-center gap-1 text-sm text-custom-text-300">
+                <div className="flex w-1/3 flex-shrink-0 items-center gap-1 text-sm text-secondary">
                   <LucideIcons.Type className="h-4 w-4 flex-shrink-0" />
                   <span>类型</span>
                 </div>
@@ -144,7 +144,7 @@ export const IssueDetailsSidebar = observer(function IssueDetailsSidebar(props: 
             )}
 
             <div className="flex h-8 items-center gap-1">
-              <div className="flex w-1/3 flex-shrink-0 items-center gap-1 text-sm text-custom-text-300">
+              <div className="flex w-1/3 flex-shrink-0 items-center gap-1 text-sm text-secondary">
                 <MembersPropertyIcon className="h-4 w-4 flex-shrink-0" />
                 <span>{t("common.assignees")}</span>
               </div>
@@ -159,7 +159,7 @@ export const IssueDetailsSidebar = observer(function IssueDetailsSidebar(props: 
                 className="group w-2/3 flex-grow"
                 buttonContainerClassName="w-full text-left"
                 buttonClassName={`text-sm justify-between ${
-                  issue?.assignee_ids?.length > 0 ? "" : "text-custom-text-400"
+                  issue?.assignee_ids?.length > 0 ? "" : "text-placeholder"
                 }`}
                 hideIcon={issue.assignee_ids?.length === 0}
                 dropdownArrow
@@ -168,63 +168,49 @@ export const IssueDetailsSidebar = observer(function IssueDetailsSidebar(props: 
             </div>
 
             <div className="flex h-8 items-center gap-1">
-              <div className="flex w-1/3 flex-shrink-0 items-center gap-1 text-sm text-custom-text-300">
+              <div className="flex w-1/3 flex-shrink-0 items-center gap-1 text-sm text-secondary">
                 <StartDatePropertyIcon className="h-4 w-4 flex-shrink-0" />
                 <span>{t("project_cycles.date_range")}</span>
               </div>
               <div className="flex items-center gap-2 w-2/3 flex-grow min-w-0">
-                <div className="h-7 flex-1 min-w-0">
-                  <DateDropdown
-                    value={issue.start_date ?? null}
-                    onChange={(date) =>
-                      issueOperations.update(workspaceSlug, projectId, issueId, {
-                        start_date: date ? renderFormattedPayloadDate(date) : null,
-                      })
-                    }
-                    maxDate={getDate(issue.target_date)}
-                    placeholder={t("issue.add.start_date")}
-                    buttonVariant="transparent-with-text"
-                    disabled={!isEditable}
-                    className="group w-full"
-                    buttonContainerClassName="w-full text-left"
-                    buttonClassName={cn("text-sm justify-between", !issue.start_date ? "text-custom-text-400" : "")}
-                    clearIconClassName="hidden group-hover:inline !text-custom-text-100"
-                    hideIcon
-                  />
-                </div>
-                <span className="text-custom-text-300">→</span>
-                <div className="h-7 flex-1 min-w-0">
-                  <DateDropdown
-                    value={issue.target_date ?? null}
-                    onChange={(date) =>
-                      issueOperations.update(workspaceSlug, projectId, issueId, {
-                        target_date: date ? renderFormattedPayloadDate(date) : null,
-                      })
-                    }
-                    minDate={getDate(issue.start_date)}
-                    placeholder={t("issue.add.due_date")}
-                    buttonVariant="transparent-with-text"
-                    disabled={!isEditable}
-                    className="group w-full"
-                    buttonContainerClassName="w-full text-left"
-                    buttonClassName={cn(
-                      "text-sm justify-between",
-                      shouldHighlightIssueDueDate(issue.target_date, stateDetails?.group)
-                        ? "text-red-500"
-                        : !issue.target_date
-                          ? "text-custom-text-400"
-                          : ""
-                    )}
-                    clearIconClassName="hidden group-hover:inline !text-custom-text-100"
-                    hideIcon
-                  />
-                </div>
+                <DateRangeDropdown
+                  value={{
+                    from: getDate(issue.start_date) ?? undefined,
+                    to: getDate(issue.target_date) ?? undefined,
+                  }}
+                  onSelect={(range) =>
+                    issueOperations.update(workspaceSlug, projectId, issueId, {
+                      start_date: range?.from ? renderFormattedPayloadDate(range.from) : null,
+                      target_date: range?.to ? renderFormattedPayloadDate(range.to) : null,
+                    })
+                  }
+                  minDate={getDate(issue.start_date)}
+                  maxDate={getDate(issue.target_date)}
+                  placeholder={{
+                    from: t("issue.add.start_date"),
+                    to: t("issue.add.due_date"),
+                  }}
+                  buttonVariant="transparent-with-text"
+                  disabled={!isEditable}
+                  className="group h-7 flex-1 min-w-0"
+                  buttonContainerClassName="w-full text-left"
+                  buttonClassName={cn(
+                    "text-sm justify-between",
+                    !issue.start_date && !issue.target_date ? "text-placeholder" : "",
+                    shouldHighlightIssueDueDate(issue.target_date, stateDetails?.group) ? "text-red-500" : ""
+                  )}
+                  clearIconClassName="hidden group-hover:inline !text-primary"
+                  hideIcon={{ from: true, to: true }}
+                  isClearable
+                  mergeDates
+                  renderPlaceholder
+                />
                 {issue.target_date && <DateAlert date={issue.target_date} workItem={issue} projectId={projectId} />}
               </div>
             </div>
 
             <div className="flex h-8 items-center gap-1">
-              <div className="flex w-1/3 flex-shrink-0 items-center gap-1 text-sm text-custom-text-300">
+              <div className="flex w-1/3 flex-shrink-0 items-center gap-1 text-sm text-secondary">
                 <PriorityPropertyIcon className="h-4 w-4 flex-shrink-0" />
                 <span>{t("common.priority")}</span>
               </div>
@@ -233,7 +219,7 @@ export const IssueDetailsSidebar = observer(function IssueDetailsSidebar(props: 
                 onChange={(val) => issueOperations.update(workspaceSlug, projectId, issueId, { priority: val })}
                 disabled={!isEditable}
                 buttonVariant="border-with-text"
-                className="w-2/3 flex-grow rounded px-2 hover:bg-custom-background-80"
+                className="w-2/3 flex-grow rounded px-2 hover:bg-layer-1-hover"
                 buttonContainerClassName="w-full text-left"
                 buttonClassName="w-min h-auto whitespace-nowrap"
               />
@@ -241,7 +227,7 @@ export const IssueDetailsSidebar = observer(function IssueDetailsSidebar(props: 
 
             {createdByDetails && (
               <div className="flex h-8 items-center gap-1">
-                <div className="flex w-1/3 flex-shrink-0 items-center gap-1 text-sm text-custom-text-300">
+                <div className="flex w-1/3 flex-shrink-0 items-center gap-1 text-sm text-secondary">
                   <UserCirclePropertyIcon className="h-4 w-4 flex-shrink-0" />
                   <span>{t("common.created_by")}</span>
                 </div>
@@ -254,7 +240,7 @@ export const IssueDetailsSidebar = observer(function IssueDetailsSidebar(props: 
 
             {projectId && areEstimateEnabledByProjectId(projectId) && (
               <div className="flex h-8 items-center gap-1">
-                <div className="flex w-1/3 flex-shrink-0 items-center gap-1 text-sm text-custom-text-300">
+                <div className="flex w-1/3 flex-shrink-0 items-center gap-1 text-sm text-secondary">
                   <EstimatePropertyIcon className="h-4 w-4 flex-shrink-0" />
                   <span>{t("common.estimate")}</span>
                 </div>
@@ -268,7 +254,7 @@ export const IssueDetailsSidebar = observer(function IssueDetailsSidebar(props: 
                   buttonVariant="transparent-with-text"
                   className="group w-2/3 flex-grow"
                   buttonContainerClassName="w-full text-left"
-                  buttonClassName={`text-sm ${issue?.estimate_point !== null ? "" : "text-custom-text-400"}`}
+                  buttonClassName={`text-sm ${issue?.estimate_point !== null ? "" : "text-placeholder"}`}
                   placeholder={t("common.none")}
                   hideIcon
                   dropdownArrow
@@ -279,7 +265,7 @@ export const IssueDetailsSidebar = observer(function IssueDetailsSidebar(props: 
 
             {projectDetails?.module_view && (
               <div className="flex min-h-8 gap-1">
-                <div className="flex w-1/3 flex-shrink-0 gap-1 pt-2 text-sm text-custom-text-300">
+                <div className="flex w-1/3 flex-shrink-0 gap-1 pt-2 text-sm text-secondary">
                   <ModuleIcon className="h-4 w-4 flex-shrink-0" />
                   <span>{t("common.modules")}</span>
                 </div>
@@ -296,7 +282,7 @@ export const IssueDetailsSidebar = observer(function IssueDetailsSidebar(props: 
 
             {projectDetails?.cycle_view && (
               <div className="flex h-8 items-center gap-1">
-                <div className="flex w-1/3 flex-shrink-0 items-center gap-1 text-sm text-custom-text-300">
+                <div className="flex w-1/3 flex-shrink-0 items-center gap-1 text-sm text-secondary">
                   <CycleIcon className="h-4 w-4 flex-shrink-0" />
                   <span>{t("common.cycle")}</span>
                   <TransferHopInfo workItem={issue} />
@@ -313,7 +299,7 @@ export const IssueDetailsSidebar = observer(function IssueDetailsSidebar(props: 
             )}
 
             <div className="flex h-8 items-center gap-1">
-              <div className="flex w-1/3 flex-shrink-0 items-center gap-1 text-sm text-custom-text-300">
+              <div className="flex w-1/3 flex-shrink-0 items-center gap-1 text-sm text-secondary">
                 <ParentPropertyIcon className="h-4 w-4 flex-shrink-0" />
                 <span>{t("common.parent")}</span>
               </div>
@@ -328,7 +314,7 @@ export const IssueDetailsSidebar = observer(function IssueDetailsSidebar(props: 
             </div>
 
             <div className="flex min-h-8 gap-1">
-              <div className="flex w-1/3 flex-shrink-0 gap-1 pt-2 text-sm text-custom-text-300">
+              <div className="flex w-1/3 flex-shrink-0 gap-1 pt-2 text-sm text-secondary">
                 <LabelPropertyIcon className="h-4 w-4 flex-shrink-0" />
                 <span>{t("common.labels")}</span>
               </div>

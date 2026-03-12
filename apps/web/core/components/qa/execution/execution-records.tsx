@@ -12,7 +12,7 @@ import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { ButtonAvatars } from "@/components/dropdowns/member/avatar";
 import { useMember } from "@/hooks/store/use-member";
 import { useSearchParams } from "next/navigation";
-import { getEnums } from "app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/util";
+import { getEnums } from "@/app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/util";
 
 type ExecRecord = {
   id: string;
@@ -185,10 +185,10 @@ export const ExecutionRecordDetailModal: React.FC<ExecutionRecordDetailModalProp
     resultColorMap: colorMap,
   }) => {
     if (!Array.isArray(steps) || steps.length === 0) {
-      return <span className="text-custom-text-300">暂无内容</span>;
+      return <span className="text-secondary">暂无内容</span>;
     }
-    const headerStyle = { backgroundColor: "#f5f5f5", padding: 12, border: "1px solid #e8e8e8" } as const;
-    const cellStyle = { padding: 12, border: "1px solid #e8e8e8" } as const;
+    const headerStyle = { backgroundColor: "var(--bg-layer-1)", padding: 12, border: "1px solid var(--border-subtle)" } as const;
+    const cellStyle = { padding: 12, border: "1px solid var(--border-subtle)" } as const;
     const columns = [
       {
         title: "序号",
@@ -213,7 +213,7 @@ export const ExecutionRecordDetailModal: React.FC<ExecutionRecordDetailModalProp
         key: "result",
         width: 320,
         render: (text: any) => (
-          <span className="whitespace-pre-wrap break-words text-custom-text-300">{String(text || "")}</span>
+          <span className="whitespace-pre-wrap break-words text-secondary">{String(text || "")}</span>
         ),
         onHeaderCell: () => ({ style: headerStyle }),
         onCell: () => ({ style: cellStyle }),
@@ -242,7 +242,7 @@ export const ExecutionRecordDetailModal: React.FC<ExecutionRecordDetailModalProp
       },
     ];
     return (
-      <div className="rounded border border-custom-border-200">
+      <div className="rounded border border-subtle">
         <div className="overflow-x-auto">
           <Table
             size="small"
@@ -303,7 +303,7 @@ export const ExecutionRecordDetailModal: React.FC<ExecutionRecordDetailModalProp
                   <button
                     type="button"
                     disabled={uploadLoading}
-                    className="text-white bg-custom-primary-100 hover:bg-custom-primary-200 focus:text-custom-brand-40 focus:bg-custom-primary-200 px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="text-on-color bg-accent-primary hover:bg-accent-primary-hover focus:text-on-color focus:bg-accent-primary-hover px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <LucideIcons.Upload size={13} />
                     上传
@@ -319,7 +319,7 @@ export const ExecutionRecordDetailModal: React.FC<ExecutionRecordDetailModalProp
                   <div className="overflow-x-auto">
                     <table className="min-w-full table-fixed">
                       <thead>
-                      <tr className="text-left text-sm text-custom-text-300 border-b">
+                      <tr className="text-left text-sm text-secondary border-b">
                       <th className="w-2/5 px-2 py-2">文件名</th>
                           <th className="w-1/5 px-2 py-2">大小</th>
                           <th className="w-1/5 px-2 py-2">上传时间</th>
@@ -329,7 +329,7 @@ export const ExecutionRecordDetailModal: React.FC<ExecutionRecordDetailModalProp
                       <tbody>
                         {attachmentFiles.length === 0 && (
                           <tr>
-                            <td className="px-2 py-6 text-sm text-custom-text-300" colSpan={4}>
+                            <td className="px-2 py-6 text-sm text-secondary" colSpan={4}>
                               暂无附件
                             </td>
                           </tr>
@@ -337,12 +337,12 @@ export const ExecutionRecordDetailModal: React.FC<ExecutionRecordDetailModalProp
                         {attachmentFiles
                           .slice((attachmentPage - 1) * attachmentPageSize, attachmentPage * attachmentPageSize)
                           .map((f) => (
-                            <tr key={f.id} className="border-b hover:bg-custom-background-90">
+                            <tr key={f.id} className="border-b hover:bg-layer-1">
                               <td className="px-2 py-2 truncate text-sm text-gray-800" title={f.name}>
                                 {f.name}
                               </td>
-                              <td className="px-2 py-2 text-sm text-custom-text-200">{formatFileSizeForDetail(f.size)}</td>
-                              <td className="px-2 py-2 text-sm text-custom-text-200">
+                              <td className="px-2 py-2 text-sm text-primary">{formatFileSizeForDetail(f.size)}</td>
+                              <td className="px-2 py-2 text-sm text-primary">
                                 {f.created_at ? (
                                   <ReadonlyDate value={f.created_at} formatToken="yyyy-MM-dd" hideIcon={true} />
                                 ) : (
@@ -375,8 +375,8 @@ export const ExecutionRecordDetailModal: React.FC<ExecutionRecordDetailModalProp
                       </tbody>
                     </table>
                   </div>
-                  <div className="flex-shrink-0 border-t border-custom-border-200 px-2 py-2 bg-custom-background-100 flex items-center justify-between mt-2">
-                    <div className="text-sm text-custom-text-300">
+                  <div className="flex-shrink-0 border-t border-subtle px-2 py-2 bg-surface-1 flex items-center justify-between mt-2">
+                    <div className="text-sm text-secondary">
                       {attachmentFiles.length > 0 ? `共 ${attachmentFiles.length} 条` : ""}
                     </div>
                     <Pagination
@@ -487,7 +487,7 @@ export const ExecutionRecordsPanel: React.FC<Props> = (props) => {
     <>
       <div
         className={cn(
-          "p-4 text-sm text-custom-text-300",
+          "p-4 text-sm text-secondary",
           "min-h-[550px]",
           className
         )}
@@ -499,7 +499,7 @@ export const ExecutionRecordsPanel: React.FC<Props> = (props) => {
         ) : error ? (
           <div className="bg-red-50 border border-red-200 rounded-md p-3 text-red-800">{error}</div>
         ) : records.length === 0 ? (
-          <div className="text-custom-text-300">暂无执行记录</div>
+          <div className="text-secondary">暂无执行记录</div>
         ) : (
           <div className="flex flex-col gap-4">
             {records.map((r) => {
@@ -510,7 +510,7 @@ export const ExecutionRecordsPanel: React.FC<Props> = (props) => {
               return (
                 <div
                   key={String(r.id)}
-                  className="flex items-start justify-between gap-4 rounded-md bg-custom-background-100 p-4 shadow-sm"
+                  className="flex items-start justify-between gap-4 rounded-md bg-surface-1 p-4 shadow-sm"
                 >
                   <div className="flex items-start gap-3 min-w-0">
                     <div className="flex-shrink-0">
@@ -532,11 +532,11 @@ export const ExecutionRecordsPanel: React.FC<Props> = (props) => {
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-medium truncate">{name}</div>
                       {r.reason ? (
-                        <div className="text-sm text-custom-text-300 whitespace-pre-wrap break-words">
+                        <div className="text-sm text-secondary whitespace-pre-wrap break-words">
                           {String(r.reason)}
                         </div>
                       ) : null}
-                      <div className="text-xs text-custom-text-400 mt-2">{time}</div>
+                      <div className="text-xs text-placeholder mt-2">{time}</div>
                     </div>
                   </div>
                   <div className="flex-shrink-0">
@@ -548,7 +548,7 @@ export const ExecutionRecordsPanel: React.FC<Props> = (props) => {
                           aria-label="查看详情"
                           aria-haspopup="dialog"
                           onClick={() => openStepsModal(r)}
-                          className="p-1 rounded hover:bg-custom-background-80 active:scale-95 focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-500 hover:text-blue-600"
+                          className="p-1 rounded hover:bg-layer-1-hover active:scale-95 focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-500 hover:text-blue-600"
                         >
                           <LucideIcons.ListOrdered size={16} aria-hidden="true" />
                         </button>

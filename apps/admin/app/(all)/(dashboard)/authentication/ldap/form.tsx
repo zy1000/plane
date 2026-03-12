@@ -145,7 +145,7 @@ export function InstanceLdapConfigForm() {
         />
       </div>
 
-      <div className="flex items-center gap-4 border-t border-custom-border-100 pt-5">
+      <div className="flex items-center gap-4 border-t border-subtle-1 pt-5">
         <Button variant="primary" type="submit" loading={isSubmitting}>
           Save Changes
         </Button>

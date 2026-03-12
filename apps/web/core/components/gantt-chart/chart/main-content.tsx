@@ -383,7 +383,7 @@ export const GanttChartMainContent = observer(function GanttChartMainContent(pro
         {(helpers) => (
           <>
             <div
-              className={cn("h-full w-full flex border-t-[0.5px] border-custom-border-200", {
+              className={cn("h-full w-full flex border-t-[0.5px] border-subtle", {
                 "mb-8": bottomSpacing,
               })}
               ref={splitContainerRef}
@@ -413,7 +413,7 @@ export const GanttChartMainContent = observer(function GanttChartMainContent(pro
                 />
               </div>
               <div
-                className="flex-shrink-0 w-1 bg-custom-border-200 hover:bg-custom-border-300 cursor-col-resize"
+                className="flex-shrink-0 w-1 bg-[var(--border-subtle)] hover:bg-[var(--border-subtle-1)] cursor-col-resize"
                 role="separator"
                 aria-orientation="vertical"
                 onMouseDown={startResize}

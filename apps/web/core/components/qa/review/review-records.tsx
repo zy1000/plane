@@ -102,13 +102,13 @@ export const ReviewRecordsPanel: React.FC<Props> = (props) => {
           <ExclamationCircleOutlined /> 重新提审
         </span>
       );
-    return <span className="text-sm text-custom-text-300">-</span>;
+    return <span className="text-sm text-secondary">-</span>;
   };
 
   return (
     <div
       className={cn(
-        "p-4 text-sm text-custom-text-300",
+        "p-4 text-sm text-secondary",
         "h-[550px] overflow-y-auto vertical-scrollbar scrollbar-sm scroll-smooth",
         className
       )}
@@ -120,7 +120,7 @@ export const ReviewRecordsPanel: React.FC<Props> = (props) => {
       ) : error ? (
         <div className="bg-red-50 border border-red-200 rounded-md p-3 text-red-800">{error}</div>
       ) : records.length === 0 ? (
-        <div className="text-custom-text-300">暂无评审记录</div>
+        <div className="text-secondary">暂无评审记录</div>
       ) : (
         <div className="flex flex-col gap-4">
           {records.map((r) => {
@@ -135,7 +135,7 @@ export const ReviewRecordsPanel: React.FC<Props> = (props) => {
             return (
               <div
                 key={String(r.id)}
-                className="flex items-start justify-between gap-4 rounded-md bg-custom-background-100 p-4 shadow-sm"
+                className="flex items-start justify-between gap-4 rounded-md bg-surface-1 p-4 shadow-sm"
               >
                 <div className="flex items-start gap-3 min-w-0">
                   <div className="flex-shrink-0">
@@ -157,11 +157,11 @@ export const ReviewRecordsPanel: React.FC<Props> = (props) => {
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-medium truncate">{name}</div>
                     {r.reason ? (
-                      <div className="text-sm text-custom-text-300 whitespace-pre-wrap break-words">
+                      <div className="text-sm text-secondary whitespace-pre-wrap break-words">
                         {String(r.reason)}
                       </div>
                     ) : null}
-                    <div className="text-xs text-custom-text-400 mt-2">{time}</div>
+                    <div className="text-xs text-placeholder mt-2">{time}</div>
                   </div>
                 </div>
                 <div className="flex-shrink-0 flex flex-col items-end gap-2">

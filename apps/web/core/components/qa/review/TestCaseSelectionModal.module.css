@@ -1,6 +1,6 @@
 .modalBody {
-  height: 60vh;
-  max-height: 60vh;
+  height: 70vh;
+  max-height: 70vh;
   display: flex;
   flex-direction: column;
 }
@@ -16,7 +16,7 @@
   width: 30%;
   min-width: 260px;
   max-width: 360px;
-  border-right: 1px solid var(--color-border, #e5e7eb);
+  border-right: 1px solid var(--border-color-subtle);
   overflow-y: auto;
 }
 

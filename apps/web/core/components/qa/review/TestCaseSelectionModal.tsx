@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useParams } from "next/navigation";
 import { Modal, Space, Button, Input, Tree, Table, Tag, message } from "antd";
-import { globalEnums, getEnums } from "app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/util";
+import { globalEnums, getEnums } from "@/app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/util";
 import type { TableProps } from "antd";
 import type { TreeProps } from "antd";
 import { CaseService as QaCaseService } from "@/services/qa/case.service";
@@ -43,7 +43,7 @@ const renderEnumTag = (
   color: "default" | "processing" | "success" | "warning" | "magenta" = "default"
 ) => {
   const label = getEnumLabel(group, value);
-  if (label === "-" || label === undefined) return <span className="text-custom-text-400">-</span>;
+  if (label === "-" || label === undefined) return <span className="text-placeholder">-</span>;
   return <Tag color={color}>{label}</Tag>;
 };
 
@@ -189,11 +189,11 @@ export default function TestCaseSelectionModal({
     return (
       <div className="group flex items-center justify-between gap-2 w-full">
         <div className="flex items-center gap-2">
-          <span className="inline-flex items-center justify-center w-5 h-5 text-custom-text-300">{icon}</span>
-          <span className={`text-sm text-custom-text-200 ${fontMedium ? "font-medium" : ""}`}>{title}</span>
+          <span className="inline-flex items-center justify-center w-5 h-5 text-secondary">{icon}</span>
+          <span className={`text-sm text-primary ${fontMedium ? "font-medium" : ""}`}>{title}</span>
         </div>
         <div className="flex items-center gap-2">
-          {typeof count === "number" && <span className="text-xs text-custom-text-300">{count}</span>}
+          {typeof count === "number" && <span className="text-xs text-secondary">{count}</span>}
         </div>
       </div>
     );
@@ -386,7 +386,7 @@ export default function TestCaseSelectionModal({
                 showLine={false}
                 checkable
                 switcherIcon={
-                  <span className="inline-flex items-center justify-center w-5 h-5 text-custom-text-300">
+                  <span className="inline-flex items-center justify-center w-5 h-5 text-secondary">
                     <DownOutlined />
                   </span>
                 }

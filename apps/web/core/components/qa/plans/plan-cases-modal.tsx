@@ -12,7 +12,7 @@ import { PlanService } from "@/services/qa/plan.service";
 import {
   formatDateTime,
   globalEnums,
-} from "app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/util";
+} from "@/app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/util";
 
 type TLabel = { id?: string; name?: string } | string;
 type TestCase = {
@@ -248,11 +248,11 @@ export const PlanCasesModal: React.FC<Props> = ({
     return (
       <div className="group flex items-center justify-between gap-2 w-full">
         <div className="flex items-center gap-2">
-          <span className="inline-flex items-center justify-center w-5 h-5 text-custom-text-300">{icon}</span>
-          <span className={`text-sm text-custom-text-200 ${fontMedium ? "font-medium" : ""}`}>{title}</span>
+          <span className="inline-flex items-center justify-center w-5 h-5 text-secondary">{icon}</span>
+          <span className={`text-sm text-primary ${fontMedium ? "font-medium" : ""}`}>{title}</span>
         </div>
         <div className="flex items-center gap-2">
-          {typeof count === "number" && <span className="text-xs text-custom-text-300">{count}</span>}
+          {typeof count === "number" && <span className="text-xs text-secondary">{count}</span>}
         </div>
       </div>
     );
@@ -366,7 +366,7 @@ export const PlanCasesModal: React.FC<Props> = ({
       width={EModalWidth.VXL}
     >
       <div className="w-full">
-        <div className="flex items-center justify-between gap-4 border-b border-custom-border-200 px-6 py-4">
+        <div className="flex items-center justify-between gap-4 border-b border-subtle px-6 py-4">
           <h3 className="text-lg font-medium">
             规划用例
           </h3>
@@ -383,7 +383,7 @@ export const PlanCasesModal: React.FC<Props> = ({
         </div>
         <Row wrap={false} className="h-[80vh] max-h-[80vh] overflow-hidden p-6" gutter={[0, 16]}>
           <Col
-            className="relative border-r border-custom-border-200 overflow-y-auto"
+            className="relative border-r border-subtle overflow-y-auto"
             flex="0 0 auto"
             style={{ width: leftWidth, minWidth: 200, maxWidth: 320 }}
           >
@@ -413,7 +413,7 @@ export const PlanCasesModal: React.FC<Props> = ({
               defaultExpandAll
               checkable
               switcherIcon={
-                <span className="inline-flex items-center justify-center w-5 h-5 text-custom-text-300">
+                <span className="inline-flex items-center justify-center w-5 h-5 text-secondary">
                   <DownOutlined />
                 </span>
               }
@@ -431,7 +431,7 @@ export const PlanCasesModal: React.FC<Props> = ({
           <Col flex="auto" className="overflow-y-auto">
             {loading && (
               <div className="flex items-center justify-center py-12">
-                <div className="text-custom-text-300">加载中...</div>
+                <div className="text-secondary">加载中...</div>
               </div>
             )}
             {error && (
@@ -441,7 +441,7 @@ export const PlanCasesModal: React.FC<Props> = ({
             )}
             {!loading && !error && cases.length === 0 && (
               <div className="flex items-center justify-center py-12">
-                <div className="text-custom-text-300">暂无用例</div>
+                <div className="text-secondary">暂无用例</div>
               </div>
             )}
             {!loading && !error && cases.length > 0 && (
@@ -495,7 +495,7 @@ export const PlanCasesModal: React.FC<Props> = ({
             )}
           </Col>
         </Row>
-        <div className="sticky bottom-0 w-full bg-custom-background-100 border-t border-custom-border-200 px-6 py-3 flex items-center justify-end gap-3">
+        <div className="sticky bottom-0 w-full bg-surface-1 border-t border-subtle px-6 py-3 flex items-center justify-end gap-3">
           <Button
             variant="primary"
             onClick={() => {

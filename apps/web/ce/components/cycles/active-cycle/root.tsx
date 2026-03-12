@@ -67,9 +67,9 @@ const SingleActiveCycle: React.FC<ISingleActiveCycleProps> = observer((props) =>
         </div>
         <button
           onClick={() => setIsOpen(!isOpen)}
-          className="p-1 hover:bg-custom-background-80 rounded transition-colors duration-200"
+          className="p-1 hover:bg-layer-1-hover rounded transition-colors duration-200"
         >
-          <ChevronDown className={`h-4 w-4 text-custom-sidebar-text-300 duration-300 ${isOpen ? "rotate-180" : ""}`} />
+          <ChevronDown className={`h-4 w-4 text-secondary duration-300 ${isOpen ? "rotate-180" : ""}`} />
         </button>
       </div>
 

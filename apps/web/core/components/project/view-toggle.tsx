@@ -14,13 +14,13 @@ export const ProjectsViewToggle = observer(function ProjectsViewToggle(props: Pr
   const { viewMode, updateViewMode } = useProjectFilter();
 
   return (
-    <div className={cn("flex items-center rounded border border-custom-border-200 bg-custom-background-100", className)}>
+    <div className={cn("flex items-center rounded border border-subtle bg-surface-1", className)}>
       <button
         type="button"
         className={cn(
-          "grid place-items-center rounded-l px-2 py-2 text-custom-text-400 transition-colors hover:bg-custom-background-80",
+          "grid place-items-center rounded-l px-2 py-2 text-placeholder transition-colors hover:bg-layer-1-hover",
           {
-            "bg-custom-background-80 text-custom-text-200": viewMode === "list",
+            "bg-layer-1-hover text-primary": viewMode === "list",
           }
         )}
         aria-pressed={viewMode === "list"}
@@ -31,9 +31,9 @@ export const ProjectsViewToggle = observer(function ProjectsViewToggle(props: Pr
       <button
         type="button"
         className={cn(
-          "grid place-items-center rounded-r px-2 py-2 text-custom-text-400 transition-colors hover:bg-custom-background-80",
+          "grid place-items-center rounded-r px-2 py-2 text-placeholder transition-colors hover:bg-layer-1-hover",
           {
-            "bg-custom-background-80 text-custom-text-200": viewMode === "card",
+            "bg-layer-1-hover text-primary": viewMode === "card",
           }
         )}
         aria-pressed={viewMode === "card"}

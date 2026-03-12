@@ -100,7 +100,7 @@ export const SidebarMenuItems = observer(function SidebarMenuItems() {
           ))}
         </div>
 
-        <hr className="my-1 border-custom-border-200" />
+        <hr className="my-1 border-subtle" />
         {projectsSidebarItem && (
           <div className="flex flex-col gap-0.5">
             <SidebarItem key="pinned_projects" item={projectsSidebarItem} />
@@ -111,12 +111,12 @@ export const SidebarMenuItems = observer(function SidebarMenuItems() {
       </div>
 
       <div className="mt-auto">
-        <hr className="border-custom-border-200" />
+        <hr className="border-subtle" />
         <Link href={`/${workspaceSlug}/changelog`}>
           <SidebarNavItem isActive={pathname?.startsWith(`/${workspaceSlug}/changelog`)}>
             <div className="flex items-center gap-1.5 py-[1px]">
               <BookText className="size-4 flex-shrink-0" />
-              <p className="text-sm leading-5 font-medium">更新日志</p>
+              <p className="text-13 leading-5 font-medium">更新日志</p>
             </div>
           </SidebarNavItem>
         </Link>

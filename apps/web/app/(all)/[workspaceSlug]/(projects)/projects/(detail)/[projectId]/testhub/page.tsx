@@ -155,7 +155,7 @@ export default function TestManagementHomePage() {
           style={{ cursor: "pointer" }}
         >
           <Tooltip title={text || ""} placement="topLeft">
-            <span className="block max-w-[440px] truncate text-custom-text-200">{text || "-"}</span>
+            <span className="block max-w-[440px] truncate text-primary">{text || "-"}</span>
           </Tooltip>
         </a>
       ),
@@ -310,7 +310,7 @@ export default function TestManagementHomePage() {
         <div className="">
           {loading && (
             <div className="flex items-center justify-center py-12">
-              <div className="text-custom-text-300">加载中...</div>
+              <div className="text-secondary">加载中...</div>
             </div>
           )}
           {error && (
@@ -321,7 +321,7 @@ export default function TestManagementHomePage() {
           {!loading && !error && (
             <>
               <div>
-                <div className="flex items-center justify-between gap-4 border-b border-custom-border-200 px-4 py-3 sm:px-5">
+                <div className="flex items-center justify-between gap-4 border-b border-subtle px-4 py-3 sm:px-5">
                   <div></div>
                   <button
                     type="button"
@@ -329,7 +329,7 @@ export default function TestManagementHomePage() {
                       setEditing(null);
                       setModalOpen(true);
                     }}
-                    className="text-white bg-custom-primary-100 hover:bg-custom-primary-200 focus:text-custom-brand-40 focus:bg-custom-primary-200 px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="text-on-color bg-accent-primary hover:bg-accent-primary-hover focus:text-on-color focus:bg-accent-primary-hover px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     新建用例库
                   </button>

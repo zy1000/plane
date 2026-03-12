@@ -93,8 +93,8 @@ export const LdapConfiguration = observer(() => {
   return (
     <div className="w-full max-w-2xl py-6">
       <div className="mb-6">
-        <h3 className="text-xl font-medium text-custom-text-100">LDAP Configuration</h3>
-        <p className="text-sm text-custom-text-300">Configure LDAP for single sign-on.</p>
+        <h3 className="text-xl font-medium text-primary">LDAP Configuration</h3>
+        <p className="text-sm text-secondary">Configure LDAP for single sign-on.</p>
       </div>
       
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
@@ -103,10 +103,10 @@ export const LdapConfiguration = observer(() => {
                 name="is_active"
                 control={control}
                 render={({ field: { value, onChange } }) => (
-                    <div className="flex items-center justify-between p-4 border border-custom-border-200 rounded-md">
+                    <div className="flex items-center justify-between p-4 border border-subtle rounded-md">
                         <div>
-                            <div className="text-sm font-medium text-custom-text-100">Enable LDAP</div>
-                            <div className="text-xs text-custom-text-300">Enable LDAP authentication for this instance</div>
+                            <div className="text-sm font-medium text-primary">Enable LDAP</div>
+                            <div className="text-xs text-secondary">Enable LDAP authentication for this instance</div>
                         </div>
                         <ToggleSwitch value={value} onChange={onChange} />
                     </div>
@@ -120,7 +120,7 @@ export const LdapConfiguration = observer(() => {
                     rules={{ required: "Server URL is required" }}
                     render={({ field, fieldState: { error } }) => (
                         <div className="space-y-1">
-                            <label className="text-sm font-medium text-custom-text-200">Server URL <span className="text-red-500">*</span></label>
+                            <label className="text-sm font-medium text-primary">Server URL <span className="text-red-500">*</span></label>
                             <Input {...field} placeholder="ldap://10.32.232.191:389" className="w-full" hasError={!!error} />
                             {error && <span className="text-xs text-red-500">{error.message}</span>}
                         </div>
@@ -133,7 +133,7 @@ export const LdapConfiguration = observer(() => {
                     rules={{ required: "Base DN is required" }}
                     render={({ field, fieldState: { error } }) => (
                         <div className="space-y-1">
-                            <label className="text-sm font-medium text-custom-text-200">Base DN <span className="text-red-500">*</span></label>
+                            <label className="text-sm font-medium text-primary">Base DN <span className="text-red-500">*</span></label>
                             <Input {...field} placeholder="dc=example,dc=com" className="w-full" hasError={!!error} />
                             {error && <span className="text-xs text-red-500">{error.message}</span>}
                         </div>
@@ -146,7 +146,7 @@ export const LdapConfiguration = observer(() => {
                     rules={{ required: "Bind DN is required" }}
                     render={({ field, fieldState: { error } }) => (
                         <div className="space-y-1">
-                            <label className="text-sm font-medium text-custom-text-200">Bind DN <span className="text-red-500">*</span></label>
+                            <label className="text-sm font-medium text-primary">Bind DN <span className="text-red-500">*</span></label>
                             <Input {...field} placeholder="cn=admin,dc=example,dc=com" className="w-full" hasError={!!error} />
                             {error && <span className="text-xs text-red-500">{error.message}</span>}
                         </div>
@@ -159,7 +159,7 @@ export const LdapConfiguration = observer(() => {
                     rules={{ required: "Bind Password is required" }}
                     render={({ field, fieldState: { error } }) => (
                         <div className="space-y-1">
-                            <label className="text-sm font-medium text-custom-text-200">Bind Password <span className="text-red-500">*</span></label>
+                            <label className="text-sm font-medium text-primary">Bind Password <span className="text-red-500">*</span></label>
                             <Input {...field} type="password" placeholder="******" className="w-full" hasError={!!error} />
                             {error && <span className="text-xs text-red-500">{error.message}</span>}
                         </div>
@@ -171,9 +171,9 @@ export const LdapConfiguration = observer(() => {
                     control={control}
                     render={({ field, fieldState: { error } }) => (
                         <div className="space-y-1">
-                            <label className="text-sm font-medium text-custom-text-200">User Search Filter</label>
+                            <label className="text-sm font-medium text-primary">User Search Filter</label>
                             <Input {...field} placeholder="(mail=%(user)s)" className="w-full" hasError={!!error} />
-                            <p className="text-xs text-custom-text-300">Default: (mail=%(user)s)</p>
+                            <p className="text-xs text-secondary">Default: (mail=%(user)s)</p>
                             {error && <span className="text-xs text-red-500">{error.message}</span>}
                         </div>
                     )}
@@ -181,7 +181,7 @@ export const LdapConfiguration = observer(() => {
             </div>
         </div>
         
-        <div className="flex gap-4 pt-4 border-t border-custom-border-200">
+        <div className="flex gap-4 pt-4 border-t border-subtle">
             <Button variant="primary" type="submit" loading={isLoading}>
                 Save Changes
             </Button>
