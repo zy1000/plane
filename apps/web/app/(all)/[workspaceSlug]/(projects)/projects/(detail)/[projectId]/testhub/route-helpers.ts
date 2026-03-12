@@ -10,11 +10,17 @@ export const isTMOverviewMenuActive = (pathname: string, workspaceSlug: string, 
   return current === base || current.startsWith(`${base}/cases`);
 };
 
+export const isTMPlansActive = (pathname: string, workspaceSlug: string, projectId: string) =>
+  normalizePath(pathname) === normalizePath(`${tmProjectBasePath(workspaceSlug, projectId)}/plans`);
+
 export const isTMPlansMenuActive = (pathname: string, workspaceSlug: string, projectId: string) => {
   const base = normalizePath(tmProjectBasePath(workspaceSlug, projectId));
   const current = normalizePath(pathname);
   return current.startsWith(`${base}/plans`) || current.startsWith(`${base}/plan-cases`);
 };
+
+export const isTMReviewsActive = (pathname: string, workspaceSlug: string, projectId: string) =>
+  normalizePath(pathname) === normalizePath(`${tmProjectBasePath(workspaceSlug, projectId)}/reviews`);
 
 export const isTMReviewsMenuActive = (pathname: string, workspaceSlug: string, projectId: string) => {
   const base = normalizePath(tmProjectBasePath(workspaceSlug, projectId));

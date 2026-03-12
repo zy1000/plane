@@ -4,9 +4,9 @@ import { AppHeader } from "@/components/core/app-header";
 import { TestManagementMenuBar } from "./menu";
 import useLocalStorage from "@/hooks/use-local-storage";
 import { useParams, usePathname } from "next/navigation";
-// 顶部：增加共享工具的导入
-import { getEnums, globalEnums } from "./util"; // 新增：全局枚举初始化工具
+import { getEnums, globalEnums } from "./util";
 import { isTMOverviewActive } from "./route-helpers";
+import { TestHubProvider } from "./testhub-context";
 
 export default function TestManagementLayout() {
   // 使用 localStorage 存储侧边栏宽度，所有子页面共享
@@ -71,7 +71,7 @@ export default function TestManagementLayout() {
   }, [workspaceSlug]);
 
   return (
-    <>
+    <TestHubProvider>
       <AppHeader header={<TestManagementMenuBar />} />
 
       {/* 主体区域：左侧共享侧边栏 + 可拖拽边框 + 右侧子页面内容 */}
@@ -97,6 +97,6 @@ export default function TestManagementLayout() {
           <Outlet />
         </main>
       </div>
-    </>
+    </TestHubProvider>
   );
 }

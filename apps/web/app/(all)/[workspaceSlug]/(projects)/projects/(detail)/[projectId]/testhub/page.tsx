@@ -13,6 +13,7 @@ import { formatDateTime, getEnums, globalEnums } from "./util";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import RepositoryModal from "./repository-modal";
 import { Logo } from "@plane/propel/emoji-icon-picker";
+import { useTestHub } from "./testhub-context";
 
 const repositoryService = new RepositoryService();
 
@@ -38,7 +39,6 @@ export default function TestManagementHomePage() {
     initializeEnums();
   }, [workspaceSlug]);
 
-  
   useEffect(() => {
     const repositoryIdFromUrl = searchParams.get("repositoryId");
     if (!workspaceSlug || !repositoryIdFromUrl) return;
@@ -63,6 +63,14 @@ export default function TestManagementHomePage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<any | null>(null);
   const [apiLoading, setApiLoading] = useState(false);
+
+  const { registerOpenNewModal } = useTestHub();
+  useEffect(() => {
+    registerOpenNewModal(() => {
+      setEditing(null);
+      setModalOpen(true);
+    });
+  }, [registerOpenNewModal]);
 
   const getColumnSearchProps = (dataIndex: keyof any | string): TableColumnType<any> => ({
     filterDropdown: ({ setSelectedKeys, selectedKeys, confirm, clearFilters, close }: FilterDropdownProps) => (
@@ -321,19 +329,6 @@ export default function TestManagementHomePage() {
           {!loading && !error && (
             <>
               <div>
-                <div className="flex items-center justify-between gap-4 border-b border-subtle px-4 py-3 sm:px-5">
-                  <div></div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEditing(null);
-                      setModalOpen(true);
-                    }}
-                    className="text-on-color bg-accent-primary hover:bg-accent-primary-hover focus:text-on-color focus:bg-accent-primary-hover px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    新建用例库
-                  </button>
-                </div>
                 <Table
                   dataSource={repositories}
                   columns={columns}

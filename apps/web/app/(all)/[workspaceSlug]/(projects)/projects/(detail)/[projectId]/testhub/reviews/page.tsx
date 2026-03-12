@@ -24,6 +24,7 @@ import { formatCNDateTime } from "@/components/qa/cases/util";
 import { debounce } from "lodash-es";
 import CreateReviewModal from "@/components/qa/review/CreateReviewModal";
 import { useAppRouter } from "@/hooks/use-app-router";
+import { useTestHub } from "../testhub-context";
 
 type ModuleNode = {
   id: string;
@@ -110,6 +111,7 @@ export default function ReviewsPage() {
   const startWidthRef = useRef<number>(0);
   const [search, setSearch] = useState<string>("");
   const [selectedModuleId, setSelectedModuleId] = useState<string | null>(null);
+  useEffect(() => { selectedModuleIdRef.current = selectedModuleId; }, [selectedModuleId]);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(10);
   const [modules, setModules] = useState<ReviewModule[]>([]);
@@ -128,6 +130,14 @@ export default function ReviewsPage() {
   const caseService = useMemo(() => new CaseService(), []);
   const [createReviewOpen, setCreateReviewOpen] = useState<boolean>(false);
   const [createReviewInitialValues, setCreateReviewInitialValues] = useState<any | undefined>(undefined);
+  const selectedModuleIdRef = useRef<string | null>(null);
+  const { registerOpenNewReviewModal } = useTestHub();
+  useEffect(() => {
+    registerOpenNewReviewModal(() => {
+      setCreateReviewInitialValues(selectedModuleIdRef.current ? { module_id: selectedModuleIdRef.current } : undefined);
+      setCreateReviewOpen(true);
+    });
+  }, [registerOpenNewReviewModal]);
   const [editOpen, setEditOpen] = useState<boolean>(false);
   const [editReview, setEditReview] = useState<any>(null);
 
@@ -917,27 +927,7 @@ export default function ReviewsPage() {
       <PageHead title="评审" />
       <div className={styles.split}>
         <div className={`${styles.left} flex flex-col h-full`} style={{ width: leftWidth }}>
-          <div className={`${styles.leftHeader} flex-shrink-0`}>
-            <Space>
-              <Input
-                allowClear
-                placeholder="按模块名称搜索"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-              <button
-                type="button"
-                onClick={() => {
-                  setCreateReviewInitialValues(selectedModuleId ? { module_id: selectedModuleId } : undefined);
-                  setCreateReviewOpen(true);
-                }}
-                className="text-on-color bg-accent-primary hover:bg-accent-primary-hover focus:text-on-color focus:bg-accent-primary-hover px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center"
-              >
-                新建评审
-              </button>
-            </Space>
-          </div>
-          <div className={`${styles.treeRoot} flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm`}>
+          <div className={`${styles.treeRoot} flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm pt-2`}>
             <style
               dangerouslySetInnerHTML={{
                 __html: `

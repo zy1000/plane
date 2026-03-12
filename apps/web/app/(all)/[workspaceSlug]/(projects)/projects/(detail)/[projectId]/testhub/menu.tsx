@@ -4,7 +4,8 @@ import { usePathname, useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import React from "react";
 import { cn } from "@plane/utils";
-import { isTMMindmapMenuActive, isTMOverviewMenuActive, isTMPlansMenuActive, isTMReviewsMenuActive } from "./route-helpers";
+import { isTMMindmapMenuActive, isTMOverviewActive, isTMOverviewMenuActive, isTMPlansActive, isTMPlansMenuActive, isTMReviewsActive, isTMReviewsMenuActive } from "./route-helpers";
+import { useTestHub } from "./testhub-context";
 
 type TMenuItem = {
   key: string;
@@ -44,11 +45,16 @@ export const TestManagementMenuBar = () => {
   const pathname = usePathname();
   const { workspaceSlug, projectId } = useParams();
   const searchParams = useSearchParams();
+  const { triggerOpenNewModal, triggerOpenNewPlanModal, triggerOpenNewReviewModal } = useTestHub();
   const [repositoryIdFromStorage, setRepositoryIdFromStorage] = React.useState<string | null>(null);
   const [isClient, setIsClient] = React.useState(false);
 
   const ws = workspaceSlug?.toString() || "";
   const pid = projectId?.toString() || "";
+
+  const isOverviewActive = !!pathname && !!ws && !!pid && isTMOverviewActive(pathname, ws, pid);
+  const isPlansActive = !!pathname && !!ws && !!pid && isTMPlansActive(pathname, ws, pid);
+  const isReviewsActive = !!pathname && !!ws && !!pid && isTMReviewsActive(pathname, ws, pid);
 
   React.useEffect(() => {
     setIsClient(true);
@@ -65,36 +71,60 @@ export const TestManagementMenuBar = () => {
 
   return (
     <div className="w-full border-b border-subtle bg-surface-1">
-      <div className="flex items-center px-4 overflow-x-auto no-scrollbar">
-        {MENU_ITEMS.map((item) => {
-          const href = item.href(ws, pid);
-          const active = item.isActive(pathname, ws, pid);
-          const finalHref =
-            repositoryIdForLinks && item.key !== "overview"
-              ? `${href}?repositoryId=${encodeURIComponent(String(repositoryIdForLinks))}`
-              : href;
-          return (
-            <Link
-              key={item.key}
-              href={finalHref}
-              className={cn(
-                "px-4 text-13 font-medium transition-colors whitespace-nowrap",
-                active
-                  ? "text-primary"
-                  : "text-secondary hover:text-primary"
-              )}
-            >
-              <span
+      <div className="flex items-center w-full -ml-3">
+        <div className="flex items-center overflow-x-auto no-scrollbar flex-1">
+          {MENU_ITEMS.map((item) => {
+            const href = item.href(ws, pid);
+            const active = item.isActive(pathname, ws, pid);
+            const finalHref =
+              repositoryIdForLinks && item.key !== "overview"
+                ? `${href}?repositoryId=${encodeURIComponent(String(repositoryIdForLinks))}`
+                : href;
+            return (
+              <Link
+                key={item.key}
+                href={finalHref}
                 className={cn(
-                  "inline-block py-3 border-b-2",
-                  active ? "border-black" : "border-transparent"
+                  "px-4 text-13 font-medium transition-colors whitespace-nowrap",
+                  active ? "text-[#006399]" : "text-secondary hover:text-primary"
                 )}
               >
-                {item.label}
-              </span>
-            </Link>
-          );
-        })}
+                <span
+                  className={cn("inline-block py-3 border-b-2", active ? "border-[#006399]" : "border-transparent")}
+                >
+                  {item.label}
+                </span>
+              </Link>
+            );
+          })}
+        </div>
+        {isOverviewActive && (
+          <button
+            type="button"
+            onClick={triggerOpenNewModal}
+            className="ml-2 shrink-0 text-on-color bg-accent-primary hover:bg-accent-primary-hover focus:text-on-color focus:bg-accent-primary-hover px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            新建用例库
+          </button>
+        )}
+        {isPlansActive && (
+          <button
+            type="button"
+            onClick={triggerOpenNewPlanModal}
+            className="ml-2 shrink-0 text-on-color bg-accent-primary hover:bg-accent-primary-hover focus:text-on-color focus:bg-accent-primary-hover px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            新建计划
+          </button>
+        )}
+        {isReviewsActive && (
+          <button
+            type="button"
+            onClick={triggerOpenNewReviewModal}
+            className="ml-2 shrink-0 text-on-color bg-accent-primary hover:bg-accent-primary-hover focus:text-on-color focus:bg-accent-primary-hover px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            新建评审
+          </button>
+        )}
       </div>
     </div>
   );

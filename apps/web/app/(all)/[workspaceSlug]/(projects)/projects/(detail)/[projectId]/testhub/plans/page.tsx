@@ -46,6 +46,7 @@ type TestPlanResponse = { data: TestPlan[]; count: number };
 import { formatDate, formatDateTime, globalEnums } from "../util";
 import { CreateUpdatePlanModal } from "@/components/qa/plans/create-update-modal";
 import styles from "../reviews/reviews.module.css";
+import { useTestHub } from "../testhub-context";
 
 export default function TestPlanDetailPage() {
   const { workspaceSlug, projectId } = useParams();
@@ -65,6 +66,10 @@ export default function TestPlanDetailPage() {
   const [searchedColumn, setSearchedColumn] = useState("");
   const searchInput = useRef<InputRef>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const { registerOpenNewPlanModal } = useTestHub();
+  useEffect(() => {
+    registerOpenNewPlanModal(() => setShowCreateModal(true));
+  }, [registerOpenNewPlanModal]);
   const planService = new PlanService();
   const [leftWidth, setLeftWidth] = useState<number>(300);
   const isDraggingRef = useRef<boolean>(false);
@@ -880,24 +885,7 @@ export default function TestPlanDetailPage() {
                   className="absolute right-0 top-0 h-full w-2"
                   style={{ cursor: "col-resize", zIndex: 10 }}
                 />
-                <div className="p-2 flex-shrink-0">
-                  <Space>
-                    <Input
-                      allowClear
-                      placeholder="按模块名称搜索"
-                      value={searchModule}
-                      onChange={(e) => setSearchModule(e.target.value)}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowCreateModal(true)}
-                      className="text-on-color bg-accent-primary hover:bg-accent-primary-hover focus:text-on-color focus:bg-accent-primary-hover px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center"
-                    >
-                      新建计划
-                    </button>
-                  </Space>
-                </div>
-                <div className="flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm">
+                <div className="flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm pt-2">
                   <style
                     dangerouslySetInnerHTML={{
                       __html: `
