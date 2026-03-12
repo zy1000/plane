@@ -185,7 +185,7 @@ export const LdapConfiguration = observer(() => {
             <Button variant="primary" type="submit" loading={isLoading}>
                 Save Changes
             </Button>
-            <Button variant="neutral-primary" type="button" onClick={handleTestConnection} loading={isTesting}>
+            <Button variant="primary" type="button" onClick={handleTestConnection} loading={isTesting}>
                 Test Connection
             </Button>
         </div>

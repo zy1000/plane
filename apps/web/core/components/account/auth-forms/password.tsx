@@ -8,7 +8,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { observer } from "mobx-react";
 import Link from "next/link";
 // icons
-import { Eye, EyeOff, Info, XCircle } from "lucide-react";
+import { Eye, EyeOff, Info } from "lucide-react";
 // plane imports
 import { API_BASE_URL, E_PASSWORD_STRENGTH, AUTH_TRACKER_EVENTS, AUTH_TRACKER_ELEMENTS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
@@ -47,7 +47,7 @@ const defaultValues: TPasswordFormValues = {
 const authService = new AuthService();
 
 export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props) {
-  const { email, isSMTPConfigured, handleAuthStep, handleEmailClear, mode, nextPath } = props;
+  const { email, isSMTPConfigured, handleAuthStep, mode, nextPath } = props;
   // plane imports
   const { t } = useTranslation();
   // ref
@@ -172,7 +172,7 @@ export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props)
         {nextPath && <input type="hidden" value={nextPath} name="next_path" />}
         <div className="space-y-1">
           <label htmlFor="email" className="text-13 font-medium text-tertiary">
-            {t("auth.common.email.label")}
+            User
           </label>
           <div className={`relative flex items-center rounded-md border border-strong bg-surface-1`}>
             <Input
@@ -183,18 +183,7 @@ export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props)
               onChange={(e) => handleFormChange("email", e.target.value)}
               placeholder={t("auth.common.email.placeholder")}
               className={`h-10 w-full border-0 disable-autofill-style placeholder:text-placeholder`}
-              disabled
             />
-            {passwordFormData.email.length > 0 && (
-              <button
-                type="button"
-                className="absolute right-3 size-5"
-                onClick={handleEmailClear}
-                aria-label={t("aria_labels.auth_forms.clear_email")}
-              >
-                <XCircle className="size-5 stroke-placeholder" />
-              </button>
-            )}
           </div>
         </div>
 

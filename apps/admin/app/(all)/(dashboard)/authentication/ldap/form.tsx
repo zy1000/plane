@@ -149,7 +149,7 @@ export function InstanceLdapConfigForm() {
         <Button variant="primary" type="submit" loading={isSubmitting}>
           Save Changes
         </Button>
-        <Button variant="neutral-primary" type="button" onClick={handleTestConnection} loading={isTesting}>
+        <Button variant="primary" type="button" onClick={handleTestConnection} loading={isTesting}>
           Test Connection
         </Button>
       </div>
