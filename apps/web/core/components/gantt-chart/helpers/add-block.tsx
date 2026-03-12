@@ -196,7 +196,7 @@ export const ChartAddBlock = observer(function ChartAddBlock(props: Props) {
           <button
             type="button"
             className={cn(
-              "absolute top-1/2 grid h-8 w-8 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-sm border border-strong bg-layer-1 p-1.5 text-secondary hover:text-primary",
+              "absolute top-1/2 grid h-8 w-8 place-items-center rounded-sm border border-strong bg-layer-1 p-1.5 text-secondary hover:text-primary",
               { "opacity-0": isPointerDown }
             )}
             style={{

@@ -65,7 +65,7 @@ export const getIssueTypeMultiSelectConfig = (params: TCreateIssueTypeFilterPara
 export const getIssueTypeFilterConfig =
   <P extends TFilterProperty>(key: P): TCreateFilterConfig<P, TCreateIssueTypeFilterParams> =>
   (params: TCreateIssueTypeFilterParams) =>
-    createFilterConfig<P, string>({
+    createFilterConfig<P>({
       id: key,
       label: "Type",
       icon: params.filterIcon,

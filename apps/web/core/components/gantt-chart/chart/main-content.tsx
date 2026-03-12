@@ -383,7 +383,7 @@ export const GanttChartMainContent = observer(function GanttChartMainContent(pro
         {(helpers) => (
           <>
             <div
-              className={cn("h-full w-full flex border-t-[0.5px] border-subtle", {
+              className={cn("h-full w-full flex flex-1 min-h-0 border-t-[0.5px] border-subtle", {
                 "mb-8": bottomSpacing,
               })}
               ref={splitContainerRef}
@@ -406,7 +406,6 @@ export const GanttChartMainContent = observer(function GanttChartMainContent(pro
                   enableSelection={enableSelection}
                   sidebarToRender={sidebarToRender}
                   title={title}
-                  quickAdd={quickAdd}
                   selectionHelpers={helpers}
                   showAllBlocks={showAllBlocks}
                   isEpic={isEpic}

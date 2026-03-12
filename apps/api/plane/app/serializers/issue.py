@@ -306,14 +306,15 @@ class IssueCreateSerializer(BaseSerializer):
         workspace_id = instance.workspace_id
         created_by_id = instance.created_by_id
         updated_by_id = instance.updated_by_id
-        dynamic_properties = self.context["dynamic_properties"]
-        for property_id, issue_value in dynamic_properties.items():
-            IssuePropertyValue.objects.update_or_create(
-                issue_id=instance.id,
-                property_id=property_id,
-                project_id=project_id,
-                defaults={"value": issue_value},
-            )
+        if self.context.get('dynamic_properties'):
+            dynamic_properties = self.context["dynamic_properties"]
+            for property_id, issue_value in dynamic_properties.items():
+                IssuePropertyValue.objects.update_or_create(
+                    issue_id=instance.id,
+                    property_id=property_id,
+                    project_id=project_id,
+                    defaults={"value": issue_value},
+                )
 
         if assignees is not None:
             IssueAssignee.objects.filter(issue=instance).delete()
@@ -1108,7 +1109,6 @@ class IssueAllSerializer(BaseSerializer):
 
 
 class IssueBatchUpdateSerializer(BaseSerializer):
-
     state_id = serializers.PrimaryKeyRelatedField(
         source="state",
         queryset=State.all_state_objects.all(),
