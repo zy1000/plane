@@ -112,8 +112,8 @@ export const SidebarMenuItems = observer(function SidebarMenuItems() {
 
       <div className="mt-auto">
         <hr className="border-subtle" />
-        <Link href={`/${workspaceSlug}/changelog`}>
-          <SidebarNavItem isActive={pathname?.startsWith(`/${workspaceSlug}/changelog`)}>
+        <Link href={`/${workspaceSlug}/releasenote`}>
+          <SidebarNavItem isActive={pathname?.startsWith(`/${workspaceSlug}/releasenote`)}>
             <div className="flex items-center gap-1.5 py-[1px]">
               <BookText className="size-4 flex-shrink-0" />
               <p className="text-13 leading-5 font-medium">更新日志</p>

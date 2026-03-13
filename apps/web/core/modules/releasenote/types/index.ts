@@ -1,6 +1,6 @@
-export type TChangelogUpdateType = "added" | "fixed" | "improved";
+export type TReleasenoteUpdateType = "added" | "fixed" | "improved";
 
-export interface IChangelogItem {
+export interface IReleasenoteItem {
   id: string;
   title: string;
   summary: string;
@@ -11,27 +11,27 @@ export interface IChangelogItem {
   links: string[];
   screenshots: string[];
   release_date: string | null;
-  update_type: TChangelogUpdateType;
+  update_type: TReleasenoteUpdateType;
   is_pinned: boolean;
   is_active: boolean;
   created_at: string;
   updated_at: string;
 }
 
-export interface IChangelogListResponse {
+export interface IReleasenoteListResponse {
   count: number;
-  data: IChangelogItem[];
+  data: IReleasenoteItem[];
 }
 
-export interface IChangelogListParams {
+export interface IReleasenoteListParams {
   page?: number;
   page_size?: number;
   search?: string;
-  update_type?: TChangelogUpdateType;
+  update_type?: TReleasenoteUpdateType;
   include_inactive?: boolean;
 }
 
-export interface IChangelogFormPayload {
+export interface IReleasenoteFormPayload {
   title: string;
   summary: string;
   description: string;
@@ -40,7 +40,7 @@ export interface IChangelogFormPayload {
   links: string[];
   screenshots: string[];
   release_date: string | null;
-  update_type: TChangelogUpdateType;
+  update_type: TReleasenoteUpdateType;
   is_pinned: boolean;
   is_active?: boolean;
 }

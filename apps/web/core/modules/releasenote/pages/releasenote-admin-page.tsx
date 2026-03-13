@@ -7,9 +7,9 @@ import { SettingsContentWrapper } from "@/components/settings/content-wrapper";
 import { SettingsHeading } from "@/components/settings/heading";
 import { useWorkspace } from "@/hooks/store/use-workspace";
 import { UserService } from "@/services/user.service";
-import { ChangelogFormModal } from "../components/changelog-form-modal";
-import { changelogService } from "../services/changelog.service";
-import type { IChangelogItem, TChangelogUpdateType } from "../types";
+import { ReleasenoteFormModal } from "../components/releasenote-form-modal";
+import { releasenoteService } from "../services/releasenote.service";
+import type { IReleasenoteItem, TReleasenoteUpdateType } from "../types";
 
 type Props = {
   workspaceSlug: string;
@@ -17,25 +17,25 @@ type Props = {
 
 const userService = new UserService();
 
-const TYPE_LABEL: Record<TChangelogUpdateType, string> = {
+const TYPE_LABEL: Record<TReleasenoteUpdateType, string> = {
   added: "新增",
   fixed: "修复",
   improved: "优化",
 };
 
-export const ChangelogAdminPage = ({ workspaceSlug }: Props) => {
+export const ReleasenoteAdminPage = ({ workspaceSlug }: Props) => {
   const { currentWorkspace } = useWorkspace();
   const [isLoading, setIsLoading] = useState(true);
   const [isAdminLoading, setIsAdminLoading] = useState(true);
   const [isInstanceAdmin, setIsInstanceAdmin] = useState(false);
-  const [items, setItems] = useState<IChangelogItem[]>([]);
+  const [items, setItems] = useState<IReleasenoteItem[]>([]);
   const [count, setCount] = useState(0);
   const [search, setSearch] = useState("");
-  const [typeFilter, setTypeFilter] = useState<"" | TChangelogUpdateType>("");
+  const [typeFilter, setTypeFilter] = useState<"" | TReleasenoteUpdateType>("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [page, setPage] = useState(1);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingItem, setEditingItem] = useState<IChangelogItem | null>(null);
+  const [editingItem, setEditingItem] = useState<IReleasenoteItem | null>(null);
   const pageSize = 10;
 
   const fetchInstanceAdminStatus = async () => {
@@ -50,7 +50,7 @@ export const ChangelogAdminPage = ({ workspaceSlug }: Props) => {
   const fetchList = async () => {
     setIsLoading(true);
     try {
-      const response = await changelogService.getChangelogList({
+      const response = await releasenoteService.getReleasenoteList({
         page,
         page_size: pageSize,
         search: search || undefined,
@@ -86,8 +86,8 @@ export const ChangelogAdminPage = ({ workspaceSlug }: Props) => {
 
   const handleCreateOrUpdate = async (payload: any) => {
     try {
-      if (editingItem?.id) await changelogService.updateChangelog(editingItem.id, payload);
-      else await changelogService.createChangelog(payload);
+      if (editingItem?.id) await releasenoteService.updateReleasenote(editingItem.id, payload);
+      else await releasenoteService.createReleasenote(payload);
 
       setToast({
         type: TOAST_TYPE.SUCCESS,
@@ -108,7 +108,7 @@ export const ChangelogAdminPage = ({ workspaceSlug }: Props) => {
 
   const handleDelete = async (id: string) => {
     if (!window.confirm("确认删除该日志吗？")) return;
-    await changelogService.deleteChangelog(id);
+    await releasenoteService.deleteReleasenote(id);
     setToast({
       type: TOAST_TYPE.SUCCESS,
       title: "删除成功",
@@ -120,7 +120,7 @@ export const ChangelogAdminPage = ({ workspaceSlug }: Props) => {
   const handleBatchDelete = async () => {
     if (!selectedIds.length) return;
     if (!window.confirm(`确认删除选中的 ${selectedIds.length} 条日志吗？`)) return;
-    await changelogService.batchDeleteChangelog(selectedIds);
+    await releasenoteService.batchDeleteReleasenote(selectedIds);
     setSelectedIds([]);
     setToast({
       type: TOAST_TYPE.SUCCESS,
@@ -135,7 +135,7 @@ export const ChangelogAdminPage = ({ workspaceSlug }: Props) => {
       {
         key: "select",
         content: "",
-        tdRender: (row: IChangelogItem) => (
+        tdRender: (row: IReleasenoteItem) => (
           <input
             type="checkbox"
             checked={selectedIds.includes(row.id)}
@@ -148,29 +148,29 @@ export const ChangelogAdminPage = ({ workspaceSlug }: Props) => {
       {
         key: "version",
         content: "版本",
-        tdRender: (row: IChangelogItem) => <span className="text-xs">{row.version}</span>,
+        tdRender: (row: IReleasenoteItem) => <span className="text-xs">{row.version}</span>,
       },
       {
         key: "title",
         content: "标题",
-        tdRender: (row: IChangelogItem) => <span className="text-sm">{row.title}</span>,
+        tdRender: (row: IReleasenoteItem) => <span className="text-sm">{row.title}</span>,
       },
       {
         key: "type",
         content: "类型",
-        tdRender: (row: IChangelogItem) => <span className="text-xs">{TYPE_LABEL[row.update_type]}</span>,
+        tdRender: (row: IReleasenoteItem) => <span className="text-xs">{TYPE_LABEL[row.update_type]}</span>,
       },
       {
         key: "release_date",
         content: "发布时间",
-        tdRender: (row: IChangelogItem) => (
+        tdRender: (row: IReleasenoteItem) => (
           <span className="text-xs">{row.release_date ? new Date(row.release_date).toLocaleString() : "-"}</span>
         ),
       },
       {
         key: "actions",
         content: "操作",
-        tdRender: (row: IChangelogItem) => (
+        tdRender: (row: IReleasenoteItem) => (
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -214,7 +214,7 @@ export const ChangelogAdminPage = ({ workspaceSlug }: Props) => {
 
   return (
     <SettingsContentWrapper>
-      <ChangelogFormModal
+      <ReleasenoteFormModal
         isOpen={isModalOpen}
         workspaceSlug={workspaceSlug}
         workspaceId={currentWorkspace?.id}
@@ -250,7 +250,7 @@ export const ChangelogAdminPage = ({ workspaceSlug }: Props) => {
           <select
             className="h-9 rounded border border-subtle bg-surface-1 px-2 text-sm"
             value={typeFilter}
-            onChange={(e) => setTypeFilter(e.target.value as "" | TChangelogUpdateType)}
+            onChange={(e) => setTypeFilter(e.target.value as "" | TReleasenoteUpdateType)}
           >
             <option value="">全部类型</option>
             <option value="added">新增</option>

@@ -1,18 +1,18 @@
 import { Card } from "@plane/ui";
 import { RichTextEditor } from "@/components/editor/rich-text";
-import type { IChangelogItem } from "../types";
+import type { IReleasenoteItem } from "../types";
 
 type Props = {
-  items: IChangelogItem[];
+  items: IReleasenoteItem[];
 };
 
-const TYPE_LABEL: Record<IChangelogItem["update_type"], string> = {
+const TYPE_LABEL: Record<IReleasenoteItem["update_type"], string> = {
   added: "新增",
   fixed: "修复",
   improved: "优化",
 };
 
-const TYPE_CLASS: Record<IChangelogItem["update_type"], string> = {
+const TYPE_CLASS: Record<IReleasenoteItem["update_type"], string> = {
   added: "text-green-700 bg-green-100",
   fixed: "text-red-700 bg-red-100",
   improved: "text-blue-700 bg-blue-100",
@@ -23,7 +23,7 @@ const formatDate = (value: string | null) => {
   return new Date(value).toLocaleString();
 };
 
-export const ChangelogTimeline = ({ items }: Props) => (
+export const ReleasenoteTimeline = ({ items }: Props) => (
   <div className="flex flex-col gap-4">
     {items.map((item) => (
       <div key={item.id} className="relative pl-6">
@@ -46,7 +46,7 @@ export const ChangelogTimeline = ({ items }: Props) => (
           {item.summary && <p className="mt-2 text-sm text-primary">{item.summary}</p>}
           <div className="mt-3 rounded border border-subtle-1 bg-layer-1 p-2">
             <RichTextEditor
-              id={`changelog-content-${item.id}`}
+              id={`releasenote-content-${item.id}`}
               editable={false}
               initialValue={item.content || item.description || ""}
               workspaceSlug=""

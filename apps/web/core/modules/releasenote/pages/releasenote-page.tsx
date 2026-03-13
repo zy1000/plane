@@ -1,22 +1,22 @@
 import { useEffect, useState } from "react";
 import { Loader } from "@plane/ui";
 import { PageHead } from "@/components/core/page-title";
-import { ChangelogTimeline } from "../components/changelog-timeline";
-import { changelogService } from "../services/changelog.service";
-import type { IChangelogItem } from "../types";
+import { ReleasenoteTimeline } from "../components/releasenote-timeline";
+import { releasenoteService } from "../services/releasenote.service";
+import type { IReleasenoteItem } from "../types";
 
 type Props = {
   workspaceSlug: string;
 };
 
-export const ChangelogPage = ({ workspaceSlug }: Props) => {
+export const ReleasenotePage = ({ workspaceSlug }: Props) => {
   const [isLoading, setIsLoading] = useState(true);
-  const [items, setItems] = useState<IChangelogItem[]>([]);
+  const [items, setItems] = useState<IReleasenoteItem[]>([]);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const response = await changelogService.getChangelogList({
+        const response = await releasenoteService.getReleasenoteList({
           page: 1,
           page_size: 50,
         });
@@ -47,7 +47,7 @@ export const ChangelogPage = ({ workspaceSlug }: Props) => {
           ) : items.length === 0 ? (
             <div className="rounded border border-subtle p-6 text-sm text-secondary">暂无更新日志</div>
           ) : (
-            <ChangelogTimeline items={items} />
+            <ReleasenoteTimeline items={items} />
           )}
         </div>
       </div>

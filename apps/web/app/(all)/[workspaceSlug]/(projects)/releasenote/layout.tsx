@@ -1,5 +1,5 @@
 import { Outlet } from "react-router";
 
-export default function WorkspaceChangelogLayout() {
+export default function WorkspaceReleasenoteLayout() {
   return <Outlet />;
 }

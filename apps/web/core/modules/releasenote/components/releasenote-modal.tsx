@@ -2,24 +2,24 @@ import { useRouter } from "next/navigation";
 import { EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
 import { RichTextEditor } from "@/components/editor/rich-text";
 import { useWorkspace } from "@/hooks/store/use-workspace";
-import { useChangelogModal } from "../hooks/use-changelog-modal";
+import { useReleasenoteModal } from "../hooks/use-releasenote-modal";
 import { useUser } from "@/hooks/store/user";
 
 type Props = {
   workspaceSlug: string;
 };
 
-export const ChangelogModal = ({ workspaceSlug }: Props) => {
+export const ReleasenoteModal = ({ workspaceSlug }: Props) => {
   const router = useRouter();
   const { data: currentUser } = useUser();
   const { currentWorkspace } = useWorkspace();
-  const { isOpen, latest, closeModal } = useChangelogModal({
+  const { isOpen, latest, closeModal } = useReleasenoteModal({
     userId: currentUser?.id,
   });
 
   const handleViewDetail = async () => {
     await closeModal();
-    router.push(`/${workspaceSlug}/changelog`);
+    router.push(`/${workspaceSlug}/releasenote`);
   };
 
   return (
@@ -30,7 +30,7 @@ export const ChangelogModal = ({ workspaceSlug }: Props) => {
         {latest?.summary && <p className="mt-3 text-sm text-primary">{latest.summary}</p>}
         <div className="mt-3 rounded border border-subtle-1 bg-layer-1 p-2">
           <RichTextEditor
-            id={`changelog-modal-content-${latest?.id ?? "latest"}`}
+            id={`releasenote-modal-content-${latest?.id ?? "latest"}`}
             editable={false}
             initialValue={latest?.content || latest?.description || ""}
             workspaceSlug={workspaceSlug}

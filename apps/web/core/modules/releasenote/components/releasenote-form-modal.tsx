@@ -1,18 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
 import { EModalPosition, EModalWidth, Input, ModalCore, TextArea } from "@plane/ui";
 import { RichTextEditor } from "@/components/editor/rich-text";
-import type { IChangelogFormPayload, IChangelogItem, TChangelogUpdateType } from "../types";
+import type { IReleasenoteFormPayload, IReleasenoteItem, TReleasenoteUpdateType } from "../types";
 
 type Props = {
   isOpen: boolean;
   workspaceSlug: string;
   workspaceId?: string;
-  initialValue?: IChangelogItem | null;
+  initialValue?: IReleasenoteItem | null;
   onClose: () => void;
-  onSubmit: (payload: IChangelogFormPayload) => Promise<void>;
+  onSubmit: (payload: IReleasenoteFormPayload) => Promise<void>;
 };
 
-const DEFAULT_FORM: IChangelogFormPayload = {
+const DEFAULT_FORM: IReleasenoteFormPayload = {
   title: "",
   summary: "",
   description: "",
@@ -33,8 +33,8 @@ const toDateTimeLocal = (date: string | null) => {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
 
-export const ChangelogFormModal = ({ isOpen, workspaceSlug, workspaceId, initialValue, onClose, onSubmit }: Props) => {
-  const [form, setForm] = useState<IChangelogFormPayload>(DEFAULT_FORM);
+export const ReleasenoteFormModal = ({ isOpen, workspaceSlug, workspaceId, initialValue, onClose, onSubmit }: Props) => {
+  const [form, setForm] = useState<IReleasenoteFormPayload>(DEFAULT_FORM);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [linksText, setLinksText] = useState("");
   const [screenshotsText, setScreenshotsText] = useState("");
@@ -105,7 +105,7 @@ export const ChangelogFormModal = ({ isOpen, workspaceSlug, workspaceId, initial
           <select
             className="h-9 rounded border border-subtle bg-surface-1 px-2 text-sm text-primary"
             value={form.update_type}
-            onChange={(e) => setForm((prev) => ({ ...prev, update_type: e.target.value as TChangelogUpdateType }))}
+            onChange={(e) => setForm((prev) => ({ ...prev, update_type: e.target.value as TReleasenoteUpdateType }))}
           >
             <option value="added">新增</option>
             <option value="fixed">修复</option>
@@ -133,7 +133,7 @@ export const ChangelogFormModal = ({ isOpen, workspaceSlug, workspaceId, initial
           />
           <div className="rounded border border-subtle p-2">
             <RichTextEditor
-              id="changelog-rich-editor"
+              id="releasenote-rich-editor"
               editable
               initialValue={form.content}
               workspaceSlug={workspaceSlug}

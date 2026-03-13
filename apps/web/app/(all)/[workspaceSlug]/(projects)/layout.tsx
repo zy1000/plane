@@ -8,7 +8,7 @@ import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 import { Outlet } from "react-router";
 import { ProjectsAppPowerKProvider } from "@/components/power-k/projects-app-provider";
-import { ChangelogModal } from "@/modules/changelog";
+import { ReleasenoteModal } from "@/modules/releasenote";
 // plane web components
 import { ProjectAppSidebar } from "./_sidebar";
 import { ExtendedProjectSidebar } from "./extended-project-sidebar";
@@ -19,7 +19,7 @@ function WorkspaceLayout() {
   return (
     <>
       <ProjectsAppPowerKProvider />
-      {workspaceSlug && <ChangelogModal workspaceSlug={workspaceSlug.toString()} />}
+      {workspaceSlug && <ReleasenoteModal workspaceSlug={workspaceSlug.toString()} />}
       <div className="relative flex h-full w-full flex-col overflow-hidden rounded-lg border border-subtle">
         <div id="full-screen-portal" className="absolute inset-0 w-full" />
         <div className="relative flex size-full overflow-hidden">

@@ -1,17 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
-import { changelogService } from "../services/changelog.service";
-import type { IChangelogItem } from "../types";
+import { releasenoteService } from "../services/releasenote.service";
+import type { IReleasenoteItem } from "../types";
 
 type Props = {
   userId?: string;
 };
 
-export const useChangelogModal = ({ userId }: Props) => {
+export const useReleasenoteModal = ({ userId }: Props) => {
   const [isLoading, setIsLoading] = useState(true);
   const [isOpen, setIsOpen] = useState(false);
-  const [latest, setLatest] = useState<IChangelogItem | null>(null);
+  const [latest, setLatest] = useState<IReleasenoteItem | null>(null);
 
-  const storageKey = useMemo(() => (userId ? `changelog_read_${userId}` : null), [userId]);
+  const storageKey = useMemo(() => (userId ? `releasenote_read_${userId}` : null), [userId]);
 
   useEffect(() => {
     if (!userId || !storageKey) {
@@ -23,15 +23,15 @@ export const useChangelogModal = ({ userId }: Props) => {
 
     const init = async () => {
       try {
-        const latestChangelog = await changelogService.getLatestChangelog();
-        if (!latestChangelog?.id) {
+        const latestReleasenote = await releasenoteService.getLatestReleasenote();
+        if (!latestReleasenote?.id) {
           setIsLoading(false);
           return;
         }
 
-        setLatest(latestChangelog);
+        setLatest(latestReleasenote);
         const localReadId = window.localStorage.getItem(storageKey);
-        const shouldOpen = localReadId !== latestChangelog.id && !latestChangelog.is_read;
+        const shouldOpen = localReadId !== latestReleasenote.id && !latestReleasenote.is_read;
 
         if (shouldOpen) {
           timerId = setTimeout(() => {
@@ -52,7 +52,7 @@ export const useChangelogModal = ({ userId }: Props) => {
 
   const markAsRead = async () => {
     if (!latest?.id || !storageKey) return;
-    await changelogService.markChangelogAsRead(latest.id);
+    await releasenoteService.markReleasenoteAsRead(latest.id);
     window.localStorage.setItem(storageKey, latest.id);
   };
 
