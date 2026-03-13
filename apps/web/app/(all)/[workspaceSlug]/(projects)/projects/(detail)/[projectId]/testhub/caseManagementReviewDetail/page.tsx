@@ -534,7 +534,7 @@ export default function CaseManagementReviewDetailPage() {
               switcherIcon={(nodeProps) => (
                 <span className="inline-flex items-center justify-center w-5 h-5 text-secondary">
                   <ChevronDownIcon
-                    className={`size-4 transition-transform ${nodeProps.expanded ? "rotate-0" : "-rotate-90"}`}
+                    className={`size-4 transition-transform rotate-0`}
                     strokeWidth={2.5}
                   />
                 </span>
