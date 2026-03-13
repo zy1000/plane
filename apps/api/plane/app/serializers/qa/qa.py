@@ -269,6 +269,9 @@ class ReviewModuleListSerializer(ModelSerializer):
 
 class ReviewCreateUpdateSerializer(ModelSerializer):
     cases = serializers.PrimaryKeyRelatedField(queryset=TestCase.objects.all(), many=True, required=False)
+    module = serializers.PrimaryKeyRelatedField(
+        queryset=CaseReviewModule.objects.all(), required=False, allow_null=True
+    )
 
     def create(self, validated_data):
         cases = validated_data.pop('cases', [])
@@ -314,7 +317,7 @@ class ReviewListSerializer(ModelSerializer):
         return statis
 
     def get_module_name(self, obj: CaseReview):
-        return obj.module.name
+        return obj.module.name if obj.module_id else None
 
     class Meta:
         model = CaseReview

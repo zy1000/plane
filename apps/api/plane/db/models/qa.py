@@ -520,11 +520,17 @@ class CaseReview(BaseModel):
         verbose_name = "CaseReview"
         verbose_name_plural = "CaseReview"
         constraints = [
-            # Enforce uniqueness of project and name when project is not NULL and deleted_at is NULL
+            # 同项目同模块下不允许重名（module 有值时）
+            models.UniqueConstraint(
+                fields=["project", "module", "name"],
+                condition=Q(project__isnull=False, deleted_at__isnull=True, module__isnull=False),
+                name="unique_review_project_module_name_when_not_deleted",
+            ),
+            # 同项目下未指定模块时不允许重名（module 为 null 时）
             models.UniqueConstraint(
                 fields=["project", "name"],
-                condition=Q(project__isnull=False, deleted_at__isnull=True),
-                name="unique_review_project_name_when_not_deleted",
+                condition=Q(project__isnull=False, deleted_at__isnull=True, module__isnull=True),
+                name="unique_review_project_name_when_module_null_not_deleted",
             ),
         ]
         db_table = "test_case_review"
