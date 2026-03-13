@@ -246,13 +246,13 @@ export default function CaseVersionCompareFullPage() {
               </colgroup>
               <thead>
                 <tr className="bg-gray-50">
-                  <th className="border border-gray-300 px-2 py-2 text-center text-xs font-medium text-gray-700">
+                  <th className="border border-gray-300 px-2 py-2 text-center text-[13px] font-medium text-secondary">
                     编号
                   </th>
-                  <th className="border border-gray-300 px-2 py-2 text-center text-xs font-medium text-gray-700">
+                  <th className="border border-gray-300 px-2 py-2 text-center text-[13px] font-medium text-secondary">
                     步骤描述
                   </th>
-                  <th className="border border-gray-300 px-2 py-2 text-center text-xs font-medium text-gray-700">
+                  <th className="border border-gray-300 px-2 py-2 text-center text-[13px] font-medium text-secondary">
                     预期结果
                   </th>
                 </tr>

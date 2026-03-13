@@ -54,6 +54,11 @@ export default function TestExecutionPage() {
   const reviewId = searchParams.get("review_id") ?? "";
   const repositoryId = searchParams.get("repositoryId") ?? "";
 
+  const [planName, setPlanName] = React.useState<string>(() => {
+    if (typeof window !== "undefined") return sessionStorage.getItem("selectedPlanName") || "";
+    return "";
+  });
+
   const caseService = React.useMemo(() => new CaseApiService(), []);
   const planService = React.useMemo(() => new PlanApiService(), []);
   const {
@@ -293,6 +298,17 @@ export default function TestExecutionPage() {
   React.useEffect(() => {
     setMounted(true);
   }, []);
+
+  React.useEffect(() => {
+    if (!planId || !workspaceSlug || !projectId || planName) return;
+    planService
+      .getPlanList(String(workspaceSlug), { project_id: String(projectId) })
+      .then((list) => {
+        const found = list.find((p) => String(p.id) === String(planId));
+        if (found?.name) setPlanName(found.name);
+      })
+      .catch(() => {});
+  }, [planId, workspaceSlug, projectId]);
 
   React.useEffect(() => {
     if (listLoading) return;
@@ -882,7 +898,7 @@ export default function TestExecutionPage() {
                     }`
                   : undefined
               }
-              label="测试计划详情"
+              label={planName || "测试计划详情"}
             />
           }
         />
@@ -1002,7 +1018,7 @@ export default function TestExecutionPage() {
                               setSelectedCaseId(caseId);
                               fetchCaseDetail(caseId);
                             }}
-                            className={`${isActive ? "ring-2 ring-blue-500" : ""} rounded-md hover:shadow-sm transition-shadow`}
+                            className={`${isActive ? "ring-2 ring-accent-strong" : ""} rounded-md hover:shadow-sm transition-shadow`}
                           >
                             <div className="flex items-center justify-between">
                               <div className="text-sm leading-5 font-medium truncate">{item.name}</div>

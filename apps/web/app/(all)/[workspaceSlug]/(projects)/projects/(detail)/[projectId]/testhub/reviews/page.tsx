@@ -730,7 +730,7 @@ export default function ReviewsPage() {
         <Tooltip title={name} placement="topLeft">
           <Button
             type="link"
-            className="!text-primary hover:!text-primary !p-0 !h-auto block w-full !text-left"
+            className="!text-primary hover:!text-primary !p-0 !h-auto block w-full !text-left !justify-start"
             onClick={() => {
               try {
                 sessionStorage.setItem("selectedReviewName", name || "");
@@ -1038,6 +1038,9 @@ export default function ReviewsPage() {
                   top: 0;
                   z-index: 5;
                   background: var(--bg-surface-1);
+                  font-size: 13px !important;
+                  font-weight: 500 !important;
+                  color: var(--text-color-secondary) !important;
                 }
 
                 .testhub-reviews-table-scroll.testhub-reviews-scrollbar-strong{

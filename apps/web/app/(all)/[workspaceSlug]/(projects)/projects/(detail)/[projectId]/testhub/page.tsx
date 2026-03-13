@@ -326,9 +326,20 @@ export default function TestManagementHomePage() {
               <div className="text-red-800 text-sm">{error}</div>
             </div>
           )}
+          <style
+            dangerouslySetInnerHTML={{
+              __html: `
+                .testhub-overview-table-scroll .ant-table-thead > tr > th {
+                  font-size: 13px !important;
+                  font-weight: 500 !important;
+                  color: var(--text-color-secondary) !important;
+                }
+              `,
+            }}
+          />
           {!loading && !error && (
             <>
-              <div>
+              <div className="testhub-overview-table-scroll">
                 <Table
                   dataSource={repositories}
                   columns={columns}

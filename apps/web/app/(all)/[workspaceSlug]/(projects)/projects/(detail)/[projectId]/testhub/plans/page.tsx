@@ -361,7 +361,15 @@ export default function TestPlanDetailPage() {
     );
   };
 
-  const renderResult = (result: any) => <span className="text-sm text-tertiary">{result ?? "-"}</span>;
+  const renderResult = (result: any) => {
+    if (!result) return <span className="text-sm text-tertiary">-</span>;
+    const colorMap: Record<string, string> = {
+      通过: "success",
+      不通过: "error",
+    };
+    const color = colorMap[result] ?? (Enums?.plan_case_result as any)?.[result] ?? "default";
+    return <Tag color={color}>{result}</Tag>;
+  };
 
   const handleTableChange: TableProps<TestPlan>["onChange"] = (_pagination, tableFilters) => {
     const selectedStates = (tableFilters?.state as number[] | undefined) || [];
@@ -423,6 +431,7 @@ export default function TestPlanDetailPage() {
       title: "计划名称",
       dataIndex: "name",
       key: "name",
+      minWidth: 160,
       ...getColumnSearchProps("name"),
       render: (_name: string, record: TestPlan) => (
         <Button
@@ -443,7 +452,7 @@ export default function TestPlanDetailPage() {
         </Button>
       ),
     },
-    { title: "用例数", dataIndex: "case_count", key: "case_count", render: (case_count: number) => (case_count ? case_count : 0) },
+    { title: "用例数", dataIndex: "case_count", key: "case_count", width: 90, render: (case_count: number) => (case_count ? case_count : 0) },
     { title: "状态", dataIndex: "state", key: "state", width: 120, render: (state: any) => renderState(state as any) },
     {
       title: "通过率",
@@ -456,7 +465,7 @@ export default function TestPlanDetailPage() {
       title: "执行结果",
       dataIndex: "result",
       key: "result",
-      width: 140,
+      width: 120,
       render: (result: any) => renderResult(result),
     },
     {
@@ -959,6 +968,7 @@ export default function TestPlanDetailPage() {
                         bordered={true}
                         onChange={handleTableChange}
                         pagination={false}
+                        scroll={{ x: 1210 }}
                       />
                     </div>
                     <div className="flex-shrink-0 border-t border-subtle px-4 py-3 bg-surface-1 flex items-center justify-between">
@@ -998,6 +1008,9 @@ export default function TestPlanDetailPage() {
                         top: 0;
                         z-index: 5;
                         background: var(--bg-surface-1);
+                        font-size: 13px !important;
+                        font-weight: 500 !important;
+                        color: var(--text-color-secondary) !important;
                       }
 
                       .testhub-plans-table-scroll.testhub-plans-scrollbar-strong{
@@ -1019,6 +1032,47 @@ export default function TestPlanDetailPage() {
 
                       .testhub-plans-table-scroll.testhub-plans-scrollbar-strong::-webkit-scrollbar-track{
                         background: transparent;
+                      }
+
+                      .testhub-plans-table-scroll .ant-table-content::-webkit-scrollbar,
+                      .testhub-plans-table-scroll .ant-table-body::-webkit-scrollbar {
+                        height: 4px;
+                        background: transparent;
+                      }
+                      .testhub-plans-table-scroll .ant-table-content::-webkit-scrollbar-thumb,
+                      .testhub-plans-table-scroll .ant-table-body::-webkit-scrollbar-thumb {
+                        background-color: transparent;
+                        border-radius: 2px;
+                        transition: background-color 0.3s ease;
+                      }
+                      .testhub-plans-table-scroll .ant-table-content::-webkit-scrollbar-track,
+                      .testhub-plans-table-scroll .ant-table-body::-webkit-scrollbar-track {
+                        background: transparent;
+                      }
+                      .testhub-plans-table-scroll .ant-table-content:hover::-webkit-scrollbar,
+                      .testhub-plans-table-scroll .ant-table-body:hover::-webkit-scrollbar {
+                        height: 4px;
+                      }
+                      .testhub-plans-table-scroll .ant-table-content:hover::-webkit-scrollbar-thumb,
+                      .testhub-plans-table-scroll .ant-table-body:hover::-webkit-scrollbar-thumb {
+                        background-color: #dddde0;
+                      }
+
+                      .testhub-plans-table-scroll .ant-table-content {
+                        scrollbar-width: thin;
+                        scrollbar-color: transparent transparent;
+                      }
+                      .testhub-plans-table-scroll .ant-table-content:hover {
+                        scrollbar-width: thin;
+                        scrollbar-color: #dddde0 transparent;
+                      }
+                      .testhub-plans-table-scroll .ant-table-body {
+                        scrollbar-width: thin;
+                        scrollbar-color: transparent transparent;
+                      }
+                      .testhub-plans-table-scroll .ant-table-body:hover {
+                        scrollbar-width: thin;
+                        scrollbar-color: #dddde0 transparent;
                       }
 
                       .testhub-plan-module-tree .ant-tree-draggable-icon{

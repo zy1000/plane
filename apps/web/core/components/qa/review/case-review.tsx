@@ -43,6 +43,11 @@ export default function CaseReview() {
   const reviewId = searchParams.get("review_id") ?? "";
   const initialCaseId = searchParams.get("case_id") ?? undefined;
 
+  const [reviewName, setReviewName] = React.useState<string>(() => {
+    if (typeof window !== "undefined") return sessionStorage.getItem("selectedReviewName") || "";
+    return "";
+  });
+
   const caseService = React.useMemo(() => new CaseApiService(), []);
   const reviewService = React.useMemo(() => new ReviewApiService(), []);
   const {
@@ -312,6 +317,17 @@ export default function CaseReview() {
   React.useEffect(() => {
     fetchReviewEnums();
   }, [workspaceSlug]);
+
+  React.useEffect(() => {
+    if (!reviewId || !workspaceSlug || !projectId || reviewName) return;
+    reviewService
+      .getReviewList(String(workspaceSlug), { project_id: String(projectId) })
+      .then((list) => {
+        const found = list.find((r) => String(r.id) === String(reviewId));
+        if (found?.name) setReviewName(found.name);
+      })
+      .catch(() => {});
+  }, [reviewId, workspaceSlug, projectId]);
 
   React.useEffect(() => {
     fetchEnums();
@@ -713,14 +729,14 @@ export default function CaseReview() {
       <Breadcrumbs>
         <Breadcrumbs.Item
           component={
-            <BreadcrumbLink href={`/${workspaceSlug}/projects/${projectId}/testhub/plans`} label="测试计划" />
+            <BreadcrumbLink href={`/${workspaceSlug}/projects/${projectId}/testhub/reviews`} label="用例评审" />
           }
         />
         <Breadcrumbs.Item
           component={
             <BreadcrumbLink
               href={`/${workspaceSlug}/projects/${projectId}/testhub/caseManagementReviewDetail?review_id=${encodeURIComponent(String(reviewId))}`}
-              label="测试计划详情"
+              label={reviewName || "用例评审详情"}
             />
           }
         />

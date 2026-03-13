@@ -671,7 +671,7 @@ export default function PlanCasesPage() {
       <div className="flex h-full w-full flex-col">
         <div className="flex-1 min-h-0 flex overflow-hidden">
           <div
-            className="relative h-full min-h-0 border-r border-subtle overflow-y-auto flex-shrink-0"
+            className="relative h-full min-h-0 border-r border-subtle overflow-y-auto flex-shrink-0 pt-3 pl-3"
             style={{ width: leftWidth, minWidth: 200, maxWidth: 320 }}
           >
             <div
@@ -716,7 +716,7 @@ export default function PlanCasesPage() {
               autoExpandParent={autoExpandParent}
               treeData={treeData}
               selectedKeys={treeData.length > 0 ? [selectedTreeKey] : []}
-              className="py-2 pl-2 custom-tree-indent"
+              className="pb-2 pr-2 custom-tree-indent"
             />
           </div>
           <div className="flex-1 h-full min-h-0 overflow-hidden min-w-0">
@@ -923,6 +923,9 @@ export default function PlanCasesPage() {
                     top: 0;
                     z-index: 5;
                     background: var(--bg-surface-1);
+                    font-size: 13px !important;
+                    font-weight: 500 !important;
+                    color: var(--text-color-secondary) !important;
                   }
 
                   .testhub-plan-cases-table-scroll.testhub-plan-cases-scrollbar-strong{

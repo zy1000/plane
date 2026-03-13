@@ -226,7 +226,6 @@ export const WorkItemDisplayModal: React.FC<WorkItemDisplayModalProps> = ({
 
   return (
     <div className={className}>
-      <div className="flex items-center justify-between mb-3"></div>
       <Spin spinning={loading} delay={200}>
         <Table<TIssue>
           size="small"

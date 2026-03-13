@@ -1091,16 +1091,16 @@ function UpdateModal({ open, onClose, caseId, workspaceSlug: propWorkspaceSlug, 
               onDeleteLabel={handleDeleteLabel}
             />
             {/* Menu 导航 */}
-            <div className="mt-6">
-              <div className="mx-2 border-b border-gray-200">
+            <div className="mt-3">
+              <div className="mx-2 border-b border-gray-200 flex items-center justify-between">
                 <nav className="flex gap-4">
                   <button
                     type="button"
                     onClick={() => setActiveTab("basic")}
-                    className={`px-2 py-3 text-sm -mb-px border-b-2 transition-colors ${
+                    className={`px-2 py-3 text-sm leading-5 font-medium -mb-px border-b-2 transition-colors ${
                       activeTab === "basic"
-                        ? "text-blue-600 border-blue-600"
-                        : "text-black border-transparent hover:text-blue-600"
+                        ? "text-accent-primary border-accent-strong"
+                        : "text-secondary border-transparent hover:text-accent-primary"
                     }`}
                   >
                     基本信息
@@ -1108,10 +1108,10 @@ function UpdateModal({ open, onClose, caseId, workspaceSlug: propWorkspaceSlug, 
                   <button
                     type="button"
                     onClick={() => setActiveTab("requirement")}
-                    className={`px-2 py-3 text-sm -mb-px border-b-2 transition-colors ${
+                    className={`px-2 py-3 text-sm leading-5 font-medium -mb-px border-b-2 transition-colors ${
                       activeTab === "requirement"
-                        ? "text-blue-600 border-blue-600"
-                        : "text-black border-transparent hover:text-blue-600"
+                        ? "text-accent-primary border-accent-strong"
+                        : "text-secondary border-transparent hover:text-accent-primary"
                     }`}
                   >
                     需求
@@ -1119,10 +1119,10 @@ function UpdateModal({ open, onClose, caseId, workspaceSlug: propWorkspaceSlug, 
                   <button
                     type="button"
                     onClick={() => setActiveTab("work")}
-                    className={`px-2 py-3 text-sm -mb-px border-b-2 transition-colors ${
+                    className={`px-2 py-3 text-sm leading-5 font-medium -mb-px border-b-2 transition-colors ${
                       activeTab === "work"
-                        ? "text-blue-600 border-blue-600"
-                        : "text-black border-transparent hover:text-blue-600"
+                        ? "text-accent-primary border-accent-strong"
+                        : "text-secondary border-transparent hover:text-accent-primary"
                     }`}
                   >
                     工作项
@@ -1130,10 +1130,10 @@ function UpdateModal({ open, onClose, caseId, workspaceSlug: propWorkspaceSlug, 
                   <button
                     type="button"
                     onClick={() => setActiveTab("defect")}
-                    className={`px-2 py-3 text-sm -mb-px border-b-2 transition-colors ${
+                    className={`px-2 py-3 text-sm leading-5 font-medium -mb-px border-b-2 transition-colors ${
                       activeTab === "defect"
-                        ? "text-blue-600 border-blue-600"
-                        : "text-black border-transparent hover:text-blue-600"
+                        ? "text-accent-primary border-accent-strong"
+                        : "text-secondary border-transparent hover:text-accent-primary"
                     }`}
                   >
                     缺陷
@@ -1141,10 +1141,10 @@ function UpdateModal({ open, onClose, caseId, workspaceSlug: propWorkspaceSlug, 
                   <button
                     type="button"
                     onClick={() => setActiveTab("execution")}
-                    className={`px-2 py-3 text-sm -mb-px border-b-2 transition-colors ${
+                    className={`px-2 py-3 text-sm leading-5 font-medium -mb-px border-b-2 transition-colors ${
                       activeTab === "execution"
-                        ? "text-blue-600 border-blue-600"
-                        : "text-black border-transparent hover:text-blue-600"
+                        ? "text-accent-primary border-accent-strong"
+                        : "text-secondary border-transparent hover:text-accent-primary"
                     }`}
                   >
                     执行
@@ -1152,15 +1152,44 @@ function UpdateModal({ open, onClose, caseId, workspaceSlug: propWorkspaceSlug, 
                   <button
                     type="button"
                     onClick={() => setActiveTab("review")}
-                    className={`px-2 py-3 text-sm -mb-px border-b-2 transition-colors ${
+                    className={`px-2 py-3 text-sm leading-5 font-medium -mb-px border-b-2 transition-colors ${
                       activeTab === "review"
-                        ? "text-blue-600 border-blue-600"
-                        : "text-black border-transparent hover:text-blue-600"
+                        ? "text-accent-primary border-accent-strong"
+                        : "text-secondary border-transparent hover:text-accent-primary"
                     }`}
                   >
                     评审历史
                   </button>
                 </nav>
+                <div className="flex-shrink-0 pb-1">
+                  {activeTab === "requirement" && (
+                    <button
+                      type="button"
+                      onClick={() => handleOpenSelectModal("Requirement")}
+                      className="text-on-color bg-accent-primary hover:bg-accent-primary-hover px-3 py-1.5 font-medium text-xs rounded whitespace-nowrap transition-all"
+                    >
+                      添加需求
+                    </button>
+                  )}
+                  {activeTab === "work" && (
+                    <button
+                      type="button"
+                      onClick={() => handleOpenSelectModal("Task")}
+                      className="text-on-color bg-accent-primary hover:bg-accent-primary-hover px-3 py-1.5 font-medium text-xs rounded whitespace-nowrap transition-all"
+                    >
+                      添加工作项
+                    </button>
+                  )}
+                  {activeTab === "defect" && (
+                    <button
+                      type="button"
+                      onClick={() => handleOpenSelectModal("Bug")}
+                      className="text-on-color bg-accent-primary hover:bg-accent-primary-hover px-3 py-1.5 font-medium text-xs rounded whitespace-nowrap transition-all"
+                    >
+                      添加缺陷
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -1395,61 +1424,28 @@ function UpdateModal({ open, onClose, caseId, workspaceSlug: propWorkspaceSlug, 
               </div>
             )}
             {activeTab === "requirement" && caseId && (
-              <div className="mt-4">
-                <div className="flex items-center justify-end mb-3">
-                  <button
-                    type="button"
-                    onClick={() => handleOpenSelectModal("Requirement")}
-                    className="inline-flex items-center gap-1 rounded px-2 py-1 text-sm bg-blue-50 text-blue-600 hover:bg-blue-100"
-                  >
-                    <PlusOutlined /> 添加
-                  </button>
-                </div>
-                <WorkItemDisplayModal
-                  caseId={String(caseId)}
-                  defaultType="Requirement"
-                  reloadToken={reloadToken}
-                  onCountChange={(n) => setCurrentCount(n)}
-                />
-              </div>
+              <WorkItemDisplayModal
+                caseId={String(caseId)}
+                defaultType="Requirement"
+                reloadToken={reloadToken}
+                onCountChange={(n) => setCurrentCount(n)}
+              />
             )}
             {activeTab === "work" && caseId && (
-              <div className="mt-4">
-                <div className="flex items-center justify-end mb-3">
-                  <button
-                    type="button"
-                    onClick={() => handleOpenSelectModal("Task")}
-                    className="inline-flex items-center gap-1 rounded px-2 py-1 text-sm bg-blue-50 text-blue-600 hover:bg-blue-100"
-                  >
-                    <PlusOutlined /> 添加
-                  </button>
-                </div>
-                <WorkItemDisplayModal
-                  caseId={String(caseId)}
-                  defaultType="Task"
-                  reloadToken={reloadToken}
-                  onCountChange={(n) => setCurrentCount(n)}
-                />
-              </div>
+              <WorkItemDisplayModal
+                caseId={String(caseId)}
+                defaultType="Task"
+                reloadToken={reloadToken}
+                onCountChange={(n) => setCurrentCount(n)}
+              />
             )}
             {activeTab === "defect" && caseId && (
-              <div className="mt-4">
-                <div className="flex items-center justify-end mb-3">
-                  <button
-                    type="button"
-                    onClick={() => handleOpenSelectModal("Bug")}
-                    className="inline-flex items-center gap-1 rounded px-2 py-1 text-sm bg-blue-50 text-blue-600 hover:bg-blue-100"
-                  >
-                    <PlusOutlined /> 添加
-                  </button>
-                </div>
-                <WorkItemDisplayModal
-                  caseId={String(caseId)}
-                  defaultType="Bug"
-                  reloadToken={reloadToken}
-                  onCountChange={(n) => setCurrentCount(n)}
-                />
-              </div>
+              <WorkItemDisplayModal
+                caseId={String(caseId)}
+                defaultType="Bug"
+                reloadToken={reloadToken}
+                onCountChange={(n) => setCurrentCount(n)}
+              />
             )}
           </div>
           <SideInfoPanel

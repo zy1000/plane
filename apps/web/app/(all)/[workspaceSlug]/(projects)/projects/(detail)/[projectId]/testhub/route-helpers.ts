@@ -16,7 +16,7 @@ export const isTMPlansActive = (pathname: string, workspaceSlug: string, project
 export const isTMPlansMenuActive = (pathname: string, workspaceSlug: string, projectId: string) => {
   const base = normalizePath(tmProjectBasePath(workspaceSlug, projectId));
   const current = normalizePath(pathname);
-  return current.startsWith(`${base}/plans`) || current.startsWith(`${base}/plan-cases`);
+  return current.startsWith(`${base}/plans`) || current.startsWith(`${base}/plan-cases`) || current.startsWith(`${base}/test-execution`);
 };
 
 export const isTMReviewsActive = (pathname: string, workspaceSlug: string, projectId: string) =>
@@ -25,7 +25,7 @@ export const isTMReviewsActive = (pathname: string, workspaceSlug: string, proje
 export const isTMReviewsMenuActive = (pathname: string, workspaceSlug: string, projectId: string) => {
   const base = normalizePath(tmProjectBasePath(workspaceSlug, projectId));
   const current = normalizePath(pathname);
-  return current.startsWith(`${base}/reviews`) || current.startsWith(`${base}/caseManagementReviewDetail`);
+  return current.startsWith(`${base}/reviews`) || current.startsWith(`${base}/caseManagementReviewDetail`) || current.startsWith(`${base}/case-review`);
 };
 
 export const isTMMindmapMenuActive = (pathname: string, workspaceSlug: string, projectId: string) => {

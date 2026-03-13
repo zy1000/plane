@@ -1,6 +1,6 @@
 // 文件顶部 imports
 import React, { useEffect, useMemo, useState } from "react";
-import { Modal, Button, Checkbox, Spin, Empty, Tag, message, Input, Table, Space } from "antd";
+import { Modal, Button, Checkbox, Spin, Empty, Tag, message, Input, Table, Space, Pagination } from "antd";
 import type { TPartialProject, TIssue, TIssuesResponse } from "@plane/types";
 import { IssueService } from "@/services/issue/issue.service";
 import { ProjectIssueTypeService, projectIssueTypesCache, type TIssueType } from "@/services/project";
@@ -543,34 +543,45 @@ export const WorkItemSelectModal: React.FC<Props> = ({
         </div>
       }
     >
-      <div style={{ display: "flex", gap: 16, height: "60vh" }}>
-        {/* 右侧工作项：Table + 分页 */}
-        <div style={{ width: "100%", overflow: "hidden" }}>
+      <div style={{ display: "flex", flexDirection: "column", height: "60vh" }}>
+        {/* 表格区域：可滚动 */}
+        <div className="scrollbar-always-visible" style={{ flex: 1, overflowY: "scroll" }}>
           <Table<TIssue>
-            scroll={{ y: "calc(60vh - 100px)" }}
             size="small"
             rowKey="id"
             loading={loadingIssues}
             dataSource={displayIssues}
             columns={columns as any}
             onChange={handleTableChange}
-            pagination={{
-              current: currentPage,
-              pageSize,
-              total: totalCount ?? displayIssues.length,
-              showSizeChanger: true,
-              showQuickJumper: true,
-              onChange: (page) => {
-                setCurrentPage(page);
-                fetchIssues(page, pageSize);
-              },
-              onShowSizeChange: (_current, size) => {
-                setPageSize(size);
-                fetchIssues(1, size);
-              },
-              showTotal: (total, range) => `第 ${range[0]}-${range[1]} 条，共 ${total} 条`,
-            }}
+            pagination={false}
             rowSelection={rowSelection as any}
+          />
+        </div>
+        {/* 分页器：始终固定在底部 */}
+        <div className="flex-shrink-0 border-t border-subtle px-4 py-3 bg-surface-1 flex items-center justify-between">
+          <span className="text-secondary text-sm">
+            {(totalCount ?? displayIssues.length) > 0
+              ? `第 ${(currentPage - 1) * pageSize + 1}-${Math.min(currentPage * pageSize, totalCount ?? displayIssues.length)} 条，共 ${totalCount ?? displayIssues.length} 条`
+              : ""}
+          </span>
+          <Pagination
+            simple
+            size="small"
+            current={currentPage}
+            pageSize={pageSize}
+            total={totalCount ?? displayIssues.length}
+            showSizeChanger
+            pageSizeOptions={["10", "20", "50", "100"]}
+            onChange={(page, newPageSize) => {
+              setCurrentPage(page);
+              setPageSize(newPageSize);
+              fetchIssues(page, newPageSize);
+            }}
+            onShowSizeChange={(_, newPageSize) => {
+              setCurrentPage(1);
+              setPageSize(newPageSize);
+              fetchIssues(1, newPageSize);
+            }}
           />
         </div>
       </div>

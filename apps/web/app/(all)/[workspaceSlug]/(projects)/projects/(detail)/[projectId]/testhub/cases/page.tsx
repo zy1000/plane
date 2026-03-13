@@ -1473,6 +1473,12 @@ export default function TestCasesPage() {
                       .testhub-cases-table-scroll .ant-table-body {
                         overflow-y: auto !important;
                       }
+
+                      .testhub-cases-table-scroll .ant-table-thead > tr > th {
+                        font-size: 13px !important;
+                        font-weight: 500 !important;
+                        color: var(--text-color-secondary) !important;
+                      }
                       
                       .testhub-cases-table-scroll .ant-table-pagination {
                         margin: 0 !important;

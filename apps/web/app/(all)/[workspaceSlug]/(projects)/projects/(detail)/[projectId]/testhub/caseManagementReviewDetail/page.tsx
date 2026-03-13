@@ -550,7 +550,7 @@ export default function CaseManagementReviewDetailPage() {
           </div>
           <div className="flex-1 overflow-hidden min-w-0">
             <div className="flex flex-col h-full min-h-0 overflow-hidden min-w-0">
-              <div className="px-4 py-3 flex items-center justify-between flex-shrink-0">
+              <div className="pl-7 pr-4 py-3 flex items-center justify-between flex-shrink-0">
                 <div>
                   <Breadcrumbs className="grow-0">
                     <Breadcrumbs.Item
@@ -744,6 +744,12 @@ export default function CaseManagementReviewDetailPage() {
                         __html: `
                       .testhub-review-detail-table-scroll .ant-table-body {
                         overflow-y: auto !important;
+                      }
+
+                      .testhub-review-detail-table-scroll .ant-table-thead > tr > th {
+                        font-size: 13px !important;
+                        font-weight: 500 !important;
+                        color: var(--text-color-secondary) !important;
                       }
 
                       .testhub-review-detail-table-scroll ::-webkit-scrollbar {
