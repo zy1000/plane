@@ -18,10 +18,11 @@ type Props = {
 };
 
 function ProgressChart({ distribution, totalIssues, className = "", plotTitle = "work items" }: Props) {
-  const chartData: TChartData<string, string>[] = Object.keys(distribution ?? []).map((key, index) => ({
+  const distributionKeys = Object.keys(distribution ?? []);
+  const chartData: TChartData<string, string>[] = distributionKeys.map((key, index) => ({
     name: renderFormattedDateWithoutYear(key),
-    current: distribution[key] ?? 0,
-    ideal: totalIssues * (1 - index / (Object.keys(distribution ?? []).length - 1)),
+    current: distribution[key] !== null && distribution[key] !== undefined ? distribution[key] : undefined,
+    ideal: totalIssues * (1 - index / (distributionKeys.length - 1)),
   }));
 
   return (

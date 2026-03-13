@@ -275,7 +275,7 @@ export const CreateUpdateIssueModalBase = observer(function CreateUpdateIssueMod
       ) {
         await addIssueToCycle(data as TBaseIssue, payload.cycle_id);
       }
-      if (data.cycle_id && !payload.cycle_id && data.project_id) {
+      if (data.cycle_id && "cycle_id" in payload && !payload.cycle_id && data.project_id) {
         await issues.removeIssueFromCycle(workspaceSlug.toString(), data.project_id, data.cycle_id, data.id);
         fetchCycleDetails(workspaceSlug.toString(), data.project_id, data.cycle_id);
       }
