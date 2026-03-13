@@ -1161,7 +1161,7 @@ function UpdateModal({ open, onClose, caseId, workspaceSlug: propWorkspaceSlug, 
                     评审历史
                   </button>
                 </nav>
-                <div className="flex-shrink-0 pb-1">
+                <div className="flex-shrink-0 pt-2">
                   {activeTab === "requirement" && (
                     <button
                       type="button"
