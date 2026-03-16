@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Pagination } from "antd";
 import { useParams } from "next/navigation";
 import useSWR from "swr";
@@ -87,6 +87,27 @@ export default function ProjectStatisticsPage() {
   const [planPage, setPlanPage] = useState(1);
   const [reviewPage, setReviewPage] = useState(1);
 
+  // 追踪是哪个分区触发了翻页，新数据到达时只更新对应分区，其他区块保持稳定
+  const changeTriggerRef = useRef<Set<string>>(new Set(["init"]));
+  const [displayData, setDisplayData] = useState<TProjectStatisticResponse | undefined>(undefined);
+
+  const handleCyclePageChange = (p: number) => {
+    changeTriggerRef.current.add("cycle");
+    setCyclePage(p);
+  };
+  const handleReleasePageChange = (p: number) => {
+    changeTriggerRef.current.add("release");
+    setReleasePage(p);
+  };
+  const handlePlanPageChange = (p: number) => {
+    changeTriggerRef.current.add("plan");
+    setPlanPage(p);
+  };
+  const handleReviewPageChange = (p: number) => {
+    changeTriggerRef.current.add("review");
+    setReviewPage(p);
+  };
+
   const effectiveWorkspaceSlug = workspaceSlug?.toString();
   const effectiveProjectId = projectId?.toString();
 
@@ -102,6 +123,7 @@ export default function ProjectStatisticsPage() {
         review_page: reviewPage,
       }),
     {
+      keepPreviousData: true,
       onError: () => {
         setToast({
           type: TOAST_TYPE.ERROR,
@@ -112,27 +134,42 @@ export default function ProjectStatisticsPage() {
     }
   );
 
+  useEffect(() => {
+    if (data === undefined) return;
+    const triggers = changeTriggerRef.current;
+    setDisplayData((prev) => {
+      if (!prev || triggers.has("init")) return data;
+      const updated = { ...prev };
+      if (triggers.has("cycle")) updated.cycles = data.cycles;
+      if (triggers.has("release")) updated.releases = data.releases;
+      if (triggers.has("plan")) updated.test_plans = data.test_plans;
+      if (triggers.has("review")) updated.case_reviews = data.case_reviews;
+      return updated;
+    });
+    changeTriggerRef.current = new Set();
+  }, [data]);
+
   const requirementTrendData = useMemo(() => {
-    const rows = data?.requirement_daily_status ?? [];
+    const rows = displayData?.requirement_daily_status ?? [];
     return rows.map((row) => ({
       key: row.date,
       name: renderFormattedDate(getDate(row.date), "yyyy-MM-dd") ?? row.date,
       completed: row.completed,
       incomplete: row.incomplete,
     }));
-  }, [data]);
+  }, [displayData]);
 
   const defectTrendData = useMemo(() => {
-    const rows = data?.defect_daily_created ?? [];
+    const rows = displayData?.defect_daily_created ?? [];
     return rows.map((row) => ({
       key: row.date,
       name: renderFormattedDate(getDate(row.date), "yyyy-MM-dd") ?? row.date,
       created: row.created,
     }));
-  }, [data]);
+  }, [displayData]);
 
   const workItemBarData = useMemo(() => {
-    const rows = data?.work_item_stats ?? [];
+    const rows = displayData?.work_item_stats ?? [];
     return rows.map((row) => ({
       key: row.type_id,
       name: row.name,
@@ -141,7 +178,7 @@ export default function ProjectStatisticsPage() {
       completed: row.completed,
       total: row.total,
     }));
-  }, [data]);
+  }, [displayData]);
 
   const getCycleStatusDetails = (status?: string) => {
     const normalizedStatusMap: Record<string, string> = {
@@ -214,33 +251,33 @@ export default function ProjectStatisticsPage() {
             <div className="grid grid-cols-1 gap-6 md:grid-cols-5">
               <KpiCard
                 title="全部需求"
-                value={isLoading ? "-" : (data?.counts?.total_requirements ?? 0)}
+                value={!displayData ? "-" : (displayData?.counts?.total_requirements ?? 0)}
               />
               <KpiCard
                 title="进行中的需求"
-                value={isLoading ? "-" : (data?.counts?.in_progress_requirements ?? 0)}
+                value={!displayData ? "-" : (displayData?.counts?.in_progress_requirements ?? 0)}
                 valueClassName="text-[#006399]"
               />
               <KpiCard
                 title="全部缺陷"
-                value={isLoading ? "-" : (data?.counts?.total_defects ?? 0)}
+                value={!displayData ? "-" : (displayData?.counts?.total_defects ?? 0)}
               />
               <KpiCard
                 title="待处理的缺陷"
-                value={isLoading ? "-" : (data?.counts?.pending_defects ?? 0)}
+                value={!displayData ? "-" : (displayData?.counts?.pending_defects ?? 0)}
                 valueClassName="text-[#dc2626]"
               />
               <KpiCard
                 title="全部用例"
-                value={isLoading ? "-" : (data?.counts?.total_cases ?? 0)}
+                value={!displayData ? "-" : (displayData?.counts?.total_cases ?? 0)}
               />
             </div>
 
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-              <div className="bg-surface-1 border border-subtle rounded-lg shadow-md p-4 min-h-[300px] flex flex-col">
+              <div className="bg-surface-1 border border-subtle rounded-lg shadow-md p-4 h-[420px] flex flex-col">
                 <div className="flex items-baseline gap-2">
                   <div className="text-lg font-medium text-primary">进行中的迭代</div>
-                  <div className="text-xs text-placeholder">{`共 ${data?.cycles?.count ?? 0} 个进行中的迭代`}</div>
+                  <div className="text-xs text-placeholder">{`共 ${displayData?.cycles?.count ?? 0} 个进行中的迭代`}</div>
                 </div>
                 <div className="mt-3 flex-1 min-h-0 overflow-hidden">
                   <Table>
@@ -253,20 +290,20 @@ export default function ProjectStatisticsPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {isLoading ? (
+                      {!displayData ? (
                         <TableRow>
                           <TableCell colSpan={4}>
                             <div className="h-20 grid place-items-center text-sm text-secondary">加载中...</div>
                           </TableCell>
                         </TableRow>
-                      ) : (data?.cycles?.data?.length ?? 0) === 0 ? (
+                      ) : (displayData?.cycles?.data?.length ?? 0) === 0 ? (
                         <TableRow>
                           <TableCell colSpan={4}>
                             <div className="h-20 grid place-items-center text-sm text-secondary">暂无进行中的迭代</div>
                           </TableCell>
                         </TableRow>
                       ) : (
-                        (data?.cycles?.data ?? []).map((cycle) => (
+                        (displayData?.cycles?.data ?? []).map((cycle) => (
                           <TableRow key={cycle.id} className="hover:bg-[#f7f7f7]">
                             <TableCell className="max-w-[320px] truncate text-primary" title={cycle.name}>
                               {cycle.name}
@@ -296,22 +333,22 @@ export default function ProjectStatisticsPage() {
                   </Table>
                 </div>
                 <div className="flex-shrink-0 border-t border-subtle px-4 py-3 bg-surface-1 flex items-center justify-between">
-                  <div className="text-sm text-secondary">{(data?.cycles?.count ?? 0) > 0 ? `共 ${data?.cycles?.count ?? 0} 条` : ""}</div>
+                  <div className="text-sm text-secondary">{(displayData?.cycles?.count ?? 0) > 0 ? `共 ${displayData?.cycles?.count ?? 0} 条` : ""}</div>
                   <Pagination
                     simple
                     current={cyclePage}
                     pageSize={5}
-                    total={data?.cycles?.count ?? 0}
-                    onChange={(p) => setCyclePage(p)}
+                    total={displayData?.cycles?.count ?? 0}
+                    onChange={handleCyclePageChange}
                     size="small"
                   />
                 </div>
               </div>
 
-              <div className="bg-surface-1 border border-subtle rounded-lg shadow-md p-4 min-h-[300px] flex flex-col">
+              <div className="bg-surface-1 border border-subtle rounded-lg shadow-md p-4 h-[420px] flex flex-col">
                 <div className="flex items-baseline gap-2">
                   <div className="text-lg font-medium text-primary">进行中的发布</div>
-                  <div className="text-xs text-placeholder">{`共 ${data?.releases?.count ?? 0} 个进行中的发布`}</div>
+                  <div className="text-xs text-placeholder">{`共 ${displayData?.releases?.count ?? 0} 个进行中的发布`}</div>
                 </div>
                 <div className="mt-3 flex-1 min-h-0 overflow-hidden">
                   <Table>
@@ -324,20 +361,20 @@ export default function ProjectStatisticsPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {isLoading ? (
+                      {!displayData ? (
                         <TableRow>
                           <TableCell colSpan={4}>
                             <div className="h-20 grid place-items-center text-sm text-secondary">加载中...</div>
                           </TableCell>
                         </TableRow>
-                      ) : (data?.releases?.data?.length ?? 0) === 0 ? (
+                      ) : (displayData?.releases?.data?.length ?? 0) === 0 ? (
                         <TableRow>
                           <TableCell colSpan={4}>
                             <div className="h-20 grid place-items-center text-sm text-secondary">暂无进行中的发布</div>
                           </TableCell>
                         </TableRow>
                       ) : (
-                        (data?.releases?.data ?? []).map((release) => (
+                        (displayData?.releases?.data ?? []).map((release) => (
                           <TableRow key={release.id} className="hover:bg-[#f7f7f7]">
                             <TableCell className="max-w-[320px] truncate text-primary" title={release.name}>
                               {release.name}
@@ -367,13 +404,13 @@ export default function ProjectStatisticsPage() {
                   </Table>
                 </div>
                 <div className="flex-shrink-0 border-t border-subtle px-4 py-3 bg-surface-1 flex items-center justify-between">
-                  <div className="text-sm text-secondary">{(data?.releases?.count ?? 0) > 0 ? `共 ${data?.releases?.count ?? 0} 条` : ""}</div>
+                  <div className="text-sm text-secondary">{(displayData?.releases?.count ?? 0) > 0 ? `共 ${displayData?.releases?.count ?? 0} 条` : ""}</div>
                   <Pagination
                     simple
                     current={releasePage}
                     pageSize={5}
-                    total={data?.releases?.count ?? 0}
-                    onChange={(p) => setReleasePage(p)}
+                    total={displayData?.releases?.count ?? 0}
+                    onChange={handleReleasePageChange}
                     size="small"
                   />
                 </div>
@@ -381,10 +418,10 @@ export default function ProjectStatisticsPage() {
             </div>
 
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-              <div className="bg-surface-1 border border-subtle rounded-lg shadow-md p-4 min-h-[300px] flex flex-col">
+              <div className="bg-surface-1 border border-subtle rounded-lg shadow-md p-4 h-[420px] flex flex-col">
                 <div className="flex items-baseline gap-2">
                   <div className="text-lg font-medium text-primary">进行中的测试计划</div>
-                  <div className="text-xs text-placeholder">{`共 ${data?.test_plans?.count ?? 0} 个进行中的测试计划`}</div>
+                  <div className="text-xs text-placeholder">{`共 ${displayData?.test_plans?.count ?? 0} 个进行中的测试计划`}</div>
                 </div>
                 <div className="mt-3 flex-1 min-h-0 overflow-hidden">
                   <Table>
@@ -397,20 +434,20 @@ export default function ProjectStatisticsPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {isLoading ? (
+                      {!displayData ? (
                         <TableRow>
                           <TableCell colSpan={4}>
                             <div className="h-20 grid place-items-center text-sm text-secondary">加载中...</div>
                           </TableCell>
                         </TableRow>
-                      ) : (data?.test_plans?.data?.length ?? 0) === 0 ? (
+                      ) : (displayData?.test_plans?.data?.length ?? 0) === 0 ? (
                         <TableRow>
                           <TableCell colSpan={4}>
                             <div className="h-20 grid place-items-center text-sm text-secondary">暂无进行中的测试计划</div>
                           </TableCell>
                         </TableRow>
                       ) : (
-                        (data?.test_plans?.data ?? []).map((plan) => (
+                        (displayData?.test_plans?.data ?? []).map((plan) => (
                           <TableRow key={plan.id} className="hover:bg-[#f7f7f7]">
                             <TableCell className="max-w-[320px] truncate text-primary" title={plan.name}>
                               {plan.name}
@@ -440,22 +477,22 @@ export default function ProjectStatisticsPage() {
                   </Table>
                 </div>
                 <div className="flex-shrink-0 border-t border-subtle px-4 py-3 bg-surface-1 flex items-center justify-between">
-                  <div className="text-sm text-secondary">{(data?.test_plans?.count ?? 0) > 0 ? `共 ${data?.test_plans?.count ?? 0} 条` : ""}</div>
+                  <div className="text-sm text-secondary">{(displayData?.test_plans?.count ?? 0) > 0 ? `共 ${displayData?.test_plans?.count ?? 0} 条` : ""}</div>
                   <Pagination
                     simple
                     current={planPage}
                     pageSize={5}
-                    total={data?.test_plans?.count ?? 0}
-                    onChange={(p) => setPlanPage(p)}
+                    total={displayData?.test_plans?.count ?? 0}
+                    onChange={handlePlanPageChange}
                     size="small"
                   />
                 </div>
               </div>
 
-              <div className="bg-surface-1 border border-subtle rounded-lg shadow-md p-4 min-h-[300px] flex flex-col">
+              <div className="bg-surface-1 border border-subtle rounded-lg shadow-md p-4 h-[420px] flex flex-col">
                 <div className="flex items-baseline gap-2">
                   <div className="text-lg font-medium text-primary">进行中的评审</div>
-                  <div className="text-xs text-placeholder">{`共 ${data?.case_reviews?.count ?? 0} 个进行中的评审`}</div>
+                  <div className="text-xs text-placeholder">{`共 ${displayData?.case_reviews?.count ?? 0} 个进行中的评审`}</div>
                 </div>
                 <div className="mt-3 flex-1 min-h-0 overflow-hidden">
                   <Table>
@@ -468,20 +505,20 @@ export default function ProjectStatisticsPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {isLoading ? (
+                      {!displayData ? (
                         <TableRow>
                           <TableCell colSpan={4}>
                             <div className="h-20 grid place-items-center text-sm text-secondary">加载中...</div>
                           </TableCell>
                         </TableRow>
-                      ) : (data?.case_reviews?.data?.length ?? 0) === 0 ? (
+                      ) : (displayData?.case_reviews?.data?.length ?? 0) === 0 ? (
                         <TableRow>
                           <TableCell colSpan={4}>
                             <div className="h-20 grid place-items-center text-sm text-secondary">暂无进行中的用例评审</div>
                           </TableCell>
                         </TableRow>
                       ) : (
-                        (data?.case_reviews?.data ?? []).map((review) => (
+                        (displayData?.case_reviews?.data ?? []).map((review) => (
                           <TableRow key={review.id} className="hover:bg-[#f7f7f7]">
                             <TableCell className="max-w-[320px] truncate text-primary" title={review.name}>
                               {review.name}
@@ -511,13 +548,13 @@ export default function ProjectStatisticsPage() {
                   </Table>
                 </div>
                 <div className="flex-shrink-0 border-t border-subtle px-4 py-3 bg-surface-1 flex items-center justify-between">
-                  <div className="text-sm text-secondary">{(data?.case_reviews?.count ?? 0) > 0 ? `共 ${data?.case_reviews?.count ?? 0} 条` : ""}</div>
+                  <div className="text-sm text-secondary">{(displayData?.case_reviews?.count ?? 0) > 0 ? `共 ${displayData?.case_reviews?.count ?? 0} 条` : ""}</div>
                   <Pagination
                     simple
                     current={reviewPage}
                     pageSize={5}
-                    total={data?.case_reviews?.count ?? 0}
-                    onChange={(p) => setReviewPage(p)}
+                    total={displayData?.case_reviews?.count ?? 0}
+                    onChange={handleReviewPageChange}
                     size="small"
                   />
                 </div>
