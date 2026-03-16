@@ -76,7 +76,10 @@ class StateViewSet(BaseViewSet):
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
     def list(self, request, slug, project_id):
-        states = StateSerializer(self.get_queryset(), many=True).data
+        issue_type_id = request.GET.get("issue_type_id", None)
+        query = self.get_queryset().filter(issue_type_id=issue_type_id)
+
+        states = StateSerializer(query, many=True).data
 
         grouped_states = defaultdict(list)
         for state in states:
@@ -93,8 +96,8 @@ class StateViewSet(BaseViewSet):
         if grouped == "true":
             state_dict = {}
             for key, value in groupby(
-                sorted(states, key=lambda state: state["group"]),
-                lambda state: state.get("group"),
+                    sorted(states, key=lambda state: state["group"]),
+                    lambda state: state.get("group"),
             ):
                 state_dict[str(key)] = list(value)
             return Response(state_dict, status=status.HTTP_200_OK)

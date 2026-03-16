@@ -31,6 +31,7 @@ import type { IQuickActionProps, TRenderQuickActions } from "../list/list-view-t
 //components
 import { getSourceFromDropPayload } from "../utils";
 import { KanBan } from "./default";
+import { StateSelectionModal } from "./state-selection-modal";
 import { KanBanSwimLanes } from "./swimlanes";
 
 export type KanbanStoreType =
@@ -127,7 +128,12 @@ export const BaseKanBanRoot = observer(function BaseKanBanRoot(props: IBaseKanBa
     EUserPermissionsLevel.PROJECT
   );
 
-  const handleOnDrop = useGroupIssuesDragNDrop(storeType, orderBy, group_by, sub_group_by);
+  const { handleOnDrop, pendingDrop, confirmStateSelection, cancelStateSelection } = useGroupIssuesDragNDrop(
+    storeType,
+    orderBy,
+    group_by,
+    sub_group_by
+  );
 
   const canEditProperties = useCallback(
     (projectId: string | undefined) => {
@@ -256,6 +262,12 @@ export const BaseKanBanRoot = observer(function BaseKanBanRoot(props: IBaseKanBa
         handleClose={() => setDeleteIssueModal(false)}
         onSubmit={handleDeleteIssue}
         isEpic={isEpic}
+      />
+      <StateSelectionModal
+        isOpen={!!pendingDrop}
+        statesInGroup={pendingDrop?.statesInGroup ?? []}
+        onSelect={confirmStateSelection}
+        onCancel={cancelStateSelection}
       />
       {/* drag and delete component */}
       <div

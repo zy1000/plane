@@ -64,6 +64,7 @@ export const RelationIssueProperty = observer(function RelationIssueProperty(pro
         <StateDropdown
           value={issue.state_id}
           projectId={issue.project_id ?? undefined}
+          issueTypeId={issue.type_id}
           onChange={handleStateChange}
           disabled={disabled}
           buttonVariant="border-with-text"

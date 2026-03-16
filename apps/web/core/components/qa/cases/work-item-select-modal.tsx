@@ -266,6 +266,7 @@ export const WorkItemSelectModal: React.FC<Props> = ({
                 }
               }}
               projectId={record?.project_id?.toString() ?? ""}
+              issueTypeId={record?.type_id}
               disabled={true}
               buttonVariant="transparent-with-text"
               className="group w-full"

@@ -145,6 +145,7 @@ export const DraftIssueProperties = observer(function DraftIssueProperties(props
           value={issue.state_id}
           onChange={handleState}
           projectId={issue.project_id}
+          issueTypeId={issue.type_id}
           buttonVariant="border-with-text"
           renderByDefault={isMobile}
           showTooltip

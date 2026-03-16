@@ -18,24 +18,27 @@ type TWorkItemStateDropdownProps = Omit<
   "stateIds" | "getStateById" | "onDropdownOpen" | "isInitializing"
 > & {
   stateIds?: string[];
+  issueTypeId?: string | null;
 };
 
 export const StateDropdown = observer(function StateDropdown(props: TWorkItemStateDropdownProps) {
-  const { projectId, stateIds: propsStateIds } = props;
+  const { projectId, stateIds: propsStateIds, issueTypeId } = props;
   // router params
   const { workspaceSlug } = useParams();
   // states
   const [stateLoader, setStateLoader] = useState(false);
   // store hooks
-  const { fetchProjectStates, getProjectStateIds, getStateById } = useProjectState();
-  // derived values
-  const stateIds = propsStateIds ?? getProjectStateIds(projectId);
+  const { fetchProjectStates, getProjectStateIds, getProjectStateIdsByIssueTypeId, getStateById } = useProjectState();
+  // derived values: when issueTypeId is provided, use issue-type-scoped states
+  const stateIds =
+    propsStateIds ??
+    (issueTypeId ? getProjectStateIdsByIssueTypeId(projectId, issueTypeId) : getProjectStateIds(projectId));
 
-  // fetch states if not provided
+  // fetch states on dropdown open, pass issueTypeId to API when available
   const onDropdownOpen = async () => {
     if ((stateIds === undefined || stateIds.length === 0) && workspaceSlug && projectId) {
       setStateLoader(true);
-      await fetchProjectStates(workspaceSlug.toString(), projectId);
+      await fetchProjectStates(workspaceSlug.toString(), projectId, issueTypeId);
       setStateLoader(false);
     }
   };

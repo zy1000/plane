@@ -938,6 +938,7 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
             value={record?.state_id}
             onChange={() => {}}
             projectId={record?.project_id?.toString() ?? ""}
+            issueTypeId={record?.type_id}
             disabled={true}
             buttonVariant="transparent-with-text"
             className="group w-full"

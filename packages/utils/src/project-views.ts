@@ -91,7 +91,7 @@ export const getViewName = (name: string | undefined) => {
  */
 export const getValidatedViewFilters = (data: Partial<IProjectView>) => {
   if (data?.display_filters && data?.display_filters?.layout === "kanban" && isNil(data.display_filters.group_by)) {
-    data.display_filters.group_by = "state";
+    data.display_filters.group_by = "state_detail.group";
   }
 
   return data;

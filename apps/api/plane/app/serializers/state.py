@@ -25,6 +25,7 @@ class StateSerializer(BaseSerializer):
             "description",
             "sequence",
             "order",
+            'issue_type_id',
         ]
         read_only_fields = ["workspace", "project"]
 

@@ -31,12 +31,24 @@ export interface IStateStore {
   getStateById: (stateId: string | null | undefined) => IState | undefined;
   getIntakeStateById: (intakeStateId: string | null | undefined) => IIntakeState | undefined;
   getProjectStates: (projectId: string | null | undefined) => IState[] | undefined;
+  getProjectStatesByIssueTypeId: (
+    projectId: string | null | undefined,
+    issueTypeId: string | null | undefined
+  ) => IState[] | undefined;
+  getProjectStateIdsByIssueTypeId: (
+    projectId: string | null | undefined,
+    issueTypeId: string | null | undefined
+  ) => string[] | undefined;
   getProjectIntakeState: (projectId: string | null | undefined) => IIntakeState | undefined;
   getProjectStateIds: (projectId: string | null | undefined) => string[] | undefined;
   getProjectIntakeStateIds: (projectId: string | null | undefined) => string[] | undefined;
   getProjectDefaultStateId: (projectId: string | null | undefined) => string | undefined;
+  getDefaultStateIdByIssueTypeId: (
+    projectId: string | null | undefined,
+    issueTypeId: string | null | undefined
+  ) => string | undefined;
   // fetch actions
-  fetchProjectStates: (workspaceSlug: string, projectId: string) => Promise<IState[]>;
+  fetchProjectStates: (workspaceSlug: string, projectId: string, issueTypeId?: string | null) => Promise<IState[]>;
   fetchProjectIntakeState: (workspaceSlug: string, projectId: string) => Promise<IIntakeState>;
   fetchWorkspaceStates: (workspaceSlug: string) => Promise<IState[]>;
   // crud actions
@@ -165,6 +177,56 @@ export class StateStore implements IStateStore {
   });
 
   /**
+   * Returns states for a project filtered by issueTypeId
+   * @param projectId
+   * @param issueTypeId
+   * @returns IState[] | undefined
+   */
+  getProjectStatesByIssueTypeId = computedFn(
+    (projectId: string | null | undefined, issueTypeId: string | null | undefined) => {
+      const workspaceSlug = this.router.workspaceSlug || "";
+      if (!projectId) return undefined;
+      const cacheKey = issueTypeId ? `${projectId}:${issueTypeId}` : projectId;
+      if (!(this.fetchedMap[cacheKey] || this.fetchedMap[workspaceSlug])) return undefined;
+      return sortStates(
+        Object.values(this.stateMap).filter(
+          (state) => state.project_id === projectId && state.issue_type_id === issueTypeId
+        )
+      );
+    }
+  );
+
+  /**
+   * Returns state ids for a project filtered by issueTypeId
+   * @param projectId
+   * @param issueTypeId
+   * @returns string[] | undefined
+   */
+  getProjectStateIdsByIssueTypeId = computedFn(
+    (projectId: string | null | undefined, issueTypeId: string | null | undefined) => {
+      const states = this.getProjectStatesByIssueTypeId(projectId, issueTypeId);
+      return states?.map((state) => state.id);
+    }
+  );
+
+  /**
+   * Returns a map of state name -> state IDs for a project
+   * Used for deduplicating same-named states across issue types
+   * @param projectId
+   * @returns Map<string, string[]>
+   */
+  getProjectStateNameToIdsMap = computedFn((projectId: string | null | undefined): Map<string, string[]> => {
+    const states = this.getProjectStates(projectId);
+    const map = new Map<string, string[]>();
+    for (const state of states ?? []) {
+      const ids = map.get(state.name) ?? [];
+      ids.push(state.id);
+      map.set(state.name, ids);
+    }
+    return map;
+  });
+
+  /**
    * Returns the intake state for a project by projectId
    * @param projectId
    * @returns IIntakeState | undefined
@@ -209,19 +271,27 @@ export class StateStore implements IStateStore {
     return projectStates?.find((state) => state.default)?.id;
   });
 
+  getDefaultStateIdByIssueTypeId = computedFn(
+    (projectId: string | null | undefined, issueTypeId: string | null | undefined) => {
+      const states = this.getProjectStatesByIssueTypeId(projectId, issueTypeId);
+      return states?.find((state) => state.default)?.id ?? states?.[0]?.id;
+    }
+  );
+
   /**
    * fetches the stateMap of a project
    * @param workspaceSlug
    * @param projectId
    * @returns
    */
-  fetchProjectStates = async (workspaceSlug: string, projectId: string) => {
-    const statesResponse = await this.stateService.getStates(workspaceSlug, projectId);
+  fetchProjectStates = async (workspaceSlug: string, projectId: string, issueTypeId?: string | null) => {
+    const statesResponse = await this.stateService.getStates(workspaceSlug, projectId, issueTypeId);
     runInAction(() => {
       statesResponse.forEach((state) => {
         set(this.stateMap, [state.id], state);
       });
-      set(this.fetchedMap, projectId, true);
+      const cacheKey = issueTypeId ? `${projectId}:${issueTypeId}` : projectId;
+      set(this.fetchedMap, cacheKey, true);
     });
     return statesResponse;
   };

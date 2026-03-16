@@ -4,11 +4,13 @@
  * See the LICENSE file for details.
  */
 
+import { useState } from "react";
 import { useParams } from "next/navigation";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import type { EIssuesStoreType, TIssue, TIssueGroupByOptions, TIssueOrderByOptions } from "@plane/types";
+import type { IState, EIssuesStoreType, TIssue, TIssueGroupByOptions, TIssueOrderByOptions } from "@plane/types";
 import type { GroupDropLocation } from "@/components/issues/issue-layouts/utils";
 import { handleGroupDragDrop } from "@/components/issues/issue-layouts/utils";
+import { store } from "@/lib/store-context";
 import { ISSUE_FILTER_DEFAULT_DATA } from "@/store/issue/helpers/base-issues.store";
 import { useIssueDetail } from "./store/use-issue-detail";
 import { useIssues } from "./store/use-issues";
@@ -27,6 +29,12 @@ type DNDStoreType =
   | EIssuesStoreType.EPIC
   | EIssuesStoreType.TEAM_PROJECT_WORK_ITEMS;
 
+export type PendingDrop = {
+  source: GroupDropLocation;
+  destination: GroupDropLocation;
+  statesInGroup: IState[];
+};
+
 export const useGroupIssuesDragNDrop = (
   storeType: DNDStoreType,
   orderBy: TIssueOrderByOptions | undefined,
@@ -34,6 +42,8 @@ export const useGroupIssuesDragNDrop = (
   subGroupBy?: TIssueGroupByOptions
 ) => {
   const { workspaceSlug } = useParams();
+
+  const [pendingDrop, setPendingDrop] = useState<PendingDrop | null>(null);
 
   const {
     issue: { getIssueById },
@@ -97,15 +107,11 @@ export const useGroupIssuesDragNDrop = (
     updateIssue && updateIssue(projectId, issueId, data).catch(() => setToast(errorToastProps));
   };
 
-  const handleOnDrop = async (source: GroupDropLocation, destination: GroupDropLocation) => {
-    if (
-      source.columnId &&
-      destination.columnId &&
-      destination.columnId === source.columnId &&
-      destination.id === source.id
-    )
-      return;
-
+  const executeDrop = async (
+    source: GroupDropLocation,
+    destination: GroupDropLocation,
+    overrideStateId?: string
+  ) => {
     await handleGroupDragDrop(
       source,
       destination,
@@ -114,7 +120,8 @@ export const useGroupIssuesDragNDrop = (
       updateIssueOnDrop,
       groupBy,
       subGroupBy,
-      orderBy !== "sort_order"
+      orderBy !== "sort_order",
+      overrideStateId
     ).catch((err) => {
       setToast({
         title: "Error!",
@@ -124,5 +131,49 @@ export const useGroupIssuesDragNDrop = (
     });
   };
 
-  return handleOnDrop;
+  const handleOnDrop = async (source: GroupDropLocation, destination: GroupDropLocation) => {
+    if (
+      source.columnId &&
+      destination.columnId &&
+      destination.columnId === source.columnId &&
+      destination.id === source.id
+    )
+      return;
+
+    // 当按状态组分组时，检查目标组是否有多个状态，若有则弹出选择框
+    if (
+      groupBy === "state_detail.group" &&
+      source.groupId &&
+      destination.groupId &&
+      source.groupId !== destination.groupId
+    ) {
+      const sourceIssue = getIssueById(source.id ?? "");
+      if (sourceIssue) {
+        const projectStates = store.state.getProjectStates(sourceIssue.project_id ?? undefined) ?? [];
+        const statesInGroup = projectStates
+          .filter((s) => s.group === destination.groupId && s.issue_type_id === sourceIssue.type_id)
+          .sort((a, b) => a.sequence - b.sequence);
+
+        if (statesInGroup.length > 1) {
+          setPendingDrop({ source, destination, statesInGroup });
+          return;
+        }
+      }
+    }
+
+    await executeDrop(source, destination);
+  };
+
+  const confirmStateSelection = async (stateId: string) => {
+    if (!pendingDrop) return;
+    const { source, destination } = pendingDrop;
+    setPendingDrop(null);
+    await executeDrop(source, destination, stateId);
+  };
+
+  const cancelStateSelection = () => {
+    setPendingDrop(null);
+  };
+
+  return { handleOnDrop, pendingDrop, confirmStateSelection, cancelStateSelection };
 };

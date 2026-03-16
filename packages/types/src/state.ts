@@ -17,6 +17,7 @@ export interface IState {
   sequence: number;
   workspace_id: string;
   order: number;
+  issue_type_id: string | null;
 }
 
 export interface IStateLite {

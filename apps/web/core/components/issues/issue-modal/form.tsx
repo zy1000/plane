@@ -141,7 +141,7 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
     issue: { getIssueById },
   } = useIssueDetail();
   const { fetchCycles } = useProjectIssueProperties();
-  const { getStateById } = useProjectState();
+  const { fetchProjectStates, getDefaultStateIdByIssueTypeId, getStateById } = useProjectState();
 
   // form info
   const methods = useForm<TIssue>({
@@ -210,6 +210,24 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, projectId]);
+
+  // 新建工作项时，自动拉取当前类型的状态并回填默认状态
+  useEffect(() => {
+    if (data?.id) return; // 编辑模式跳过
+    const issueTypeId = watch("type_id");
+    if (!projectId || !issueTypeId || !workspaceSlug) return;
+
+    const alreadySetStateId = watch("state_id");
+
+    fetchProjectStates(workspaceSlug.toString(), projectId, issueTypeId).then(() => {
+      // 只有在 state_id 未被用户手动设置时才自动回填
+      if (!watch("state_id") || watch("state_id") === alreadySetStateId) {
+        const defaultStateId = getDefaultStateIdByIssueTypeId(projectId, issueTypeId);
+        if (defaultStateId) setValue("state_id", defaultStateId, { shouldValidate: false });
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId, watch("type_id")]);
 
   useEffect(() => {
     if (workItemTemplateId && editorRef.current) {

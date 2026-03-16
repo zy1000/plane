@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Trash2 } from "lucide-react";
 import { runInAction } from "mobx";
 import { observer } from "mobx-react";
@@ -8,6 +8,7 @@ import { format } from "date-fns";
 // components
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
+import { Tooltip } from "@plane/propel/tooltip";
 import { AlertModalCore, Checkbox } from "@plane/ui";
 import { StateDropdown } from "@/components/dropdowns/state/dropdown";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
@@ -38,6 +39,17 @@ export const BulkOperationsActionBar = observer(function BulkOperationsActionBar
   // store hooks
   const storeType = useIssueStoreType();
   const { issueMap, issues } = useIssues(storeType);
+
+  // 计算选中工作项的类型信息
+  const { hasMultipleTypes, singleTypeId } = useMemo(() => {
+    const typeIds = new Set(
+      selectedEntityIds.map((id) => issueMap[id]?.type_id ?? null).filter((typeId) => typeId !== null)
+    );
+    return {
+      hasMultipleTypes: typeIds.size > 1,
+      singleTypeId: typeIds.size === 1 ? [...typeIds][0] : null,
+    };
+  }, [selectedEntityIds, issueMap]);
 
   const [selectedStateId, setSelectedStateId] = useState<string | null>(null);
   const [selectedAssigneeIds, setSelectedAssigneeIds] = useState<string[]>([]);
@@ -184,13 +196,23 @@ export const BulkOperationsActionBar = observer(function BulkOperationsActionBar
           </div>
         </div>
         <div className="flex items-center  gap-2 flex-wrap flex-grow">
-          <StateDropdown
-            projectId={projectId ? projectId.toString() : undefined}
-            value={selectedStateId}
-            onChange={(stateId) => setSelectedStateId(stateId)}
-            buttonVariant="transparent-with-text"
-            buttonClassName={actionPillClassName}
-          />
+          <Tooltip
+            tooltipContent={hasMultipleTypes ? "选中的工作项包含多种类型，不支持批量修改状态" : undefined}
+            disabled={!hasMultipleTypes}
+            position="top"
+          >
+            <div>
+              <StateDropdown
+                projectId={projectId ? projectId.toString() : undefined}
+                issueTypeId={singleTypeId}
+                value={selectedStateId}
+                onChange={(stateId) => !hasMultipleTypes && setSelectedStateId(stateId)}
+                buttonVariant="transparent-with-text"
+                buttonClassName={cn(actionPillClassName, hasMultipleTypes && "opacity-50 cursor-not-allowed")}
+                disabled={hasMultipleTypes}
+              />
+            </div>
+          </Tooltip>
           <MemberDropdown
             value={selectedAssigneeIds}
             onChange={(data) => setSelectedAssigneeIds(data)}

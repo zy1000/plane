@@ -88,6 +88,7 @@ export const SubIssuesListItemProperties = observer(function SubIssuesListItemPr
           <StateDropdown
             value={issue.state_id}
             projectId={issue.project_id ?? undefined}
+            issueTypeId={issue.type_id}
             onChange={(val) =>
               issue.project_id &&
               updateSubIssue(

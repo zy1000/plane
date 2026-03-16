@@ -32,8 +32,9 @@ export class ProjectStateService extends APIService {
       });
   }
 
-  async getStates(workspaceSlug: string, projectId: string): Promise<IState[]> {
-    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/states/`)
+  async getStates(workspaceSlug: string, projectId: string, issueTypeId?: string | null): Promise<IState[]> {
+    const params = issueTypeId ? { issue_type_id: issueTypeId } : undefined;
+    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/states/`, { params })
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;

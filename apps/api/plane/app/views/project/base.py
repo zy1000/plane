@@ -29,7 +29,6 @@ from plane.app.serializers import (
 from plane.app.views.base import BaseAPIView, BaseViewSet
 from plane.bgtasks.recent_visited_task import recent_visited_task
 from plane.bgtasks.webhook_task import model_activity, webhook_activity
-from plane.app.views.custom.simple_api import temporary_create_issue_type
 from plane.db.models import (
     UserFavorite,
     DeployBoard,
@@ -40,8 +39,6 @@ from plane.db.models import (
     ProjectMember,
     ProjectNetwork,
     ProjectUserProperty,
-    State,
-    DEFAULT_STATES,
     Workspace,
     WorkspaceMember,
     IssueActivity,
@@ -55,6 +52,7 @@ from plane.db.models import (
 from plane.db.models.intake import IntakeIssueStatus
 from plane.utils.host import base_host
 from plane.utils.paginator import CustomPaginator
+from plane.utils.project.state import bulk_create_issue_state, temporary_create_issue_type
 from plane.utils.response import list_response
 
 
@@ -367,7 +365,7 @@ class ProjectViewSet(BaseViewSet):
         serializer = ProjectSerializer(data={**request.data}, context={"workspace_id": workspace.id})
         if serializer.is_valid():
             serializer.save()
-            temporary_create_issue_type(project_id=serializer.data["id"])
+            issue_types = temporary_create_issue_type(project_id=serializer.data["id"])
 
             # Add the user as Administrator to the project
             _ = ProjectMember.objects.create(
@@ -385,21 +383,8 @@ class ProjectViewSet(BaseViewSet):
                     role=ROLE.ADMIN.value,
                 )
 
-            State.objects.bulk_create(
-                [
-                    State(
-                        name=state["name"],
-                        color=state["color"],
-                        project=serializer.instance,
-                        sequence=state["sequence"],
-                        workspace=serializer.instance.workspace,
-                        group=state["group"],
-                        default=state.get("default", False),
-                        created_by=request.user,
-                    )
-                    for state in DEFAULT_STATES
-                ]
-            )
+            bulk_create_issue_state(issue_types=issue_types, workspace=serializer.instance.workspace,
+                                    project=serializer.instance,created_by=request.user)
 
             project = self.get_queryset().filter(pk=serializer.data["id"]).first()
 

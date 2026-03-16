@@ -1339,6 +1339,27 @@ export abstract class BaseIssuesStore implements IBaseIssuesStore {
       }
     }
 
+    // When groupBy="state", merge groups that share the same state name so that same-named
+    // states across different issue types appear as a single group
+    if (this.groupBy === "state") {
+      const stateMap = this.rootIssueStore?.rootStore?.state?.stateMap;
+      if (stateMap) {
+        const mergedIssues: TGroupedIssues = {};
+        const mergedCount: TGroupedIssueCount = {};
+        set(mergedCount, [ALL_ISSUES], issueResponse.total_count);
+        for (const groupId in groupedIssues) {
+          const stateName = stateMap[groupId]?.name ?? groupId;
+          const existing = mergedIssues[stateName];
+          const incoming = groupedIssues[groupId];
+          mergedIssues[stateName] = Array.isArray(existing) && Array.isArray(incoming)
+            ? [...existing, ...incoming]
+            : incoming;
+          mergedCount[stateName] = (mergedCount[stateName] ?? 0) + (groupedIssueCount[groupId] ?? 0);
+        }
+        return { issueList, groupedIssues: mergedIssues, groupedIssueCount: mergedCount };
+      }
+    }
+
     return { issueList, groupedIssues, groupedIssueCount };
   }
 
@@ -1356,18 +1377,25 @@ export abstract class BaseIssuesStore implements IBaseIssuesStore {
     groupId?: string,
     subGroupId?: string
   ) {
+    // When groupBy="state", remap the state UUID groupId to state name so pagination
+    // appends to the correct merged group
+    const resolvedGroupId =
+      groupId && this.groupBy === "state"
+        ? (this.rootIssueStore?.rootStore?.state?.stateMap?.[groupId]?.name ?? groupId)
+        : groupId;
+
     // if groupId exists and groupedIssues has ALL_ISSUES as a group,
     // then it's an individual group/subgroup pagination
-    if (groupId && groupedIssues[ALL_ISSUES] && Array.isArray(groupedIssues[ALL_ISSUES])) {
+    if (resolvedGroupId && groupedIssues[ALL_ISSUES] && Array.isArray(groupedIssues[ALL_ISSUES])) {
       const issueGroup = groupedIssues[ALL_ISSUES];
       const issueGroupCount = groupedIssueCount[ALL_ISSUES];
-      const issuesPath = [groupId];
+      const issuesPath = [resolvedGroupId];
       // issuesPath is the path for the issue List in the Grouped Issue List
       // issuePath is either [groupId] for grouped pagination or [groupId, subGroupId] for subGrouped pagination
       if (subGroupId) issuesPath.push(subGroupId);
 
       // update the issue Count of the particular group/subGroup
-      set(this.groupedIssueCount, [getGroupKey(groupId, subGroupId)], issueGroupCount);
+      set(this.groupedIssueCount, [getGroupKey(resolvedGroupId, subGroupId)], issueGroupCount);
 
       // update the issue list in the issuePath
       this.updateIssueGroup(issueGroup, issuesPath);
@@ -1654,6 +1682,12 @@ export abstract class BaseIssuesStore implements IBaseIssuesStore {
     // Handle special case for state group
     if (groupByKey === "state_detail.group") {
       return [this.rootIssueStore.rootStore.state.stateMap?.[value]?.group ?? issueObject.state__group];
+    }
+
+    // When grouping by individual state, remap state UUID to state name so same-named
+    // states across different issue types are merged into one group
+    if (groupByKey === "state") {
+      return [this.rootIssueStore.rootStore.state.stateMap?.[value]?.name ?? value];
     }
 
     return [value];

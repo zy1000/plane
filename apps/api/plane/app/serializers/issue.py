@@ -193,6 +193,14 @@ class IssueCreateSerializer(BaseSerializer):
         ):
             raise serializers.ValidationError("State is not valid please pass a valid state_id")
 
+        # Check state belongs to the issue's type when the state is type-scoped
+        if attrs.get("state"):
+            state = attrs["state"]
+            issue_type = attrs.get("type") or (self.instance.type if self.instance else None)
+            if state.issue_type_id is not None and issue_type is not None:
+                if str(state.issue_type_id) != str(issue_type.id):
+                    raise serializers.ValidationError("State does not belong to the issue type")
+
         # Check parent issue is from workspace as it can be cross workspace
         if (
                 attrs.get("parent")

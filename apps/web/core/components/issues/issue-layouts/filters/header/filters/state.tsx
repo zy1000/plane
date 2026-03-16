@@ -18,7 +18,7 @@ import { FilterHeader, FilterOption } from "@/components/issues/issue-layouts/fi
 
 type Props = {
   appliedFilters: string[] | null;
-  handleUpdate: (val: string) => void;
+  handleUpdate: (val: string | string[]) => void;
   searchQuery: string;
   states: IState[] | undefined;
 };
@@ -31,12 +31,28 @@ export const FilterState = observer(function FilterState(props: Props) {
 
   const appliedFiltersCount = appliedFilters?.length ?? 0;
 
-  const sortedOptions = useMemo(() => {
-    const filteredOptions = (states ?? []).filter((s) => s.name.toLowerCase().includes(searchQuery.toLowerCase()));
+  // Deduplicate states by name, accumulating all IDs per unique name so that
+  // same-named states from different issue types are treated as a single option.
+  const stateGroups = useMemo(() => {
+    const groups = new Map<string, { state: IState; ids: string[] }>();
+    for (const state of states ?? []) {
+      const existing = groups.get(state.name);
+      if (existing) {
+        existing.ids.push(state.id);
+      } else {
+        groups.set(state.name, { state, ids: [state.id] });
+      }
+    }
+    return Array.from(groups.values());
+  }, [states]);
 
-    return sortBy(filteredOptions, [(s) => !(appliedFilters ?? []).includes(s.id)]);
+  const sortedOptions = useMemo(() => {
+    const filtered = stateGroups.filter(({ state }) =>
+      state.name.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+    return sortBy(filtered, [({ ids }) => !ids.some((id) => (appliedFilters ?? []).includes(id))]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchQuery]);
+  }, [stateGroups, searchQuery]);
 
   const handleViewToggle = () => {
     if (!sortedOptions) return;
@@ -57,11 +73,11 @@ export const FilterState = observer(function FilterState(props: Props) {
           {sortedOptions ? (
             sortedOptions.length > 0 ? (
               <>
-                {sortedOptions.slice(0, itemsToRender).map((state) => (
+                {sortedOptions.slice(0, itemsToRender).map(({ state, ids }) => (
                   <FilterOption
-                    key={state.id}
-                    isChecked={appliedFilters?.includes(state.id) ? true : false}
-                    onClick={() => handleUpdate(state.id)}
+                    key={state.name}
+                    isChecked={ids.some((id) => appliedFilters?.includes(id)) ? true : false}
+                    onClick={() => handleUpdate(ids.length === 1 ? ids[0] : ids)}
                     icon={
                       <StateGroupIcon
                         stateGroup={state.group}

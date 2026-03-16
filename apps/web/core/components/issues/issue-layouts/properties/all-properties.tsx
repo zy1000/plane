@@ -202,6 +202,7 @@ export const IssueProperties = observer(function IssueProperties(props: IIssuePr
             value={issue.state_id}
             onChange={handleState}
             projectId={issue.project_id}
+            issueTypeId={issue.type_id}
             disabled={isReadOnly}
             buttonVariant="border-with-text"
             renderByDefault={isMobile}

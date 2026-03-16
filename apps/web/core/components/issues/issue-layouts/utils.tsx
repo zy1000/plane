@@ -212,9 +212,14 @@ const getStateColumns = ({ projectId }: TGetColumns): IGroupByColumn[] | undefin
   const { getProjectStates, projectStates } = store.state;
   const _states = projectId ? getProjectStates(projectId) : projectStates;
   if (!_states) return;
-  // map project states to group by columns
-  return _states.map((state) => ({
-    id: state.id,
+  // Deduplicate by state name so that same-named states across different issue types
+  // appear as a single column. The first occurrence provides icon/color metadata.
+  const seenNames = new Map<string, (typeof _states)[number]>();
+  for (const state of _states) {
+    if (!seenNames.has(state.name)) seenNames.set(state.name, state);
+  }
+  return Array.from(seenNames.values()).map((state) => ({
+    id: state.name,
     name: state.name,
     icon: (
       <div className="size-4 rounded-full">
@@ -513,7 +518,8 @@ export const handleGroupDragDrop = async (
   updateIssueOnDrop: (projectId: string, issueId: string, data: Partial<TIssue>, issueUpdates: IssueUpdates) => void,
   groupBy: TIssueGroupByOptions | undefined,
   subGroupBy: TIssueGroupByOptions | undefined,
-  shouldAddIssueAtTop = false
+  shouldAddIssueAtTop = false,
+  overrideStateId?: string
 ) => {
   if (!source.id || (subGroupBy && (!source.subGroupId || !destination.subGroupId))) return;
 
@@ -543,7 +549,48 @@ export const handleGroupDragDrop = async (
   };
 
   // update updatedIssue values based on the source and destination groupIds
-  if (source.groupId && destination.groupId && source.groupId !== destination.groupId && groupBy) {
+  if (
+    groupBy === "state_detail.group" &&
+    source.groupId &&
+    destination.groupId &&
+    source.groupId !== destination.groupId
+  ) {
+    // state_detail.group is a read-only virtual field; instead find the first matching state
+    // in the destination group and update state_id directly
+    if (overrideStateId) {
+      // user manually selected a state from the modal
+      updatedIssue = { ...updatedIssue, state_id: overrideStateId };
+    } else {
+      const projectStates = store.state.getProjectStates(sourceIssue.project_id ?? undefined) ?? [];
+      const statesInGroup = projectStates
+        .filter((s) => s.group === destination.groupId)
+        .sort((a, b) => a.sequence - b.sequence);
+      // prefer state that matches the issue's type_id, fall back to first state in group
+      const targetState =
+        statesInGroup.find((s) => s.issue_type_id === sourceIssue.type_id) ?? statesInGroup[0];
+      if (targetState) {
+        updatedIssue = { ...updatedIssue, state_id: targetState.id };
+      }
+    }
+  } else if (
+    groupBy === "state" &&
+    source.groupId &&
+    destination.groupId &&
+    source.groupId !== destination.groupId
+  ) {
+    // When grouping by state, column IDs are state names (not UUIDs). Find the actual
+    // state UUID for this issue's type that matches the destination state name.
+    const projectStates = store.state.getProjectStates(sourceIssue.project_id ?? undefined) ?? [];
+    const statesWithName = projectStates
+      .filter((s) => s.name === destination.groupId)
+      .sort((a, b) => a.sequence - b.sequence);
+    // prefer state that matches the issue's type_id, fall back to first state with this name
+    const targetState =
+      statesWithName.find((s) => s.issue_type_id === sourceIssue.type_id) ?? statesWithName[0];
+    if (targetState) {
+      updatedIssue = { ...updatedIssue, state_id: targetState.id };
+    }
+  } else if (source.groupId && destination.groupId && source.groupId !== destination.groupId && groupBy) {
     const groupKey = ISSUE_FILTER_DEFAULT_DATA[groupBy];
     let groupValue: any = clone(sourceIssue[groupKey]);
 

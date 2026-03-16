@@ -101,6 +101,7 @@ export const IssueDefaultProperties = observer(function IssueDefaultProperties(p
                 handleFormChange();
               }}
               projectId={projectId ?? undefined}
+              issueTypeId={issueTypeId}
               buttonVariant="border-with-text"
               tabIndex={getIndex("state_id")}
               isForWorkItemCreation={!id}

@@ -114,11 +114,16 @@ export const useWorkItemFiltersConfig = (props: TUseWorkItemFiltersConfigProps):
         : undefined,
     [memberIds, getUserDetails]
   );
-  const workItemStates: IState[] | undefined = useMemo(
-    () =>
-      stateIds ? (stateIds.map((stateId) => getStateById(stateId)).filter((state) => state) as IState[]) : undefined,
-    [stateIds, getStateById]
-  );
+  const workItemStates: IState[] | undefined = useMemo(() => {
+    if (!stateIds) return undefined;
+    const all = stateIds.map((stateId) => getStateById(stateId)).filter(Boolean) as IState[];
+    // Deduplicate by state name so same-named states from different issue types show as one option
+    const seen = new Map<string, IState>();
+    for (const s of all) {
+      if (!seen.has(s.name)) seen.set(s.name, s);
+    }
+    return Array.from(seen.values());
+  }, [stateIds, getStateById]);
   const workItemLabels: IIssueLabel[] | undefined = useMemo(
     () =>
       labelIds
