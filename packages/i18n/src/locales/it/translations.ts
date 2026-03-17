@@ -1975,6 +1975,9 @@ export default {
         description: "Plane archiverà automaticamente gli elementi di lavoro che sono stati completati o annullati.",
         duration: "Archivia automaticamente gli elementi di lavoro chiusi per",
       },
+    workflow: {
+      label: "Flusso di lavoro",
+    },
       "auto-close": {
         title: "Chiudi automaticamente gli elementi di lavoro",
         description: "Plane chiuderà automaticamente gli elementi di lavoro che non sono stati completati o annullati.",

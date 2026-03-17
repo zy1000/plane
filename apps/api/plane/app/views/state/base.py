@@ -108,7 +108,9 @@ class StateViewSet(BaseViewSet):
     @allow_permission([ROLE.ADMIN])
     def mark_as_default(self, request, slug, project_id, pk):
         # Select all the states which are marked as default
-        _ = State.objects.filter(workspace__slug=slug, project_id=project_id, default=True).update(default=False)
+        issue_type_id = request.data['issue_type_id']
+        _ = State.objects.filter(workspace__slug=slug, project_id=project_id, default=True,
+                                 issue_type_id=issue_type_id).update(default=False)
         _ = State.objects.filter(workspace__slug=slug, project_id=project_id, pk=pk).update(default=True)
         return Response(status=status.HTTP_204_NO_CONTENT)
 

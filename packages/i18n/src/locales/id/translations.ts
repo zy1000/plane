@@ -1971,6 +1971,9 @@ export default {
         description: "Plane akan mengarsipkan secara otomatis item kerja yang telah selesai atau dibatalkan.",
         duration: "Arsip otomatis item kerja yang ditutup selama",
       },
+    workflow: {
+      label: "Alur kerja",
+    },
       "auto-close": {
         title: "Tutup otomatis item kerja",
         description: "Plane akan menutup secara otomatis item kerja yang belum selesai atau dibatalkan.",

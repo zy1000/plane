@@ -1953,6 +1953,9 @@ export default {
         description: "Plane은 완료되거나 취소된 작업 항목을 자동으로 보관합니다.",
         duration: "다음 기간 동안 닫힌 작업 항목 자동 보관",
       },
+    workflow: {
+      label: "워크플로",
+    },
       "auto-close": {
         title: "작업 항목 자동 닫기",
         description: "Plane은 완료되거나 취소되지 않은 작업 항목을 자동으로 닫습니다.",

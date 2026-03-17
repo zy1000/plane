@@ -1945,6 +1945,9 @@ export default {
         description: "Plane, tamamlanan veya iptal edilen iş öğelerini otomatik arşivleyecek.",
         duration: "Şu süre kapalı kalan iş öğelerini otomatik arşivle",
       },
+    workflow: {
+      label: "İş akışı",
+    },
       "auto-close": {
         title: "İş öğelerini otomatik kapat",
         description: "Plane, tamamlanmamış veya iptal edilmemiş iş öğelerini otomatik kapatacak.",

@@ -95,3 +95,13 @@ from .issue_type import *
 from .qa import *
 from .ldap import LdapConfig
 from .milestone import *
+from .workflow import (
+    ApprovalType,
+    ApprovalAction,
+    TransitionRecordStatus,
+    Workflow,
+    WorkflowTransition,
+    WorkflowTransitionApproval,
+    IssueTransitionRecord,
+    IssueTransitionApprovalRecord,
+)

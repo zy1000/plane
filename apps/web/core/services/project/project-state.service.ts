@@ -24,8 +24,10 @@ export class ProjectStateService extends APIService {
       });
   }
 
-  async markDefault(workspaceSlug: string, projectId: string, stateId: string): Promise<void> {
-    return this.post(`/api/workspaces/${workspaceSlug}/projects/${projectId}/states/${stateId}/mark-default/`, {})
+  async markDefault(workspaceSlug: string, projectId: string, stateId: string, issueTypeId: string | null): Promise<void> {
+    return this.post(`/api/workspaces/${workspaceSlug}/projects/${projectId}/states/${stateId}/mark-default/`, {
+      issue_type_id: issueTypeId,
+    })
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response;

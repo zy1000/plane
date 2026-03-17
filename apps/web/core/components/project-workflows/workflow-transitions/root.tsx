@@ -1,0 +1,206 @@
+/**
+ * Copyright (c) 2023-present Plane Software, Inc. and contributors
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * See the LICENSE file for details.
+ */
+
+import type { FC } from "react";
+import { useEffect, useState } from "react";
+import { Workflow } from "lucide-react";
+import { EUserPermissionsLevel } from "@plane/constants";
+import type { IState } from "@plane/types";
+import { EUserProjectRoles } from "@plane/types";
+import { useWorkflowTransitions } from "@/hooks/store/use-workflow-transitions";
+import { useProjectState } from "@/hooks/store/use-project-state";
+import { useUserPermissions } from "@/hooks/store/user";
+import type { TApprovalType, TWorkflow } from "@/services/project/project-workflow.service";
+import { StateTransitionCard } from "./state-transition-card";
+import { WorkflowSidePanel, type TPanelConfig, type TMemberPanelConfig } from "./workflow-side-panel";
+
+type TWorkflowTransitionsRootProps = {
+  workspaceSlug: string;
+  projectId: string;
+  workflow: TWorkflow;
+};
+
+const TransitionsSkeleton: FC = () => (
+  <div className="flex flex-col gap-3">
+    {[1, 2, 3, 4].map((i) => (
+      <div key={i} className="h-14 animate-pulse rounded-lg border border-subtle bg-layer-1" />
+    ))}
+  </div>
+);
+
+export const WorkflowTransitionsRoot: FC<TWorkflowTransitionsRootProps> = ({
+  workspaceSlug,
+  projectId,
+  workflow,
+}) => {
+  const { allowPermissions } = useUserPermissions();
+  const { getProjectStatesByIssueTypeId, fetchProjectStates } = useProjectState();
+  const { transitions, isLoading, fetchTransitions, createTransition, updateTransition, deleteTransition } =
+    useWorkflowTransitions(workspaceSlug, projectId, workflow.id);
+
+  const [activePanel, setActivePanel] = useState<TPanelConfig | null>(null);
+  const [activePanelOwner, setActivePanelOwner] = useState<string | null>(null);
+
+  const isEditable = allowPermissions(
+    [EUserProjectRoles.ADMIN],
+    EUserPermissionsLevel.PROJECT,
+    workspaceSlug,
+    projectId
+  );
+
+  useEffect(() => {
+    fetchTransitions();
+  }, [fetchTransitions]);
+
+  useEffect(() => {
+    if (workflow.issue_type_id) {
+      fetchProjectStates(workspaceSlug, projectId, workflow.issue_type_id);
+    }
+  }, [workspaceSlug, projectId, workflow.issue_type_id, fetchProjectStates]);
+
+  const allStates = getProjectStatesByIssueTypeId(projectId, workflow.issue_type_id) ?? [];
+
+  const transitionsByState: Record<string, typeof transitions> = {};
+  for (const state of allStates) {
+    transitionsByState[state.id] = transitions.filter((t) => t.from_state_id === state.id);
+  }
+
+  const handleSaveTransition = async (
+    stateId: string,
+    data: {
+      id?: string;
+      to_state_id: string;
+      approver_ids: string[];
+      approval_type: TApprovalType;
+      required_count?: number;
+    }
+  ) => {
+    const requiredCountField = data.required_count !== undefined ? { required_count: data.required_count } : {};
+    if (data.id) {
+      await updateTransition({
+        id: data.id,
+        to_state_id: data.to_state_id,
+        approver_ids: data.approver_ids,
+        approval_type: data.approval_type,
+        ...requiredCountField,
+      });
+    } else {
+      await createTransition({
+        workflow_id: workflow.id,
+        from_state_id: stateId,
+        to_state_id: data.to_state_id,
+        approver_ids: data.approver_ids,
+        approval_type: data.approval_type,
+        ...requiredCountField,
+      });
+    }
+  };
+
+  const handleRequestStatePanel = (
+    availableStates: IState[],
+    currentValue: string | null,
+    onConfirm: (stateId: string) => void
+  ) => {
+    setActivePanel({ type: "state", availableStates, currentValue, onConfirm });
+  };
+
+  const handleRequestMemberPanel = (
+    currentValue: string[],
+    requiredCount: number,
+    isNofM: boolean,
+    onConfirm: (memberIds: string[], count: number, useNofM: boolean) => void,
+    readOnly?: boolean
+  ) => {
+    const config: TMemberPanelConfig = {
+      type: "member",
+      projectId,
+      currentValue,
+      requiredCount,
+      isNofM,
+      onConfirm,
+      readOnly,
+    };
+    setActivePanel(config);
+  };
+
+  const handleRequestFlowPanel = (onConfirm: () => void) => {
+    setActivePanel({ type: "flow", onConfirm });
+  };
+
+  return (
+    <div className="flex flex-col gap-6">
+      {/* workflow info banner */}
+      <div className="flex items-center justify-between gap-4 rounded-lg bg-surface-1 px-4 py-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <Workflow className="h-5 w-5 flex-shrink-0 text-secondary" />
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold text-primary">{workflow.name}</p>
+            {workflow.description && (
+              <p className="truncate text-xs text-secondary">{workflow.description}</p>
+            )}
+          </div>
+        </div>
+        {workflow.is_active && (
+          <span className="inline-flex flex-shrink-0 items-center rounded-sm bg-accent-subtle px-2 py-0.5 text-xs font-medium text-accent-primary">
+            活动
+          </span>
+        )}
+      </div>
+
+      {/* define workflow section — two-column layout when panel is open */}
+      <div>
+        <h3 className="mb-3 text-sm font-medium text-secondary">Define workflow</h3>
+
+        <div className="flex items-start gap-4">
+          {/* main content */}
+          <div className="min-w-0 flex-1">
+            {isLoading ? (
+              <TransitionsSkeleton />
+            ) : allStates.length === 0 ? (
+              <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-subtle py-12 text-center gap-3">
+                <Workflow className="size-8 text-tertiary" strokeWidth={1.2} />
+                <p className="text-sm text-secondary">该工作流关联的工作项类型暂无状态</p>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {allStates.map((state) => (
+                  <StateTransitionCard
+                    key={state.id}
+                    state={state}
+                    allStates={allStates}
+                    transitions={transitionsByState[state.id] ?? []}
+                    projectId={projectId}
+                    isEditable={isEditable}
+                    activePanelOwner={activePanelOwner}
+                    onSetActivePanelOwner={setActivePanelOwner}
+                    onSaveTransition={handleSaveTransition}
+                    onDeleteTransition={deleteTransition}
+                    onRequestStatePanel={handleRequestStatePanel}
+                    onRequestMemberPanel={handleRequestMemberPanel}
+                    onRequestFlowPanel={handleRequestFlowPanel}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* right side panel */}
+          {activePanel && (
+            <div className="w-64 flex-shrink-0 sticky top-0 flex flex-col" style={{ height: "calc(100vh - 2.75rem)" }}>
+              <WorkflowSidePanel
+                config={activePanel}
+                onClose={() => {
+                  setActivePanel(null);
+                  setActivePanelOwner(null);
+                }}
+              />
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};

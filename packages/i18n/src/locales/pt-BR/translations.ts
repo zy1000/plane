@@ -1984,6 +1984,9 @@ export default {
         description: "O Plane arquivará automaticamente os itens de trabalho que foram concluídos ou cancelados.",
         duration: "Arquivar automaticamente itens de trabalho que estão fechados por",
       },
+    workflow: {
+      label: "Fluxo de trabalho",
+    },
       "auto-close": {
         title: "Fechar automaticamente itens de trabalho",
         description: "O Plane fechará automaticamente os itens de trabalho que não foram concluídos ou cancelados.",

@@ -1932,6 +1932,9 @@ export default {
         auto_close_status: "自动关闭状态",
       },
     },
+    workflow: {
+      label: "工作流",
+    },
     empty_state: {
       labels: {
         title: "尚无标签",

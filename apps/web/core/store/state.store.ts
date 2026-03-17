@@ -39,6 +39,10 @@ export interface IStateStore {
     projectId: string | null | undefined,
     issueTypeId: string | null | undefined
   ) => string[] | undefined;
+  getGroupedProjectStatesByIssueTypeId: (
+    projectId: string | null | undefined,
+    issueTypeId: string | null | undefined
+  ) => Record<string, IState[]> | undefined;
   getProjectIntakeState: (projectId: string | null | undefined) => IIntakeState | undefined;
   getProjectStateIds: (projectId: string | null | undefined) => string[] | undefined;
   getProjectIntakeStateIds: (projectId: string | null | undefined) => string[] | undefined;
@@ -206,6 +210,28 @@ export class StateStore implements IStateStore {
     (projectId: string | null | undefined, issueTypeId: string | null | undefined) => {
       const states = this.getProjectStatesByIssueTypeId(projectId, issueTypeId);
       return states?.map((state) => state.id);
+    }
+  );
+
+  /**
+   * Returns states for a project filtered by issueTypeId, grouped by state group
+   * @param projectId
+   * @param issueTypeId
+   * @returns Record<string, IState[]> | undefined
+   */
+  getGroupedProjectStatesByIssueTypeId = computedFn(
+    (projectId: string | null | undefined, issueTypeId: string | null | undefined) => {
+      const states = this.getProjectStatesByIssueTypeId(projectId, issueTypeId);
+      if (!states) return undefined;
+
+      const groupedStates = groupBy(states, "group") as Record<string, IState[]>;
+      return Object.keys(STATE_GROUPS).reduce(
+        (acc, group) => ({
+          ...acc,
+          [group]: groupedStates[group] || [],
+        }),
+        {} as Record<string, IState[]>
+      );
     }
   );
 
@@ -392,17 +418,18 @@ export class StateStore implements IStateStore {
    */
   markStateAsDefault = async (workspaceSlug: string, projectId: string, stateId: string) => {
     const originalStates = this.stateMap;
+    const targetState = this.stateMap[stateId];
+    const issueTypeId = targetState?.issue_type_id ?? null;
     const currentDefaultState = Object.values(this.stateMap).find(
-      (state) => state.project_id === projectId && state.default
+      (state) => state.project_id === projectId && state.default && state.issue_type_id === issueTypeId
     );
     try {
       runInAction(() => {
         if (currentDefaultState) set(this.stateMap, [currentDefaultState.id, "default"], false);
         set(this.stateMap, [stateId, "default"], true);
       });
-      await this.stateService.markDefault(workspaceSlug, projectId, stateId);
+      await this.stateService.markDefault(workspaceSlug, projectId, stateId, issueTypeId);
     } catch (error) {
-      // reverting back to old state group if api fails
       runInAction(() => {
         this.stateMap = originalStates;
       });

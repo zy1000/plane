@@ -6,11 +6,17 @@
 from .base import BaseSerializer
 from rest_framework import serializers
 
-from plane.db.models import State, StateGroup
+from plane.db.models import State, StateGroup, IssueType
 
 
 class StateSerializer(BaseSerializer):
     order = serializers.FloatField(required=False)
+    issue_type_id = serializers.PrimaryKeyRelatedField(
+        queryset=IssueType.objects.all(),
+        source="issue_type",
+        required=False,
+        allow_null=False,
+    )
 
     class Meta:
         model = State

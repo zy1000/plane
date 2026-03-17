@@ -1960,6 +1960,9 @@ export default {
         description: "Planeは完了またはキャンセルされた作業項目を自動的にアーカイブします。",
         duration: "閉じられた作業項目を自動的にアーカイブ",
       },
+    workflow: {
+      label: "ワークフロー",
+    },
       "auto-close": {
         title: "作業項目を自動的に閉じる",
         description: "Planeは完了またはキャンセルされていない作業項目を自動的に閉じます。",

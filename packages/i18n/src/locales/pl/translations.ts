@@ -1958,6 +1958,9 @@ export default {
         description: "Plane będzie automatycznie archiwizował elementy, które zostały ukończone lub anulowane.",
         duration: "Archiwizuj elementy zamknięte dłużej niż",
       },
+    workflow: {
+      label: "Przepływ pracy",
+    },
       "auto-close": {
         title: "Automatyczne zamykanie elementów",
         description: "Plane będzie automatycznie zamykał elementy, które nie zostały ukończone lub anulowane.",

@@ -1938,6 +1938,9 @@ export default {
         description: "Plane將自動封存已完成或已取消的工作項目。",
         duration: "自動封存已關閉的工作項目",
       },
+    workflow: {
+      label: "工作流程",
+    },
       "auto-close": {
         title: "自動關閉工作項目",
         description: "Plane將自動關閉未完成或未取消的工作項目。",

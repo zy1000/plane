@@ -1835,6 +1835,9 @@ export default {
         description: "Plane will auto archive work items that have been completed or canceled.",
         duration: "Auto-archive work items that are closed for",
       },
+    workflow: {
+      label: "Workflow",
+    },
       "auto-close": {
         title: "Auto-close work items",
         description: "Plane will automatically close work items that haven't been completed or canceled.",

@@ -28,6 +28,7 @@ from .qa import urlpatterns as qa_urls
 from .milestone import urlpatterns as milestone_urls
 from .filestore import urlpatterns as filestore_urls
 from .changelog import urlpatterns as changelog_urls
+from .workflow import urlpatterns as workflow_urls
 
 urlpatterns = [
     *analytic_urls,
@@ -56,4 +57,5 @@ urlpatterns = [
     *milestone_urls,
     *filestore_urls,
     *changelog_urls,
+    *workflow_urls,
 ]

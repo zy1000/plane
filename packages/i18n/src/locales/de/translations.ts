@@ -1978,6 +1978,9 @@ export default {
         description: "Plane wird Arbeitselemente automatisch archivieren, die abgeschlossen oder abgebrochen wurden.",
         duration: "Arbeitselemente automatisch archivieren, die seit",
       },
+    workflow: {
+      label: "Workflow",
+    },
       "auto-close": {
         title: "Arbeitselemente automatisch schließen",
         description:

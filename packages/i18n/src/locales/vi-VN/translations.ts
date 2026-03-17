@@ -1969,6 +1969,9 @@ export default {
         description: "Plane sẽ tự động lưu trữ các mục công việc đã hoàn thành hoặc đã hủy.",
         duration: "Tự động lưu trữ đã đóng",
       },
+    workflow: {
+      label: "Quy trình làm việc",
+    },
       "auto-close": {
         title: "Tự động đóng mục công việc",
         description: "Plane sẽ tự động đóng các mục công việc chưa hoàn thành hoặc hủy.",

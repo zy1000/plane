@@ -1956,6 +1956,9 @@ export default {
         description: "Plane bude archivovať dokončené alebo zrušené položky.",
         duration: "Archivovať položky uzavreté dlhšie ako",
       },
+    workflow: {
+      label: "Pracovný postup",
+    },
       "auto-close": {
         title: "Automaticky uzatvárať položky",
         description: "Plane uzavrie neaktívne položky.",

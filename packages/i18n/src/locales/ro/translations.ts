@@ -1976,6 +1976,9 @@ export default {
         description: "Plane va arhiva automat activitățile care au fost finalizate sau anulate.",
         duration: "Auto-arhivează activitățile finalizate de",
       },
+    workflow: {
+      label: "Flux de lucru",
+    },
       "auto-close": {
         title: "Închide automat activitățile",
         description: "Plane va închide automat activitățile care nu au fost finalizate sau anulate.",
