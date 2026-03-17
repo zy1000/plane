@@ -6,10 +6,11 @@
 
 import { useCallback, useMemo } from "react";
 import { observer } from "mobx-react";
+import { Settings } from "lucide-react";
 // plane imports
 import { ProjectIcon } from "@plane/propel/icons";
 import type { ICustomSearchSelectOption } from "@plane/types";
-import { CustomSearchSelect } from "@plane/ui";
+import { CustomSearchSelect, Tooltip } from "@plane/ui";
 // hooks
 import { useProject } from "@/hooks/store/use-project";
 import { useUserPermissions } from "@/hooks/store/user";
@@ -101,6 +102,10 @@ export const ProjectHeader = observer(function ProjectHeader(props: TProjectHead
     router.push(`/${workspaceSlug}/projects/`);
   }, [router, workspaceSlug]);
 
+  const handleProjectSettingsClick = useCallback(() => {
+    router.push(`/${workspaceSlug}/settings/projects/${projectId}/`);
+  }, [router, workspaceSlug, projectId]);
+
   // Early return if no project details
   if (!currentProjectDetails) return null;
 
@@ -118,6 +123,15 @@ export const ProjectHeader = observer(function ProjectHeader(props: TProjectHead
         className="h-full rounded"
         customButtonClassName="group flex items-center gap-0.5 rounded-sm hover:bg-surface-2 outline-none cursor-pointer h-full"
       />
+      <Tooltip tooltipContent="项目设置" position="bottom">
+        <button
+          type="button"
+          onClick={handleProjectSettingsClick}
+          className="ml-1 flex size-6 flex-shrink-0 items-center justify-center rounded hover:bg-surface-2 text-tertiary hover:text-secondary transition-colors"
+        >
+          <Settings className="size-3.5" />
+        </button>
+      </Tooltip>
     </>
   );
 });
