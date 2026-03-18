@@ -6,7 +6,7 @@
 
 import type { FC } from "react";
 import { useState, useEffect } from "react";
-import { Plus, Workflow } from "lucide-react";
+import { GitPullRequest, Plus } from "lucide-react";
 import * as LucideIcons from "lucide-react";
 import { Button } from "@plane/ui";
 import { LayersIcon } from "@plane/propel/icons";
@@ -154,7 +154,7 @@ export const ProjectWorkflowRoot: FC<TProjectWorkflowRootProps> = ({ workspaceSl
   if (!issueTypes || issueTypes.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center text-secondary gap-3">
-        <Workflow className="size-10 text-tertiary" strokeWidth={1.2} />
+        <GitPullRequest className="rotate-90 size-10 text-tertiary" strokeWidth={1.2} />
         <p className="text-sm">该项目暂无工作项类型，请先创建工作项类型。</p>
       </div>
     );
@@ -201,7 +201,7 @@ export const ProjectWorkflowRoot: FC<TProjectWorkflowRootProps> = ({ workspaceSl
             <WorkflowListSkeleton />
           ) : workflows.length === 0 ? (
             <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-subtle py-12 text-center gap-3">
-              <Workflow className="size-8 text-tertiary" strokeWidth={1.2} />
+              <GitPullRequest className="rotate-90 size-8 text-tertiary" strokeWidth={1.2} />
               <div>
                 <p className="text-sm font-medium text-secondary">暂无工作流</p>
                 <p className="mt-1 text-xs text-tertiary">

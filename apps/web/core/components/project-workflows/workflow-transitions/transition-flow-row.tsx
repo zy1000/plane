@@ -109,8 +109,8 @@ export const TransitionFlowRow: FC<TTransitionFlowRowProps> = ({
     JSON.stringify([...approverIds].sort()) !== JSON.stringify([...(transition?.approver_ids ?? [])].sort()) ||
     requiredCount !== (transition?.required_count ?? 1);
 
-  const canSave = toStateId !== null && (isDirty || isNew);
-  const showSaveCancel = isEditable && ((isNew && step === "done") || (!isNew && (isDirty || isEditMode)));
+  const canSave = isNew ? step === "done" : toStateId !== null && isDirty;
+  const showSaveCancel = isEditable && (isNew || (!isNew && (isDirty || isEditMode)));
 
   const selectedToState = toStateId ? allStates.find((s) => s.id === toStateId) : null;
   const isAllApprovers = approverIds.length === 0;
@@ -426,7 +426,7 @@ export const TransitionFlowRow: FC<TTransitionFlowRowProps> = ({
         {/* Save / Cancel — below boxes */}
         {showSaveCancel && (
           <div className="mt-3 flex justify-end gap-1.5">
-            <Button variant="neutral-primary" size="sm" onClick={isNew ? onDiscard : handleCancel} disabled={isSaving}>
+            <Button variant="neutral-primary" size="sm" onClick={isNew ? () => { releasePanel(); onDiscard(); } : handleCancel} disabled={isSaving}>
               取消
             </Button>
             <Button variant="primary" size="sm" onClick={handleSave} loading={isSaving} disabled={!canSave}>

@@ -4,8 +4,9 @@
  * See the LICENSE file for details.
  */
 
+import type { ComponentProps } from "react";
 import type { LucideIcon } from "lucide-react";
-import { Users, Workflow, Zap } from "lucide-react";
+import { GitPullRequest, Users, Zap } from "lucide-react";
 // plane imports
 import type { ISvgIcons } from "@plane/propel/icons";
 import {
@@ -22,6 +23,10 @@ import type { TProjectSettingsTabs } from "@plane/types";
 // components
 import { SettingIcon } from "@/components/icons/attachment";
 
+const WorkflowIcon = (props: ComponentProps<typeof GitPullRequest>) => (
+  <GitPullRequest {...props} className={`rotate-90 ${props.className ?? ""}`} />
+);
+
 export const PROJECT_SETTINGS_ICONS: Record<TProjectSettingsTabs, LucideIcon | React.FC<ISvgIcons>> = {
   general: SettingIcon,
   members: Users,
@@ -34,5 +39,5 @@ export const PROJECT_SETTINGS_ICONS: Record<TProjectSettingsTabs, LucideIcon | R
   labels: LabelPropertyIcon,
   estimates: EstimatePropertyIcon,
   automations: Zap,
-  workflow: Workflow,
+  workflow: WorkflowIcon,
 };

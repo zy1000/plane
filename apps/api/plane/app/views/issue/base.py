@@ -599,6 +599,9 @@ class IssueViewSet(BaseViewSet):
         the requesting user then dont show the issue
         """
 
+        # 规则检查，是否有权限修改状态
+        #
+
         if (
                 ProjectMember.objects.filter(
                     workspace__slug=slug,

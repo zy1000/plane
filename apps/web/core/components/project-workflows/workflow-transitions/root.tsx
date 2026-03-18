@@ -6,7 +6,7 @@
 
 import type { FC } from "react";
 import { useEffect, useState } from "react";
-import { Workflow } from "lucide-react";
+import { GitPullRequest } from "lucide-react";
 import { EUserPermissionsLevel } from "@plane/constants";
 import type { IState } from "@plane/types";
 import { EUserProjectRoles } from "@plane/types";
@@ -43,6 +43,11 @@ export const WorkflowTransitionsRoot: FC<TWorkflowTransitionsRootProps> = ({
 
   const [activePanel, setActivePanel] = useState<TPanelConfig | null>(null);
   const [activePanelOwner, setActivePanelOwner] = useState<string | null>(null);
+
+  const handleSetActivePanelOwner = (key: string | null) => {
+    setActivePanelOwner(key);
+    if (key === null) setActivePanel(null);
+  };
 
   const isEditable = allowPermissions(
     [EUserProjectRoles.ADMIN],
@@ -135,7 +140,7 @@ export const WorkflowTransitionsRoot: FC<TWorkflowTransitionsRootProps> = ({
       {/* workflow info banner */}
       <div className="flex items-center justify-between gap-4 rounded-lg bg-surface-1 px-4 py-3">
         <div className="flex min-w-0 items-center gap-3">
-          <Workflow className="h-5 w-5 flex-shrink-0 text-secondary" />
+          <GitPullRequest className="rotate-90 h-5 w-5 flex-shrink-0 text-secondary" />
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold text-primary">{workflow.name}</p>
             {workflow.description && (
@@ -161,7 +166,7 @@ export const WorkflowTransitionsRoot: FC<TWorkflowTransitionsRootProps> = ({
               <TransitionsSkeleton />
             ) : allStates.length === 0 ? (
               <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-subtle py-12 text-center gap-3">
-                <Workflow className="size-8 text-tertiary" strokeWidth={1.2} />
+                <GitPullRequest className="rotate-90 size-8 text-tertiary" strokeWidth={1.2} />
                 <p className="text-sm text-secondary">该工作流关联的工作项类型暂无状态</p>
               </div>
             ) : (
@@ -175,7 +180,7 @@ export const WorkflowTransitionsRoot: FC<TWorkflowTransitionsRootProps> = ({
                     projectId={projectId}
                     isEditable={isEditable}
                     activePanelOwner={activePanelOwner}
-                    onSetActivePanelOwner={setActivePanelOwner}
+                    onSetActivePanelOwner={handleSetActivePanelOwner}
                     onSaveTransition={handleSaveTransition}
                     onDeleteTransition={deleteTransition}
                     onRequestStatePanel={handleRequestStatePanel}
