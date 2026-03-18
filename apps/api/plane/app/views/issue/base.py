@@ -63,7 +63,7 @@ from plane.db.models import (
     ModuleIssue,
     Project,
     ProjectMember,
-    UserRecentVisit, IssueType, ProjectIssueType,
+    UserRecentVisit, IssueType, ProjectIssueType, State,
 )
 from plane.utils.filters import ComplexFilterBackend, IssueFilterSet
 from plane.utils.global_paginator import paginate
@@ -78,6 +78,8 @@ from plane.utils.order_queryset import order_issue_queryset
 from plane.utils.paginator import GroupedOffsetPaginator, SubGroupedOffsetPaginator
 from plane.utils.timezone_converter import user_timezone_converter
 from plane.settings.redis import redis_instance
+from plane.utils.workflow import check_update_state_permission
+from plane.db.models import State as StateModel
 
 from .. import BaseAPIView, BaseViewSet
 
@@ -403,7 +405,7 @@ class IssueViewSet(BaseViewSet):
 
         data = dict(request.data)
         if not data.get("type_id"):
-            data['type_id'] = str(ProjectIssueType.objects.get(project=project,issue_type__name='任务').issue_type_id)
+            data['type_id'] = str(ProjectIssueType.objects.get(project=project, issue_type__name='任务').issue_type_id)
         serializer = IssueCreateSerializer(
             data=data,
             context={
@@ -599,8 +601,7 @@ class IssueViewSet(BaseViewSet):
         the requesting user then dont show the issue
         """
 
-        # 规则检查，是否有权限修改状态
-        #
+
 
         if (
                 ProjectMember.objects.filter(
@@ -685,7 +686,37 @@ class IssueViewSet(BaseViewSet):
             redis_client.delete(lock_id)
             return Response({"error": "Issue not found"}, status=status.HTTP_404_NOT_FOUND)
 
+        # 工作流审批检查
+        state_id = request.data.get("state_id")
+        if state_id and str(state_id) != str(issue.state_id):
+            try:
+                to_state = StateModel.objects.get(pk=state_id, project_id=project_id)
+                allowed, error_msg, transition_record = check_update_state_permission(
+                    issue=issue,
+                    to_state=to_state,
+                    user=request.user,
+                    project_id=project_id
+                )
+                if not allowed:
+                    redis_client.delete(lock_id)
+                    resp_data = {"error": error_msg, "workflow_blocked": True}
+                    if transition_record:
+                        resp_data["transition_record_id"] = str(transition_record.id)
+                    return Response(resp_data, status=status.HTTP_403_FORBIDDEN)
+            except StateModel.DoesNotExist:
+                pass
+
         current_instance = json.dumps(IssueDetailSerializer(issue).data, cls=DjangoJSONEncoder)
+
+        # 规则检查，是否有权限修改状态
+        # if to_state_id := request.data.get('state_id'):
+        #     to_state = State.objects.get(pk=to_state_id)
+        #     result, reason = check_update_state_permission(issue=issue, to_state=to_state, user=request.user)
+        #     if not result:
+        #         return Response(
+        #             {"error": reason},
+        #             status=status.HTTP_400_BAD_REQUEST,
+        #         )
 
         # 获取当前的动态字段值
         current_dynamic_properties = {}
@@ -751,7 +782,7 @@ class IssueViewSet(BaseViewSet):
             redis_client.delete(lock_id)
             return Response(status=status.HTTP_204_NO_CONTENT)
         redis_client.delete(lock_id)
-        return Response({'error':serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'error': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
 
     def _record_dynamic_properties_activity(self, current_dynamic_properties, new_dynamic_properties, issue_id,
                                             project_id, actor_id, request):
@@ -840,17 +871,17 @@ class ProjectUserDisplayPropertyEndpoint(BaseAPIView):
     def patch(self, request, slug, project_id):
         try:
             issue_property = ProjectUserProperty.objects.get(
-                user=request.user, 
+                user=request.user,
                 project_id=project_id
             )
         except ProjectUserProperty.DoesNotExist:
             issue_property = ProjectUserProperty.objects.create(
-                user=request.user, 
+                user=request.user,
                 project_id=project_id
             )
 
         serializer = ProjectUserPropertySerializer(
-            issue_property, 
+            issue_property,
             data=request.data,
             partial=True
         )
@@ -1196,6 +1227,7 @@ class IssueDetailEndpoint(BaseAPIView):
                 issue, many=True, fields=self.fields, expand=self.expand
             ).data,
         )
+
 
 class IssueBulkUpdateDateEndpoint(BaseAPIView):
     def validate_dates(self, current_start, current_target, new_start, new_target):

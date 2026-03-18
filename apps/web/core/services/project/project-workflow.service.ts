@@ -47,6 +47,47 @@ export type TWorkflowTransitionUpdatePayload = {
   approver_ids?: string[];
 };
 
+export type TApprovalRecord = {
+  id: string;
+  approver_id: string;
+  approver_display_name: string;
+  approver_avatar_url: string | null;
+  action: "approved" | "rejected" | null;
+  comment: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type TTransitionRecord = {
+  id: string;
+  issue_id: string;
+  issue_sequence_id: number;
+  issue_name: string;
+  from_state_id: string | null;
+  from_state_name: string | null;
+  from_state_color: string | null;
+  from_state_group: string | null;
+  to_state_id: string | null;
+  to_state_name: string | null;
+  to_state_color: string | null;
+  to_state_group: string | null;
+  status: "pending" | "approved" | "rejected" | "cancelled";
+  required_count: number | null;
+  approval_records: TApprovalRecord[];
+  created_at: string;
+  completed_at: string | null;
+};
+
+export type TMyApprovalsResponse = {
+  results: TTransitionRecord[];
+  pending_count: number;
+};
+
+export type TApprovalActionPayload = {
+  action: "approved" | "rejected";
+  comment?: string;
+};
+
 export class ProjectWorkflowService extends APIService {
   constructor() {
     super(API_BASE_URL);
@@ -163,6 +204,68 @@ export class ProjectWorkflowService extends APIService {
       { params: { id: transitionId } }
     )
       .then(() => undefined)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  // Approval APIs
+
+  async fetchMyApprovals(
+    workspaceSlug: string,
+    projectId: string,
+    tab: "pending" | "processed" = "pending"
+  ): Promise<TMyApprovalsResponse> {
+    return this.get(
+      `/api/workspaces/${workspaceSlug}/projects/${projectId}/my-approvals/`,
+      { params: { tab } }
+    )
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async fetchIssueApprovals(
+    workspaceSlug: string,
+    projectId: string,
+    issueId: string
+  ): Promise<TMyApprovalsResponse> {
+    return this.get(
+      `/api/workspaces/${workspaceSlug}/projects/${projectId}/my-approvals/`,
+      { params: { tab: "pending", issue_id: issueId } }
+    )
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async fetchIssuePendingRecords(
+    workspaceSlug: string,
+    projectId: string,
+    issueId: string
+  ): Promise<TTransitionRecord[]> {
+    return this.get(
+      `/api/workspaces/${workspaceSlug}/projects/${projectId}/issues/${issueId}/transition-records/`
+    )
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async submitApprovalAction(
+    workspaceSlug: string,
+    projectId: string,
+    recordId: string,
+    data: TApprovalActionPayload
+  ): Promise<TTransitionRecord> {
+    return this.post(
+      `/api/workspaces/${workspaceSlug}/projects/${projectId}/transition-records/${recordId}/action/`,
+      data
+    )
+      .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
       });

@@ -7,7 +7,7 @@
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 // icons
-import { Circle } from "lucide-react";
+import { Circle, ClipboardCheck } from "lucide-react";
 // plane imports
 import {
   EUserPermissions,
@@ -27,9 +27,10 @@ import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { CountChip } from "@/components/common/count-chip";
 // constants
 import { HeaderFilters } from "@/components/issues/filters";
+import { WorkflowApprovalModal } from "@/components/issues/workflow-approval-modal";
 import { IssueService } from "@/services/issue";
 import { message } from "antd";
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 // helpers
 // hooks
 import { useCommandPalette } from "@/hooks/store/use-command-palette";
@@ -39,6 +40,7 @@ import { useProject } from "@/hooks/store/use-project";
 import { useUserPermissions } from "@/hooks/store/user";
 import { useAppRouter } from "@/hooks/use-app-router";
 import { usePlatformOS } from "@/hooks/use-platform-os";
+import { useWorkflowApprovals } from "@/hooks/store/use-workflow-approvals";
 // plane web imports
 import { CommonProjectBreadcrumbs } from "@/plane-web/components/breadcrumbs/common";
 
@@ -60,6 +62,20 @@ export const IssuesHeader = observer(function IssuesHeader() {
   const { toggleCreateIssueModal } = useCommandPalette();
   const { allowPermissions } = useUserPermissions();
   const { isMobile } = usePlatformOS();
+
+  const [isApprovalModalOpen, setIsApprovalModalOpen] = useState(false);
+
+  const { pendingCount, fetchPendingCount } = useWorkflowApprovals(
+    workspaceSlug?.toString(),
+    projectId?.toString()
+  );
+
+  // 页面加载时拉取待审批数量（用于红点）
+  useEffect(() => {
+    if (workspaceSlug && projectId) {
+      fetchPendingCount();
+    }
+  }, [workspaceSlug, projectId, fetchPendingCount]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const issueService = new IssueService();
@@ -200,7 +216,34 @@ export const IssuesHeader = observer(function IssuesHeader() {
               accept=".xlsx,.xls"
               onChange={handleImport}
             />
+            <div className="relative hidden md:block">
+              <Button
+                variant="secondary"
+                onClick={() => setIsApprovalModalOpen(true)}
+                className="flex items-center gap-1"
+              >
+                <ClipboardCheck className="h-3.5 w-3.5" />
+                {pendingCount > 0 ? (
+                  <span style={{ color: "#f87171" }}>
+                    待审批·{pendingCount > 99 ? "99+" : pendingCount}
+                  </span>
+                ) : (
+                  "审批"
+                )}
+              </Button>
+            </div>
           </>
+        )}
+        {isApprovalModalOpen && workspaceSlug && projectId && (
+          <WorkflowApprovalModal
+            isOpen={isApprovalModalOpen}
+            onClose={() => {
+              setIsApprovalModalOpen(false);
+              fetchPendingCount();
+            }}
+            workspaceSlug={workspaceSlug.toString()}
+            projectId={projectId.toString()}
+          />
         )}
       </Header.RightItem>
     </Header>

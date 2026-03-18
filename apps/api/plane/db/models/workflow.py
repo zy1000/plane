@@ -57,9 +57,9 @@ class Workflow(ProjectBaseModel):
         from .issue_type import ProjectIssueType
 
         if not ProjectIssueType.objects.filter(
-            project=self.project,
-            issue_type=self.issue_type,
-            deleted_at__isnull=True,
+                project=self.project,
+                issue_type=self.issue_type,
+                deleted_at__isnull=True,
         ).exists():
             raise ValidationError(
                 {
@@ -236,9 +236,9 @@ class WorkflowTransitionApproval(BaseModel):
         if self.approver_id and self.transition_id:
             project = self.transition.workflow.project
             if not ProjectMember.objects.filter(
-                project=project,
-                member=self.approver,
-                is_active=True,
+                    project=project,
+                    member=self.approver,
+                    is_active=True,
             ).exists():
                 raise ValidationError(
                     {"approver": f"用户 '{self.approver}' 不是当前项目的成员，无法设为审批人。"}
@@ -352,7 +352,7 @@ class IssueTransitionApprovalRecord(BaseModel):
         blank=True,
         verbose_name="审批操作（null 表示尚未操作）",
     )
-    comment = models.TextField(blank=True, verbose_name="审批意见")
+    comment = models.TextField(blank=True, null=True, verbose_name="审批意见")
 
     class Meta:
         verbose_name = "Issue Transition Approval Record"

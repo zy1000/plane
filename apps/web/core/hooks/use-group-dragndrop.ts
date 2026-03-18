@@ -104,7 +104,10 @@ export const useGroupIssuesDragNDrop = (
       delete data[moduleKey];
     }
 
-    updateIssue && updateIssue(projectId, issueId, data).catch(() => setToast(errorToastProps));
+    updateIssue &&
+      updateIssue(projectId, issueId, data).catch((error) =>
+        setToast({ ...errorToastProps, message: (error as { error?: string })?.error ?? errorToastProps.message })
+      );
   };
 
   const executeDrop = async (

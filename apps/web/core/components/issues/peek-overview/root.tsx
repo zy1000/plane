@@ -84,10 +84,11 @@ export const IssuePeekOverview = observer(function IssuePeekOverview(props: IWor
               return;
             })
             .catch((error) => {
+              const errorMessage = (error as { error?: string })?.error;
               setToast({
                 title: t("toast.error"),
                 type: TOAST_TYPE.ERROR,
-                message: t("entity.update.failed", { entity: t("issue.label", { count: 1 }) }),
+                message: errorMessage ?? t("entity.update.failed", { entity: t("issue.label", { count: 1 }) }),
               });
             });
         }

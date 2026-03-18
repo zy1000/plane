@@ -19,11 +19,42 @@ class IssueBatchUpdate(BaseAPIView):
         issue_ids = request.data.get("issue_ids", [])
         properties = request.data.get("properties", {})
 
+        state_id = properties.get("state_id")
+
         queryset = self.queryset.filter(project_id=project_id, id__in=issue_ids)
+        blocked = []
+
         for query in queryset:
+            # 工作流审批检查（批量更新中仅对实际变更状态的 issue 生效）
+            if state_id and str(state_id) != str(query.state_id):
+                from plane.db.models import State as StateModel
+                from plane.utils.workflow.transition import check_update_state_permission
+                try:
+                    to_state = StateModel.objects.get(pk=state_id, project_id=project_id)
+                    allowed, error_msg, transition_record = check_update_state_permission(
+                        issue=query,
+                        to_state=to_state,
+                        user=request.user,
+                    )
+                    if not allowed:
+                        blocked.append({
+                            "issue_id": str(query.id),
+                            "error": error_msg,
+                            "transition_record_id": str(transition_record.id) if transition_record else None,
+                        })
+                        continue
+                except StateModel.DoesNotExist:
+                    pass
+
             serializer = IssueBatchUpdateSerializer(instance=query, data=properties, partial=True)
             if serializer.is_valid():
-                updated_instances = serializer.save()
+                serializer.save()
+
+        if blocked:
+            return Response(
+                {"workflow_blocked": True, "blocked_issues": blocked},
+                status=status.HTTP_207_MULTI_STATUS,
+            )
         return Response(status=status.HTTP_200_OK)
 
     def delete(self, request, slug, project_id):

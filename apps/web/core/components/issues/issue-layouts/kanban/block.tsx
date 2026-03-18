@@ -35,6 +35,7 @@ import type { TSelectionHelper } from "@/hooks/use-multiple-select";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 // plane web components
 import { IssueIdentifier } from "@/plane-web/components/issues/issue-details/issue-identifier";
+import { IssueApprovalTag } from "@/components/issues/issue-approval-tag";
 // local components
 import { IssueStats } from "@/plane-web/components/issues/issue-layouts/issue-stats";
 import type { TRenderQuickActions } from "../list/list-view-types";
@@ -138,6 +139,13 @@ const KanbanIssueDetailsBlock = observer(function KanbanIssueDetailsBlock(props:
             size="xs"
             variant="tertiary"
             displayProperties={displayProperties}
+          />
+        )}
+        {issue.project_id && routerWorkspaceSlug && (
+          <IssueApprovalTag
+            workspaceSlug={routerWorkspaceSlug.toString()}
+            projectId={issue.project_id}
+            issueId={issue.id}
           />
         )}
         <div

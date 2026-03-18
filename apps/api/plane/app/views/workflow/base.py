@@ -1,9 +1,23 @@
 from rest_framework import status
 from rest_framework.response import Response
 
-from plane.app.serializers.workflow import WorkflowSerializer, WorkflowTransitionSerializer
+from plane.app.permissions import ROLE, allow_permission
+from plane.app.serializers.workflow import (
+    IssueTransitionActionSerializer,
+    IssueTransitionRecordListSerializer,
+    WorkflowSerializer,
+    WorkflowTransitionSerializer,
+)
 from plane.app.views import BaseAPIView
-from plane.db.models import Workflow, WorkflowTransition, WorkflowTransitionApproval
+from plane.db.models import (
+    IssueTransitionApprovalRecord,
+    IssueTransitionRecord,
+    TransitionRecordStatus,
+    Workflow,
+    WorkflowTransition,
+    WorkflowTransitionApproval,
+)
+from plane.utils.workflow.transition import approve_transition_record
 
 
 class WorkflowAPIView(BaseAPIView):
@@ -108,3 +122,118 @@ class WorkflowTransitionAPIView(BaseAPIView):
             qs = qs.filter(id=transition_id)
         qs.delete(soft=False)
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class MyApprovalsAPIView(BaseAPIView):
+    """
+    GET /workspaces/<slug>/projects/<project_id>/my-approvals/?tab=pending|processed
+    返回当前用户在该项目下所有需要/已经审批的状态变更申请。
+    同时在响应头中附带 X-Pending-Count。
+    """
+
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    def get(self, request, slug, project_id):
+        tab = request.query_params.get("tab", "pending")
+        issue_id = request.query_params.get("issue_id")
+        user = request.user
+
+        # 找出当前用户在该项目下有审批资格的 IssueTransitionApprovalRecord
+        my_approval_qs = IssueTransitionApprovalRecord.objects.filter(
+            approver=user,
+            deleted_at__isnull=True,
+            transition_record__issue__project_id=project_id,
+            transition_record__issue__deleted_at__isnull=True,
+        )
+
+        if tab == "pending":
+            my_approval_qs = my_approval_qs.filter(
+                action__isnull=True,
+                transition_record__status=TransitionRecordStatus.PENDING,
+            )
+        else:
+            my_approval_qs = my_approval_qs.filter(action__isnull=False)
+
+        if issue_id:
+            my_approval_qs = my_approval_qs.filter(transition_record__issue_id=issue_id)
+
+        record_ids = my_approval_qs.values_list("transition_record_id", flat=True)
+
+        records = (
+            IssueTransitionRecord.objects.filter(id__in=record_ids)
+            .select_related(
+                "issue",
+                "from_state",
+                "to_state",
+                "transition",
+            )
+            .prefetch_related("approval_records__approver")
+        )
+
+        # 计算 pending 数量（用于红点）
+        pending_count = IssueTransitionApprovalRecord.objects.filter(
+            approver=user,
+            deleted_at__isnull=True,
+            action__isnull=True,
+            transition_record__status=TransitionRecordStatus.PENDING,
+            transition_record__issue__project_id=project_id,
+            transition_record__issue__deleted_at__isnull=True,
+        ).count()
+
+        serializer = IssueTransitionRecordListSerializer(records, many=True)
+        response = Response({"results": serializer.data, "pending_count": pending_count})
+        response["X-Pending-Count"] = str(pending_count)
+        return response
+
+
+class IssueTransitionRecordsAPIView(BaseAPIView):
+    """
+    GET /workspaces/<slug>/projects/<project_id>/issues/<issue_id>/transition-records/
+    返回该 issue 当前所有 pending 状态的审批记录，所有项目成员均可查看。
+    """
+
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    def get(self, request, slug, project_id, issue_id):
+        records = (
+            IssueTransitionRecord.objects.filter(
+                issue_id=issue_id,
+                issue__project_id=project_id,
+                issue__deleted_at__isnull=True,
+                status=TransitionRecordStatus.PENDING,
+            )
+            .select_related("issue", "from_state", "to_state", "transition")
+            .prefetch_related("approval_records__approver")
+        )
+        serializer = IssueTransitionRecordListSerializer(records, many=True)
+        return Response(serializer.data)
+
+
+class TransitionRecordActionAPIView(BaseAPIView):
+    """
+    POST /workspaces/<slug>/projects/<project_id>/transition-records/<record_id>/action/
+    提交个人审批动作（approved / rejected + comment）。
+    """
+
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    def post(self, request, slug, project_id, record_id):
+        serializer = IssueTransitionActionSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        action = serializer.validated_data["action"]
+        comment = serializer.validated_data.get("comment", "")
+
+        success, error, record = approve_transition_record(
+            record_id=record_id,
+            approver=request.user,
+            action=action,
+            comment=comment,
+        )
+
+        if not success:
+            return Response({"error": error}, status=status.HTTP_400_BAD_REQUEST)
+
+        record.refresh_from_db()
+        return Response(
+            IssueTransitionRecordListSerializer(record).data,
+            status=status.HTTP_200_OK,
+        )
