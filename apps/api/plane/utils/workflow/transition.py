@@ -21,7 +21,7 @@ from plane.db.models import (
 
 def get_active_workflow(issue: Issue):
     """根据 issue.type 获取激活的工作流，不存在返回 None。"""
-    return Workflow.objects.filter(issue_type=issue.type, is_active=True).first()
+    return Workflow.objects.filter(issue_type=issue.type, is_active=True, project_id=issue.project_id).first()
 
 
 def get_active_transition(issue: Issue, to_state: State):
@@ -69,7 +69,7 @@ def resolve_transition_approver_ids(issue: Issue, transition: WorkflowTransition
     return list(dict.fromkeys(approver_ids))
 
 
-def check_update_state_permission(issue: Issue, to_state: State, user,**kwargs):
+def check_update_state_permission(issue: Issue, to_state: State, user, **kwargs):
     """
     检查是否可以直接变更工作项状态。
     返回: (allowed: bool, error_message: str | None, transition_record: IssueTransitionRecord | None)
@@ -124,12 +124,12 @@ def check_update_state_permission(issue: Issue, to_state: State, user,**kwargs):
 
 
 def ensure_transition_record(
-    issue: Issue,
-    transition: WorkflowTransition,
-    from_state,
-    to_state: State,
-    project_id,
-    initiated_by=None,
+        issue: Issue,
+        transition: WorkflowTransition,
+        from_state,
+        to_state: State,
+        project_id,
+        initiated_by=None,
 ) -> tuple:
     """
     取消同一流转边中、目标状态不同的 PENDING 申请（已过期的旧申请），
@@ -141,7 +141,7 @@ def ensure_transition_record(
         issue=issue,
         from_state=from_state,
         status=TransitionRecordStatus.PENDING,
-    ).exclude(to_state=to_state,transition=transition,).update(status=TransitionRecordStatus.CANCELLED)
+    ).exclude(to_state=to_state, transition=transition, ).update(status=TransitionRecordStatus.CANCELLED)
 
     record, created = IssueTransitionRecord.objects.get_or_create(
         issue=issue,
