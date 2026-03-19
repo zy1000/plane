@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { observer } from "mobx-react";
 import { Controller, useForm } from "react-hook-form";
 import { ArrowRight } from "lucide-react";
@@ -48,6 +48,7 @@ export const CycleSidebarHeader = observer(function CycleSidebarHeader(props: Pr
   const { updateCycleDetails } = useCycle();
   const { t } = useTranslation();
   const { renderFormattedDateInUserTimezone, getProjectUTCOffset } = useTimeZoneConverter(projectId);
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
 
   // derived values
   const projectUTCOffset = getProjectUTCOffset();
@@ -63,7 +64,15 @@ export const CycleSidebarHeader = observer(function CycleSidebarHeader(props: Pr
   const currentCycle = CYCLE_STATUS.find((status) => status.value === cycleStatus);
 
   const submitChanges = async (data: Partial<ICycle>) => {
-    if (!workspaceSlug || !projectId || !cycleDetails.id) return;
+    if (!workspaceSlug || !projectId || !cycleDetails.id) return false;
+    const hasChanges = Object.entries(data).some(([key, value]) => {
+      if (key === "status") return value !== cycleDetails.status;
+      if (key === "start_date") return (value ?? null) !== (cycleDetails.start_date ?? null);
+      if (key === "end_date") return (value ?? null) !== (cycleDetails.end_date ?? null);
+      return true;
+    });
+
+    if (!hasChanges) return true;
 
     return await updateCycleDetails(workspaceSlug.toString(), projectId.toString(), cycleDetails.id.toString(), data)
       .then(() => {
@@ -107,7 +116,16 @@ export const CycleSidebarHeader = observer(function CycleSidebarHeader(props: Pr
       isDateValid = true;
     }
     if (isDateValid) {
-      submitChanges(payload);
+      const didSucceed = await submitChanges(payload);
+      if (!didSucceed) {
+        setToast({
+          type: TOAST_TYPE.ERROR,
+          title: t("project_cycles.action.update.failed.title"),
+          message: t("something_went_wrong_please_try_again"),
+        });
+        return false;
+      }
+
       setToast({
         type: TOAST_TYPE.SUCCESS,
         title: t("project_cycles.action.update.success.title"),
@@ -175,23 +193,29 @@ export const CycleSidebarHeader = observer(function CycleSidebarHeader(props: Pr
                     value={value}
                     onChange={(nextStatus: any) => {
                       void (async () => {
-                        const didSucceed = await submitChanges({ status: nextStatus });
-                        if (didSucceed) {
-                          setToast({
-                            type: TOAST_TYPE.SUCCESS,
-                            title: t("project_cycles.action.update.success.title"),
-                            message: t("project_cycles.action.update.success.description"),
-                          });
-                        } else {
-                          setToast({
-                            type: TOAST_TYPE.ERROR,
-                            title: t("project_cycles.action.update.failed.title"),
-                            message: t("something_went_wrong_please_try_again"),
-                          });
+                        if (!nextStatus || nextStatus === cycleStatus || isUpdatingStatus) return;
+                        setIsUpdatingStatus(true);
+                        try {
+                          const didSucceed = await submitChanges({ status: nextStatus });
+                          if (didSucceed) {
+                            setToast({
+                              type: TOAST_TYPE.SUCCESS,
+                              title: t("project_cycles.action.update.success.title"),
+                              message: t("project_cycles.action.update.success.description"),
+                            });
+                          } else {
+                            setToast({
+                              type: TOAST_TYPE.ERROR,
+                              title: t("project_cycles.action.update.failed.title"),
+                              message: t("something_went_wrong_please_try_again"),
+                            });
+                          }
+                        } finally {
+                          setIsUpdatingStatus(false);
                         }
                       })();
                     }}
-                    disabled={!canChangeStatus}
+                    disabled={!canChangeStatus || isUpdatingStatus}
                   >
                     {CYCLE_STATUS.filter((s) => statusOptions.includes(s.value)).map((status) => (
                       <CustomSelect.Option key={status.value} value={status.value}>

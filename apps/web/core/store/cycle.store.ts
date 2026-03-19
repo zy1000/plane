@@ -669,19 +669,20 @@ export class CycleStore implements ICycleStore {
    * @returns
    */
   updateCycleDetails = async (workspaceSlug: string, projectId: string, cycleId: string, data: Partial<ICycle>) => {
+    const normalizedPatch = normalizeIncomingCyclePatch(data);
+
     try {
       runInAction(() => {
-        const normalizedPatch = normalizeIncomingCyclePatch(data);
         set(this.cycleMap, [cycleId], { ...this.cycleMap?.[cycleId], ...normalizedPatch });
       });
       const apiPatch = normalizeOutgoingCyclePatchForApi(data);
       const response = await this.cycleService.patchCycle(workspaceSlug, projectId, cycleId, apiPatch);
-      this.fetchCycleDetails(workspaceSlug, projectId, cycleId);
+      void this.fetchCycleDetails(workspaceSlug, projectId, cycleId);
       return response;
     } catch (error) {
       console.log("Failed to patch cycle from cycle store");
-      this.fetchAllCycles(workspaceSlug, projectId);
-      this.fetchActiveCycle(workspaceSlug, projectId);
+      void this.fetchAllCycles(workspaceSlug, projectId);
+      void this.fetchActiveCycle(workspaceSlug, projectId);
       throw error;
     }
   };

@@ -222,6 +222,22 @@ class CycleArchiveUnarchiveEndpoint(BaseAPIView):
                 )
             )
             .annotate(
+                status=Case(
+                    When(
+                        Q(start_date__lte=timezone.now()) & Q(end_date__gte=timezone.now()),
+                        then=Value("CURRENT"),
+                    ),
+                    When(start_date__gt=timezone.now(), then=Value("UPCOMING")),
+                    When(end_date__lt=timezone.now(), then=Value("COMPLETED")),
+                    When(
+                        Q(start_date__isnull=True) & Q(end_date__isnull=True),
+                        then=Value("DRAFT"),
+                    ),
+                    default=Value("DRAFT"),
+                    output_field=CharField(),
+                )
+            )
+            .annotate(
                 assignee_ids=Coalesce(
                     ArrayAgg(
                         "issue_cycle__issue__assignees__id",
@@ -587,7 +603,7 @@ class CycleArchiveUnarchiveEndpoint(BaseAPIView):
     def post(self, request, slug, project_id, cycle_id):
         cycle = Cycle.objects.get(pk=cycle_id, project_id=project_id, workspace__slug=slug)
 
-        if cycle.end_date >= timezone.now():
+        if cycle.status != Cycle.Status.COMPLETED:
             return Response(
                 {"error": "Only completed cycles can be archived"},
                 status=status.HTTP_400_BAD_REQUEST,
