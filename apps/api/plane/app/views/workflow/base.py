@@ -14,10 +14,17 @@ from plane.db.models import (
     IssueTransitionRecord,
     TransitionRecordStatus,
     Workflow,
+    WorkflowApproverTarget,
     WorkflowTransition,
     WorkflowTransitionApproval,
 )
 from plane.utils.workflow.transition import approve_transition_record
+
+SPECIAL_APPROVER_PREFIX = "special:"
+SPECIAL_APPROVER_ID_MAP = {
+    f"{SPECIAL_APPROVER_PREFIX}{WorkflowApproverTarget.ASSIGNEES}": WorkflowApproverTarget.ASSIGNEES,
+    f"{SPECIAL_APPROVER_PREFIX}{WorkflowApproverTarget.CREATED_BY}": WorkflowApproverTarget.CREATED_BY,
+}
 
 
 class WorkflowAPIView(BaseAPIView):
@@ -76,10 +83,28 @@ class WorkflowTransitionAPIView(BaseAPIView):
             ignore_conflicts=True,
         )
 
+    def _parse_approver_selections(self, approver_ids):
+        static_approver_ids = []
+        dynamic_approver_types = []
+
+        for approver_id in approver_ids:
+            if approver_id in SPECIAL_APPROVER_ID_MAP:
+                approver_type = SPECIAL_APPROVER_ID_MAP[approver_id]
+                if approver_type not in dynamic_approver_types:
+                    dynamic_approver_types.append(approver_type)
+                continue
+            static_approver_ids.append(approver_id)
+
+        return static_approver_ids, dynamic_approver_types
+
     def _with_approvers(self, serializer_data, transition):
         """在序列化数据中附加当前审批人 ID 列表。"""
         approver_ids = list(
             transition.approvals.filter(deleted_at__isnull=True).values_list("approver_id", flat=True)
+        )
+        approver_ids.extend(
+            f"{SPECIAL_APPROVER_PREFIX}{approver_type}"
+            for approver_type in (transition.dynamic_approver_types or [])
         )
         return {**serializer_data, "approver_ids": approver_ids}
 
@@ -95,8 +120,12 @@ class WorkflowTransitionAPIView(BaseAPIView):
         if serializer.is_valid():
             transition = serializer.save(project_id=project_id)
             approver_ids = request.data.get("approver_ids") or []
-            if approver_ids:
-                self._build_approvals(transition, approver_ids)
+            static_approver_ids, dynamic_approver_types = self._parse_approver_selections(approver_ids)
+            if static_approver_ids:
+                self._build_approvals(transition, static_approver_ids)
+            if transition.dynamic_approver_types != dynamic_approver_types:
+                transition.dynamic_approver_types = dynamic_approver_types
+                transition.save(update_fields=["dynamic_approver_types", "updated_at"])
             return Response(self._with_approvers(serializer.data, transition), status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -111,8 +140,11 @@ class WorkflowTransitionAPIView(BaseAPIView):
         if "approver_ids" in request.data:
             transition.approvals.all().delete()
             approver_ids = request.data["approver_ids"] or []
-            if approver_ids:
-                self._build_approvals(transition, approver_ids)
+            static_approver_ids, dynamic_approver_types = self._parse_approver_selections(approver_ids)
+            if static_approver_ids:
+                self._build_approvals(transition, static_approver_ids)
+            transition.dynamic_approver_types = dynamic_approver_types
+            transition.save(update_fields=["dynamic_approver_types", "updated_at"])
         return Response(self._with_approvers(serializer.data, transition), status=status.HTTP_200_OK)
 
     def delete(self, request, slug, project_id, workflow_id):

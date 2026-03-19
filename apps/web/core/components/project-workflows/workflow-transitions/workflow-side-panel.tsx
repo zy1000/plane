@@ -13,6 +13,10 @@ import type { IState, TStateGroups } from "@plane/types";
 import { Avatar } from "@plane/ui";
 import { cn } from "@plane/utils";
 import { useMember } from "@/hooks/store/use-member";
+import {
+  WORKFLOW_SPECIAL_APPROVER_OPTIONS,
+  getWorkflowApproverLabel,
+} from "./approver-utils";
 
 export type TStatePanelConfig = {
   type: "state";
@@ -136,11 +140,17 @@ const MemberPanel: FC<{
 
   const memberIds = getProjectMemberIds(config.projectId, false) ?? [];
   const isAllSelected = selected.length === 0;
+  const filteredSpecialOptions = WORKFLOW_SPECIAL_APPROVER_OPTIONS.filter((option) =>
+    `${option.label} ${option.description}`.toLowerCase().includes(search.toLowerCase())
+  );
 
   const filteredIds = search
     ? memberIds.filter((id) => {
         const user = getUserDetails(id);
-        return user?.display_name?.toLowerCase().includes(search.toLowerCase());
+        return (
+          user?.display_name?.toLowerCase().includes(search.toLowerCase()) ||
+          user?.email?.toLowerCase().includes(search.toLowerCase())
+        );
       })
     : memberIds;
 
@@ -195,6 +205,32 @@ const MemberPanel: FC<{
           </button>
         )}
 
+        {/* special approver options */}
+        {filteredSpecialOptions.map((option) => {
+          const isSelected = selected.includes(option.id);
+          return (
+            <button
+              key={option.id}
+              type="button"
+              onClick={() => handleToggle(option.id)}
+              className="flex w-full items-start gap-2 rounded-sm px-2 py-1.5 text-left text-sm transition-colors hover:bg-layer-1"
+            >
+              <div
+                className={cn(
+                  "mt-0.5 flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center rounded border transition-colors",
+                  isSelected ? "border-accent-primary bg-accent-primary" : "border-secondary bg-transparent"
+                )}
+              >
+                {isSelected && <Check className="h-2.5 w-2.5 text-white" />}
+              </div>
+              <div className="min-w-0">
+                <p className="truncate font-medium text-primary">{option.label}</p>
+                <p className="text-xs text-secondary">{option.description}</p>
+              </div>
+            </button>
+          );
+        })}
+
         {/* member list */}
         {filteredIds.map((id) => {
           const user = getUserDetails(id);
@@ -216,7 +252,7 @@ const MemberPanel: FC<{
                 {isSelected && <Check className="h-2.5 w-2.5 text-white" />}
               </div>
               <Avatar name={user.display_name} src={user.avatar_url} size="sm" className="flex-shrink-0" />
-              <span className="truncate text-primary">{user.display_name}</span>
+              <span className="truncate text-primary">{getWorkflowApproverLabel(id, getUserDetails)}</span>
             </button>
           );
         })}

@@ -22,6 +22,9 @@ import {
   SignalMediumIcon,
   MessageSquareIcon,
   UsersIcon,
+  ClipboardCheck,
+  CheckCircle2,
+  XCircle,
 } from "lucide-react";
 import {
   BlockedIcon,
@@ -153,7 +156,7 @@ const getInboxUserActivityMessage = (activity: IIssueActivity, showIssue: boolea
 const activityDetails: {
   [key: string]: {
     message: (activity: IIssueActivity, showIssue: boolean, workspaceSlug: string) => React.ReactNode;
-    icon: React.ReactNode;
+    icon: React.ReactNode | ((activity: IIssueActivity) => React.ReactNode);
   };
 } = {
   assignees: {
@@ -747,10 +750,80 @@ const activityDetails: {
     ),
     icon: <IntakeIcon className="size-3 text-secondary" aria-hidden="true" />,
   },
+  workflow_approval_request: {
+    message: (activity, showIssue) => {
+      const isRejected = activity.verb === "updated" && activity.new_value === "rejected";
+      const isCancelled = activity.verb === "updated" && activity.new_value === "cancelled";
+      const fromName = activity.old_value || "None";
+      const toName =
+        activity.new_value && !["rejected", "cancelled"].includes(activity.new_value)
+          ? activity.new_value
+          : undefined;
+
+      return (
+        <>
+          {isRejected ? (
+            <>closed the state change approval request as rejected</>
+          ) : isCancelled ? (
+            <>cancelled the pending state change approval request</>
+          ) : (
+            <>
+              requested approval to change the state from{" "}
+              <span className="font-medium break-all text-primary">{fromName}</span>
+              {" to "}
+              <span className="font-medium break-all text-primary">{toName || "None"}</span>
+            </>
+          )}
+          {showIssue && (
+            <>
+              {" "}
+              for <IssueLink activity={activity} />
+            </>
+          )}
+        </>
+      );
+    },
+    icon: (activity) => {
+      const isRejected = activity.verb === "updated" && activity.new_value === "rejected";
+      const isCancelled = activity.verb === "updated" && activity.new_value === "cancelled";
+
+      if (isRejected)
+        return <XCircle size={12} className="text-red-500" aria-hidden="true" />;
+      if (isCancelled)
+        return <XCircle size={12} className="text-secondary" aria-hidden="true" />;
+      return <ClipboardCheck size={12} className="text-secondary" aria-hidden="true" />;
+    },
+  },
+  workflow_approval_action: {
+    message: (activity, showIssue) => {
+      const approved = activity.new_value === "approved";
+
+      return (
+        <>
+          {approved ? "approved" : "rejected"} the state change approval request
+          {showIssue && (
+            <>
+              {" "}
+              for <IssueLink activity={activity} />
+            </>
+          )}
+        </>
+      );
+    },
+    icon: (activity) =>
+      activity.new_value === "approved" ? (
+        <CheckCircle2 size={12} className="text-emerald-500" aria-hidden="true" />
+      ) : (
+        <XCircle size={12} className="text-red-500" aria-hidden="true" />
+      ),
+  },
 };
 
 export function ActivityIcon({ activity }: { activity: IIssueActivity }) {
-  return <>{activityDetails[activity.field as keyof typeof activityDetails]?.icon}</>;
+  const activityConfig = activityDetails[activity.field as keyof typeof activityDetails];
+  const icon = activityConfig?.icon;
+
+  return <>{typeof icon === "function" ? icon(activity) : icon}</>;
 }
 
 type ActivityMessageProps = {
@@ -762,14 +835,17 @@ export function ActivityMessage({ activity, showIssue = false }: ActivityMessage
   // router params
   const { workspaceSlug } = useParams();
   const activityField = activity.field ?? "issue";
+  const activityConfig = activityDetails[activityField as keyof typeof activityDetails];
 
   return (
     <>
-      {activityDetails[activityField as keyof typeof activityDetails]?.message(
-        activity,
-        showIssue,
-        workspaceSlug ? workspaceSlug.toString() : (activity.workspace_detail?.slug ?? "")
-      )}
+      {activityConfig
+        ? activityConfig.message(
+            activity,
+            showIssue,
+            workspaceSlug ? workspaceSlug.toString() : (activity.workspace_detail?.slug ?? "")
+          )
+        : activity.comment || null}
     </>
   );
 }

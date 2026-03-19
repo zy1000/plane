@@ -24,6 +24,7 @@ import { useUserPermissions } from "@/hooks/store/user";
 import { useAppRouter } from "@/hooks/use-app-router";
 // local components
 import { IssuePeekOverview } from "../peek-overview";
+import { isWorkflowApprovalInitiated, type TIssueWorkflowUpdateError } from "../workflow-error-utils";
 import { IssueMainContent } from "./main-content";
 import { IssueDetailsSidebar } from "./sidebar";
 
@@ -96,14 +97,15 @@ export const IssueDetailRoot = observer(function IssueDetailRoot(props: TIssueDe
           await updateIssue(workspaceSlug, projectId, issueId, data);
         } catch (error) {
           console.log("Error in updating issue:", error);
-          const errorData = error as { error?: string; workflow_blocked?: boolean };
+          const errorData = error as TIssueWorkflowUpdateError;
           const errorMessage = errorData?.error;
+          const approvalInitiated = isWorkflowApprovalInitiated(errorData);
           setToast({
-            title: errorData?.workflow_blocked ? "已发起审批流程" : t("common.error.label"),
-            type: errorData?.workflow_blocked ? TOAST_TYPE.INFO : TOAST_TYPE.ERROR,
+            title: approvalInitiated ? "已发起审批流程" : t("common.error.label"),
+            type: approvalInitiated ? TOAST_TYPE.INFO : TOAST_TYPE.ERROR,
             message:
               errorMessage ??
-              (errorData?.workflow_blocked
+              (approvalInitiated
                 ? "该状态变更需审批人通过后才会生效"
                 : t("entity.update.failed", { entity: t("issue.label") })),
           });

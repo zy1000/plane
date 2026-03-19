@@ -47,6 +47,7 @@ import { usePlatformOS } from "@/hooks/use-platform-os";
 import { WorkItemLayoutAdditionalProperties } from "@/plane-web/components/issues/issue-layouts/additional-properties";
 // local components
 import { IssuePropertyLabels } from "./labels";
+import { isWorkflowApprovalInitiated, type TIssueWorkflowUpdateError } from "../../workflow-error-utils";
 import { WithDisplayPropertiesHOC } from "./with-display-properties-HOC";
 
 export interface IIssueProperties {
@@ -113,14 +114,15 @@ export const IssueProperties = observer(function IssueProperties(props: IIssuePr
     try {
       await updateIssue(issue.project_id, issue.id, { state_id: stateId });
     } catch (error) {
-      const errorData = error as { error?: string; workflow_blocked?: boolean };
+      const errorData = error as TIssueWorkflowUpdateError;
       const errorMessage = errorData?.error;
+      const approvalInitiated = isWorkflowApprovalInitiated(errorData);
       setToast({
-        type: errorData?.workflow_blocked ? TOAST_TYPE.INFO : TOAST_TYPE.ERROR,
-        title: errorData?.workflow_blocked ? "已发起审批流程" : t("common.error.label"),
+        type: approvalInitiated ? TOAST_TYPE.INFO : TOAST_TYPE.ERROR,
+        title: approvalInitiated ? "已发起审批流程" : t("common.error.label"),
         message:
           errorMessage ??
-          (errorData?.workflow_blocked
+          (approvalInitiated
             ? "该状态变更需审批人通过后才会生效"
             : t("entity.update.failed", { entity: t("issue.label") })),
       });

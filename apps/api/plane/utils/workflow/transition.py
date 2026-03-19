@@ -6,12 +6,14 @@ from plane.db.models import (
     ApprovalType,
     Issue,
     IssueActivity,
+    IssueAssignee,
     IssueTransitionApprovalRecord,
     IssueTransitionRecord,
     Notification,
     State,
     TransitionRecordStatus,
     Workflow,
+    WorkflowApproverTarget,
     WorkflowTransition,
     WorkflowTransitionApproval,
 )
@@ -44,6 +46,29 @@ def get_active_transition(issue: Issue, to_state: State):
     return workflow, transition, has_any
 
 
+def resolve_transition_approver_ids(issue: Issue, transition: WorkflowTransition) -> list:
+    """解析流转配置中的静态/动态审批人，返回去重后的真实用户 ID 列表。"""
+    approver_ids = list(
+        WorkflowTransitionApproval.objects.filter(
+            transition=transition,
+            deleted_at__isnull=True,
+        ).values_list("approver_id", flat=True)
+    )
+
+    dynamic_approver_types = transition.dynamic_approver_types or []
+    if WorkflowApproverTarget.ASSIGNEES in dynamic_approver_types:
+        approver_ids.extend(
+            IssueAssignee.objects.filter(
+                issue=issue,
+                deleted_at__isnull=True,
+            ).values_list("assignee_id", flat=True)
+        )
+    if WorkflowApproverTarget.CREATED_BY in dynamic_approver_types and issue.created_by_id:
+        approver_ids.append(issue.created_by_id)
+
+    return list(dict.fromkeys(approver_ids))
+
+
 def check_update_state_permission(issue: Issue, to_state: State, user,**kwargs):
     """
     检查是否可以直接变更工作项状态。
@@ -68,12 +93,21 @@ def check_update_state_permission(issue: Issue, to_state: State, user,**kwargs):
 
     # ANY：审批人之一则放行
     if wft.approval_type == ApprovalType.ANY:
-        if WorkflowTransitionApproval.objects.filter(transition=wft, approver=user).exists():
+        approver_ids = resolve_transition_approver_ids(issue, wft)
+        if not approver_ids:
+            return False, "当前工作项未找到可用审批人", None
+        if user.id in approver_ids:
             return True, None, None
         return False, "你不是该状态的审批人", None
 
     # N_OF_M：发起/复用审批申请
     if wft.approval_type == ApprovalType.N_OF_M:
+        approver_ids = resolve_transition_approver_ids(issue, wft)
+        required_count = wft.required_count or 1
+        if not approver_ids:
+            return False, "当前工作项未找到可用审批人，无法发起审批", None
+        if len(approver_ids) < required_count:
+            return False, "当前工作项可用审批人数不足，无法发起审批", None
         record, created = ensure_transition_record(
             issue=issue,
             transition=wft,
@@ -119,11 +153,7 @@ def ensure_transition_record(
     )
 
     if created:
-        all_approver_ids = list(
-            WorkflowTransitionApproval.objects.filter(transition=transition).values_list(
-                "approver_id", flat=True
-            )
-        )
+        all_approver_ids = resolve_transition_approver_ids(issue, transition)
         IssueTransitionApprovalRecord.objects.bulk_create(
             [
                 IssueTransitionApprovalRecord(
@@ -248,7 +278,7 @@ def approve_transition_record(record_id, approver, action: str, comment: str = "
         epoch=int(timezone.now().timestamp()),
     )
 
-    recompute_transition_record_status(record)
+    recompute_transition_record_status(record, acted_by=approver)
     record.refresh_from_db()
     return True, None, record
 
@@ -299,7 +329,7 @@ def cancel_issue_pending_transitions(issue: Issue, cancelled_by, project_id: str
     return len(pending_records)
 
 
-def recompute_transition_record_status(record: IssueTransitionRecord):
+def recompute_transition_record_status(record: IssueTransitionRecord, acted_by=None):
     """
     重算主申请状态（调用前必须在事务+行锁保护下）。
     - 任一人拒绝 -> REJECTED
@@ -326,7 +356,7 @@ def recompute_transition_record_status(record: IssueTransitionRecord):
         to_name = record.to_state.name if record.to_state_id else ""
         IssueActivity.objects.create(
             issue=record.issue,
-            actor=None,
+            actor=acted_by,
             verb="updated",
             field="workflow_approval_request",
             old_value=from_name,
@@ -360,7 +390,7 @@ def recompute_transition_record_status(record: IssueTransitionRecord):
             issue.save(update_fields=["state", "updated_at"])
             IssueActivity.objects.create(
                 issue=issue,
-                actor=None,
+                actor=acted_by,
                 verb="updated",
                 field="state",
                 old_value=old_state_name,

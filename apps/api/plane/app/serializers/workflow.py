@@ -7,6 +7,7 @@ from plane.db.models import (
     IssueType,
     State,
     Workflow,
+    WorkflowApproverTarget,
     WorkflowTransition,
 )
 
@@ -45,6 +46,11 @@ class WorkflowTransitionSerializer(BaseSerializer):
         queryset=Workflow.objects.all(),
         source="workflow",
     )
+    dynamic_approver_types = serializers.ListField(
+        child=serializers.ChoiceField(choices=WorkflowApproverTarget.values),
+        required=False,
+        allow_empty=True,
+    )
 
     class Meta:
         model = WorkflowTransition
@@ -55,6 +61,7 @@ class WorkflowTransitionSerializer(BaseSerializer):
             "to_state_id",
             "approval_type",
             "required_count",
+            "dynamic_approver_types",
         ]
 
 

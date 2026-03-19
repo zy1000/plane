@@ -6,9 +6,11 @@
 
 import { useState } from "react";
 import { useParams } from "next/navigation";
+import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { IState, EIssuesStoreType, TIssue, TIssueGroupByOptions, TIssueOrderByOptions } from "@plane/types";
 import type { GroupDropLocation } from "@/components/issues/issue-layouts/utils";
+import { isWorkflowApprovalInitiated, type TIssueWorkflowUpdateError } from "@/components/issues/workflow-error-utils";
 import { handleGroupDragDrop } from "@/components/issues/issue-layouts/utils";
 import { store } from "@/lib/store-context";
 import { ISSUE_FILTER_DEFAULT_DATA } from "@/store/issue/helpers/base-issues.store";
@@ -42,6 +44,7 @@ export const useGroupIssuesDragNDrop = (
   subGroupBy?: TIssueGroupByOptions
 ) => {
   const { workspaceSlug } = useParams();
+  const { t } = useTranslation();
 
   const [pendingDrop, setPendingDrop] = useState<PendingDrop | null>(null);
 
@@ -73,7 +76,7 @@ export const useGroupIssuesDragNDrop = (
   ) => {
     const errorToastProps = {
       type: TOAST_TYPE.ERROR,
-      title: "Error!",
+      title: t("common.error.label"),
       message: "Error while updating work item",
     };
     const moduleKey = ISSUE_FILTER_DEFAULT_DATA["module"];
@@ -105,9 +108,16 @@ export const useGroupIssuesDragNDrop = (
     }
 
     updateIssue &&
-      updateIssue(projectId, issueId, data).catch((error) =>
-        setToast({ ...errorToastProps, message: (error as { error?: string })?.error ?? errorToastProps.message })
-      );
+      updateIssue(projectId, issueId, data).catch((error) => {
+        const errorData = error as TIssueWorkflowUpdateError;
+        const approvalInitiated = isWorkflowApprovalInitiated(errorData);
+        setToast({
+          ...errorToastProps,
+          type: approvalInitiated ? TOAST_TYPE.INFO : TOAST_TYPE.ERROR,
+          title: approvalInitiated ? "已发起审批流程" : errorToastProps.title,
+          message: errorData?.error ?? errorToastProps.message,
+        });
+      });
   };
 
   const executeDrop = async (
@@ -127,7 +137,7 @@ export const useGroupIssuesDragNDrop = (
       overrideStateId
     ).catch((err) => {
       setToast({
-        title: "Error!",
+        title: t("common.error.label"),
         type: TOAST_TYPE.ERROR,
         message: err?.detail ?? "Failed to perform this action",
       });

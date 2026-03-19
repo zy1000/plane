@@ -22,6 +22,7 @@ import { useIssueStoreType } from "@/hooks/use-issue-layout-store";
 import { useWorkItemProperties } from "@/plane-web/hooks/use-issue-properties";
 // local imports
 import type { TIssueOperations } from "../issue-detail";
+import { isWorkflowApprovalInitiated, type TIssueWorkflowUpdateError } from "../workflow-error-utils";
 import { IssueView } from "./view";
 
 export const IssuePeekOverview = observer(function IssuePeekOverview(props: IWorkItemPeekOverview) {
@@ -84,14 +85,15 @@ export const IssuePeekOverview = observer(function IssuePeekOverview(props: IWor
               return;
             })
             .catch((error) => {
-              const errorData = error as { error?: string; workflow_blocked?: boolean };
+              const errorData = error as TIssueWorkflowUpdateError;
               const errorMessage = errorData?.error;
+              const approvalInitiated = isWorkflowApprovalInitiated(errorData);
               setToast({
-                title: errorData?.workflow_blocked ? "已发起审批流程" : t("toast.error"),
-                type: errorData?.workflow_blocked ? TOAST_TYPE.INFO : TOAST_TYPE.ERROR,
+                title: approvalInitiated ? "已发起审批流程" : t("toast.error"),
+                type: approvalInitiated ? TOAST_TYPE.INFO : TOAST_TYPE.ERROR,
                 message:
                   errorMessage ??
-                  (errorData?.workflow_blocked
+                  (approvalInitiated
                     ? "该状态变更需审批人通过后才会生效"
                     : t("entity.update.failed", { entity: t("issue.label", { count: 1 }) })),
               });

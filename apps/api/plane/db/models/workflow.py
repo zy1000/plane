@@ -18,6 +18,11 @@ class ApprovalType(models.TextChoices):
     N_OF_M = "n_of_m", "至少 N 人通过"
 
 
+class WorkflowApproverTarget(models.TextChoices):
+    ASSIGNEES = "assignees", "工作项负责人"
+    CREATED_BY = "created_by", "工作项创建人"
+
+
 class Workflow(ProjectBaseModel):
     """
     某个项目下、某个工作项类型的状态流转工作流。
@@ -115,6 +120,11 @@ class WorkflowTransition(ProjectBaseModel):
         blank=True,
         verbose_name="最少通过人数（仅 n_of_m 模式生效）",
     )
+    dynamic_approver_types = models.JSONField(
+        blank=True,
+        default=list,
+        verbose_name="动态审批人类型",
+    )
 
     class Meta:
         verbose_name = "Workflow Transition"
@@ -146,6 +156,7 @@ class WorkflowTransition(ProjectBaseModel):
     def clean(self):
         super().clean()
         issue_type = self.workflow.issue_type
+        dynamic_approver_types = self.dynamic_approver_types or []
 
         # to_state 必须属于 workflow.issue_type
         if self.to_state_id and self.to_state.issue_type_id != issue_type.pk:
@@ -179,6 +190,30 @@ class WorkflowTransition(ProjectBaseModel):
 
         if self.from_state_id and self.from_state.project_id != self.project_id:
             raise ValidationError({"from_state": "起始状态不属于当前项目。"})
+
+        if not isinstance(dynamic_approver_types, list):
+            raise ValidationError({"dynamic_approver_types": "动态审批人必须是列表。"})
+
+        invalid_targets = [
+            approver_target
+            for approver_target in dynamic_approver_types
+            if approver_target not in WorkflowApproverTarget.values
+        ]
+        if invalid_targets:
+            raise ValidationError(
+                {
+                    "dynamic_approver_types": (
+                        "存在不支持的动态审批人类型："
+                        + ", ".join(invalid_targets)
+                    )
+                }
+            )
+
+        normalized_targets = []
+        for approver_target in dynamic_approver_types:
+            if approver_target not in normalized_targets:
+                normalized_targets.append(approver_target)
+        self.dynamic_approver_types = normalized_targets
 
     def save(self, *args, **kwargs):
         # 保持 project 与 workflow.project 一致

@@ -69,6 +69,15 @@ const ProjectActivityListPage = observer((props: ProjectActivityListPageProps) =
   return (
     <ul role="list">
       {projectActivity.results.map((activityItem: any) => {
+        const actorDetail = activityItem?.actor_detail;
+        const isSystemActivity = !actorDetail;
+        const actorDisplayName = isSystemActivity
+          ? "Plane"
+          : actorDetail.is_bot
+            ? `${actorDetail.first_name} Bot`
+            : currentUser?.id === actorDetail.id
+              ? "You"
+              : actorDetail.display_name;
         if (activityItem.field === "comment")
           return (
             <div key={activityItem.id} className="mt-2">
@@ -76,23 +85,23 @@ const ProjectActivityListPage = observer((props: ProjectActivityListPageProps) =
                 <div className="relative px-1">
                   {activityItem.field ? (
                     activityItem.new_value === "restore" && <History className="h-3.5 w-3.5 text-primary" />
-                  ) : activityItem.actor_detail.avatar_url && activityItem.actor_detail.avatar_url !== "" ? (
+                  ) : actorDetail?.avatar_url && actorDetail.avatar_url !== "" ? (
                     <img
-                      src={getFileURL(activityItem.actor_detail.avatar_url)}
-                      alt={activityItem.actor_detail.display_name}
+                      src={getFileURL(actorDetail.avatar_url)}
+                      alt={actorDisplayName}
                       height={24}
                       width={24}
                       className="grid h-6 w-6 place-items-center rounded-full border-2 border-white bg-gray-500 text-white"
                     />
                   ) : (
                     <div className="grid h-6 w-6 place-items-center rounded-full border-2 border-white bg-gray-700 text-xs capitalize text-white">
-                      {activityItem.actor_detail.display_name?.[0]}
+                      {actorDisplayName?.[0]}
                     </div>
                   )}
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="text-[0.7875rem] text-primary">
-                    <span className="font-medium text-primary">{activityItem.actor_detail.display_name}</span>
+                    <span className="font-medium text-primary">{actorDisplayName}</span>
                     <span className="ml-2 text-[0.7875rem] text-placeholder">
                       {calculateTimeAgo(activityItem.created_at)}
                     </span>
@@ -133,18 +142,18 @@ const ProjectActivityListPage = observer((props: ProjectActivityListPageProps) =
                               ) : (
                                 <ActivityIcon activity={activityItem} />
                               )
-                            ) : activityItem.actor_detail.avatar_url &&
-                              activityItem.actor_detail.avatar_url !== "" ? (
+                            ) : actorDetail?.avatar_url &&
+                              actorDetail.avatar_url !== "" ? (
                               <img
-                                src={getFileURL(activityItem.actor_detail.avatar_url)}
-                                alt={activityItem.actor_detail.display_name}
+                                src={getFileURL(actorDetail.avatar_url)}
+                                alt={actorDisplayName}
                                 height={20}
                                 width={20}
                                 className="h-full w-full rounded-full object-cover"
                               />
                             ) : (
                               <div className="grid h-5 w-5 place-items-center rounded-full border-2 border-white bg-gray-700 text-xs capitalize text-white">
-                                {activityItem.actor_detail.display_name?.[0]}
+                                {actorDisplayName?.[0]}
                               </div>
                             )}
                           </div>
@@ -155,17 +164,17 @@ const ProjectActivityListPage = observer((props: ProjectActivityListPageProps) =
                       <div className="break-words text-[0.7875rem] text-primary">
                         {activityItem.field === "archived_at" && activityItem.new_value !== "restore" ? (
                           <span className="text-gray font-medium">Plane</span>
-                        ) : activityItem.actor_detail.is_bot ? (
-                          <span className="text-gray font-medium">{activityItem.actor_detail.first_name} Bot</span>
+                        ) : isSystemActivity ? (
+                          <span className="text-gray font-medium">Plane</span>
+                        ) : actorDetail.is_bot ? (
+                          <span className="text-gray font-medium">{actorDetail.first_name} Bot</span>
                         ) : (
                           <Link
-                            href={`/${activityItem.workspace_detail?.slug}/profile/${activityItem.actor_detail.id}`}
+                            href={`/${activityItem.workspace_detail?.slug}/profile/${actorDetail.id}`}
                             className="inline"
                           >
                             <span className="text-gray font-medium">
-                              {currentUser?.id === activityItem.actor_detail.id
-                                ? "You"
-                                : activityItem.actor_detail.display_name}
+                              {actorDisplayName}
                             </span>
                           </Link>
                         )}{" "}

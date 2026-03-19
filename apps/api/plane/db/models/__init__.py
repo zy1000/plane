@@ -99,6 +99,7 @@ from .workflow import (
     ApprovalType,
     ApprovalAction,
     TransitionRecordStatus,
+    WorkflowApproverTarget,
     Workflow,
     WorkflowTransition,
     WorkflowTransitionApproval,

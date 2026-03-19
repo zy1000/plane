@@ -10,10 +10,11 @@ import { ArrowRight, MoreHorizontal, Users } from "lucide-react";
 import { EIconSize } from "@plane/constants";
 import { StateGroupIcon } from "@plane/propel/icons";
 import type { IState } from "@plane/types";
-import { Avatar, Button } from "@plane/ui";
+import { Button } from "@plane/ui";
 import { cn } from "@plane/utils";
 import { useMember } from "@/hooks/store/use-member";
 import type { TWorkflowTransition, TApprovalType } from "@/services/project/project-workflow.service";
+import { getWorkflowApproverLabel } from "./approver-utils";
 
 type TStep = 1 | 2 | 3 | "done";
 
@@ -114,6 +115,13 @@ export const TransitionFlowRow: FC<TTransitionFlowRowProps> = ({
 
   const selectedToState = toStateId ? allStates.find((s) => s.id === toStateId) : null;
   const isAllApprovers = approverIds.length === 0;
+  const approverLabels = approverIds.map((id) => getWorkflowApproverLabel(id, getUserDetails));
+  const approverSummaryLabel =
+    approverLabels.length === 1
+      ? approverLabels[0]
+      : approverLabels.length === 2
+        ? approverLabels.join("、")
+        : `${approverLabels.length} 个审批对象`;
 
   const excludeIds = [fromState.id, ...usedToStateIds.filter((id) => id !== transition?.to_state_id)];
   const availableStates = allStates.filter((s) => !excludeIds.includes(s.id));
@@ -358,23 +366,7 @@ export const TransitionFlowRow: FC<TTransitionFlowRowProps> = ({
                 {isAllApprovers ? (
                   <span className="flex-1 text-left text-primary">All</span>
                 ) : (
-                  <div className="flex flex-1 items-center gap-1">
-                    {approverIds.slice(0, 3).map((id) => {
-                      const user = getUserDetails(id);
-                      return user ? (
-                        <Avatar
-                          key={id}
-                          name={user.display_name}
-                          src={user.avatar_url}
-                          size="sm"
-                          className="-ml-1 first:ml-0 ring-1 ring-surface-1"
-                        />
-                      ) : null;
-                    })}
-                    {approverIds.length > 3 && (
-                      <span className="ml-1 text-xs text-secondary">+{approverIds.length - 3}</span>
-                    )}
-                  </div>
+                  <span className="flex-1 truncate text-left text-primary">{approverSummaryLabel}</span>
                 )}
               </button>
             </div>
