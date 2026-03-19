@@ -52,7 +52,11 @@ from plane.db.models import (
 from plane.db.models.intake import IntakeIssueStatus
 from plane.utils.host import base_host
 from plane.utils.paginator import CustomPaginator
-from plane.utils.project.state import bulk_create_issue_state, temporary_create_issue_type
+from plane.utils.project.state import (
+    bulk_create_issue_state,
+    create_default_bug_workflow,
+    temporary_create_issue_type,
+)
 from plane.utils.response import list_response
 
 
@@ -383,8 +387,18 @@ class ProjectViewSet(BaseViewSet):
                     role=ROLE.ADMIN.value,
                 )
 
-            bulk_create_issue_state(issue_types=issue_types, workspace=serializer.instance.workspace,
-                                    project=serializer.instance,created_by=request.user)
+            bulk_create_issue_state(
+                issue_types=issue_types,
+                workspace=serializer.instance.workspace,
+                project=serializer.instance,
+                created_by=request.user,
+            )
+            create_default_bug_workflow(
+                issue_types=issue_types,
+                workspace=serializer.instance.workspace,
+                project=serializer.instance,
+                created_by=request.user,
+            )
 
             project = self.get_queryset().filter(pk=serializer.data["id"]).first()
 

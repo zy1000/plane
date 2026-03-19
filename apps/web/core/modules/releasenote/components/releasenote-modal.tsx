@@ -24,20 +24,26 @@ export const ReleasenoteModal = ({ workspaceSlug }: Props) => {
 
   return (
     <ModalCore isOpen={isOpen} handleClose={closeModal} position={EModalPosition.CENTER} width={EModalWidth.LG}>
-      <div className="p-5">
-        <p className="text-sm text-secondary">更新日志</p>
-        <h3 className="mt-1 text-lg font-semibold text-primary">{latest?.title}</h3>
-        {latest?.summary && <p className="mt-3 text-sm text-primary">{latest.summary}</p>}
-        <div className="mt-3 rounded border border-subtle-1 bg-layer-1 p-2">
-          <RichTextEditor
-            id={`releasenote-modal-content-${latest?.id ?? "latest"}`}
-            editable={false}
-            initialValue={latest?.content || latest?.description || ""}
-            workspaceSlug={workspaceSlug}
-            workspaceId={currentWorkspace?.id ?? ""}
-          />
+      <div className="flex max-h-[80vh] flex-col p-5">
+        <div className="flex-shrink-0">
+          <p className="text-sm text-secondary">更新日志</p>
+          <h3 className="mt-1 text-lg font-semibold text-primary">{latest?.title}</h3>
+          {latest?.summary && <p className="mt-3 text-sm text-primary">{latest.summary}</p>}
         </div>
-        <div className="mt-5 flex items-center justify-end gap-2">
+
+        <div className="mt-3 min-h-0 flex-1 overflow-y-auto pr-1">
+          <div className="rounded border border-subtle-1 bg-layer-1 p-2">
+            <RichTextEditor
+              id={`releasenote-modal-content-${latest?.id ?? "latest"}`}
+              editable={false}
+              initialValue={latest?.content || latest?.description || ""}
+              workspaceSlug={workspaceSlug}
+              workspaceId={currentWorkspace?.id ?? ""}
+            />
+          </div>
+        </div>
+
+        <div className="mt-5 flex flex-shrink-0 items-center justify-end gap-2 border-t border-subtle pt-4">
           <button
             type="button"
             className="rounded border border-subtle px-3 py-1.5 text-sm text-primary"
