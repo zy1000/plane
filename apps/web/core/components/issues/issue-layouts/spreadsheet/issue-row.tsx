@@ -23,6 +23,7 @@ import { cn, generateWorkItemLink } from "@plane/utils";
 // components
 import { MultipleSelectEntityAction } from "@/components/core/multiple-select";
 import RenderIfVisible from "@/components/core/render-if-visible-HOC";
+import { IssueApprovalTag } from "@/components/issues/issue-approval-tag";
 // helper
 // hooks
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
@@ -402,8 +403,8 @@ const IssueRowDetails = observer(function IssueRowDetails(props: IssueRowDetails
               )}
 
               <div className="my-auto flex h-full w-full items-center justify-between gap-2 truncate">
-                <div className="line-clamp-1 w-full text-14 text-primary">
-                  <div className="w-full overflow-hidden">
+                <div className="flex min-w-0 items-center gap-2 text-14 text-primary">
+                  <div className="line-clamp-1 w-full">
                     <Tooltip tooltipContent={issueDetail.name} isMobile={isMobile}>
                       <div
                         className="h-full w-full cursor-pointer truncate pr-4 text-left text-13 text-primary focus:outline-none"
@@ -413,6 +414,13 @@ const IssueRowDetails = observer(function IssueRowDetails(props: IssueRowDetails
                       </div>
                     </Tooltip>
                   </div>
+                  {issueDetail.project_id && workspaceSlug && (
+                    <IssueApprovalTag
+                      workspaceSlug={workspaceSlug.toString()}
+                      projectId={issueDetail.project_id}
+                      issueId={issueDetail.id}
+                    />
+                  )}
                 </div>
                 <div
                   className={`opacity-0 transition-opacity group-hover:opacity-100 ${isMenuActive ? "!opacity-100" : ""}`}

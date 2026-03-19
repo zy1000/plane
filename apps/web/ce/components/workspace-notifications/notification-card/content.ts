@@ -8,7 +8,13 @@ import { replaceUnderscoreIfSnakeCase } from "@plane/utils";
 import type { TNotificationContentMap } from "@/components/workspace-notifications/sidebar/notification-card/content";
 
 // Additional notification content map for CE (empty - EE extends this)
-export const ADDITIONAL_NOTIFICATION_CONTENT_MAP: TNotificationContentMap = {};
+export const ADDITIONAL_NOTIFICATION_CONTENT_MAP: TNotificationContentMap = {
+  workflow_approval_request: ({ newValue, oldValue }) => ({
+    action: "发起了状态变更审批申请",
+    value: oldValue && newValue ? `${oldValue} → ${newValue}` : null,
+    showConnector: false,
+  }),
+};
 
 // Fallback action renderer for fields not in the map
 export const renderAdditionalAction = (notificationField: string, verb: string | undefined) => {

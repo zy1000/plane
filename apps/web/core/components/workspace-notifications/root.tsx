@@ -22,6 +22,7 @@ import { useWorkspaceIssueProperties } from "@/hooks/use-workspace-issue-propert
 import { useNotificationPreview } from "@/plane-web/hooks/use-notification-preview";
 // local imports
 import { InboxContentRoot } from "../inbox/content";
+import { ApprovalNotificationPanel } from "./approval-notification-panel";
 
 type NotificationsRootProps = {
   workspaceSlug?: string;
@@ -40,7 +41,7 @@ export const NotificationsRoot = observer(function NotificationsRoot({ workspace
   const { fetchUserProjectInfo } = useUserPermissions();
   const { isWorkItem, PeekOverviewComponent, setPeekWorkItem } = useNotificationPreview();
   // derived values
-  const { workspace_slug, project_id, issue_id, is_inbox_issue } =
+  const { workspace_slug, project_id, issue_id, is_inbox_issue, is_approval_notification, transition_record_id } =
     notificationLiteByNotificationId(currentSelectedNotificationId);
 
   // fetching workspace work item properties
@@ -91,7 +92,13 @@ export const NotificationsRoot = observer(function NotificationsRoot({ workspace
         </div>
       ) : (
         <>
-          {is_inbox_issue === true && workspace_slug && project_id && issue_id ? (
+          {is_approval_notification && workspace_slug && project_id && transition_record_id ? (
+            <ApprovalNotificationPanel
+              workspaceSlug={workspace_slug}
+              projectId={project_id}
+              transitionRecordId={transition_record_id}
+            />
+          ) : is_inbox_issue === true && workspace_slug && project_id && issue_id ? (
             <>
               {projectMemberInfoLoader ? (
                 <div className="flex h-full w-full items-center justify-center">

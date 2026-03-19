@@ -38,6 +38,8 @@ export type TNotificationData = {
     new_value: string | undefined;
     old_value: string | undefined;
   };
+  /** 工作流审批申请通知专用，指向 IssueTransitionRecord 的 ID */
+  transition_record_id?: string;
 };
 
 export type TNotification = {
@@ -103,4 +105,6 @@ export type TNotificationLite = {
   notification_id: string | undefined;
   issue_id: string | undefined;
   is_inbox_issue: boolean | undefined;
+  is_approval_notification: boolean | undefined;
+  transition_record_id: string | undefined;
 };

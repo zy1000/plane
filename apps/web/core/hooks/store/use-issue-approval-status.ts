@@ -1,18 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
+import type { TTransitionRecord } from "@/services/project/project-workflow.service";
 import {
-  ProjectWorkflowService,
-  type TTransitionRecord,
-} from "@/services/project/project-workflow.service";
-
-const workflowService = new ProjectWorkflowService();
-
-// 模块级缓存，避免同一 issue 重复请求
-const cache = new Map<string, TTransitionRecord[]>();
-const inflight = new Map<string, Promise<TTransitionRecord[]>>();
-
-function cacheKey(projectId: string, issueId: string) {
-  return `${projectId}:${issueId}`;
-}
+  fetchIssueApprovalStatus,
+  invalidateIssueApprovalStatus,
+  subscribeIssueApprovalStatus,
+} from "@/services/project/issue-approval-status-cache";
 
 export function useIssueApprovalStatus(
   workspaceSlug: string | undefined,
@@ -24,41 +16,33 @@ export function useIssueApprovalStatus(
 
   const fetch = useCallback(async (skipCache = false) => {
     if (!workspaceSlug || !projectId || !issueId) return;
-    const key = cacheKey(projectId, issueId);
-
-    if (!skipCache && cache.has(key)) {
-      setRecords(cache.get(key)!);
-      return;
-    }
-
-    if (!inflight.has(key)) {
-      const promise = workflowService
-        .fetchIssuePendingRecords(workspaceSlug, projectId, issueId)
-        .then((results) => {
-          cache.set(key, results);
-          inflight.delete(key);
-          return results;
-        })
-        .catch(() => {
-          inflight.delete(key);
-          return [] as TTransitionRecord[];
-        });
-      inflight.set(key, promise);
-    }
 
     setIsLoading(true);
-    const result = await inflight.get(key)!;
-    setRecords(result);
-    setIsLoading(false);
+    try {
+      const result = await fetchIssueApprovalStatus(workspaceSlug, projectId, issueId, skipCache);
+      setRecords(result);
+    } finally {
+      setIsLoading(false);
+    }
   }, [workspaceSlug, projectId, issueId]);
 
   useEffect(() => {
-    fetch();
+    void fetch();
   }, [fetch]);
 
+  useEffect(() => {
+    if (!projectId || !issueId) return;
+
+    const unsubscribe = subscribeIssueApprovalStatus(projectId, issueId, () => {
+      void fetch(true);
+    });
+
+    return unsubscribe;
+  }, [projectId, issueId, fetch]);
+
   const invalidate = useCallback(() => {
-    if (projectId && issueId) cache.delete(cacheKey(projectId, issueId));
-    fetch(true);
+    if (!projectId || !issueId) return;
+    invalidateIssueApprovalStatus(projectId, issueId);
   }, [projectId, issueId, fetch]);
 
   return {

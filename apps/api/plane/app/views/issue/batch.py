@@ -9,6 +9,10 @@ from plane.bgtasks.issue_activities_task import issue_activity
 from plane.app.views import BaseAPIView
 from plane.db.models import Issue, UserRecentVisit
 from plane.utils.host import base_host
+from plane.utils.workflow.transition import (
+    cancel_issue_pending_transitions,
+    check_update_state_permission,
+)
 
 
 class IssueBatchUpdate(BaseAPIView):
@@ -23,18 +27,26 @@ class IssueBatchUpdate(BaseAPIView):
 
         queryset = self.queryset.filter(project_id=project_id, id__in=issue_ids)
         blocked = []
+        updated_issue_ids = []
+        to_state = None
+
+        if state_id:
+            from plane.db.models import State as StateModel
+
+            try:
+                to_state = StateModel.objects.get(pk=state_id, project_id=project_id)
+            except StateModel.DoesNotExist:
+                to_state = None
 
         for query in queryset:
             # 工作流审批检查（批量更新中仅对实际变更状态的 issue 生效）
             if state_id and str(state_id) != str(query.state_id):
-                from plane.db.models import State as StateModel
-                from plane.utils.workflow.transition import check_update_state_permission
-                try:
-                    to_state = StateModel.objects.get(pk=state_id, project_id=project_id)
+                if to_state:
                     allowed, error_msg, transition_record = check_update_state_permission(
                         issue=query,
                         to_state=to_state,
                         user=request.user,
+                        project_id=project_id,
                     )
                     if not allowed:
                         blocked.append({
@@ -43,19 +55,28 @@ class IssueBatchUpdate(BaseAPIView):
                             "transition_record_id": str(transition_record.id) if transition_record else None,
                         })
                         continue
-                except StateModel.DoesNotExist:
-                    pass
 
             serializer = IssueBatchUpdateSerializer(instance=query, data=properties, partial=True)
             if serializer.is_valid():
+                if state_id and str(state_id) != str(query.state_id):
+                    cancel_issue_pending_transitions(
+                        issue=query,
+                        cancelled_by=request.user,
+                        project_id=str(project_id),
+                    )
                 serializer.save()
+                updated_issue_ids.append(str(query.id))
 
         if blocked:
             return Response(
-                {"workflow_blocked": True, "blocked_issues": blocked},
+                {
+                    "workflow_blocked": True,
+                    "blocked_issues": blocked,
+                    "updated_issue_ids": updated_issue_ids,
+                },
                 status=status.HTTP_207_MULTI_STATUS,
             )
-        return Response(status=status.HTTP_200_OK)
+        return Response({"updated_issue_ids": updated_issue_ids}, status=status.HTTP_200_OK)
 
     def delete(self, request, slug, project_id):
         issue_ids = request.data.get("issue_ids", [])

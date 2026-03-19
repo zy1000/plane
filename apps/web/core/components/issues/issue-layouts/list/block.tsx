@@ -21,6 +21,7 @@ import { Spinner, ControlLink, Row } from "@plane/ui";
 import { cn, generateWorkItemLink } from "@plane/utils";
 // components
 import { MultipleSelectEntityAction } from "@/components/core/multiple-select";
+import { IssueApprovalTag } from "@/components/issues/issue-approval-tag";
 import { IssueProperties } from "@/components/issues/issue-layouts/properties";
 // helpers
 // hooks
@@ -310,15 +311,24 @@ export const IssueBlock = observer(function IssueBlock(props: IssueBlockProps) {
               )}
             </div>
 
-            <Tooltip
-              tooltipContent={issue.name}
-              isMobile={isMobile}
-              position="top-start"
-              disabled={isCurrentBlockDragging}
-              renderByDefault={false}
-            >
-              <p className="cursor-pointer truncate text-body-xs-medium text-primary">{issue.name}</p>
-            </Tooltip>
+            <div className="flex min-w-0 items-center gap-2">
+              <Tooltip
+                tooltipContent={issue.name}
+                isMobile={isMobile}
+                position="top-start"
+                disabled={isCurrentBlockDragging}
+                renderByDefault={false}
+              >
+                <p className="cursor-pointer truncate text-body-xs-medium text-primary">{issue.name}</p>
+              </Tooltip>
+              {issue.project_id && workspaceSlug && (
+                <IssueApprovalTag
+                  workspaceSlug={workspaceSlug}
+                  projectId={issue.project_id}
+                  issueId={issue.id}
+                />
+              )}
+            </div>
             {isEpic && displayProperties && (
               <WithDisplayPropertiesHOC
                 displayProperties={displayProperties}

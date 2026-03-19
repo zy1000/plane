@@ -234,11 +234,20 @@ interface IssueApprovalTagProps {
 export function IssueApprovalTag({ workspaceSlug, projectId, issueId }: IssueApprovalTagProps) {
   const [isOpen, setIsOpen] = useState(false);
   const { data: currentUser } = useUser();
-  const { records, hasPendingApproval, invalidate } = useIssueApprovalStatus(workspaceSlug, projectId, issueId);
+  const { records, hasPendingApproval, isLoading, invalidate } = useIssueApprovalStatus(workspaceSlug, projectId, issueId);
 
-  if (!hasPendingApproval) return null;
+  // 弹窗打开中时保持渲染，避免因 hasPendingApproval 变为 false 而闪烁关闭
+  if (!hasPendingApproval && !isOpen) return null;
 
   const record = records[0];
+
+  const handleOpen = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    // 每次打开时强制刷新，确保显示最新的审批状态
+    invalidate();
+    setIsOpen(true);
+  };
 
   const handleActioned = () => {
     invalidate();
@@ -247,19 +256,17 @@ export function IssueApprovalTag({ workspaceSlug, projectId, issueId }: IssueApp
 
   return (
     <>
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          e.preventDefault();
-          setIsOpen(true);
-        }}
-        className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium flex-shrink-0 transition-opacity hover:opacity-80"
-        style={tagStyle(STATUS_COLOR.pending)}
-      >
-        <Clock className="h-2.5 w-2.5" />
-        待审批
-      </button>
+      {hasPendingApproval && (
+        <button
+          type="button"
+          onClick={handleOpen}
+          className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium flex-shrink-0 transition-opacity hover:opacity-80"
+          style={tagStyle(STATUS_COLOR.pending)}
+        >
+          <Clock className="h-2.5 w-2.5" />
+          待审批
+        </button>
+      )}
 
       <Transition.Root show={isOpen} as={React.Fragment}>
         <Dialog as="div" className="relative z-50" onClose={() => setIsOpen(false)}>
@@ -291,7 +298,9 @@ export function IssueApprovalTag({ workspaceSlug, projectId, issueId }: IssueApp
                   <div className="flex items-start justify-between gap-3 px-5 py-4 border-b" style={{ borderColor: "rgba(0,0,0,0.08)" }}>
                     <div className="min-w-0">
                       <p className="text-xs mb-0.5" style={{ color: "#9ca3af" }}>#{record?.issue_sequence_id}</p>
-                      <Dialog.Title className="text-base font-semibold truncate">{record?.issue_name}</Dialog.Title>
+                      <Dialog.Title className="text-base font-semibold truncate">
+                        {record?.issue_name ?? "审批流程"}
+                      </Dialog.Title>
                     </div>
                     <button
                       type="button"
@@ -304,7 +313,11 @@ export function IssueApprovalTag({ workspaceSlug, projectId, issueId }: IssueApp
 
                   {/* 内容 */}
                   <div className="px-5 py-4 overflow-y-auto" style={{ maxHeight: "60vh" }}>
-                    {record ? (
+                    {isLoading ? (
+                      <div className="flex items-center justify-center py-8">
+                        <Loader2 className="h-5 w-5 animate-spin" style={{ color: "#9ca3af" }} />
+                      </div>
+                    ) : record ? (
                       <RecordDetail
                         record={record}
                         currentUserId={currentUser?.id?.toString()}
@@ -313,8 +326,9 @@ export function IssueApprovalTag({ workspaceSlug, projectId, issueId }: IssueApp
                         onActioned={handleActioned}
                       />
                     ) : (
-                      <div className="flex items-center justify-center py-8">
-                        <Loader2 className="h-5 w-5 animate-spin" style={{ color: "#9ca3af" }} />
+                      <div className="flex flex-col items-center justify-center gap-2 py-8 text-center">
+                        <p className="text-sm font-medium" style={{ color: "#6b7280" }}>审批流程已取消或已完成</p>
+                        <p className="text-xs" style={{ color: "#9ca3af" }}>工作项状态已被直接修改</p>
                       </div>
                     )}
                   </div>

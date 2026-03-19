@@ -35,6 +35,7 @@ import { workItemSortWithOrderByExtended } from "@/plane-web/store/issue/helpers
 import { CycleService } from "@/services/cycle.service";
 import { IssueArchiveService, IssueService } from "@/services/issue";
 import { ModuleService } from "@/services/module.service";
+import { invalidateIssueApprovalStatus } from "@/services/project/issue-approval-status-cache";
 //
 import type { IIssueRootStore } from "../root.store";
 import {
@@ -64,6 +65,7 @@ export interface IBaseIssuesStore {
 
   //actions
   removeIssue: (workspaceSlug: string, projectId: string, issueId: string) => Promise<void>;
+  applyOptimisticIssuePatch: (issueId: string, data: Partial<TIssue>) => void;
   clear(shouldClearPaginationOptions?: boolean): void;
   // helper methods
   getIssueIds: (groupId?: string, subGroupId?: string) => string[] | undefined;
@@ -577,15 +579,43 @@ export abstract class BaseIssuesStore implements IBaseIssuesStore {
       // call API to update the issue
       await this.issueService.patchIssue(workspaceSlug, projectId, issueId, data);
 
+      if ("state_id" in data && issueBeforeUpdate?.state_id !== data.state_id) {
+        invalidateIssueApprovalStatus(projectId, issueId);
+      }
+
       // call fetch Parent Stats
       this.fetchParentStats(workspaceSlug, projectId);
     } catch (error) {
       // If errored out update store again to revert the change
       this.rootIssueStore.issues.updateIssue(issueId, issueBeforeUpdate ?? {});
       this.updateIssueList(issueBeforeUpdate, { ...issueBeforeUpdate, ...data } as TIssue);
+
+      if ((error as { workflow_blocked?: boolean })?.workflow_blocked) {
+        invalidateIssueApprovalStatus(projectId, issueId);
+      }
+
       throw error;
     }
   }
+
+  applyOptimisticIssuePatch = (issueId: string, data: Partial<TIssue>) => {
+    const issueBeforeUpdate = clone(this.rootIssueStore.issues.getIssueById(issueId));
+    if (!issueBeforeUpdate) return;
+
+    const nextIssue = {
+      ...issueBeforeUpdate,
+      ...data,
+      updated_at: data.updated_at ?? new Date().toISOString(),
+    } as TIssue;
+
+    this.rootIssueStore.issues.updateIssue(issueId, nextIssue);
+    this.updateIssueList(nextIssue, issueBeforeUpdate);
+    this.updateParentStats(issueBeforeUpdate, nextIssue);
+
+    if ("state_id" in data && issueBeforeUpdate.state_id !== data.state_id && nextIssue.project_id) {
+      invalidateIssueApprovalStatus(nextIssue.project_id, issueId);
+    }
+  };
 
   /**
    * This method is called to delete an issue

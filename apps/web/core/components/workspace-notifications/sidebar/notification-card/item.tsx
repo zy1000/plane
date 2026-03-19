@@ -42,10 +42,10 @@ export const NotificationItem = observer(function NotificationItem(props: TNotif
 
   const notificationField = notification?.data?.issue_activity.field || undefined;
   const notificationTriggeredBy = notification.triggered_by_details || undefined;
+  const isApprovalNotification = notification?.sender === "in_app:workflow_approval:requested";
 
   const handleNotificationIssuePeekOverview = async () => {
     if (workspaceSlug && projectId && issueId && !isSnoozeStateModalOpen && !customSnoozeModal) {
-      setPeekIssue(undefined);
       setCurrentSelectedNotificationId(notificationId);
 
       // make the notification as read
@@ -57,6 +57,10 @@ export const NotificationItem = observer(function NotificationItem(props: TNotif
         }
       }
 
+      // 审批通知：右侧面板展示审批详情，无需 peek issue
+      if (isApprovalNotification) return;
+
+      setPeekIssue(undefined);
       if (notification?.is_inbox_issue === false) {
         if (!getIsIssuePeeked(issueId)) {
           setPeekIssue({ workspaceSlug, projectId, issueId });

@@ -434,7 +434,15 @@ export class IssueService extends APIService {
         target_date?: string | null;
       };
     }
-  ): Promise<void> {
+  ): Promise<{
+    workflow_blocked?: boolean;
+    blocked_issues?: {
+      issue_id: string;
+      error: string;
+      transition_record_id?: string | null;
+    }[];
+    updated_issue_ids?: string[];
+  }> {
     return this.post(`/api/workspaces/${workspaceSlug}/projects/${projectId}/batch-update/`, data)
       .then((response) => response?.data)
       .catch((error) => {

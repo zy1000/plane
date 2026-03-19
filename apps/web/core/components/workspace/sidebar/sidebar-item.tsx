@@ -94,7 +94,7 @@ export const SidebarItemBase = observer(function SidebarItemBase({
     <Link href={itemHref} onClick={handleLinkClick}>
       <SidebarNavItem isActive={item.highlight(pathname, itemHref)}>
         <div className="flex items-center gap-1.5 py-[1px]">
-          {icon}
+          {renderedIcon}
           <p className="text-13 leading-5 font-medium">{t(item.labelTranslationKey)}</p>
         </div>
         {additionalRender?.(item.key, slug)}

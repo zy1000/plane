@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
 import { Trash2 } from "lucide-react";
-import { runInAction } from "mobx";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 import { cn } from "@plane/utils";
@@ -22,6 +21,7 @@ import { useIssues } from "@/hooks/store/use-issues";
 import { useIssueStoreType } from "@/hooks/use-issue-layout-store";
 // services
 import { IssueService } from "@/services/issue";
+import { invalidateIssueApprovalStatus } from "@/services/project/issue-approval-status-cache";
 
 type Props = {
   className?: string;
@@ -98,28 +98,46 @@ export const BulkOperationsActionBar = observer(function BulkOperationsActionBar
 
     setIsUpdating(true);
     try {
-      await issueService.batchUpdateIssues(workspaceSlug.toString(), projectId.toString(), {
+      const response = await issueService.batchUpdateIssues(workspaceSlug.toString(), projectId.toString(), {
         issue_ids: selectedEntityIds,
         properties,
       });
 
-      // 手动更新 MobX store 中的数据以刷新列表
-      runInAction(() => {
-        selectedEntityIds.forEach((issueId) => {
-          const issue = issueMap[issueId];
-          if (issue) {
-            if (properties.state_id) issue.state_id = properties.state_id;
-            if (properties.assignee_ids) issue.assignee_ids = properties.assignee_ids;
-            if (properties.start_date) issue.start_date = properties.start_date;
-            if (properties.target_date) issue.target_date = properties.target_date;
-            if (properties.label_ids) issue.label_ids = properties.label_ids;
-            if (properties.cycle_id) issue.cycle_id = properties.cycle_id;
-            if (properties.module_ids) issue.module_ids = properties.module_ids;
-            // 更新 updated_at 触发 UI 刷新
-            issue.updated_at = new Date().toISOString();
+      const blockedIssueIds = new Set(response?.blocked_issues?.map((item) => item.issue_id) ?? []);
+      const updatedIssueIds =
+        response?.updated_issue_ids ?? selectedEntityIds.filter((issueId) => !blockedIssueIds.has(issueId));
+
+      updatedIssueIds.forEach((issueId) => {
+        issues.applyOptimisticIssuePatch(issueId, properties);
+      });
+
+      if (properties.state_id) {
+        (response?.blocked_issues ?? []).forEach((blockedIssue) => {
+          const issue = issueMap[blockedIssue.issue_id];
+          if (issue?.project_id) {
+            invalidateIssueApprovalStatus(issue.project_id, blockedIssue.issue_id);
           }
         });
-      });
+      }
+
+      if (response?.blocked_issues?.length) {
+        const blockedCount = response.blocked_issues.length;
+        const updatedCount = updatedIssueIds.length;
+        setToast({
+          type: TOAST_TYPE.INFO,
+          title: "部分工作项已发起审批流程",
+          message:
+            updatedCount > 0
+              ? `已更新 ${updatedCount} 个工作项，另有 ${blockedCount} 个工作项需审批通过后才会变更状态。`
+              : `${blockedCount} 个工作项已发起审批流程，需审批通过后状态才会更新。`,
+        });
+      } else {
+        setToast({
+          type: TOAST_TYPE.SUCCESS,
+          title: "批量更新成功",
+          message: "已更新选中的工作项。",
+        });
+      }
       
       // 清空选中
       clearSelection();

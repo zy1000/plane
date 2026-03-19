@@ -255,6 +255,20 @@ export class ProjectWorkflowService extends APIService {
       });
   }
 
+  async fetchTransitionRecord(
+    workspaceSlug: string,
+    projectId: string,
+    recordId: string
+  ): Promise<TTransitionRecord> {
+    return this.get(
+      `/api/workspaces/${workspaceSlug}/projects/${projectId}/transition-records/${recordId}/action/`
+    )
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
   async submitApprovalAction(
     workspaceSlug: string,
     projectId: string,

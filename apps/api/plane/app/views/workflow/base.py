@@ -209,9 +209,26 @@ class IssueTransitionRecordsAPIView(BaseAPIView):
 
 class TransitionRecordActionAPIView(BaseAPIView):
     """
-    POST /workspaces/<slug>/projects/<project_id>/transition-records/<record_id>/action/
-    提交个人审批动作（approved / rejected + comment）。
+    GET  /workspaces/<slug>/projects/<project_id>/transition-records/<record_id>/action/ - 获取单条审批记录
+    POST /workspaces/<slug>/projects/<project_id>/transition-records/<record_id>/action/ - 提交审批动作
     """
+
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    def get(self, request, slug, project_id, record_id):
+        try:
+            record = (
+                IssueTransitionRecord.objects.filter(
+                    pk=record_id,
+                    issue__project_id=project_id,
+                    issue__deleted_at__isnull=True,
+                )
+                .select_related("issue", "from_state", "to_state", "transition")
+                .prefetch_related("approval_records__approver")
+                .get()
+            )
+        except IssueTransitionRecord.DoesNotExist:
+            return Response({"error": "审批记录不存在"}, status=status.HTTP_404_NOT_FOUND)
+        return Response(IssueTransitionRecordListSerializer(record).data, status=status.HTTP_200_OK)
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
     def post(self, request, slug, project_id, record_id):

@@ -84,11 +84,16 @@ export const IssuePeekOverview = observer(function IssuePeekOverview(props: IWor
               return;
             })
             .catch((error) => {
-              const errorMessage = (error as { error?: string })?.error;
+              const errorData = error as { error?: string; workflow_blocked?: boolean };
+              const errorMessage = errorData?.error;
               setToast({
-                title: t("toast.error"),
-                type: TOAST_TYPE.ERROR,
-                message: errorMessage ?? t("entity.update.failed", { entity: t("issue.label", { count: 1 }) }),
+                title: errorData?.workflow_blocked ? "已发起审批流程" : t("toast.error"),
+                type: errorData?.workflow_blocked ? TOAST_TYPE.INFO : TOAST_TYPE.ERROR,
+                message:
+                  errorMessage ??
+                  (errorData?.workflow_blocked
+                    ? "该状态变更需审批人通过后才会生效"
+                    : t("entity.update.failed", { entity: t("issue.label", { count: 1 }) })),
               });
             });
         }

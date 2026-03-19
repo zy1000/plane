@@ -113,11 +113,16 @@ export const IssueProperties = observer(function IssueProperties(props: IIssuePr
     try {
       await updateIssue(issue.project_id, issue.id, { state_id: stateId });
     } catch (error) {
-      const errorMessage = (error as { error?: string })?.error;
+      const errorData = error as { error?: string; workflow_blocked?: boolean };
+      const errorMessage = errorData?.error;
       setToast({
-        type: TOAST_TYPE.ERROR,
-        title: t("common.error.label"),
-        message: errorMessage ?? t("entity.update.failed", { entity: t("issue.label") }),
+        type: errorData?.workflow_blocked ? TOAST_TYPE.INFO : TOAST_TYPE.ERROR,
+        title: errorData?.workflow_blocked ? "已发起审批流程" : t("common.error.label"),
+        message:
+          errorMessage ??
+          (errorData?.workflow_blocked
+            ? "该状态变更需审批人通过后才会生效"
+            : t("entity.update.failed", { entity: t("issue.label") })),
       });
     }
   };

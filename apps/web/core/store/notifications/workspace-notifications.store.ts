@@ -163,12 +163,15 @@ export class WorkspaceNotificationStore implements IWorkspaceNotificationStore {
     const { workspaceSlug } = this.store.router;
     const notification = this.notifications[notificationId];
     if (!notification || !workspaceSlug) return {} as TNotificationLite;
+    const isApproval = notification.sender === "in_app:workflow_approval:requested";
     return {
       workspace_slug: workspaceSlug,
       project_id: notification.project,
       notification_id: notification.id,
       issue_id: notification.data?.issue?.id,
       is_inbox_issue: notification.is_inbox_issue || false,
+      is_approval_notification: isApproval,
+      transition_record_id: isApproval ? notification.data?.transition_record_id : undefined,
     };
   });
 

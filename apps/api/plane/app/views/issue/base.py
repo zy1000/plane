@@ -78,7 +78,7 @@ from plane.utils.order_queryset import order_issue_queryset
 from plane.utils.paginator import GroupedOffsetPaginator, SubGroupedOffsetPaginator
 from plane.utils.timezone_converter import user_timezone_converter
 from plane.settings.redis import redis_instance
-from plane.utils.workflow import check_update_state_permission
+from plane.utils.workflow import check_update_state_permission, cancel_issue_pending_transitions
 from plane.db.models import State as StateModel
 
 from .. import BaseAPIView, BaseViewSet
@@ -703,6 +703,12 @@ class IssueViewSet(BaseViewSet):
                     if transition_record:
                         resp_data["transition_record_id"] = str(transition_record.id)
                     return Response(resp_data, status=status.HTTP_403_FORBIDDEN)
+                # 直接放行时，取消该工作项所有进行中的审批流程
+                cancel_issue_pending_transitions(
+                    issue=issue,
+                    cancelled_by=request.user,
+                    project_id=str(project_id),
+                )
             except StateModel.DoesNotExist:
                 pass
 
