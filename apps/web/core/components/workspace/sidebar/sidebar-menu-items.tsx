@@ -9,7 +9,7 @@ import { isEmpty } from "lodash-es";
 import { observer } from "mobx-react";
 import Link from "next/link";
 import { useParams, usePathname } from "next/navigation";
-import { BookText } from "lucide-react";
+import { BookText, LayoutDashboard } from "lucide-react";
 // plane imports
 import {
   WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS,
@@ -101,17 +101,38 @@ export const SidebarMenuItems = observer(function SidebarMenuItems() {
         </div>
 
         <hr className="my-1 border-subtle" />
+        {canPerformWorkspaceMemberActions && (
+          <div className="flex flex-col gap-0.5">
+            <Link href={`/${workspaceSlug}/analytics`}>
+              <SidebarNavItem
+                isActive={
+                  !!pathname?.includes(`/${workspaceSlug}/analytics`) ||
+                  !!pathname?.includes(`/${workspaceSlug}/projects/archives`)
+                }
+              >
+                <div className="flex items-center gap-1.5 py-[1px]">
+                  <LayoutDashboard className="size-4 flex-shrink-0" />
+                  <p className="text-13 leading-5 font-medium">工作区</p>
+                </div>
+              </SidebarNavItem>
+            </Link>
+          </div>
+        )}
         {projectsSidebarItem && (
           <div className="flex flex-col gap-0.5">
             <SidebarItem key="pinned_projects" item={projectsSidebarItem} />
           </div>
         )}
         {/* Favorites Menu */}
-        {canPerformWorkspaceMemberActions && !isFavoriteEmpty && <SidebarFavoritesMenu />}
+        {canPerformWorkspaceMemberActions && !isFavoriteEmpty && (
+          <>
+            <hr className="my-1 border-subtle" />
+            <SidebarFavoritesMenu />
+          </>
+        )}
       </div>
 
       <div className="mt-auto">
-        <hr className="border-subtle" />
         <Link href={`/${workspaceSlug}/releasenote`}>
           <SidebarNavItem isActive={pathname?.startsWith(`/${workspaceSlug}/releasenote`)}>
             <div className="flex items-center gap-1.5 py-[1px]">

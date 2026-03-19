@@ -10,7 +10,7 @@ import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 import { CycleIcon, IntakeIcon, ModuleIcon, PageIcon, TestManagementIcon, ViewsIcon, WorkItemsIcon } from "@plane/propel/icons";
 import type { EUserProjectRoles, IPartialProject } from "@plane/types";
 import type { TNavigationItem } from "@/components/navigation/tab-navigation-root";
-import { BarChart3, Folder, Milestone, Rss } from "lucide-react";
+import { ArchiveIcon, BarChart3, Folder, Milestone, Rss } from "lucide-react";
 
 type UseNavigationItemsProps = {
   workspaceSlug: string;
@@ -142,6 +142,16 @@ export const useNavigationItems = ({
         access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
         shouldRender: true,
         sortOrder: 9,
+      },
+      {
+        i18n_key: "archives",
+        key: "archives",
+        name: "归档",
+        href: `/${workspaceSlug}/projects/${projectId}/archives/issues`,
+        icon: ArchiveIcon,
+        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
+        shouldRender: true,
+        sortOrder: 9.5,
       },
     ],
     [project]

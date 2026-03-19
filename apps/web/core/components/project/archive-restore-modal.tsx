@@ -5,6 +5,7 @@
  */
 
 import { useState } from "react";
+import { usePathname } from "next/navigation";
 // ui
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
@@ -15,7 +16,6 @@ import { useAppRouter } from "@/hooks/use-app-router";
 
 type Props = {
   workspaceSlug: string;
-
   projectId: string;
   isOpen: boolean;
   onClose: () => void;
@@ -26,8 +26,11 @@ export function ArchiveRestoreProjectModal(props: Props) {
   const { workspaceSlug, projectId, isOpen, onClose, archive } = props;
   // router
   const router = useAppRouter();
+  const pathname = usePathname();
   // states
   const [isLoading, setIsLoading] = useState(false);
+  // derived values
+  const isOnArchivesPage = !!pathname?.includes("/archives");
   // store hooks
   const { getProjectById, archiveProject, restoreProject } = useProject();
 
@@ -72,7 +75,9 @@ export function ArchiveRestoreProjectModal(props: Props) {
           message: `You can find ${projectDetails.name} in your projects.`,
         });
         onClose();
-        router.push(`/${workspaceSlug}/projects/`);
+        if (!isOnArchivesPage) {
+          router.push(`/${workspaceSlug}/projects/`);
+        }
         return;
       })
       .catch(() =>

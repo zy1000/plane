@@ -15,7 +15,7 @@ import { dropTargetForElements } from "@atlaskit/pragmatic-drag-and-drop/element
 import { orderBy } from "lodash-es";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
-import { FolderPlus } from "lucide-react";
+import { FolderPlus, Star } from "lucide-react";
 import { Disclosure, Transition } from "@headlessui/react";
 import { IS_FAVORITE_MENU_OPEN } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
@@ -184,14 +184,14 @@ export const SidebarFavoritesMenu = observer(function SidebarFavoritesMenu() {
         <div
           ref={elementRef}
           className={cn(
-            "group/favorites-button flex w-full items-center justify-between rounded-sm px-2 py-1.5 text-placeholder hover:bg-layer-transparent-hover"
+            "group/favorites-button flex w-full items-center justify-between rounded-sm px-2 py-1.5 text-primary hover:bg-layer-transparent-hover"
           )}
         >
           <Disclosure.Button
             as="button"
             type="button"
             className={cn(
-              "flex w-full items-center gap-1 text-left text-13 font-semibold whitespace-nowrap text-placeholder",
+              "flex w-full items-center gap-1.5 text-left text-13 leading-5 font-medium whitespace-nowrap text-primary",
               {
                 "bg-layer-1 opacity-60": isDragging,
               }
@@ -203,9 +203,10 @@ export const SidebarFavoritesMenu = observer(function SidebarFavoritesMenu() {
                 : "aria_labels.projects_sidebar.open_favorites_menu"
             )}
           >
-            <span className="text-13 font-semibold">{t("favorites")}</span>
+            <Star className="size-4 flex-shrink-0" />
+            <span className="text-13 leading-5 font-medium text-primary">{t("favorites")}</span>
           </Disclosure.Button>
-          <div className="pointer-events-none flex items-center opacity-0 group-hover/favorites-button:pointer-events-auto group-hover/favorites-button:opacity-100">
+          <div className="flex items-center">
             <Tooltip tooltipHeading={t("create_folder")} tooltipContent="">
               <IconButton
                 variant="ghost"

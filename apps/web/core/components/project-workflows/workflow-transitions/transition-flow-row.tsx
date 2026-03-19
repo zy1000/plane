@@ -227,9 +227,9 @@ export const TransitionFlowRow: FC<TTransitionFlowRowProps> = ({
     }
   };
 
-  const handleOpenMemberPanel = () => {
+  const handleOpenMemberPanel = (forceEditable = false) => {
     if (!isEditable) return;
-    if (!isNew && !isEditMode) {
+    if (!isNew && !isEditMode && !forceEditable) {
       // View-only: show current approvers without allowing edits
       onRequestMemberPanel(approverIds, requiredCount, isNofMApproval, () => {}, true);
       return;
@@ -280,7 +280,7 @@ export const TransitionFlowRow: FC<TTransitionFlowRowProps> = ({
   const handleEditClick = () => {
     setShowMenu(false);
     setIsEditMode(true);
-    handleOpenMemberPanel();
+    handleOpenMemberPanel(true);
   };
 
   const handleCancel = () => {
@@ -358,7 +358,7 @@ export const TransitionFlowRow: FC<TTransitionFlowRowProps> = ({
               <p className="mb-1 text-xs text-tertiary">by</p>
               <button
                 type="button"
-                onClick={handleOpenMemberPanel}
+                onClick={() => handleOpenMemberPanel()}
                 disabled={!isEditable}
                 className={getBoxClassName(box3Active, true)}
               >

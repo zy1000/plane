@@ -11,7 +11,10 @@ import { getAnalyticsTabs } from "./tabs";
 export const useAnalyticsTabs = (workspaceSlug: string) => {
   const { t } = useTranslation();
 
-  const analyticsTabs = useMemo(() => getAnalyticsTabs(t), [t]);
+  const analyticsTabs = useMemo(
+    () => getAnalyticsTabs(t).filter((tab) => tab.key !== "statistics"),
+    [t]
+  );
 
   return analyticsTabs;
 };

@@ -225,12 +225,6 @@ export class ProjectIssuesFilter extends IssueFilterHelperStore implements IProj
             _filters.displayFilters.group_by = "state_detail.group";
             updatedDisplayFilters.group_by = "state_detail.group";
           }
-          // set group_by to state_detail.group if layout is switched to list and group_by is null
-          if (_filters.displayFilters.layout === "list" && _filters.displayFilters.group_by === null) {
-            _filters.displayFilters.group_by = "state_detail.group";
-            updatedDisplayFilters.group_by = "state_detail.group";
-          }
-
           runInAction(() => {
             Object.keys(updatedDisplayFilters).forEach((_key) => {
               set(

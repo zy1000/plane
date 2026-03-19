@@ -6,14 +6,13 @@
 
 // components
 import { Outlet } from "react-router";
-import { AppHeader } from "@/components/core/app-header";
 import { ContentWrapper } from "@/components/core/content-wrapper";
-import { WorkspaceAnalyticsHeader } from "./header";
+import { WorkspaceManagementNavigation } from "@/components/navigation/workspace-management-header";
 
 export default function WorkspaceAnalyticsTabLayout() {
   return (
     <>
-      <AppHeader header={<WorkspaceAnalyticsHeader />} />
+      <WorkspaceManagementNavigation />
       <ContentWrapper>
         <Outlet />
       </ContentWrapper>

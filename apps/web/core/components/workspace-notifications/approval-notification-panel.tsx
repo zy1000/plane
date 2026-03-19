@@ -12,6 +12,7 @@ import { Avatar } from "@plane/ui";
 import { cn } from "@plane/utils";
 import { message } from "antd";
 import { useUser } from "@/hooks/store/user";
+import { invalidateIssueApprovalStatus } from "@/services/project/issue-approval-status-cache";
 import { ProjectWorkflowService } from "@/services/project/project-workflow.service";
 import type { TTransitionRecord, TApprovalRecord } from "@/services/project/project-workflow.service";
 
@@ -127,6 +128,10 @@ export function ApprovalNotificationPanel({ workspaceSlug, projectId, transition
       setRecord(updated);
       setAction(null);
       setComment("");
+      // 审批完成后使缓存失效，让看板/列表视图中的审批标签能实时感知最新状态
+      if (updated.issue_id) {
+        invalidateIssueApprovalStatus(projectId, updated.issue_id);
+      }
       message.success(action === "approved" ? "审批通过" : "已拒绝");
     } catch (err: any) {
       message.error(err?.error || err?.message || "审批失败");

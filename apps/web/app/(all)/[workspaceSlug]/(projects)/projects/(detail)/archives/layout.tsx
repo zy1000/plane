@@ -6,16 +6,13 @@
 
 // components
 import { Outlet } from "react-router";
-import { AppHeader } from "@/components/core/app-header";
 import { ContentWrapper } from "@/components/core/content-wrapper";
-// local components
-import { ProjectsListHeader } from "@/plane-web/components/projects/header";
-import { ProjectsListMobileHeader } from "@/plane-web/components/projects/mobile-header";
+import { WorkspaceManagementNavigation } from "@/components/navigation/workspace-management-header";
 
-export default function ProjectListLayout() {
+export default function WorkspaceArchivesLayout() {
   return (
     <>
-      <AppHeader header={<ProjectsListHeader />} mobileHeader={<ProjectsListMobileHeader />} />
+      <WorkspaceManagementNavigation />
       <ContentWrapper>
         <Outlet />
       </ContentWrapper>
