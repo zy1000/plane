@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 FROM python:3.12.10-alpine
 
 # set environment variables
@@ -21,7 +22,8 @@ RUN apk add --no-cache --upgrade \
 COPY requirements.txt ./
 COPY requirements ./requirements
 RUN apk add --no-cache libffi-dev
-RUN apk add --no-cache --virtual .build-deps \
+RUN --mount=type=cache,target=/root/.cache/pip \
+    apk add --no-cache --virtual .build-deps \
     "bash~=5.2" \
     "g++" \
     "gcc" \
@@ -32,7 +34,7 @@ RUN apk add --no-cache --virtual .build-deps \
     "libc-dev" \
     "linux-headers" \
     && \
-    pip install -r requirements.txt --compile --no-cache-dir \
+    pip install -r requirements.txt --compile \
     && \
     apk del .build-deps \
     && \
@@ -50,7 +52,6 @@ COPY ./bin ./bin/
 
 RUN mkdir -p /code/plane/logs
 RUN chmod +x ./bin/*
-RUN chmod -R 777 /code
 
 # Expose container port and run entry point script
 EXPOSE 8000

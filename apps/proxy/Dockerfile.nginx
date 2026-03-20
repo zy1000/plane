@@ -1,0 +1,10 @@
+FROM nginx:1.27-alpine
+
+# 与 Caddyfile.ce 一致的可调默认值（compose 里可覆盖）
+ENV FILE_SIZE_LIMIT=104857600
+ENV BUCKET_NAME=uploads
+
+# 官方 entrypoint 会将 /etc/nginx/templates/*.template 经 envsubst 写入 conf.d/
+COPY nginx/conf.d/00-map.conf /etc/nginx/conf.d/00-map.conf
+COPY nginx/templates/default.conf.template /etc/nginx/templates/default.conf.template
+COPY nginx/proxy_params.plane /etc/nginx/proxy_params.plane

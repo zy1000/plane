@@ -20,21 +20,22 @@ class Command(BaseCommand):
         bind_dn = os.environ.get("LDAP_BIND_DN", "cdsync1")
         bind_password = os.environ.get("LDAP_BIND_PASSWORD", "69kActpcc3C1ZkQ=")
         user_search_filter = os.environ.get("LDAP_USER_FILTER", "(mail=%(user)s)")
-        
-        # Check if environment variables are actually set (or use defaults if that's the intention)
-        # The user said "migrate /data/code/test2/plane/apps/api/.env#L75-80"
-        # Since I can't read .env directly in this context easily without dotenv, I rely on os.environ
-        # which should be loaded.
-        
+
+        if not all([ldap_url, base_dn, bind_dn, bind_password]):
+            self.stdout.write(
+                self.style.WARNING("LDAP environment variables are incomplete. Skipping LDAP configuration migration.")
+            )
+            return
+
         self.stdout.write("Migrating LDAP configuration...")
-        
+
         LdapConfig.objects.create(
             server_url=ldap_url,
             bind_dn=bind_dn,
             bind_password=encrypt_data(bind_password),
             base_dn=base_dn,
             user_search_filter=user_search_filter,
-            is_active=True # Activate by default if we are migrating
+            is_active=True,  # Activate by default if we are migrating
         )
-        
+
         self.stdout.write(self.style.SUCCESS("Successfully migrated LDAP configuration to database."))

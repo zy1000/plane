@@ -142,30 +142,20 @@ SITE_ID = 1
 AUTH_USER_MODEL = "db.User"
 
 # Database
-# if bool(os.environ.get("DATABASE_URL")):
-#     # Parse database configuration from $DATABASE_URL
-#     DATABASES = {"default": dj_database_url.config()}
-# else:
-#     DATABASES = {
-#         "default": {
-#             "ENGINE": "django.db.backends.postgresql",
-#             "NAME": os.environ.get("POSTGRES_DB"),
-#             "USER": os.environ.get("POSTGRES_USER"),
-#             "PASSWORD": os.environ.get("POSTGRES_PASSWORD"),
-#             "HOST": os.environ.get("POSTGRES_HOST"),
-#             "PORT": os.environ.get("POSTGRES_PORT", "5432"),
-#         }
-#     }
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": 'plane',
-        "USER": 'plane',
-        "PASSWORD": 'plane',
-        "HOST": '10.32.190.226',
-        "PORT": 5432,
+if bool(os.environ.get("DATABASE_URL")):
+    # Parse database configuration from $DATABASE_URL
+    DATABASES = {"default": dj_database_url.config()}
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": os.environ.get("POSTGRES_DB", "plane"),
+            "USER": os.environ.get("POSTGRES_USER", "plane"),
+            "PASSWORD": os.environ.get("POSTGRES_PASSWORD", "plane"),
+            "HOST": os.environ.get("POSTGRES_HOST", "plane-db"),
+            "PORT": os.environ.get("POSTGRES_PORT", "5432"),
+        }
     }
-}
 
 if os.environ.get("ENABLE_READ_REPLICA", "0") == "1":
     if bool(os.environ.get("DATABASE_READ_REPLICA_URL")):
@@ -188,7 +178,12 @@ if os.environ.get("ENABLE_READ_REPLICA", "0") == "1":
 
 
 # Redis Config
-REDIS_URL = 'redis://10.32.190.226:6379/0'
+REDIS_URL = os.environ.get("REDIS_URL")
+if not REDIS_URL:
+    redis_host = os.environ.get("REDIS_HOST", "plane-redis")
+    redis_port = os.environ.get("REDIS_PORT", "6379")
+    redis_db = os.environ.get("REDIS_DB", "0")
+    REDIS_URL = f"redis://{redis_host}:{redis_port}/{redis_db}"
 REDIS_SSL = REDIS_URL and "rediss" in REDIS_URL
 
 if REDIS_SSL:
@@ -482,5 +477,5 @@ MONGO_DB_URL = os.environ.get("MONGO_DB_URL", False)
 MONGO_DB_DATABASE = os.environ.get("MONGO_DB_DATABASE", False)
 
 # onlyoffice
-ONLYOFFICE_DOCUMENT_SERVER_URL= os.environ.get("ONLYOFFICE_DOCUMENT_SERVER_URL", "http://10.32.190.226:89")
+ONLYOFFICE_DOCUMENT_SERVER_URL = os.environ.get("ONLYOFFICE_DOCUMENT_SERVER_URL", "http://localhost:89")
 ONLYOFFICE_JWT_ENABLED = os.environ.get("ONLYOFFICE_JWT_ENABLED", "0") == "1"

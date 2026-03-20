@@ -37,6 +37,7 @@ Getting started with Plane is simple. Choose the setup that works best for you:
 
 - **Self-host Plane**
   Prefer full control over your data and infrastructure? Install and run Plane on your own servers. Follow our detailed [deployment guides](https://developers.plane.so/self-hosting/overview) to get started.
+  For building this repository directly with the bundled Compose stack, see [docs/docker-compose-deploy.md](./docs/docker-compose-deploy.md).
 
 | Installation methods | Docs link                                                                                                                                                                               |
 | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
