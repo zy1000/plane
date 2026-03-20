@@ -295,7 +295,7 @@ CELERY_IMPORTS = (
     "plane.bgtasks.issue_description_version_sync",
 )
 
-FILE_SIZE_LIMIT = int(os.environ.get("FILE_SIZE_LIMIT", 52428800))
+FILE_SIZE_LIMIT = int(os.environ.get("FILE_SIZE_LIMIT", 104857600))
 
 # Unsplash Access key
 UNSPLASH_ACCESS_KEY = os.environ.get("UNSPLASH_ACCESS_KEY")
@@ -313,7 +313,7 @@ POSTHOG_HOST = os.environ.get("POSTHOG_HOST", False)
 # Skip environment variable configuration
 SKIP_ENV_VAR = os.environ.get("SKIP_ENV_VAR", "1") == "1"
 
-DATA_UPLOAD_MAX_MEMORY_SIZE = int(os.environ.get("FILE_SIZE_LIMIT", 5242880))
+DATA_UPLOAD_MAX_MEMORY_SIZE = int(os.environ.get("FILE_SIZE_LIMIT", 104857600))
 
 # Cookie Settings
 SESSION_COOKIE_SECURE = secure_origins
