@@ -14,6 +14,15 @@ const viteEnv = Object.keys(process.env)
     return a;
   }, {});
 
+const devLanHost = process.env.DEV_PUBLIC_HOST;
+const devHmrClientPort = process.env.DEV_HMR_CLIENT_PORT ? Number(process.env.DEV_HMR_CLIENT_PORT) : undefined;
+const useLanHmr =
+  Boolean(devLanHost) &&
+  devLanHost !== "127.0.0.1" &&
+  devLanHost !== "localhost" &&
+  devHmrClientPort != null &&
+  !Number.isNaN(devHmrClientPort);
+
 export default defineConfig(() => ({
   define: {
     "process.env": JSON.stringify(viteEnv),
@@ -33,6 +42,12 @@ export default defineConfig(() => ({
   },
   server: {
     host: "127.0.0.1",
+    ...(useLanHmr
+      ? {
+          allowedHosts: true,
+          hmr: { host: devLanHost!, clientPort: devHmrClientPort! },
+        }
+      : {}),
   },
   // No SSR-specific overrides needed; alias resolves to ESM build
 }));

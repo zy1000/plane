@@ -1,0 +1,367 @@
+# 本地开发：基础设施 + 后端 Django runserver + 前端 Vite 热更新（源码 bind mount）。
+# 前置：准备 apps/api/.env（可参考 apps/api/.env.example，数据库/Redis/MQ/MinIO 主机名使用 compose 服务名）。
+#
+# 推荐：使用仓库根目录 dev.env（公网地址已写死为 10.32.190.212）作为 compose 变量来源：
+#   pnpm docker:dev
+# 或：
+#   docker compose --env-file dev.env -f docker-compose.dev.yml up --build
+#
+# 若不用 dev.env：compose 会读项目根目录 .env；未设置时 DEV_PUBLIC_HOST 默认为 127.0.0.1。
+# 从其他机器访问时也可在 .env 中设置 DEV_PUBLIC_HOST（勿带 http:// 与端口）。
+#
+# 默认端口：Web 3000 / Admin 3001 / Space 3002 / Live 3003 / API 8000 / MinIO 控制台 9090
+# 若仍无法连接：检查宿主机防火墙；端口映射绑定 DEV_BIND_ADDRESS（dev.env 中为 0.0.0.0）。
+
+x-db-env: &db-env
+  POSTGRES_USER: ${POSTGRES_USER:-plane}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-plane}
+  POSTGRES_DB: ${POSTGRES_DB:-plane}
+  POSTGRES_HOST: ${POSTGRES_HOST:-plane-db}
+  POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+  PGDATA: ${PGDATA:-/var/lib/postgresql/data}
+
+x-redis-env: &redis-env
+  REDIS_HOST: ${REDIS_HOST:-plane-redis}
+  REDIS_PORT: ${REDIS_PORT:-6379}
+  REDIS_DB: ${REDIS_DB:-0}
+  REDIS_URL: ${REDIS_URL:-redis://plane-redis:6379/0}
+
+x-mq-env: &mq-env
+  RABBITMQ_HOST: ${RABBITMQ_HOST:-plane-mq}
+  RABBITMQ_PORT: ${RABBITMQ_PORT:-5672}
+  RABBITMQ_USER: ${RABBITMQ_USER:-plane}
+  RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-plane}
+  RABBITMQ_VHOST: ${RABBITMQ_VHOST:-plane}
+
+# 浏览器端 URL：默认本机；局域网访问请设置 DEV_PUBLIC_HOST（见文件头说明）。
+x-public-env: &public-env
+  DEBUG: ${DEBUG:-1}
+  SECRET_KEY: ${SECRET_KEY:-change-me-to-a-long-random-string}
+  ALLOWED_HOSTS: ${ALLOWED_HOSTS:-*}
+  CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://${DEV_PUBLIC_HOST:-127.0.0.1}:${DEV_WEB_PORT:-3000},http://${DEV_PUBLIC_HOST:-127.0.0.1}:${DEV_ADMIN_PORT:-3001},http://${DEV_PUBLIC_HOST:-127.0.0.1}:${DEV_SPACE_PORT:-3002},http://${DEV_PUBLIC_HOST:-127.0.0.1}:${DEV_LIVE_PORT:-3003},http://127.0.0.1:${DEV_WEB_PORT:-3000},http://127.0.0.1:${DEV_ADMIN_PORT:-3001},http://127.0.0.1:${DEV_SPACE_PORT:-3002},http://127.0.0.1:${DEV_LIVE_PORT:-3003},http://localhost:${DEV_WEB_PORT:-3000},http://localhost:${DEV_ADMIN_PORT:-3001},http://localhost:${DEV_SPACE_PORT:-3002},http://localhost:${DEV_LIVE_PORT:-3003}}
+  WEB_URL: ${WEB_URL:-http://${DEV_PUBLIC_HOST:-127.0.0.1}:${DEV_WEB_PORT:-3000}}
+  APP_BASE_URL: ${APP_BASE_URL:-http://${DEV_PUBLIC_HOST:-127.0.0.1}:${DEV_WEB_PORT:-3000}}
+  APP_BASE_PATH: ${APP_BASE_PATH:-}
+  ADMIN_BASE_URL: ${ADMIN_BASE_URL:-http://${DEV_PUBLIC_HOST:-127.0.0.1}:${DEV_ADMIN_PORT:-3001}}
+  ADMIN_BASE_PATH: ${ADMIN_BASE_PATH:-/god-mode}
+  SPACE_BASE_URL: ${SPACE_BASE_URL:-http://${DEV_PUBLIC_HOST:-127.0.0.1}:${DEV_SPACE_PORT:-3002}}
+  SPACE_BASE_PATH: ${SPACE_BASE_PATH:-/spaces}
+  LIVE_BASE_URL: ${LIVE_BASE_URL:-http://${DEV_PUBLIC_HOST:-127.0.0.1}:${DEV_LIVE_PORT:-3003}}
+  LIVE_BASE_PATH: ${LIVE_BASE_PATH:-/live}
+  LIVE_SERVER_SECRET_KEY: ${LIVE_SERVER_SECRET_KEY:-change-me-live-secret}
+  ONLYOFFICE_DOCUMENT_SERVER_URL: ${ONLYOFFICE_DOCUMENT_SERVER_URL:-http://127.0.0.1:89}
+  GUNICORN_WORKERS: ${GUNICORN_WORKERS:-2}
+  USE_MINIO: ${USE_MINIO:-1}
+  MINIO_ENDPOINT_SSL: ${MINIO_ENDPOINT_SSL:-0}
+  FILE_SIZE_LIMIT: ${FILE_SIZE_LIMIT:-104857600}
+  SIGNED_URL_EXPIRATION: ${SIGNED_URL_EXPIRATION:-3600}
+  API_KEY_RATE_LIMIT: ${API_KEY_RATE_LIMIT:-60/minute}
+
+x-aws-s3-env: &aws-s3-env
+  AWS_REGION: ${AWS_REGION:-}
+  AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-access-key}
+  AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-secret-key}
+  AWS_S3_ENDPOINT_URL: ${AWS_S3_ENDPOINT_URL:-http://plane-minio:9000}
+  AWS_S3_BUCKET_NAME: ${AWS_S3_BUCKET_NAME:-uploads}
+
+# 前端 Vite 在浏览器端请求 API，须为其他电脑能访问的宿主机地址（不要用容器名 api）。
+x-vite-browser-env: &vite-browser-env
+  VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://${DEV_PUBLIC_HOST:-127.0.0.1}:${DEV_API_PORT:-8000}}
+  VITE_API_BASE_PATH: ${VITE_API_BASE_PATH:-/api}
+  VITE_WEB_BASE_URL: ${VITE_WEB_BASE_URL:-http://${DEV_PUBLIC_HOST:-127.0.0.1}:${DEV_WEB_PORT:-3000}}
+  VITE_WEB_BASE_PATH: ${VITE_WEB_BASE_PATH:-}
+  VITE_ADMIN_BASE_URL: ${VITE_ADMIN_BASE_URL:-http://${DEV_PUBLIC_HOST:-127.0.0.1}:${DEV_ADMIN_PORT:-3001}}
+  VITE_ADMIN_BASE_PATH: ${VITE_ADMIN_BASE_PATH:-/god-mode}
+  VITE_SPACE_BASE_URL: ${VITE_SPACE_BASE_URL:-http://${DEV_PUBLIC_HOST:-127.0.0.1}:${DEV_SPACE_PORT:-3002}}
+  VITE_SPACE_BASE_PATH: ${VITE_SPACE_BASE_PATH:-/spaces}
+  VITE_LIVE_BASE_URL: ${VITE_LIVE_BASE_URL:-http://${DEV_PUBLIC_HOST:-127.0.0.1}:${DEV_LIVE_PORT:-3003}}
+  VITE_LIVE_BASE_PATH: ${VITE_LIVE_BASE_PATH:-/live}
+  VITE_WEBSITE_URL: ${VITE_WEBSITE_URL:-http://${DEV_PUBLIC_HOST:-127.0.0.1}:${DEV_WEB_PORT:-3000}}
+  VITE_SUPPORT_EMAIL: ${VITE_SUPPORT_EMAIL:-support@example.com}
+
+x-dev-backend-env: &dev-backend-env
+  <<: [*public-env, *db-env, *redis-env, *mq-env, *aws-s3-env]
+  DJANGO_SETTINGS_MODULE: plane.settings.local
+
+services:
+  web:
+    container_name: plane-dev-web
+    image: plane-dev-web
+    build:
+      context: .
+      dockerfile: ./apps/web/Dockerfile.dev
+    restart: unless-stopped
+    working_dir: /app
+    volumes:
+      - .:/app
+      - web-root-node-modules:/app/node_modules
+      - web-app-node-modules:/app/apps/web/node_modules
+    ports:
+      - "${DEV_BIND_ADDRESS:-0.0.0.0}:${DEV_WEB_PORT:-3000}:3000"
+    environment:
+      <<: *vite-browser-env
+      DEV_PUBLIC_HOST: ${DEV_PUBLIC_HOST:-127.0.0.1}
+      DEV_HMR_CLIENT_PORT: ${DEV_WEB_PORT:-3000}
+    depends_on:
+      api:
+        condition: service_started
+
+  admin:
+    container_name: plane-dev-admin
+    image: plane-dev-admin
+    build:
+      context: .
+      dockerfile: ./apps/admin/Dockerfile.dev
+    restart: unless-stopped
+    working_dir: /app
+    volumes:
+      - .:/app
+      - admin-root-node-modules:/app/node_modules
+      - admin-app-node-modules:/app/apps/admin/node_modules
+    ports:
+      - "${DEV_BIND_ADDRESS:-0.0.0.0}:${DEV_ADMIN_PORT:-3001}:3001"
+    environment:
+      <<: *vite-browser-env
+      DEV_PUBLIC_HOST: ${DEV_PUBLIC_HOST:-127.0.0.1}
+      DEV_HMR_CLIENT_PORT: ${DEV_ADMIN_PORT:-3001}
+    depends_on:
+      api:
+        condition: service_started
+
+  space:
+    container_name: plane-dev-space
+    image: plane-dev-space
+    build:
+      context: .
+      dockerfile: ./apps/space/Dockerfile.dev
+    restart: unless-stopped
+    working_dir: /app
+    volumes:
+      - .:/app
+      - space-root-node-modules:/app/node_modules
+      - space-app-node-modules:/app/apps/space/node_modules
+    ports:
+      - "${DEV_BIND_ADDRESS:-0.0.0.0}:${DEV_SPACE_PORT:-3002}:3002"
+    environment:
+      <<: *vite-browser-env
+      DEV_PUBLIC_HOST: ${DEV_PUBLIC_HOST:-127.0.0.1}
+      DEV_HMR_CLIENT_PORT: ${DEV_SPACE_PORT:-3002}
+    depends_on:
+      api:
+        condition: service_started
+
+  live:
+    container_name: plane-dev-live
+    image: plane-dev-live
+    build:
+      context: .
+      dockerfile: ./apps/live/Dockerfile.dev
+    restart: unless-stopped
+    working_dir: /app
+    volumes:
+      - .:/app
+      - live-root-node-modules:/app/node_modules
+      - live-app-node-modules:/app/apps/live/node_modules
+    ports:
+      - "${DEV_BIND_ADDRESS:-0.0.0.0}:${DEV_LIVE_PORT:-3003}:3003"
+    environment:
+      PORT: "3003"
+      API_BASE_URL: http://api:8000
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://${DEV_PUBLIC_HOST:-127.0.0.1}:${DEV_WEB_PORT:-3000},http://${DEV_PUBLIC_HOST:-127.0.0.1}:${DEV_ADMIN_PORT:-3001},http://${DEV_PUBLIC_HOST:-127.0.0.1}:${DEV_SPACE_PORT:-3002},http://${DEV_PUBLIC_HOST:-127.0.0.1}:${DEV_LIVE_PORT:-3003},http://127.0.0.1:${DEV_WEB_PORT:-3000},http://127.0.0.1:${DEV_ADMIN_PORT:-3001},http://127.0.0.1:${DEV_SPACE_PORT:-3002},http://127.0.0.1:${DEV_LIVE_PORT:-3003},http://localhost:${DEV_WEB_PORT:-3000},http://localhost:${DEV_ADMIN_PORT:-3001},http://localhost:${DEV_SPACE_PORT:-3002},http://localhost:${DEV_LIVE_PORT:-3003}}
+      LIVE_BASE_URL: ${LIVE_BASE_URL:-http://${DEV_PUBLIC_HOST:-127.0.0.1}:${DEV_LIVE_PORT:-3003}}
+      LIVE_BASE_PATH: ${LIVE_BASE_PATH:-/live}
+      LIVE_SERVER_SECRET_KEY: ${LIVE_SERVER_SECRET_KEY:-change-me-live-secret}
+      REDIS_URL: ${REDIS_URL:-redis://plane-redis:6379/0}
+      REDIS_HOST: ${REDIS_HOST:-plane-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+    depends_on:
+      api:
+        condition: service_started
+      plane-redis:
+        condition: service_healthy
+
+  migrator:
+    container_name: plane-dev-migrator
+    image: plane-dev-api
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile.dev
+      args:
+        DOCKER_BUILDKIT: 1
+    restart: "no"
+    command: ["./bin/docker-entrypoint-migrator.sh", "--settings=plane.settings.local"]
+    working_dir: /code
+    volumes:
+      - ./apps/api:/code
+    environment:
+      <<: *dev-backend-env
+    env_file:
+      - ./apps/api/.env
+    depends_on:
+      plane-db:
+        condition: service_healthy
+      plane-redis:
+        condition: service_healthy
+      plane-mq:
+        condition: service_healthy
+
+  api:
+    container_name: plane-dev-api
+    image: plane-dev-api
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile.dev
+      args:
+        DOCKER_BUILDKIT: 1
+    restart: unless-stopped
+    command: ./bin/docker-entrypoint-api-local.sh
+    working_dir: /code
+    volumes:
+      - ./apps/api:/code
+    ports:
+      - "${DEV_BIND_ADDRESS:-0.0.0.0}:${DEV_API_PORT:-8000}:8000"
+    environment:
+      <<: *dev-backend-env
+    env_file:
+      - ./apps/api/.env
+    depends_on:
+      plane-db:
+        condition: service_healthy
+      plane-redis:
+        condition: service_healthy
+      plane-mq:
+        condition: service_healthy
+      migrator:
+        condition: service_completed_successfully
+
+  worker:
+    container_name: plane-dev-worker
+    image: plane-dev-api
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile.dev
+      args:
+        DOCKER_BUILDKIT: 1
+    restart: unless-stopped
+    command: ./bin/docker-entrypoint-worker.sh
+    working_dir: /code
+    volumes:
+      - ./apps/api:/code
+    environment:
+      <<: *dev-backend-env
+    env_file:
+      - ./apps/api/.env
+    depends_on:
+      api:
+        condition: service_started
+      plane-db:
+        condition: service_healthy
+      plane-redis:
+        condition: service_healthy
+      plane-mq:
+        condition: service_healthy
+      migrator:
+        condition: service_completed_successfully
+
+  beat-worker:
+    container_name: plane-dev-beat-worker
+    image: plane-dev-api
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile.dev
+      args:
+        DOCKER_BUILDKIT: 1
+    restart: unless-stopped
+    command: ./bin/docker-entrypoint-beat.sh
+    working_dir: /code
+    volumes:
+      - ./apps/api:/code
+    environment:
+      <<: *dev-backend-env
+    env_file:
+      - ./apps/api/.env
+    depends_on:
+      api:
+        condition: service_started
+      plane-db:
+        condition: service_healthy
+      plane-redis:
+        condition: service_healthy
+      plane-mq:
+        condition: service_healthy
+      migrator:
+        condition: service_completed_successfully
+
+  plane-db:
+    container_name: plane-dev-db
+    image: postgres:15.7-alpine
+    restart: unless-stopped
+    command: postgres -c 'max_connections=1000'
+    volumes:
+      - dev_pgdata:/var/lib/postgresql/data
+    environment:
+      <<: *db-env
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-plane} -d ${POSTGRES_DB:-plane}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  plane-redis:
+    container_name: plane-dev-redis
+    image: valkey/valkey:7.2.5-alpine
+    restart: unless-stopped
+    volumes:
+      - dev_redisdata:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping || valkey-cli ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  plane-mq:
+    container_name: plane-dev-mq
+    image: rabbitmq:3.13.6-management-alpine
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-plane}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-plane}
+      RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_VHOST:-plane}
+    volumes:
+      - dev_rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 15s
+
+  plane-minio:
+    container_name: plane-dev-minio
+    image: minio/minio
+    restart: unless-stopped
+    command: server /export --console-address ":9090"
+    volumes:
+      - dev_uploads:/export
+    ports:
+      - "${DEV_BIND_ADDRESS:-0.0.0.0}:${DEV_MINIO_API_PORT:-9000}:9000"
+      - "${DEV_BIND_ADDRESS:-0.0.0.0}:${DEV_MINIO_CONSOLE_PORT:-9090}:9090"
+    environment:
+      MINIO_ROOT_USER: ${AWS_ACCESS_KEY_ID:-access-key}
+      MINIO_ROOT_PASSWORD: ${AWS_SECRET_ACCESS_KEY:-secret-key}
+
+volumes:
+  dev_pgdata:
+  dev_redisdata:
+  dev_uploads:
+  dev_rabbitmq_data:
+  web-root-node-modules:
+  web-app-node-modules:
+  admin-root-node-modules:
+  admin-app-node-modules:
+  space-root-node-modules:
+  space-app-node-modules:
+  live-root-node-modules:
+  live-app-node-modules:

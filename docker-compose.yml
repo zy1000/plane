@@ -149,6 +149,8 @@ services:
         condition: service_healthy
       migrator:
         condition: service_completed_successfully
+    ports:
+      - "8000:8000"
 
   worker:
     container_name: bgworker
@@ -238,6 +240,8 @@ services:
       timeout: 5s
       retries: 10
       start_period: 10s
+    ports:
+      - "5432:5432"
 
   plane-redis:
     container_name: plane-redis
@@ -251,6 +255,9 @@ services:
       timeout: 5s
       retries: 10
       start_period: 5s
+    ports:
+      - "16739:6739"
+
 
   plane-mq:
     container_name: plane-mq
@@ -268,6 +275,9 @@ services:
       timeout: 10s
       retries: 10
       start_period: 15s
+    ports:
+      - "5672:5672"
+      - "15672:15672"
 
   plane-minio:
     container_name: plane-minio
@@ -279,6 +289,9 @@ services:
     environment:
       MINIO_ROOT_USER: ${AWS_ACCESS_KEY_ID:-access-key}
       MINIO_ROOT_PASSWORD: ${AWS_SECRET_ACCESS_KEY:-secret-key}
+    ports:
+      - "19000:9000"
+      - "19090:9090"
 
   # Comment this if you already have a reverse proxy running
   proxy:

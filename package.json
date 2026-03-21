@@ -17,6 +17,7 @@
     "check:lint": "turbo run check:lint",
     "check:format": "turbo run check:format",
     "check:types": "turbo run check:types",
+    "docker:dev": "docker compose --env-file dev.env -f docker-compose.dev.yml up --build",
     "prepare": "husky"
   },
   "devDependencies": {

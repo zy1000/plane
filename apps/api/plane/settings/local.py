@@ -6,7 +6,7 @@
 
 import os
 
-from .common import *  # noqa
+from .local_common import *  # noqa
 
 DEBUG = True
 SECRET_KEY = os.environ.get("SECRET_KEY", "dev-secret-key-do-not-use-in-prod")
