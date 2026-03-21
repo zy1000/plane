@@ -4,18 +4,26 @@
  * See the LICENSE file for details.
  */
 
+import { useCallback, useMemo } from "react";
+import { usePathname } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { observer } from "mobx-react";
 // plane imports
 import { ROLE_DETAILS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
-import { Logo } from "@plane/propel/emoji-icon-picker";
 import { IconButton } from "@plane/propel/icon-button";
+import { ProjectIcon } from "@plane/propel/icons";
+import type { ICustomSearchSelectOption } from "@plane/types";
+import { CustomSearchSelect } from "@plane/ui";
+// components
+import { SwitcherLabel } from "@/components/common/switcher-label";
 // hooks
 import { useUserPermissions } from "@/hooks/store/user";
 import { useAppRouter } from "@/hooks/use-app-router";
 import { useProject } from "@/hooks/store/use-project";
 import { useWorkspace } from "@/hooks/store/use-workspace";
+// local imports
+import { ProjectHeaderButton } from "../../../navigation/project-header-button";
 
 type Props = {
   projectId: string;
@@ -25,19 +33,59 @@ export const ProjectSettingsSidebarHeader = observer(function ProjectSettingsSid
   const { projectId } = props;
   // router
   const router = useAppRouter();
+  const pathname = usePathname();
   // store hooks
   const { getProjectRoleByWorkspaceSlugAndProjectId } = useUserPermissions();
   const { currentWorkspace } = useWorkspace();
-  const { getPartialProjectById } = useProject();
+  const { joinedProjectIds, getPartialProjectById } = useProject();
   // derived values
   const projectDetails = getPartialProjectById(projectId);
   const currentProjectRole = currentWorkspace?.slug
     ? getProjectRoleByWorkspaceSlugAndProjectId(currentWorkspace.slug, projectId)
     : undefined;
+  const switcherOptions = useMemo<ICustomSearchSelectOption[]>(
+    () =>
+      joinedProjectIds
+        .map((id): ICustomSearchSelectOption | null => {
+          const project = getPartialProjectById(id);
+          if (!project) return null;
+
+          return {
+            value: id,
+            query: project.name,
+            content: (
+              <SwitcherLabel
+                name={project.name}
+                logo_props={project.logo_props}
+                LabelIcon={ProjectIcon}
+                type="material"
+              />
+            ),
+          };
+        })
+        .filter((option): option is ICustomSearchSelectOption => option !== null),
+    [joinedProjectIds, getPartialProjectById]
+  );
   // translation
   const { t } = useTranslation();
 
-  if (!currentProjectRole) return null;
+  const handleProjectChange = useCallback(
+    (value: string) => {
+      const workspaceSlug = currentWorkspace?.slug;
+      if (!workspaceSlug || value === projectId) return;
+
+      const currentPathPrefix = `/${workspaceSlug}/settings/projects/${projectId}`;
+      const nextPathPrefix = `/${workspaceSlug}/settings/projects/${value}`;
+      const nextPath = pathname.startsWith(currentPathPrefix)
+        ? pathname.replace(currentPathPrefix, nextPathPrefix)
+        : nextPathPrefix;
+
+      router.push(nextPath.endsWith("/") ? nextPath : `${nextPath}/`);
+    },
+    [currentWorkspace?.slug, pathname, projectId, router]
+  );
+
+  if (!currentProjectRole || !projectDetails) return null;
 
   return (
     <div className="shrink-0">
@@ -50,14 +98,18 @@ export const ProjectSettingsSidebarHeader = observer(function ProjectSettingsSid
         />
         <p>Project settings</p>
       </div>
-      <div className="mt-1.5 flex items-center gap-2 truncate px-5 py-0.5">
-        <div className="grid size-8 shrink-0 place-items-center rounded bg-layer-2">
-          <Logo logo={projectDetails?.logo_props} size={20} />
-        </div>
-        <div className="truncate">
-          <p className="truncate text-body-sm-medium">{projectDetails?.name}</p>
-          <p className="truncate text-caption-md-regular">{t(ROLE_DETAILS[currentProjectRole].i18n_title)}</p>
-        </div>
+      <div className="mt-1.5 px-5 py-0.5">
+        <CustomSearchSelect
+          options={switcherOptions}
+          value={projectDetails.id}
+          onChange={handleProjectChange}
+          customButton={<ProjectHeaderButton project={projectDetails} />}
+          className="w-full rounded"
+          customButtonClassName="group flex w-full items-center rounded-sm hover:bg-surface-2 outline-none cursor-pointer"
+        />
+        <p className="mt-1 truncate pl-9 text-caption-md-regular">
+          {t(ROLE_DETAILS[currentProjectRole].i18n_title)}
+        </p>
       </div>
     </div>
   );

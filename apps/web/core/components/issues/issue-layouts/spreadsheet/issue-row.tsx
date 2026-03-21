@@ -275,12 +275,12 @@ const IssueRowDetails = observer(function IssueRowDetails(props: IssueRowDetails
         id={`issue-${issueId}`}
         ref={cellRef}
         tabIndex={0}
-        className="group/list-block relative left-0 z-10 max-w-lg bg-surface-1 md:sticky"
+        className="group/list-block relative left-0 z-10 w-[360px] min-w-[360px] max-w-[360px] bg-surface-1 md:sticky"
       >
         <ControlLink
           href={workItemLink}
           onClick={() => handleIssuePeekOverview(issueDetail)}
-          className="outline-none"
+          className="block w-full outline-none"
           disabled={!!issueDetail?.tempId}
         >
           <Row
@@ -305,10 +305,7 @@ const IssueRowDetails = observer(function IssueRowDetails(props: IssueRowDetails
 
             {/* Workitem section */}
             <div
-              className={cn("flex flex-grow items-center gap-0.5 py-2", {
-                "min-w-[360px]": !displayProperties?.key,
-                "min-w-60": displayProperties?.key,
-              })}
+              className="flex w-full min-w-0 items-center gap-0.5 py-2"
             >
               {/* select checkbox */}
               {projectId && canSelectIssues && (
@@ -344,7 +341,7 @@ const IssueRowDetails = observer(function IssueRowDetails(props: IssueRowDetails
               {nestingLevel !== 0 && <div style={{ width: subIssueIndentation }} />}
 
               {/* sub-issues chevron */}
-              <div className="grid size-4 place-items-center">
+              <div className="grid size-4 flex-shrink-0 place-items-center">
                 {subIssuesCount > 0 && !isEpic && (
                   <button
                     type="button"

@@ -126,7 +126,7 @@ export const SidebarMenuItems = observer(function SidebarMenuItems() {
         {/* Favorites Menu */}
         {canPerformWorkspaceMemberActions && !isFavoriteEmpty && (
           <>
-            <hr className="my-1 border-subtle" />
+            <hr className="mt-2 mb-1 border-subtle" />
             <SidebarFavoritesMenu />
           </>
         )}
