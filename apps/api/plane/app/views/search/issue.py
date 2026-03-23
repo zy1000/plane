@@ -101,7 +101,6 @@ class IssueSearchEndpoint(BaseAPIView):
         """
         issues = issues.exclude(
             Q(issue_cycle__isnull=False) & Q(issue_cycle__deleted_at__isnull=True))
-        issues = issues.exclude(type__name__in=['史诗', '特性'])
 
         return issues
 

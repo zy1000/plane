@@ -81,6 +81,25 @@ const detectMimeTypeFromSignature = async (file: File): Promise<string> => {
   }
 };
 
+/** Plain-text and similar types have no reliable magic bytes; map extension when signature + browser type are empty. */
+const mimeTypeFromFilenameExtension = (filename: string): string => {
+  const ext = filename.split(".").pop()?.toLowerCase() ?? "";
+  const map: Record<string, string> = {
+    md: "text/markdown",
+    markdown: "text/markdown",
+    txt: "text/plain",
+    csv: "text/csv",
+    json: "application/json",
+    xml: "text/xml",
+    css: "text/css",
+    js: "text/javascript",
+    mjs: "text/javascript",
+    cjs: "text/javascript",
+    sql: "application/x-sql",
+  };
+  return map[ext] ?? "";
+};
+
 /**
  * @description Validate and detect the MIME type of a file using signature detection
  * Also performs basic security checks on filename
@@ -103,8 +122,11 @@ const validateAndDetectFileType = async (file: File): Promise<string> => {
     console.warn("Error detecting file type from signature:", _error);
   }
 
-  // fallback for unknown files
-  return "";
+  if (file.type) {
+    return file.type;
+  }
+
+  return mimeTypeFromFilenameExtension(file.name);
 };
 
 /**
