@@ -6,9 +6,10 @@
 
 import { useCallback, useState } from "react";
 import { observer } from "mobx-react";
+import { usePathname } from "next/navigation";
 import { ChartNoAxesColumn, SlidersHorizontal } from "lucide-react";
 // plane imports
-import { EIssueFilterType, ISSUE_STORE_TO_FILTERS_MAP } from "@plane/constants";
+import { EIssueFilterType, ISSUE_DISPLAY_FILTERS_BY_PAGE, ISSUE_STORE_TO_FILTERS_MAP } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import type { IIssueDisplayFilterOptions, IIssueDisplayProperties } from "@plane/types";
@@ -54,13 +55,24 @@ export const HeaderFilters = observer(function HeaderFilters(props: Props) {
   const { t } = useTranslation();
   // states
   const [analyticsModal, setAnalyticsModal] = useState(false);
+  // router — detect typed pages (requirements / defects)
+  const pathname = usePathname();
+  const typedVariant = pathname?.includes("/requirements")
+    ? "requirements"
+    : pathname?.includes("/defects")
+      ? "defects"
+      : null;
+  // typed pages use a variant-scoped filter entityId to keep their instances isolated
+  const filterEntityId = typedVariant ? `${projectId}_${typedVariant}` : projectId;
   // store hooks
   const {
     issuesFilter: { issueFilters, updateFilters },
   } = useIssues(storeType);
   // derived values
   const activeLayout = issueFilters?.displayFilters?.layout;
-  const layoutDisplayFiltersOptions = ISSUE_STORE_TO_FILTERS_MAP[storeType]?.layoutOptions[activeLayout];
+  const layoutDisplayFiltersOptions = typedVariant
+    ? (ISSUE_DISPLAY_FILTERS_BY_PAGE[typedVariant] as any)?.layoutOptions?.[activeLayout]
+    : ISSUE_STORE_TO_FILTERS_MAP[storeType]?.layoutOptions[activeLayout];
 
   const handleLayoutChange = useCallback(
     (layout: EIssueLayoutTypes) => {
@@ -108,7 +120,7 @@ export const HeaderFilters = observer(function HeaderFilters(props: Props) {
           activeLayout={activeLayout}
         />
       </div>
-      <WorkItemFiltersToggle entityType={storeType} entityId={projectId} />
+      <WorkItemFiltersToggle entityType={storeType} entityId={filterEntityId} />
       <FiltersDropdown
         miniIcon={<SlidersHorizontal className="size-3.5" />}
         title={t("common.display")}

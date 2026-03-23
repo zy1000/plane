@@ -16,6 +16,8 @@ export default {
     views: "视图",
     analytics: "分析",
     work_items: "工作项",
+    requirements: "需求",
+    defects: "缺陷",
     cycles: "迭代",
     modules: "发布",
     intake: "收集",

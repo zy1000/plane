@@ -151,6 +151,20 @@ export const coreRoutes: RouteConfigEntry[] = [
               "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/issues/(list)/page.tsx"
             ),
           ]),
+          // Requirements List (epic / feature / user story)
+          layout("./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/requirements/(list)/layout.tsx", [
+            route(
+              ":workspaceSlug/projects/:projectId/requirements",
+              "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/requirements/(list)/page.tsx"
+            ),
+          ]),
+          // Defects List (bug / defect)
+          layout("./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/defects/(list)/layout.tsx", [
+            route(
+              ":workspaceSlug/projects/:projectId/defects",
+              "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/defects/(list)/page.tsx"
+            ),
+          ]),
           // Issue Detail
           route(
             ":workspaceSlug/projects/:projectId/issues/:issueId",

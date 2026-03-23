@@ -10,7 +10,7 @@ import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 import { CycleIcon, IntakeIcon, ModuleIcon, PageIcon, TestManagementIcon, ViewsIcon, WorkItemsIcon } from "@plane/propel/icons";
 import type { EUserProjectRoles, IPartialProject } from "@plane/types";
 import type { TNavigationItem } from "@/components/navigation/tab-navigation-root";
-import { ArchiveIcon, BarChart3, Folder, Milestone, Rss } from "lucide-react";
+import { ArchiveIcon, BarChart3, BookOpenText, Bug, Folder, Milestone, Rss } from "lucide-react";
 
 type UseNavigationItemsProps = {
   workspaceSlug: string;
@@ -62,6 +62,26 @@ export const useNavigationItems = ({
         access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
         shouldRender: true,
         sortOrder: 1,
+      },
+      {
+        i18n_key: "sidebar.requirements",
+        key: "requirements",
+        name: "需求",
+        href: `/${workspaceSlug}/projects/${projectId}/requirements`,
+        icon: BookOpenText,
+        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
+        shouldRender: true,
+        sortOrder: 1.3,
+      },
+      {
+        i18n_key: "sidebar.defects",
+        key: "defects",
+        name: "缺陷",
+        href: `/${workspaceSlug}/projects/${projectId}/defects`,
+        icon: Bug,
+        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
+        shouldRender: true,
+        sortOrder: 1.6,
       },
       {
         i18n_key: "sidebar.cycles",

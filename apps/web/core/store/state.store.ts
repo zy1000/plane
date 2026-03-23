@@ -46,6 +46,8 @@ export interface IStateStore {
   getProjectIntakeState: (projectId: string | null | undefined) => IIntakeState | undefined;
   getProjectStateIds: (projectId: string | null | undefined) => string[] | undefined;
   getProjectIntakeStateIds: (projectId: string | null | undefined) => string[] | undefined;
+  /** 返回项目内 state_name -> state_ids 的映射（同名状态归组） */
+  getProjectStateNameToIdsMap: (projectId: string | null | undefined) => Map<string, string[]>;
   getProjectDefaultStateId: (projectId: string | null | undefined) => string | undefined;
   getDefaultStateIdByIssueTypeId: (
     projectId: string | null | undefined,

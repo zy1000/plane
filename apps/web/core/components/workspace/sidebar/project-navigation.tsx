@@ -20,6 +20,7 @@ import {
   WorkItemsIcon,
   TestManagementIcon,
 } from "@plane/propel/icons";
+import { BookOpenText, Bug } from "lucide-react";
 import type { EUserProjectRoles } from "@plane/types";
 // plane ui
 // components
@@ -109,6 +110,26 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
         access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
         shouldRender: true,
         sortOrder: 1,
+      },
+      {
+        i18n_key: "sidebar.requirements",
+        key: "requirements",
+        name: "需求",
+        href: `/${workspaceSlug}/projects/${projectId}/requirements`,
+        icon: BookOpenText,
+        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
+        shouldRender: true,
+        sortOrder: 1.3,
+      },
+      {
+        i18n_key: "sidebar.defects",
+        key: "defects",
+        name: "缺陷",
+        href: `/${workspaceSlug}/projects/${projectId}/defects`,
+        icon: Bug,
+        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
+        shouldRender: true,
+        sortOrder: 1.6,
       },
       {
         i18n_key: "sidebar.cycles",

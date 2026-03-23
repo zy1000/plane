@@ -16,6 +16,8 @@ export default {
     views: "Views",
     analytics: "Analytics",
     work_items: "Work items",
+    requirements: "Requirements",
+    defects: "Defects",
     cycles: "Sprints",
     modules: "Releases",
     intake: "Intake",
