@@ -199,11 +199,14 @@ function ImageFullScreenModalWithoutPortal(props: Props) {
 
   return (
     <div
-      className={cn("pointer-events-none fixed inset-0 z-100 size-full bg-black/90 opacity-0 transition-opacity", {
-        "editor-image-full-screen-modal pointer-events-auto opacity-100": isFullScreenEnabled,
-        "cursor-default": !isDragging,
-        "cursor-grabbing": isDragging,
-      })}
+      className={cn(
+        "pointer-events-none fixed inset-0 z-[1400] size-full bg-black/90 opacity-0 transition-opacity",
+        {
+          "editor-image-full-screen-modal pointer-events-auto opacity-100": isFullScreenEnabled,
+          "cursor-default": !isDragging,
+          "cursor-grabbing": isDragging,
+        }
+      )}
       role="dialog"
       aria-modal="true"
       aria-label="Fullscreen image viewer"

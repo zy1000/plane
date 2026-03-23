@@ -621,15 +621,15 @@ class CycleDateCheckEndpoint(BaseAPIView):
                     | Q(start_date__gte=start_date, end_date__lte=end_date)
             )
         ).exclude(pk=cycle_id)
-        if cycles.exists():
-            return Response(
-                {
-                    "error": "You have a cycle already on the given dates, if you want to create a draft cycle you can do that by removing dates",  # noqa: E501
-                    "status": False,
-                }
-            )
-        else:
-            return Response({"status": True}, status=status.HTTP_200_OK)
+        # if cycles.exists():
+        #     return Response(
+        #         {
+        #             "error": "You have a cycle already on the given dates, if you want to create a draft cycle you can do that by removing dates",  # noqa: E501
+        #             "status": False,
+        #         }
+        #     )
+        # else:
+        return Response({"status": True}, status=status.HTTP_200_OK)
 
 
 class CycleFavoriteViewSet(BaseViewSet):
