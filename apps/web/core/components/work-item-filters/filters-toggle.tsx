@@ -11,7 +11,6 @@ import type { EIssuesStoreType } from "@plane/types";
 // components
 import { FiltersToggle } from "@/components/rich-filters/filters-toggle";
 // hooks
-import { useIssues } from "@/hooks/store/use-issues";
 import { useWorkItemFilters } from "@/hooks/store/work-item-filters/use-work-item-filters";
 
 type TWorkItemFiltersToggleProps = {
@@ -24,11 +23,7 @@ export const WorkItemFiltersToggle = observer(function WorkItemFiltersToggle(pro
   const { entityType, entityId, initialExpression: initialExpressionProp } = props;
   // store hooks
   const { getFilter, getOrCreateFilter } = useWorkItemFilters();
-  const { issuesFilter } = useIssues(entityType);
-
-  const filtersFromStore =
-    (issuesFilter as any)?.getIssueFilters?.(entityId) ?? (issuesFilter as any)?.issueFilters ?? undefined;
-  const initialExpression = initialExpressionProp ?? filtersFromStore?.richFilters;
+  const initialExpression = initialExpressionProp;
 
   const filter =
     initialExpression === undefined

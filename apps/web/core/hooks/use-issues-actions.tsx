@@ -93,14 +93,26 @@ const useProjectIssueActions = () => {
   const fetchIssues = useCallback(
     async (loadType: TLoader, options: IssuePaginationOptions) => {
       if (!workspaceSlug || !projectId) return;
-      return issues.fetchIssues(workspaceSlug.toString(), projectId.toString(), loadType, options, scope);
+      return issues.fetchIssues(
+        workspaceSlug.toString(),
+        projectId.toString(),
+        loadType,
+        options,
+        scope
+      );
     },
     [issues.fetchIssues, workspaceSlug, projectId, scope]
   );
   const fetchNextIssues = useCallback(
     async (groupId?: string, subGroupId?: string) => {
       if (!workspaceSlug || !projectId) return;
-      return issues.fetchNextIssues(workspaceSlug.toString(), projectId.toString(), groupId, subGroupId, scope);
+      return issues.fetchNextIssues(
+        workspaceSlug.toString(),
+        projectId.toString(),
+        groupId,
+        subGroupId,
+        scope
+      );
     },
     [issues.fetchIssues, workspaceSlug, projectId, scope]
   );

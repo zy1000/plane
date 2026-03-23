@@ -190,11 +190,13 @@ export const TypedProjectLayoutRoot = observer(function TypedProjectLayoutRoot({
 
   useEffect(() => {
     if (!workspaceSlug || !projectId) return;
+    // Wait until scoped filters are initialized to avoid being overridden by fetchFilters.
+    if (!storeFilters) return;
     if (fixedTypeIds.length === 0) return;
     if (isEqual(storeFilters?.richFilters ?? {}, mergedRichFilters)) return;
 
     issuesFilter?.applyLocalRichFilters(workspaceSlug, projectId, mergedRichFilters, scope);
-  }, [workspaceSlug, projectId, fixedTypeIds.length, mergedRichFilters, scope, storeFilters?.richFilters, issuesFilter]);
+  }, [workspaceSlug, projectId, fixedTypeIds.length, mergedRichFilters, scope, storeFilters, storeFilters?.richFilters, issuesFilter]);
 
   useEffect(() => {
     if (!workspaceSlug || !projectId) return;

@@ -67,7 +67,7 @@ export const HeaderFilters = observer(function HeaderFilters(props: Props) {
   // derived values
   const scopedIssueFilters =
     storeType === EIssuesStoreType.PROJECT
-      ? issuesFilter?.getIssueFilters?.(projectId, scope) ?? issuesFilter?.issueFilters
+      ? issuesFilter?.getIssueFilters?.(projectId, scope)
       : issuesFilter?.issueFilters;
   const activeLayout = scopedIssueFilters?.displayFilters?.layout;
   const projectScopeFilterConfig = getProjectScopeFilterConfig(scope);
