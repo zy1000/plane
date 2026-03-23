@@ -1428,6 +1428,11 @@ export default {
     create: {
       label: "Aggiungi progetto",
     },
+    nav: {
+      joined: "Joined projects",
+      all: "All projects",
+    },
+    search_in_current_list: "Search projects in the current list",
     network: {
       label: "Rete",
       private: {

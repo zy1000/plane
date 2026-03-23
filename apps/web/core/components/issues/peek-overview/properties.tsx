@@ -220,7 +220,7 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
         </SidebarPropertyListItem>
 
         {/* created by */}
-        {isMetaExpanded && createdByDetails && (
+        {createdByDetails && (
           <SidebarPropertyListItem
             icon={UserCirclePropertyIcon}
             label={t("common.created_by")}

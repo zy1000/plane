@@ -1412,6 +1412,11 @@ export default {
     create: {
       label: "프로젝트 추가",
     },
+    nav: {
+      joined: "Joined projects",
+      all: "All projects",
+    },
+    search_in_current_list: "Search projects in the current list",
     network: {
       label: "네트워크",
       private: {

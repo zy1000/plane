@@ -1405,6 +1405,11 @@ export default {
     create: {
       label: "新增專案",
     },
+    nav: {
+      joined: "已加入專案",
+      all: "全部專案",
+    },
+    search_in_current_list: "在目前清單中搜尋專案",
     network: {
       label: "網路",
       private: {

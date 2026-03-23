@@ -1257,6 +1257,11 @@ export default {
     create: {
       label: "Add Project",
     },
+    nav: {
+      joined: "Joined projects",
+      all: "All projects",
+    },
+    search_in_current_list: "Search projects in the current list",
     network: {
       label: "Network",
       private: {

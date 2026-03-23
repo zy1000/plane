@@ -1414,6 +1414,11 @@ export default {
     create: {
       label: "添加项目",
     },
+    nav: {
+      joined: "已加入项目",
+      all: "全部项目",
+    },
+    search_in_current_list: "在当前列表中搜索项目",
     network: {
       private: {
         title: "私有",
