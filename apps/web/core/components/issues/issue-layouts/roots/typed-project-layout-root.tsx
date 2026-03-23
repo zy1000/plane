@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { isEqual } from "lodash-es";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
@@ -13,7 +13,6 @@ import useSWR from "swr";
 import { ISSUE_DISPLAY_FILTERS_BY_PAGE, PROJECT_VIEW_TRACKER_ELEMENTS } from "@plane/constants";
 import { EIssueLayoutTypes, EIssuesStoreType, LOGICAL_OPERATOR } from "@plane/types";
 import type {
-  IIssueDisplayFilterOptions,
   IIssueFilters,
   TWorkItemFilterExpression,
   TWorkItemFilterProperty,
@@ -26,6 +25,8 @@ import { WorkItemFiltersRow } from "@/components/work-item-filters/filters-row";
 import { useIssues } from "@/hooks/store/use-issues";
 import { useProjectIssueTypes } from "@/hooks/store/use-project-issue-types";
 import { IssuesStoreContext } from "@/hooks/use-issue-layout-store";
+import { getProjectScopeFilterConfig } from "@/components/issues/typed-page-filter-config";
+import { type TProjectIssueScope } from "@/store/issue/project";
 // local imports
 import { IssuePeekOverview } from "../../peek-overview";
 import { CalendarLayout } from "../calendar/roots/project-root";
@@ -49,36 +50,6 @@ const REQUIREMENTS_TYPE_NAMES = ["史诗", "epic", "特性", "feature", "用户�
 
 /** 缺陷页面匹配的类型名称（支持中英文） */
 const DEFECTS_TYPE_NAMES = ["缺陷", "bug", "defect"];
-
-const TYPED_PAGE_FILTER_KEY = "plane_typed_page_rich_filters";
-
-// ─── LocalStorage helpers ─────────────────────────────────────────────────────
-
-function loadLocalRichFilters(projectId: string, variant: TTypedPageVariant): TWorkItemFilterExpression | null {
-  try {
-    const raw = localStorage.getItem(TYPED_PAGE_FILTER_KEY);
-    if (!raw) return null;
-    const all = JSON.parse(raw);
-    return all?.[`${projectId}_${variant}`] ?? null;
-  } catch {
-    return null;
-  }
-}
-
-function saveLocalRichFilters(
-  projectId: string,
-  variant: TTypedPageVariant,
-  richFilters: TWorkItemFilterExpression
-): void {
-  try {
-    const raw = localStorage.getItem(TYPED_PAGE_FILTER_KEY);
-    const all = raw ? JSON.parse(raw) : {};
-    all[`${projectId}_${variant}`] = richFilters;
-    localStorage.setItem(TYPED_PAGE_FILTER_KEY, JSON.stringify(all));
-  } catch {
-    // ignore storage errors
-  }
-}
 
 // ─── Type name matching ───────────────────────────────────────────────────────
 
@@ -189,123 +160,77 @@ export const TypedProjectLayoutRoot = observer(function TypedProjectLayoutRoot({
     return issueTypes.filter((t) => matchesAnyName(t.name ?? "", allowedTypeNames)).map((t) => t.id);
   }, [issueTypes, allowedTypeNames]);
 
-  // ── Local rich-filter state (user's expression WITHOUT type condition) ─
-  const [localRichFilters, setLocalRichFilters] = useState<TWorkItemFilterExpression>(() => {
-    if (!projectId) return {};
-    return loadLocalRichFilters(projectId, variant) ?? {};
-  });
+  const scope = variant as TProjectIssueScope;
 
-  // ── Save originals to restore on unmount ──────────────────────────────
-  const originalRichFiltersRef = useRef<TWorkItemFilterExpression>({});
-  const originalGroupByRef = useRef<IIssueDisplayFilterOptions["group_by"] | undefined>(undefined);
-  const hasSavedOriginalRef = useRef(false);
-
-  // ── 切换项目或 typed variant 时，同步各自独立的本地筛选状态 ────────────
   useEffect(() => {
-    if (!projectId) return;
+    issuesFilter?.setActiveScope(scope);
+  }, [issuesFilter, scope]);
 
-    setLocalRichFilters(loadLocalRichFilters(projectId, variant) ?? {});
-    originalRichFiltersRef.current = {};
-    originalGroupByRef.current = undefined;
-    hasSavedOriginalRef.current = false;
-  }, [projectId, variant]);
-
-  // ── Fetch base project filters once (for displayFilters defaults) ──────
   useSWR(
     workspaceSlug && projectId ? `TYPED_PAGE_INIT_${variant}_${workspaceSlug}_${projectId}` : null,
     async () => {
       if (!workspaceSlug || !projectId) return;
-      await issuesFilter?.fetchFilters(workspaceSlug, projectId);
-
-      if (!hasSavedOriginalRef.current) {
-        const loaded = issuesFilter?.getIssueFilters(projectId);
-        originalRichFiltersRef.current = loaded?.richFilters ?? {};
-        originalGroupByRef.current = loaded?.displayFilters?.group_by;
-        hasSavedOriginalRef.current = true;
-      }
+      issuesFilter?.setActiveScope(scope);
+      await issuesFilter?.fetchFilters(workspaceSlug, projectId, scope);
     },
     { revalidateIfStale: false, revalidateOnFocus: false }
   );
 
-  // ── Derived display state ───────────────────────────────────────────────
-  const storeFilters = projectId ? issuesFilter?.getIssueFilters(projectId) : undefined;
+  const storeFilters = projectId ? issuesFilter?.getIssueFilters(projectId, scope) : undefined;
   const activeLayout = storeFilters?.displayFilters?.layout;
-
-  const mergedRichFilters = useMemo(
-    () => mergeWithFixedTypeCondition(localRichFilters, fixedTypeIds),
-    [localRichFilters, fixedTypeIds]
+  const userRichFilters = useMemo(
+    () => stripTypeIdFromExpression(storeFilters?.richFilters ?? {}),
+    [storeFilters?.richFilters]
   );
 
-  // ── 保持当前 typed 页面的固定 type 条件始终生效，避免切页时被其它页面覆盖
+  const mergedRichFilters = useMemo(
+    () => mergeWithFixedTypeCondition(userRichFilters, fixedTypeIds),
+    [userRichFilters, fixedTypeIds]
+  );
+
   useEffect(() => {
     if (!workspaceSlug || !projectId) return;
     if (fixedTypeIds.length === 0) return;
     if (isEqual(storeFilters?.richFilters ?? {}, mergedRichFilters)) return;
 
-    issuesFilter?.applyLocalRichFilters(workspaceSlug, projectId, mergedRichFilters);
-  }, [workspaceSlug, projectId, fixedTypeIds.length, mergedRichFilters, storeFilters?.richFilters, issuesFilter]);
+    issuesFilter?.applyLocalRichFilters(workspaceSlug, projectId, mergedRichFilters, scope);
+  }, [workspaceSlug, projectId, fixedTypeIds.length, mergedRichFilters, scope, storeFilters?.richFilters, issuesFilter]);
 
-  // ── 问题#2：在 kanban 布局时将 group_by 强制覆盖为 "state"（不持久化）──
-  // 仅在布局切换到 kanban 时触发，不监听 group_by 避免覆盖用户手动修改
   useEffect(() => {
     if (!workspaceSlug || !projectId) return;
     const layout = storeFilters?.displayFilters?.layout;
     const groupBy = storeFilters?.displayFilters?.group_by;
 
     if (layout === "kanban" && groupBy === "state_detail.group") {
-      issuesFilter?.applyLocalDisplayFilters(workspaceSlug, projectId, { group_by: "state" });
+      issuesFilter?.applyLocalDisplayFilters(workspaceSlug, projectId, { group_by: "state" }, scope);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [storeFilters?.displayFilters?.layout, workspaceSlug, projectId]);
+  }, [storeFilters?.displayFilters?.layout, workspaceSlug, projectId, scope, issuesFilter]);
 
-  // ── 卸载时恢复 richFilters 和 group_by ────────────────────────────────
-  useEffect(() => {
-    return () => {
-      if (!projectId) return;
-      issuesFilter?.restoreLocalRichFilters(projectId, originalRichFiltersRef.current);
-      if (originalGroupByRef.current !== undefined) {
-        issuesFilter?.restoreLocalDisplayFilters(projectId, { group_by: originalGroupByRef.current });
-      }
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId]);
-
-  // Build the initialWorkItemFilters for the HOC:
-  // richFilters = user expression (without type) — for the filter UI
-  // displayFilters/displayProperties/kanbanFilters = from shared project store
   const initialWorkItemFilters: IIssueFilters | undefined = useMemo(() => {
     if (!storeFilters) return undefined;
     return {
-      richFilters: localRichFilters,
+      richFilters: userRichFilters,
       displayFilters: storeFilters.displayFilters,
       displayProperties: storeFilters.displayProperties,
       kanbanFilters: storeFilters.kanbanFilters,
     };
-  }, [storeFilters, localRichFilters]);
+  }, [storeFilters, userRichFilters]);
 
-  // ── Custom updateFilters: merge type, update store, save to localStorage
   const handleUpdateFilters = useCallback(
     async (expression: TWorkItemFilterExpression) => {
       if (!workspaceSlug || !projectId) return;
 
-      // 1. Strip any type conditions from user expression and save to localStorage
       const userExprWithoutType = stripTypeIdFromExpression(expression);
-      setLocalRichFilters(userExprWithoutType);
-      saveLocalRichFilters(projectId, variant, userExprWithoutType);
-
-      // 2. Merge with fixed type IDs and apply to store (triggers data refresh)
       if (fixedTypeIds.length > 0) {
         const merged = mergeWithFixedTypeCondition(userExprWithoutType, fixedTypeIds);
-        issuesFilter?.applyLocalRichFilters(workspaceSlug, projectId, merged);
+        issuesFilter?.applyLocalRichFilters(workspaceSlug, projectId, merged, scope);
       }
     },
-    [workspaceSlug, projectId, variant, fixedTypeIds, issuesFilter]
+    [workspaceSlug, projectId, fixedTypeIds, issuesFilter, scope]
   );
 
   // ── Filters config (same as issues but without type_id) ────────────────
-  const filtersConfig = (
-    variant === "requirements" ? ISSUE_DISPLAY_FILTERS_BY_PAGE["requirements"] : ISSUE_DISPLAY_FILTERS_BY_PAGE["defects"]
-  ) as { filters: TWorkItemFilterProperty[] };
+  const filtersConfig = getProjectScopeFilterConfig(scope) as { filters: TWorkItemFilterProperty[] };
 
   // Wait for issue types and store filters to be ready before rendering layout
   // This prevents a brief flash of unfiltered data

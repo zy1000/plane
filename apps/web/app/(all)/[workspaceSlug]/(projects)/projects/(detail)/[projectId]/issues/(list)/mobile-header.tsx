@@ -6,7 +6,7 @@
 
 import { useCallback, useState } from "react";
 import { observer } from "mobx-react";
-import { useParams } from "next/navigation";
+import { useParams, usePathname } from "next/navigation";
 // plane imports
 import { EIssueFilterType, ISSUE_DISPLAY_FILTERS_BY_PAGE } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
@@ -23,42 +23,60 @@ import {
 // hooks
 import { useIssues } from "@/hooks/store/use-issues";
 import { useProject } from "@/hooks/store/use-project";
+import { getProjectScopeFilterConfig } from "@/components/issues/typed-page-filter-config";
+import { getProjectIssueScopeFromPathname } from "@/store/issue/project";
 
 export const ProjectIssuesMobileHeader = observer(function ProjectIssuesMobileHeader() {
   // i18n
   const { t } = useTranslation();
   const [analyticsModal, setAnalyticsModal] = useState(false);
   const { workspaceSlug, projectId } = useParams();
+  const pathname = usePathname();
   const { currentProjectDetails } = useProject();
+  const scope = getProjectIssueScopeFromPathname(pathname);
 
   // store hooks
-  const {
-    issuesFilter: { issueFilters, updateFilters },
-  } = useIssues(EIssuesStoreType.PROJECT);
-  const activeLayout = issueFilters?.displayFilters?.layout;
+  const { issuesFilter } = useIssues(EIssuesStoreType.PROJECT);
+  const scopedIssueFilters = projectId ? issuesFilter.getIssueFilters(projectId.toString(), scope) : issuesFilter.issueFilters;
+  const activeLayout = scopedIssueFilters?.displayFilters?.layout;
+  const projectScopeFilterConfig = getProjectScopeFilterConfig(scope);
 
   const handleLayoutChange = useCallback(
     (layout: EIssueLayoutTypes) => {
       if (!workspaceSlug || !projectId) return;
-      updateFilters(workspaceSlug, projectId, EIssueFilterType.DISPLAY_FILTERS, { layout: layout });
+      issuesFilter.updateFilters(workspaceSlug.toString(), projectId.toString(), EIssueFilterType.DISPLAY_FILTERS, {
+        layout: layout,
+      }, scope);
     },
-    [workspaceSlug, projectId, updateFilters]
+    [workspaceSlug, projectId, issuesFilter, scope]
   );
 
   const handleDisplayFilters = useCallback(
     (updatedDisplayFilter: Partial<IIssueDisplayFilterOptions>) => {
       if (!workspaceSlug || !projectId) return;
-      updateFilters(workspaceSlug, projectId, EIssueFilterType.DISPLAY_FILTERS, updatedDisplayFilter);
+      issuesFilter.updateFilters(
+        workspaceSlug.toString(),
+        projectId.toString(),
+        EIssueFilterType.DISPLAY_FILTERS,
+        updatedDisplayFilter,
+        scope
+      );
     },
-    [workspaceSlug, projectId, updateFilters]
+    [workspaceSlug, projectId, issuesFilter, scope]
   );
 
   const handleDisplayProperties = useCallback(
     (property: Partial<IIssueDisplayProperties>) => {
       if (!workspaceSlug || !projectId) return;
-      updateFilters(workspaceSlug, projectId, EIssueFilterType.DISPLAY_PROPERTIES, property);
+      issuesFilter.updateFilters(
+        workspaceSlug.toString(),
+        projectId.toString(),
+        EIssueFilterType.DISPLAY_PROPERTIES,
+        property,
+        scope
+      );
     },
-    [workspaceSlug, projectId, updateFilters]
+    [workspaceSlug, projectId, issuesFilter, scope]
   );
 
   return (
@@ -86,11 +104,11 @@ export const ProjectIssuesMobileHeader = observer(function ProjectIssuesMobileHe
           >
             <DisplayFiltersSelection
               layoutDisplayFiltersOptions={
-                activeLayout ? ISSUE_DISPLAY_FILTERS_BY_PAGE.issues.layoutOptions[activeLayout] : undefined
+                activeLayout ? projectScopeFilterConfig.layoutOptions[activeLayout] : undefined
               }
-              displayFilters={issueFilters?.displayFilters ?? {}}
+              displayFilters={scopedIssueFilters?.displayFilters ?? {}}
               handleDisplayFiltersUpdate={handleDisplayFilters}
-              displayProperties={issueFilters?.displayProperties ?? {}}
+              displayProperties={scopedIssueFilters?.displayProperties ?? {}}
               handleDisplayPropertiesUpdate={handleDisplayProperties}
               cycleViewDisabled={!currentProjectDetails?.cycle_view}
               moduleViewDisabled={!currentProjectDetails?.module_view}

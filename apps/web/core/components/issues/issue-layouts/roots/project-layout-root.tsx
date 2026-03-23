@@ -4,6 +4,7 @@
  * See the LICENSE file for details.
  */
 
+import { useEffect } from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 import useSWR from "swr";
@@ -17,6 +18,7 @@ import { WorkItemFiltersRow } from "@/components/work-item-filters/filters-row";
 // hooks
 import { useIssues } from "@/hooks/store/use-issues";
 import { IssuesStoreContext } from "@/hooks/use-issue-layout-store";
+import { DEFAULT_PROJECT_ISSUE_SCOPE } from "@/store/issue/project";
 // local imports
 import { IssuePeekOverview } from "../../peek-overview";
 import { CalendarLayout } from "../calendar/roots/project-root";
@@ -50,14 +52,19 @@ export const ProjectLayoutRoot = observer(function ProjectLayoutRoot() {
   // hooks
   const { issues, issuesFilter } = useIssues(EIssuesStoreType.PROJECT);
   // derived values
-  const workItemFilters = projectId ? issuesFilter?.getIssueFilters(projectId) : undefined;
+  const workItemFilters = projectId ? issuesFilter?.getIssueFilters(projectId, DEFAULT_PROJECT_ISSUE_SCOPE) : undefined;
   const activeLayout = workItemFilters?.displayFilters?.layout;
+
+  useEffect(() => {
+    issuesFilter?.setActiveScope(DEFAULT_PROJECT_ISSUE_SCOPE);
+  }, [issuesFilter]);
 
   useSWR(
     workspaceSlug && projectId ? `PROJECT_ISSUES_${workspaceSlug}_${projectId}` : null,
     async () => {
       if (workspaceSlug && projectId) {
-        await issuesFilter?.fetchFilters(workspaceSlug, projectId);
+        issuesFilter?.setActiveScope(DEFAULT_PROJECT_ISSUE_SCOPE);
+        await issuesFilter?.fetchFilters(workspaceSlug, projectId, DEFAULT_PROJECT_ISSUE_SCOPE);
       }
     },
     { revalidateIfStale: false, revalidateOnFocus: false }
@@ -72,7 +79,9 @@ export const ProjectLayoutRoot = observer(function ProjectLayoutRoot() {
         entityId={projectId}
         filtersToShowByLayout={ISSUE_DISPLAY_FILTERS_BY_PAGE.issues.filters}
         initialWorkItemFilters={workItemFilters}
-        updateFilters={issuesFilter?.updateFilterExpression.bind(issuesFilter, workspaceSlug, projectId)}
+        updateFilters={(expression) =>
+          issuesFilter?.updateFilterExpression(workspaceSlug, projectId, expression, DEFAULT_PROJECT_ISSUE_SCOPE)
+        }
         projectId={projectId}
         workspaceSlug={workspaceSlug}
       >

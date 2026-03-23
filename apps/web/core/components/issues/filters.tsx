@@ -18,6 +18,8 @@ import { EIssueLayoutTypes, EIssuesStoreType } from "@plane/types";
 import { useIssues } from "@/hooks/store/use-issues";
 // plane web imports
 import type { TProject } from "@/plane-web/types";
+import { getProjectScopeFilterConfig } from "@/components/issues/typed-page-filter-config";
+import { getProjectIssueScopeFromPathname } from "@/store/issue/project";
 // local imports
 import { WorkItemsModal } from "../analytics/work-items/modal";
 import { WorkItemFiltersToggle } from "../work-item-filters/filters-toggle";
@@ -57,45 +59,45 @@ export const HeaderFilters = observer(function HeaderFilters(props: Props) {
   const [analyticsModal, setAnalyticsModal] = useState(false);
   // router — detect typed pages (requirements / defects)
   const pathname = usePathname();
-  const typedVariant = pathname?.includes("/requirements")
-    ? "requirements"
-    : pathname?.includes("/defects")
-      ? "defects"
-      : null;
+  const scope = getProjectIssueScopeFromPathname(pathname);
   // typed pages use a variant-scoped filter entityId to keep their instances isolated
-  const filterEntityId = typedVariant ? `${projectId}_${typedVariant}` : projectId;
+  const filterEntityId = scope === "issues" ? projectId : `${projectId}_${scope}`;
   // store hooks
-  const {
-    issuesFilter: { issueFilters, updateFilters },
-  } = useIssues(storeType);
+  const { issuesFilter } = useIssues(storeType);
   // derived values
-  const activeLayout = issueFilters?.displayFilters?.layout;
-  const layoutDisplayFiltersOptions = typedVariant
-    ? (ISSUE_DISPLAY_FILTERS_BY_PAGE[typedVariant] as any)?.layoutOptions?.[activeLayout]
-    : ISSUE_STORE_TO_FILTERS_MAP[storeType]?.layoutOptions[activeLayout];
+  const scopedIssueFilters =
+    storeType === EIssuesStoreType.PROJECT
+      ? issuesFilter?.getIssueFilters?.(projectId, scope) ?? issuesFilter?.issueFilters
+      : issuesFilter?.issueFilters;
+  const activeLayout = scopedIssueFilters?.displayFilters?.layout;
+  const projectScopeFilterConfig = getProjectScopeFilterConfig(scope);
+  const layoutDisplayFiltersOptions =
+    storeType === EIssuesStoreType.PROJECT
+      ? projectScopeFilterConfig?.layoutOptions?.[activeLayout]
+      : ISSUE_STORE_TO_FILTERS_MAP[storeType]?.layoutOptions[activeLayout];
 
   const handleLayoutChange = useCallback(
     (layout: EIssueLayoutTypes) => {
       if (!workspaceSlug || !projectId) return;
-      updateFilters(workspaceSlug, projectId, EIssueFilterType.DISPLAY_FILTERS, { layout: layout });
+      issuesFilter.updateFilters(workspaceSlug, projectId, EIssueFilterType.DISPLAY_FILTERS, { layout: layout }, scope);
     },
-    [workspaceSlug, projectId, updateFilters]
+    [workspaceSlug, projectId, issuesFilter, scope]
   );
 
   const handleDisplayFilters = useCallback(
     (updatedDisplayFilter: Partial<IIssueDisplayFilterOptions>) => {
       if (!workspaceSlug || !projectId) return;
-      updateFilters(workspaceSlug, projectId, EIssueFilterType.DISPLAY_FILTERS, updatedDisplayFilter);
+      issuesFilter.updateFilters(workspaceSlug, projectId, EIssueFilterType.DISPLAY_FILTERS, updatedDisplayFilter, scope);
     },
-    [workspaceSlug, projectId, updateFilters]
+    [workspaceSlug, projectId, issuesFilter, scope]
   );
 
   const handleDisplayProperties = useCallback(
     (property: Partial<IIssueDisplayProperties>) => {
       if (!workspaceSlug || !projectId) return;
-      updateFilters(workspaceSlug, projectId, EIssueFilterType.DISPLAY_PROPERTIES, property);
+      issuesFilter.updateFilters(workspaceSlug, projectId, EIssueFilterType.DISPLAY_PROPERTIES, property, scope);
     },
-    [workspaceSlug, projectId, updateFilters]
+    [workspaceSlug, projectId, issuesFilter, scope]
   );
 
   return (
@@ -120,7 +122,11 @@ export const HeaderFilters = observer(function HeaderFilters(props: Props) {
           activeLayout={activeLayout}
         />
       </div>
-      <WorkItemFiltersToggle entityType={storeType} entityId={filterEntityId} />
+      <WorkItemFiltersToggle
+        entityType={storeType}
+        entityId={filterEntityId}
+        initialExpression={scopedIssueFilters?.richFilters}
+      />
       <FiltersDropdown
         miniIcon={<SlidersHorizontal className="size-3.5" />}
         title={t("common.display")}
@@ -128,9 +134,9 @@ export const HeaderFilters = observer(function HeaderFilters(props: Props) {
       >
         <DisplayFiltersSelection
           layoutDisplayFiltersOptions={layoutDisplayFiltersOptions}
-          displayFilters={issueFilters?.displayFilters ?? {}}
+          displayFilters={scopedIssueFilters?.displayFilters ?? {}}
           handleDisplayFiltersUpdate={handleDisplayFilters}
-          displayProperties={issueFilters?.displayProperties ?? {}}
+          displayProperties={scopedIssueFilters?.displayProperties ?? {}}
           handleDisplayPropertiesUpdate={handleDisplayProperties}
           cycleViewDisabled={!currentProjectDetails?.cycle_view}
           moduleViewDisabled={!currentProjectDetails?.module_view}

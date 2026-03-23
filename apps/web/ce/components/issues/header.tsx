@@ -5,7 +5,7 @@
  */
 
 import { observer } from "mobx-react";
-import { useParams } from "next/navigation";
+import { useParams, usePathname } from "next/navigation";
 // icons
 import { Circle, ClipboardCheck } from "lucide-react";
 // plane imports
@@ -43,11 +43,14 @@ import { usePlatformOS } from "@/hooks/use-platform-os";
 import { useWorkflowApprovals } from "@/hooks/store/use-workflow-approvals";
 // plane web imports
 import { CommonProjectBreadcrumbs } from "@/plane-web/components/breadcrumbs/common";
+import { getProjectIssueScopeFromPathname } from "@/store/issue/project";
 
 export const IssuesHeader = observer(function IssuesHeader() {
   // router
   const router = useAppRouter();
   const { workspaceSlug, projectId } = useParams();
+  const pathname = usePathname();
+  const scope = getProjectIssueScopeFromPathname(pathname);
   const { issues } = useIssues(EIssuesStoreType.PROJECT);
   // store hooks
   const {
@@ -122,7 +125,12 @@ export const IssuesHeader = observer(function IssuesHeader() {
       if (workspaceSlug && projectId) {
         await fetchProjectLabels(workspaceSlug.toString(), projectId.toString());
       }
-      await issues.fetchIssuesWithExistingPagination(workspaceSlug?.toString(), projectId?.toString(), "mutation");
+      await issues.fetchIssuesWithExistingPagination(
+        workspaceSlug?.toString(),
+        projectId?.toString(),
+        "mutation",
+        scope
+      );
     } catch (err: any) {
       console.error(err);
       message.error(err?.error || "导入失败");

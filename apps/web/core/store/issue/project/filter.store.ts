@@ -30,6 +30,11 @@ import { IssueFilterHelperStore } from "../helpers/issue-filter-helper.store";
 // types
 import type { IIssueRootStore } from "../root.store";
 import { ProjectService } from "@/services/project";
+import {
+  DEFAULT_PROJECT_ISSUE_SCOPE,
+  getProjectIssueScopeKey,
+  type TProjectIssueScope,
+} from "./scope";
 // constants
 // services
 
@@ -100,44 +105,63 @@ function expandStateConditionData(
 
 export interface IProjectIssuesFilter extends IBaseIssueFilterStore {
   //helper actions
+  setActiveScope: (scope: TProjectIssueScope) => void;
   getFilterParams: (
     options: IssuePaginationOptions,
     projectId: string,
     cursor: string | undefined,
     groupId: string | undefined,
-    subGroupId: string | undefined
+    subGroupId: string | undefined,
+    scope?: TProjectIssueScope
   ) => Partial<Record<TIssueParams, string | boolean>>;
-  getIssueFilters(projectId: string): IIssueFilters | undefined;
+  getIssueFilters(projectId: string, scope?: TProjectIssueScope): IIssueFilters | undefined;
   // action
-  fetchFilters: (workspaceSlug: string, projectId: string) => Promise<void>;
+  fetchFilters: (workspaceSlug: string, projectId: string, scope?: TProjectIssueScope) => Promise<void>;
   updateFilterExpression: (
     workspaceSlug: string,
     projectId: string,
-    filters: TWorkItemFilterExpression
+    filters: TWorkItemFilterExpression,
+    scope?: TProjectIssueScope
   ) => Promise<void>;
   updateFilters: (
     workspaceSlug: string,
     projectId: string,
     filterType: TSupportedFilterTypeForUpdate,
-    filters: TSupportedFilterForUpdate
+    filters: TSupportedFilterForUpdate,
+    scope?: TProjectIssueScope
   ) => Promise<void>;
   /** 仅更新内存中的 richFilters 并触发数据刷新，不回写后端（供 typed 页面使用） */
-  applyLocalRichFilters: (workspaceSlug: string, projectId: string, richFilters: TWorkItemFilterExpression) => void;
+  applyLocalRichFilters: (
+    workspaceSlug: string,
+    projectId: string,
+    richFilters: TWorkItemFilterExpression,
+    scope?: TProjectIssueScope
+  ) => void;
   /** 仅重置内存中的 richFilters，不触发数据刷新（供 typed 页面卸载时恢复用） */
-  restoreLocalRichFilters: (projectId: string, richFilters: TWorkItemFilterExpression) => void;
+  restoreLocalRichFilters: (
+    projectId: string,
+    richFilters: TWorkItemFilterExpression,
+    scope?: TProjectIssueScope
+  ) => void;
   /** 仅更新内存中的 displayFilters 并触发数据刷新，不回写后端（供 typed 页面使用） */
   applyLocalDisplayFilters: (
     workspaceSlug: string,
     projectId: string,
-    displayFilters: Partial<IIssueDisplayFilterOptions>
+    displayFilters: Partial<IIssueDisplayFilterOptions>,
+    scope?: TProjectIssueScope
   ) => void;
   /** 仅重置内存中的 displayFilters，不触发数据刷新（供 typed 页面卸载时恢复用） */
-  restoreLocalDisplayFilters: (projectId: string, displayFilters: Partial<IIssueDisplayFilterOptions>) => void;
+  restoreLocalDisplayFilters: (
+    projectId: string,
+    displayFilters: Partial<IIssueDisplayFilterOptions>,
+    scope?: TProjectIssueScope
+  ) => void;
 }
 
 export class ProjectIssuesFilter extends IssueFilterHelperStore implements IProjectIssuesFilter {
   // observables
   filters: { [projectId: string]: IIssueFilters } = {};
+  activeScope: TProjectIssueScope = DEFAULT_PROJECT_ISSUE_SCOPE;
   // root store
   rootIssueStore: IIssueRootStore;
   // services
@@ -148,10 +172,12 @@ export class ProjectIssuesFilter extends IssueFilterHelperStore implements IProj
     makeObservable(this, {
       // observables
       filters: observable,
+      activeScope: observable,
       // computed
       issueFilters: computed,
       appliedFilters: computed,
       // actions
+      setActiveScope: action,
       fetchFilters: action,
       updateFilterExpression: action,
       updateFilters: action,
@@ -166,29 +192,33 @@ export class ProjectIssuesFilter extends IssueFilterHelperStore implements IProj
     this.projectService = new ProjectService();
   }
 
+  setActiveScope = (scope: TProjectIssueScope) => {
+    this.activeScope = scope;
+  };
+
   get issueFilters() {
     const projectId = this.rootIssueStore.projectId;
     if (!projectId) return undefined;
 
-    return this.getIssueFilters(projectId);
+    return this.getIssueFilters(projectId, this.activeScope);
   }
 
   get appliedFilters() {
     const projectId = this.rootIssueStore.projectId;
     if (!projectId) return undefined;
 
-    return this.getAppliedFilters(projectId);
+    return this.getAppliedFilters(projectId, this.activeScope);
   }
 
-  getIssueFilters(projectId: string) {
-    const displayFilters = this.filters[projectId] || undefined;
+  getIssueFilters(projectId: string, scope: TProjectIssueScope = this.activeScope) {
+    const displayFilters = this.filters[getProjectIssueScopeKey(projectId, scope)] || undefined;
     if (isEmpty(displayFilters)) return undefined;
 
     return this.computedIssueFilters(displayFilters);
   }
 
-  getAppliedFilters(projectId: string) {
-    const userFilters = this.getIssueFilters(projectId);
+  getAppliedFilters(projectId: string, scope: TProjectIssueScope = this.activeScope) {
+    const userFilters = this.getIssueFilters(projectId, scope);
     if (!userFilters) return undefined;
 
     const filteredParams = handleIssueQueryParamsByLayout(userFilters?.displayFilters?.layout, "issues");
@@ -214,15 +244,23 @@ export class ProjectIssuesFilter extends IssueFilterHelperStore implements IProj
       projectId: string,
       cursor: string | undefined,
       groupId: string | undefined,
-      subGroupId: string | undefined
+      subGroupId: string | undefined,
+      scope: TProjectIssueScope = this.activeScope
     ) => {
-      const filterParams = this.getAppliedFilters(projectId);
+      const filterParams = this.getAppliedFilters(projectId, scope);
       const paginationParams = this.getPaginationParams(filterParams, options, cursor, groupId, subGroupId);
       return paginationParams;
     }
   );
 
-  fetchFilters = async (workspaceSlug: string, projectId: string) => {
+  fetchFilters = async (
+    workspaceSlug: string,
+    projectId: string,
+    scope: TProjectIssueScope = this.activeScope
+  ) => {
+    const scopedKey = getProjectIssueScopeKey(projectId, scope);
+    if (scope !== DEFAULT_PROJECT_ISSUE_SCOPE && !isEmpty(this.filters[scopedKey])) return;
+
     const _filters = await this.projectService.getProjectUserProperties(workspaceSlug, projectId);
 
     const richFilters = _filters?.rich_filters;
@@ -239,7 +277,7 @@ export class ProjectIssuesFilter extends IssueFilterHelperStore implements IProj
       const _kanbanFilters = this.handleIssuesLocalFilters.get(
         EIssuesStoreType.PROJECT,
         workspaceSlug,
-        projectId,
+        scopedKey,
         currentUserId
       );
       kanbanFilters.group_by = _kanbanFilters?.kanban_filters?.group_by || [];
@@ -247,10 +285,10 @@ export class ProjectIssuesFilter extends IssueFilterHelperStore implements IProj
     }
 
     runInAction(() => {
-      set(this.filters, [projectId, "richFilters"], richFilters);
-      set(this.filters, [projectId, "displayFilters"], displayFilters);
-      set(this.filters, [projectId, "displayProperties"], displayProperties);
-      set(this.filters, [projectId, "kanbanFilters"], kanbanFilters);
+      set(this.filters, [scopedKey, "richFilters"], richFilters);
+      set(this.filters, [scopedKey, "displayFilters"], displayFilters);
+      set(this.filters, [scopedKey, "displayProperties"], displayProperties);
+      set(this.filters, [scopedKey, "kanbanFilters"], kanbanFilters);
     });
   };
 
@@ -262,32 +300,43 @@ export class ProjectIssuesFilter extends IssueFilterHelperStore implements IProj
   updateFilterExpression: IProjectIssuesFilter["updateFilterExpression"] = async (
     workspaceSlug,
     projectId,
-    filters
+    filters,
+    scope = this.activeScope
   ) => {
+    const scopedKey = getProjectIssueScopeKey(projectId, scope);
     try {
       runInAction(() => {
-        set(this.filters, [projectId, "richFilters"], filters);
+        set(this.filters, [scopedKey, "richFilters"], filters);
       });
 
-      this.rootIssueStore.projectIssues.fetchIssuesWithExistingPagination(workspaceSlug, projectId, "mutation");
-      await this.projectService.updateProjectUserProperties(workspaceSlug, projectId, {
-        rich_filters: filters,
-      });
+      this.rootIssueStore.projectIssues.fetchIssuesWithExistingPagination(workspaceSlug, projectId, "mutation", scope);
+      if (scope === DEFAULT_PROJECT_ISSUE_SCOPE) {
+        await this.projectService.updateProjectUserProperties(workspaceSlug, projectId, {
+          rich_filters: filters,
+        });
+      }
     } catch (error) {
       console.log("error while updating rich filters", error);
       throw error;
     }
   };
 
-  updateFilters: IProjectIssuesFilter["updateFilters"] = async (workspaceSlug, projectId, type, filters) => {
+  updateFilters: IProjectIssuesFilter["updateFilters"] = async (
+    workspaceSlug,
+    projectId,
+    type,
+    filters,
+    scope = this.activeScope
+  ) => {
+    const scopedKey = getProjectIssueScopeKey(projectId, scope);
     try {
-      if (isEmpty(this.filters) || isEmpty(this.filters[projectId])) return;
+      if (isEmpty(this.filters) || isEmpty(this.filters[scopedKey])) return;
 
       const _filters = {
-        richFilters: this.filters[projectId].richFilters,
-        displayFilters: this.filters[projectId].displayFilters as IIssueDisplayFilterOptions,
-        displayProperties: this.filters[projectId].displayProperties as IIssueDisplayProperties,
-        kanbanFilters: this.filters[projectId].kanbanFilters as TIssueKanbanFilters,
+        richFilters: this.filters[scopedKey].richFilters,
+        displayFilters: this.filters[scopedKey].displayFilters as IIssueDisplayFilterOptions,
+        displayProperties: this.filters[scopedKey].displayProperties as IIssueDisplayProperties,
+        kanbanFilters: this.filters[scopedKey].kanbanFilters as TIssueKanbanFilters,
       };
 
       switch (type) {
@@ -317,7 +366,7 @@ export class ProjectIssuesFilter extends IssueFilterHelperStore implements IProj
             Object.keys(updatedDisplayFilters).forEach((_key) => {
               set(
                 this.filters,
-                [projectId, "displayFilters", _key],
+                [scopedKey, "displayFilters", _key],
                 updatedDisplayFilters[_key as keyof IIssueDisplayFilterOptions]
               );
             });
@@ -328,12 +377,14 @@ export class ProjectIssuesFilter extends IssueFilterHelperStore implements IProj
           }
 
           if (this.getShouldReFetchIssues(updatedDisplayFilters)) {
-            this.rootIssueStore.projectIssues.fetchIssuesWithExistingPagination(workspaceSlug, projectId, "mutation");
+            this.rootIssueStore.projectIssues.fetchIssuesWithExistingPagination(workspaceSlug, projectId, "mutation", scope);
           }
 
-          await this.projectService.updateProjectUserProperties(workspaceSlug, projectId, {
-            display_filters: _filters.displayFilters,
-          });
+          if (scope === DEFAULT_PROJECT_ISSUE_SCOPE) {
+            await this.projectService.updateProjectUserProperties(workspaceSlug, projectId, {
+              display_filters: _filters.displayFilters,
+            });
+          }
 
           break;
         }
@@ -345,15 +396,17 @@ export class ProjectIssuesFilter extends IssueFilterHelperStore implements IProj
             Object.keys(updatedDisplayProperties).forEach((_key) => {
               set(
                 this.filters,
-                [projectId, "displayProperties", _key],
+                [scopedKey, "displayProperties", _key],
                 updatedDisplayProperties[_key as keyof IIssueDisplayProperties]
               );
             });
           });
 
-          await this.projectService.updateProjectUserProperties(workspaceSlug, projectId, {
-            display_properties: _filters.displayProperties,
-          });
+          if (scope === DEFAULT_PROJECT_ISSUE_SCOPE) {
+            await this.projectService.updateProjectUserProperties(workspaceSlug, projectId, {
+              display_properties: _filters.displayProperties,
+            });
+          }
           break;
         }
 
@@ -363,7 +416,7 @@ export class ProjectIssuesFilter extends IssueFilterHelperStore implements IProj
 
           const currentUserId = this.rootIssueStore.currentUserId;
           if (currentUserId)
-            this.handleIssuesLocalFilters.set(EIssuesStoreType.PROJECT, type, workspaceSlug, projectId, currentUserId, {
+            this.handleIssuesLocalFilters.set(EIssuesStoreType.PROJECT, type, workspaceSlug, scopedKey, currentUserId, {
               kanban_filters: _filters.kanbanFilters,
             });
 
@@ -371,7 +424,7 @@ export class ProjectIssuesFilter extends IssueFilterHelperStore implements IProj
             Object.keys(updatedKanbanFilters).forEach((_key) => {
               set(
                 this.filters,
-                [projectId, "kanbanFilters", _key],
+                [scopedKey, "kanbanFilters", _key],
                 updatedKanbanFilters[_key as keyof TIssueKanbanFilters]
               );
             });
@@ -383,45 +436,63 @@ export class ProjectIssuesFilter extends IssueFilterHelperStore implements IProj
           break;
       }
     } catch (error) {
-      this.fetchFilters(workspaceSlug, projectId);
+      this.fetchFilters(workspaceSlug, projectId, scope);
       throw error;
     }
   };
 
-  applyLocalRichFilters: IProjectIssuesFilter["applyLocalRichFilters"] = (workspaceSlug, projectId, richFilters) => {
+  applyLocalRichFilters: IProjectIssuesFilter["applyLocalRichFilters"] = (
+    workspaceSlug,
+    projectId,
+    richFilters,
+    scope = this.activeScope
+  ) => {
+    const scopedKey = getProjectIssueScopeKey(projectId, scope);
     runInAction(() => {
-      set(this.filters, [projectId, "richFilters"], richFilters);
+      set(this.filters, [scopedKey, "richFilters"], richFilters);
     });
-    this.rootIssueStore.projectIssues.fetchIssuesWithExistingPagination(workspaceSlug, projectId, "mutation");
+    this.rootIssueStore.projectIssues.fetchIssuesWithExistingPagination(workspaceSlug, projectId, "mutation", scope);
   };
 
-  restoreLocalRichFilters: IProjectIssuesFilter["restoreLocalRichFilters"] = (projectId, richFilters) => {
+  restoreLocalRichFilters: IProjectIssuesFilter["restoreLocalRichFilters"] = (
+    projectId,
+    richFilters,
+    scope = this.activeScope
+  ) => {
+    const scopedKey = getProjectIssueScopeKey(projectId, scope);
     runInAction(() => {
-      set(this.filters, [projectId, "richFilters"], richFilters);
+      set(this.filters, [scopedKey, "richFilters"], richFilters);
     });
   };
 
   applyLocalDisplayFilters: IProjectIssuesFilter["applyLocalDisplayFilters"] = (
     workspaceSlug,
     projectId,
-    displayFilters
+    displayFilters,
+    scope = this.activeScope
   ) => {
-    const current = this.filters[projectId]?.displayFilters;
+    const scopedKey = getProjectIssueScopeKey(projectId, scope);
+    const current = this.filters[scopedKey]?.displayFilters;
     if (!current) return;
     runInAction(() => {
-      set(this.filters, [projectId, "displayFilters"], { ...current, ...displayFilters });
+      set(this.filters, [scopedKey, "displayFilters"], { ...current, ...displayFilters });
     });
     if (this.getShouldClearIssues(displayFilters as IIssueDisplayFilterOptions)) {
       this.rootIssueStore.projectIssues.clear(true);
     }
-    this.rootIssueStore.projectIssues.fetchIssuesWithExistingPagination(workspaceSlug, projectId, "mutation");
+    this.rootIssueStore.projectIssues.fetchIssuesWithExistingPagination(workspaceSlug, projectId, "mutation", scope);
   };
 
-  restoreLocalDisplayFilters: IProjectIssuesFilter["restoreLocalDisplayFilters"] = (projectId, displayFilters) => {
-    const current = this.filters[projectId]?.displayFilters;
+  restoreLocalDisplayFilters: IProjectIssuesFilter["restoreLocalDisplayFilters"] = (
+    projectId,
+    displayFilters,
+    scope = this.activeScope
+  ) => {
+    const scopedKey = getProjectIssueScopeKey(projectId, scope);
+    const current = this.filters[scopedKey]?.displayFilters;
     if (!current) return;
     runInAction(() => {
-      set(this.filters, [projectId, "displayFilters"], { ...current, ...displayFilters });
+      set(this.filters, [scopedKey, "displayFilters"], { ...current, ...displayFilters });
     });
   };
 }

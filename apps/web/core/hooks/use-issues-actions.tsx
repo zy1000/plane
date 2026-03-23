@@ -7,7 +7,7 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 import { useCallback, useMemo } from "react";
 // types
-import { useParams } from "next/navigation";
+import { useParams, usePathname } from "next/navigation";
 import type { TSupportedFilterTypeForUpdate } from "@plane/constants";
 import { EDraftIssuePaginationType } from "@plane/constants";
 import type {
@@ -21,6 +21,7 @@ import type {
   TSupportedFilterForUpdate,
 } from "@plane/types";
 import { EIssuesStoreType } from "@plane/types";
+import { getProjectIssueScopeFromPathname } from "@/store/issue/project";
 import { useIssues } from "./store/use-issues";
 
 export interface IssueActions {
@@ -82,24 +83,26 @@ export const useIssuesActions = (storeType: EIssuesStoreType): IssueActions => {
 const useProjectIssueActions = () => {
   // router
   const { workspaceSlug: routerWorkspaceSlug, projectId: routerProjectId } = useParams();
+  const pathname = usePathname();
   const workspaceSlug = routerWorkspaceSlug?.toString();
   const projectId = routerProjectId?.toString();
+  const scope = getProjectIssueScopeFromPathname(pathname);
   // store hooks
   const { issues, issuesFilter } = useIssues(EIssuesStoreType.PROJECT);
 
   const fetchIssues = useCallback(
     async (loadType: TLoader, options: IssuePaginationOptions) => {
       if (!workspaceSlug || !projectId) return;
-      return issues.fetchIssues(workspaceSlug.toString(), projectId.toString(), loadType, options);
+      return issues.fetchIssues(workspaceSlug.toString(), projectId.toString(), loadType, options, scope);
     },
-    [issues.fetchIssues, workspaceSlug, projectId]
+    [issues.fetchIssues, workspaceSlug, projectId, scope]
   );
   const fetchNextIssues = useCallback(
     async (groupId?: string, subGroupId?: string) => {
       if (!workspaceSlug || !projectId) return;
-      return issues.fetchNextIssues(workspaceSlug.toString(), projectId.toString(), groupId, subGroupId);
+      return issues.fetchNextIssues(workspaceSlug.toString(), projectId.toString(), groupId, subGroupId, scope);
     },
-    [issues.fetchIssues, workspaceSlug, projectId]
+    [issues.fetchIssues, workspaceSlug, projectId, scope]
   );
 
   const createIssue = useCallback(
@@ -141,9 +144,9 @@ const useProjectIssueActions = () => {
   const updateFilters = useCallback(
     async (projectId: string, filterType: TSupportedFilterTypeForUpdate, filters: TSupportedFilterForUpdate) => {
       if (!workspaceSlug) return;
-      return await issuesFilter.updateFilters(workspaceSlug, projectId, filterType, filters);
+      return await issuesFilter.updateFilters(workspaceSlug, projectId, filterType, filters, scope);
     },
-    [issuesFilter.updateFilters, workspaceSlug]
+    [issuesFilter.updateFilters, workspaceSlug, scope]
   );
 
   return useMemo(
