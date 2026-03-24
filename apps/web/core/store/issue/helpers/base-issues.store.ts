@@ -1419,6 +1419,28 @@ export abstract class BaseIssuesStore implements IBaseIssuesStore {
     if (resolvedGroupId && groupedIssues[ALL_ISSUES] && Array.isArray(groupedIssues[ALL_ISSUES])) {
       const issueGroup = groupedIssues[ALL_ISSUES];
       const issueGroupCount = groupedIssueCount[ALL_ISSUES];
+
+      // When groupBy="state", UI columns are merged by state name. Group-specific pagination can still
+      // return issues whose actual state names differ from the requested column, so redistribute by
+      // each issue's real state name instead of blindly appending everything to the requested group.
+      if (this.groupBy === "state" && !subGroupId) {
+        const groupedByStateName = issueGroup.reduce<TGroupedIssues>((acc, issueId) => {
+          const issue = this.rootIssueStore.issues.getIssueById(issueId);
+          if (!issue) return acc;
+          const stateName = this.getArrayStringArray(issue, issue.state_id, this.groupBy)[0] ?? resolvedGroupId;
+          const current = acc[stateName];
+          acc[stateName] = Array.isArray(current) ? uniq(concat(current, [issueId])) : [issueId];
+          return acc;
+        }, {});
+
+        for (const actualGroupId in groupedByStateName) {
+          this.updateIssueGroup(groupedByStateName[actualGroupId], [actualGroupId]);
+        }
+
+        set(this.groupedIssueCount, [getGroupKey(resolvedGroupId, subGroupId)], issueGroupCount);
+        return;
+      }
+
       const issuesPath = [resolvedGroupId];
       // issuesPath is the path for the issue List in the Grouped Issue List
       // issuePath is either [groupId] for grouped pagination or [groupId, subGroupId] for subGrouped pagination
