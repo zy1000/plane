@@ -8,7 +8,7 @@ import { useCallback, useRef, useState } from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 // icons
-import { ChartNoAxesColumn, PanelRight, SlidersHorizontal } from "lucide-react";
+import { ChartNoAxesColumn, ChevronDown, PanelRight, SlidersHorizontal } from "lucide-react";
 // plane imports
 import {
   EIssueFilterType,
@@ -19,16 +19,23 @@ import {
 } from "@plane/constants";
 import { usePlatformOS } from "@plane/hooks";
 import { useTranslation } from "@plane/i18n";
-import { Button } from "@plane/propel/button";
+import { Button, getButtonStyling } from "@plane/propel/button";
+import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { IconButton } from "@plane/propel/icon-button";
 import { CycleIcon } from "@plane/propel/icons";
 import { Tooltip } from "@plane/propel/tooltip";
-import type { ICustomSearchSelectOption, IIssueDisplayFilterOptions, IIssueDisplayProperties } from "@plane/types";
+import type {
+  ICustomSearchSelectOption,
+  IIssueDisplayFilterOptions,
+  IIssueDisplayProperties,
+  ISearchIssueResponse,
+} from "@plane/types";
 import { EIssuesStoreType, EIssueLayoutTypes } from "@plane/types";
-import { Breadcrumbs, BreadcrumbNavigationSearchDropdown, Header } from "@plane/ui";
+import { Breadcrumbs, BreadcrumbNavigationSearchDropdown, CustomMenu, Header } from "@plane/ui";
 import { cn } from "@plane/utils";
 // components
 import { WorkItemsModal } from "@/components/analytics/work-items/modal";
+import { ExistingIssuesListModal } from "@/components/core/modals/existing-issues-list-modal";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { SwitcherLabel } from "@/components/common/switcher-label";
 import { CycleQuickActions } from "@/components/cycles/quick-actions";
@@ -55,6 +62,7 @@ export const CycleIssuesHeader = observer(function CycleIssuesHeader() {
   const parentRef = useRef<HTMLDivElement>(null);
   // states
   const [analyticsModal, setAnalyticsModal] = useState(false);
+  const [openExistingIssueListModal, setOpenExistingIssueListModal] = useState(false);
   // router
   const router = useAppRouter();
   const { workspaceSlug, projectId, cycleId } = useParams();
@@ -63,7 +71,7 @@ export const CycleIssuesHeader = observer(function CycleIssuesHeader() {
   // store hooks
   const {
     issuesFilter: { issueFilters, updateFilters },
-    issues: { getGroupIssueCount },
+    issues: { getGroupIssueCount, addIssueToCycle },
   } = useIssues(EIssuesStoreType.CYCLE);
   const { currentProjectCycleIds, getCycleById } = useCycle();
   const { toggleCreateIssueModal } = useCommandPalette();
@@ -126,6 +134,28 @@ export const CycleIssuesHeader = observer(function CycleIssuesHeader() {
 
   const workItemsCount = getGroupIssueCount(undefined, undefined, false);
 
+  const handleAddExistingIssuesToCycle = async (data: ISearchIssueResponse[]) => {
+    if (!workspaceSlug || !projectId || !cycleId) return;
+
+    const issueIds = data.map((i) => i.id);
+
+    try {
+      await addIssueToCycle(workspaceSlug.toString(), projectId.toString(), cycleId.toString(), issueIds);
+
+      setToast({
+        type: TOAST_TYPE.SUCCESS,
+        title: "Success!",
+        message: "Work items added to the cycle successfully.",
+      });
+    } catch (_error) {
+      setToast({
+        type: TOAST_TYPE.ERROR,
+        title: "Error!",
+        message: "Selected work items could not be added to the cycle. Please try again.",
+      });
+    }
+  };
+
   return (
     <>
       <WorkItemsModal
@@ -133,6 +163,14 @@ export const CycleIssuesHeader = observer(function CycleIssuesHeader() {
         isOpen={analyticsModal}
         onClose={() => setAnalyticsModal(false)}
         cycleDetails={cycleDetails ?? undefined}
+      />
+      <ExistingIssuesListModal
+        workspaceSlug={workspaceSlug?.toString()}
+        projectId={projectId?.toString()}
+        isOpen={openExistingIssueListModal}
+        handleClose={() => setOpenExistingIssueListModal(false)}
+        searchParams={{ cycle: true }}
+        handleOnSubmit={handleAddExistingIssuesToCycle}
       />
       <Header>
         <Header.LeftItem>
@@ -240,16 +278,33 @@ export const CycleIssuesHeader = observer(function CycleIssuesHeader() {
                   </span>
                 </Button>
                 {!isCompletedCycle && (
-                  <Button
-                    variant="primary"
-                    size="lg"
-                    onClick={() => {
-                      toggleCreateIssueModal(true, EIssuesStoreType.CYCLE);
-                    }}
-                    data-ph-element={WORK_ITEM_TRACKER_ELEMENTS.HEADER_ADD_BUTTON.CYCLE}
+                  <CustomMenu
+                    placement="bottom-end"
+                    customButton={
+                      <span
+                        className={cn(getButtonStyling("primary", "lg"), "cursor-pointer")}
+                        data-ph-element={WORK_ITEM_TRACKER_ELEMENTS.HEADER_ADD_BUTTON.CYCLE}
+                      >
+                        {t("issue.add.label")}
+                        <ChevronDown className="size-4 shrink-0" strokeWidth={2} />
+                      </span>
+                    }
                   >
-                    {t("issue.add.label")}
-                  </Button>
+                    <CustomMenu.MenuItem
+                      onClick={() => {
+                        toggleCreateIssueModal(true, EIssuesStoreType.CYCLE);
+                      }}
+                    >
+                      <span className="flex items-center justify-start gap-2">{t("create_work_item")}</span>
+                    </CustomMenu.MenuItem>
+                    <CustomMenu.MenuItem
+                      onClick={() => {
+                        setOpenExistingIssueListModal(true);
+                      }}
+                    >
+                      <span className="flex items-center justify-start gap-2">{t("issue.add.existing")}</span>
+                    </CustomMenu.MenuItem>
+                  </CustomMenu>
                 )}
               </>
             )}

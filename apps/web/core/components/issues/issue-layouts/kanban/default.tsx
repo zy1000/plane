@@ -62,6 +62,7 @@ export interface IKanBan {
   enableQuickIssueCreate?: boolean;
   quickAddCallback?: (projectId: string | null | undefined, data: TIssue) => Promise<TIssue | undefined>;
   disableIssueCreation?: boolean;
+  hideColumnHeaderAddButton?: boolean;
   addIssuesToView?: (issueIds: string[]) => Promise<TIssue>;
   canEditProperties: (projectId: string | undefined) => boolean;
   scrollableContainerRef?: MutableRefObject<HTMLDivElement | null>;
@@ -88,6 +89,7 @@ export const KanBan = observer(function KanBan(props: IKanBan) {
     quickAddCallback,
     loadMoreIssues,
     disableIssueCreation,
+    hideColumnHeaderAddButton,
     addIssuesToView,
     canEditProperties,
     scrollableContainerRef,
@@ -183,6 +185,7 @@ export const KanBan = observer(function KanBan(props: IKanBan) {
                       isGroupByCreatedBy ||
                       getIsWorkflowWorkItemCreationDisabled(subList.id, sub_group_id)
                     }
+                    hideHeaderAddButton={hideColumnHeaderAddButton}
                     addIssuesToView={addIssuesToView}
                     collapsedGroups={collapsedGroups}
                     handleCollapsedGroups={handleCollapsedGroups}

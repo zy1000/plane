@@ -35,6 +35,7 @@ interface IHeaderGroupByCard {
   handleCollapsedGroups: (toggle: "group_by" | "sub_group_by", value: string) => void;
   issuePayload: Partial<TIssue>;
   disableIssueCreation?: boolean;
+  hideHeaderAddButton?: boolean;
   addIssuesToView?: (issueIds: string[]) => Promise<TIssue>;
   isEpic?: boolean;
 }
@@ -51,6 +52,7 @@ export const HeaderGroupByCard = observer(function HeaderGroupByCard(props: IHea
     handleCollapsedGroups,
     issuePayload,
     disableIssueCreation,
+    hideHeaderAddButton,
     addIssuesToView,
     isEpic = false,
   } = props;
@@ -154,7 +156,8 @@ export const HeaderGroupByCard = observer(function HeaderGroupByCard(props: IHea
           </button>
         )}
 
-        {!disableIssueCreation &&
+        {!hideHeaderAddButton &&
+          !disableIssueCreation &&
           (renderExistingIssueModal ? (
             <CustomMenu
               customButton={

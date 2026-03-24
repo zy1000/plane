@@ -48,6 +48,7 @@ export interface IList {
   canEditProperties: (projectId: string | undefined) => boolean;
   quickAddCallback?: (projectId: string | null | undefined, data: TIssue) => Promise<TIssue | undefined>;
   disableIssueCreation?: boolean;
+  hideColumnHeaderAddButton?: boolean;
   handleOnDrop: (source: GroupDropLocation, destination: GroupDropLocation) => Promise<void>;
   addIssuesToView?: (issueIds: string[]) => Promise<TIssue>;
   isCompletedCycle?: boolean;
@@ -72,6 +73,7 @@ export const List = observer(function List(props: IList) {
     canEditProperties,
     quickAddCallback,
     disableIssueCreation,
+    hideColumnHeaderAddButton,
     handleOnDrop,
     addIssuesToView,
     isCompletedCycle = false,
@@ -160,6 +162,7 @@ export const List = observer(function List(props: IList) {
                     canEditProperties={canEditProperties}
                     quickAddCallback={quickAddCallback}
                     disableIssueCreation={disableIssueCreation}
+                    hideColumnHeaderAddButton={hideColumnHeaderAddButton}
                     addIssuesToView={addIssuesToView}
                     isCompletedCycle={isCompletedCycle}
                     loadMoreIssues={loadMoreIssues}
