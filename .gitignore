@@ -150,3 +150,12 @@ pack/minio-musllinux-cp312/pycryptodome-3.23.0-cp37-abi3-musllinux_1_2_x86_64.wh
 pack/minio-musllinux-cp312/typing_extensions-4.15.0-py3-none-any.whl
 pack/minio-musllinux-cp312/urllib3-2.6.3-py3-none-any.whl
 .gitignore
+**/pnpm-lock.yaml
+.pnpm-store/*
+pnpm-lock.yaml
+.cursor/rules/commit-message.mdc
+pnpm-lock.yaml
+.gitignore
+apps/api/类型化状态工作流_1fd7f859.plan.md
+.cursor/skills/plane-django-resource-pattern/SKILL.md
+.cursor/*
