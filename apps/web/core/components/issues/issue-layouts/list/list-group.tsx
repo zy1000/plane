@@ -65,6 +65,7 @@ interface Props {
   quickAddCallback?: ((projectId: string | null | undefined, data: TIssue) => Promise<TIssue | undefined>) | undefined;
   handleOnDrop: (source: GroupDropLocation, destination: GroupDropLocation) => Promise<void>;
   disableIssueCreation?: boolean;
+  hideColumnHeaderAddButton?: boolean;
   addIssuesToView?: (issueIds: string[]) => Promise<TIssue>;
   isCompletedCycle?: boolean;
   showEmptyGroup?: boolean;
@@ -93,6 +94,7 @@ export const ListGroup = observer(function ListGroup(props: Props) {
     quickAddCallback,
     handleOnDrop,
     disableIssueCreation,
+    hideColumnHeaderAddButton,
     addIssuesToView,
     isCompletedCycle,
     showEmptyGroup,
@@ -279,6 +281,7 @@ export const ListGroup = observer(function ListGroup(props: Props) {
           disableIssueCreation={
             disableIssueCreation || isGroupByCreatedBy || isCompletedCycle || isWorkflowIssueCreationDisabled
           }
+          hideHeaderAddButton={hideColumnHeaderAddButton}
           addIssuesToView={addIssuesToView}
           selectionHelpers={selectionHelpers}
           handleCollapsedGroups={handleCollapsedGroups}

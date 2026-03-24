@@ -36,6 +36,8 @@ interface IHeaderGroupByCard {
   issuePayload: Partial<TIssue>;
   canEditProperties: (projectId: string | undefined) => boolean;
   disableIssueCreation?: boolean;
+  /** 迭代等场景下列头仅保留折叠/分组操作，添加统一走页眉 */
+  hideHeaderAddButton?: boolean;
   addIssuesToView?: (issueIds: string[]) => Promise<TIssue>;
   selectionHelpers: TSelectionHelper;
   handleCollapsedGroups: (value: string) => void;
@@ -52,6 +54,7 @@ export const HeaderGroupByCard = observer(function HeaderGroupByCard(props: IHea
     issuePayload,
     canEditProperties,
     disableIssueCreation,
+    hideHeaderAddButton,
     addIssuesToView,
     selectionHelpers,
     handleCollapsedGroups,
@@ -125,7 +128,8 @@ export const HeaderGroupByCard = observer(function HeaderGroupByCard(props: IHea
           </div>
         </div>
 
-        {!disableIssueCreation &&
+        {!hideHeaderAddButton &&
+          !disableIssueCreation &&
           (renderExistingIssueModal ? (
             <CustomMenu
               customButton={

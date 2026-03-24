@@ -1,6 +1,7 @@
 from django.urls import path
 
 from plane.app.views.workflow.base import (
+    BatchIssueTransitionRecordsAPIView,
     IssueTransitionRecordsAPIView,
     MyApprovalsAPIView,
     TransitionRecordActionAPIView,
@@ -28,6 +29,11 @@ urlpatterns = [
         "workspaces/<str:slug>/projects/<uuid:project_id>/issues/<uuid:issue_id>/transition-records/",
         IssueTransitionRecordsAPIView.as_view(),
         name="issue-transition-records",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/batch-transition-records/",
+        BatchIssueTransitionRecordsAPIView.as_view(),
+        name="batch-issue-transition-records",
     ),
     path(
         "workspaces/<str:slug>/projects/<uuid:project_id>/transition-records/<uuid:record_id>/action/",

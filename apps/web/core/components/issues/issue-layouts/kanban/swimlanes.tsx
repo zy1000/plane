@@ -33,6 +33,7 @@ import { HeaderGroupByCard } from "./headers/group-by-card";
 import { HeaderSubGroupByCard } from "./headers/sub-group-by-card";
 
 interface ISubGroupSwimlaneHeader {
+  hideColumnHeaderAddButton?: boolean;
   collapsedGroups: TIssueKanbanFilters;
   group_by: TIssueGroupByOptions | undefined;
   getGroupIssueCount: (
@@ -60,6 +61,7 @@ const visibilitySubGroupByGroupCount = (subGroupIssueCount: number, showEmptyGro
 };
 
 const SubGroupSwimlaneHeader = observer(function SubGroupSwimlaneHeader({
+  hideColumnHeaderAddButton,
   collapsedGroups,
   getGroupIssueCount,
   group_by,
@@ -95,6 +97,7 @@ const SubGroupSwimlaneHeader = observer(function SubGroupSwimlaneHeader({
                 handleCollapsedGroups={handleCollapsedGroups}
                 issuePayload={_list.payload}
                 disableIssueCreation={getIsWorkflowWorkItemCreationDisabled(_list.id)}
+                hideHeaderAddButton={hideColumnHeaderAddButton}
                 isEpic={isEpic}
               />
             </div>
@@ -135,6 +138,7 @@ const SubGroupSwimlane = observer(function SubGroupSwimlane(props: ISubGroupSwim
     addIssuesToView,
     canEditProperties,
     collapsedGroups,
+    hideColumnHeaderAddButton,
     disableIssueCreation,
     displayProperties,
     enableQuickIssueCreate,
@@ -216,6 +220,7 @@ const SubGroupSwimlane = observer(function SubGroupSwimlane(props: ISubGroupSwim
                     enableQuickIssueCreate={enableQuickIssueCreate}
                     disableIssueCreation={disableIssueCreation}
                     canEditProperties={canEditProperties}
+                    hideColumnHeaderAddButton={hideColumnHeaderAddButton}
                     addIssuesToView={addIssuesToView}
                     quickAddCallback={quickAddCallback}
                     scrollableContainerRef={scrollableContainerRef}
@@ -236,6 +241,7 @@ const SubGroupSwimlane = observer(function SubGroupSwimlane(props: ISubGroupSwim
 });
 
 export interface IKanBanSwimLanes {
+  hideColumnHeaderAddButton?: boolean;
   addIssuesToView?: (issueIds: string[]) => Promise<TIssue>;
   canEditProperties: (projectId: string | undefined) => boolean;
   collapsedGroups: TIssueKanbanFilters;
@@ -282,6 +288,7 @@ export const KanBanSwimLanes = observer(function KanBanSwimLanes(props: IKanBanS
     disableIssueCreation,
     enableQuickIssueCreate,
     canEditProperties,
+    hideColumnHeaderAddButton,
     addIssuesToView,
     quickAddCallback,
     scrollableContainerRef,
@@ -316,6 +323,7 @@ export const KanBanSwimLanes = observer(function KanBanSwimLanes(props: IKanBanS
           handleCollapsedGroups={handleCollapsedGroups}
           list={groupByList}
           showEmptyGroup={showEmptyGroup}
+          hideColumnHeaderAddButton={hideColumnHeaderAddButton}
           isEpic={isEpic}
         />
       </Row>
@@ -339,6 +347,7 @@ export const KanBanSwimLanes = observer(function KanBanSwimLanes(props: IKanBanS
           handleOnDrop={handleOnDrop}
           disableIssueCreation={disableIssueCreation}
           enableQuickIssueCreate={enableQuickIssueCreate}
+          hideColumnHeaderAddButton={hideColumnHeaderAddButton}
           addIssuesToView={addIssuesToView}
           canEditProperties={canEditProperties}
           quickAddCallback={quickAddCallback}

@@ -11,8 +11,8 @@ import { useParams } from "next/navigation";
 // plane constants
 import { EIssueFilterType, EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 // types
-import type { EIssuesStoreType, GroupByColumnTypes, TGroupedIssues, TIssueKanbanFilters } from "@plane/types";
-import { EIssueLayoutTypes } from "@plane/types";
+import type { GroupByColumnTypes, TGroupedIssues, TIssueKanbanFilters } from "@plane/types";
+import { EIssueLayoutTypes, EIssuesStoreType } from "@plane/types";
 // constants
 // hooks
 import { useIssues } from "@/hooks/store/use-issues";
@@ -59,6 +59,7 @@ export const BaseListRoot = observer(function BaseListRoot(props: IBaseListRoot)
   } = props;
   // router
   const storeType = useIssueStoreType() as ListStoreType;
+  const hideColumnHeaderAddButton = storeType === EIssuesStoreType.CYCLE;
   //stores
   const { issuesFilter, issues } = useIssues(storeType);
   const {
@@ -219,6 +220,7 @@ export const BaseListRoot = observer(function BaseListRoot(props: IBaseListRoot)
           enableIssueQuickAdd={!!enableQuickAdd}
           canEditProperties={canEditProperties}
           disableIssueCreation={!enableIssueCreation || !isEditingAllowed}
+          hideColumnHeaderAddButton={hideColumnHeaderAddButton}
           addIssuesToView={addIssuesToView}
           isCompletedCycle={isCompletedCycle}
           handleOnDrop={handleOnDrop}

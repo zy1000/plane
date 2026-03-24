@@ -255,6 +255,21 @@ export class ProjectWorkflowService extends APIService {
       });
   }
 
+  async fetchBatchIssuePendingRecords(
+    workspaceSlug: string,
+    projectId: string,
+    issueIds: string[]
+  ): Promise<Record<string, TTransitionRecord[]>> {
+    return this.post(
+      `/api/workspaces/${workspaceSlug}/projects/${projectId}/batch-transition-records/`,
+      { issue_ids: issueIds }
+    )
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
   async fetchTransitionRecord(
     workspaceSlug: string,
     projectId: string,
