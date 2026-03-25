@@ -460,6 +460,10 @@ export const coreRoutes: RouteConfigEntry[] = [
                 "./(all)/[workspaceSlug]/(settings)/settings/projects/[projectId]/workflow/[workflowId]/page.tsx"
               ),
             ]),
+            route(
+              ":workspaceSlug/settings/projects/:projectId/pms-sync",
+              "./(all)/[workspaceSlug]/(settings)/settings/projects/[projectId]/pms-sync/page.tsx"
+            ),
           ]),
         ]),
       ]),

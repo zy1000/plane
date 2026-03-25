@@ -6,7 +6,7 @@
 
 import type { ComponentProps } from "react";
 import type { LucideIcon } from "lucide-react";
-import { GitPullRequest, Users, Zap } from "lucide-react";
+import { CloudCog, GitPullRequest, Users, Zap } from "lucide-react";
 // plane imports
 import type { ISvgIcons } from "@plane/propel/icons";
 import {
@@ -40,4 +40,5 @@ export const PROJECT_SETTINGS_ICONS: Record<TProjectSettingsTabs, LucideIcon | R
   estimates: EstimatePropertyIcon,
   automations: Zap,
   workflow: WorkflowIcon,
+  pms_sync: CloudCog,
 };

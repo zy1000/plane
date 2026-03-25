@@ -22,7 +22,7 @@ from plane.db.models import (
 from plane.utils.content_validator import (
     validate_html_content,
 )
-from ...db.models.project import ProjectAnnouncement
+from ...db.models.project import ProjectAnnouncement, ProjectPmsInfo
 
 
 class ProjectSerializer(BaseSerializer):
@@ -238,3 +238,52 @@ class ProjectAnnouncementCreateSerializer(BaseSerializer):
     class Meta:
         model = ProjectAnnouncement
         fields = ['name', 'description', 'project']
+
+
+METER_TYPE_VALUES = frozenset(
+    {
+        "01-电表",
+        "02-水表",
+        "03-气表",
+        "04-P2P",
+        "05-PLC",
+        "06-DCU",
+        "07-CIU",
+    }
+)
+METER_TYPE_LEGACY_TO_CANONICAL = {
+    "01": "01-电表",
+    "02": "02-水表",
+    "03": "03-气表",
+    "04": "04-P2P",
+    "05": "05-PLC",
+    "06": "06-DCU",
+    "07": "07-CIU",
+}
+REPRODUCE_LEVELS = frozenset({"表象级", "操作级", "发散级", "难重现", "其他"})
+
+
+class ProjectPmsInfoSerializer(BaseSerializer):
+    class Meta:
+        model = ProjectPmsInfo
+        fields = "__all__"
+        read_only_fields = ["project"]
+
+    def validate_meter_type(self, value: str) -> str:
+        if value in METER_TYPE_VALUES:
+            return value
+        if value in METER_TYPE_LEGACY_TO_CANONICAL:
+            return METER_TYPE_LEGACY_TO_CANONICAL[value]
+        raise serializers.ValidationError("INVALID_METER_TYPE")
+
+    def validate_reproduce(self, value: str) -> str:
+        if value not in REPRODUCE_LEVELS:
+            raise serializers.ValidationError("INVALID_REPRODUCE")
+        return value
+
+    def create(self, validated_data):
+        project_id = self.context.get("project_id")
+        if not project_id:
+            raise serializers.ValidationError({"project": "project_id is required in context"})
+        validated_data["project_id"] = project_id
+        return super().create(validated_data)

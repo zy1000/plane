@@ -22,6 +22,7 @@ from plane.app.views import (
 )
 from plane.app.views.project.announcement import AnnouncementAPIView
 from plane.app.views.project.base import ProjectAPI
+from plane.app.views.project.pms import PmsSyncAPIView, ProjectPmsInfoAPIView, ProjectPmsInfoDetailAPIView
 from plane.app.views.project.template import ProjectTemplateAPIView
 
 router = SimpleRouter()
@@ -139,4 +140,19 @@ urlpatterns = [
     path('workspaces/<str:slug>/projects/template/', ProjectTemplateAPIView.as_view(), name='project-template'),
     path("workspaces/<str:slug>/projects/<uuid:project_id>/announcement/", AnnouncementAPIView.as_view(),
          name='project-announcement'),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/pms-info/",
+        ProjectPmsInfoAPIView.as_view(),
+        name="project-pms-info",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/pms-info/sync/",
+        PmsSyncAPIView.as_view(),
+        name="project-pms-info-sync",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/pms-info/<int:pk>/",
+        ProjectPmsInfoDetailAPIView.as_view(),
+        name="project-pms-info-detail",
+    ),
 ]
