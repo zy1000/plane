@@ -31,7 +31,8 @@ export type TProjectSettingsTabs =
   | "labels"
   | "estimates"
   | "automations"
-  | "workflow";
+  | "workflow"
+  | "pms_sync";
 export type TProjectSettingsItem = {
   key: TProjectSettingsTabs;
   i18n_label: string;

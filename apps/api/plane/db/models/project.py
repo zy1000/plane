@@ -131,7 +131,6 @@ class Project(BaseModel):
     is_template = models.BooleanField(default=False)
 
     objects = SoftProjectManager()
-    
 
     def __init__(self, *args, **kwargs):
         # Track if timezone is provided, if so, don't override it with the workspace timezone when saving
@@ -405,3 +404,18 @@ class ProjectAnnouncement(BaseModel):
     class Meta:
         db_table = "project_announcement"
         ordering = ("-created_at",)
+
+
+class ProjectPmsInfo(models.Model):
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="project_pms_info")
+    sub_project = models.CharField(max_length=255, verbose_name="子项目名称")
+    project_code = models.CharField(max_length=255, verbose_name='项目编号')
+    meter_type = models.CharField(max_length=255, verbose_name='产品类型')
+    software_version = models.CharField(max_length=255, verbose_name='软件版本')
+    tool_version = models.CharField(max_length=255, verbose_name='工具软件版本')
+    reproduce = models.CharField(max_length=255, verbose_name='易现等级1')
+
+    issue_ids = models.JSONField(default=list)
+
+    class Meta:
+        db_table = "project_pms_info"
