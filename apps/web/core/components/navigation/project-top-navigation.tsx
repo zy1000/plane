@@ -8,7 +8,6 @@ import { observer } from "mobx-react";
 import { Header, Row } from "@plane/ui";
 import { cn } from "@plane/utils";
 import { TabNavigationRoot } from "@/components/navigation/tab-navigation-root";
-import { AppSidebarToggleButton } from "@/components/sidebar/sidebar-toggle-button";
 import { useAppTheme } from "@/hooks/store/use-app-theme";
 import { useProjectNavigationPreferences } from "@/hooks/use-navigation-preferences";
 
@@ -29,11 +28,6 @@ export const ProjectTopNavigation = observer(function ProjectTopNavigation(props
       <Row className="flex h-header w-full items-center gap-2 border-b border-subtle bg-surface-1">
         <div className="flex h-full w-full items-center gap-2 divide-x divide-subtle">
           <div className="flex size-full flex-1 items-center gap-2">
-            {sidebarCollapsed && (
-              <div className="shrink-0">
-                <AppSidebarToggleButton />
-              </div>
-            )}
             <Header className={cn("h-full", { "pl-1.5": !sidebarCollapsed })}>
               <Header.LeftItem className="flex h-full max-w-full items-center gap-2">
                 <TabNavigationRoot workspaceSlug={workspaceSlug} projectId={projectId} />

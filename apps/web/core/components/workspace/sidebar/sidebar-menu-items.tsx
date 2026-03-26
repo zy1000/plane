@@ -9,7 +9,7 @@ import { isEmpty } from "lodash-es";
 import { observer } from "mobx-react";
 import Link from "next/link";
 import { useParams, usePathname } from "next/navigation";
-import { BookText, LayoutDashboard } from "lucide-react";
+import { LayoutDashboard } from "lucide-react";
 // plane imports
 import {
   WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS,
@@ -100,7 +100,7 @@ export const SidebarMenuItems = observer(function SidebarMenuItems() {
           ))}
         </div>
 
-        <hr className="my-1 border-subtle" />
+        <hr className="my-3 border-subtle" />
         {canPerformWorkspaceMemberActions && (
           <div className="flex flex-col gap-0.5">
             <Link href={`/${workspaceSlug}/analytics`}>
@@ -130,17 +130,6 @@ export const SidebarMenuItems = observer(function SidebarMenuItems() {
             <SidebarFavoritesMenu />
           </>
         )}
-      </div>
-
-      <div className="mt-auto">
-        <Link href={`/${workspaceSlug}/releasenote`}>
-          <SidebarNavItem isActive={pathname?.startsWith(`/${workspaceSlug}/releasenote`)}>
-            <div className="flex items-center gap-1.5 py-[1px]">
-              <BookText className="size-4 flex-shrink-0" />
-              <p className="text-13 leading-5 font-medium">更新日志</p>
-            </div>
-          </SidebarNavItem>
-        </Link>
       </div>
     </div>
   );

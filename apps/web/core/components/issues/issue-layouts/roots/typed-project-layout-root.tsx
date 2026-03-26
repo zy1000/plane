@@ -211,12 +211,12 @@ export const TypedProjectLayoutRoot = observer(function TypedProjectLayoutRoot({
   const initialWorkItemFilters: IIssueFilters | undefined = useMemo(() => {
     if (!storeFilters) return undefined;
     return {
-      richFilters: userRichFilters,
+      richFilters: mergedRichFilters,
       displayFilters: storeFilters.displayFilters,
       displayProperties: storeFilters.displayProperties,
       kanbanFilters: storeFilters.kanbanFilters,
     };
-  }, [storeFilters, userRichFilters]);
+  }, [mergedRichFilters, storeFilters]);
 
   const handleUpdateFilters = useCallback(
     async (expression: TWorkItemFilterExpression) => {
@@ -248,6 +248,7 @@ export const TypedProjectLayoutRoot = observer(function TypedProjectLayoutRoot({
     <IssuesStoreContext.Provider value={EIssuesStoreType.PROJECT}>
       <ProjectLevelWorkItemFiltersHOC
         enableSaveView
+        deleteOnUnmount
         entityType={EIssuesStoreType.PROJECT}
         entityId={`${projectId}_${variant}`}
         filtersToShowByLayout={filtersConfig?.filters ?? ISSUE_DISPLAY_FILTERS_BY_PAGE.issues.filters}

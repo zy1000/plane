@@ -47,7 +47,6 @@ export const AddFilterDropdown = observer(function AddFilterDropdown<
     ),
     query: config.label.toLowerCase(),
   }));
-
   // If all filters are applied, show disabled options
   const allFiltersApplied = filterOptions.length === 0;
   const displayOptions = allFiltersApplied

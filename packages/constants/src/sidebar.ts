@@ -6,3 +6,4 @@
 
 export const SIDEBAR_WIDTH = 250;
 export const EXTENDED_SIDEBAR_WIDTH = 300;
+export const COLLAPSED_SIDEBAR_WIDTH = 52;

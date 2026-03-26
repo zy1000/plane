@@ -101,13 +101,12 @@ export function Tooltip({
         </div>
       }
       position={position}
-      renderTarget={({ isOpen: isTooltipOpen, ref: eleReference, ...tooltipProps }) =>
-        React.cloneElement(children, {
-          ref: eleReference,
-          ...tooltipProps,
-          ...children.props,
-        })
-      }
+      renderTarget={({ ref: targetRef, isOpen: _isTooltipOpen, ...targetProps }) => (
+        // 使用原生元素承载 Popper ref，避免 cloneElement 到 Link 等组件时 ref 未落到 DOM 上导致气泡定位到视口顶部
+        <span ref={targetRef} {...targetProps} className={cn("inline-flex max-w-full", targetProps.className)}>
+          {children}
+        </span>
+      )}
     />
   );
 }

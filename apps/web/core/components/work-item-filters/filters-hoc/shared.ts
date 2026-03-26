@@ -14,7 +14,10 @@ export type TSharedWorkItemFiltersProps = {
   filtersToShowByLayout: TWorkItemFilterProperty[];
   updateFilters: (updatedFilters: TWorkItemFilterExpression) => void;
   isTemporary?: boolean;
+  deleteOnUnmount?: boolean;
   showOnMount?: boolean;
+  /** Collapse filter row on first mount even when default expression counts as active (typed pages with fixed type filter). */
+  filterRowHiddenOnMount?: boolean;
 } & ({ isTemporary: true; entityId?: string } | { isTemporary?: false; entityId: string }); // entity id (project_id, cycle_id, workspace_id, etc)
 
 export type TSharedWorkItemFiltersHOCProps = TSharedWorkItemFiltersProps & {
