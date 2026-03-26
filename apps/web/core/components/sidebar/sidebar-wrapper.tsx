@@ -12,6 +12,7 @@ import { PreferencesIcon } from "@plane/propel/icons";
 import { ScrollArea } from "@plane/propel/scrollarea";
 // components
 import { CustomizeNavigationDialog } from "@/components/navigation/customize-navigation-dialog";
+import { HelpMenuRoot } from "@/components/workspace/sidebar/help-section/root";
 import { WorkspaceMenuRoot } from "@/components/workspace/sidebar/workspace-menu-root";
 import { UserMenuRoot } from "@/components/workspace/sidebar/user-menu-root";
 // hooks
@@ -79,11 +80,7 @@ export const SidebarWrapper = observer(function SidebarWrapper(props: TSidebarWr
         {/* Help Section */}
         <div className="flex h-12 items-center justify-between border-t border-subtle bg-surface-1 p-3">
           <UserMenuRoot size="xs" showLabel />
-          {/* TODO: To be checked if we need this */}
-          {/* <div className="flex items-center gap-2">
-          {!shouldRenderAppRail && <HelpMenu />}
-          {!isAppRailEnabled && <AppSidebarToggleButton />}
-        </div> */}
+          <HelpMenuRoot />
         </div>
       </div>
     </>

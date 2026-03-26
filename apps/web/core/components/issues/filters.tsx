@@ -126,6 +126,7 @@ export const HeaderFilters = observer(function HeaderFilters(props: Props) {
         entityType={storeType}
         entityId={filterEntityId}
         initialExpression={scopedIssueFilters?.richFilters}
+        filterRowHiddenOnMount={scope === "requirements" || scope === "defects"}
       />
       <FiltersDropdown
         miniIcon={<SlidersHorizontal className="size-3.5" />}

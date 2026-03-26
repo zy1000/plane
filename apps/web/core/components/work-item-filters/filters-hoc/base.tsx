@@ -54,10 +54,12 @@ const WorkItemFilterRoot = observer(function WorkItemFilterRoot(props: TWorkItem
     filtersToShowByLayout,
     initialWorkItemFilters,
     isTemporary,
+    deleteOnUnmount,
     saveViewOptions,
     updateFilters,
     updateViewOptions,
     showOnMount,
+    filterRowHiddenOnMount,
     ...entityConfigProps
   } = props;
   // store hooks
@@ -86,6 +88,7 @@ const WorkItemFilterRoot = observer(function WorkItemFilterRoot(props: TWorkItem
           updateViewOptions,
         },
         showOnMount,
+        filterRowHiddenOnMount,
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [entityType, workItemEntityID, saveViewOptions, updateViewOptions, updateFilters]
@@ -94,9 +97,10 @@ const WorkItemFilterRoot = observer(function WorkItemFilterRoot(props: TWorkItem
   // delete filter instance when component unmounts
   useEffect(
     () => () => {
+      if (isTemporary !== true && deleteOnUnmount !== true) return;
       deleteFilter(entityType, workItemEntityID);
     },
-    [deleteFilter, entityType, workItemEntityID]
+    [deleteFilter, deleteOnUnmount, entityType, isTemporary, workItemEntityID, workItemLayoutFilter]
   );
 
   useEffect(() => {

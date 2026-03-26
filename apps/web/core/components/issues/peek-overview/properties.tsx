@@ -103,7 +103,7 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
         {/* type */}
         {projectIssueTypesMap && issue?.type_id && projectIssueTypesMap[issue.type_id] && (
           <SidebarPropertyListItem icon={LucideIcons.Type} label="类型">
-            <div className="flex items-center gap-2">
+            <div className="flex min-w-0 w-full flex-nowrap items-center gap-2">
               {(() => {
                 const issueType = projectIssueTypesMap[issue.type_id];
                 const { name, color, background_color } = issueType.logo_props?.icon || {};
@@ -154,7 +154,7 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
 
         {/* date range */}
         <SidebarPropertyListItem icon={StartDatePropertyIcon} label={t("project_cycles.date_range")}>
-          <div className="flex items-center gap-2 w-3/4 flex-grow min-w-0">
+          <div className="flex min-w-0 w-full flex-1 items-center gap-2">
             <div className="flex items-center gap-1">
               <div className="h-7 w-28 flex-shrink-0">
                 <DateDropdown
@@ -224,15 +224,17 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
           <SidebarPropertyListItem
             icon={UserCirclePropertyIcon}
             label={t("common.created_by")}
-            childrenClassName="px-2"
+            childrenClassName="min-w-0 px-2"
           >
-            <ButtonAvatars
-              showTooltip
-              userIds={createdByDetails?.display_name.includes("-intake") ? null : createdByDetails?.id}
-            />
-            <span className="grow truncate text-body-xs-medium leading-5 text-secondary">
-              {createdByDetails?.display_name.includes("-intake") ? "Plane" : createdByDetails?.display_name}
-            </span>
+            <div className="flex min-w-0 w-full flex-nowrap items-center gap-2">
+              <ButtonAvatars
+                showTooltip
+                userIds={createdByDetails?.display_name.includes("-intake") ? null : createdByDetails?.id}
+              />
+              <span className="min-w-0 flex-1 truncate text-body-xs-medium leading-5 text-secondary">
+                {createdByDetails?.display_name.includes("-intake") ? "Plane" : createdByDetails?.display_name}
+              </span>
+            </div>
           </SidebarPropertyListItem>
         )}
 

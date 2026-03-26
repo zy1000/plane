@@ -20,6 +20,8 @@ import type { IWorkItemFilterInstance, TWorkItemFilterKey } from "./shared";
 
 type TGetOrCreateFilterParams = {
   showOnMount?: boolean;
+  /** When true, filter row stays collapsed on first create even if expression has active conditions (e.g. fixed type scope). */
+  filterRowHiddenOnMount?: boolean;
   entityId: string;
   entityType: EIssuesStoreType;
   expressionOptions?: TExpressionOptions<TWorkItemFilterExpression>;
@@ -218,9 +220,11 @@ export class WorkItemFilterStore implements IWorkItemFilterStore {
       onExpressionChange: params.onExpressionChange,
       options: {
         expression: params.expressionOptions,
-        visibility: params.showOnMount
-          ? { autoSetVisibility: false, isVisibleOnMount: true }
-          : { autoSetVisibility: true },
+        visibility: params.filterRowHiddenOnMount
+          ? { autoSetVisibility: false, isVisibleOnMount: false }
+          : params.showOnMount
+            ? { autoSetVisibility: false, isVisibleOnMount: true }
+            : { autoSetVisibility: true },
       },
     });
 }
