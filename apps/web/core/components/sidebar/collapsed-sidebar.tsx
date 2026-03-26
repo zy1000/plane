@@ -31,6 +31,14 @@ import { usePersonalNavigationPreferences } from "@/hooks/use-navigation-prefere
 // plane-web
 import { getSidebarNavigationItemIcon } from "@/plane-web/components/workspace/sidebar/helper";
 
+/** 折叠侧栏导航图标的容器：固定 32×32；激活态仅背景/文字，不额外描边 */
+function collapsedNavIconClass(isActive: boolean) {
+  return cn(
+    "flex size-8 shrink-0 items-center justify-center rounded-md",
+    isActive ? "bg-layer-transparent-selected text-primary" : "text-secondary hover:bg-layer-transparent-hover"
+  );
+}
+
 type NavIconProps = {
   slug: string;
   pathname: string | null;
@@ -47,15 +55,8 @@ function NavIconItem({ slug, pathname, item, t, badgeDot = false }: NavIconProps
 
   return (
     <Tooltip tooltipContent={t(item.labelTranslationKey)} position="right">
-      <Link href={itemHref} className="w-full">
-        <div
-          className={cn(
-            "flex size-8 w-full items-center justify-center rounded-md",
-            isActive
-              ? "bg-layer-transparent-selected text-primary"
-              : "text-secondary hover:bg-layer-transparent-hover"
-          )}
-        >
+      <Link href={itemHref} className="flex w-full justify-center">
+        <div className={collapsedNavIconClass(isActive)}>
           {badgeDot ? (
             <div className="relative flex-shrink-0">
               {icon}
@@ -157,15 +158,8 @@ export const CollapsedSidebar = observer(function CollapsedSidebar() {
 
           return (
             <Tooltip key={item.key} tooltipContent={t(item.labelTranslationKey)} position="right">
-              <Link href={itemHref} className="w-full">
-                <div
-                  className={cn(
-                    "flex size-8 w-full items-center justify-center rounded-md",
-                    isActive
-                      ? "bg-layer-transparent-selected text-primary"
-                      : "text-secondary hover:bg-layer-transparent-hover"
-                  )}
-                >
+              <Link href={itemHref} className="flex w-full justify-center">
+                <div className={collapsedNavIconClass(isActive)}>
                   {shouldShowInboxDot ? (
                     <div className="relative flex-shrink-0">
                       {icon}
@@ -182,13 +176,10 @@ export const CollapsedSidebar = observer(function CollapsedSidebar() {
 
         {canPerformWorkspaceMemberActions && (
           <Tooltip tooltipContent="工作区" position="right">
-            <Link href={`/${slug}/analytics`} className="w-full">
+            <Link href={`/${slug}/analytics`} className="flex w-full justify-center">
               <div
-                className={cn(
-                  "flex size-8 w-full items-center justify-center rounded-md",
-                  pathname?.includes(`/${slug}/analytics`) || pathname?.includes(`/${slug}/projects/archives`)
-                    ? "bg-layer-transparent-selected text-primary"
-                    : "text-secondary hover:bg-layer-transparent-hover"
+                className={collapsedNavIconClass(
+                  !!(pathname?.includes(`/${slug}/analytics`) || pathname?.includes(`/${slug}/projects/archives`))
                 )}
               >
                 <LayoutDashboard className="size-4 flex-shrink-0" />
