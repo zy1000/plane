@@ -11,7 +11,6 @@ import { LayoutDashboard } from "lucide-react";
 import { TabNavigationItem, TabNavigationList } from "@plane/propel/tab-navigation";
 import { Header, Row } from "@plane/ui";
 import { cn } from "@plane/utils";
-import { AppSidebarToggleButton } from "@/components/sidebar/sidebar-toggle-button";
 import { useAppTheme } from "@/hooks/store/use-app-theme";
 
 export const WorkspaceManagementNavigation = observer(function WorkspaceManagementNavigation() {
@@ -43,11 +42,6 @@ export const WorkspaceManagementNavigation = observer(function WorkspaceManageme
       <Row className="flex h-header w-full items-center gap-2 border-b border-subtle bg-surface-1">
         <div className="flex h-full w-full items-center gap-2 divide-x divide-subtle">
           <div className="flex size-full flex-1 items-center gap-2">
-            {sidebarCollapsed && (
-              <div className="shrink-0">
-                <AppSidebarToggleButton />
-              </div>
-            )}
             <Header className={cn("h-full", { "pl-1.5": !sidebarCollapsed })}>
               <Header.LeftItem className="flex h-full max-w-full items-center gap-2">
                 <div className="flex size-full items-center gap-3 overflow-hidden">
