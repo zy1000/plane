@@ -7,6 +7,7 @@
 import { useEffect, useState } from "react";
 import { observer } from "mobx-react";
 import useSWR from "swr";
+import { Search, X } from "lucide-react";
 // plane imports
 import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 import { cn } from "@plane/utils";
@@ -29,6 +30,7 @@ const WorkspaceRolesPage = observer(function WorkspaceRolesPage({ params }: Rout
 
   // selected role state
   const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
   // store hooks
   const { workspaceUserInfo, allowPermissions } = useUserPermissions();
@@ -96,6 +98,7 @@ const WorkspaceRolesPage = observer(function WorkspaceRolesPage({ params }: Rout
 
   const handleSelectRole = (roleId: string) => {
     setSelectedRoleId(roleId);
+    setSearchQuery(""); // clear search when switching roles
   };
 
   const handleDeleteRole = async (roleId: string) => {
@@ -137,11 +140,44 @@ const WorkspaceRolesPage = observer(function WorkspaceRolesPage({ params }: Rout
         <div className="flex flex-1 flex-col overflow-hidden">
           {/* Selected role info header */}
           {selectedRole && (
-            <div className="flex shrink-0 items-start gap-3 border-b border-subtle bg-surface-1 px-6 py-3.5">
+            <div className="flex shrink-0 items-center gap-4 border-b border-subtle bg-surface-1 px-6 py-3">
               <div className="min-w-0 flex-1">
                 <h2 className="truncate text-body-md-semibold text-primary">{selectedRole.name}</h2>
                 {selectedRole.description?.trim() && (
                   <p className="truncate text-body-xs-regular text-tertiary">{selectedRole.description}</p>
+                )}
+              </div>
+              {/* Global permission search */}
+              <div
+                className={cn(
+                  "flex w-52 shrink-0 items-center gap-1.5 rounded-md border py-1.5 pl-2.5 pr-1.5 transition-colors duration-150",
+                  searchQuery
+                    ? "border-accent-primary/40 bg-accent-primary/4"
+                    : "border-subtle bg-surface-2 focus-within:border-accent-primary/40 focus-within:bg-surface-1"
+                )}
+              >
+                <Search
+                  className={cn(
+                    "size-3.5 shrink-0",
+                    searchQuery ? "text-accent-primary" : "text-placeholder"
+                  )}
+                />
+                <input
+                  type="text"
+                  className="min-w-0 flex-1 border-none bg-transparent text-body-xs-regular outline-none placeholder:text-placeholder"
+                  placeholder="搜索权限..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery("")}
+                    className="flex size-4 cursor-pointer items-center justify-center rounded text-placeholder transition-colors hover:bg-layer-1-hover hover:text-primary"
+                    aria-label="清除搜索"
+                  >
+                    <X className="size-3" />
+                  </button>
                 )}
               </div>
             </div>
@@ -155,6 +191,7 @@ const WorkspaceRolesPage = observer(function WorkspaceRolesPage({ params }: Rout
               permissionKeys={rolePermissionState?.data?.permission_keys ?? []}
               isLoading={Boolean(rolePermissionState?.isLoading)}
               isAdmin={isAdmin}
+              searchQuery={searchQuery}
               onTogglePermission={togglePermission}
             />
           </div>

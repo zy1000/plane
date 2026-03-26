@@ -221,7 +221,6 @@ class WorkspaceRolePermissionBindingSerializer(serializers.Serializer):
         normalized_keys = list(dict.fromkeys(value))
         permissions = Permission.objects.filter(
             key__in=normalized_keys,
-            scope=Permission.Scope.WORKSPACE,
             is_active=True,
         )
         existing_keys = set(permissions.values_list("key", flat=True))

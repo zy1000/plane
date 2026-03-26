@@ -139,7 +139,6 @@ class WorkspaceRolePermissionAPIView(BaseAPIView):
 
     def get_permission_queryset(self):
         return Permission.objects.filter(
-            scope=Permission.Scope.WORKSPACE,
             is_active=True,
         ).order_by("module", "sort_order", "key")
 
