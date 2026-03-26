@@ -6,6 +6,7 @@ from django.urls import path
 
 
 from plane.app.views import (
+    PermissionViewSet,
     UserWorkspaceInvitationsViewSet,
     WorkSpaceViewSet,
     WorkspaceJoinEndpoint,
@@ -36,6 +37,11 @@ from plane.app.views import (
     WorkspaceHomePreferenceViewSet,
     WorkspaceStickyViewSet,
     WorkspaceUserPreferenceViewSet,
+    WorkspaceRoleViewSet,
+    WorkspaceRolePermissionAPIView,
+    WorkspaceGroupViewSet,
+    WorkspaceGroupMemberViewSet,
+    WorkspaceGroupRoleViewSet,
 )
 
 
@@ -128,6 +134,61 @@ urlpatterns = [
         "workspaces/<str:slug>/workspace-themes/<uuid:pk>/",
         WorkspaceThemeViewSet.as_view({"get": "retrieve", "patch": "partial_update", "delete": "destroy"}),
         name="workspace-themes",
+    ),
+    path(
+        "workspaces/<str:slug>/permissions/",
+        PermissionViewSet.as_view({"get": "list"}),
+        name="workspace-permissions",
+    ),
+    path(
+        "workspaces/<str:slug>/permissions/<uuid:pk>/",
+        PermissionViewSet.as_view({"get": "retrieve"}),
+        name="workspace-permissions",
+    ),
+    path(
+        "workspaces/<str:slug>/roles/",
+        WorkspaceRoleViewSet.as_view({"get": "list", "post": "create"}),
+        name="workspace-roles",
+    ),
+    path(
+        "workspaces/<str:slug>/roles/<uuid:pk>/",
+        WorkspaceRoleViewSet.as_view({"get": "retrieve", "patch": "partial_update", "delete": "destroy"}),
+        name="workspace-roles",
+    ),
+    path(
+        "workspaces/<str:slug>/roles/<uuid:pk>/permissions/",
+        WorkspaceRolePermissionAPIView.as_view(),
+        name="workspace-role-permissions",
+    ),
+    path(
+        "workspaces/<str:slug>/groups/",
+        WorkspaceGroupViewSet.as_view({"get": "list", "post": "create"}),
+        name="workspace-groups",
+    ),
+    path(
+        "workspaces/<str:slug>/groups/<uuid:pk>/",
+        WorkspaceGroupViewSet.as_view({"get": "retrieve", "patch": "partial_update", "delete": "destroy"}),
+        name="workspace-groups",
+    ),
+    path(
+        "workspaces/<str:slug>/groups/<uuid:group_id>/members/",
+        WorkspaceGroupMemberViewSet.as_view({"get": "list", "post": "create"}),
+        name="workspace-group-members",
+    ),
+    path(
+        "workspaces/<str:slug>/groups/<uuid:group_id>/members/<uuid:pk>/",
+        WorkspaceGroupMemberViewSet.as_view({"delete": "destroy"}),
+        name="workspace-group-members",
+    ),
+    path(
+        "workspaces/<str:slug>/groups/<uuid:group_id>/roles/",
+        WorkspaceGroupRoleViewSet.as_view({"get": "list", "post": "create"}),
+        name="workspace-group-roles",
+    ),
+    path(
+        "workspaces/<str:slug>/groups/<uuid:group_id>/roles/<uuid:pk>/",
+        WorkspaceGroupRoleViewSet.as_view({"delete": "destroy"}),
+        name="workspace-group-roles",
     ),
     path(
         "workspaces/<str:slug>/user-stats/<uuid:user_id>/",

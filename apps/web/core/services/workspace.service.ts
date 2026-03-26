@@ -26,6 +26,10 @@ import type {
   IWorkspaceSidebarNavigationItem,
   IWorkspaceSidebarNavigation,
   IWorkspaceUserPropertiesResponse,
+  IWorkspaceGroup,
+  IWorkspaceGroupMember,
+  IWorkspaceGroupRole,
+  IWorkspaceRole,
 } from "@plane/types";
 // services
 import { APIService } from "@/services/api.service";
@@ -418,6 +422,166 @@ export class WorkspaceService extends APIService {
     data: Partial<IWorkspaceUserPropertiesResponse>
   ): Promise<IWorkspaceUserPropertiesResponse> {
     return this.patch(`/api/workspaces/${workspaceSlug}/user-properties/`, data)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  // workspace roles
+  async fetchWorkspaceRoles(workspaceSlug: string): Promise<IWorkspaceRole[]> {
+    return this.get(`/api/workspaces/${workspaceSlug}/roles/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async createWorkspaceRole(
+    workspaceSlug: string,
+    data: { name: string; description?: string }
+  ): Promise<IWorkspaceRole> {
+    return this.post(`/api/workspaces/${workspaceSlug}/roles/`, data)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async updateWorkspaceRole(
+    workspaceSlug: string,
+    roleId: string,
+    data: Partial<{ name: string; description: string }>
+  ): Promise<IWorkspaceRole> {
+    return this.patch(`/api/workspaces/${workspaceSlug}/roles/${roleId}/`, data)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async deleteWorkspaceRole(workspaceSlug: string, roleId: string): Promise<void> {
+    return this.delete(`/api/workspaces/${workspaceSlug}/roles/${roleId}/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async fetchWorkspacePermissions(workspaceSlug: string): Promise<import("@plane/types").IPermission[]> {
+    return this.get(`/api/workspaces/${workspaceSlug}/permissions/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async fetchWorkspaceRolePermissions(
+    workspaceSlug: string,
+    roleId: string
+  ): Promise<import("@plane/types").IRolePermissionData> {
+    return this.get(`/api/workspaces/${workspaceSlug}/roles/${roleId}/permissions/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async updateWorkspaceRolePermissions(
+    workspaceSlug: string,
+    roleId: string,
+    permissionKeys: string[]
+  ): Promise<import("@plane/types").IRolePermissionData> {
+    return this.patch(`/api/workspaces/${workspaceSlug}/roles/${roleId}/permissions/`, {
+      permission_keys: permissionKeys,
+    })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  // workspace groups
+  async fetchWorkspaceGroups(workspaceSlug: string): Promise<IWorkspaceGroup[]> {
+    return this.get(`/api/workspaces/${workspaceSlug}/groups/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async createWorkspaceGroup(workspaceSlug: string, data: { name: string; description?: string }): Promise<IWorkspaceGroup> {
+    return this.post(`/api/workspaces/${workspaceSlug}/groups/`, data)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async updateWorkspaceGroup(
+    workspaceSlug: string,
+    groupId: string,
+    data: Partial<{ name: string; description: string }>
+  ): Promise<IWorkspaceGroup> {
+    return this.patch(`/api/workspaces/${workspaceSlug}/groups/${groupId}/`, data)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async deleteWorkspaceGroup(workspaceSlug: string, groupId: string): Promise<void> {
+    return this.delete(`/api/workspaces/${workspaceSlug}/groups/${groupId}/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  // workspace group members
+  async fetchWorkspaceGroupMembers(workspaceSlug: string, groupId: string): Promise<IWorkspaceGroupMember[]> {
+    return this.get(`/api/workspaces/${workspaceSlug}/groups/${groupId}/members/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async addWorkspaceGroupMember(workspaceSlug: string, groupId: string, memberId: string): Promise<IWorkspaceGroupMember> {
+    return this.post(`/api/workspaces/${workspaceSlug}/groups/${groupId}/members/`, { member: memberId })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async removeWorkspaceGroupMember(workspaceSlug: string, groupId: string, membershipId: string): Promise<void> {
+    return this.delete(`/api/workspaces/${workspaceSlug}/groups/${groupId}/members/${membershipId}/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  // workspace group roles
+  async fetchWorkspaceGroupRoles(workspaceSlug: string, groupId: string): Promise<IWorkspaceGroupRole[]> {
+    return this.get(`/api/workspaces/${workspaceSlug}/groups/${groupId}/roles/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async addWorkspaceGroupRole(workspaceSlug: string, groupId: string, roleId: string): Promise<IWorkspaceGroupRole> {
+    return this.post(`/api/workspaces/${workspaceSlug}/groups/${groupId}/roles/`, { role: roleId })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async removeWorkspaceGroupRole(workspaceSlug: string, groupId: string, groupRoleId: string): Promise<void> {
+    return this.delete(`/api/workspaces/${workspaceSlug}/groups/${groupId}/roles/${groupRoleId}/`)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;

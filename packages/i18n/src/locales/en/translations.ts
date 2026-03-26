@@ -1500,13 +1500,11 @@ export default {
           },
         },
       },
-      billing_and_plans: {
-        heading: "Billing & Plans",
-        description: "Choose your plan, manage subscriptions, and easily upgrade as your needs grow.",
-        title: "Billing & Plans",
-        current_plan: "Current plan",
-        free_plan: "You are currently using the free plan",
-        view_plans: "View plans",
+      groups: {
+        title: "Member groups",
+      },
+      roles: {
+        title: "Roles",
       },
       exports: {
         heading: "Exports",

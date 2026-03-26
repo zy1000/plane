@@ -266,3 +266,77 @@ export enum ECreateOrJoinWorkspaceViews {
   WORKSPACE_CREATE = "WORKSPACE_CREATE",
   WORKSPACE_JOIN = "WORKSPACE_JOIN",
 }
+
+// Workspace Role
+export interface IWorkspaceRole {
+  id: string;
+  workspace: string;
+  name: string;
+  description: string;
+  permissions: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+  created_by: string;
+  updated_by: string;
+  deleted_at: string | null;
+}
+
+// Workspace Group
+export interface IWorkspaceGroup {
+  id: string;
+  workspace: string;
+  name: string;
+  description: string;
+  member_count: number;
+  role_count: number;
+  created_at: string;
+  updated_at: string;
+  created_by: string;
+  updated_by: string;
+  deleted_at: string | null;
+}
+
+export interface IWorkspaceGroupMember {
+  id: string;
+  group: string;
+  member: string;
+  member_detail: IWorkspaceMember;
+  created_at: string;
+  updated_at: string;
+  created_by: string;
+  updated_by: string;
+  deleted_at: string | null;
+}
+
+export interface IWorkspaceGroupRole {
+  id: string;
+  group: string;
+  role: string;
+  role_detail: IWorkspaceRole;
+  created_at: string;
+  updated_at: string;
+  created_by: string;
+  updated_by: string;
+  deleted_at: string | null;
+}
+
+// Permission
+export interface IPermission {
+  id: string;
+  key: string;
+  name: string;
+  description: string | null;
+  scope: "workspace" | "project";
+  module: string | null;
+  action: string | null;
+  category: string | null;
+  sort_order: number;
+  is_active: boolean;
+  is_bound: boolean;
+}
+
+export interface IRolePermissionData {
+  role: IWorkspaceRole;
+  permission_keys: string[];
+  permissions: IPermission[];
+}

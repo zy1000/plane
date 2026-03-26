@@ -1643,11 +1643,11 @@ export default {
           },
         },
       },
-      billing_and_plans: {
-        title: "請求とプラン",
-        current_plan: "現在のプラン",
-        free_plan: "現在フリープランを使用中です",
-        view_plans: "プランを表示",
+      groups: {
+        title: "メンバーグループ",
+      },
+      roles: {
+        title: "Roles",
       },
       exports: {
         title: "エクスポート",

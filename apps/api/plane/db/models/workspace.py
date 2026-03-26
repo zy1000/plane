@@ -454,3 +454,110 @@ class WorkspaceUserPreference(BaseModel):
         verbose_name_plural = "Workspace User Preferences"
         db_table = "workspace_user_preferences"
         ordering = ("-created_at",)
+
+
+class WorkspaceRole(BaseModel):
+    """Workspace 级角色模板，定义一次后可导入到多个项目"""
+
+    workspace = models.ForeignKey(
+        "db.Workspace",
+        on_delete=models.CASCADE,
+        related_name="workspace_roles",
+    )
+    name = models.CharField(max_length=255)
+    description = models.TextField(blank=True, null=True)
+    permissions = models.JSONField(default=dict)
+
+    class Meta:
+        unique_together = ["workspace", "name", "deleted_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["workspace", "name"],
+                condition=models.Q(deleted_at__isnull=True),
+                name="workspace_role_unique_workspace_name_when_deleted_at_null",
+            )
+        ]
+        verbose_name = "Workspace Role"
+        verbose_name_plural = "Workspace Roles"
+        db_table = "workspace_roles"
+        ordering = ("-created_at",)
+
+    def __str__(self):
+        return f"{self.name} <{self.workspace.name}>"
+
+
+class WorkspaceGroup(BaseModel):
+    """Workspace 级用户组，成员固定，可跨项目复用"""
+
+    workspace = models.ForeignKey(
+        "db.Workspace",
+        on_delete=models.CASCADE,
+        related_name="workspace_groups",
+    )
+    name = models.CharField(max_length=255)
+    description = models.TextField(blank=True, null=True)
+
+    class Meta:
+        unique_together = ["workspace", "name", "deleted_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["workspace", "name"],
+                condition=models.Q(deleted_at__isnull=True),
+                name="workspace_group_unique_workspace_name_when_deleted_at_null",
+            )
+        ]
+        verbose_name = "Workspace Group"
+        verbose_name_plural = "Workspace Groups"
+        db_table = "workspace_groups"
+        ordering = ("-created_at",)
+
+    def __str__(self):
+        return f"{self.name} <{self.workspace.name}>"
+
+
+class WorkspaceGroupMember(BaseModel):
+    """WorkspaceGroup ↔ WorkspaceMember M2M 中间表"""
+
+    group = models.ForeignKey(WorkspaceGroup, on_delete=models.CASCADE, related_name="group_members")
+    member = models.ForeignKey(WorkspaceMember, on_delete=models.CASCADE, related_name="member_groups")
+
+    class Meta:
+        unique_together = ["group", "member", "deleted_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["group", "member"],
+                condition=models.Q(deleted_at__isnull=True),
+                name="workspace_group_member_unique_group_member_when_deleted_at_null",
+            )
+        ]
+        verbose_name = "Workspace Group Member"
+        verbose_name_plural = "Workspace Group Members"
+        db_table = "workspace_group_members"
+        ordering = ("-created_at",)
+
+    def __str__(self):
+        return f"{self.group.name} -> {self.member}"
+
+
+class WorkspaceGroupRole(BaseModel):
+    """WorkspaceGroup ↔ WorkspaceRole 默认对应关系，用于项目导入模板时批量预填"""
+
+    group = models.ForeignKey(WorkspaceGroup, on_delete=models.CASCADE, related_name="group_roles")
+    role = models.ForeignKey(WorkspaceRole, on_delete=models.CASCADE, related_name="role_groups")
+
+    class Meta:
+        unique_together = ["group", "role", "deleted_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["group", "role"],
+                condition=models.Q(deleted_at__isnull=True),
+                name="workspace_group_role_unique_group_role_when_deleted_at_null",
+            )
+        ]
+        verbose_name = "Workspace Group Role"
+        verbose_name_plural = "Workspace Group Roles"
+        db_table = "workspace_group_roles"
+        ordering = ("-created_at",)
+
+    def __str__(self):
+        return f"{self.group.name} -> {self.role.name}"

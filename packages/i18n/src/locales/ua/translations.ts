@@ -1680,13 +1680,11 @@ export default {
           },
         },
       },
-      billing_and_plans: {
-        heading: "Платежі та плани",
-        description: "Оберіть план, керуйте підписками та легко оновлюйте їх відповідно до ваших потреб.",
-        title: "Платежі та плани",
-        current_plan: "Поточний план",
-        free_plan: "Ви використовуєте безкоштовний план",
-        view_plans: "Переглянути плани",
+      groups: {
+        title: "Групи учасників",
+      },
+      roles: {
+        title: "Roles",
       },
       exports: {
         heading: "Експорти",

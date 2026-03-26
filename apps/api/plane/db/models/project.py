@@ -218,6 +218,36 @@ class ProjectMemberInvite(ProjectBaseModel):
         return f"{self.project.name} {self.email} {self.accepted}"
 
 
+class ProjectRole(ProjectBaseModel):
+    name = models.CharField(max_length=255)
+    description = models.TextField(blank=True, null=True)
+    permissions = models.JSONField(default=dict)
+    source_template = models.ForeignKey(
+        "db.WorkspaceRole",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="derived_project_roles",
+    )
+
+    class Meta:
+        unique_together = [["project", "name", "deleted_at"]]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["project", "name"],
+                condition=Q(deleted_at__isnull=True),
+                name="project_role_unique_project_name_when_deleted_at_null",
+            )
+        ]
+        verbose_name = "Project Role"
+        verbose_name_plural = "Project Roles"
+        db_table = "project_roles"
+        ordering = ("-created_at",)
+
+    def __str__(self):
+        return f"{self.name} <{self.project.name}>"
+
+
 class ProjectMember(ProjectBaseModel):
     member = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -233,6 +263,12 @@ class ProjectMember(ProjectBaseModel):
     preferences = models.JSONField(default=get_default_preferences)
     sort_order = models.FloatField(default=65535)
     is_active = models.BooleanField(default=True)
+    custom_roles = models.ManyToManyField(
+        "ProjectRole",
+        through="ProjectMemberRole",
+        blank=True,
+        related_name="role_members",
+    )
 
     def save(self, *args, **kwargs):
         if self._state.adding and self.member:
@@ -269,6 +305,54 @@ class ProjectMember(ProjectBaseModel):
     def __str__(self):
         """Return members of the project"""
         return f"{self.member.email} <{self.project.name}>"
+
+
+class ProjectMemberRole(ProjectBaseModel):
+    """ProjectMember ↔ ProjectRole M2M 中间表"""
+
+    member = models.ForeignKey(ProjectMember, on_delete=models.CASCADE, related_name="member_roles")
+    role = models.ForeignKey(ProjectRole, on_delete=models.CASCADE, related_name="role_member_entries")
+
+    class Meta:
+        unique_together = [["member", "role", "deleted_at"]]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["member", "role"],
+                condition=Q(deleted_at__isnull=True),
+                name="project_member_role_unique_member_role_when_deleted_at_null",
+            )
+        ]
+        verbose_name = "Project Member Role"
+        verbose_name_plural = "Project Member Roles"
+        db_table = "project_member_roles"
+        ordering = ("-created_at",)
+
+    def __str__(self):
+        return f"{self.member} -> {self.role.name}"
+
+
+class ProjectGroupRole(ProjectBaseModel):
+    """WorkspaceGroup 在某个项目中被授予的 ProjectRole（组在此项目的权限授权）"""
+
+    group = models.ForeignKey("db.WorkspaceGroup", on_delete=models.CASCADE, related_name="project_group_roles")
+    role = models.ForeignKey(ProjectRole, on_delete=models.CASCADE, related_name="group_role_entries")
+
+    class Meta:
+        unique_together = [["group", "role", "deleted_at"]]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["group", "role"],
+                condition=Q(deleted_at__isnull=True),
+                name="project_group_role_unique_group_role_when_deleted_at_null",
+            )
+        ]
+        verbose_name = "Project Group Role"
+        verbose_name_plural = "Project Group Roles"
+        db_table = "project_group_roles"
+        ordering = ("-created_at",)
+
+    def __str__(self):
+        return f"{self.group.name} -> {self.role.name}"
 
 
 # TODO: Remove workspace relation later

@@ -14,12 +14,11 @@ import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { SettingsPageHeader } from "@/components/settings/page-header";
 import { WORKSPACE_SETTINGS_ICONS } from "@/components/settings/workspace/sidebar/item-icon";
 
-export const BillingWorkspaceSettingsHeader = observer(function BillingWorkspaceSettingsHeader() {
-  // translation
+export const GroupsWorkspaceSettingsHeader = observer(function GroupsWorkspaceSettingsHeader() {
   const { t } = useTranslation();
   // derived values
-  const settingsDetails = WORKSPACE_SETTINGS["billing-and-plans"];
-  const Icon = WORKSPACE_SETTINGS_ICONS["billing-and-plans"];
+  const settingsDetails = WORKSPACE_SETTINGS["groups"];
+  const Icon = WORKSPACE_SETTINGS_ICONS["groups"];
 
   return (
     <SettingsPageHeader

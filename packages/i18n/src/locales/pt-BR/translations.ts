@@ -1665,11 +1665,11 @@ export default {
           },
         },
       },
-      billing_and_plans: {
-        title: "Faturamento e planos",
-        current_plan: "Plano atual",
-        free_plan: "Você está usando o plano gratuito atualmente",
-        view_plans: "Ver planos",
+      groups: {
+        title: "Grupos de membros",
+      },
+      roles: {
+        title: "Roles",
       },
       exports: {
         title: "Exportações",

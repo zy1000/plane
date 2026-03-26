@@ -49,14 +49,18 @@ from .issue import (
 from .module import Module, ModuleIssue, ModuleLink, ModuleMember, ModuleUserProperties
 from .notification import EmailNotificationLog, Notification, UserNotificationPreference
 from .page import Page, PageLabel, PageLog, ProjectPage, PageVersion
+from .permission import Permission
 from .project import (
     Project,
     ProjectBaseModel,
     ProjectIdentifier,
     ProjectMember,
     ProjectMemberInvite,
+    ProjectMemberRole,
     ProjectNetwork,
     ProjectPublicMember,
+    ProjectRole,
+    ProjectGroupRole,
     ProjectUserProperty,
 )
 from .session import Session
@@ -75,6 +79,10 @@ from .workspace import (
     WorkspaceUserLink,
     WorkspaceHomePreference,
     WorkspaceUserPreference,
+    WorkspaceRole,
+    WorkspaceGroup,
+    WorkspaceGroupMember,
+    WorkspaceGroupRole,
 )
 
 from .favorite import UserFavorite

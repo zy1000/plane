@@ -1633,11 +1633,11 @@ export default {
           },
         },
       },
-      billing_and_plans: {
-        title: "账单与计划",
-        current_plan: "当前计划",
-        free_plan: "您目前使用的是免费计划",
-        view_plans: "查看计划",
+      groups: {
+        title: "团队",
+      },
+      roles: {
+        title: "角色",
       },
       exports: {
         title: "导出",

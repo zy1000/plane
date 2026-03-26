@@ -1677,13 +1677,11 @@ export default {
           },
         },
       },
-      billing_and_plans: {
-        heading: "Оплата и тарифы",
-        description: "Выберите тариф, управляйте подписками и легко обновляйте их по мере роста потребностей.",
-        title: "Оплата и тарифы",
-        current_plan: "Текущий тариф",
-        free_plan: "Используется бесплатный тариф",
-        view_plans: "Посмотреть тарифы",
+      groups: {
+        title: "Группы участников",
+      },
+      roles: {
+        title: "Roles",
       },
       exports: {
         heading: "Экспорт",

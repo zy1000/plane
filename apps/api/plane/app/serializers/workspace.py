@@ -11,10 +11,15 @@ from .user import UserLiteSerializer, UserAdminLiteSerializer
 
 
 from plane.db.models import (
+    Permission,
     Workspace,
     WorkspaceMember,
     WorkspaceMemberInvite,
     WorkspaceTheme,
+    WorkspaceRole,
+    WorkspaceGroup,
+    WorkspaceGroupMember,
+    WorkspaceGroupRole,
     WorkspaceUserProperties,
     WorkspaceUserLink,
     UserRecentVisit,
@@ -134,6 +139,227 @@ class WorkspaceThemeSerializer(BaseSerializer):
         model = WorkspaceTheme
         fields = "__all__"
         read_only_fields = ["workspace", "actor"]
+
+
+class WorkspaceRoleSerializer(BaseSerializer):
+    class Meta:
+        model = WorkspaceRole
+        fields = [
+            "id",
+            "workspace",
+            "name",
+            "description",
+            "permissions",
+            "created_at",
+            "updated_at",
+            "created_by",
+            "updated_by",
+            "deleted_at",
+        ]
+        read_only_fields = [
+            "id",
+            "workspace",
+            "created_at",
+            "updated_at",
+            "created_by",
+            "updated_by",
+            "deleted_at",
+        ]
+
+    def validate_name(self, value):
+        workspace = self.context.get("workspace") or getattr(self.instance, "workspace", None)
+        queryset = WorkspaceRole.objects.filter(workspace=workspace, name=value)
+
+        if self.instance:
+            queryset = queryset.exclude(pk=self.instance.pk)
+
+        if workspace and queryset.exists():
+            raise serializers.ValidationError("Role with this name already exists in the workspace.")
+
+        return value
+
+    def validate_permissions(self, value):
+        if not isinstance(value, dict):
+            raise serializers.ValidationError("Permissions must be a JSON object.")
+
+        return value
+
+
+class PermissionSerializer(BaseSerializer):
+    is_bound = serializers.SerializerMethodField(read_only=True)
+
+    class Meta:
+        model = Permission
+        fields = [
+            "id",
+            "key",
+            "name",
+            "description",
+            "scope",
+            "module",
+            "action",
+            "category",
+            "sort_order",
+            "is_active",
+            "is_bound",
+        ]
+        read_only_fields = fields
+
+    def get_is_bound(self, obj):
+        bound_permission_keys = set(self.context.get("bound_permission_keys", []))
+        return obj.key in bound_permission_keys
+
+
+class WorkspaceRolePermissionBindingSerializer(serializers.Serializer):
+    permission_keys = serializers.ListField(
+        child=serializers.CharField(max_length=255),
+        allow_empty=True,
+        required=True,
+    )
+
+    def validate_permission_keys(self, value):
+        normalized_keys = list(dict.fromkeys(value))
+        permissions = Permission.objects.filter(
+            key__in=normalized_keys,
+            scope=Permission.Scope.WORKSPACE,
+            is_active=True,
+        )
+        existing_keys = set(permissions.values_list("key", flat=True))
+        invalid_keys = [key for key in normalized_keys if key not in existing_keys]
+
+        if invalid_keys:
+            raise serializers.ValidationError(
+                f"Invalid workspace permission keys: {', '.join(invalid_keys)}"
+            )
+
+        return normalized_keys
+
+    def save(self, **kwargs):
+        role = self.context["role"]
+        permissions_payload = role.permissions if isinstance(role.permissions, dict) else {}
+        permissions_payload["permission_keys"] = self.validated_data["permission_keys"]
+        role.permissions = permissions_payload
+        role.save()
+        return role
+
+
+class WorkspaceGroupSerializer(BaseSerializer):
+    member_count = serializers.IntegerField(read_only=True)
+    role_count = serializers.IntegerField(read_only=True)
+
+    class Meta:
+        model = WorkspaceGroup
+        fields = [
+            "id",
+            "workspace",
+            "name",
+            "description",
+            "member_count",
+            "role_count",
+            "created_at",
+            "updated_at",
+            "created_by",
+            "updated_by",
+            "deleted_at",
+        ]
+        read_only_fields = [
+            "id",
+            "workspace",
+            "member_count",
+            "role_count",
+            "created_at",
+            "updated_at",
+            "created_by",
+            "updated_by",
+            "deleted_at",
+        ]
+
+    def validate_name(self, value):
+        workspace = self.context.get("workspace") or getattr(self.instance, "workspace", None)
+        queryset = WorkspaceGroup.objects.filter(workspace=workspace, name=value)
+
+        if self.instance:
+            queryset = queryset.exclude(pk=self.instance.pk)
+
+        if workspace and queryset.exists():
+            raise serializers.ValidationError("Group with this name already exists in the workspace.")
+
+        return value
+
+
+class WorkspaceGroupMemberSerializer(BaseSerializer):
+    member_detail = WorkspaceMemberAdminSerializer(source="member", read_only=True)
+
+    class Meta:
+        model = WorkspaceGroupMember
+        fields = [
+            "id",
+            "group",
+            "member",
+            "member_detail",
+            "created_at",
+            "updated_at",
+            "created_by",
+            "updated_by",
+            "deleted_at",
+        ]
+        read_only_fields = [
+            "id",
+            "group",
+            "member_detail",
+            "created_at",
+            "updated_at",
+            "created_by",
+            "updated_by",
+            "deleted_at",
+        ]
+
+    def validate_member(self, value):
+        group = self.context.get("group")
+
+        if not value.is_active:
+            raise serializers.ValidationError("Inactive workspace members cannot be added to a group.")
+
+        if group and value.workspace_id != group.workspace_id:
+            raise serializers.ValidationError("The member does not belong to this workspace.")
+
+        return value
+
+
+class WorkspaceGroupRoleSerializer(BaseSerializer):
+    role_detail = WorkspaceRoleSerializer(source="role", read_only=True)
+
+    class Meta:
+        model = WorkspaceGroupRole
+        fields = [
+            "id",
+            "group",
+            "role",
+            "role_detail",
+            "created_at",
+            "updated_at",
+            "created_by",
+            "updated_by",
+            "deleted_at",
+        ]
+        read_only_fields = [
+            "id",
+            "group",
+            "role_detail",
+            "created_at",
+            "updated_at",
+            "created_by",
+            "updated_by",
+            "deleted_at",
+        ]
+
+    def validate_role(self, value):
+        group = self.context.get("group")
+
+        if group and value.workspace_id != group.workspace_id:
+            raise serializers.ValidationError("The role does not belong to this workspace.")
+
+        return value
 
 
 class WorkspaceUserPropertiesSerializer(BaseSerializer):
