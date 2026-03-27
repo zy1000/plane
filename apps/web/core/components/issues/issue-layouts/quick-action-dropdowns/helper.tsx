@@ -7,6 +7,7 @@
 import { useMemo } from "react";
 import { XCircle, ArchiveRestoreIcon } from "lucide-react";
 // plane imports
+import { PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { LinkIcon, CopyIcon, NewTabIcon, EditIcon, ArchiveIcon, TrashIcon } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
@@ -83,6 +84,7 @@ export interface MenuItemFactoryProps {
 // Common action handlers hook
 export const useIssueActionHandlers = (props: MenuItemFactoryProps) => {
   const { issue, workspaceSlug, projectIdentifier, handleRestore } = props;
+  const { t } = useTranslation();
 
   const workItemLink = useMemo(
     () =>
@@ -120,11 +122,18 @@ export const useIssueActionHandlers = (props: MenuItemFactoryProps) => {
           message: "Your work item can be found in project work items.",
         });
       })
-      .catch(() => {
+      .catch((error) => {
+        const isPermissionError = isProjectPermissionError(error);
+        const currentError = isPermissionError
+          ? PROJECT_ERROR_MESSAGES.permissionError
+          : {
+              i18n_title: "Error!",
+              i18n_message: "Work item could not be restored. Please try again.",
+            };
         setToast({
           type: TOAST_TYPE.ERROR,
-          title: "Error!",
-          message: "Work item could not be restored. Please try again.",
+          title: isPermissionError ? t(currentError.i18n_title) : currentError.i18n_title,
+          message: isPermissionError ? currentError.i18n_message && t(currentError.i18n_message) : currentError.i18n_message,
         });
       });
   };

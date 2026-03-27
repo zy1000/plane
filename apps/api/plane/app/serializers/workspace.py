@@ -150,6 +150,7 @@ class WorkspaceRoleSerializer(BaseSerializer):
             "name",
             "description",
             "permissions",
+            "type",
             "created_at",
             "updated_at",
             "created_by",
@@ -219,16 +220,27 @@ class WorkspaceRolePermissionBindingSerializer(serializers.Serializer):
 
     def validate_permission_keys(self, value):
         normalized_keys = list(dict.fromkeys(value))
-        permissions = Permission.objects.filter(
-            key__in=normalized_keys,
-            is_active=True,
-        )
-        existing_keys = set(permissions.values_list("key", flat=True))
+        role = self.context.get("role")
+
+        # 按 type 决定允许绑定的 scope
+        allowed_scope = None
+        if role:
+            if role.type == WorkspaceRole.RoleType.WORKSPACE:
+                allowed_scope = "workspace"
+            elif role.type == WorkspaceRole.RoleType.PROJECT_TEMPLATE:
+                allowed_scope = "project"
+
+        query = Permission.objects.filter(key__in=normalized_keys, is_active=True)
+        if allowed_scope:
+            query = query.filter(scope=allowed_scope)
+
+        existing_keys = set(query.values_list("key", flat=True))
         invalid_keys = [key for key in normalized_keys if key not in existing_keys]
 
         if invalid_keys:
+            scope_label = {"workspace": "工作区", "project": "项目"}.get(allowed_scope, "")
             raise serializers.ValidationError(
-                f"Invalid workspace permission keys: {', '.join(invalid_keys)}"
+                f"无效的{scope_label}权限 key：{', '.join(invalid_keys)}"
             )
 
         return normalized_keys

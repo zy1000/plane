@@ -13,12 +13,13 @@ import { PlusIcon } from "@plane/propel/icons";
 // plane imports
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TIssueServiceType } from "@plane/types";
+import { useTranslation } from "@plane/i18n";
 // hooks
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 // plane web hooks
 import { useFileSize } from "@/plane-web/hooks/use-file-size";
 // local imports
-import { useAttachmentOperations } from "./helper";
+import { getAttachmentUploadErrorToast, useAttachmentOperations } from "./helper";
 
 type Props = {
   workspaceSlug: string;
@@ -31,6 +32,7 @@ type Props = {
 
 export const IssueAttachmentActionButton = observer(function IssueAttachmentActionButton(props: Props) {
   const { workspaceSlug, projectId, issueId, customButton, disabled = false, issueServiceType } = props;
+  const { t } = useTranslation();
   // state
   const [isLoading, setIsLoading] = useState(false);
   // store hooks
@@ -60,11 +62,12 @@ export const IssueAttachmentActionButton = observer(function IssueAttachmentActi
         setIsLoading(true);
         attachmentOperations
           .create(currentFile)
-          .catch(() => {
+          .catch((error) => {
+            const currentError = getAttachmentUploadErrorToast(error, t);
             setToast({
               type: TOAST_TYPE.ERROR,
-              title: "Error!",
-              message: "File could not be attached. Try uploading again.",
+              title: currentError.title,
+              message: currentError.message,
             });
           })
           .finally(() => {
@@ -85,7 +88,7 @@ export const IssueAttachmentActionButton = observer(function IssueAttachmentActi
       });
       return;
     },
-    [attachmentOperations, maxFileSize, workspaceSlug, handleFetchPropertyActivities, setLastWidgetAction]
+    [attachmentOperations, maxFileSize, workspaceSlug, handleFetchPropertyActivities, setLastWidgetAction, t]
   );
 
   const { getRootProps, getInputProps } = useDropzone({

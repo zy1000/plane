@@ -7,6 +7,7 @@
 import { useRef } from "react";
 import { observer } from "mobx-react";
 // plane imports
+import { PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { CopyLinkIcon } from "@plane/propel/icons";
 import { IconButton } from "@plane/propel/icon-button";
@@ -111,11 +112,17 @@ export const IssueDetailQuickActions = observer(function IssueDetailQuickActions
     try {
       await archiveIssue(workspaceSlug, projectId, issueId);
       router.push(`/${workspaceSlug}/projects/${projectId}/issues`);
-    } catch (_error) {
+    } catch (error) {
+      const currentError = isProjectPermissionError(error)
+        ? PROJECT_ERROR_MESSAGES.permissionError
+        : {
+            i18n_title: "toast.error",
+            i18n_message: "issue.archive.failed.message",
+          };
       setToast({
-        title: t("toast.error"),
+        title: t(currentError.i18n_title),
         type: TOAST_TYPE.ERROR,
-        message: t("issue.archive.failed.message"),
+        message: currentError.i18n_message ? t(currentError.i18n_message) : undefined,
       });
     }
   };
@@ -130,11 +137,17 @@ export const IssueDetailQuickActions = observer(function IssueDetailQuickActions
         message: t("issue.restore.success.message"),
       });
       router.push(workItemLink);
-    } catch (_error) {
+    } catch (error) {
+      const currentError = isProjectPermissionError(error)
+        ? PROJECT_ERROR_MESSAGES.permissionError
+        : {
+            i18n_title: "toast.error",
+            i18n_message: "issue.restore.failed.message",
+          };
       setToast({
-        title: t("toast.error"),
+        title: t(currentError.i18n_title),
         type: TOAST_TYPE.ERROR,
-        message: t("issue.restore.failed.message"),
+        message: currentError.i18n_message ? t(currentError.i18n_message) : undefined,
       });
     }
   };

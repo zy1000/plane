@@ -17,5 +17,6 @@ from .project import (
     ProjectLitePermission,
     ProjectAdminPermission,
 )
-from .base import allow_permission, ROLE
+from .keys import PermissionKey
+from .base import allow_permission, allow_workspace_permission, allow_project_permission, ROLE
 from .page import ProjectPagePermission

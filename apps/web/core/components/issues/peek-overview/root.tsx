@@ -9,7 +9,7 @@ import { observer } from "mobx-react";
 import { usePathname } from "next/navigation";
 // Plane imports
 import useSWR from "swr";
-import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import { EUserPermissions, EUserPermissionsLevel, PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setPromiseToast, setToast } from "@plane/propel/toast";
 import type { IWorkItemPeekOverview, TIssue } from "@plane/types";
@@ -119,7 +119,17 @@ export const IssuePeekOverview = observer(function IssuePeekOverview(props: IWor
           if (!issues?.archiveIssue) return;
           await issues.archiveIssue(workspaceSlug, projectId, issueId);
         } catch (error) {
-          console.error("Error archiving the issue", error);
+          const currentError = isProjectPermissionError(error)
+            ? PROJECT_ERROR_MESSAGES.permissionError
+            : {
+                i18n_title: "toast.error",
+                i18n_message: "issue.archive.failed.message",
+              };
+          setToast({
+            type: TOAST_TYPE.ERROR,
+            title: t(currentError.i18n_title),
+            message: currentError.i18n_message ? t(currentError.i18n_message) : undefined,
+          });
         }
       },
       restore: async (workspaceSlug: string, projectId: string, issueId: string) => {
@@ -130,11 +140,17 @@ export const IssuePeekOverview = observer(function IssuePeekOverview(props: IWor
             title: t("issue.restore.success.title"),
             message: t("issue.restore.success.message"),
           });
-        } catch (_error) {
+        } catch (error) {
+          const currentError = isProjectPermissionError(error)
+            ? PROJECT_ERROR_MESSAGES.permissionError
+            : {
+                i18n_title: "toast.error",
+                i18n_message: "issue.restore.failed.message",
+              };
           setToast({
             type: TOAST_TYPE.ERROR,
-            title: t("toast.error"),
-            message: t("issue.restore.failed.message"),
+            title: t(currentError.i18n_title),
+            message: currentError.i18n_message ? t(currentError.i18n_message) : undefined,
           });
         }
       },

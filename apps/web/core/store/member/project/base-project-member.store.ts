@@ -81,6 +81,12 @@ export interface IBaseProjectMemberStore {
     userId: string,
     role: EUserProjectRoles
   ) => Promise<TProjectMembership>;
+  updateMemberCustomRoles: (
+    workspaceSlug: string,
+    projectId: string,
+    userId: string,
+    customRoleIds: string[]
+  ) => Promise<string[]>;
   removeMemberFromProject: (workspaceSlug: string, projectId: string, userId: string) => Promise<void>;
 }
 
@@ -120,6 +126,7 @@ export abstract class BaseProjectMemberStore implements IBaseProjectMemberStore 
       updateProjectUserProperties: action,
       bulkAddMembersToProject: action,
       updateMemberRole: action,
+      updateMemberCustomRoles: action,
       removeMemberFromProject: action,
     });
     // root store
@@ -219,6 +226,7 @@ export abstract class BaseProjectMemberStore implements IBaseProjectMemberStore 
       id: projectMember.id,
       role: projectMember.role,
       original_role: projectMember.original_role,
+      custom_role_ids: projectMember.custom_role_ids,
       member: {
         ...userDetails,
         joining_date: projectMember.created_at ?? undefined,
@@ -272,6 +280,7 @@ export abstract class BaseProjectMemberStore implements IBaseProjectMemberStore 
       id: projectMember.id,
       role: projectMember.role,
       original_role: projectMember.original_role,
+      custom_role_ids: projectMember.custom_role_ids,
       member: {
         ...userDetails,
         joining_date: projectMember.created_at ?? undefined,
@@ -396,6 +405,48 @@ export abstract class BaseProjectMemberStore implements IBaseProjectMemberStore 
             permissionBeforeUpdate
           );
         }
+      });
+      throw error;
+    }
+  };
+
+  /**
+   * @description update the custom roles of a member in a project
+   * @param workspaceSlug
+   * @param projectId
+   * @param userId
+   * @param customRoleIds
+   */
+  updateMemberCustomRoles = async (
+    workspaceSlug: string,
+    projectId: string,
+    userId: string,
+    customRoleIds: string[]
+  ): Promise<string[]> => {
+    const memberDetails = this.getProjectMemberDetails(userId, projectId);
+    if (!memberDetails?.id) throw new Error("Member not found");
+
+    const previousRoleIds = this.getProjectMembershipByUserId(userId, projectId)?.custom_role_ids ?? [];
+
+    // Optimistic update
+    runInAction(() => {
+      set(this.projectMemberMap, [projectId, userId, "custom_role_ids"], customRoleIds);
+    });
+
+    try {
+      const response = await this.projectMemberService.updateMemberCustomRoles(
+        workspaceSlug,
+        projectId,
+        memberDetails.id,
+        customRoleIds
+      );
+      runInAction(() => {
+        set(this.projectMemberMap, [projectId, userId, "custom_role_ids"], response.custom_role_ids);
+      });
+      return response.custom_role_ids;
+    } catch (error) {
+      runInAction(() => {
+        set(this.projectMemberMap, [projectId, userId, "custom_role_ids"], previousRoleIds);
       });
       throw error;
     }

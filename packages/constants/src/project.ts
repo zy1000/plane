@@ -125,6 +125,42 @@ export const PROJECT_ERROR_MESSAGES = {
   },
 };
 
+/**
+ * 通用项目权限接口在 403 时返回的 `error` 字段。
+ * 用于前端区分「权限不足」与「其他业务失败」。
+ */
+export function isProjectPermissionError(error: unknown): boolean {
+  const raw =
+    typeof error === "object" && error !== null && "error" in error
+      ? (error as { error?: unknown }).error
+      : undefined;
+  const msg = raw === undefined || raw === null ? "" : String(raw).trim();
+  if (!msg) return false;
+  if (msg === "You don't have the required permissions.") return true;
+  if (msg === "您没有所需的项目权限。") return true;
+  if (msg === "You don't have the required workspace permissions.") return true;
+  return false;
+}
+
+/**
+ * 删除工作项接口的权限错误判断，兼容旧版「仅创建者或管理员可删除」文案。
+ */
+export function isWorkItemDeletePermissionError(error: unknown): boolean {
+  if (isProjectPermissionError(error)) return true;
+
+  const raw =
+    typeof error === "object" && error !== null && "error" in error
+      ? (error as { error?: unknown }).error
+      : undefined;
+  const msg = raw === undefined || raw === null ? "" : String(raw).trim();
+  if (!msg) return false;
+
+  if (msg === "Only admin or creator can delete the work item") return true;
+  if (msg.startsWith("Only admin or creator can delete the ")) return true;
+
+  return false;
+}
+
 export enum EProjectFeatureKey {
   WORK_ITEMS = "work_items",
   CYCLES = "cycles",

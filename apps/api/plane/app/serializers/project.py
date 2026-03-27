@@ -11,6 +11,7 @@ from django.db.models import Max
 from plane.app.serializers.workspace import WorkspaceLiteSerializer
 from plane.app.serializers.user import UserLiteSerializer, UserAdminLiteSerializer
 from plane.db.models import (
+    Permission,
     Project,
     ProjectMember,
     ProjectMemberInvite,
@@ -19,10 +20,8 @@ from plane.db.models import (
     ProjectPublicMember,
     IssueSequence,
 )
-from plane.utils.content_validator import (
-    validate_html_content,
-)
-from ...db.models.project import ProjectAnnouncement, ProjectPmsInfo
+from plane.utils.content_validator import validate_html_content
+from ...db.models.project import ProjectAnnouncement, ProjectPmsInfo, ProjectRole
 
 
 class ProjectSerializer(BaseSerializer):
@@ -179,11 +178,15 @@ class ProjectMemberAdminSerializer(BaseSerializer):
 
 class ProjectMemberRoleSerializer(DynamicBaseSerializer):
     original_role = serializers.IntegerField(source="role", read_only=True)
+    custom_role_ids = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = ProjectMember
-        fields = ("id", "role", "member", "project", "original_role", "created_at")
-        read_only_fields = ["original_role", "created_at"]
+        fields = ("id", "role", "member", "project", "original_role", "created_at", "custom_role_ids")
+        read_only_fields = ["original_role", "created_at", "custom_role_ids"]
+
+    def get_custom_role_ids(self, obj):
+        return [str(r.id) for r in obj.custom_roles.all()]
 
 
 class ProjectMemberInviteSerializer(BaseSerializer):
@@ -287,3 +290,94 @@ class ProjectPmsInfoSerializer(BaseSerializer):
             raise serializers.ValidationError({"project": "project_id is required in context"})
         validated_data["project_id"] = project_id
         return super().create(validated_data)
+
+
+class ProjectRoleSerializer(BaseSerializer):
+    source_template_name = serializers.SerializerMethodField(read_only=True)
+
+    class Meta:
+        model = ProjectRole
+        fields = [
+            "id",
+            "project",
+            "name",
+            "description",
+            "permissions",
+            "source_template",
+            "source_template_name",
+            "created_at",
+            "updated_at",
+            "created_by",
+            "updated_by",
+            "deleted_at",
+        ]
+        read_only_fields = [
+            "id",
+            "project",
+            "source_template",
+            "source_template_name",
+            "created_at",
+            "updated_at",
+            "created_by",
+            "updated_by",
+            "deleted_at",
+        ]
+
+    def get_source_template_name(self, obj):
+        if obj.source_template_id:
+            return obj.source_template.name
+        return None
+
+    def validate_name(self, value):
+        project = self.context.get("project") or getattr(self.instance, "project", None)
+        queryset = ProjectRole.objects.filter(project=project, name=value)
+
+        if self.instance:
+            queryset = queryset.exclude(pk=self.instance.pk)
+
+        if project and queryset.exists():
+            raise serializers.ValidationError("该项目中已存在同名角色。")
+
+        return value
+
+    def validate_permissions(self, value):
+        if not isinstance(value, dict):
+            raise serializers.ValidationError("Permissions must be a JSON object.")
+        return value
+
+
+class ProjectRolePermissionBindingSerializer(serializers.Serializer):
+    permission_keys = serializers.ListField(
+        child=serializers.CharField(max_length=255),
+        allow_empty=True,
+        required=True,
+    )
+
+    def validate_permission_keys(self, value):
+        normalized_keys = list(dict.fromkeys(value))
+        queryset = Permission.objects.filter(
+            key__in=normalized_keys,
+            is_active=True,
+            scope="project",
+        )
+        existing_keys = set(queryset.values_list("key", flat=True))
+        invalid_keys = [key for key in normalized_keys if key not in existing_keys]
+
+        if invalid_keys:
+            raise serializers.ValidationError(f"无效的项目权限 key：{', '.join(invalid_keys)}")
+
+        return normalized_keys
+
+    def save(self, **kwargs):
+        role = self.context["role"]
+        permissions_payload = role.permissions if isinstance(role.permissions, dict) else {}
+        permissions_payload["permission_keys"] = self.validated_data["permission_keys"]
+        role.permissions = permissions_payload
+        role.save()
+        return role
+
+
+class ImportProjectRoleSerializer(serializers.Serializer):
+    """从工作区项目角色模板导入；固定为独立副本（与模板解绑，不设置 source_template）。"""
+
+    workspace_role_id = serializers.UUIDField(required=True)

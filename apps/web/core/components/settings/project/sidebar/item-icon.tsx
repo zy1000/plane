@@ -6,7 +6,7 @@
 
 import type { ComponentProps } from "react";
 import type { LucideIcon } from "lucide-react";
-import { CloudCog, GitPullRequest, Users, Zap } from "lucide-react";
+import { CloudCog, GitPullRequest, ShieldCheck, Users, Zap } from "lucide-react";
 // plane imports
 import type { ISvgIcons } from "@plane/propel/icons";
 import {
@@ -30,6 +30,7 @@ const WorkflowIcon = (props: ComponentProps<typeof GitPullRequest>) => (
 export const PROJECT_SETTINGS_ICONS: Record<TProjectSettingsTabs, LucideIcon | React.FC<ISvgIcons>> = {
   general: SettingIcon,
   members: Users,
+  roles: ShieldCheck,
   features_cycles: CycleIcon,
   features_modules: ModuleIcon,
   features_views: ViewsIcon,

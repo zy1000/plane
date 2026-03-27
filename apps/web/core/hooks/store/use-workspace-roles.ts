@@ -4,8 +4,8 @@
  * See the LICENSE file for details.
  */
 
-import { useCallback, useRef, useState } from "react";
-import type { IPermission, IRolePermissionData, IWorkspaceRole } from "@plane/types";
+import { useCallback, useMemo, useRef, useState } from "react";
+import type { IPermission, IRolePermissionData, IWorkspaceRole, TWorkspaceRoleType } from "@plane/types";
 import { WorkspaceService } from "@/services/workspace.service";
 
 const workspaceService = new WorkspaceService();
@@ -27,7 +27,11 @@ const emptyPermissionState = (): TRolePermissionState => ({
   loaded: false,
 });
 
-export const useWorkspaceRoles = (workspaceSlug: string | undefined) => {
+/**
+ * 统一管理工作区下所有角色（workspace 角色 + project_template 模板）。
+ * 通过 `roleType` 参数在消费层按类型过滤展示。
+ */
+export const useWorkspaceRoles = (workspaceSlug: string | undefined, roleType?: TWorkspaceRoleType) => {
   const [rolesState, setRolesState] = useState<TRolesState>({
     roles: [],
     isLoading: false,
@@ -51,6 +55,12 @@ export const useWorkspaceRoles = (workspaceSlug: string | undefined) => {
       setRolesState((prev) => ({ ...prev, isLoading: false }));
     }
   }, [workspaceSlug]);
+
+  // 按 roleType 过滤，未传则返回全量
+  const roles = useMemo(
+    () => (roleType ? rolesState.roles.filter((r) => r.type === roleType) : rolesState.roles),
+    [rolesState.roles, roleType]
+  );
 
   const loadRolePermissions = useCallback(
     async (roleId: string) => {
@@ -92,16 +102,18 @@ export const useWorkspaceRoles = (workspaceSlug: string | undefined) => {
   );
 
   const createRole = useCallback(
-    async (data: { name: string; description?: string }): Promise<IWorkspaceRole> => {
+    async (data: { name: string; description?: string; type?: TWorkspaceRoleType }): Promise<IWorkspaceRole> => {
       if (!workspaceSlug) throw new Error("缺少 workspaceSlug");
-      const newRole = await workspaceService.createWorkspaceRole(workspaceSlug, data);
+      // 若调用者未指定 type，则使用当前 hook 的 roleType（如有），否则默认 workspace
+      const payload = { ...data, type: data.type ?? roleType ?? "workspace" };
+      const newRole = await workspaceService.createWorkspaceRole(workspaceSlug, payload);
       setRolesState((prev) => ({
         ...prev,
         roles: [newRole, ...prev.roles],
       }));
       return newRole;
     },
-    [workspaceSlug]
+    [workspaceSlug, roleType]
   );
 
   const updateRole = useCallback(
@@ -194,7 +206,7 @@ export const useWorkspaceRoles = (workspaceSlug: string | undefined) => {
   );
 
   return {
-    roles: rolesState.roles,
+    roles,
     isLoading: rolesState.isLoading,
     error,
     getRolePermissionState,

@@ -7,10 +7,12 @@
 import { useCallback, useState } from "react";
 import { observer } from "mobx-react";
 import { useDropzone } from "react-dropzone";
+import { TOAST_TYPE, setToast } from "@plane/propel/toast";
+import { useTranslation } from "@plane/i18n";
 // plane web hooks
 import { useFileSize } from "@/plane-web/hooks/use-file-size";
 // types
-import type { TAttachmentOperations } from "../issue-detail-widgets/attachments/helper";
+import { getAttachmentUploadErrorToast, type TAttachmentOperations } from "../issue-detail-widgets/attachments/helper";
 
 type TAttachmentOperationsModal = Pick<TAttachmentOperations, "create">;
 
@@ -22,6 +24,7 @@ type Props = {
 
 export const IssueAttachmentUpload = observer(function IssueAttachmentUpload(props: Props) {
   const { workspaceSlug, disabled = false, attachmentOperations } = props;
+  const { t } = useTranslation();
   // states
   const [isLoading, setIsLoading] = useState(false);
   // file size
@@ -33,9 +36,19 @@ export const IssueAttachmentUpload = observer(function IssueAttachmentUpload(pro
       if (!currentFile || !workspaceSlug) return;
 
       setIsLoading(true);
-      attachmentOperations.create(currentFile).finally(() => setIsLoading(false));
+      attachmentOperations
+        .create(currentFile)
+        .catch((error) => {
+          const currentError = getAttachmentUploadErrorToast(error, t);
+          setToast({
+            type: TOAST_TYPE.ERROR,
+            title: currentError.title,
+            message: currentError.message,
+          });
+        })
+        .finally(() => setIsLoading(false));
     },
-    [attachmentOperations, workspaceSlug]
+    [attachmentOperations, workspaceSlug, t]
   );
 
   const { getRootProps, getInputProps, isDragActive, isDragReject, fileRejections } = useDropzone({

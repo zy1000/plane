@@ -7,7 +7,7 @@
 import { useMemo } from "react";
 import { observer } from "mobx-react";
 // plane imports
-import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import { EUserPermissions, EUserPermissionsLevel, PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setPromiseToast, setToast } from "@plane/propel/toast";
 import type { TIssue } from "@plane/types";
@@ -134,6 +134,17 @@ export const IssueDetailRoot = observer(function IssueDetailRoot(props: TIssueDe
           await archiveIssue(workspaceSlug, projectId, issueId);
         } catch (error) {
           console.log("Error in archiving issue:", error);
+          const currentError = isProjectPermissionError(error)
+            ? PROJECT_ERROR_MESSAGES.permissionError
+            : {
+                i18n_title: "common.error.label",
+                i18n_message: "issue.archive.failed.message",
+              };
+          setToast({
+            title: t(currentError.i18n_title),
+            type: TOAST_TYPE.ERROR,
+            message: currentError.i18n_message ? t(currentError.i18n_message) : undefined,
+          });
         }
       },
       addCycleToIssue: async (workspaceSlug: string, projectId: string, cycleId: string, issueId: string) => {

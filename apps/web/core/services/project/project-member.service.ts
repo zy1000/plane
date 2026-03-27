@@ -71,6 +71,22 @@ export class ProjectMemberService extends APIService {
         throw error?.response?.data;
       });
   }
+
+  async updateMemberCustomRoles(
+    workspaceSlug: string,
+    projectId: string,
+    memberId: string,
+    customRoleIds: string[]
+  ): Promise<{ custom_role_ids: string[] }> {
+    return this.put(
+      `/api/workspaces/${workspaceSlug}/projects/${projectId}/members/${memberId}/custom-roles/`,
+      { custom_role_ids: customRoleIds }
+    )
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
 }
 
 const projectMemberService = new ProjectMemberService();

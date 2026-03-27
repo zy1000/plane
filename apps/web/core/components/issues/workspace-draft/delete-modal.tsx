@@ -6,7 +6,12 @@
 
 import { useEffect, useState } from "react";
 // types
-import { PROJECT_ERROR_MESSAGES, EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import {
+  PROJECT_ERROR_MESSAGES,
+  EUserPermissions,
+  EUserPermissionsLevel,
+  isWorkItemDeletePermissionError,
+} from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TWorkspaceDraftIssue } from "@plane/types";
@@ -78,7 +83,7 @@ export function WorkspaceDraftIssueDeleteIssueModal(props: Props) {
           onClose();
         })
         .catch((errors) => {
-          const isPermissionError = errors?.error === "Only admin or creator can delete the work item";
+          const isPermissionError = isWorkItemDeletePermissionError(errors);
           const currentError = isPermissionError
             ? PROJECT_ERROR_MESSAGES.permissionError
             : PROJECT_ERROR_MESSAGES.issueDeleteError;

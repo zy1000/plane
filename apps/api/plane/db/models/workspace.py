@@ -457,7 +457,14 @@ class WorkspaceUserPreference(BaseModel):
 
 
 class WorkspaceRole(BaseModel):
-    """Workspace 级角色模板，定义一次后可导入到多个项目"""
+    """Workspace 级角色，分两类：
+    - type=workspace：管理工作区权限（只能绑定 workspace scope 权限）
+    - type=project_template：项目角色模板（只能绑定 project scope 权限），可导入到 ProjectRole
+    """
+
+    class RoleType(models.TextChoices):
+        WORKSPACE = "workspace", "工作区角色"
+        PROJECT_TEMPLATE = "project_template", "项目角色模板"
 
     workspace = models.ForeignKey(
         "db.Workspace",
@@ -467,6 +474,12 @@ class WorkspaceRole(BaseModel):
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True, null=True)
     permissions = models.JSONField(default=dict)
+    type = models.CharField(
+        max_length=20,
+        choices=RoleType.choices,
+        default=RoleType.WORKSPACE,
+        db_index=True,
+    )
 
     class Meta:
         unique_together = ["workspace", "name", "deleted_at"]

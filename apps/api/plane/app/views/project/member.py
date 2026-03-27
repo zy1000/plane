@@ -6,6 +6,7 @@
 from rest_framework.response import Response
 from rest_framework import status
 from django.db.models import Min
+from django.utils import timezone
 
 # Module imports
 from .base import BaseViewSet, BaseAPIView
@@ -19,6 +20,7 @@ from plane.app.serializers import (
 from plane.app.permissions import WorkspaceUserPermission
 
 from plane.db.models import Project, ProjectMember, ProjectUserProperty, WorkspaceMember
+from plane.db.models.project import ProjectRole, ProjectMemberRole
 from plane.bgtasks.project_add_user_email_task import project_add_user_email
 from plane.utils.host import base_host
 from plane.app.permissions.base import allow_permission, ROLE
@@ -156,14 +158,18 @@ class ProjectMemberViewSet(BaseViewSet):
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
     def list(self, request, slug, project_id):
         # Get the list of project members for the project
-        project_members = ProjectMember.objects.filter(
-            project_id=project_id,
-            workspace__slug=slug,
-            member__is_bot=False,
-            is_active=True,
-            member__member_workspace__workspace__slug=slug,
-            member__member_workspace__is_active=True,
-        ).select_related("project", "member", "workspace")
+        project_members = (
+            ProjectMember.objects.filter(
+                project_id=project_id,
+                workspace__slug=slug,
+                member__is_bot=False,
+                is_active=True,
+                member__member_workspace__workspace__slug=slug,
+                member__member_workspace__is_active=True,
+            )
+            .select_related("project", "member", "workspace")
+            .prefetch_related("custom_roles")
+        )
 
         serializer = ProjectMemberRoleSerializer(project_members, fields=("id", "member", "role"), many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
@@ -339,6 +345,93 @@ class UserProjectRolesEndpoint(BaseAPIView):
 
         project_members = {str(member["project_id"]): member["role"] for member in project_members}
         return Response(project_members, status=status.HTTP_200_OK)
+
+
+class ProjectMemberCustomRolesAPIView(BaseAPIView):
+    """管理项目成员的自定义角色（支持多角色）"""
+
+    def get_project_member(self, slug, project_id, pk):
+        return (
+            ProjectMember.objects.filter(
+                pk=pk,
+                project_id=project_id,
+                project__workspace__slug=slug,
+                is_active=True,
+            )
+            .prefetch_related("custom_roles")
+            .first()
+        )
+
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    def get(self, request, slug, project_id, pk):
+        project_member = self.get_project_member(slug, project_id, pk)
+        if not project_member:
+            return Response({"error": "Project member not found."}, status=status.HTTP_404_NOT_FOUND)
+        custom_role_ids = [str(r.id) for r in project_member.custom_roles.all()]
+        return Response({"custom_role_ids": custom_role_ids}, status=status.HTTP_200_OK)
+
+    @allow_permission([ROLE.ADMIN])
+    def put(self, request, slug, project_id, pk):
+        project_member = self.get_project_member(slug, project_id, pk)
+        if not project_member:
+            return Response({"error": "Project member not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        role_ids = request.data.get("custom_role_ids", [])
+        if not isinstance(role_ids, list):
+            return Response({"error": "custom_role_ids 必须是列表。"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 验证角色 ID 均属于该项目
+        valid_roles = list(
+            ProjectRole.objects.filter(
+                pk__in=role_ids,
+                project_id=project_id,
+            )
+        )
+        valid_role_id_set = {str(r.id) for r in valid_roles}
+        invalid_ids = [rid for rid in role_ids if str(rid) not in valid_role_id_set]
+        if invalid_ids:
+            return Response(
+                {"error": f"无效的角色 ID：{', '.join(str(i) for i in invalid_ids)}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # 软删除不在新集合中的已有角色关联
+        ProjectMemberRole.objects.filter(
+            member=project_member,
+            deleted_at__isnull=True,
+        ).exclude(role_id__in=valid_role_id_set).update(deleted_at=timezone.now())
+
+        # 添加新的角色关联
+        existing_active_role_ids = set(
+            str(rid)
+            for rid in ProjectMemberRole.objects.filter(
+                member=project_member,
+                deleted_at__isnull=True,
+            ).values_list("role_id", flat=True)
+        )
+        to_create = [
+            ProjectMemberRole(
+                member=project_member,
+                role=role,
+                created_by=request.user,
+                updated_by=request.user,
+                project_id=project_id,
+                workspace=project_member.workspace
+            )
+            for role in valid_roles
+            if str(role.id) not in existing_active_role_ids
+        ]
+        if to_create:
+            ProjectMemberRole.objects.bulk_create(to_create, ignore_conflicts=True)
+
+        final_role_ids = [
+            str(rid)
+            for rid in ProjectMemberRole.objects.filter(
+                member=project_member,
+                deleted_at__isnull=True,
+            ).values_list("role_id", flat=True)
+        ]
+        return Response({"custom_role_ids": final_role_ids}, status=status.HTTP_200_OK)
 
 
 class ProjectMemberPreferenceEndpoint(BaseAPIView):

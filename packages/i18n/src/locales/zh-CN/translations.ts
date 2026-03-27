@@ -1942,6 +1942,9 @@ export default {
     workflow: {
       label: "工作流",
     },
+    roles: {
+      label: "项目角色",
+    },
     pms_sync: {
       label: "PMS 缺陷同步",
       heading: "PMS 缺陷同步",

@@ -18,7 +18,7 @@ from rest_framework import status
 # Module imports
 from .. import BaseViewSet
 from plane.app.serializers import IssueCommentSerializer, CommentReactionSerializer
-from plane.app.permissions import allow_permission, ROLE
+from plane.app.permissions import allow_permission, ROLE, allow_project_permission, PermissionKey
 from plane.db.models import IssueComment, ProjectMember, CommentReaction, Project, Issue
 from plane.bgtasks.issue_activities_task import issue_activity
 from plane.utils.host import base_host
@@ -61,6 +61,7 @@ class IssueCommentViewSet(BaseViewSet):
         )
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    @allow_project_permission(PermissionKey.ISSUE_COMMENT_CREATE)
     def create(self, request, slug, project_id, issue_id):
         project = Project.objects.get(pk=project_id)
         issue = Issue.objects.get(pk=issue_id)
@@ -107,6 +108,7 @@ class IssueCommentViewSet(BaseViewSet):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     @allow_permission(allowed_roles=[ROLE.ADMIN], creator=True, model=IssueComment)
+    @allow_project_permission(PermissionKey.ISSUE_COMMENT_EDIT)
     def partial_update(self, request, slug, project_id, issue_id, pk):
         issue_comment = IssueComment.objects.get(workspace__slug=slug, project_id=project_id, issue_id=issue_id, pk=pk)
         requested_data = json.dumps(self.request.data, cls=DjangoJSONEncoder)
@@ -142,6 +144,7 @@ class IssueCommentViewSet(BaseViewSet):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     @allow_permission(allowed_roles=[ROLE.ADMIN], creator=True, model=IssueComment)
+    @allow_project_permission(PermissionKey.ISSUE_COMMENT_DELETE)
     def destroy(self, request, slug, project_id, issue_id, pk):
         issue_comment = IssueComment.objects.get(workspace__slug=slug, project_id=project_id, issue_id=issue_id, pk=pk)
         current_instance = json.dumps(IssueCommentSerializer(issue_comment).data, cls=DjangoJSONEncoder)

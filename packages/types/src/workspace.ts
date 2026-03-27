@@ -268,12 +268,15 @@ export enum ECreateOrJoinWorkspaceViews {
 }
 
 // Workspace Role
+export type TWorkspaceRoleType = "workspace" | "project_template";
+
 export interface IWorkspaceRole {
   id: string;
   workspace: string;
   name: string;
   description: string;
   permissions: Record<string, unknown>;
+  type: TWorkspaceRoleType;
   created_at: string;
   updated_at: string;
   created_by: string;
@@ -337,6 +340,28 @@ export interface IPermission {
 
 export interface IRolePermissionData {
   role: IWorkspaceRole;
+  permission_keys: string[];
+  permissions: IPermission[];
+}
+
+// Project Role — 项目内实际生效的自定义角色
+export interface IProjectRole {
+  id: string;
+  project: string;
+  name: string;
+  description: string;
+  permissions: Record<string, unknown>;
+  source_template: string | null;
+  source_template_name: string | null;
+  created_at: string;
+  updated_at: string;
+  created_by: string;
+  updated_by: string;
+  deleted_at: string | null;
+}
+
+export interface IProjectRolePermissionData {
+  role: IProjectRole;
   permission_keys: string[];
   permissions: IPermission[];
 }

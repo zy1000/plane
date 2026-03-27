@@ -7,3 +7,15 @@
 export * from "./common";
 export * from "./multi-select";
 export * from "./single-select";
+export type {
+  IDropdown,
+  TDropdownOption,
+  IMultiSelectDropdown,
+  ISingleSelectDropdown,
+  IDropdownButton,
+  IMultiSelectDropdownButton,
+  ISingleSelectDropdownButton,
+  IDropdownOptions,
+  IMultiSelectDropdownOptions,
+  ISingleSelectDropdownOptions,
+} from "./dropdown";

@@ -61,7 +61,7 @@ from .project import (
     ProjectPublicMember,
     ProjectRole,
     ProjectGroupRole,
-    ProjectUserProperty,
+    ProjectUserProperty, ProjectMemberRole, ProjectRole
 )
 from .session import Session
 from .social_connection import SocialLoginConnection

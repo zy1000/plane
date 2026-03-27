@@ -5,7 +5,7 @@
  */
 
 import { useState } from "react";
-import { PencilIcon, PlusIcon, ShieldCheck, Trash2Icon } from "lucide-react";
+import { DownloadIcon, PencilIcon, PlusIcon, ShieldCheck, Trash2Icon } from "lucide-react";
 import type { IWorkspaceRole } from "@plane/types";
 import { AlertModalCore } from "@plane/ui";
 import { Button } from "@plane/propel/button";
@@ -25,6 +25,7 @@ type Props = {
   onCreate: (data: { name: string; description: string }) => Promise<IWorkspaceRole>;
   onUpdate: (roleId: string, data: { name: string; description: string }) => Promise<void>;
   onDelete: (roleId: string) => Promise<void>;
+  onImport?: () => void;
 };
 
 export function RolesSidebar({
@@ -37,6 +38,7 @@ export function RolesSidebar({
   onCreate,
   onUpdate,
   onDelete,
+  onImport,
 }: Props) {
   const [searchQuery, setSearchQuery] = useState("");
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -116,15 +118,29 @@ export function RolesSidebar({
             <CountChip count={totalRoleCount} className="h-4" />
           </h4>
           {isAdmin && (
-            <button
-              type="button"
-              onClick={() => setShowCreateModal(true)}
-              className="flex size-6 cursor-pointer items-center justify-center rounded-md text-placeholder transition-colors duration-200 hover:bg-layer-1-hover hover:text-primary"
-              aria-label="新建角色"
-              title="新建角色"
-            >
-              <PlusIcon className="size-3.5" />
-            </button>
+            <div className="flex items-center gap-0.5">
+              {onImport ? (
+                <button
+                  type="button"
+                  onClick={onImport}
+                  className="flex size-6 cursor-pointer items-center justify-center rounded-md text-placeholder transition-colors duration-200 hover:bg-layer-1-hover hover:text-primary"
+                  aria-label="从模板导入"
+                  title="从模板导入"
+                >
+                  <DownloadIcon className="size-3.5" />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowCreateModal(true)}
+                  className="flex size-6 cursor-pointer items-center justify-center rounded-md text-placeholder transition-colors duration-200 hover:bg-layer-1-hover hover:text-primary"
+                  aria-label="新建角色"
+                  title="新建角色"
+                >
+                  <PlusIcon className="size-3.5" />
+                </button>
+              )}
+            </div>
           )}
         </div>
         {/* Search */}

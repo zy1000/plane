@@ -22,6 +22,7 @@ from .project.member import (
     ProjectMemberUserEndpoint,
     UserProjectRolesEndpoint,
     ProjectMemberPreferenceEndpoint,
+    ProjectMemberCustomRolesAPIView,
 )
 
 from .user.base import (

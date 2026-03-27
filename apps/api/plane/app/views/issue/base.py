@@ -33,7 +33,7 @@ from rest_framework import status
 from rest_framework.response import Response
 
 # Module imports
-from plane.app.permissions import ROLE, allow_permission
+from plane.app.permissions import ROLE, allow_permission, allow_project_permission, PermissionKey
 from plane.app.serializers import (
     IssueCreateSerializer,
     IssueDetailSerializer,
@@ -396,6 +396,7 @@ class IssueViewSet(BaseViewSet):
             )
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
+    @allow_project_permission(PermissionKey.ISSUE_CREATE)
     def create(self, request, slug, project_id):
         project = Project.objects.get(pk=project_id)
         if 'dynamic_properties' in request.data:
@@ -631,6 +632,7 @@ class IssueViewSet(BaseViewSet):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     @allow_permission(allowed_roles=[ROLE.ADMIN, ROLE.MEMBER], creator=True, model=Issue)
+    @allow_project_permission(PermissionKey.ISSUE_EDIT)
     def partial_update(self, request, slug, project_id, pk=None):
         redis_client = redis_instance()
         lock_id = f"{project_id}-{pk}"
@@ -846,6 +848,7 @@ class IssueViewSet(BaseViewSet):
             IssueActivity.objects.bulk_create(activities_to_create)
 
     @allow_permission([ROLE.ADMIN], creator=True, model=Issue)
+    @allow_project_permission(PermissionKey.ISSUE_DELETE)
     def destroy(self, request, slug, project_id, pk=None):
         issue = Issue.objects.get(workspace__slug=slug, project_id=project_id, pk=pk)
 

@@ -19,7 +19,7 @@ import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 // plane web hooks
 import { useFileSize } from "@/plane-web/hooks/use-file-size";
 // types
-import type { TAttachmentHelpers } from "../issue-detail-widgets/attachments/helper";
+import { getAttachmentUploadErrorToast, type TAttachmentHelpers } from "../issue-detail-widgets/attachments/helper";
 // components
 import { IssueAttachmentsListItem } from "./attachment-list-item";
 import { IssueAttachmentsUploadItem } from "./attachment-list-upload-item";
@@ -77,11 +77,12 @@ export const IssueAttachmentItemList = observer(function IssueAttachmentItemList
 
         setIsUploading(true);
         createAttachment(currentFile)
-          .catch(() => {
+          .catch((error) => {
+            const currentError = getAttachmentUploadErrorToast(error, t);
             setToast({
               type: TOAST_TYPE.ERROR,
-              title: t("toast.error"),
-              message: t("attachment.error"),
+              title: currentError.title,
+              message: currentError.message,
             });
           })
           .finally(() => {

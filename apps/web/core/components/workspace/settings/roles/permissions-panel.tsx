@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { useMemo, useState, useCallback } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ShieldCheck, Building2, FolderKanban, Search, CheckSquare, Square, MinusSquare } from "lucide-react";
 import type { IPermission, IWorkspaceRole } from "@plane/types";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
@@ -95,6 +95,23 @@ export function PermissionsPanel({
     });
   }, [permissions, boundKeySet]);
 
+  // 只展示有权限数据的 scope tab
+  const visibleScopeGroups = useMemo(
+    () => scopeGroups.filter((g) => g.totalPermissions > 0),
+    [scopeGroups]
+  );
+
+  // 当 permissions 变化（角色切换）时，自动切到第一个有数据的 scope
+  const prevRoleId = useRef<string | null>(null);
+  useEffect(() => {
+    const roleId = role?.id ?? null;
+    if (roleId !== prevRoleId.current && visibleScopeGroups.length > 0) {
+      setActiveScope(visibleScopeGroups[0].scope);
+      setActiveCategory(null);
+      prevRoleId.current = roleId;
+    }
+  }, [role?.id, visibleScopeGroups]);
+
   const currentScopeGroup = useMemo(
     () => scopeGroups.find((g) => g.scope === activeScope) ?? null,
     [scopeGroups, activeScope]
@@ -117,11 +134,11 @@ export function PermissionsPanel({
     [currentScopeGroup, effectiveActiveCategory]
   );
 
-  // Cross-scope search results (all scopes, grouped scope → category)
+  // Cross-scope search results (only visible scopes, grouped scope → category)
   const crossScopeResults = useMemo<TSearchResultScope[]>(() => {
     if (!isSearching) return [];
     const query = searchQuery.toLowerCase();
-    return scopeGroups
+    return visibleScopeGroups
       .map((group) => {
         const categories = group.categories
           .map(({ category, permissions: perms }) => ({
@@ -266,9 +283,9 @@ export function PermissionsPanel({
 
   return (
     <div className="flex h-full flex-1 flex-col overflow-hidden">
-      {/* ── Scope Tabs ── */}
+      {/* ── Scope Tabs（仅展示有数据的 scope）── */}
       <div className="flex shrink-0 items-end gap-0 border-b border-subtle px-5">
-        {scopeGroups.map((group) => {
+        {visibleScopeGroups.map((group) => {
           const isActive = activeScope === group.scope;
           const Icon = group.icon;
           return (

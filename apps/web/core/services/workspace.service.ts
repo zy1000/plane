@@ -439,7 +439,7 @@ export class WorkspaceService extends APIService {
 
   async createWorkspaceRole(
     workspaceSlug: string,
-    data: { name: string; description?: string }
+    data: { name: string; description?: string; type?: import("@plane/types").TWorkspaceRoleType }
   ): Promise<IWorkspaceRole> {
     return this.post(`/api/workspaces/${workspaceSlug}/roles/`, data)
       .then((response) => response?.data)

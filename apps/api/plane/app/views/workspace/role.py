@@ -22,6 +22,7 @@ class WorkspaceRoleViewSet(BaseViewSet):
     model = WorkspaceRole
     use_read_replica = True
     search_fields = ["name", "description"]
+    filterset_fields = ["type"]
 
     def get_queryset(self):
         return self.filter_queryset(
@@ -137,15 +138,19 @@ class WorkspaceRolePermissionAPIView(BaseAPIView):
         ]
         return list(dict.fromkeys(legacy_permission_keys))
 
-    def get_permission_queryset(self):
-        return Permission.objects.filter(
-            is_active=True,
-        ).order_by("module", "sort_order", "key")
+    def get_permission_queryset(self, role):
+        """按角色 type 只返回对应 scope 的权限。"""
+        qs = Permission.objects.filter(is_active=True)
+        if role.type == WorkspaceRole.RoleType.WORKSPACE:
+            qs = qs.filter(scope="workspace")
+        elif role.type == WorkspaceRole.RoleType.PROJECT_TEMPLATE:
+            qs = qs.filter(scope="project")
+        return qs.order_by("module", "sort_order", "key")
 
     def build_response_data(self, role):
         bound_permission_keys = self.get_bound_permission_keys(role)
         permission_serializer = PermissionSerializer(
-            self.get_permission_queryset(),
+            self.get_permission_queryset(role),
             many=True,
             context={"bound_permission_keys": bound_permission_keys},
         )

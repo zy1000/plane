@@ -9,6 +9,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { observer } from "mobx-react";
 // plane imports
 import type { EditorRefApi } from "@plane/editor";
+import { PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TIssue, TNameDescriptionLoader } from "@plane/types";
 import { EFileAssetType, EInboxIssueSource, EInboxIssueStatus } from "@plane/types";
@@ -130,6 +131,17 @@ export const InboxIssueMainContent = observer(function InboxIssueMainContent(pro
           await archiveIssue(workspaceSlug, projectId, issueId);
         } catch (error) {
           console.error("Error in archiving issue:", error);
+          const currentError = isProjectPermissionError(error)
+            ? PROJECT_ERROR_MESSAGES.permissionError
+            : {
+                i18n_title: "Error!",
+                i18n_message: "Work item archive failed",
+              };
+          setToast({
+            title: currentError.i18n_title,
+            type: TOAST_TYPE.ERROR,
+            message: currentError.i18n_message,
+          });
         }
       },
     }),

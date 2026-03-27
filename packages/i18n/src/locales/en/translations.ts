@@ -1841,6 +1841,9 @@ export default {
     workflow: {
       label: "Workflow",
     },
+    roles: {
+      label: "Project Roles",
+    },
     pms_sync: {
       label: "PMS defect sync",
       heading: "PMS defect sync",

@@ -4,21 +4,25 @@
  * See the LICENSE file for details.
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 // plane imports
 import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
-import type { IWorkspaceMember, TProjectMembership } from "@plane/types";
+import type { EUserProjectRoles, IWorkspaceMember } from "@plane/types";
 import { renderFormattedDate } from "@plane/utils";
 // components
 import { MemberHeaderColumn } from "@/components/project/member-header-column";
 import { AccountTypeColumn, NameColumn } from "@/components/project/settings/member-columns";
 // hooks
 import { useMember } from "@/hooks/store/use-member";
+import { useProjectRoles } from "@/hooks/store/use-project-roles";
 import { useUser, useUserPermissions } from "@/hooks/store/user";
 import type { IMemberFilters } from "@/store/member/utils";
 
-export interface RowData extends Pick<TProjectMembership, "original_role"> {
+export interface RowData {
+  id: string;
   member: IWorkspaceMember;
+  original_role: EUserProjectRoles | null;
+  custom_role_ids?: string[];
 }
 
 type TUseProjectColumnsProps = {
@@ -39,6 +43,7 @@ export const useProjectColumns = (props: TUseProjectColumnsProps) => {
       filters: { getFilters, updateFilters },
     },
   } = useMember();
+  const { roles, isLoading: isRolesLoading, fetchRoles } = useProjectRoles(workspaceSlug, projectId);
   // derived values
   const isAdmin = allowPermissions(
     [EUserPermissions.ADMIN],
@@ -55,6 +60,10 @@ export const useProjectColumns = (props: TUseProjectColumnsProps) => {
   const handleDisplayFilterUpdate = (filters: Partial<IMemberFilters>) => {
     updateFilters(projectId, filters);
   };
+
+  useEffect(() => {
+    void fetchRoles();
+  }, [fetchRoles]);
 
   const columns = [
     {
@@ -118,6 +127,8 @@ export const useProjectColumns = (props: TUseProjectColumnsProps) => {
           currentProjectRole={currentProjectRole}
           projectId={projectId}
           workspaceSlug={workspaceSlug}
+          roles={roles}
+          isRolesLoading={isRolesLoading}
         />
       ),
     },

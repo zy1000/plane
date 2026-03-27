@@ -19,10 +19,12 @@ from plane.app.views import (
     UserProjectRolesEndpoint,
     ProjectArchiveUnarchiveEndpoint,
     ProjectMemberPreferenceEndpoint,
+    ProjectMemberCustomRolesAPIView,
 )
 from plane.app.views.project.announcement import AnnouncementAPIView
 from plane.app.views.project.base import ProjectAPI
 from plane.app.views.project.pms import PmsSyncAPIView, ProjectPmsInfoAPIView, ProjectPmsInfoDetailAPIView
+from plane.app.views.project.role import ProjectRoleViewSet, ProjectRoleImportAPIView, ProjectRolePermissionAPIView
 from plane.app.views.project.template import ProjectTemplateAPIView
 
 router = SimpleRouter()
@@ -98,6 +100,11 @@ urlpatterns = [
         name="project-member",
     ),
     path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/members/<uuid:pk>/custom-roles/",
+        ProjectMemberCustomRolesAPIView.as_view(),
+        name="project-member-custom-roles",
+    ),
+    path(
         "workspaces/<str:slug>/projects/<uuid:project_id>/project-views/",
         ProjectUserViewsEndpoint.as_view(),
         name="project-view",
@@ -138,6 +145,27 @@ urlpatterns = [
         name="project-member-preference",
     ),
     path('workspaces/<str:slug>/projects/template/', ProjectTemplateAPIView.as_view(), name='project-template'),
+    # Project roles
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/roles/",
+        ProjectRoleViewSet.as_view({"get": "list", "post": "create"}),
+        name="project-role",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/roles/<uuid:pk>/",
+        ProjectRoleViewSet.as_view({"get": "retrieve", "patch": "partial_update", "delete": "destroy"}),
+        name="project-role-detail",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/roles/import/",
+        ProjectRoleImportAPIView.as_view(),
+        name="project-role-import",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/roles/<uuid:pk>/permissions/",
+        ProjectRolePermissionAPIView.as_view(),
+        name="project-role-permissions",
+    ),
     path("workspaces/<str:slug>/projects/<uuid:project_id>/announcement/", AnnouncementAPIView.as_view(),
          name='project-announcement'),
     path(

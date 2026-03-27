@@ -8,7 +8,12 @@ import { useEffect, useState } from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 // types
-import { PROJECT_ERROR_MESSAGES, EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import {
+  PROJECT_ERROR_MESSAGES,
+  EUserPermissions,
+  EUserPermissionsLevel,
+  isWorkItemDeletePermissionError,
+} from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TDeDupeIssue, TIssue } from "@plane/types";
@@ -95,9 +100,7 @@ export const DeleteIssueModal = observer(function DeleteIssueModal(props: Props)
           onClose();
         })
         .catch((errors) => {
-          const isPermissionError =
-            errors?.error ===
-            `Only admin or creator can delete the ${isSubIssue ? "sub-work item" : isEpic ? "epic" : "work item"}`;
+          const isPermissionError = isWorkItemDeletePermissionError(errors);
           const currentError = isPermissionError
             ? PROJECT_ERROR_MESSAGES.permissionError
             : PROJECT_ERROR_MESSAGES.issueDeleteError;

@@ -5,7 +5,9 @@
  */
 
 import { useMemo } from "react";
-import { setPromiseToast, TOAST_TYPE, setToast } from "@plane/propel/toast";
+import { PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
+import { useTranslation } from "@plane/i18n";
+import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TIssueServiceType } from "@plane/types";
 import { EIssueServiceType } from "@plane/types";
 // hooks
@@ -27,12 +29,56 @@ export type TAttachmentHelpers = {
   snapshot: TAttachmentSnapshot;
 };
 
+type TToastContent = {
+  title: string;
+  message?: string;
+};
+
+export const getAttachmentUploadErrorToast = (
+  error: unknown,
+  t: (key: string, values?: Record<string, string | number>) => string
+): TToastContent => {
+  if (isProjectPermissionError(error)) {
+    return {
+      title: t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title),
+      message: PROJECT_ERROR_MESSAGES.permissionError.i18n_message
+        ? t(PROJECT_ERROR_MESSAGES.permissionError.i18n_message)
+        : undefined,
+    };
+  }
+
+  return {
+    title: t("toast.error"),
+    message: t("attachment.error"),
+  };
+};
+
+const getAttachmentDeleteErrorToast = (
+  error: unknown,
+  t: (key: string, values?: Record<string, string | number>) => string
+): TToastContent => {
+  if (isProjectPermissionError(error)) {
+    return {
+      title: t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title),
+      message: PROJECT_ERROR_MESSAGES.permissionError.i18n_message
+        ? t(PROJECT_ERROR_MESSAGES.permissionError.i18n_message)
+        : undefined,
+    };
+  }
+
+  return {
+    title: "Attachment not removed",
+    message: "The Attachment could not be removed",
+  };
+};
+
 export const useAttachmentOperations = (
   workspaceSlug: string,
   projectId: string,
   issueId: string,
   issueServiceType: TIssueServiceType = EIssueServiceType.ISSUES
 ): TAttachmentHelpers => {
+  const { t } = useTranslation();
   const {
     attachment: { createAttachment, removeAttachment, getAttachmentsUploadStatusByIssueId },
   } = useIssueDetail(issueServiceType);
@@ -41,20 +87,12 @@ export const useAttachmentOperations = (
     () => ({
       create: async (file) => {
         if (!workspaceSlug || !projectId || !issueId) throw new Error("Missing required fields");
-        const attachmentUploadPromise = createAttachment(workspaceSlug, projectId, issueId, file);
-        setPromiseToast(attachmentUploadPromise, {
-          loading: "Uploading attachment...",
-          success: {
-            title: "Attachment uploaded",
-            message: () => "The attachment has been successfully uploaded",
-          },
-          error: {
-            title: "Attachment not uploaded",
-            message: () => "The attachment could not be uploaded",
-          },
+        await createAttachment(workspaceSlug, projectId, issueId, file);
+        setToast({
+          type: TOAST_TYPE.SUCCESS,
+          title: "Attachment uploaded",
+          message: "The attachment has been successfully uploaded",
         });
-
-        await attachmentUploadPromise;
       },
       remove: async (attachmentId) => {
         try {
@@ -65,16 +103,17 @@ export const useAttachmentOperations = (
             type: TOAST_TYPE.SUCCESS,
             title: "Attachment removed",
           });
-        } catch (_error) {
+        } catch (error) {
+          const currentError = getAttachmentDeleteErrorToast(error, t);
           setToast({
-            message: "The Attachment could not be removed",
+            message: currentError.message,
             type: TOAST_TYPE.ERROR,
-            title: "Attachment not removed",
+            title: currentError.title,
           });
         }
       },
     }),
-    [workspaceSlug, projectId, issueId, createAttachment, removeAttachment]
+    [workspaceSlug, projectId, issueId, createAttachment, removeAttachment, t]
   );
   const attachmentsUploadStatus = getAttachmentsUploadStatusByIssueId(issueId);
 

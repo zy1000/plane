@@ -5,6 +5,7 @@
  */
 
 import { useState } from "react";
+import { PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
 // i18n
 import { useTranslation } from "@plane/i18n";
 // types
@@ -57,13 +58,20 @@ export function ArchiveIssueModal(props: Props) {
         onClose();
         return;
       })
-      .catch(() =>
+      .catch((error) => {
+        const currentError = isProjectPermissionError(error)
+          ? PROJECT_ERROR_MESSAGES.permissionError
+          : {
+              i18n_title: "common.error.label",
+              i18n_message: "issue.archive.failed.message",
+            };
+
         setToast({
           type: TOAST_TYPE.ERROR,
-          title: t("common.error.label"),
-          message: t("issue.archive.failed.message"),
-        })
-      )
+          title: t(currentError.i18n_title),
+          message: currentError.i18n_message ? t(currentError.i18n_message) : undefined,
+        });
+      })
       .finally(() => setIsArchiving(false));
   };
 

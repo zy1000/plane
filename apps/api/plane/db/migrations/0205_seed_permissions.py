@@ -68,7 +68,7 @@ issue.link.view|查看外部链接|project|issue.link|view|工作项外部链接
 issue.link.manage|新增、编辑、删除外部链接|project|issue.link|manage|工作项外部链接|2
 issue.relation.view|查看事项关联|project|issue.relation|view|工作项关联|1
 issue.relation.manage|新增、删除事项关联|project|issue.relation|manage|工作项关联|2
-issue.attachment.view|查看附件|project|issue.attachment|view|工作项附件|1
+issue.attachment.download|下载附件|project|issue.attachment|view|工作项附件|1
 issue.attachment.upload|上传附件|project|issue.attachment|upload|工作项附件|2
 issue.attachment.delete|删除附件|project|issue.attachment|delete|工作项附件|3
 issue.label.manage|绑定/解绑标签|project|issue.label|manage|工作项标签|1
