@@ -11,6 +11,11 @@ import { useUser } from "@/hooks/store/user";
 import { DEFAULT_TAB_KEY } from "./tab-navigation-utils";
 import type { TTabPreferences } from "./tab-navigation-utils";
 
+const ALWAYS_VISIBLE_TABS = ["views"] as const;
+
+const sanitizeHiddenTabs = (hiddenTabs: string[]) =>
+  hiddenTabs.filter((tabKey) => !ALWAYS_VISIBLE_TABS.includes(tabKey as (typeof ALWAYS_VISIBLE_TABS)[number]));
+
 export type TTabPreferencesHook = {
   tabPreferences: TTabPreferences;
   isLoading: boolean;
@@ -41,7 +46,7 @@ export const useTabPreferences = (workspaceSlug: string, projectId: string): TTa
   // Get preferences from store
   const storePreferences = getProjectUserProperties(projectId);
   const defaultTab = storePreferences?.preferences?.navigation?.default_tab || DEFAULT_TAB_KEY;
-  const hideInMoreMenu = storePreferences?.preferences?.navigation?.hide_in_more_menu || [];
+  const hideInMoreMenu = sanitizeHiddenTabs(storePreferences?.preferences?.navigation?.hide_in_more_menu || []);
 
   // Convert store preferences to component format
   const tabPreferences: TTabPreferences = useMemo(() => {
@@ -97,9 +102,11 @@ export const useTabPreferences = (workspaceSlug: string, projectId: string): TTa
    * Hide a tab (moves to overflow menu with "Show" option)
    */
   const handleHideTab = (tabKey: string) => {
+    if (ALWAYS_VISIBLE_TABS.includes(tabKey as (typeof ALWAYS_VISIBLE_TABS)[number])) return;
+
     const newPreferences = {
       ...tabPreferences,
-      hiddenTabs: [...tabPreferences.hiddenTabs, tabKey],
+      hiddenTabs: sanitizeHiddenTabs([...tabPreferences.hiddenTabs, tabKey]),
     };
     try {
       updatePreferences(newPreferences);

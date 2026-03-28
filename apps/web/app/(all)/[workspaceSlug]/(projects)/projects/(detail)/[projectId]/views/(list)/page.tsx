@@ -39,10 +39,13 @@ function ProjectViewsPage({ params }: Route.ComponentProps) {
   const { t } = useTranslation();
   // store
   const { getProjectById, currentProjectDetails } = useProject();
-  const { filters, updateFilters, clearAllFilters } = useProjectView();
+  const { filters, updateFilters, clearAllFilters, getProjectViews, fetchedMap } = useProjectView();
   const { allowPermissions } = useUserPermissions();
   // derived values
   const project = getProjectById(projectId);
+  const projectViews = getProjectViews(projectId);
+  const isViewsFetched = !!fetchedMap[projectId];
+  const hasExistingViews = (projectViews?.length ?? 0) > 0;
   const pageTitle = project?.name ? `${project?.name} - Views` : undefined;
   const canPerformEmptyStateActions = allowPermissions([EUserProjectRoles.ADMIN], EUserPermissionsLevel.PROJECT);
   const resolvedPath = resolvedTheme === "light" ? lightViewsAsset : darkViewsAsset;
@@ -66,8 +69,8 @@ function ProjectViewsPage({ params }: Route.ComponentProps) {
 
   const isFiltersApplied = calculateTotalFilters(filters?.filters ?? {}) !== 0;
 
-  // No access to
-  if (currentProjectDetails?.issue_views_view === false)
+  // Show the disabled-feature empty state only when the project has no existing views.
+  if (currentProjectDetails?.issue_views_view === false && isViewsFetched && !hasExistingViews)
     return (
       <div className="flex h-full w-full items-center justify-center">
         <DetailedEmptyState
@@ -77,7 +80,7 @@ function ProjectViewsPage({ params }: Route.ComponentProps) {
           primaryButton={{
             text: t("disabled_project.empty_state.view.primary_button.text"),
             onClick: () => {
-              router.push(`/${workspaceSlug}/settings/projects/${projectId}/features`);
+              router.push(`/${workspaceSlug}/settings/projects/${projectId}/features/views`);
             },
             disabled: !canPerformEmptyStateActions,
           }}

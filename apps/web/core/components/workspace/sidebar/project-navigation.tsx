@@ -168,7 +168,8 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
         href: `/${workspaceSlug}/projects/${projectId}/views`,
         icon: ViewsIcon,
         access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
-        shouldRender: project?.issue_views_view ?? false,
+        // Keep the entry visible so users can still reach the disabled-feature empty state.
+        shouldRender: true,
         sortOrder: 5,
       },
       {
