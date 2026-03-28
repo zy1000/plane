@@ -139,6 +139,7 @@ export function isProjectPermissionError(error: unknown): boolean {
   if (msg === "You don't have the required permissions.") return true;
   if (msg === "您没有所需的项目权限。") return true;
   if (msg === "You don't have the required workspace permissions.") return true;
+  if (msg === "You are not allowed to comment on the issue") return true;
   return false;
 }
 

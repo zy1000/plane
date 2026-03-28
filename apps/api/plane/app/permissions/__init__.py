@@ -18,5 +18,13 @@ from .project import (
     ProjectAdminPermission,
 )
 from .keys import PermissionKey
-from .base import allow_permission, allow_workspace_permission, allow_project_permission, ROLE
+from .base import (
+    allow_permission,
+    allow_workspace_permission,
+    allow_project_permission,
+    get_issue_permission_key,
+    has_project_issue_permission,
+    resolve_project_issue_type_name,
+    ROLE,
+)
 from .page import ProjectPagePermission

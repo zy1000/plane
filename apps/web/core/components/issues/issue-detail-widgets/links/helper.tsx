@@ -5,6 +5,7 @@
  */
 
 import { useMemo } from "react";
+import { PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
 // plane imports
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
@@ -71,11 +72,22 @@ export const useLinkOperations = (
             type: TOAST_TYPE.SUCCESS,
             title: t("links.toasts.removed.title"),
           });
-        } catch {
+        } catch (error) {
+          const currentError = isProjectPermissionError(error)
+            ? {
+                title: t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title),
+                message: PROJECT_ERROR_MESSAGES.permissionError.i18n_message
+                  ? t(PROJECT_ERROR_MESSAGES.permissionError.i18n_message)
+                  : undefined,
+              }
+            : {
+                title: t("links.toasts.not_removed.title"),
+                message: t("links.toasts.not_removed.message"),
+              };
           setToast({
-            message: t("links.toasts.not_removed.message"),
+            message: currentError.message,
             type: TOAST_TYPE.ERROR,
-            title: t("links.toasts.not_removed.title"),
+            title: currentError.title,
           });
         }
       },

@@ -7,6 +7,8 @@
 import type { FC } from "react";
 import React from "react";
 import { observer } from "mobx-react";
+import { PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
+import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { ISearchIssueResponse, TIssue, TIssueServiceType, TWorkItemWidgets } from "@plane/types";
 // components
@@ -32,6 +34,7 @@ type Props = {
 
 export const IssueDetailWidgetModals = observer(function IssueDetailWidgetModals(props: Props) {
   const { workspaceSlug, projectId, issueId, issueServiceType, hideWidgets } = props;
+  const { t } = useTranslation();
   // store hooks
   const {
     isIssueLinkModalOpen,
@@ -120,15 +123,34 @@ export const IssueDetailWidgetModals = observer(function IssueDetailWidgetModals
       return;
     }
 
-    await createRelation(
-      workspaceSlug,
-      projectId,
-      issueId,
-      relationKey,
-      data.map((i) => i.id)
-    );
+    try {
+      await createRelation(
+        workspaceSlug,
+        projectId,
+        issueId,
+        relationKey,
+        data.map((i) => i.id)
+      );
 
-    toggleRelationModal(null, null);
+      toggleRelationModal(null, null);
+    } catch (error) {
+      const currentError = isProjectPermissionError(error)
+        ? {
+            title: t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title),
+            message: PROJECT_ERROR_MESSAGES.permissionError.i18n_message
+              ? t(PROJECT_ERROR_MESSAGES.permissionError.i18n_message)
+              : undefined,
+          }
+        : {
+            title: t("common.error.label"),
+            message: "The relation could not be created",
+          };
+      setToast({
+        type: TOAST_TYPE.ERROR,
+        title: currentError.title,
+        message: currentError.message,
+      });
+    }
   };
 
   // helpers

@@ -5,6 +5,7 @@
  */
 
 import { useMemo } from "react";
+import { PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { EFileAssetType } from "@plane/types";
@@ -42,6 +43,13 @@ export const useWorkItemCommentOperations = (
   const { t } = useTranslation();
 
   const operations: TCommentsOperations = useMemo(() => {
+    const getCommentPermissionToast = () => ({
+      title: t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title),
+      message: PROJECT_ERROR_MESSAGES.permissionError.i18n_message
+        ? t(PROJECT_ERROR_MESSAGES.permissionError.i18n_message)
+        : undefined,
+    });
+
     // Define operations object with all methods
     const ops: TCommentsOperations = {
       copyCommentLink: (id) => {
@@ -81,11 +89,17 @@ export const useWorkItemCommentOperations = (
             message: t("issue.comments.create.success"),
           });
           return comment;
-        } catch {
+        } catch (error) {
+          const currentError = isProjectPermissionError(error)
+            ? getCommentPermissionToast()
+            : {
+                title: t("common.error.label"),
+                message: t("issue.comments.create.error"),
+              };
           setToast({
-            title: t("common.error.label"),
+            title: currentError.title,
             type: TOAST_TYPE.ERROR,
-            message: t("issue.comments.create.error"),
+            message: currentError.message,
           });
         }
       },
@@ -98,11 +112,17 @@ export const useWorkItemCommentOperations = (
             type: TOAST_TYPE.SUCCESS,
             message: t("issue.comments.update.success"),
           });
-        } catch {
+        } catch (error) {
+          const currentError = isProjectPermissionError(error)
+            ? getCommentPermissionToast()
+            : {
+                title: t("common.error.label"),
+                message: t("issue.comments.update.error"),
+              };
           setToast({
-            title: t("common.error.label"),
+            title: currentError.title,
             type: TOAST_TYPE.ERROR,
-            message: t("issue.comments.update.error"),
+            message: currentError.message,
           });
         }
       },
@@ -115,11 +135,17 @@ export const useWorkItemCommentOperations = (
             type: TOAST_TYPE.SUCCESS,
             message: t("issue.comments.remove.success"),
           });
-        } catch {
+        } catch (error) {
+          const currentError = isProjectPermissionError(error)
+            ? getCommentPermissionToast()
+            : {
+                title: t("common.error.label"),
+                message: t("issue.comments.remove.error"),
+              };
           setToast({
-            title: t("common.error.label"),
+            title: currentError.title,
             type: TOAST_TYPE.ERROR,
-            message: t("issue.comments.remove.error"),
+            message: currentError.message,
           });
         }
       },
@@ -166,28 +192,40 @@ export const useWorkItemCommentOperations = (
             type: TOAST_TYPE.SUCCESS,
             message: "Reaction created successfully",
           });
-        } catch {
+        } catch (error) {
+          const currentError = isProjectPermissionError(error)
+            ? getCommentPermissionToast()
+            : {
+                title: "Error!",
+                message: "Reaction creation failed",
+              };
           setToast({
-            title: "Error!",
+            title: currentError.title,
             type: TOAST_TYPE.ERROR,
-            message: "Reaction creation failed",
+            message: currentError.message,
           });
         }
       },
       deleteCommentReaction: async (commentId, reaction) => {
         try {
           if (!workspaceSlug || !projectId || !commentId || !currentUser?.id) throw new Error("Missing fields");
-          removeCommentReaction(workspaceSlug, projectId, commentId, reaction, currentUser.id);
+          await removeCommentReaction(workspaceSlug, projectId, commentId, reaction, currentUser.id);
           setToast({
             title: "Success!",
             type: TOAST_TYPE.SUCCESS,
             message: "Reaction removed successfully",
           });
-        } catch {
+        } catch (error) {
+          const currentError = isProjectPermissionError(error)
+            ? getCommentPermissionToast()
+            : {
+                title: "Error!",
+                message: "Reaction remove failed",
+              };
           setToast({
-            title: "Error!",
+            title: currentError.title,
             type: TOAST_TYPE.ERROR,
-            message: "Reaction remove failed",
+            message: currentError.message,
           });
         }
       },

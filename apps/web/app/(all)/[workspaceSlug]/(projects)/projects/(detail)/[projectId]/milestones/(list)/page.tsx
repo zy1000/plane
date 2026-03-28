@@ -5,6 +5,9 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Button, Input, Pagination, Popconfirm, Select, Table, Tag } from "antd";
 import type { TableProps } from "antd";
+import { PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
+import { useTranslation } from "@plane/i18n";
+import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 
 // components
 import { PageHead } from "@/components/core/page-title";
@@ -29,6 +32,7 @@ const STATE_OPTIONS = [
 function ProjectMilestonesPage() {
   const { workspaceSlug, projectId } = useParams();
   const router = useRouter();
+  const { t } = useTranslation();
 
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<IMilestone[]>([]);
@@ -162,8 +166,19 @@ function ProjectMilestonesPage() {
       } else {
         fetchData(currentPage, pageSize);
       }
-    } catch (e) {
-      console.error(e);
+    } catch (error) {
+      console.error(error);
+      const currentError = isProjectPermissionError(error)
+        ? PROJECT_ERROR_MESSAGES.permissionError
+        : {
+            i18n_title: "common.error.label",
+            i18n_message: undefined,
+          };
+      setToast({
+        type: TOAST_TYPE.ERROR,
+        title: t(currentError.i18n_title),
+        message: currentError.i18n_message ? t(currentError.i18n_message) : "删除里程碑失败",
+      });
     } finally {
       setDeletingById((prev) => ({ ...prev, [milestoneId]: false }));
     }

@@ -8,6 +8,8 @@ import React from "react";
 import { observer } from "mobx-react";
 import Link from "next/link";
 
+import { PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
+import { useTranslation } from "@plane/i18n";
 import { EditIcon, CloseIcon } from "@plane/propel/icons";
 // Plane
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
@@ -37,6 +39,7 @@ type TIssueRelationSelect = {
 
 export const IssueRelationSelect = observer(function IssueRelationSelect(props: TIssueRelationSelect) {
   const { className = "", workspaceSlug, projectId, issueId, relationKey, disabled = false } = props;
+  const { t } = useTranslation();
   // hooks
   const { getProjectById } = useProject();
   const {
@@ -61,15 +64,33 @@ export const IssueRelationSelect = observer(function IssueRelationSelect(props: 
       return;
     }
 
-    await createRelation(
-      workspaceSlug,
-      projectId,
-      issueId,
-      relationKey,
-      data.map((i) => i.id)
-    );
-
-    toggleRelationModal(null, null);
+    try {
+      await createRelation(
+        workspaceSlug,
+        projectId,
+        issueId,
+        relationKey,
+        data.map((i) => i.id)
+      );
+      toggleRelationModal(null, null);
+    } catch (error) {
+      const currentError = isProjectPermissionError(error)
+        ? {
+            title: t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title),
+            message: PROJECT_ERROR_MESSAGES.permissionError.i18n_message
+              ? t(PROJECT_ERROR_MESSAGES.permissionError.i18n_message)
+              : undefined,
+          }
+        : {
+            title: t("common.error.label"),
+            message: "The relation could not be created",
+          };
+      setToast({
+        type: TOAST_TYPE.ERROR,
+        title: currentError.title,
+        message: currentError.message,
+      });
+    }
   };
 
   if (!relationIssueIds) return null;
@@ -142,7 +163,26 @@ export const IssueRelationSelect = observer(function IssueRelationSelect(props: 
                           onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
-                            removeRelation(workspaceSlug, projectId, issueId, relationKey, relationIssueId);
+                            removeRelation(workspaceSlug, projectId, issueId, relationKey, relationIssueId).catch(
+                              (error) => {
+                                const currentError = isProjectPermissionError(error)
+                                  ? {
+                                      title: t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title),
+                                      message: PROJECT_ERROR_MESSAGES.permissionError.i18n_message
+                                        ? t(PROJECT_ERROR_MESSAGES.permissionError.i18n_message)
+                                        : undefined,
+                                    }
+                                  : {
+                                      title: t("common.error.label"),
+                                      message: "The relation could not be removed",
+                                    };
+                                setToast({
+                                  type: TOAST_TYPE.ERROR,
+                                  title: currentError.title,
+                                  message: currentError.message,
+                                });
+                              }
+                            );
                           }}
                         >
                           <CloseIcon className="h-2.5 w-2.5 text-tertiary hover:text-danger-primary" />

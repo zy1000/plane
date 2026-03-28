@@ -8,8 +8,8 @@ import { Modal, Pagination, message } from "antd";
 import type { TableProps } from "antd";
 import type { TSelectionHelper } from "@/hooks/use-multiple-select";
 import { DEFAULT_DISPLAY_PROPERTIES } from "@/store/issue/issue-details/sub_issues_filter.store";
-import { ALL_ISSUES } from "@plane/constants";
-import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import { ALL_ISSUES, EUserPermissions, EUserPermissionsLevel, PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
+import { useTranslation } from "@plane/i18n";
 import { EIssueServiceType } from "@plane/types";
 import { CustomMenu } from "@plane/ui";
 
@@ -37,6 +37,7 @@ type TIssueRow = {
 
 function ProjectMilestoneIssuesPage() {
   const { workspaceSlug, projectId, milestoneId } = useParams();
+  const { t } = useTranslation();
   const listContainerRef = useRef<HTMLDivElement | null>(null);
   const paginationRef = useRef<{ page: number; size: number }>({ page: 1, size: 10 });
   const wasPeekOpenRef = useRef(false);
@@ -230,7 +231,19 @@ function ProjectMilestoneIssuesPage() {
       const successCount = results.filter((r) => r.status === "fulfilled").length;
       const failCount = results.length - successCount;
       if (successCount > 0) message.success(`已关联 ${successCount} 条`);
-      if (failCount > 0) message.error(`关联失败 ${failCount} 条`);
+      if (failCount > 0) {
+        const firstRejected = results.find((r) => r.status === "rejected");
+        const error = firstRejected?.status === "rejected" ? firstRejected.reason : undefined;
+        if (isProjectPermissionError(error)) {
+          message.error(
+            PROJECT_ERROR_MESSAGES.permissionError.i18n_message
+              ? t(PROJECT_ERROR_MESSAGES.permissionError.i18n_message)
+              : t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title)
+          );
+        } else {
+          message.error(`关联失败 ${failCount} 条`);
+        }
+      }
       setAddModalOpen(false);
       setSelectedIssueIds([]);
       fetchIssues(currentPage, pageSize);
@@ -257,7 +270,15 @@ function ProjectMilestoneIssuesPage() {
           message.success("已移除");
           fetchIssues(currentPage, pageSize);
         } catch (e: any) {
-          message.error(e?.detail || e?.error || "移除失败");
+          if (isProjectPermissionError(e)) {
+            message.error(
+              PROJECT_ERROR_MESSAGES.permissionError.i18n_message
+                ? t(PROJECT_ERROR_MESSAGES.permissionError.i18n_message)
+                : t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title)
+            );
+          } else {
+            message.error(e?.detail || e?.error || "移除失败");
+          }
         }
       },
     });

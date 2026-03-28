@@ -2,12 +2,15 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
-from plane.db.models import WorkspaceMember, ProjectMember, ProjectMemberRole, ProjectRole
+from plane.db.models import WorkspaceMember, ProjectMember, ProjectMemberRole, ProjectRole, ProjectIssueType
 from functools import wraps
 from rest_framework.response import Response
 from rest_framework import status
 
 from enum import Enum
+from typing import Optional
+
+from .keys import PermissionKey
 
 
 class ROLE(Enum):
@@ -75,6 +78,52 @@ def _get_user_project_permission_keys(user, workspace_slug: str, project_id: str
             if isinstance(k, str):
                 keys.add(k)
     return keys
+
+
+def resolve_project_issue_type_name(project_id: str, issue_type_id: str) -> Optional[str]:
+    project_issue_type = (
+        ProjectIssueType.objects.filter(
+            project_id=project_id,
+            issue_type_id=issue_type_id,
+            deleted_at__isnull=True,
+        )
+        .select_related("issue_type")
+        .first()
+    )
+    if not project_issue_type:
+        return None
+    return project_issue_type.issue_type.name
+
+
+def get_issue_permission_key(action: str, issue_type_name: Optional[str] = None) -> str:
+    common_permission_map = {
+        "create": PermissionKey.ISSUE_CREATE,
+        "edit": PermissionKey.ISSUE_EDIT,
+        "delete": PermissionKey.ISSUE_DELETE,
+    }
+    defect_permission_map = {
+        "create": PermissionKey.ISSUE_DEFECT_CREATE,
+        "edit": PermissionKey.ISSUE_DEFECT_EDIT,
+        "delete": PermissionKey.ISSUE_DEFECT_DELETE,
+    }
+    permission_map = defect_permission_map if issue_type_name == "缺陷" else common_permission_map
+
+    try:
+        return permission_map[action]
+    except KeyError as exc:
+        raise ValueError(f"Unsupported issue permission action: {action}") from exc
+
+
+def has_project_issue_permission(
+    user,
+    workspace_slug: str,
+    project_id: str,
+    action: str,
+    issue_type_name: Optional[str] = None,
+) -> bool:
+    required_permission = get_issue_permission_key(action=action, issue_type_name=issue_type_name)
+    user_keys = _get_user_project_permission_keys(user, workspace_slug, project_id)
+    return required_permission in user_keys
 
 
 def allow_workspace_permission(*permission_keys: str):

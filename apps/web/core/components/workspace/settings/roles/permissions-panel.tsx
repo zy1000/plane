@@ -337,7 +337,7 @@ export function PermissionsPanel({
               const matchCount = isSearching ? (categoryMatchCounts.get(category) ?? 0) : null;
               const hasNoMatch = isSearching && matchCount === 0;
               const allBound = catPerms.length > 0 && boundCount === catPerms.length;
-              const progressPercent = catPerms.length > 0 ? (boundCount / catPerms.length) * 100 : 0;
+              const progressScale = catPerms.length > 0 ? Math.min(boundCount / catPerms.length, 1) : 0;
 
               return (
                 <button
@@ -371,7 +371,7 @@ export function PermissionsPanel({
                             : "text-tertiary"
                           : isActive
                             ? allBound
-                              ? "text-green-600"
+                              ? "text-success-primary"
                               : "text-accent-primary/70"
                             : "text-tertiary"
                       )}
@@ -380,19 +380,24 @@ export function PermissionsPanel({
                     </span>
                   </div>
                   {!isSearching && (
-                    <div className="h-0.5 w-full overflow-hidden rounded-full bg-layer-1">
+                    <div
+                      className={cn(
+                        "relative h-1 w-full overflow-hidden rounded-full",
+                        allBound ? "bg-success-subtle" : "bg-layer-1"
+                      )}
+                    >
                       <div
                         className={cn(
-                          "h-full rounded-full transition-all duration-300",
+                          "absolute inset-y-0 left-0 w-full origin-left rounded-full transition-transform duration-300",
                           allBound
-                            ? "bg-green-500"
+                            ? "bg-success-primary"
                             : boundCount > 0
                               ? isActive
                                 ? "bg-accent-primary"
                                 : "bg-accent-primary/50"
                               : "bg-transparent"
                         )}
-                        style={{ width: `${progressPercent}%` }}
+                        style={{ transform: `scaleX(${progressScale})` }}
                       />
                     </div>
                   )}

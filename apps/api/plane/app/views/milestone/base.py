@@ -4,6 +4,7 @@ from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
+from plane.app.permissions import allow_project_permission, PermissionKey
 from plane.app.serializers.issue import IssueWithTypeSerializer
 from plane.app.serializers.milestone import (
     MilestoneCreateUpdateSerializer,
@@ -31,6 +32,7 @@ class MilestoneAPIView(BaseAPIView):
             completed_count=Count('issues', distinct=True, filter=Q(issues__state__group=StateGroup.COMPLETED)),
         )
 
+    @allow_project_permission(PermissionKey.MILESTONE_VIEW)
     def get(self, request, slug, project_id: str):
         queryset = self.filter_queryset(self.get_queryset()).filter(project_id=project_id).order_by('-created_at')
         paginator = self.pagination_class()
@@ -38,6 +40,7 @@ class MilestoneAPIView(BaseAPIView):
         serializer = self.serializer_class(instance=paginated_queryset, many=True)
         return list_response(data=serializer.data, count=queryset.count())
 
+    @allow_project_permission(PermissionKey.MILESTONE_CREATE)
     def post(self, request, slug: str, project_id: str):
         serializer = MilestoneCreateUpdateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -45,6 +48,7 @@ class MilestoneAPIView(BaseAPIView):
         serializer = self.serializer_class(instance=milestone)
         return Response(data=serializer.data)
 
+    @allow_project_permission(PermissionKey.MILESTONE_EDIT)
     def put(self, request, slug: str, project_id: str):
         milestone_id = request.data.pop('id')
         milestone = self.get_queryset().get(id=milestone_id)
@@ -54,6 +58,7 @@ class MilestoneAPIView(BaseAPIView):
         serializer = self.serializer_class(instance=milestone)
         return Response(data=serializer.data)
 
+    @allow_project_permission(PermissionKey.MILESTONE_DELETE)
     def delete(self, request, slug: str, project_id: str):
         milestone_ids = request.data.pop('id')
         self.get_queryset().filter(id=milestone_ids).delete(soft=False)
@@ -65,6 +70,7 @@ class MilestoneView(BaseViewSet):
     pagination_class = CustomPaginator
 
     @action(detail=False, methods=['get'], url_path='issues')
+    @allow_project_permission(PermissionKey.MILESTONE_ISSUE_VIEW)
     def get_issues(self, request, slug, project_id):
         milestone_id = request.query_params.get('milestone_id')
         paginator = self.pagination_class()
@@ -94,6 +100,7 @@ class MilestoneView(BaseViewSet):
         return list_response(data=serializer.data, count=unrelated_issues.count())
 
     @action(detail=False, methods=['post'], url_path='add-milestone-issue')
+    @allow_project_permission(PermissionKey.MILESTONE_ISSUE_ADD)
     def add_milestone_issue(self, request, slug, project_id):
         issue_id = request.data.get('issue_id')
         milestone_id = request.data.get('milestone_id')
@@ -107,6 +114,7 @@ class MilestoneView(BaseViewSet):
         return Response(status=status.HTTP_201_CREATED)
 
     @action(detail=False, methods=['delete'], url_path='delete-milestone-issue')
+    @allow_project_permission(PermissionKey.MILESTONE_ISSUE_REMOVE)
     def delete_milestone_issue(self, request, slug, project_id):
         issue_id = request.data.get('issue_id')
         milestone_id = request.data.get('milestone_id')

@@ -33,7 +33,13 @@ from rest_framework import status
 from rest_framework.response import Response
 
 # Module imports
-from plane.app.permissions import ROLE, allow_permission, allow_project_permission, PermissionKey
+from plane.app.permissions import (
+    ROLE,
+    allow_permission,
+    get_issue_permission_key,
+    has_project_issue_permission,
+    resolve_project_issue_type_name,
+)
 from plane.app.serializers import (
     IssueCreateSerializer,
     IssueDetailSerializer,
@@ -396,7 +402,6 @@ class IssueViewSet(BaseViewSet):
             )
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
-    @allow_project_permission(PermissionKey.ISSUE_CREATE)
     def create(self, request, slug, project_id):
         project = Project.objects.get(pk=project_id)
         if 'dynamic_properties' in request.data:
@@ -407,6 +412,23 @@ class IssueViewSet(BaseViewSet):
         data = dict(request.data)
         if not data.get("type_id"):
             data['type_id'] = str(ProjectIssueType.objects.get(project=project, issue_type__name='任务').issue_type_id)
+
+        issue_type_name = resolve_project_issue_type_name(str(project_id), str(data["type_id"]))
+        if issue_type_name is None:
+            return Response({"error": "Issue type is not valid please pass a valid type_id"}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not has_project_issue_permission(
+            user=request.user,
+            workspace_slug=slug,
+            project_id=str(project_id),
+            action="create",
+            issue_type_name=issue_type_name,
+        ):
+            return Response(
+                {"error": f"您没有所需的项目权限。"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         serializer = IssueCreateSerializer(
             data=data,
             context={
@@ -632,7 +654,6 @@ class IssueViewSet(BaseViewSet):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     @allow_permission(allowed_roles=[ROLE.ADMIN, ROLE.MEMBER], creator=True, model=Issue)
-    @allow_project_permission(PermissionKey.ISSUE_EDIT)
     def partial_update(self, request, slug, project_id, pk=None):
         redis_client = redis_instance()
         lock_id = f"{project_id}-{pk}"
@@ -687,6 +708,19 @@ class IssueViewSet(BaseViewSet):
         if not issue:
             redis_client.delete(lock_id)
             return Response({"error": "Issue not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        if not has_project_issue_permission(
+            user=request.user,
+            workspace_slug=slug,
+            project_id=str(project_id),
+            action="edit",
+            issue_type_name=issue.type.name,
+        ):
+            redis_client.delete(lock_id)
+            return Response(
+                {"error": f"您没有所需的项目权限。"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         # 工作流审批检查
         state_id = request.data.get("state_id")
@@ -848,9 +882,20 @@ class IssueViewSet(BaseViewSet):
             IssueActivity.objects.bulk_create(activities_to_create)
 
     @allow_permission([ROLE.ADMIN], creator=True, model=Issue)
-    @allow_project_permission(PermissionKey.ISSUE_DELETE)
     def destroy(self, request, slug, project_id, pk=None):
-        issue = Issue.objects.get(workspace__slug=slug, project_id=project_id, pk=pk)
+        issue = Issue.objects.select_related("type").get(workspace__slug=slug, project_id=project_id, pk=pk)
+
+        if not has_project_issue_permission(
+            user=request.user,
+            workspace_slug=slug,
+            project_id=str(project_id),
+            action="delete",
+            issue_type_name=issue.type.name,
+        ):
+            return Response(
+                {"error": f"您没有所需的项目权限。"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         issue.delete()
         # delete the issue from recent visits
@@ -914,6 +959,22 @@ class BulkDeleteIssuesEndpoint(BaseAPIView):
             return Response({"error": "Issue IDs are required"}, status=status.HTTP_400_BAD_REQUEST)
 
         issues = Issue.issue_objects.filter(workspace__slug=slug, project_id=project_id, pk__in=issue_ids)
+        issue_type_names = set(
+            issues.filter(type__isnull=False).values_list("type__name", flat=True).distinct()
+        )
+
+        for issue_type_name in issue_type_names:
+            if not has_project_issue_permission(
+                user=request.user,
+                workspace_slug=slug,
+                project_id=str(project_id),
+                action="delete",
+                issue_type_name=issue_type_name,
+            ):
+                return Response(
+                    {"error": f"您没有所需的项目权限。"},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
 
         total_issues = len(issues)
 

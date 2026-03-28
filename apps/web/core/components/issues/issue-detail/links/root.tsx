@@ -6,6 +6,8 @@
 
 import { useCallback, useMemo, useState } from "react";
 
+import { PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
+import { useTranslation } from "@plane/i18n";
 import { PlusIcon } from "@plane/propel/icons";
 // plane imports
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
@@ -33,6 +35,7 @@ export type TIssueLinkRoot = {
 export function IssueLinkRoot(props: TIssueLinkRoot) {
   // props
   const { workspaceSlug, projectId, issueId, disabled = false } = props;
+  const { t } = useTranslation();
   // hooks
   const { toggleIssueLinkModal: toggleIssueLinkModalStore, createLink, updateLink, removeLink } = useIssueDetail();
   // state
@@ -95,16 +98,27 @@ export function IssueLinkRoot(props: TIssueLinkRoot) {
             title: "Link removed",
           });
           toggleIssueLinkModal(false);
-        } catch {
+        } catch (error) {
+          const currentError = isProjectPermissionError(error)
+            ? {
+                title: t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title),
+                message: PROJECT_ERROR_MESSAGES.permissionError.i18n_message
+                  ? t(PROJECT_ERROR_MESSAGES.permissionError.i18n_message)
+                  : undefined,
+              }
+            : {
+                title: "Link not removed",
+                message: "The link could not be removed",
+              };
           setToast({
-            message: "The link could not be removed",
+            message: currentError.message,
             type: TOAST_TYPE.ERROR,
-            title: "Link not removed",
+            title: currentError.title,
           });
         }
       },
     }),
-    [workspaceSlug, projectId, issueId, createLink, updateLink, removeLink, toggleIssueLinkModal]
+    [workspaceSlug, projectId, issueId, createLink, updateLink, removeLink, toggleIssueLinkModal, t]
   );
 
   const handleOnClose = () => {

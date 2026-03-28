@@ -104,10 +104,15 @@ export const DeleteIssueModal = observer(function DeleteIssueModal(props: Props)
           const currentError = isPermissionError
             ? PROJECT_ERROR_MESSAGES.permissionError
             : PROJECT_ERROR_MESSAGES.issueDeleteError;
+          const rawErrorMessage =
+            typeof errors === "object" && errors !== null && "error" in errors
+              ? String((errors as { error?: unknown }).error ?? "").trim()
+              : "";
           setToast({
             title: t(currentError.i18n_title),
             type: TOAST_TYPE.ERROR,
-            message: currentError.i18n_message && t(currentError.i18n_message),
+            message:
+              rawErrorMessage || (currentError.i18n_message ? t(currentError.i18n_message) : undefined),
           });
         })
         .finally(() => onClose());

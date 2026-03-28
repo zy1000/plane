@@ -173,21 +173,6 @@ export const RelationsCollapsibleContent = observer(function RelationsCollapsibl
           data={issueCrudState?.delete?.issue as TIssue}
           onSubmit={async () => {
             if (
-              issueCrudState.removeRelation.issueId &&
-              issueCrudState.removeRelation.issue?.project_id &&
-              issueCrudState.removeRelation.relationKey &&
-              issueCrudState.removeRelation.relationIssueId
-            ) {
-              await removeRelation(
-                workspaceSlug,
-                issueCrudState.removeRelation.issue.project_id,
-                issueCrudState.removeRelation.issueId,
-                issueCrudState.removeRelation.relationKey as TIssueRelationTypes,
-                issueCrudState.removeRelation.relationIssueId,
-                true
-              );
-            }
-            if (
               issueCrudState.delete.issue &&
               issueCrudState.delete.issue.id &&
               issueCrudState.delete.issue.project_id
@@ -200,6 +185,23 @@ export const RelationsCollapsibleContent = observer(function RelationsCollapsibl
                 issueCrudState.delete.issue?.project_id,
                 issueCrudState?.delete?.issue?.id
               );
+
+              // Only update the current relation list after the delete succeeds.
+              if (
+                issueCrudState.removeRelation.issueId &&
+                issueCrudState.removeRelation.issue?.project_id &&
+                issueCrudState.removeRelation.relationKey &&
+                issueCrudState.removeRelation.relationIssueId
+              ) {
+                void removeRelation(
+                  workspaceSlug,
+                  issueCrudState.removeRelation.issue.project_id,
+                  issueCrudState.removeRelation.issueId,
+                  issueCrudState.removeRelation.relationKey as TIssueRelationTypes,
+                  issueCrudState.removeRelation.relationIssueId,
+                  true
+                ).catch(() => undefined);
+              }
             }
           }}
           isEpic={!!issueCrudState.delete.issue?.is_epic}

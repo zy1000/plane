@@ -7,9 +7,11 @@
 import type { FC } from "react";
 import React from "react";
 import { observer } from "mobx-react";
+import { PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { LinkIcon, EditIcon, TrashIcon, CloseIcon } from "@plane/propel/icons";
 // plane imports
+import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Tooltip } from "@plane/propel/tooltip";
 import type { TIssue, TIssueServiceType } from "@plane/types";
 import { EIssueServiceType } from "@plane/types";
@@ -117,7 +119,24 @@ export const RelationIssueListItem = observer(function RelationIssueListItem(pro
   const handleRemoveRelation = (e: React.MouseEvent<HTMLButtonElement, MouseEvent>) => {
     e.preventDefault();
     e.stopPropagation();
-    removeRelation(workspaceSlug, projectId, issueId, relationKey, relationIssueId);
+    removeRelation(workspaceSlug, projectId, issueId, relationKey, relationIssueId).catch((error) => {
+      const currentError = isProjectPermissionError(error)
+        ? {
+            title: t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title),
+            message: PROJECT_ERROR_MESSAGES.permissionError.i18n_message
+              ? t(PROJECT_ERROR_MESSAGES.permissionError.i18n_message)
+              : undefined,
+          }
+        : {
+            title: t("common.error.label"),
+            message: "The relation could not be removed",
+          };
+      setToast({
+        type: TOAST_TYPE.ERROR,
+        title: currentError.title,
+        message: currentError.message,
+      });
+    });
   };
 
   return (

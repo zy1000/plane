@@ -184,6 +184,7 @@ class CommentReactionViewSet(BaseViewSet):
         )
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    @allow_project_permission(PermissionKey.ISSUE_COMMENT_CREATE)
     def create(self, request, slug, project_id, comment_id):
         try:
             serializer = CommentReactionSerializer(data=request.data)
@@ -213,6 +214,7 @@ class CommentReactionViewSet(BaseViewSet):
             )
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    @allow_project_permission(PermissionKey.ISSUE_COMMENT_DELETE)
     def destroy(self, request, slug, project_id, comment_id, reaction_code):
         comment_reaction = CommentReaction.objects.get(
             workspace__slug=slug,
