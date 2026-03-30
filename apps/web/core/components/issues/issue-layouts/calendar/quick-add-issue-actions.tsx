@@ -9,6 +9,7 @@ import { differenceInCalendarDays } from "date-fns/differenceInCalendarDays";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 
+import { PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 // plane imports
 import { PlusIcon } from "@plane/propel/icons";
@@ -66,7 +67,10 @@ export const CalendarQuickAddIssueActions = observer(function CalendarQuickAddIs
       },
       error: {
         title: t("toast.error"),
-        message: (err) => err?.message || t("common.errors.default.message"),
+        message: (err: unknown) =>
+          isProjectPermissionError(err)
+            ? t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title)
+            : (err as Error)?.message || t("common.errors.default.message"),
       },
     });
   };

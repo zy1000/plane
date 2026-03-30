@@ -6,7 +6,13 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { Pagination } from "antd";
 import { Archive, ArchiveRestoreIcon, ArrowDown, ArrowUp, ArrowUpDown, Globe2, Link as LinkIcon, Settings, Star } from "lucide-react";
-import { EUserPermissions, EUserPermissionsLevel, PROJECT_TRACKER_ELEMENTS } from "@plane/constants";
+import {
+  EUserPermissions,
+  EUserPermissionsLevel,
+  PROJECT_PUBLISH_CREATE_PERMISSION_KEY,
+  PROJECT_PUBLISH_VIEW_PERMISSION_KEY,
+  PROJECT_TRACKER_ELEMENTS,
+} from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { EmptyStateDetailed } from "@plane/propel/empty-state";
 import { Logo } from "@plane/propel/emoji-icon-picker";
@@ -60,7 +66,7 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
     currentWorkspaceFilters,
     updateDisplayFilters,
   } = useProjectFilter();
-  const { allowPermissions } = useUserPermissions();
+  const { allowPermissions, allowProjectPermissionKeys } = useUserPermissions();
   const { getUserDetails } = useMember();
 
   const totalProjectIds = totalProjectIdsProps ?? storeTotalProjectIds;
@@ -389,6 +395,17 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
                     workspaceSlugString,
                     project.id
                   );
+                  const canPublishProject =
+                    allowProjectPermissionKeys(
+                      [PROJECT_PUBLISH_VIEW_PERMISSION_KEY, PROJECT_PUBLISH_CREATE_PERMISSION_KEY],
+                      workspaceSlugString,
+                      project.id
+                    ) ||
+                    (project.permission_keys ?? []).some(
+                      (k) =>
+                        k === PROJECT_PUBLISH_VIEW_PERMISSION_KEY ||
+                        k === PROJECT_PUBLISH_CREATE_PERMISSION_KEY
+                    );
                   const projectLeadId =
                     typeof project.project_lead === "string" ? project.project_lead : project.project_lead?.id ?? null;
                   const projectLead =
@@ -586,17 +603,17 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
                       <Tooltip
                         tooltipContent={
                           <div className="text-xs text-primary">
-                            {isArchived ? "已归档不可发布" : canManageProject ? "发布项目" : "无权限发布"}
+                            {isArchived ? "已归档不可发布" : canPublishProject ? "发布项目" : "无权限发布"}
                           </div>
                         }
                         position="top"
                       >
                         <button
                           type="button"
-                          disabled={isArchived || !canManageProject}
+                          disabled={isArchived || !canPublishProject}
                           className={cn(
                             "grid h-6 w-6 place-items-center rounded text-secondary transition-colors",
-                            isArchived || !canManageProject
+                            isArchived || !canPublishProject
                               ? "cursor-not-allowed opacity-50"
                               : "hover:text-primary hover:bg-layer-1-hover"
                           )}

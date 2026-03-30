@@ -6,7 +6,9 @@
 
 import { useState } from "react";
 import { FolderKanban, XIcon } from "lucide-react";
+import { PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
 import type { IWorkspaceRole } from "@plane/types";
+import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { cn } from "@plane/utils";
@@ -21,6 +23,7 @@ type Props = {
 };
 
 export function ImportTemplateModal({ isOpen, onClose, templates, isTemplatesLoading, onImport }: Props) {
+  const { t } = useTranslation();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -37,11 +40,21 @@ export function ImportTemplateModal({ isOpen, onClose, templates, isTemplatesLoa
       setToast({ type: TOAST_TYPE.SUCCESS, title: "导入成功", message: "项目角色已从模板创建" });
       handleClose();
     } catch (err: unknown) {
-      const errObj = err as Record<string, string | string[]>;
-      const msg = errObj?.error
-        ? String(Array.isArray(errObj.error) ? errObj.error[0] : errObj.error)
-        : "导入失败，请稍后重试";
-      setToast({ type: TOAST_TYPE.ERROR, title: "导入失败", message: msg });
+      if (isProjectPermissionError(err)) {
+        setToast({
+          type: TOAST_TYPE.ERROR,
+          title: t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title),
+          message: PROJECT_ERROR_MESSAGES.permissionError.i18n_message
+            ? t(PROJECT_ERROR_MESSAGES.permissionError.i18n_message)
+            : undefined,
+        });
+      } else {
+        const errObj = err as Record<string, string | string[]>;
+        const msg = errObj?.error
+          ? String(Array.isArray(errObj.error) ? errObj.error[0] : errObj.error)
+          : "导入失败，请稍后重试";
+        setToast({ type: TOAST_TYPE.ERROR, title: "导入失败", message: msg });
+      }
     } finally {
       setIsSubmitting(false);
     }

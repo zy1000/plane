@@ -17,13 +17,13 @@ from plane.app.serializers import (
     ProjectMemberPreferenceSerializer,
 )
 
-from plane.app.permissions import WorkspaceUserPermission
+from plane.app.permissions import WorkspaceUserPermission, PermissionKey
 
 from plane.db.models import Project, ProjectMember, ProjectUserProperty, WorkspaceMember
 from plane.db.models.project import ProjectRole, ProjectMemberRole
 from plane.bgtasks.project_add_user_email_task import project_add_user_email
 from plane.utils.host import base_host
-from plane.app.permissions.base import allow_permission, ROLE
+from plane.app.permissions.base import allow_permission, ROLE, allow_project_permission
 
 
 class ProjectMemberViewSet(BaseViewSet):
@@ -45,7 +45,7 @@ class ProjectMemberViewSet(BaseViewSet):
             .select_related("workspace", "workspace__owner")
         )
 
-    @allow_permission([ROLE.ADMIN])
+    @allow_project_permission(PermissionKey.PROJECT_MEMBER_INVITE)
     def create(self, request, slug, project_id):
         # Get the list of members to be added to the project and their roles i.e. the user_id and the role
         members = request.data.get("members", [])
@@ -174,7 +174,6 @@ class ProjectMemberViewSet(BaseViewSet):
         serializer = ProjectMemberRoleSerializer(project_members, fields=("id", "member", "role"), many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
     def retrieve(self, request, slug, project_id, pk):
         requesting_project_member = ProjectMember.objects.get(
             project_id=project_id,
@@ -208,7 +207,6 @@ class ProjectMemberViewSet(BaseViewSet):
 
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
     def partial_update(self, request, slug, project_id, pk):
         project_member = ProjectMember.objects.get(pk=pk, workspace__slug=slug, project_id=project_id, is_active=True)
 
@@ -255,7 +253,7 @@ class ProjectMemberViewSet(BaseViewSet):
             return Response(serializer.data, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    @allow_permission([ROLE.ADMIN])
+    @allow_project_permission(PermissionKey.PROJECT_MEMBER_REMOVE)
     def destroy(self, request, slug, project_id, pk):
         project_member = ProjectMember.objects.get(
             workspace__slug=slug,
@@ -288,7 +286,7 @@ class ProjectMemberViewSet(BaseViewSet):
         project_member.save()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    @allow_project_permission(PermissionKey.PROJECT_MEMBER_LEAVE)
     def leave(self, request, slug, project_id):
         project_member = ProjectMember.objects.get(
             workspace__slug=slug,
@@ -370,7 +368,7 @@ class ProjectMemberCustomRolesAPIView(BaseAPIView):
         custom_role_ids = [str(r.id) for r in project_member.custom_roles.all()]
         return Response({"custom_role_ids": custom_role_ids}, status=status.HTTP_200_OK)
 
-    @allow_permission([ROLE.ADMIN])
+    @allow_project_permission(PermissionKey.PROJECT_MEMBER_BIND_ROLE)
     def put(self, request, slug, project_id, pk):
         project_member = self.get_project_member(slug, project_id, pk)
         if not project_member:

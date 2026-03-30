@@ -4,14 +4,17 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Pagination } from "antd";
 import { useParams } from "next/navigation";
 import useSWR from "swr";
-import { CYCLE_STATUS, MODULE_STATUS } from "@plane/constants";
+import { observer } from "mobx-react";
+import { CYCLE_STATUS, MODULE_STATUS, PROJECT_ANALYTICS_VIEW_PERMISSION_KEY } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { AreaChart } from "@plane/propel/charts/area-chart";
 import { BarChart } from "@plane/propel/charts/bar-chart";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { getDate, renderFormattedDate } from "@plane/utils";
+import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
 import { PageHead } from "@/components/core/page-title";
+import { useUserPermissions } from "@/hooks/store/user";
 import { ProjectStatisticService, type TProjectStatisticResponse } from "@/services/project";
 
 const projectStatisticService = new ProjectStatisticService();
@@ -78,10 +81,11 @@ const KpiCard: React.FC<{
   );
 };
 
-export default function ProjectStatisticsPage() {
+function ProjectStatisticsPage() {
   const pageTitle = "统计";
   const { t } = useTranslation();
   const { workspaceSlug, projectId } = useParams();
+  const { workspaceUserInfo, allowProjectPermissionKeys } = useUserPermissions();
   const [cyclePage, setCyclePage] = useState(1);
   const [releasePage, setReleasePage] = useState(1);
   const [planPage, setPlanPage] = useState(1);
@@ -110,6 +114,16 @@ export default function ProjectStatisticsPage() {
 
   const effectiveWorkspaceSlug = workspaceSlug?.toString();
   const effectiveProjectId = projectId?.toString();
+
+  const canViewStatistics = allowProjectPermissionKeys(
+    [PROJECT_ANALYTICS_VIEW_PERMISSION_KEY],
+    effectiveWorkspaceSlug,
+    effectiveProjectId
+  );
+
+  if (workspaceUserInfo && effectiveWorkspaceSlug && effectiveProjectId && !canViewStatistics) {
+    return <NotAuthorizedView section="general" isProjectView className="h-auto" />;
+  }
 
   const { data, isLoading } = useSWR<TProjectStatisticResponse>(
     effectiveWorkspaceSlug && effectiveProjectId
@@ -693,3 +707,5 @@ export default function ProjectStatisticsPage() {
     </>
   );
 }
+
+export default observer(ProjectStatisticsPage);

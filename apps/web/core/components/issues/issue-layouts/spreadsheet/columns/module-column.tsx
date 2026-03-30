@@ -8,6 +8,9 @@ import { useCallback } from "react";
 import { xor } from "lodash-es";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
+import { PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
+import { useTranslation } from "@plane/i18n";
+import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 // types
 import type { TIssue } from "@plane/types";
 // components
@@ -23,6 +26,7 @@ type Props = {
 
 export const SpreadsheetModuleColumn = observer(function SpreadsheetModuleColumn(props: Props) {
   const { issue, disabled, onClose } = props;
+  const { t } = useTranslation();
   // router
   const { workspaceSlug } = useParams();
   // hooks
@@ -41,9 +45,27 @@ export const SpreadsheetModuleColumn = observer(function SpreadsheetModuleColumn
         if (issue.module_ids.includes(moduleId)) modulesToRemove.push(moduleId);
         else modulesToAdd.push(moduleId);
       }
-      changeModulesInIssue(workspaceSlug.toString(), issue.project_id, issue.id, modulesToAdd, modulesToRemove);
+      try {
+        await changeModulesInIssue(workspaceSlug.toString(), issue.project_id, issue.id, modulesToAdd, modulesToRemove);
+      } catch (error) {
+        if (isProjectPermissionError(error)) {
+          setToast({
+            type: TOAST_TYPE.ERROR,
+            title: t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title),
+            message: PROJECT_ERROR_MESSAGES.permissionError.i18n_message
+              ? t(PROJECT_ERROR_MESSAGES.permissionError.i18n_message)
+              : undefined,
+          });
+        } else {
+          setToast({
+            type: TOAST_TYPE.ERROR,
+            title: t("common.error.label"),
+            message: t("entity.update.failed", { entity: t("issue.label") }),
+          });
+        }
+      }
     },
-    [workspaceSlug, issue, changeModulesInIssue]
+    [workspaceSlug, issue, changeModulesInIssue, t]
   );
 
   return (

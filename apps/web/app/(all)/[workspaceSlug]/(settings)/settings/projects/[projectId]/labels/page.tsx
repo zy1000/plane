@@ -9,7 +9,7 @@ import { combine } from "@atlaskit/pragmatic-drag-and-drop/combine";
 import { autoScrollForElements } from "@atlaskit/pragmatic-drag-and-drop-auto-scroll/element";
 import { observer } from "mobx-react";
 // components
-import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import { PROJECT_SETTINGS } from "@plane/constants";
 import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
 import { PageHead } from "@/components/core/page-title";
 import { ProjectSettingsLabelList } from "@/components/labels";
@@ -23,17 +23,14 @@ import { LabelsProjectSettingsHeader } from "./header";
 function LabelsSettingsPage() {
   // store hooks
   const { currentProjectDetails } = useProject();
-  const { workspaceUserInfo, allowPermissions } = useUserPermissions();
+  const { workspaceUserInfo, allowProjectPermissionKeys } = useUserPermissions();
 
   const pageTitle = currentProjectDetails?.name ? `${currentProjectDetails?.name} - Labels` : undefined;
 
   const scrollableContainerRef = useRef<HTMLDivElement | null>(null);
 
   // derived values
-  const canPerformProjectMemberActions = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-    EUserPermissionsLevel.PROJECT
-  );
+  const canView = allowProjectPermissionKeys(PROJECT_SETTINGS.labels.permissionKeys ?? []);
 
   // Enable Auto Scroll for Labels list
   useEffect(() => {
@@ -48,7 +45,7 @@ function LabelsSettingsPage() {
     );
   }, []);
 
-  if (workspaceUserInfo && !canPerformProjectMemberActions) {
+  if (workspaceUserInfo && !canView) {
     return <NotAuthorizedView section="settings" isProjectView className="h-auto" />;
   }
 

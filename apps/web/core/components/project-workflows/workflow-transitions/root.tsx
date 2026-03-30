@@ -7,9 +7,7 @@
 import type { FC } from "react";
 import { useEffect, useState } from "react";
 import { GitPullRequest } from "lucide-react";
-import { EUserPermissionsLevel } from "@plane/constants";
 import type { IState } from "@plane/types";
-import { EUserProjectRoles } from "@plane/types";
 import { useWorkflowTransitions } from "@/hooks/store/use-workflow-transitions";
 import { useProjectState } from "@/hooks/store/use-project-state";
 import { useUserPermissions } from "@/hooks/store/user";
@@ -36,7 +34,7 @@ export const WorkflowTransitionsRoot: FC<TWorkflowTransitionsRootProps> = ({
   projectId,
   workflow,
 }) => {
-  const { allowPermissions } = useUserPermissions();
+  const { allowProjectPermissionKeys } = useUserPermissions();
   const { getProjectStatesByIssueTypeId, fetchProjectStates } = useProjectState();
   const { transitions, isLoading, fetchTransitions, createTransition, updateTransition, deleteTransition } =
     useWorkflowTransitions(workspaceSlug, projectId, workflow.id);
@@ -49,9 +47,8 @@ export const WorkflowTransitionsRoot: FC<TWorkflowTransitionsRootProps> = ({
     if (key === null) setActivePanel(null);
   };
 
-  const isEditable = allowPermissions(
-    [EUserProjectRoles.ADMIN],
-    EUserPermissionsLevel.PROJECT,
+  const isEditable = allowProjectPermissionKeys(
+    ["workflow.transition.create", "workflow.transition.edit", "workflow.transition.delete"],
     workspaceSlug,
     projectId
   );

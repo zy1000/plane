@@ -45,5 +45,7 @@ export type TProjectSettingsItem = {
   i18n_label: string;
   href: string;
   access: EUserProjectRoles[];
+  permissionKeys?: string[];
+  editPermissionKeys?: string[];
   highlight: (pathname: string, baseUrl: string) => boolean;
 };

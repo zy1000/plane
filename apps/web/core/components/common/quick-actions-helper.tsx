@@ -15,6 +15,9 @@ import { useQuickActionsFactory } from "@/plane-web/components/common/quick-acti
 interface UseCycleMenuItemsProps {
   cycleDetails: ICycle | undefined;
   isEditingAllowed: boolean;
+  canEditSprint: boolean;
+  canDeleteSprint: boolean;
+  canArchiveSprint: boolean;
   workspaceSlug: string;
   projectId: string;
   cycleId: string;
@@ -32,6 +35,7 @@ interface UseCycleMenuItemsProps {
 interface UseModuleMenuItemsProps {
   moduleDetails: IModule | undefined;
   isEditingAllowed: boolean;
+  canArchiveRelease: boolean;
   workspaceSlug: string;
   projectId: string;
   moduleId: string;
@@ -70,18 +74,30 @@ type MenuResult = {
 
 export const useCycleMenuItems = (props: UseCycleMenuItemsProps): MenuResult => {
   const factory = useQuickActionsFactory();
-  const { cycleDetails, isEditingAllowed, ...handlers } = props;
+  const { cycleDetails, isEditingAllowed, canEditSprint, canDeleteSprint, canArchiveSprint, ...handlers } = props;
 
   const isArchived = !!cycleDetails?.archived_at;
   const isCompleted = cycleDetails?.status === "completed";
   const cycleStatus = cycleDetails?.status;
 
-  const canMarkCompletedOrCancelled = !isArchived && isEditingAllowed && (cycleStatus === "in_progress" || cycleStatus === "delayed");
-  const canMarkInProgress = !isArchived && isEditingAllowed && (cycleStatus === "completed" || cycleStatus === "cancelled");
+  const canMarkCompletedOrCancelled = !isArchived && isEditingAllowed && canEditSprint && (cycleStatus === "in_progress" || cycleStatus === "delayed");
+  const canMarkInProgress = !isArchived && isEditingAllowed && canEditSprint && (cycleStatus === "completed" || cycleStatus === "cancelled");
+
+  const archiveDisabled = !canArchiveSprint || !isCompleted;
+  const archiveDescription = !canArchiveSprint
+    ? "您没有归档/恢复迭代的权限"
+    : !isCompleted
+      ? "Only completed cycles can be archived"
+      : undefined;
+
+  const editDisabled = !canEditSprint;
+  const editDescription = !canEditSprint ? "您没有编辑迭代的权限" : undefined;
+  const deleteDisabled = !canDeleteSprint;
+  const deleteDescription = !canDeleteSprint ? "您没有删除迭代的权限" : undefined;
 
   // Assemble final menu items - order defined here
   const items = [
-    factory.createEditMenuItem(handlers.handleEdit, isEditingAllowed && !isCompleted && !isArchived),
+    factory.createEditMenuItem(handlers.handleEdit, isEditingAllowed && !isCompleted && !isArchived, editDisabled, editDescription),
     factory.createOpenInNewTabMenuItem(handlers.handleOpenInNewTab),
     factory.createCopyLinkMenuItem(handlers.handleCopyLink),
     {
@@ -107,11 +123,11 @@ export const useCycleMenuItems = (props: UseCycleMenuItemsProps): MenuResult => 
     },
     factory.createArchiveMenuItem(handlers.handleArchive, {
       shouldRender: isEditingAllowed && !isArchived,
-      disabled: !isCompleted,
-      description: isCompleted ? undefined : "Only completed cycles can be archived",
+      disabled: archiveDisabled,
+      description: archiveDescription,
     }),
-    factory.createRestoreMenuItem(handlers.handleRestore, isEditingAllowed && isArchived),
-    factory.createDeleteMenuItem(handlers.handleDelete, isEditingAllowed && !isCompleted && !isArchived),
+    factory.createRestoreMenuItem(handlers.handleRestore, isEditingAllowed && isArchived && canArchiveSprint),
+    factory.createDeleteMenuItem(handlers.handleDelete, isEditingAllowed && !isCompleted && !isArchived, deleteDisabled, deleteDescription),
   ].filter((item) => item.shouldRender !== false);
 
   return { items, modals: null };
@@ -119,11 +135,18 @@ export const useCycleMenuItems = (props: UseCycleMenuItemsProps): MenuResult => 
 
 export const useModuleMenuItems = (props: UseModuleMenuItemsProps): MenuResult => {
   const factory = useQuickActionsFactory();
-  const { moduleDetails, isEditingAllowed, ...handlers } = props;
+  const { moduleDetails, isEditingAllowed, canArchiveRelease, ...handlers } = props;
 
   const isArchived = !!moduleDetails?.archived_at;
   const moduleState = moduleDetails?.status?.toLocaleLowerCase();
   const isInArchivableGroup = !!moduleState && ["completed", "cancelled"].includes(moduleState);
+
+  const archiveDisabled = !canArchiveRelease || !isInArchivableGroup;
+  const archiveDescription = !canArchiveRelease
+    ? "您没有归档/恢复发布的权限"
+    : !isInArchivableGroup
+      ? "Only completed or cancelled modules can be archived"
+      : undefined;
 
   // Assemble final menu items - order defined here
   const items = [
@@ -132,10 +155,10 @@ export const useModuleMenuItems = (props: UseModuleMenuItemsProps): MenuResult =
     factory.createCopyLinkMenuItem(handlers.handleCopyLink),
     factory.createArchiveMenuItem(handlers.handleArchive, {
       shouldRender: isEditingAllowed && !isArchived,
-      disabled: !isInArchivableGroup,
-      description: isInArchivableGroup ? undefined : "Only completed or cancelled modules can be archived",
+      disabled: archiveDisabled,
+      description: archiveDescription,
     }),
-    factory.createRestoreMenuItem(handlers.handleRestore, isEditingAllowed && isArchived),
+    factory.createRestoreMenuItem(handlers.handleRestore, isEditingAllowed && isArchived && canArchiveRelease),
     factory.createDeleteMenuItem(handlers.handleDelete, isEditingAllowed && !isArchived),
   ].filter((item) => item.shouldRender !== false);
 

@@ -22,6 +22,16 @@ router.register('module/file', ModuleFileAPI, basename='module-file')
 
 urlpatterns = [
     path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/module/file/<uuid:file_id>/delete/",
+        ModuleFileAPI.as_view({"delete": "delete_file"}),
+        name="module-file-detail",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/module/file/<uuid:file_id>/download/",
+        ModuleFileAPI.as_view({"get": "download"}),
+        name="module-file-download",
+    ),
+    path(
         "workspaces/<str:slug>/projects/<uuid:project_id>/modules/",
         ModuleViewSet.as_view({"get": "list", "post": "create"}),
         name="project-modules",

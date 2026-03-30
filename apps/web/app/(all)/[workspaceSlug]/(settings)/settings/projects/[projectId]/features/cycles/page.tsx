@@ -8,7 +8,7 @@ import { observer } from "mobx-react";
 // plane imports
 import { useTranslation } from "@plane/i18n";
 // components
-import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import { PROJECT_SETTINGS } from "@plane/constants";
 import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
 import { PageHead } from "@/components/core/page-title";
 import { ProjectSettingsFeatureControlItem } from "@/components/settings/project/content/feature-control-item";
@@ -24,7 +24,7 @@ import { SettingsHeading } from "@/components/settings/heading";
 function FeaturesCyclesSettingsPage({ params }: Route.ComponentProps) {
   const { workspaceSlug, projectId } = params;
   // store hooks
-  const { workspaceUserInfo, allowPermissions } = useUserPermissions();
+  const { workspaceUserInfo, allowProjectPermissionKeys } = useUserPermissions();
   const { currentProjectDetails } = useProject();
   // translation
   const { t } = useTranslation();
@@ -32,9 +32,18 @@ function FeaturesCyclesSettingsPage({ params }: Route.ComponentProps) {
   const pageTitle = currentProjectDetails?.name
     ? `${currentProjectDetails?.name} settings - ${t("project_settings.features.cycles.short_title")}`
     : undefined;
-  const canPerformProjectAdminActions = allowPermissions([EUserPermissions.ADMIN], EUserPermissionsLevel.PROJECT);
+  const canView = allowProjectPermissionKeys(
+    PROJECT_SETTINGS.features_cycles.permissionKeys ?? [],
+    workspaceSlug,
+    projectId
+  );
+  const canEdit = allowProjectPermissionKeys(
+    PROJECT_SETTINGS.features_cycles.editPermissionKeys ?? [],
+    workspaceSlug,
+    projectId
+  );
 
-  if (workspaceUserInfo && !canPerformProjectAdminActions) {
+  if (workspaceUserInfo && !canView) {
     return <NotAuthorizedView section="settings" isProjectView className="h-auto" />;
   }
 
@@ -50,6 +59,7 @@ function FeaturesCyclesSettingsPage({ params }: Route.ComponentProps) {
           <ProjectSettingsFeatureControlItem
             title={t("project_settings.features.cycles.toggle_title")}
             description={t("project_settings.features.cycles.toggle_description")}
+            disabled={!canEdit}
             featureProperty="cycle_view"
             projectId={projectId}
             value={!!currentProjectDetails?.cycle_view}

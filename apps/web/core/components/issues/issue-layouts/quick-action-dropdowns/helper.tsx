@@ -167,6 +167,32 @@ export const useMenuItemFactory = (props: MenuItemFactoryProps) => {
     handleRemoveFromView,
   } = props;
 
+  const runRemoveFromView = async (actionLabel: string, fallbackMessage: string) => {
+    if (!handleRemoveFromView) {
+      handleOptionalAction(handleRemoveFromView, actionLabel);
+      return;
+    }
+    try {
+      await handleRemoveFromView();
+    } catch (error) {
+      if (isProjectPermissionError(error)) {
+        setToast({
+          type: TOAST_TYPE.ERROR,
+          title: t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title),
+          message: PROJECT_ERROR_MESSAGES.permissionError.i18n_message
+            ? t(PROJECT_ERROR_MESSAGES.permissionError.i18n_message)
+            : undefined,
+        });
+      } else {
+        setToast({
+          type: TOAST_TYPE.ERROR,
+          title: "Error!",
+          message: fallbackMessage,
+        });
+      }
+    }
+  };
+
   const createEditMenuItem = (customEditAction?: () => void): TContextMenuItem => ({
     key: "edit",
     title: t("common.actions.edit"),
@@ -218,7 +244,9 @@ export const useMenuItemFactory = (props: MenuItemFactoryProps) => {
     key: "remove-from-cycle",
     title: "Remove from cycle",
     icon: XCircle,
-    action: () => handleOptionalAction(handleRemoveFromView, "Remove from cycle"),
+    action: () => {
+      void runRemoveFromView("Remove from cycle", "Could not remove work item from cycle. Please try again.");
+    },
     shouldRender: isEditingAllowed,
   });
 
@@ -226,7 +254,9 @@ export const useMenuItemFactory = (props: MenuItemFactoryProps) => {
     key: "remove-from-module",
     title: "Remove from module",
     icon: XCircle,
-    action: () => handleOptionalAction(handleRemoveFromView, "Remove from module"),
+    action: () => {
+      void runRemoveFromView("Remove from module", "Could not remove work item from module. Please try again.");
+    },
     shouldRender: isEditingAllowed,
   });
 

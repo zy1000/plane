@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { observer } from "mobx-react";
 import { Modal, Pagination } from "antd";
 import { Plus, Trash2 } from "lucide-react";
+import { PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
+import { useTranslation } from "@plane/i18n";
 import type { IProject, TNameDescriptionLoader } from "@plane/types";
 import { Button } from "@plane/propel/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
@@ -29,6 +31,7 @@ type TPageView = {
 
 export const OverviewListView: React.FC<TPageView> = observer((props) => {
   const { project, workspaceSlug } = props;
+  const { t } = useTranslation();
   const [isSubmitting, setIsSubmitting] = useState<TNameDescriptionLoader>("submitted");
   const [announcements, setAnnouncements] = useState<TProjectAnnouncement[]>([]);
   const [isLoadingAnnouncements, setIsLoadingAnnouncements] = useState(false);
@@ -85,11 +88,21 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
       if (announcements.length === 1 && page > 1) setPage(page - 1);
       else fetchAnnouncements();
     } catch (error) {
-      setToast({
-        type: TOAST_TYPE.ERROR,
-        title: "删除失败",
-        message: "删除公告失败，请稍后重试。",
-      });
+      if (isProjectPermissionError(error)) {
+        setToast({
+          type: TOAST_TYPE.ERROR,
+          title: t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title),
+          message: PROJECT_ERROR_MESSAGES.permissionError.i18n_message
+            ? t(PROJECT_ERROR_MESSAGES.permissionError.i18n_message)
+            : undefined,
+        });
+      } else {
+        setToast({
+          type: TOAST_TYPE.ERROR,
+          title: "删除失败",
+          message: "删除公告失败，请稍后重试。",
+        });
+      }
     }
   };
 

@@ -6,7 +6,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ShieldCheck, Building2, FolderKanban, Search, CheckSquare, Square, MinusSquare } from "lucide-react";
+import { PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
 import type { IPermission, IWorkspaceRole } from "@plane/types";
+import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { cn } from "@plane/utils";
 
@@ -60,6 +62,7 @@ export function PermissionsPanel({
   searchQuery,
   onTogglePermission,
 }: Props) {
+  const { t } = useTranslation();
   const [activeScope, setActiveScope] = useState<TScope>("workspace");
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [togglingKey, setTogglingKey] = useState<string | null>(null);
@@ -191,13 +194,23 @@ export function PermissionsPanel({
       try {
         await onTogglePermission(role.id, permissionKey);
       } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : "更新权限失败";
-        setToast({ type: TOAST_TYPE.ERROR, title: "失败", message: msg });
+        if (isProjectPermissionError(err)) {
+          setToast({
+            type: TOAST_TYPE.ERROR,
+            title: t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title),
+            message: PROJECT_ERROR_MESSAGES.permissionError.i18n_message
+              ? t(PROJECT_ERROR_MESSAGES.permissionError.i18n_message)
+              : undefined,
+          });
+        } else {
+          const msg = err instanceof Error ? err.message : "更新权限失败";
+          setToast({ type: TOAST_TYPE.ERROR, title: "失败", message: msg });
+        }
       } finally {
         setTogglingKey(null);
       }
     },
-    [role, isAdmin, togglingKey, onTogglePermission]
+    [role, isAdmin, togglingKey, onTogglePermission, t]
   );
 
   const handleToggleCategoryAll = useCallback(
@@ -211,13 +224,24 @@ export function PermissionsPanel({
         setTogglingKey(perm.key);
         try {
           await onTogglePermission(role.id, perm.key);
-        } catch {
+        } catch (err: unknown) {
+          if (isProjectPermissionError(err)) {
+            setToast({
+              type: TOAST_TYPE.ERROR,
+              title: t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title),
+              message: PROJECT_ERROR_MESSAGES.permissionError.i18n_message
+                ? t(PROJECT_ERROR_MESSAGES.permissionError.i18n_message)
+                : undefined,
+            });
+          } else {
+            setToast({ type: TOAST_TYPE.ERROR, title: "失败", message: "更新权限失败" });
+          }
           break;
         }
       }
       setTogglingKey(null);
     },
-    [role, isAdmin, togglingKey, boundKeySet, onTogglePermission]
+    [role, isAdmin, togglingKey, boundKeySet, onTogglePermission, t]
   );
 
   // --- Empty state: no role selected ---

@@ -23,7 +23,7 @@ from rest_framework import status
 from rest_framework.response import Response
 
 # Module imports
-from plane.app.permissions import allow_permission, ROLE
+from plane.app.permissions import PermissionKey, ROLE, allow_permission, allow_project_permission
 from plane.app.serializers import IssueViewSerializer, ViewIssueListSerializer
 from plane.db.models import (
     Issue,
@@ -286,7 +286,7 @@ class IssueViewViewSet(BaseViewSet):
             .distinct()
         )
 
-    @allow_permission(allowed_roles=[ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    @allow_project_permission(PermissionKey.VIEW_VIEW)
     def list(self, request, slug, project_id):
         queryset = self.get_queryset()
         project = Project.objects.get(id=project_id)
@@ -305,7 +305,7 @@ class IssueViewViewSet(BaseViewSet):
         views = IssueViewSerializer(queryset, many=True, fields=fields if fields else None).data
         return Response(views, status=status.HTTP_200_OK)
 
-    @allow_permission(allowed_roles=[ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    @allow_project_permission(PermissionKey.VIEW_VIEW)
     def retrieve(self, request, slug, project_id, pk):
         issue_view = self.get_queryset().filter(pk=pk, project_id=project_id).first()
         project = Project.objects.get(id=project_id)
@@ -340,7 +340,15 @@ class IssueViewViewSet(BaseViewSet):
         )
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    @allow_permission(allowed_roles=[], creator=True, model=IssueView)
+    @allow_project_permission(PermissionKey.VIEW_CREATE)
+    def create(self, request, *args, **kwargs):
+        return super().create(request, *args, **kwargs)
+
+    @allow_project_permission(PermissionKey.VIEW_EDIT)
+    def update(self, request, *args, **kwargs):
+        return self.partial_update(request, *args, **kwargs)
+
+    @allow_project_permission(PermissionKey.VIEW_EDIT)
     def partial_update(self, request, slug, project_id, pk):
         with transaction.atomic():
             issue_view = IssueView.objects.select_for_update().get(pk=pk, workspace__slug=slug, project_id=project_id)
@@ -362,39 +370,24 @@ class IssueViewViewSet(BaseViewSet):
                 return Response(serializer.data, status=status.HTTP_200_OK)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    @allow_permission(allowed_roles=[ROLE.ADMIN], creator=True, model=IssueView)
+    @allow_project_permission(PermissionKey.VIEW_DELETE)
     def destroy(self, request, slug, project_id, pk):
         project_view = IssueView.objects.get(pk=pk, project_id=project_id, workspace__slug=slug)
-        if (
-            ProjectMember.objects.filter(
-                workspace__slug=slug,
-                project_id=project_id,
-                member=request.user,
-                role=20,
-                is_active=True,
-            ).exists()
-            or project_view.owned_by_id == request.user.id
-        ):
-            project_view.delete()
-            # Delete the user favorite view
-            UserFavorite.objects.filter(
-                project_id=project_id,
-                workspace__slug=slug,
-                entity_identifier=pk,
-                entity_type="view",
-            ).delete()
-            # Delete the page from recent visit
-            UserRecentVisit.objects.filter(
-                project_id=project_id,
-                workspace__slug=slug,
-                entity_identifier=pk,
-                entity_name="view",
-            ).delete(soft=False)
-        else:
-            return Response(
-                {"error": "Only admin or owner can delete the view"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        project_view.delete()
+        # Delete the user favorite view
+        UserFavorite.objects.filter(
+            project_id=project_id,
+            workspace__slug=slug,
+            entity_identifier=pk,
+            entity_type="view",
+        ).delete()
+        # Delete the page from recent visit
+        UserRecentVisit.objects.filter(
+            project_id=project_id,
+            workspace__slug=slug,
+            entity_identifier=pk,
+            entity_name="view",
+        ).delete(soft=False)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -410,7 +403,11 @@ class IssueViewFavoriteViewSet(BaseViewSet):
             .select_related("view")
         )
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
+    @allow_project_permission(PermissionKey.VIEW_VIEW)
+    def list(self, request, *args, **kwargs):
+        return super().list(request, *args, **kwargs)
+
+    @allow_project_permission(PermissionKey.VIEW_VIEW)
     def create(self, request, slug, project_id):
         _ = UserFavorite.objects.create(
             user=request.user,
@@ -420,7 +417,7 @@ class IssueViewFavoriteViewSet(BaseViewSet):
         )
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
+    @allow_project_permission(PermissionKey.VIEW_VIEW)
     def destroy(self, request, slug, project_id, view_id):
         view_favorite = UserFavorite.objects.get(
             project=project_id,

@@ -8,7 +8,7 @@ import { useState } from "react";
 import { observer } from "mobx-react";
 // plane imports
 import { useTheme } from "next-themes";
-import { EUserPermissionsLevel, CYCLE_TRACKER_ELEMENTS } from "@plane/constants";
+import { EUserPermissionsLevel, CYCLE_TRACKER_ELEMENTS, PROJECT_SPRINTS_VIEW_PERMISSION_KEY, PROJECT_SPRINTS_CREATE_PERMISSION_KEY } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { EmptyStateDetailed } from "@plane/propel/empty-state";
 import type { TCycleFilters } from "@plane/types";
@@ -20,6 +20,7 @@ import { calculateTotalFilters } from "@plane/utils";
 import darkEmptyState from "@/app/assets/empty-state/disabled-feature/cycles-dark.webp?url";
 import lightEmptyState from "@/app/assets/empty-state/disabled-feature/cycles-light.webp?url";
 // components
+import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
 import { PageHead } from "@/components/core/page-title";
 import { CycleAppliedFiltersList } from "@/components/cycles/applied-filters";
 import { CyclesView } from "@/components/cycles/cycles-view";
@@ -49,7 +50,7 @@ function ProjectCyclesPage({ params }: Route.ComponentProps) {
   const { t } = useTranslation();
   // cycle filters hook
   const { clearAllFilters, currentProjectFilters, updateFilters } = useCycleFilter();
-  const { allowPermissions } = useUserPermissions();
+  const { allowPermissions, allowProjectPermissionKeys, workspaceUserInfo } = useUserPermissions();
   // derived values
   const resolvedEmptyState = resolvedTheme === "light" ? lightEmptyState : darkEmptyState;
   const totalCycles = currentProjectCycleIds?.length ?? 0;
@@ -69,6 +70,16 @@ function ProjectCyclesPage({ params }: Route.ComponentProps) {
 
     updateFilters(projectId, { [key]: newValues });
   };
+
+  const canViewSprints = allowProjectPermissionKeys(
+    [PROJECT_SPRINTS_VIEW_PERMISSION_KEY],
+    workspaceSlug,
+    projectId
+  );
+
+  if (workspaceUserInfo && !canViewSprints) {
+    return <NotAuthorizedView section="general" isProjectView className="h-auto" />;
+  }
 
   // No access to cycle
   if (currentProjectDetails?.cycle_view === false)
@@ -112,7 +123,7 @@ function ProjectCyclesPage({ params }: Route.ComponentProps) {
                   label: t("project_empty_state.cycles.cta_primary"),
                   onClick: () => setCreateModal(true),
                   variant: "primary",
-                  disabled: !hasMemberLevelPermission,
+                  disabled: !hasMemberLevelPermission || !allowProjectPermissionKeys([PROJECT_SPRINTS_CREATE_PERMISSION_KEY], workspaceSlug, projectId),
                   "data-ph-element": CYCLE_TRACKER_ELEMENTS.EMPTY_STATE_ADD_BUTTON,
                 },
               ]}

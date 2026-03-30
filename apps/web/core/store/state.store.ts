@@ -419,12 +419,15 @@ export class StateStore implements IStateStore {
    * @param stateId
    */
   markStateAsDefault = async (workspaceSlug: string, projectId: string, stateId: string) => {
-    const originalStates = this.stateMap;
     const targetState = this.stateMap[stateId];
     const issueTypeId = targetState?.issue_type_id ?? null;
     const currentDefaultState = Object.values(this.stateMap).find(
       (state) => state.project_id === projectId && state.default && state.issue_type_id === issueTypeId
     );
+    // 快照受影响的 state 对象（勿复用 stateMap 引用，否则 set() 就地修改后无法回滚）
+    const snapshot: Record<string, IState> = {};
+    if (currentDefaultState) snapshot[currentDefaultState.id] = { ...this.stateMap[currentDefaultState.id] };
+    snapshot[stateId] = { ...this.stateMap[stateId] };
     try {
       runInAction(() => {
         if (currentDefaultState) set(this.stateMap, [currentDefaultState.id, "default"], false);
@@ -433,7 +436,9 @@ export class StateStore implements IStateStore {
       await this.stateService.markDefault(workspaceSlug, projectId, stateId, issueTypeId);
     } catch (error) {
       runInAction(() => {
-        this.stateMap = originalStates;
+        for (const [id, state] of Object.entries(snapshot)) {
+          set(this.stateMap, [id], state);
+        }
       });
       throw error;
     }
@@ -448,7 +453,7 @@ export class StateStore implements IStateStore {
    * @param groupIndex
    */
   moveStatePosition = async (workspaceSlug: string, projectId: string, stateId: string, payload: Partial<IState>) => {
-    const originalStates = this.stateMap;
+    const originalState = this.stateMap[stateId] ? { ...this.stateMap[stateId] } : undefined;
     try {
       Object.entries(payload).forEach(([key, value]) => {
         runInAction(() => {
@@ -457,11 +462,16 @@ export class StateStore implements IStateStore {
       });
       // updating using api
       await this.stateService.patchState(workspaceSlug, projectId, stateId, payload);
-    } catch {
-      // reverting back to old state group if api fails
+    } catch (error) {
       runInAction(() => {
-        this.stateMap = originalStates;
+        if (originalState) {
+          this.stateMap = {
+            ...this.stateMap,
+            [stateId]: originalState,
+          };
+        }
       });
+      throw error;
     }
   };
 

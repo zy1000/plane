@@ -17,9 +17,12 @@ import {
   EUserPermissions,
   EUserPermissionsLevel,
   IS_FAVORITE_MENU_OPEN,
+  PROJECT_ERROR_MESSAGES,
+  isProjectPermissionError,
 } from "@plane/constants";
 import { useLocalStorage } from "@plane/hooks";
 import { WorkItemsIcon } from "@plane/propel/icons";
+import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setPromiseToast, setToast } from "@plane/propel/toast";
 import { Tooltip } from "@plane/propel/tooltip";
 import type { IModule } from "@plane/types";
@@ -42,6 +45,7 @@ type Props = {
 
 export const ModuleCardItem = observer(function ModuleCardItem(props: Props) {
   const { moduleId } = props;
+  const { t } = useTranslation();
   // refs
   const parentRef = useRef(null);
   const { workspaceSlug, projectId } = useParams();
@@ -126,11 +130,21 @@ export const ModuleCardItem = observer(function ModuleCardItem(props: Props) {
         });
       })
       .catch((err) => {
-        setToast({
-          type: TOAST_TYPE.ERROR,
-          title: "Error!",
-          message: err?.detail ?? "Module could not be updated. Please try again.",
-        });
+        if (isProjectPermissionError(err)) {
+          setToast({
+            type: TOAST_TYPE.ERROR,
+            title: t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title),
+            message: PROJECT_ERROR_MESSAGES.permissionError.i18n_message
+              ? t(PROJECT_ERROR_MESSAGES.permissionError.i18n_message)
+              : undefined,
+          });
+        } else {
+          setToast({
+            type: TOAST_TYPE.ERROR,
+            title: "Error!",
+            message: err?.detail ?? err?.error ?? "Module could not be updated. Please try again.",
+          });
+        }
       });
   };
 

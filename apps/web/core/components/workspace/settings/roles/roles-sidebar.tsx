@@ -6,7 +6,9 @@
 
 import { useState } from "react";
 import { DownloadIcon, PencilIcon, PlusIcon, ShieldCheck, Trash2Icon } from "lucide-react";
+import { PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
 import type { IWorkspaceRole } from "@plane/types";
+import { useTranslation } from "@plane/i18n";
 import { AlertModalCore } from "@plane/ui";
 import { Button } from "@plane/propel/button";
 import { SearchIcon } from "@plane/propel/icons";
@@ -40,6 +42,7 @@ export function RolesSidebar({
   onDelete,
   onImport,
 }: Props) {
+  const { t } = useTranslation();
   const [searchQuery, setSearchQuery] = useState("");
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingRole, setEditingRole] = useState<IWorkspaceRole | null>(null);
@@ -80,8 +83,18 @@ export function RolesSidebar({
       await onDelete(pendingDelete.id);
       setToast({ type: TOAST_TYPE.SUCCESS, title: "已删除", message: `角色「${pendingDelete.name}」已删除` });
       closeDeleteModal();
-    } catch {
-      setToast({ type: TOAST_TYPE.ERROR, title: "删除失败", message: "请稍后重试" });
+    } catch (error) {
+      if (isProjectPermissionError(error)) {
+        setToast({
+          type: TOAST_TYPE.ERROR,
+          title: t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title),
+          message: PROJECT_ERROR_MESSAGES.permissionError.i18n_message
+            ? t(PROJECT_ERROR_MESSAGES.permissionError.i18n_message)
+            : undefined,
+        });
+      } else {
+        setToast({ type: TOAST_TYPE.ERROR, title: "删除失败", message: "请稍后重试" });
+      }
     } finally {
       setIsDeleteSubmitting(false);
     }

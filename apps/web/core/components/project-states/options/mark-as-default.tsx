@@ -6,8 +6,10 @@
 
 import { useState } from "react";
 import { observer } from "mobx-react";
-// plane imports
+import { PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
+import { useTranslation } from "@plane/i18n";
 import type { TStateOperationsCallbacks } from "@plane/types";
+import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { cn } from "@plane/utils";
 
 type TStateMarksAsDefault = {
@@ -18,6 +20,7 @@ type TStateMarksAsDefault = {
 
 export const StateMarksAsDefault = observer(function StateMarksAsDefault(props: TStateMarksAsDefault) {
   const { stateId, isDefault, markStateAsDefaultCallback } = props;
+  const { t } = useTranslation();
   // states
   const [isLoading, setIsLoading] = useState(false);
 
@@ -26,10 +29,24 @@ export const StateMarksAsDefault = observer(function StateMarksAsDefault(props: 
     setIsLoading(true);
 
     try {
-      setIsLoading(false);
       await markStateAsDefaultCallback(stateId);
-      setIsLoading(false);
-    } catch {
+    } catch (error) {
+      if (isProjectPermissionError(error)) {
+        setToast({
+          type: TOAST_TYPE.ERROR,
+          title: t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title),
+          message: PROJECT_ERROR_MESSAGES.permissionError.i18n_message
+            ? t(PROJECT_ERROR_MESSAGES.permissionError.i18n_message)
+            : undefined,
+        });
+      } else {
+        setToast({
+          type: TOAST_TYPE.ERROR,
+          title: t("common.error.label"),
+          message: "State could not be updated. Please try again.",
+        });
+      }
+    } finally {
       setIsLoading(false);
     }
   };

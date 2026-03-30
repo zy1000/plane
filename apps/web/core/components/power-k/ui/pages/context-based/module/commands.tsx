@@ -8,7 +8,7 @@ import { useCallback } from "react";
 import { useParams } from "next/navigation";
 import { Star, StarOff, Users } from "lucide-react";
 // plane imports
-import { EUserPermissionsLevel } from "@plane/constants";
+import { EUserPermissionsLevel, PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { LinkIcon, ModuleStatusIcon } from "@plane/propel/icons";
 import { setToast, TOAST_TYPE } from "@plane/propel/toast";
@@ -43,12 +43,22 @@ export const usePowerKModuleContextBasedActions = (): TPowerKCommandConfig[] => 
     async (formData: Partial<IModule>) => {
       if (!workspaceSlug || !projectId || !moduleDetails) return;
       await updateModuleDetails(workspaceSlug.toString(), projectId.toString(), moduleDetails.id, formData).catch(
-        () => {
-          setToast({
-            type: TOAST_TYPE.ERROR,
-            title: "Error!",
-            message: "Module could not be updated. Please try again.",
-          });
+        (err: unknown) => {
+          if (isProjectPermissionError(err)) {
+            setToast({
+              type: TOAST_TYPE.ERROR,
+              title: t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title),
+              message: PROJECT_ERROR_MESSAGES.permissionError.i18n_message
+                ? t(PROJECT_ERROR_MESSAGES.permissionError.i18n_message)
+                : undefined,
+            });
+          } else {
+            setToast({
+              type: TOAST_TYPE.ERROR,
+              title: "Error!",
+              message: "Module could not be updated. Please try again.",
+            });
+          }
         }
       );
     },

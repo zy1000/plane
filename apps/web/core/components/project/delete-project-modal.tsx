@@ -7,6 +7,8 @@
 import { useParams } from "next/navigation";
 import { Controller, useForm } from "react-hook-form";
 import { AlertTriangle } from "lucide-react";
+import { PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
+import { useTranslation } from "@plane/i18n";
 // Plane imports
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
@@ -29,6 +31,7 @@ const defaultValues = {
 
 export function DeleteProjectModal(props: DeleteProjectModal) {
   const { isOpen, project, onClose } = props;
+  const { t } = useTranslation();
   // store hooks
   const { deleteProject } = useProject();
   // router
@@ -66,11 +69,20 @@ export function DeleteProjectModal(props: DeleteProjectModal) {
         title: "Success!",
         message: "Project deleted successfully.",
       });
-    } catch (_error) {
+    } catch (error) {
+      const currentError = isProjectPermissionError(error)
+        ? PROJECT_ERROR_MESSAGES.permissionError
+        : {
+            i18n_title: "common.error.label",
+            i18n_message: undefined,
+          };
       setToast({
         type: TOAST_TYPE.ERROR,
-        title: "Error!",
-        message: "Something went wrong. Please try again later.",
+        title: t(currentError.i18n_title),
+        message:
+          currentError === PROJECT_ERROR_MESSAGES.permissionError
+            ? currentError.i18n_message && t(currentError.i18n_message)
+            : "Something went wrong. Please try again later.",
       });
     }
   };

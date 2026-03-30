@@ -41,6 +41,8 @@ export interface IPartialProject {
   un_started_work_items?: number;
   completed_work_items?: number;
   cancelled_work_items?: number;
+  /** 当前用户在该项目下的细粒度权限键，与 project-members/me 及列表接口一致 */
+  permission_keys?: string[];
   // Timestamps
   created_at?: Date | string | null;
   updated_at?: Date | string | null;
@@ -105,6 +107,7 @@ export type TProjectMembership = {
   member: string;
   role: TUserPermissions | EUserProjectRoles;
   custom_role_ids?: string[];
+  permission_keys?: string[];
 } & (
   | {
       id: string;

@@ -8,7 +8,7 @@ import { useState } from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 // types
-import { PROJECT_ERROR_MESSAGES } from "@plane/constants";
+import { PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { IModule } from "@plane/types";
@@ -57,14 +57,13 @@ export const DeleteModuleModal = observer(function DeleteModuleModal(props: Prop
         });
       })
       .catch((errors) => {
-        const isPermissionError = errors?.error === "You don't have the required permissions.";
-        const currentError = isPermissionError
+        const currentError = isProjectPermissionError(errors)
           ? PROJECT_ERROR_MESSAGES.permissionError
           : PROJECT_ERROR_MESSAGES.moduleDeleteError;
         setToast({
           title: t(currentError.i18n_title),
           type: TOAST_TYPE.ERROR,
-          message: currentError.i18n_message && t(currentError.i18n_message),
+          message: currentError.i18n_message ? t(currentError.i18n_message) : undefined,
         });
       })
       .finally(() => handleClose());

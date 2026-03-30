@@ -8,6 +8,8 @@ import { useState } from "react";
 import { observer } from "mobx-react";
 import { Loader } from "lucide-react";
 import { CloseIcon } from "@plane/propel/icons";
+import { PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
+import { useTranslation } from "@plane/i18n";
 // plane imports
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Tooltip } from "@plane/propel/tooltip";
@@ -26,6 +28,7 @@ type TStateDelete = {
 
 export const StateDelete = observer(function StateDelete(props: TStateDelete) {
   const { totalStates, state, deleteStateCallback } = props;
+  const { t } = useTranslation();
   // hooks
   const { isMobile } = usePlatformOS();
   // states
@@ -41,23 +44,40 @@ export const StateDelete = observer(function StateDelete(props: TStateDelete) {
 
     try {
       await deleteStateCallback(state.id);
-      setIsDelete(false);
-    } catch (error) {
-      const errorStatus = error as { status: number; data: { error: string } };
-      if (errorStatus.status === 400) {
+    } catch (error: unknown) {
+      if (isProjectPermissionError(error)) {
         setToast({
           type: TOAST_TYPE.ERROR,
-          title: "Error!",
-          message:
-            "This state contains some work items within it, please move them to some other state to delete this state.",
+          title: t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title),
+          message: PROJECT_ERROR_MESSAGES.permissionError.i18n_message
+            ? t(PROJECT_ERROR_MESSAGES.permissionError.i18n_message)
+            : undefined,
         });
       } else {
-        setToast({
-          type: TOAST_TYPE.ERROR,
-          title: "Error!",
-          message: "State could not be deleted. Please try again.",
-        });
+        const e = error as { error?: string };
+        const msg = e?.error;
+        if (msg === "The state is not empty, only empty states can be deleted") {
+          setToast({
+            type: TOAST_TYPE.ERROR,
+            title: "Error!",
+            message:
+              "This state contains some work items within it, please move them to some other state to delete this state.",
+          });
+        } else if (msg === "Default state cannot be deleted") {
+          setToast({
+            type: TOAST_TYPE.ERROR,
+            title: "Error!",
+            message: "Default state cannot be deleted.",
+          });
+        } else {
+          setToast({
+            type: TOAST_TYPE.ERROR,
+            title: "Error!",
+            message: "State could not be deleted. Please try again.",
+          });
+        }
       }
+    } finally {
       setIsDelete(false);
     }
   };

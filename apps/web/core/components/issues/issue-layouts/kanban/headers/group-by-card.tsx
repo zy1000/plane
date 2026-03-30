@@ -10,6 +10,8 @@ import { useParams } from "next/navigation";
 // lucide icons
 import { Minimize2, Maximize2, Circle } from "lucide-react";
 import { PlusIcon } from "@plane/propel/icons";
+import { PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
+import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TIssue, ISearchIssueResponse, TIssueKanbanFilters, TIssueGroupByOptions } from "@plane/types";
 // ui
@@ -60,6 +62,7 @@ export const HeaderGroupByCard = observer(function HeaderGroupByCard(props: IHea
   // states
   const [isOpen, setIsOpen] = React.useState(false);
   const [openExistingIssueListModal, setOpenExistingIssueListModal] = React.useState(false);
+  const { t } = useTranslation();
   // hooks
   const storeType = useIssueStoreType();
   // router
@@ -79,14 +82,28 @@ export const HeaderGroupByCard = observer(function HeaderGroupByCard(props: IHea
       setToast({
         type: TOAST_TYPE.SUCCESS,
         title: "Success!",
-        message: "Work items added to the cycle successfully.",
+        message: moduleId
+          ? "Work items added to the module successfully."
+          : "Work items added to the cycle successfully.",
       });
-    } catch (_error) {
-      setToast({
-        type: TOAST_TYPE.ERROR,
-        title: "Error!",
-        message: "Selected work items could not be added to the cycle. Please try again.",
-      });
+    } catch (error) {
+      if (isProjectPermissionError(error)) {
+        setToast({
+          type: TOAST_TYPE.ERROR,
+          title: t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title),
+          message: PROJECT_ERROR_MESSAGES.permissionError.i18n_message
+            ? t(PROJECT_ERROR_MESSAGES.permissionError.i18n_message)
+            : undefined,
+        });
+      } else {
+        setToast({
+          type: TOAST_TYPE.ERROR,
+          title: "Error!",
+          message: moduleId
+            ? "Selected work items could not be added to the module. Please try again."
+            : "Selected work items could not be added to the cycle. Please try again.",
+        });
+      }
     }
   };
 

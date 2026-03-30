@@ -29,7 +29,7 @@ export const ProjectSettingsSidebarItemCategories = observer(function ProjectSet
   const { workspaceSlug } = useParams();
   const pathname = usePathname();
   // store hooks
-  const { allowPermissions } = useUserPermissions();
+  const { allowPermissions, allowProjectPermissionKeys } = useUserPermissions();
   // translation
   const { t } = useTranslation();
 
@@ -38,7 +38,9 @@ export const ProjectSettingsSidebarItemCategories = observer(function ProjectSet
       {PROJECT_SETTINGS_CATEGORIES.map((category) => {
         const categoryItems = GROUPED_PROJECT_SETTINGS[category];
         const accessibleItems = categoryItems.filter((item) =>
-          allowPermissions(item.access, EUserPermissionsLevel.PROJECT, workspaceSlug, projectId)
+          item.permissionKeys?.length
+            ? allowProjectPermissionKeys(item.permissionKeys, workspaceSlug, projectId)
+            : allowPermissions(item.access, EUserPermissionsLevel.PROJECT, workspaceSlug, projectId)
         );
 
         if (accessibleItems.length === 0) return null;

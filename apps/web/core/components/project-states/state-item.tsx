@@ -11,7 +11,10 @@ import { attachClosestEdge, extractClosestEdge } from "@atlaskit/pragmatic-drag-
 import { observer } from "mobx-react";
 // Plane
 import type { TDraggableData } from "@plane/constants";
+import { PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
+import { useTranslation } from "@plane/i18n";
 import type { IState, TStateGroups, TStateOperationsCallbacks } from "@plane/types";
+import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { DropIndicator } from "@plane/ui";
 import { cn, getCurrentStateSequence } from "@plane/utils";
 // components
@@ -39,6 +42,7 @@ export const StateItem = observer(function StateItem(props: TStateItem) {
     disabled = false,
     stateItemClassName,
   } = props;
+  const { t } = useTranslation();
   // ref
   const draggableElementRef = useRef<HTMLDivElement | null>(null);
   // states
@@ -60,10 +64,24 @@ export const StateItem = observer(function StateItem(props: TStateItem) {
         if (!payload.id) return;
         await stateOperationsCallbacks.moveStatePosition(payload.id, payload);
       } catch (error) {
-        console.error("error", error);
+        if (isProjectPermissionError(error)) {
+          setToast({
+            type: TOAST_TYPE.ERROR,
+            title: t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title),
+            message: PROJECT_ERROR_MESSAGES.permissionError.i18n_message
+              ? t(PROJECT_ERROR_MESSAGES.permissionError.i18n_message)
+              : undefined,
+          });
+        } else {
+          setToast({
+            type: TOAST_TYPE.ERROR,
+            title: t("common.error.label"),
+            message: "State order could not be updated. Please try again.",
+          });
+        }
       }
     },
-    [stateOperationsCallbacks]
+    [stateOperationsCallbacks, t]
   );
 
   useEffect(() => {

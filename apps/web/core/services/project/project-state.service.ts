@@ -20,7 +20,7 @@ export class ProjectStateService extends APIService {
     return this.post(`/api/workspaces/${workspaceSlug}/projects/${projectId}/states/`, data)
       .then((response) => response?.data)
       .catch((error) => {
-        throw error?.response;
+        throw error?.response?.data;
       });
   }
 
@@ -30,7 +30,7 @@ export class ProjectStateService extends APIService {
     })
       .then((response) => response?.data)
       .catch((error) => {
-        throw error?.response;
+        throw error?.response?.data;
       });
   }
 
@@ -63,7 +63,7 @@ export class ProjectStateService extends APIService {
     return this.put(`/api/workspaces/${workspaceSlug}/projects/${projectId}/states/${stateId}/`, data)
       .then((response) => response?.data)
       .catch((error) => {
-        throw error?.response;
+        throw error?.response?.data;
       });
   }
 
@@ -79,7 +79,7 @@ export class ProjectStateService extends APIService {
     return this.delete(`/api/workspaces/${workspaceSlug}/projects/${projectId}/states/${stateId}/`)
       .then((response) => response?.data)
       .catch((error) => {
-        throw error?.response;
+        throw error?.response?.data;
       });
   }
 

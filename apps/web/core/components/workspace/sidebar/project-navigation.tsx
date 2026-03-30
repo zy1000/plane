@@ -8,7 +8,13 @@ import React, { useCallback, useMemo } from "react";
 import { observer } from "mobx-react";
 import Link from "next/link";
 import { useParams, usePathname } from "next/navigation";
-import { EUserPermissionsLevel, EUserPermissions } from "@plane/constants";
+import {
+  EUserPermissionsLevel,
+  EUserPermissions,
+  PROJECT_ANALYTICS_VIEW_PERMISSION_KEY,
+  PROJECT_ASSET_VIEW_PERMISSION_KEY,
+  PROJECT_RELEASES_VIEW_PERMISSION_KEY,
+} from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 
 import {
@@ -37,6 +43,7 @@ export type TNavigationItem = {
   href: string;
   icon: React.ElementType;
   access: EUserPermissions[] | EUserProjectRoles[];
+  permissionKeys?: string[];
   shouldRender: boolean;
   sortOrder: number;
   i18n_key: string;
@@ -56,7 +63,7 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
   const { t } = useTranslation();
   const { isExtendedProjectSidebarOpened, toggleExtendedProjectSidebar, toggleSidebar } = useAppTheme();
   const { getPartialProjectById } = useProject();
-  const { allowPermissions } = useUserPermissions();
+  const { allowPermissions, allowProjectPermissionKeys } = useUserPermissions();
   const {
     issue: { getIssueIdByIdentifier, getIssueById },
   } = useIssueDetail();
@@ -98,6 +105,7 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
         href: `/${workspaceSlug}/projects/${projectId}/statistics`,
         icon: BarChart3,
         access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
+        permissionKeys: [PROJECT_ANALYTICS_VIEW_PERMISSION_KEY],
         shouldRender: true,
         sortOrder: 0.5,
       },
@@ -147,7 +155,8 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
         name: "Modules",
         href: `/${workspaceSlug}/projects/${projectId}/modules`,
         icon: ModuleIcon,
-        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
+        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
+        permissionKeys: [PROJECT_RELEASES_VIEW_PERMISSION_KEY],
         shouldRender: project?.module_view ?? false,
         sortOrder: 3,
       },
@@ -209,6 +218,7 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
         href: `/${workspaceSlug}/projects/${projectId}/filestore`,
         icon: Folder,
         access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
+        permissionKeys: [PROJECT_ASSET_VIEW_PERMISSION_KEY],
         shouldRender: true,
         sortOrder: 9,
       },
@@ -263,6 +273,10 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
 
         const hasAccess = allowPermissions(item.access, EUserPermissionsLevel.PROJECT, workspaceSlug, project.id);
         if (!hasAccess) return null;
+        const hasPermissionKeys =
+          !item.permissionKeys?.length ||
+          allowProjectPermissionKeys(item.permissionKeys, workspaceSlug, project.id);
+        if (!hasPermissionKeys) return null;
 
         const shouldShowCount = item.key === "intake" && (project.intake_count ?? 0) > 0;
 

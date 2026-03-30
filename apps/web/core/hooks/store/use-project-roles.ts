@@ -167,12 +167,12 @@ export const useProjectRoles = (workspaceSlug: string | undefined, projectId: st
           ...prev,
           [roleId]: { data: updated, isLoading: false, loaded: true },
         }));
-      } catch {
+      } catch (error) {
         setPermissionByRoleId((prev) => ({
           ...prev,
           [roleId]: { data: currentState.data, isLoading: false, loaded: true },
         }));
-        throw new Error("更新权限失败，请重试");
+        throw error;
       }
     },
     [workspaceSlug, projectId]

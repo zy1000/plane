@@ -15,8 +15,6 @@ import { cn } from "@plane/utils";
 import { useProjectIssueTypes } from "@/hooks/store/use-project-issue-types";
 import { useProjectWorkflows } from "@/hooks/store/use-project-workflows";
 import { useUserPermissions } from "@/hooks/store/user";
-import { EUserPermissionsLevel } from "@plane/constants";
-import { EUserProjectRoles } from "@plane/types";
 // services
 import type { TWorkflow } from "@/services/project/project-workflow.service";
 // types
@@ -78,16 +76,15 @@ const WorkflowListSkeleton: FC = () => (
 
 export const ProjectWorkflowRoot: FC<TProjectWorkflowRootProps> = ({ workspaceSlug, projectId }) => {
   const { issueTypes, isLoading: issueTypesLoading } = useProjectIssueTypes(workspaceSlug, projectId);
-  const { allowPermissions } = useUserPermissions();
+  const { allowProjectPermissionKeys } = useUserPermissions();
   const { fetchWorkflows, createWorkflow, updateWorkflow, deleteWorkflow, getWorkflowsByIssueTypeId, isLoadingForIssueType } =
     useProjectWorkflows(workspaceSlug, projectId);
 
   const [selectedIssueTypeId, setSelectedIssueTypeId] = useState<string | undefined>(undefined);
   const [modalState, setModalState] = useState<{ isOpen: boolean; workflow?: TWorkflow }>({ isOpen: false });
 
-  const isEditable = allowPermissions(
-    [EUserProjectRoles.ADMIN],
-    EUserPermissionsLevel.PROJECT,
+  const isEditable = allowProjectPermissionKeys(
+    ["workflow.create", "workflow.edit", "workflow.delete"],
     workspaceSlug,
     projectId
   );

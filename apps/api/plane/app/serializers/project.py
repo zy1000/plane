@@ -10,6 +10,7 @@ from .base import BaseSerializer, DynamicBaseSerializer
 from django.db.models import Max
 from plane.app.serializers.workspace import WorkspaceLiteSerializer
 from plane.app.serializers.user import UserLiteSerializer, UserAdminLiteSerializer
+from plane.app.permissions.base import _get_user_project_permission_keys
 from plane.db.models import (
     Permission,
     Project,
@@ -148,10 +149,24 @@ class ProjectMemberSerializer(BaseSerializer):
     workspace = WorkspaceLiteSerializer(read_only=True)
     project = ProjectLiteSerializer(read_only=True)
     member = UserLiteSerializer(read_only=True)
+    custom_role_ids = serializers.SerializerMethodField(read_only=True)
+    permission_keys = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = ProjectMember
         fields = "__all__"
+
+    def get_custom_role_ids(self, obj):
+        return [str(role.id) for role in obj.custom_roles.all()]
+
+    def get_permission_keys(self, obj):
+        return list(
+            _get_user_project_permission_keys(
+                user=obj.member,
+                workspace_slug=obj.workspace.slug,
+                project_id=str(obj.project_id),
+            )
+        )
 
 
 class ProjectMemberPreferenceSerializer(BaseSerializer):

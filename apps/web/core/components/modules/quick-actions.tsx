@@ -8,7 +8,7 @@ import { useState } from "react";
 import { observer } from "mobx-react";
 import { MoreHorizontal } from "lucide-react";
 // plane imports
-import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import { EUserPermissions, EUserPermissionsLevel, PROJECT_RELEASES_ARCHIVE_PERMISSION_KEY } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { IconButton } from "@plane/propel/icon-button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
@@ -40,7 +40,7 @@ export const ModuleQuickActions = observer(function ModuleQuickActions(props: Pr
   const [archiveModuleModal, setArchiveModuleModal] = useState(false);
   const [deleteModal, setDeleteModal] = useState(false);
   // store hooks
-  const { allowPermissions } = useUserPermissions();
+  const { allowPermissions, allowProjectPermissionKeys } = useUserPermissions();
 
   const { getModuleById, restoreModule } = useModule();
 
@@ -51,6 +51,11 @@ export const ModuleQuickActions = observer(function ModuleQuickActions(props: Pr
   const isEditingAllowed = allowPermissions(
     [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
     EUserPermissionsLevel.PROJECT,
+    workspaceSlug,
+    projectId
+  );
+  const canArchiveRelease = allowProjectPermissionKeys(
+    [PROJECT_RELEASES_ARCHIVE_PERMISSION_KEY],
     workspaceSlug,
     projectId
   );
@@ -91,6 +96,7 @@ export const ModuleQuickActions = observer(function ModuleQuickActions(props: Pr
     projectId,
     moduleId,
     isEditingAllowed,
+    canArchiveRelease,
     handleEdit: () => setEditModal(true),
     handleArchive: () => setArchiveModuleModal(true),
     handleRestore: handleRestoreModule,

@@ -1,7 +1,11 @@
 "use client";
 
 import { useMemo, useEffect, useRef, useState, useCallback } from "react";
+import { observer } from "mobx-react";
 import { useParams, useSearchParams } from "next/navigation";
+import { PROJECT_ASSET_VIEW_PERMISSION_KEY, PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
+import { useTranslation } from "@plane/i18n";
+import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
 import { PageHead } from "@/components/core/page-title";
 import { AppHeader } from "@/components/core/app-header";
 import { ContentWrapper } from "@/components/core/content-wrapper";
@@ -14,6 +18,7 @@ import { DeleteOutlined, DownloadOutlined, EyeOutlined, SearchOutlined, FileOutl
 import { FilestoreService, type TFilestoreAsset } from "@/services/filestore.service";
 import { formatCNDateTime } from "@/components/qa/cases/util";
 import { Folder } from "lucide-react";
+import { useUserPermissions } from "@/hooks/store/user";
 
 const FILE_PREVIEW_BASE_URL = process.env.VITE_FILEVIEW_URL || "http://localhost:8012";
 
@@ -61,11 +66,19 @@ const isOnlyOfficeSupported = (filename?: string): boolean => {
   return ONLYOFFICE_SUPPORTED_EXTS.includes(ext as any);
 };
 
-export default function FilestorePage() {
+function FilestorePage() {
   const { workspaceSlug, projectId } = useParams<{ workspaceSlug: string; projectId: string }>();
+  const { t } = useTranslation();
+  const { workspaceUserInfo, allowProjectPermissionKeys } = useUserPermissions();
   const searchParams = useSearchParams();
   const onlyOfficeAssetIdFromQuery = searchParams.get("onlyofficeAssetId");
   const service = useMemo(() => new FilestoreService(), []);
+
+  const canViewFilestore = allowProjectPermissionKeys(
+    [PROJECT_ASSET_VIEW_PERMISSION_KEY],
+    workspaceSlug,
+    projectId
+  );
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const searchInput = useRef<InputRef>(null);
@@ -98,6 +111,32 @@ export default function FilestorePage() {
   const onlyOfficeDirtyRef = useRef<boolean>(false);
   const onlyOfficeForceSaveInFlightRef = useRef<boolean>(false);
   const onlyOfficeLastForceSaveAtRef = useRef<number>(0);
+
+  const getPermissionErrorMessage = useCallback(
+    (error: unknown, fallback: string) => {
+      if (isProjectPermissionError(error)) {
+        return PROJECT_ERROR_MESSAGES.permissionError.i18n_message
+          ? t(PROJECT_ERROR_MESSAGES.permissionError.i18n_message)
+          : t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title);
+      }
+
+      const responseError =
+        typeof error === "object" && error !== null && "error" in error
+          ? (error as { error?: unknown }).error
+          : undefined;
+      const responseDetail =
+        typeof error === "object" && error !== null && "detail" in error
+          ? (error as { detail?: unknown }).detail
+          : undefined;
+      const responseMessage =
+        typeof error === "object" && error !== null && "message" in error
+          ? (error as { message?: unknown }).message
+          : undefined;
+
+      return String(responseDetail || responseError || responseMessage || fallback);
+    },
+    [t]
+  );
 
   const onlyOfficeContainerId = useMemo(() => {
     if (!onlyOfficeAsset?.id) return "onlyoffice-editor";
@@ -212,11 +251,33 @@ export default function FilestorePage() {
         await service.deleteFilestoreAsset(String(workspaceSlug), String(projectId), String(record.id));
         message.success("删除成功");
         await fetchAssets(currentPage, pageSize);
-      } catch (e: any) {
-        message.error(e?.detail || e?.message || "删除失败");
+      } catch (error) {
+        message.error(getPermissionErrorMessage(error, "删除失败"));
       }
     },
-    [currentPage, fetchAssets, pageSize, projectId, service, workspaceSlug]
+    [currentPage, fetchAssets, getPermissionErrorMessage, pageSize, projectId, service, workspaceSlug]
+  );
+
+  const handleDownload = useCallback(
+    async (record: TFilestoreAsset) => {
+      if (!workspaceSlug || !projectId || !record?.id) return;
+      try {
+        const downloadUrl = await service.getFilestoreAssetPresignedURL(
+          String(workspaceSlug),
+          String(projectId),
+          String(record.id),
+          "attachment"
+        );
+        if (!downloadUrl) {
+          message.error("获取下载地址失败");
+          return;
+        }
+        window.open(downloadUrl, "_blank", "noopener,noreferrer");
+      } catch (error) {
+        message.error(getPermissionErrorMessage(error, "下载失败"));
+      }
+    },
+    [getPermissionErrorMessage, projectId, service, workspaceSlug]
   );
 
   const closeOnlyOffice = useCallback(() => {
@@ -482,8 +543,8 @@ export default function FilestorePage() {
       setFile(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
       await fetchAssets(1, pageSize);
-    } catch (e: any) {
-      message.error(e?.detail || e?.message || "上传失败");
+    } catch (error) {
+      message.error(getPermissionErrorMessage(error, "上传失败"));
     } finally {
       setUploading(false);
     }
@@ -587,11 +648,7 @@ export default function FilestorePage() {
                 type="text"
                 aria-label="下载"
                 icon={<DownloadOutlined />}
-                onClick={() => {
-                  if (!workspaceSlug || !projectId || !record?.id) return;
-                  const url = service.getFilestoreAssetDownloadURL(String(workspaceSlug), String(projectId), String(record.id));
-                  window.open(url, "_blank", "noopener,noreferrer");
-                }}
+                onClick={() => void handleDownload(record)}
               />
             </Tooltip>
             <Popconfirm title="确认删除该文件？" okText="删除" cancelText="取消" onConfirm={() => void handleDelete(record)}>
@@ -610,6 +667,10 @@ export default function FilestorePage() {
     const nextPage = newPageSize !== pageSize ? 1 : page;
     void fetchAssets(nextPage, newPageSize);
   };
+
+  if (workspaceUserInfo && workspaceSlug && projectId && !canViewFilestore) {
+    return <NotAuthorizedView section="general" isProjectView className="h-auto" />;
+  }
 
   if (onlyOfficeAssetIdFromQuery) {
     return (
@@ -867,3 +928,5 @@ export default function FilestorePage() {
     </>
   );
 }
+
+export default observer(FilestorePage);

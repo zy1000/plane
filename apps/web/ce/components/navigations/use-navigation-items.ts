@@ -6,7 +6,13 @@
 
 import { useMemo, useCallback } from "react";
 // plane imports
-import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import {
+  EUserPermissions,
+  EUserPermissionsLevel,
+  PROJECT_ANALYTICS_VIEW_PERMISSION_KEY,
+  PROJECT_ASSET_VIEW_PERMISSION_KEY,
+  PROJECT_RELEASES_VIEW_PERMISSION_KEY,
+} from "@plane/constants";
 import { CycleIcon, IntakeIcon, ModuleIcon, PageIcon, TestManagementIcon, ViewsIcon, WorkItemsIcon } from "@plane/propel/icons";
 import type { EUserProjectRoles, IPartialProject } from "@plane/types";
 import type { TNavigationItem } from "@/components/navigation/tab-navigation-root";
@@ -22,6 +28,7 @@ type UseNavigationItemsProps = {
     workspaceSlug: string,
     projectId: string
   ) => boolean;
+  allowProjectPermissionKeys: (permissionKeys: string[], workspaceSlug: string, projectId: string) => boolean;
 };
 
 export const useNavigationItems = ({
@@ -29,6 +36,7 @@ export const useNavigationItems = ({
   projectId,
   project,
   allowPermissions,
+  allowProjectPermissionKeys,
 }: UseNavigationItemsProps): TNavigationItem[] => {
   // Base navigation items
   const baseNavigation = useCallback(
@@ -50,6 +58,7 @@ export const useNavigationItems = ({
         href: `/${workspaceSlug}/projects/${projectId}/statistics`,
         icon: BarChart3,
         access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
+        permissionKeys: [PROJECT_ANALYTICS_VIEW_PERMISSION_KEY],
         shouldRender: true,
         sortOrder: 0.5,
       },
@@ -99,7 +108,8 @@ export const useNavigationItems = ({
         name: "Releases",
         href: `/${workspaceSlug}/projects/${projectId}/modules`,
         icon: ModuleIcon,
-        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
+        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
+        permissionKeys: [PROJECT_RELEASES_VIEW_PERMISSION_KEY],
         shouldRender: !!project?.module_view,
         sortOrder: 3,
       },
@@ -161,6 +171,7 @@ export const useNavigationItems = ({
         href: `/${workspaceSlug}/projects/${projectId}/filestore`,
         icon: Folder,
         access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
+        permissionKeys: [PROJECT_ASSET_VIEW_PERMISSION_KEY],
         shouldRender: true,
         sortOrder: 9,
       },
@@ -186,12 +197,16 @@ export const useNavigationItems = ({
     const filteredItems = navItems.filter((item) => {
       if (!item.shouldRender) return false;
       const hasAccess = allowPermissions(item.access, EUserPermissionsLevel.PROJECT, workspaceSlug, project?.id ?? "");
-      return hasAccess;
+      if (!hasAccess) return false;
+      if (item.permissionKeys?.length) {
+        return allowProjectPermissionKeys(item.permissionKeys, workspaceSlug, project?.id ?? "");
+      }
+      return true;
     });
 
     // Sort by sortOrder
     return filteredItems.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
-  }, [workspaceSlug, projectId, baseNavigation, allowPermissions, project?.id]);
+  }, [workspaceSlug, projectId, baseNavigation, allowPermissions, allowProjectPermissionKeys, project?.id]);
 
   return navigationItems;
 };

@@ -8,7 +8,7 @@ import { useState } from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 // plane imports
-import { EUserPermissionsLevel } from "@plane/constants";
+import { EUserPermissionsLevel, PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { EmptyStateDetailed } from "@plane/propel/empty-state";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
@@ -56,13 +56,23 @@ export const ModuleEmptyState = observer(function ModuleEmptyState() {
           message: "Work items added to the module successfully.",
         })
       )
-      .catch(() =>
-        setToast({
-          type: TOAST_TYPE.ERROR,
-          title: "Error!",
-          message: "Selected work items could not be added to the module. Please try again.",
-        })
-      );
+      .catch((error) => {
+        if (isProjectPermissionError(error)) {
+          setToast({
+            type: TOAST_TYPE.ERROR,
+            title: t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title),
+            message: PROJECT_ERROR_MESSAGES.permissionError.i18n_message
+              ? t(PROJECT_ERROR_MESSAGES.permissionError.i18n_message)
+              : undefined,
+          });
+        } else {
+          setToast({
+            type: TOAST_TYPE.ERROR,
+            title: "Error!",
+            message: "Selected work items could not be added to the module. Please try again.",
+          });
+        }
+      });
   };
 
   return (

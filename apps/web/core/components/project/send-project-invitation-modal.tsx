@@ -4,21 +4,23 @@
  * See the LICENSE file for details.
  */
 
-import React, { useEffect } from "react";
+import React, { useEffect, useMemo } from "react";
 import { observer } from "mobx-react";
 import { useForm, Controller, useFieldArray } from "react-hook-form";
+import { Check, ChevronDown } from "lucide-react";
 // plane imports
-import { ROLE, EUserPermissions } from "@plane/constants";
+import { PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
+import { EUserProjectRoles } from "@plane/types";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { PlusIcon, CloseIcon, ChevronDownIcon } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import { Avatar, CustomSelect, CustomSearchSelect, EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
+import { Avatar, CustomSearchSelect, MultiSelectDropdown, EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
 // helpers
 import { getFileURL } from "@plane/utils";
 // hooks
 import { useMember } from "@/hooks/store/use-member";
-import { useUserPermissions } from "@/hooks/store/user";
+import { useProjectRoles } from "@/hooks/store/use-project-roles";
 
 type Props = {
   isOpen: boolean;
@@ -29,7 +31,7 @@ type Props = {
 };
 
 type member = {
-  role: EUserPermissions;
+  role_ids: string[];
   member_id: string;
 };
 
@@ -40,7 +42,7 @@ type FormValues = {
 const defaultValues: FormValues = {
   members: [
     {
-      role: 5,
+      role_ids: [],
       member_id: "",
     },
   ],
@@ -51,16 +53,14 @@ export const SendProjectInvitationModal = observer(function SendProjectInvitatio
   // plane hooks
   const { t } = useTranslation();
   // store hooks
-  const { getProjectRoleByWorkspaceSlugAndProjectId } = useUserPermissions();
   const {
-    project: { getProjectMemberDetails, bulkAddMembersToProject },
+    project: { getProjectMemberDetails, bulkAddMembersToProject, updateMemberCustomRoles },
     workspace: { workspaceMemberIds, getWorkspaceMemberDetails },
   } = useMember();
+  const { roles, isLoading: isRolesLoading, fetchRoles } = useProjectRoles(workspaceSlug, projectId);
   // form info
   const {
     formState: { errors, isSubmitting },
-    watch,
-    setValue,
     reset,
     handleSubmit,
     control,
@@ -70,7 +70,6 @@ export const SendProjectInvitationModal = observer(function SendProjectInvitatio
     name: "members",
   });
   // derived values
-  const currentProjectRole = getProjectRoleByWorkspaceSlugAndProjectId(workspaceSlug, projectId);
   const uninvitedPeople = workspaceMemberIds?.filter((userId) => {
     const projectMemberDetails = getProjectMemberDetails(userId, projectId);
     const isInvited = projectMemberDetails?.member.id && projectMemberDetails?.original_role;
@@ -80,10 +79,22 @@ export const SendProjectInvitationModal = observer(function SendProjectInvitatio
   const onSubmit = async (formData: FormValues) => {
     if (!workspaceSlug || !projectId || isSubmitting) return;
 
-    const payload = { ...formData };
+    const payload = {
+      members: formData.members.map((m) => ({
+        member_id: m.member_id,
+        role: EUserProjectRoles.GUEST,
+      })),
+    };
 
     await bulkAddMembersToProject(workspaceSlug.toString(), projectId.toString(), payload)
-      .then(() => {
+      .then(async () => {
+        // Assign custom roles for members that have role_ids selected
+        const withRoles = formData.members.filter((m) => m.role_ids.length > 0);
+        await Promise.allSettled(
+          withRoles.map((m) =>
+            updateMemberCustomRoles(workspaceSlug.toString(), projectId.toString(), m.member_id, m.role_ids)
+          )
+        );
         if (onSuccess) onSuccess();
         onClose();
         setToast({
@@ -93,7 +104,21 @@ export const SendProjectInvitationModal = observer(function SendProjectInvitatio
         });
       })
       .catch((error) => {
-        console.error(error);
+        if (isProjectPermissionError(error)) {
+          setToast({
+            type: TOAST_TYPE.ERROR,
+            title: t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title),
+            message: PROJECT_ERROR_MESSAGES.permissionError.i18n_message
+              ? t(PROJECT_ERROR_MESSAGES.permissionError.i18n_message)
+              : undefined,
+          });
+        } else {
+          setToast({
+            type: TOAST_TYPE.ERROR,
+            title: t("common.error.label"),
+            message: "Something went wrong. Please try again.",
+          });
+        }
       })
       .finally(() => {
         reset(defaultValues);
@@ -111,7 +136,7 @@ export const SendProjectInvitationModal = observer(function SendProjectInvitatio
 
   const appendField = () => {
     append({
-      role: 5,
+      role_ids: [],
       member_id: "",
     });
   };
@@ -120,12 +145,18 @@ export const SendProjectInvitationModal = observer(function SendProjectInvitatio
     if (fields.length === 0) {
       append([
         {
-          role: 5,
+          role_ids: [],
           member_id: "",
         },
       ]);
     }
   }, [fields, append]);
+
+  useEffect(() => {
+    if (isOpen) {
+      void fetchRoles();
+    }
+  }, [isOpen, fetchRoles]);
 
   const options = uninvitedPeople
     ?.map((userId) => {
@@ -158,18 +189,10 @@ export const SendProjectInvitationModal = observer(function SendProjectInvitatio
       }[]
     | undefined;
 
-  const checkCurrentOptionWorkspaceRole = (value: string) => {
-    const currentMemberWorkspaceRole = getWorkspaceMemberDetails(value)?.role;
-    if (!value || !currentMemberWorkspaceRole) return ROLE;
-
-    const isGuestOROwner = [EUserPermissions.ADMIN, EUserPermissions.GUEST].includes(
-      currentMemberWorkspaceRole as EUserPermissions
-    );
-
-    return Object.fromEntries(
-      Object.entries(ROLE).filter(([key]) => !isGuestOROwner || [currentMemberWorkspaceRole].includes(parseInt(key)))
-    );
-  };
+  const roleOptions = useMemo(
+    () => roles.map((role) => ({ value: role.id, data: role })),
+    [roles]
+  );
 
   return (
     <ModalCore isOpen={isOpen} handleClose={handleClose} position={EModalPosition.CENTER} width={EModalWidth.XXL}>
@@ -213,14 +236,6 @@ export const SendProjectInvitationModal = observer(function SendProjectInvitatio
                           }
                           onChange={(val: string) => {
                             onChange(val);
-                            // Update the role to the workspace role when member ID changes
-                            const workspaceMemberDetails = getWorkspaceMemberDetails(val);
-                            const workspaceRole = workspaceMemberDetails?.role ?? 5;
-                            const newValue = ROLE[workspaceRole].toUpperCase();
-                            setValue(
-                              `members.${index}.role`,
-                              EUserPermissions[newValue as keyof typeof EUserPermissions]
-                            );
                           }}
                           options={options}
                           optionsClassName="w-48"
@@ -238,37 +253,58 @@ export const SendProjectInvitationModal = observer(function SendProjectInvitatio
                 <div className="flex shrink-0 items-center justify-between gap-2">
                   <div className="flex flex-col gap-1">
                     <Controller
-                      name={`members.${index}.role`}
+                      name={`members.${index}.role_ids`}
                       control={control}
-                      rules={{ required: "Select Role" }}
-                      render={({ field }) => (
-                        <CustomSelect
-                          {...field}
-                          customButton={
-                            <div className="shadow-sm flex w-24 items-center justify-between gap-1 rounded-md border border-subtle px-3 py-2.5 text-left text-13 text-secondary duration-300 hover:bg-layer-1 hover:text-primary focus:outline-none">
-                              <span className="capitalize">{field.value ? ROLE[field.value] : "Select role"}</span>
-                              <ChevronDownIcon className="h-3 w-3" aria-hidden="true" />
-                            </div>
-                          }
-                          input
-                        >
-                          {Object.entries(checkCurrentOptionWorkspaceRole(watch(`members.${index}.member_id`))).map(
-                            ([key, label]) => {
-                              if (parseInt(key) > (currentProjectRole ?? EUserPermissions.GUEST)) return null;
+                      render={({ field }) => {
+                        const selectedIds = field.value ?? [];
+                        const selectedNames = roles
+                          .filter((r) => selectedIds.includes(r.id))
+                          .map((r) => r.name);
+                        const buttonLabel =
+                          isRolesLoading ? (
+                            <span className="text-secondary">加载中...</span>
+                          ) : selectedNames.length === 0 ? (
+                            <span className="text-secondary">选择角色</span>
+                          ) : selectedNames.length === 1 ? (
+                            <span className="truncate max-w-[80px]">{selectedNames[0]}</span>
+                          ) : (
+                            <span className="truncate max-w-[80px]">
+                              {selectedNames[0]} +{selectedNames.length - 1}
+                            </span>
+                          );
 
+                        return (
+                          <MultiSelectDropdown
+                            value={selectedIds}
+                            onChange={(newIds) => field.onChange(newIds)}
+                            options={roleOptions}
+                            disableSorting
+                            disabled={isRolesLoading}
+                            keyExtractor={(option) => option.data.id}
+                            queryArray={["name"]}
+                            inputPlaceholder="搜索角色..."
+                            containerClassName="w-36"
+                            optionsContainerClassName="w-52"
+                            buttonContent={() => (
+                              <div className="shadow-sm flex w-36 items-center justify-between gap-1 rounded-md border border-subtle px-3 py-2.5 text-left text-13 text-secondary duration-300 hover:bg-layer-1 hover:text-primary focus:outline-none">
+                                {buttonLabel}
+                                <ChevronDown className="h-3 w-3 flex-shrink-0" aria-hidden="true" />
+                              </div>
+                            )}
+                            renderItem={({ value, selected }) => {
+                              const role = roles.find((r) => r.id === value);
+                              if (!role) return null;
                               return (
-                                <CustomSelect.Option key={key} value={key}>
-                                  {label}
-                                </CustomSelect.Option>
+                                <div className="flex w-full items-center justify-between gap-2 truncate text-13">
+                                  <span className="truncate">{role.name}</span>
+                                  {selected && <Check className="size-3 flex-shrink-0" />}
+                                </div>
                               );
-                            }
-                          )}
-                        </CustomSelect>
-                      )}
+                            }}
+                          />
+                        );
+                      }}
                     />
-                    {errors.members && errors.members[index]?.role && (
-                      <span className="px-1 text-13 text-danger-primary">{errors.members[index]?.role?.message}</span>
-                    )}
                   </div>
 
                   {fields.length > 1 && (

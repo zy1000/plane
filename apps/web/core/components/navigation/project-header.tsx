@@ -34,7 +34,7 @@ export const ProjectHeader = observer(function ProjectHeader(props: TProjectHead
   const router = useAppRouter();
   // store hooks
   const { joinedProjectIds, getPartialProjectById } = useProject();
-  const { allowPermissions } = useUserPermissions();
+  const { allowPermissions, allowProjectPermissionKeys } = useUserPermissions();
 
   // Get current project details
   const currentProjectDetails = getPartialProjectById(projectId);
@@ -45,6 +45,7 @@ export const ProjectHeader = observer(function ProjectHeader(props: TProjectHead
     projectId,
     project: currentProjectDetails,
     allowPermissions,
+    allowProjectPermissionKeys,
   });
 
   // Get preferences from hook

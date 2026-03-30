@@ -31,6 +31,16 @@ urlpatterns = [
         name="cycle-file-list",
     ),
     path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/cycles/file/<uuid:file_id>/delete/",
+        CycleFileAPI.as_view({"delete": "delete_file"}),
+        name="cycle-file-delete",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/cycles/file/<uuid:file_id>/download/",
+        CycleFileAPI.as_view({"get": "download"}),
+        name="cycle-file-download",
+    ),
+    path(
         "workspaces/<str:slug>/projects/<uuid:project_id>/cycles/",
         CycleViewSet.as_view({"get": "list", "post": "create"}),
         name="project-cycle",

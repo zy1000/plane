@@ -224,18 +224,35 @@ export class CycleService extends APIService {
       });
   }
 
-  async downloadCycleFile(fileId: string): Promise<Blob> {
-    return this.post(`/api/file/`, { file_id: fileId }, { responseType: "blob" })
+  async downloadCycleFile(workspaceSlug: string, projectId: string, fileId: string): Promise<Blob> {
+    return this.get(
+      `/api/workspaces/${workspaceSlug}/projects/${projectId}/cycles/file/${fileId}/download/`,
+      undefined,
+      { responseType: "blob" }
+    )
       .then((response) => response?.data as Blob)
-      .catch((error) => {
-        throw error?.response?.data;
+      .catch(async (error) => {
+        const raw = error?.response?.data;
+        if (raw instanceof Blob) {
+          const text = await raw.text();
+          try {
+            const parsed = JSON.parse(text) as { error?: string };
+            throw parsed;
+          } catch (e: unknown) {
+            if (e && typeof e === "object" && e !== null && "error" in e) {
+              throw e;
+            }
+            throw { error: text || "Download failed" };
+          }
+        }
+        throw raw;
       });
   }
 
-  async deleteCycleFile(fileId: string): Promise<any> {
-    return this.delete(`/api/file/`, undefined, {
-      params: { file_id: fileId },
-    })
+  async deleteCycleFile(workspaceSlug: string, projectId: string, fileId: string): Promise<any> {
+    return this.delete(
+      `/api/workspaces/${workspaceSlug}/projects/${projectId}/cycles/file/${fileId}/delete/`
+    )
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;

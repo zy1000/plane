@@ -6,6 +6,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { XIcon } from "lucide-react";
+import { PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
 import type { IWorkspaceRole } from "@plane/types";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
@@ -53,7 +54,12 @@ export function RoleFormModal({ isOpen, role, onClose, onSubmit }: Props) {
       await onSubmit({ name: name.trim(), description: description.trim() });
       onClose();
     } catch (err: unknown) {
-      const errObj = err as Record<string, string | string[]>;
+      if (isProjectPermissionError(err)) {
+        setNameError(null);
+        setFormError(t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title));
+        return;
+      }
+      const errObj = err as Record<string, string | string[] | undefined>;
       if (errObj?.name) {
         const nameMsg = Array.isArray(errObj.name) ? errObj.name[0] : errObj.name;
         setNameError(String(nameMsg));

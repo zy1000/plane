@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
-from plane.db.models import WorkspaceMember, ProjectMember, ProjectMemberRole, ProjectRole, ProjectIssueType
+from plane.db.models import WorkspaceMember, ProjectMember, ProjectMemberRole, ProjectRole, ProjectIssueType, Project
 from functools import wraps
 from rest_framework.response import Response
 from rest_framework import status
@@ -55,6 +55,9 @@ def _get_user_project_permission_keys(user, workspace_slug: str, project_id: str
     目前仅从直接绑定的 ProjectRole 取键，后续可合并组角色。
     此函数是第二阶段细粒度鉴权的基础，首阶段暂不强制使用。
     """
+    project = Project.objects.get(pk=project_id)
+    if user == project.created_by:
+        return set(PermissionKey.values())
 
     project_member = ProjectMember.objects.filter(
         member=user,
@@ -115,11 +118,11 @@ def get_issue_permission_key(action: str, issue_type_name: Optional[str] = None)
 
 
 def has_project_issue_permission(
-    user,
-    workspace_slug: str,
-    project_id: str,
-    action: str,
-    issue_type_name: Optional[str] = None,
+        user,
+        workspace_slug: str,
+        project_id: str,
+        action: str,
+        issue_type_name: Optional[str] = None,
 ) -> bool:
     required_permission = get_issue_permission_key(action=action, issue_type_name=issue_type_name)
     user_keys = _get_user_project_permission_keys(user, workspace_slug, project_id)
@@ -161,7 +164,8 @@ def allow_project_permission(*permission_keys: str):
         @wraps(view_func)
         def _wrapped_view(instance, request, *args, **kwargs):
             slug = kwargs.get("slug", "")
-            project_id = str(kwargs.get("project_id", ""))
+            project_id = str(kwargs.get("project_id", "")) or str(kwargs.get("pk", "")) or request.query_params.get(
+                'project_id', "")
             user_keys = _get_user_project_permission_keys(request.user, slug, project_id)
             if user_keys.intersection(permission_keys):
                 return view_func(instance, request, *args, **kwargs)

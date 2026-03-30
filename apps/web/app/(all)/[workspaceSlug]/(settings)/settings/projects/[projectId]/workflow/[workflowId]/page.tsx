@@ -7,7 +7,7 @@
 import { useState, useEffect } from "react";
 import { observer } from "mobx-react";
 // plane imports
-import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import { PROJECT_SETTINGS } from "@plane/constants";
 // components
 import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
 import { PageHead } from "@/components/core/page-title";
@@ -30,15 +30,12 @@ const workflowService = new ProjectWorkflowService();
 function WorkflowDetailPage({ params }: Route.ComponentProps) {
   const { workspaceSlug, projectId, workflowId } = params;
   const { currentProjectDetails } = useProject();
-  const { workspaceUserInfo, allowPermissions } = useUserPermissions();
+  const { workspaceUserInfo, allowProjectPermissionKeys } = useUserPermissions();
 
   const [workflow, setWorkflow] = useState<TWorkflow | null>(null);
   const [isLoadingWorkflow, setIsLoadingWorkflow] = useState(true);
 
-  const canPerformProjectAdminActions = allowPermissions(
-    [EUserPermissions.ADMIN],
-    EUserPermissionsLevel.PROJECT
-  );
+  const canView = allowProjectPermissionKeys(PROJECT_SETTINGS.workflow.permissionKeys ?? [], workspaceSlug, projectId);
 
   useEffect(() => {
     if (!workspaceSlug || !projectId || !workflowId) return;
@@ -56,7 +53,7 @@ function WorkflowDetailPage({ params }: Route.ComponentProps) {
     ? `${currentProjectDetails.name} - ${workflow?.name ?? "工作流详情"}`
     : undefined;
 
-  if (workspaceUserInfo && !canPerformProjectAdminActions) {
+  if (workspaceUserInfo && !canView) {
     return <NotAuthorizedView section="settings" isProjectView className="h-auto" />;
   }
 

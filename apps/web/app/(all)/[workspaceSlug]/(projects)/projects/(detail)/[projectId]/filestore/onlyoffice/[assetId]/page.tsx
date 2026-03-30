@@ -1,13 +1,23 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 import { Alert, Button } from "antd";
+import { PROJECT_ASSET_VIEW_PERMISSION_KEY } from "@plane/constants";
+import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
+import { useUserPermissions } from "@/hooks/store/user";
 import { FilestoreService } from "@/services/filestore.service";
 
-export default function FilestoreOnlyOfficePage() {
+function FilestoreOnlyOfficePage() {
   const { workspaceSlug, projectId, assetId } = useParams<{ workspaceSlug: string; projectId: string; assetId: string }>();
+  const { workspaceUserInfo, allowProjectPermissionKeys } = useUserPermissions();
   const service = useMemo(() => new FilestoreService(), []);
+  const canViewFilestore = allowProjectPermissionKeys(
+    [PROJECT_ASSET_VIEW_PERMISSION_KEY],
+    workspaceSlug?.toString(),
+    projectId?.toString()
+  );
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>("");
@@ -169,6 +179,10 @@ export default function FilestoreOnlyOfficePage() {
     return () => window.clearInterval(t);
   }, [triggerForceSave]);
 
+  if (workspaceUserInfo && workspaceSlug && projectId && !canViewFilestore) {
+    return <NotAuthorizedView section="general" isProjectView className="h-auto" />;
+  }
+
   return (
     <div className="fixed inset-0 z-50 bg-surface-1">
       {error && (
@@ -195,4 +209,6 @@ export default function FilestoreOnlyOfficePage() {
     </div>
   );
 }
+
+export default observer(FilestoreOnlyOfficePage);
 

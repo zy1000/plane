@@ -8,6 +8,8 @@ import { useEffect, useState } from "react";
 import { observer } from "mobx-react";
 import { useForm } from "react-hook-form";
 // Plane imports
+import { PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
+import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { IModule } from "@plane/types";
 import { EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
@@ -37,6 +39,7 @@ const defaultValues: Partial<IModule> = {
 
 export const CreateUpdateModuleModal = observer(function CreateUpdateModuleModal(props: Props) {
   const { isOpen, onClose, data, workspaceSlug, projectId } = props;
+  const { t } = useTranslation();
   // states
   const [activeProject, setActiveProject] = useState<string | null>(null);
   // store hooks
@@ -67,11 +70,21 @@ export const CreateUpdateModuleModal = observer(function CreateUpdateModuleModal
         });
       })
       .catch((err) => {
-        setToast({
-          type: TOAST_TYPE.ERROR,
-          title: "Error!",
-          message: err?.detail ?? err?.error ?? "Module could not be created. Please try again.",
-        });
+        if (isProjectPermissionError(err)) {
+          setToast({
+            type: TOAST_TYPE.ERROR,
+            title: t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title),
+            message: PROJECT_ERROR_MESSAGES.permissionError.i18n_message
+              ? t(PROJECT_ERROR_MESSAGES.permissionError.i18n_message)
+              : undefined,
+          });
+        } else {
+          setToast({
+            type: TOAST_TYPE.ERROR,
+            title: "Error!",
+            message: err?.detail ?? err?.error ?? "Module could not be created. Please try again.",
+          });
+        }
       });
   };
 
@@ -90,11 +103,21 @@ export const CreateUpdateModuleModal = observer(function CreateUpdateModuleModal
         });
       })
       .catch((err) => {
-        setToast({
-          type: TOAST_TYPE.ERROR,
-          title: "Error!",
-          message: err?.detail ?? err?.error ?? "Module could not be updated. Please try again.",
-        });
+        if (isProjectPermissionError(err)) {
+          setToast({
+            type: TOAST_TYPE.ERROR,
+            title: t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title),
+            message: PROJECT_ERROR_MESSAGES.permissionError.i18n_message
+              ? t(PROJECT_ERROR_MESSAGES.permissionError.i18n_message)
+              : undefined,
+          });
+        } else {
+          setToast({
+            type: TOAST_TYPE.ERROR,
+            title: "Error!",
+            message: err?.detail ?? err?.error ?? "Module could not be updated. Please try again.",
+          });
+        }
       });
   };
 

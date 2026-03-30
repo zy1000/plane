@@ -5,7 +5,7 @@
  */
 
 import { observer } from "mobx-react";
-import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import { PROJECT_SETTINGS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 // components
 import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
@@ -24,19 +24,16 @@ function StatesSettingsPage({ params }: Route.ComponentProps) {
   const { workspaceSlug, projectId } = params;
   // store
   const { currentProjectDetails } = useProject();
-  const { workspaceUserInfo, allowPermissions } = useUserPermissions();
+  const { workspaceUserInfo, allowProjectPermissionKeys } = useUserPermissions();
 
   const { t } = useTranslation();
 
   // derived values
   const pageTitle = currentProjectDetails?.name ? `${currentProjectDetails?.name} - States` : undefined;
   // derived values
-  const canPerformProjectMemberActions = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-    EUserPermissionsLevel.PROJECT
-  );
+  const canView = allowProjectPermissionKeys(PROJECT_SETTINGS.states.permissionKeys ?? [], workspaceSlug, projectId);
 
-  if (workspaceUserInfo && !canPerformProjectMemberActions) {
+  if (workspaceUserInfo && !canView) {
     return <NotAuthorizedView section="settings" isProjectView className="h-auto" />;
   }
 

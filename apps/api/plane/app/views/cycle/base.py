@@ -34,7 +34,7 @@ from django.core.serializers.json import DjangoJSONEncoder
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from plane.app.permissions import allow_permission, ROLE
+from plane.app.permissions import allow_permission, ROLE, allow_project_permission, PermissionKey
 from plane.app.serializers import (
     CycleSerializer,
     CycleUserPropertiesSerializer,
@@ -173,7 +173,7 @@ class CycleViewSet(BaseViewSet):
             .distinct()
         )
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    @allow_project_permission(PermissionKey.SPRINTS_VIEW)
     def list(self, request, slug, project_id):
         cycle_status = request.query_params.getlist('status')
         queryset = self.get_queryset().filter(archived_at__isnull=True)
@@ -318,7 +318,7 @@ class CycleViewSet(BaseViewSet):
 
         return Response(data, status=status.HTTP_200_OK)
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
+    @allow_project_permission(PermissionKey.SPRINTS_CREATE)
     def create(self, request, slug, project_id):
         if (
             request.data.get("start_date", None) is None
@@ -391,7 +391,7 @@ class CycleViewSet(BaseViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
+    @allow_project_permission(PermissionKey.SPRINTS_EDIT)
     def partial_update(self, request, slug, project_id, pk):
         queryset = self.get_queryset().filter(workspace__slug=slug, project_id=project_id, pk=pk)
         cycle = queryset.first()
@@ -466,7 +466,7 @@ class CycleViewSet(BaseViewSet):
             return Response(cycle, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
+    @allow_project_permission(PermissionKey.SPRINTS_VIEW)
     def retrieve(self, request, slug, project_id, pk):
         queryset = self.get_queryset().filter(archived_at__isnull=True).filter(pk=pk)
         project = Project.objects.get(id=self.kwargs.get("project_id"))
@@ -550,7 +550,7 @@ class CycleViewSet(BaseViewSet):
         )
         return Response(data, status=status.HTTP_200_OK)
 
-    @allow_permission([ROLE.ADMIN], creator=True, model=Cycle)
+    @allow_project_permission(PermissionKey.SPRINTS_DELETE)
     def destroy(self, request, slug, project_id, pk):
         cycle = Cycle.objects.get(workspace__slug=slug, project_id=project_id, pk=pk)
 
@@ -668,7 +668,7 @@ class CycleFavoriteViewSet(BaseViewSet):
 
 
 class TransferCycleIssueEndpoint(BaseAPIView):
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
+    @allow_project_permission(PermissionKey.SPRINTS_ISSUE_MANAGE)
     def post(self, request, slug, project_id, cycle_id):
         new_cycle_id = request.data.get("new_cycle_id", False)
 

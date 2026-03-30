@@ -6,7 +6,8 @@
 
 import { useState } from "react";
 import { observer } from "mobx-react";
-import { STATE_GROUPS } from "@plane/constants";
+import { PROJECT_ERROR_MESSAGES, STATE_GROUPS, isProjectPermissionError } from "@plane/constants";
+import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { IState, TStateGroups, TStateOperationsCallbacks } from "@plane/types";
 // components
@@ -21,6 +22,7 @@ type TStateCreate = {
 
 export const StateCreate = observer(function StateCreate(props: TStateCreate) {
   const { groupKey, createStateCallback, handleClose } = props;
+  const { t } = useTranslation();
 
   // states
   const [loader, setLoader] = useState(false);
@@ -44,22 +46,36 @@ export const StateCreate = observer(function StateCreate(props: TStateCreate) {
       handleClose();
       return { status: "success" };
     } catch (error) {
-      const errorStatus = error as { status: number; data: { error: string } };
-      if (errorStatus?.status === 400) {
+      if (isProjectPermissionError(error)) {
+        setToast({
+          type: TOAST_TYPE.ERROR,
+          title: t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title),
+          message: PROJECT_ERROR_MESSAGES.permissionError.i18n_message
+            ? t(PROJECT_ERROR_MESSAGES.permissionError.i18n_message)
+            : undefined,
+        });
+        return { status: "error" };
+      }
+      const err = error as { name?: string | string[]; error?: string };
+      const nameDuplicate =
+        (typeof err?.name === "string" && (err.name.includes("already") || err.name.includes("taken"))) ||
+        (Array.isArray(err?.name) &&
+          err.name[0] &&
+          (String(err.name[0]).includes("already") || String(err.name[0]).includes("taken")));
+      if (nameDuplicate) {
         setToast({
           type: TOAST_TYPE.ERROR,
           title: "Error!",
           message: "State with that name already exists. Please try again with another name.",
         });
         return { status: "already_exists" };
-      } else {
-        setToast({
-          type: TOAST_TYPE.ERROR,
-          title: "Error!",
-          message: errorStatus.data.error ?? "State could not be created. Please try again.",
-        });
-        return { status: "error" };
       }
+      setToast({
+        type: TOAST_TYPE.ERROR,
+        title: "Error!",
+        message: err?.error ?? "State could not be created. Please try again.",
+      });
+      return { status: "error" };
     }
   };
 

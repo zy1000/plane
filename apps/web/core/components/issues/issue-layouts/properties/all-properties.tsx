@@ -12,6 +12,7 @@ import { useParams } from "next/navigation";
 // icons
 import { Paperclip } from "lucide-react";
 // i18n
+import { PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { LinkIcon, StartDatePropertyIcon, ViewsIcon, DueDatePropertyIcon } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
@@ -91,11 +92,47 @@ export const IssueProperties = observer(function IssueProperties(props: IIssuePr
     () => ({
       addModulesToIssue: async (moduleIds: string[]) => {
         if (!workspaceSlug || !issue.project_id || !issue.id) return;
-        await changeModulesInIssue?.(workspaceSlug.toString(), issue.project_id, issue.id, moduleIds, []);
+        try {
+          await changeModulesInIssue?.(workspaceSlug.toString(), issue.project_id, issue.id, moduleIds, []);
+        } catch (error) {
+          if (isProjectPermissionError(error)) {
+            setToast({
+              type: TOAST_TYPE.ERROR,
+              title: t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title),
+              message: PROJECT_ERROR_MESSAGES.permissionError.i18n_message
+                ? t(PROJECT_ERROR_MESSAGES.permissionError.i18n_message)
+                : undefined,
+            });
+          } else {
+            setToast({
+              type: TOAST_TYPE.ERROR,
+              title: t("common.error.label"),
+              message: t("entity.update.failed", { entity: t("issue.label") }),
+            });
+          }
+        }
       },
       removeModulesFromIssue: async (moduleIds: string[]) => {
         if (!workspaceSlug || !issue.project_id || !issue.id) return;
-        await changeModulesInIssue?.(workspaceSlug.toString(), issue.project_id, issue.id, [], moduleIds);
+        try {
+          await changeModulesInIssue?.(workspaceSlug.toString(), issue.project_id, issue.id, [], moduleIds);
+        } catch (error) {
+          if (isProjectPermissionError(error)) {
+            setToast({
+              type: TOAST_TYPE.ERROR,
+              title: t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title),
+              message: PROJECT_ERROR_MESSAGES.permissionError.i18n_message
+                ? t(PROJECT_ERROR_MESSAGES.permissionError.i18n_message)
+                : undefined,
+            });
+          } else {
+            setToast({
+              type: TOAST_TYPE.ERROR,
+              title: t("common.error.label"),
+              message: t("entity.update.failed", { entity: t("issue.label") }),
+            });
+          }
+        }
       },
       addIssueToCycle: async (cycleId: string) => {
         if (!workspaceSlug || !issue.project_id || !issue.id) return;
@@ -106,7 +143,7 @@ export const IssueProperties = observer(function IssueProperties(props: IIssuePr
         await removeCycleFromIssue?.(workspaceSlug.toString(), issue.project_id, issue.id);
       },
     }),
-    [workspaceSlug, issue, changeModulesInIssue, addCycleToIssue, removeCycleFromIssue]
+    [workspaceSlug, issue, changeModulesInIssue, addCycleToIssue, removeCycleFromIssue, t]
   );
 
   const handleState = async (stateId: string) => {

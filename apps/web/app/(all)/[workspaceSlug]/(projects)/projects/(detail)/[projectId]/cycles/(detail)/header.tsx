@@ -16,6 +16,9 @@ import {
   EUserPermissionsLevel,
   ISSUE_DISPLAY_FILTERS_BY_PAGE,
   WORK_ITEM_TRACKER_ELEMENTS,
+  PROJECT_SPRINTS_ISSUE_MANAGE_PERMISSION_KEY,
+  PROJECT_ERROR_MESSAGES,
+  isProjectPermissionError,
 } from "@plane/constants";
 import { usePlatformOS } from "@plane/hooks";
 import { useTranslation } from "@plane/i18n";
@@ -77,7 +80,7 @@ export const CycleIssuesHeader = observer(function CycleIssuesHeader() {
   const { toggleCreateIssueModal } = useCommandPalette();
   const { currentProjectDetails, loader } = useProject();
   const { isMobile } = usePlatformOS();
-  const { allowPermissions } = useUserPermissions();
+  const { allowPermissions, allowProjectPermissionKeys } = useUserPermissions();
 
   const activeLayout = issueFilters?.displayFilters?.layout;
 
@@ -119,6 +122,7 @@ export const CycleIssuesHeader = observer(function CycleIssuesHeader() {
     [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
     EUserPermissionsLevel.PROJECT
   );
+  const canManageSprintIssues = allowProjectPermissionKeys([PROJECT_SPRINTS_ISSUE_MANAGE_PERMISSION_KEY]);
 
   const switcherOptions = currentProjectCycleIds
     ?.map((id) => {
@@ -134,6 +138,13 @@ export const CycleIssuesHeader = observer(function CycleIssuesHeader() {
 
   const workItemsCount = getGroupIssueCount(undefined, undefined, false);
 
+  const showPermissionError = () => {
+    setToast({
+      type: TOAST_TYPE.ERROR,
+      title: t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title),
+    });
+  };
+
   const handleAddExistingIssuesToCycle = async (data: ISearchIssueResponse[]) => {
     if (!workspaceSlug || !projectId || !cycleId) return;
 
@@ -147,12 +158,16 @@ export const CycleIssuesHeader = observer(function CycleIssuesHeader() {
         title: "Success!",
         message: "Work items added to the cycle successfully.",
       });
-    } catch (_error) {
-      setToast({
-        type: TOAST_TYPE.ERROR,
-        title: "Error!",
-        message: "Selected work items could not be added to the cycle. Please try again.",
-      });
+    } catch (error) {
+      if (isProjectPermissionError(error)) {
+        showPermissionError();
+      } else {
+        setToast({
+          type: TOAST_TYPE.ERROR,
+          title: "Error!",
+          message: "Selected work items could not be added to the cycle. Please try again.",
+        });
+      }
     }
   };
 
@@ -292,6 +307,7 @@ export const CycleIssuesHeader = observer(function CycleIssuesHeader() {
                   >
                     <CustomMenu.MenuItem
                       onClick={() => {
+                        if (!canManageSprintIssues) return showPermissionError();
                         toggleCreateIssueModal(true, EIssuesStoreType.CYCLE);
                       }}
                     >
@@ -299,6 +315,7 @@ export const CycleIssuesHeader = observer(function CycleIssuesHeader() {
                     </CustomMenu.MenuItem>
                     <CustomMenu.MenuItem
                       onClick={() => {
+                        if (!canManageSprintIssues) return showPermissionError();
                         setOpenExistingIssueListModal(true);
                       }}
                     >

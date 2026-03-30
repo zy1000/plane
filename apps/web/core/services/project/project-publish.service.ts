@@ -20,7 +20,7 @@ export class ProjectPublishService extends APIService {
     return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectID}/project-deploy-boards/`)
       .then((response) => response?.data)
       .catch((error) => {
-        throw error?.response;
+        throw error?.response?.data;
       });
   }
 
@@ -32,7 +32,7 @@ export class ProjectPublishService extends APIService {
     return this.post(`/api/workspaces/${workspaceSlug}/projects/${projectID}/project-deploy-boards/`, data)
       .then((response) => response?.data)
       .catch((error) => {
-        throw error?.response;
+        throw error?.response?.data;
       });
   }
 
@@ -48,7 +48,7 @@ export class ProjectPublishService extends APIService {
     )
       .then((response) => response?.data)
       .catch((error) => {
-        throw error?.response;
+        throw error?.response?.data;
       });
   }
 
@@ -58,7 +58,7 @@ export class ProjectPublishService extends APIService {
     )
       .then((response) => response?.data)
       .catch((error) => {
-        throw error?.response;
+        throw error?.response?.data;
       });
   }
 }

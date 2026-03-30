@@ -6,7 +6,8 @@ import { Plus, Unlink, Pencil, Download, Trash2 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { Button } from "@plane/propel/button";
 import { BarChart } from "@plane/propel/charts/bar-chart";
-import { STATE_GROUPS } from "@plane/constants";
+import { PROJECT_ERROR_MESSAGES, STATE_GROUPS, isProjectPermissionError } from "@plane/constants";
+import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Dialog, Transition } from "@headlessui/react";
 import { Pagination, Popconfirm } from "antd";
@@ -35,6 +36,7 @@ type TModuleFile = {
 
 
 export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen }) => {
+  const { t } = useTranslation();
   const { workspaceSlug, projectId } = useParams();
   const router = useRouter();
   const { getModuleById, fetchModuleDetails } = useModule();
@@ -99,6 +101,20 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
 
   const moduleFilesPageSize = 5;
 
+  const showModuleFileApiError = (error: unknown, genericTitle: string, genericMessage: string) => {
+    if (isProjectPermissionError(error)) {
+      setToast({
+        type: TOAST_TYPE.ERROR,
+        title: t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title),
+        message: PROJECT_ERROR_MESSAGES.permissionError.i18n_message
+          ? t(PROJECT_ERROR_MESSAGES.permissionError.i18n_message)
+          : undefined,
+      });
+    } else {
+      setToast({ type: TOAST_TYPE.ERROR, title: genericTitle, message: genericMessage });
+    }
+  };
+
   const fetchModuleStatistics = async () => {
     if (!workspaceSlug || !projectId || !moduleId) return;
     try {
@@ -148,8 +164,13 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
       setModuleFiles(list);
       setModuleFilesTotal(count);
       setModuleFilesPage(page);
-    } catch (e: any) {
-      setModuleFilesError(e?.detail || e?.error || "获取文件列表失败");
+    } catch (e: unknown) {
+      if (isProjectPermissionError(e)) {
+        setModuleFilesError(t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title));
+      } else {
+        const err = e as { detail?: string; error?: string };
+        setModuleFilesError(err?.detail || err?.error || "获取文件列表失败");
+      }
     } finally {
       setModuleFilesLoading(false);
     }
@@ -167,8 +188,8 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
       await moduleService.uploadModuleFile(workspaceSlug.toString(), projectId.toString(), formData);
       setToast({ type: TOAST_TYPE.SUCCESS, title: "上传成功", message: "文件已上传" });
       await fetchModuleFiles(1);
-    } catch (e: any) {
-      setToast({ type: TOAST_TYPE.ERROR, title: "上传失败", message: e?.detail || e?.error || "请稍后重试" });
+    } catch (e: unknown) {
+      showModuleFileApiError(e, "上传失败", "请稍后重试");
     } finally {
       event.target.value = "";
       setModuleFilesUploading(false);
@@ -178,11 +199,11 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
   const handleDeleteModuleFile = async (fileId: string) => {
     try {
       setModuleFilesDeletingId(fileId);
-      await moduleService.deleteModuleFile(fileId);
+      await moduleService.deleteModuleFile(workspaceSlug.toString(), projectId.toString(), fileId);
       setToast({ type: TOAST_TYPE.SUCCESS, title: "删除成功", message: "文件已删除" });
       await fetchModuleFiles(moduleFilesPage);
-    } catch (e: any) {
-      setToast({ type: TOAST_TYPE.ERROR, title: "删除失败", message: e?.detail || e?.error || "请稍后重试" });
+    } catch (e: unknown) {
+      showModuleFileApiError(e, "删除失败", "请稍后重试");
     } finally {
       setModuleFilesDeletingId(null);
     }
@@ -191,7 +212,11 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
   const handleDownloadModuleFile = async (fileId: string, fileName: string) => {
     try {
       setModuleFilesDownloadingId(fileId);
-      const blob = await moduleService.downloadModuleFile(fileId);
+      const blob = await moduleService.downloadModuleFile(
+        workspaceSlug.toString(),
+        projectId.toString(),
+        fileId
+      );
       const objectUrl = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = objectUrl;
@@ -200,8 +225,8 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(objectUrl);
-    } catch (e: any) {
-      setToast({ type: TOAST_TYPE.ERROR, title: "下载失败", message: e?.detail || e?.error || "请稍后重试" });
+    } catch (e: unknown) {
+      showModuleFileApiError(e, "下载失败", "请稍后重试");
     } finally {
       setModuleFilesDownloadingId(null);
     }

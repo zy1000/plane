@@ -13,6 +13,7 @@ import { CalendarCheck, Download, Plus, Trash2 } from "lucide-react";
 // headless ui
 import { Tab } from "@headlessui/react";
 // plane imports
+import { PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { PriorityIcon } from "@plane/propel/icons";
 import { useRouter } from "next/navigation";
@@ -20,6 +21,7 @@ import type { TWorkItemFilterCondition } from "@plane/shared-state";
 import type { ICycle } from "@plane/types";
 import { EIssuesStoreType } from "@plane/types";
 // ui
+import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Loader, Avatar, Button } from "@plane/ui";
 import { cn, getDate, renderFormattedDate, renderFormattedDateWithoutYear, getFileURL } from "@plane/utils";
 // assets
@@ -111,6 +113,20 @@ export const ActiveCycleStats = observer(function ActiveCycleStats(props: Active
 
   useIntersectionObserver(issuesContainerRef, issuesLoaderElement, loadMoreIssues, `0% 0% 100% 0%`);
 
+  const showCycleFileApiError = (error: unknown, genericTitle: string, genericMessage: string) => {
+    if (isProjectPermissionError(error)) {
+      setToast({
+        type: TOAST_TYPE.ERROR,
+        title: t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title),
+        message: PROJECT_ERROR_MESSAGES.permissionError.i18n_message
+          ? t(PROJECT_ERROR_MESSAGES.permissionError.i18n_message)
+          : undefined,
+      });
+    } else {
+      setToast({ type: TOAST_TYPE.ERROR, title: genericTitle, message: genericMessage });
+    }
+  };
+
   const fetchCycleFiles = useCallback(
     async (page = 1) => {
       if (!workspaceSlug || !projectId || !cycleId) return;
@@ -132,8 +148,13 @@ export const ActiveCycleStats = observer(function ActiveCycleStats(props: Active
         setCycleFiles(list);
         setCycleFilesTotal(count);
         setCycleFilesPage(page);
-      } catch (e: any) {
-        setCycleFilesError(e?.detail || e?.error || "获取文件列表失败");
+      } catch (e: unknown) {
+        if (isProjectPermissionError(e)) {
+          setCycleFilesError(t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title));
+        } else {
+          const err = e as { detail?: string; error?: string };
+          setCycleFilesError(err?.detail || err?.error || "获取文件列表失败");
+        }
       } finally {
         setCycleFilesLoading(false);
       }
@@ -144,7 +165,7 @@ export const ActiveCycleStats = observer(function ActiveCycleStats(props: Active
   const handleDownloadCycleFile = async (fileId: string, fileName: string) => {
     try {
       setCycleFilesDownloadingId(fileId);
-      const blob = await cycleService.current.downloadCycleFile(fileId);
+      const blob = await cycleService.current.downloadCycleFile(workspaceSlug, projectId, fileId);
       const objectUrl = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = objectUrl;
@@ -153,6 +174,8 @@ export const ActiveCycleStats = observer(function ActiveCycleStats(props: Active
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(objectUrl);
+    } catch (e: unknown) {
+      showCycleFileApiError(e, "下载失败", "请稍后重试");
     } finally {
       setCycleFilesDownloadingId(null);
     }
@@ -163,14 +186,14 @@ export const ActiveCycleStats = observer(function ActiveCycleStats(props: Active
     if (!selectedFile || !cycleId) return;
     try {
       setCycleFilesUploading(true);
-      setCycleFilesError(null);
       const formData = new FormData();
       formData.append("file", selectedFile);
       formData.append("cycle_id", cycleId);
       await cycleService.current.uploadCycleFile(workspaceSlug, projectId, formData);
+      setToast({ type: TOAST_TYPE.SUCCESS, title: "上传成功", message: "文件已上传" });
       await fetchCycleFiles(1);
-    } catch (e: any) {
-      setCycleFilesError(e?.detail || e?.error || "上传失败");
+    } catch (e: unknown) {
+      showCycleFileApiError(e, "上传失败", "请稍后重试");
     } finally {
       setCycleFilesUploading(false);
       event.target.value = "";
@@ -180,11 +203,11 @@ export const ActiveCycleStats = observer(function ActiveCycleStats(props: Active
   const handleDeleteCycleFile = async (fileId: string) => {
     try {
       setCycleFilesDeletingId(fileId);
-      setCycleFilesError(null);
-      await cycleService.current.deleteCycleFile(fileId);
+      await cycleService.current.deleteCycleFile(workspaceSlug, projectId, fileId);
+      setToast({ type: TOAST_TYPE.SUCCESS, title: "删除成功", message: "文件已删除" });
       await fetchCycleFiles(cycleFilesPage);
-    } catch (e: any) {
-      setCycleFilesError(e?.detail || e?.error || "删除失败");
+    } catch (e: unknown) {
+      showCycleFileApiError(e, "删除失败", "请稍后重试");
     } finally {
       setCycleFilesDeletingId(null);
     }

@@ -7,6 +7,8 @@
 import { useState } from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
+import { PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
+import { useTranslation } from "@plane/i18n";
 // Plane imports
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { IState } from "@plane/types";
@@ -23,6 +25,7 @@ type TStateDeleteModal = {
 
 export const StateDeleteModal = observer(function StateDeleteModal(props: TStateDeleteModal) {
   const { isOpen, onClose, data } = props;
+  const { t } = useTranslation();
   // states
   const [isDeleteLoading, setIsDeleteLoading] = useState(false);
   // router
@@ -43,20 +46,39 @@ export const StateDeleteModal = observer(function StateDeleteModal(props: TState
       .then(() => {
         handleClose();
       })
-      .catch((err) => {
-        if (err.status === 400)
+      .catch((err: unknown) => {
+        if (isProjectPermissionError(err)) {
+          setToast({
+            type: TOAST_TYPE.ERROR,
+            title: t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title),
+            message: PROJECT_ERROR_MESSAGES.permissionError.i18n_message
+              ? t(PROJECT_ERROR_MESSAGES.permissionError.i18n_message)
+              : undefined,
+          });
+          return;
+        }
+        const e = err as { error?: string };
+        const msg = e?.error;
+        if (msg === "The state is not empty, only empty states can be deleted") {
           setToast({
             type: TOAST_TYPE.ERROR,
             title: "Error!",
             message:
               "This state contains some work items within it, please move them to some other state to delete this state.",
           });
-        else
+        } else if (msg === "Default state cannot be deleted") {
+          setToast({
+            type: TOAST_TYPE.ERROR,
+            title: "Error!",
+            message: "Default state cannot be deleted.",
+          });
+        } else {
           setToast({
             type: TOAST_TYPE.ERROR,
             title: "Error!",
             message: "State could not be deleted. Please try again.",
           });
+        }
       })
       .finally(() => {
         setIsDeleteLoading(false);

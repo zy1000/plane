@@ -6,7 +6,7 @@
 
 import { observer } from "mobx-react";
 // plane imports
-import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import { PROJECT_SETTINGS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 // components
 import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
@@ -31,17 +31,12 @@ function MembersSettingsPage({ params }: Route.ComponentProps) {
   const { t } = useTranslation();
   // store hooks
   const { currentProjectDetails } = useProject();
-  const { workspaceUserInfo, allowPermissions } = useUserPermissions();
+  const { workspaceUserInfo, allowProjectPermissionKeys } = useUserPermissions();
   // derived values
   const pageTitle = currentProjectDetails?.name ? `${currentProjectDetails?.name} - Members` : undefined;
-  const isProjectMemberOrAdmin = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-    EUserPermissionsLevel.PROJECT
-  );
-  const isWorkspaceAdmin = allowPermissions([EUserPermissions.ADMIN], EUserPermissionsLevel.WORKSPACE);
-  const canPerformProjectMemberActions = isProjectMemberOrAdmin || isWorkspaceAdmin;
+  const canView = allowProjectPermissionKeys(PROJECT_SETTINGS.members.permissionKeys ?? [], workspaceSlug, projectId);
 
-  if (workspaceUserInfo && !canPerformProjectMemberActions) {
+  if (workspaceUserInfo && !canView) {
     return <NotAuthorizedView section="settings" isProjectView className="h-auto" />;
   }
 

@@ -204,15 +204,32 @@ export const IssuePeekOverview = observer(function IssuePeekOverview(props: IWor
         addModuleIds: string[],
         removeModuleIds: string[]
       ) => {
-        const promise = await issues.changeModulesInIssue(
-          workspaceSlug,
-          projectId,
-          issueId,
-          addModuleIds,
-          removeModuleIds
-        );
-        fetchActivities(workspaceSlug, projectId, issueId);
-        return promise;
+        try {
+          await issues.changeModulesInIssue(
+            workspaceSlug,
+            projectId,
+            issueId,
+            addModuleIds,
+            removeModuleIds
+          );
+          fetchActivities(workspaceSlug, projectId, issueId);
+        } catch (error) {
+          if (isProjectPermissionError(error)) {
+            setToast({
+              type: TOAST_TYPE.ERROR,
+              title: t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title),
+              message: PROJECT_ERROR_MESSAGES.permissionError.i18n_message
+                ? t(PROJECT_ERROR_MESSAGES.permissionError.i18n_message)
+                : undefined,
+            });
+          } else {
+            setToast({
+              type: TOAST_TYPE.ERROR,
+              title: t("toast.error"),
+              message: t("common.errors.default.message"),
+            });
+          }
+        }
       },
       removeIssueFromModule: async (workspaceSlug: string, projectId: string, moduleId: string, issueId: string) => {
         try {
@@ -225,7 +242,10 @@ export const IssuePeekOverview = observer(function IssuePeekOverview(props: IWor
             },
             error: {
               title: t("toast.error"),
-              message: () => t("issue.remove.module.failed"),
+              message: (err: unknown) =>
+                isProjectPermissionError(err)
+                  ? t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title)
+                  : t("issue.remove.module.failed"),
             },
           });
           await removeFromModulePromise;

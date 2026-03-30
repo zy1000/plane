@@ -17,12 +17,21 @@ export const useQuickActionsFactory = () => {
 
   return {
     // Common menu items
-    createEditMenuItem: (handler: () => void, shouldRender: boolean = true): TContextMenuItem => ({
+    createEditMenuItem: (
+      handler: () => void,
+      shouldRender: boolean = true,
+      disabled?: boolean,
+      description?: string
+    ): TContextMenuItem => ({
       key: "edit",
       title: t("edit"),
       icon: Pencil,
       action: handler,
       shouldRender,
+      disabled,
+      description,
+      className: description ? "items-start" : undefined,
+      iconClassName: description ? "mt-1" : undefined,
     }),
 
     createOpenInNewTabMenuItem: (handler: () => void): TContextMenuItem => ({
@@ -62,12 +71,21 @@ export const useQuickActionsFactory = () => {
       shouldRender,
     }),
 
-    createDeleteMenuItem: (handler: () => void, shouldRender: boolean = true): TContextMenuItem => ({
+    createDeleteMenuItem: (
+      handler: () => void,
+      shouldRender: boolean = true,
+      disabled?: boolean,
+      description?: string
+    ): TContextMenuItem => ({
       key: "delete",
       title: t("delete"),
       icon: Trash2,
       action: handler,
       shouldRender,
+      disabled,
+      description,
+      className: description ? "items-start" : undefined,
+      iconClassName: description ? "mt-1" : undefined,
     }),
 
     // Layout-level actions (for work item list views)

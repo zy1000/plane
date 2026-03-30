@@ -8,7 +8,14 @@ import { useState } from "react";
 import { observer } from "mobx-react";
 import { MoreHorizontal } from "lucide-react";
 // ui
-import { CYCLE_TRACKER_EVENTS, EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import {
+  CYCLE_TRACKER_EVENTS,
+  EUserPermissions,
+  EUserPermissionsLevel,
+  PROJECT_SPRINTS_ARCHIVE_PERMISSION_KEY,
+  PROJECT_SPRINTS_EDIT_PERMISSION_KEY,
+  PROJECT_SPRINTS_DELETE_PERMISSION_KEY,
+} from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { IconButton } from "@plane/propel/icon-button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
@@ -43,7 +50,7 @@ export const CycleQuickActions = observer(function CycleQuickActions(props: Prop
   const [archiveCycleModal, setArchiveCycleModal] = useState(false);
   const [deleteModal, setDeleteModal] = useState(false);
   // store hooks
-  const { allowPermissions } = useUserPermissions();
+  const { allowPermissions, allowProjectPermissionKeys } = useUserPermissions();
   const { getCycleById, restoreCycle, updateCycleDetails } = useCycle();
   const { t } = useTranslation();
   // derived values
@@ -55,6 +62,9 @@ export const CycleQuickActions = observer(function CycleQuickActions(props: Prop
     workspaceSlug,
     projectId
   );
+  const canEditSprint = allowProjectPermissionKeys([PROJECT_SPRINTS_EDIT_PERMISSION_KEY], workspaceSlug, projectId);
+  const canDeleteSprint = allowProjectPermissionKeys([PROJECT_SPRINTS_DELETE_PERMISSION_KEY], workspaceSlug, projectId);
+  const canArchiveSprint = allowProjectPermissionKeys([PROJECT_SPRINTS_ARCHIVE_PERMISSION_KEY], workspaceSlug, projectId);
 
   const cycleLink = `${workspaceSlug}/projects/${projectId}/cycles/${cycleId}`;
   const handleCopyText = () =>
@@ -124,6 +134,9 @@ export const CycleQuickActions = observer(function CycleQuickActions(props: Prop
     projectId,
     cycleId,
     isEditingAllowed,
+    canEditSprint,
+    canDeleteSprint,
+    canArchiveSprint,
     handleEdit: () => setUpdateModal(true),
     handleMarkAsCompleted: () => handleUpdateCycleStatus("completed"),
     handleMarkAsCancelled: () => handleUpdateCycleStatus("cancelled"),

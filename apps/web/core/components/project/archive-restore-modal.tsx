@@ -6,6 +6,8 @@
 
 import { useState } from "react";
 import { usePathname } from "next/navigation";
+import { PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
+import { useTranslation } from "@plane/i18n";
 // ui
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
@@ -24,6 +26,7 @@ type Props = {
 
 export function ArchiveRestoreProjectModal(props: Props) {
   const { workspaceSlug, projectId, isOpen, onClose, archive } = props;
+  const { t } = useTranslation();
   // router
   const router = useAppRouter();
   const pathname = usePathname();
@@ -55,13 +58,22 @@ export function ArchiveRestoreProjectModal(props: Props) {
         router.push(`/${workspaceSlug}/projects/`);
         return;
       })
-      .catch(() =>
+      .catch((error) => {
+        const currentError = isProjectPermissionError(error)
+          ? PROJECT_ERROR_MESSAGES.permissionError
+          : {
+              i18n_title: "common.error.label",
+              i18n_message: undefined,
+            };
         setToast({
           type: TOAST_TYPE.ERROR,
-          title: "Error!",
-          message: "Project could not be archived. Please try again.",
-        })
-      )
+          title: t(currentError.i18n_title),
+          message:
+            currentError === PROJECT_ERROR_MESSAGES.permissionError
+              ? currentError.i18n_message && t(currentError.i18n_message)
+              : "Project could not be archived. Please try again.",
+        });
+      })
       .finally(() => setIsLoading(false));
   };
 
@@ -80,13 +92,22 @@ export function ArchiveRestoreProjectModal(props: Props) {
         }
         return;
       })
-      .catch(() =>
+      .catch((error) => {
+        const currentError = isProjectPermissionError(error)
+          ? PROJECT_ERROR_MESSAGES.permissionError
+          : {
+              i18n_title: "common.error.label",
+              i18n_message: undefined,
+            };
         setToast({
           type: TOAST_TYPE.ERROR,
-          title: "Error!",
-          message: "Project could not be restored. Please try again.",
-        })
-      )
+          title: t(currentError.i18n_title),
+          message:
+            currentError === PROJECT_ERROR_MESSAGES.permissionError
+              ? currentError.i18n_message && t(currentError.i18n_message)
+              : "Project could not be restored. Please try again.",
+        });
+      })
       .finally(() => setIsLoading(false));
   };
 

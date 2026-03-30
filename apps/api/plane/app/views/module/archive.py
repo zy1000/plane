@@ -28,7 +28,7 @@ from django.db import models
 # Third party imports
 from rest_framework import status
 from rest_framework.response import Response
-from plane.app.permissions import ProjectEntityPermission
+from plane.app.permissions import ProjectEntityPermission, allow_project_permission, PermissionKey
 from plane.app.serializers import ModuleDetailSerializer
 from plane.db.models import Issue, Module, ModuleLink, UserFavorite, Project
 from plane.utils.analytics_plot import burndown_plot
@@ -541,6 +541,7 @@ class ModuleArchiveUnarchiveEndpoint(BaseAPIView):
 
             return Response(data, status=status.HTTP_200_OK)
 
+    @allow_project_permission(PermissionKey.RELEASES_ARCHIVE)
     def post(self, request, slug, project_id, module_id):
         module = Module.objects.get(pk=module_id, project_id=project_id, workspace__slug=slug)
         if module.status not in ["completed", "cancelled"]:
@@ -558,6 +559,7 @@ class ModuleArchiveUnarchiveEndpoint(BaseAPIView):
         ).delete()
         return Response({"archived_at": str(module.archived_at)}, status=status.HTTP_200_OK)
 
+    @allow_project_permission(PermissionKey.RELEASES_ARCHIVE)
     def delete(self, request, slug, project_id, module_id):
         module = Module.objects.get(pk=module_id, project_id=project_id, workspace__slug=slug)
         module.archived_at = None

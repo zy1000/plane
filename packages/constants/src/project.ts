@@ -171,3 +171,34 @@ export enum EProjectFeatureKey {
   INTAKE = "intake",
   OVERVIEW = "overview",
 }
+
+/** 项目文件/资产页权限常量，与后端 PermissionKey.PROJECT_ASSET_* 一致 */
+export const PROJECT_ASSET_VIEW_PERMISSION_KEY = "project.asset.view" as const;
+export const PROJECT_ASSET_UPLOAD_PERMISSION_KEY = "project.asset.upload" as const;
+export const PROJECT_ASSET_DELETE_PERMISSION_KEY = "project.asset.delete" as const;
+export const PROJECT_ASSET_DOWNLOAD_PERMISSION_KEY = "project.asset.download" as const;
+
+/** 项目统计页（/projects/:id/statistics），与后端 PermissionKey.PROJECT_ANALYTICS_VIEW 一致 */
+export const PROJECT_ANALYTICS_VIEW_PERMISSION_KEY = "project.analytics.view" as const;
+
+/** 迭代权限常量，与后端 PermissionKey.SPRINTS_* 一致 */
+export const PROJECT_SPRINTS_VIEW_PERMISSION_KEY = "sprints.view" as const;
+export const PROJECT_SPRINTS_CREATE_PERMISSION_KEY = "sprints.create" as const;
+export const PROJECT_SPRINTS_EDIT_PERMISSION_KEY = "sprints.edit" as const;
+export const PROJECT_SPRINTS_DELETE_PERMISSION_KEY = "sprints.delete" as const;
+export const PROJECT_SPRINTS_ARCHIVE_PERMISSION_KEY = "sprints.archive" as const;
+export const PROJECT_SPRINTS_ISSUE_MANAGE_PERMISSION_KEY = "sprints.issue.manage" as const;
+export const PROJECT_SPRINTS_FILE_UPLOAD_PERMISSION_KEY = "sprints.file.upload" as const;
+export const PROJECT_SPRINTS_FILE_DELETE_PERMISSION_KEY = "sprints.file.delete" as const;
+export const PROJECT_SPRINTS_FILE_DOWNLOAD_PERMISSION_KEY = "sprints.file.download" as const;
+
+/** 项目发布页权限常量，与后端 PermissionKey.RELEASES_VIEW / RELEASES_CREATE 一致 */
+export const PROJECT_RELEASES_VIEW_PERMISSION_KEY = "releases.view" as const;
+export const PROJECT_RELEASES_CREATE_PERMISSION_KEY = "releases.create" as const;
+
+/** 发布归档/恢复权限常量，与后端 PermissionKey.RELEASES_ARCHIVE 一致 */
+export const PROJECT_RELEASES_ARCHIVE_PERMISSION_KEY = "releases.archive" as const;
+
+/** 兼容旧命名，避免现有调用方失效 */
+export const PROJECT_PUBLISH_VIEW_PERMISSION_KEY = PROJECT_RELEASES_VIEW_PERMISSION_KEY;
+export const PROJECT_PUBLISH_CREATE_PERMISSION_KEY = PROJECT_RELEASES_CREATE_PERMISSION_KEY;

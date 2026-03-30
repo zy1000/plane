@@ -16,6 +16,8 @@ import {
   IS_FAVORITE_MENU_OPEN,
   MODULE_TRACKER_EVENTS,
   MODULE_TRACKER_ELEMENTS,
+  PROJECT_ERROR_MESSAGES,
+  isProjectPermissionError,
 } from "@plane/constants";
 import { useLocalStorage } from "@plane/hooks";
 import { useTranslation } from "@plane/i18n";
@@ -125,11 +127,21 @@ export const ModuleListItemAction = observer(function ModuleListItemAction(props
         });
       })
       .catch((err) => {
-        setToast({
-          type: TOAST_TYPE.ERROR,
-          title: "Error!",
-          message: err?.detail ?? "Module could not be updated. Please try again.",
-        });
+        if (isProjectPermissionError(err)) {
+          setToast({
+            type: TOAST_TYPE.ERROR,
+            title: t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title),
+            message: PROJECT_ERROR_MESSAGES.permissionError.i18n_message
+              ? t(PROJECT_ERROR_MESSAGES.permissionError.i18n_message)
+              : undefined,
+          });
+        } else {
+          setToast({
+            type: TOAST_TYPE.ERROR,
+            title: "Error!",
+            message: err?.detail ?? err?.error ?? "Module could not be updated. Please try again.",
+          });
+        }
       });
   };
 

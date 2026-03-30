@@ -28,6 +28,8 @@ export const PROJECT_SETTINGS: Record<TProjectSettingsTabs, TProjectSettingsItem
     i18n_label: "common.general",
     href: ``,
     access: [EUserProjectRoles.ADMIN, EUserProjectRoles.MEMBER, EUserProjectRoles.GUEST],
+    permissionKeys: ["project.settings.view"],
+    editPermissionKeys: ["project.settings.edit"],
     highlight: (pathname: string, baseUrl: string) => pathname === `${baseUrl}/`,
   },
   members: {
@@ -35,6 +37,7 @@ export const PROJECT_SETTINGS: Record<TProjectSettingsTabs, TProjectSettingsItem
     i18n_label: "common.members",
     href: `/members`,
     access: [EUserProjectRoles.ADMIN, EUserProjectRoles.MEMBER, EUserProjectRoles.GUEST],
+    permissionKeys: ["project.member.view"],
     highlight: (pathname: string, baseUrl: string) => pathname === `${baseUrl}/members/`,
   },
   roles: {
@@ -42,6 +45,7 @@ export const PROJECT_SETTINGS: Record<TProjectSettingsTabs, TProjectSettingsItem
     i18n_label: "project_settings.roles.label",
     href: `/roles`,
     access: [EUserProjectRoles.ADMIN, EUserProjectRoles.MEMBER, EUserProjectRoles.GUEST],
+    permissionKeys: ["project.role.view"],
     highlight: (pathname: string, baseUrl: string) => pathname === `${baseUrl}/roles/`,
   },
   features_cycles: {
@@ -49,6 +53,8 @@ export const PROJECT_SETTINGS: Record<TProjectSettingsTabs, TProjectSettingsItem
     i18n_label: "project_settings.features.cycles.short_title",
     href: `/features/cycles`,
     access: [EUserProjectRoles.ADMIN],
+    permissionKeys: ["project.settings.view"],
+    editPermissionKeys: ["project.settings.edit"],
     highlight: (pathname: string, baseUrl: string) => pathname === `${baseUrl}/features/cycles/`,
   },
   features_modules: {
@@ -56,6 +62,8 @@ export const PROJECT_SETTINGS: Record<TProjectSettingsTabs, TProjectSettingsItem
     i18n_label: "project_settings.features.modules.short_title",
     href: `/features/modules`,
     access: [EUserProjectRoles.ADMIN],
+    permissionKeys: ["project.settings.view"],
+    editPermissionKeys: ["project.settings.edit"],
     highlight: (pathname: string, baseUrl: string) => pathname === `${baseUrl}/features/modules/`,
   },
   features_views: {
@@ -63,6 +71,8 @@ export const PROJECT_SETTINGS: Record<TProjectSettingsTabs, TProjectSettingsItem
     i18n_label: "project_settings.features.views.short_title",
     href: `/features/views`,
     access: [EUserProjectRoles.ADMIN],
+    permissionKeys: ["project.settings.view"],
+    editPermissionKeys: ["project.settings.edit"],
     highlight: (pathname: string, baseUrl: string) => pathname === `${baseUrl}/features/views/`,
   },
   features_pages: {
@@ -70,6 +80,8 @@ export const PROJECT_SETTINGS: Record<TProjectSettingsTabs, TProjectSettingsItem
     i18n_label: "project_settings.features.pages.short_title",
     href: `/features/pages`,
     access: [EUserProjectRoles.ADMIN],
+    permissionKeys: ["project.settings.view"],
+    editPermissionKeys: ["project.settings.edit"],
     highlight: (pathname: string, baseUrl: string) => pathname === `${baseUrl}/features/pages/`,
   },
   features_intake: {
@@ -77,6 +89,8 @@ export const PROJECT_SETTINGS: Record<TProjectSettingsTabs, TProjectSettingsItem
     i18n_label: "project_settings.features.intake.short_title",
     href: `/features/intake`,
     access: [EUserProjectRoles.ADMIN],
+    permissionKeys: ["project.settings.view"],
+    editPermissionKeys: ["project.settings.edit"],
     highlight: (pathname: string, baseUrl: string) => pathname === `${baseUrl}/features/intake/`,
   },
   states: {
@@ -84,6 +98,7 @@ export const PROJECT_SETTINGS: Record<TProjectSettingsTabs, TProjectSettingsItem
     i18n_label: "common.states",
     href: `/states`,
     access: [EUserProjectRoles.ADMIN, EUserProjectRoles.MEMBER],
+    permissionKeys: ["state.view"],
     highlight: (pathname: string, baseUrl: string) => pathname === `${baseUrl}/states/`,
   },
   labels: {
@@ -91,6 +106,7 @@ export const PROJECT_SETTINGS: Record<TProjectSettingsTabs, TProjectSettingsItem
     i18n_label: "common.labels",
     href: `/labels`,
     access: [EUserProjectRoles.ADMIN, EUserProjectRoles.MEMBER],
+    permissionKeys: ["label.view"],
     highlight: (pathname: string, baseUrl: string) => pathname === `${baseUrl}/labels/`,
   },
   estimates: {
@@ -98,6 +114,7 @@ export const PROJECT_SETTINGS: Record<TProjectSettingsTabs, TProjectSettingsItem
     i18n_label: "common.estimates",
     href: `/estimates`,
     access: [EUserProjectRoles.ADMIN],
+    permissionKeys: ["estimate.view"],
     highlight: (pathname: string, baseUrl: string) => pathname === `${baseUrl}/estimates/`,
   },
   automations: {
@@ -105,6 +122,8 @@ export const PROJECT_SETTINGS: Record<TProjectSettingsTabs, TProjectSettingsItem
     i18n_label: "project_settings.automations.label",
     href: `/automations`,
     access: [EUserProjectRoles.ADMIN],
+    permissionKeys: ["project.settings.view"],
+    editPermissionKeys: ["project.settings.edit"],
     highlight: (pathname: string, baseUrl: string) => pathname === `${baseUrl}/automations/`,
   },
   workflow: {
@@ -112,6 +131,7 @@ export const PROJECT_SETTINGS: Record<TProjectSettingsTabs, TProjectSettingsItem
     i18n_label: "project_settings.workflow.label",
     href: `/workflow`,
     access: [EUserProjectRoles.ADMIN],
+    permissionKeys: ["workflow.view"],
     highlight: (pathname: string, baseUrl: string) => pathname === `${baseUrl}/workflow/`,
   },
   pms_sync: {
@@ -119,6 +139,8 @@ export const PROJECT_SETTINGS: Record<TProjectSettingsTabs, TProjectSettingsItem
     i18n_label: "project_settings.pms_sync.label",
     href: `/pms-sync`,
     access: [EUserProjectRoles.ADMIN],
+    permissionKeys: ["project.settings.view"],
+    editPermissionKeys: ["project.settings.edit"],
     highlight: (pathname: string, baseUrl: string) => pathname === `${baseUrl}/pms-sync/`,
   },
 };

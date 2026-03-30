@@ -56,9 +56,11 @@ export const IssueModuleSelect = observer(function IssueModuleSelect(props: TIss
       }
     }
 
-    await issueOperations.changeModulesInIssue?.(workspaceSlug, projectId, issueId, modulesToAdd, modulesToRemove);
-
-    setIsUpdating(false);
+    try {
+      await issueOperations.changeModulesInIssue?.(workspaceSlug, projectId, issueId, modulesToAdd, modulesToRemove);
+    } finally {
+      setIsUpdating(false);
+    }
   };
 
   return (

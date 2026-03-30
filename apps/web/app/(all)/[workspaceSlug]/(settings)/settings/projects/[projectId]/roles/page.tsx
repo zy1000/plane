@@ -9,7 +9,7 @@ import { observer } from "mobx-react";
 import useSWR from "swr";
 import { Search, X } from "lucide-react";
 // plane imports
-import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import { PROJECT_SETTINGS } from "@plane/constants";
 import type { IWorkspaceRole } from "@plane/types";
 import { cn } from "@plane/utils";
 // components
@@ -35,14 +35,15 @@ const ProjectRolesPage = observer(function ProjectRolesPage({ params }: Route.Co
   const [searchQuery, setSearchQuery] = useState("");
   const [showImportModal, setShowImportModal] = useState(false);
 
-  const { workspaceUserInfo, allowPermissions } = useUserPermissions();
+  const { workspaceUserInfo, allowProjectPermissionKeys } = useUserPermissions();
   const { currentProjectDetails } = useProject();
 
-  const isAdmin = allowPermissions([EUserPermissions.ADMIN], EUserPermissionsLevel.PROJECT);
-  const canView = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
-    EUserPermissionsLevel.PROJECT
+  const isAdmin = allowProjectPermissionKeys(
+    ["project.role.create", "project.role.edit", "project.role.delete"],
+    workspaceSlug,
+    projectId
   );
+  const canView = allowProjectPermissionKeys(PROJECT_SETTINGS.roles.permissionKeys ?? [], workspaceSlug, projectId);
 
   // 项目角色
   const {

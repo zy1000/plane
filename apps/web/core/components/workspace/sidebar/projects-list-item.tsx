@@ -74,7 +74,7 @@ export const SidebarProjectsListItem = observer(function SidebarProjectsListItem
   const { t } = useTranslation();
   const { getPartialProjectById } = useProject();
   const { isMobile } = usePlatformOS();
-  const { allowPermissions } = useUserPermissions();
+  const { allowPermissions, allowProjectPermissionKeys } = useUserPermissions();
   const { getIsProjectListOpen, toggleProjectListOpen } = useCommandPalette();
   const { preferences: projectPreferences } = useProjectNavigationPreferences();
   const { isExtendedProjectSidebarOpened, toggleExtendedProjectSidebar, toggleAnySidebarDropdown } = useAppTheme();
@@ -102,6 +102,7 @@ export const SidebarProjectsListItem = observer(function SidebarProjectsListItem
     projectId,
     project,
     allowPermissions,
+    allowProjectPermissionKeys,
   });
   const availableTabKeys = navigationItems.map((item) => item.key);
 

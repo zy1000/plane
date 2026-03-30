@@ -6,6 +6,8 @@
 
 import { useMemo } from "react";
 import { Check, ChevronDown } from "lucide-react";
+import { PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
+import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { IProjectRole } from "@plane/types";
 import { MultiSelectDropdown } from "@plane/ui";
@@ -28,6 +30,7 @@ type Props = {
 
 export function ProjectRoleMultiSelect(props: Props) {
   const { workspaceSlug, projectId, memberId, selectedRoleIds, roles, isLoading, disabled = false } = props;
+  const { t } = useTranslation();
 
   const {
     project: { updateMemberCustomRoles },
@@ -65,12 +68,22 @@ export function ProjectRoleMultiSelect(props: Props) {
         title: "角色已更新",
         message: savedRoleNames.length > 0 ? `已分配角色：${savedRoleNames.join("、")}` : "已清空该成员的项目角色。",
       });
-    } catch {
-      setToast({
-        type: TOAST_TYPE.ERROR,
-        title: "更新角色失败",
-        message: "更新成员角色时出现错误，请重试。",
-      });
+    } catch (error) {
+      if (isProjectPermissionError(error)) {
+        setToast({
+          type: TOAST_TYPE.ERROR,
+          title: t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title),
+          message: PROJECT_ERROR_MESSAGES.permissionError.i18n_message
+            ? t(PROJECT_ERROR_MESSAGES.permissionError.i18n_message)
+            : undefined,
+        });
+      } else {
+        setToast({
+          type: TOAST_TYPE.ERROR,
+          title: "更新角色失败",
+          message: "更新成员角色时出现错误，请重试。",
+        });
+      }
     }
   };
 

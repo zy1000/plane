@@ -9,9 +9,7 @@ import { useMemo, useState, useEffect } from "react";
 import { observer } from "mobx-react";
 import useSWR from "swr";
 // components
-import { EUserPermissionsLevel } from "@plane/constants";
 import type { IState, TStateOperationsCallbacks } from "@plane/types";
-import { EUserProjectRoles } from "@plane/types";
 import { ProjectStateLoader, GroupList } from "@/components/project-states";
 // hooks
 import { useProjectState } from "@/hooks/store/use-project-state";
@@ -79,7 +77,7 @@ export const ProjectStateRoot = observer(function ProjectStateRoot(props: TProje
     deleteState,
     markStateAsDefault,
   } = useProjectState();
-  const { allowPermissions } = useUserPermissions();
+  const { allowProjectPermissionKeys } = useUserPermissions();
   const { issueTypes, isLoading: issueTypesLoading } = useProjectIssueTypes(workspaceSlug, projectId);
 
   // selected issue type state
@@ -93,9 +91,8 @@ export const ProjectStateRoot = observer(function ProjectStateRoot(props: TProje
   }, [issueTypes, selectedIssueTypeId]);
 
   // derived values
-  const isEditable = allowPermissions(
-    [EUserProjectRoles.ADMIN],
-    EUserPermissionsLevel.PROJECT,
+  const isEditable = allowProjectPermissionKeys(
+    ["state.create", "state.edit", "state.delete", "state.mark_default"],
     workspaceSlug,
     projectId
   );

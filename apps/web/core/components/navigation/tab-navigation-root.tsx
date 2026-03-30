@@ -33,6 +33,8 @@ export type TNavigationItem = {
   href: string;
   icon: React.ElementType;
   access: EUserPermissions[] | EUserProjectRoles[];
+  /** 若存在，需同时具备其中至少一项细粒度权限（如 project.analytics.view） */
+  permissionKeys?: string[];
   shouldRender: boolean;
   sortOrder: number;
   i18n_key: string;
@@ -54,7 +56,7 @@ export const TabNavigationRoot = observer(function TabNavigationRoot(props: TTab
 
   // Store hooks
   const { getPartialProjectById } = useProject();
-  const { allowPermissions } = useUserPermissions();
+  const { allowPermissions, allowProjectPermissionKeys } = useUserPermissions();
   const {
     issue: { getIssueIdByIdentifier, getIssueById },
   } = useIssueDetail();
@@ -78,6 +80,7 @@ export const TabNavigationRoot = observer(function TabNavigationRoot(props: TTab
     projectId,
     project,
     allowPermissions,
+    allowProjectPermissionKeys,
   });
 
   // Active tab hook

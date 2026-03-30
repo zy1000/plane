@@ -9,6 +9,8 @@ import { useParams } from "next/navigation";
 import { Controller, useForm } from "react-hook-form";
 import { AlertTriangleIcon } from "lucide-react";
 // Plane imports
+import { PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
+import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { IProject } from "@plane/types";
@@ -35,6 +37,7 @@ export interface ILeaveProjectModal {
 
 export const LeaveProjectModal = observer(function LeaveProjectModal(props: ILeaveProjectModal) {
   const { project, isOpen, onClose } = props;
+  const { t } = useTranslation();
   // router
   const router = useAppRouter();
   const { workspaceSlug } = useParams();
@@ -65,11 +68,21 @@ export const LeaveProjectModal = observer(function LeaveProjectModal(props: ILea
               handleClose();
             })
             .catch((err) => {
-              setToast({
-                type: TOAST_TYPE.ERROR,
-                title: "Error!",
-                message: "Something went wrong please try again later.",
-              });
+              if (isProjectPermissionError(err)) {
+                setToast({
+                  type: TOAST_TYPE.ERROR,
+                  title: t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title),
+                  message: PROJECT_ERROR_MESSAGES.permissionError.i18n_message
+                    ? t(PROJECT_ERROR_MESSAGES.permissionError.i18n_message)
+                    : undefined,
+                });
+              } else {
+                setToast({
+                  type: TOAST_TYPE.ERROR,
+                  title: "Error!",
+                  message: "Something went wrong please try again later.",
+                });
+              }
             });
         } else {
           setToast({

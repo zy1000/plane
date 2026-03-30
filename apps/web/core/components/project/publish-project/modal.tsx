@@ -10,7 +10,8 @@ import { useParams } from "next/navigation";
 import { Controller, useForm } from "react-hook-form";
 
 // types
-import { SPACE_BASE_PATH, SPACE_BASE_URL } from "@plane/constants";
+import { PROJECT_ERROR_MESSAGES, SPACE_BASE_PATH, SPACE_BASE_URL, isProjectPermissionError } from "@plane/constants";
+import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { GlobeIcon, NewTabIcon, CheckIcon } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
@@ -49,6 +50,7 @@ const VIEW_OPTIONS: {
 
 export const PublishProjectModal = observer(function PublishProjectModal(props: Props) {
   const { isOpen, onClose, projectId } = props;
+  const { t } = useTranslation();
   // states
   const [isUnPublishing, setIsUnPublishing] = useState(false);
   // router
@@ -80,6 +82,24 @@ export const PublishProjectModal = observer(function PublishProjectModal(props: 
     onClose();
   };
 
+  const showPublishApiError = (error: unknown, genericTitle: string, genericMessage: string) => {
+    if (isProjectPermissionError(error)) {
+      setToast({
+        type: TOAST_TYPE.ERROR,
+        title: t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title),
+        message: PROJECT_ERROR_MESSAGES.permissionError.i18n_message
+          ? t(PROJECT_ERROR_MESSAGES.permissionError.i18n_message)
+          : undefined,
+      });
+    } else {
+      setToast({
+        type: TOAST_TYPE.ERROR,
+        title: genericTitle,
+        message: genericMessage,
+      });
+    }
+  };
+
   // fetch publish settings
   useEffect(() => {
     if (!workspaceSlug || !isOpen) return;
@@ -91,13 +111,18 @@ export const PublishProjectModal = observer(function PublishProjectModal(props: 
 
   const handlePublishProject = async (payload: Partial<TProjectPublishSettings>) => {
     if (!workspaceSlug) return;
-    await publishProject(workspaceSlug.toString(), projectId, payload);
+    try {
+      await publishProject(workspaceSlug.toString(), projectId, payload);
+    } catch (error) {
+      showPublishApiError(error, "Error!", "Something went wrong while publishing the project.");
+    }
   };
 
   const handleUpdatePublishSettings = async (payload: Partial<TProjectPublishSettings>) => {
     if (!workspaceSlug || !payload.id) return;
 
-    await updatePublishSettings(workspaceSlug.toString(), projectId, payload.id, payload).then((res) => {
+    try {
+      const res = await updatePublishSettings(workspaceSlug.toString(), projectId, payload.id, payload);
       setToast({
         type: TOAST_TYPE.SUCCESS,
         title: "Success!",
@@ -106,7 +131,9 @@ export const PublishProjectModal = observer(function PublishProjectModal(props: 
 
       handleClose();
       return res;
-    });
+    } catch (error) {
+      showPublishApiError(error, "Error!", "Publish settings could not be updated. Please try again.");
+    }
   };
 
   const handleUnPublishProject = async (publishId: string) => {
@@ -114,15 +141,13 @@ export const PublishProjectModal = observer(function PublishProjectModal(props: 
 
     setIsUnPublishing(true);
 
-    await unPublishProject(workspaceSlug.toString(), projectId, publishId)
-      .catch(() =>
-        setToast({
-          type: TOAST_TYPE.ERROR,
-          title: "Error!",
-          message: "Something went wrong while unpublishing the project.",
-        })
-      )
-      .finally(() => setIsUnPublishing(false));
+    try {
+      await unPublishProject(workspaceSlug.toString(), projectId, publishId);
+    } catch (error) {
+      showPublishApiError(error, "Error!", "Something went wrong while unpublishing the project.");
+    } finally {
+      setIsUnPublishing(false);
+    }
   };
 
   const selectedLayouts = Object.entries(watch("view_props") ?? {})

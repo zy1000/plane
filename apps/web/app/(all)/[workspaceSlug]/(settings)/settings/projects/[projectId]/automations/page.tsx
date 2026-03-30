@@ -6,7 +6,7 @@
 
 import { observer } from "mobx-react";
 // plane imports
-import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import { PROJECT_SETTINGS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { IProject } from "@plane/types";
@@ -28,16 +28,21 @@ function AutomationSettingsPage({ params }: Route.ComponentProps) {
   // router
   const { workspaceSlug, projectId } = params;
   // store hooks
-  const { workspaceUserInfo, allowPermissions } = useUserPermissions();
+  const { workspaceUserInfo, allowProjectPermissionKeys } = useUserPermissions();
   const { currentProjectDetails: projectDetails, updateProject } = useProject();
 
   const { t } = useTranslation();
 
   // derived values
-  const canPerformProjectAdminActions = allowPermissions([EUserPermissions.ADMIN], EUserPermissionsLevel.PROJECT);
+  const canView = allowProjectPermissionKeys(PROJECT_SETTINGS.automations.permissionKeys ?? [], workspaceSlug, projectId);
+  const canEdit = allowProjectPermissionKeys(
+    PROJECT_SETTINGS.automations.editPermissionKeys ?? [],
+    workspaceSlug,
+    projectId
+  );
 
   const handleChange = async (formData: Partial<IProject>) => {
-    if (!projectDetails) return;
+    if (!projectDetails || !canEdit) return;
 
     try {
       await updateProject(workspaceSlug, projectId, formData);
@@ -53,14 +58,14 @@ function AutomationSettingsPage({ params }: Route.ComponentProps) {
   // derived values
   const pageTitle = projectDetails?.name ? `${projectDetails?.name} - Automations` : undefined;
 
-  if (workspaceUserInfo && !canPerformProjectAdminActions) {
+  if (workspaceUserInfo && !canView) {
     return <NotAuthorizedView section="settings" isProjectView className="h-auto" />;
   }
 
   return (
     <SettingsContentWrapper header={<AutomationsProjectSettingsHeader />} hugging>
       <PageHead title={pageTitle} />
-      <section className={`w-full ${canPerformProjectAdminActions ? "" : "opacity-60"}`}>
+      <section className={`w-full ${canEdit ? "" : "opacity-60"}`}>
         <SettingsHeading
           title={t("project_settings.automations.heading")}
           description={t("project_settings.automations.description")}

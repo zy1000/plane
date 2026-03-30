@@ -199,7 +199,10 @@ export const IssueDetailRoot = observer(function IssueDetailRoot(props: TIssueDe
             },
             error: {
               title: t("common.error.label"),
-              message: () => t("issue.remove.module.failed"),
+              message: (err: unknown) =>
+                isProjectPermissionError(err)
+                  ? t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title)
+                  : t("issue.remove.module.failed"),
             },
           });
           await removeFromModulePromise;
@@ -214,8 +217,25 @@ export const IssueDetailRoot = observer(function IssueDetailRoot(props: TIssueDe
         addModuleIds: string[],
         removeModuleIds: string[]
       ) => {
-        const promise = await changeModulesInIssue(workspaceSlug, projectId, issueId, addModuleIds, removeModuleIds);
-        return promise;
+        try {
+          await changeModulesInIssue(workspaceSlug, projectId, issueId, addModuleIds, removeModuleIds);
+        } catch (error) {
+          if (isProjectPermissionError(error)) {
+            setToast({
+              type: TOAST_TYPE.ERROR,
+              title: t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title),
+              message: PROJECT_ERROR_MESSAGES.permissionError.i18n_message
+                ? t(PROJECT_ERROR_MESSAGES.permissionError.i18n_message)
+                : undefined,
+            });
+          } else {
+            setToast({
+              type: TOAST_TYPE.ERROR,
+              title: t("common.error.label"),
+              message: t("entity.update.failed", { entity: t("issue.label") }),
+            });
+          }
+        }
       },
     }),
     [

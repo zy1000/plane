@@ -4,19 +4,15 @@
  * See the LICENSE file for details.
  */
 
-import { Outlet, useParams } from "react-router";
+import { Outlet } from "react-router";
 // components
 import { AppHeader } from "@/components/core/app-header";
 import { ContentWrapper } from "@/components/core/content-wrapper";
-import { ProjectTopNavigation } from "@/components/navigation/project-top-navigation";
 import { ProjectArchivedIssueDetailsHeader } from "./header";
 
 export default function ProjectArchivedIssueDetailLayout() {
-  const { workspaceSlug, projectId } = useParams();
-
   return (
     <>
-      <ProjectTopNavigation workspaceSlug={workspaceSlug ?? ""} projectId={projectId ?? ""} />
       <AppHeader header={<ProjectArchivedIssueDetailsHeader />} />
       <ContentWrapper>
         <Outlet />

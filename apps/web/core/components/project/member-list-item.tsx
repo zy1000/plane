@@ -6,6 +6,8 @@
 
 import { observer } from "mobx-react";
 // plane imports
+import { PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
+import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Table } from "@plane/ui";
 // hooks
@@ -27,6 +29,7 @@ type Props = {
 
 export const ProjectMemberListItem = observer(function ProjectMemberListItem(props: Props) {
   const { memberDetails, projectId, workspaceSlug } = props;
+  const { t } = useTranslation();
   // router
   const router = useAppRouter();
   // store hooks
@@ -50,20 +53,40 @@ export const ProjectMemberListItem = observer(function ProjectMemberListItem(pro
           router.push(`/${workspaceSlug}/projects`);
         })
         .catch((err) => {
-          setToast({
-            type: TOAST_TYPE.ERROR,
-            title: "You can’t leave this project yet.",
-            message: err?.error || "Something went wrong. Please try again.",
-          });
+          if (isProjectPermissionError(err)) {
+            setToast({
+              type: TOAST_TYPE.ERROR,
+              title: t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title),
+              message: PROJECT_ERROR_MESSAGES.permissionError.i18n_message
+                ? t(PROJECT_ERROR_MESSAGES.permissionError.i18n_message)
+                : undefined,
+            });
+          } else {
+            setToast({
+              type: TOAST_TYPE.ERROR,
+              title: "You can’t leave this project yet.",
+              message: err?.error || "Something went wrong. Please try again.",
+            });
+          }
         });
     } else
-      await removeMemberFromProject(workspaceSlug.toString(), projectId.toString(), memberId).catch((err) =>
-        setToast({
-          type: TOAST_TYPE.ERROR,
-          title: "You can't remove the member from this project yet.",
-          message: err?.error || "Something went wrong. Please try again.",
-        })
-      );
+      await removeMemberFromProject(workspaceSlug.toString(), projectId.toString(), memberId).catch((err) => {
+        if (isProjectPermissionError(err)) {
+          setToast({
+            type: TOAST_TYPE.ERROR,
+            title: t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title),
+            message: PROJECT_ERROR_MESSAGES.permissionError.i18n_message
+              ? t(PROJECT_ERROR_MESSAGES.permissionError.i18n_message)
+              : undefined,
+          });
+        } else {
+          setToast({
+            type: TOAST_TYPE.ERROR,
+            title: "You can't remove the member from this project yet.",
+            message: err?.error || "Something went wrong. Please try again.",
+          });
+        }
+      });
   };
 
   if (!memberDetails) return null;

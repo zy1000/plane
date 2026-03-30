@@ -42,6 +42,7 @@ export interface IBaseUserPermissionStore {
     workspaceSlug: string,
     projectId?: string
   ) => EUserPermissions | undefined;
+  getProjectPermissionKeysByWorkspaceSlugAndProjectId: (workspaceSlug: string, projectId?: string) => string[];
   fetchWorkspaceLevelProjectEntities: (workspaceSlug: string, projectId: string) => void;
   allowPermissions: (
     allowPermissions: ETempUserRole[],
@@ -50,6 +51,7 @@ export interface IBaseUserPermissionStore {
     projectId?: string,
     onPermissionAllowed?: () => boolean
   ) => boolean;
+  allowProjectPermissionKeys: (permissionKeys: string[], workspaceSlug?: string, projectId?: string) => boolean;
   // actions
   fetchUserWorkspaceInfo: (workspaceSlug: string) => Promise<IWorkspaceMemberMe>;
   leaveWorkspace: (workspaceSlug: string) => Promise<void>;
@@ -155,6 +157,11 @@ export abstract class BaseUserPermissionStore implements IBaseUserPermissionStor
     projectId?: string
   ) => EUserPermissions | undefined;
 
+  getProjectPermissionKeysByWorkspaceSlugAndProjectId = computedFn((workspaceSlug: string, projectId?: string): string[] => {
+    if (!workspaceSlug || !projectId) return [];
+    return this.projectUserInfo?.[workspaceSlug]?.[projectId]?.permission_keys ?? [];
+  });
+
   /**
    * @description Fetches project-level entities that are not automatically loaded by the project wrapper.
    * This is used when joining a project to ensure all necessary workspace-level project data is available.
@@ -226,6 +233,21 @@ export abstract class BaseUserPermissionStore implements IBaseUserPermissionStor
     }
 
     return false;
+  };
+
+  allowProjectPermissionKeys = (permissionKeys: string[], workspaceSlug?: string, projectId?: string): boolean => {
+    const { workspaceSlug: currentWorkspaceSlug, projectId: currentProjectId } = this.store.router;
+    const resolvedWorkspaceSlug = workspaceSlug ?? currentWorkspaceSlug;
+    const resolvedProjectId = projectId ?? currentProjectId;
+
+    if (!resolvedWorkspaceSlug || !resolvedProjectId || permissionKeys.length === 0) return false;
+
+    const currentPermissionKeys = this.getProjectPermissionKeysByWorkspaceSlugAndProjectId(
+      resolvedWorkspaceSlug,
+      resolvedProjectId
+    );
+
+    return permissionKeys.some((key) => currentPermissionKeys.includes(key));
   };
 
   // actions

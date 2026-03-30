@@ -317,21 +317,37 @@ export class ModuleService extends APIService {
       });
   }
 
-  async deleteModuleFile(fileId: string): Promise<any> {
-    return this.delete(`/api/file/`, undefined, {
-      params: { file_id: fileId },
-    })
+  async deleteModuleFile(workspaceSlug: string, projectId: string, fileId: string): Promise<any> {
+    return this.delete(`/api/workspaces/${workspaceSlug}/projects/${projectId}/module/file/${fileId}/delete/`)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
       });
   }
 
-  async downloadModuleFile(fileId: string): Promise<Blob> {
-    return this.post(`/api/file/`, { file_id: fileId }, { responseType: "blob" })
+  async downloadModuleFile(workspaceSlug: string, projectId: string, fileId: string): Promise<Blob> {
+    return this.get(
+      `/api/workspaces/${workspaceSlug}/projects/${projectId}/module/file/${fileId}/download/`,
+      undefined,
+      { responseType: "blob" }
+    )
       .then((response) => response?.data as Blob)
-      .catch((error) => {
-        throw error?.response?.data;
+      .catch(async (error) => {
+        const raw = error?.response?.data;
+        // 403 等错误时 axios 仍可能把 JSON 错误体放在 Blob 里，需解析后才能与 isProjectPermissionError 对齐
+        if (raw instanceof Blob) {
+          const text = await raw.text();
+          try {
+            const parsed = JSON.parse(text) as { error?: string };
+            throw parsed;
+          } catch (e: unknown) {
+            if (e && typeof e === "object" && e !== null && "error" in e) {
+              throw e;
+            }
+            throw { error: text || "Download failed" };
+          }
+        }
+        throw raw;
       });
   }
  
