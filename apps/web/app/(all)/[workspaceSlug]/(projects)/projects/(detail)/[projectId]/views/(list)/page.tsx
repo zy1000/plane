@@ -8,7 +8,7 @@ import { useCallback } from "react";
 import { observer } from "mobx-react";
 import { useTheme } from "next-themes";
 // plane imports
-import { EUserPermissionsLevel } from "@plane/constants";
+import { EUserPermissionsLevel, PROJECT_VIEWS_VIEW_PERMISSION_KEY } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import type { EViewAccess, TViewFilterProps } from "@plane/types";
 import { EUserProjectRoles } from "@plane/types";
@@ -18,6 +18,7 @@ import { calculateTotalFilters } from "@plane/utils";
 import darkViewsAsset from "@/app/assets/empty-state/disabled-feature/views-dark.webp?url";
 import lightViewsAsset from "@/app/assets/empty-state/disabled-feature/views-light.webp?url";
 // components
+import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
 import { PageHead } from "@/components/core/page-title";
 import { DetailedEmptyState } from "@/components/empty-state/detailed-empty-state-root";
 import { ViewAppliedFiltersList } from "@/components/views/applied-filters";
@@ -40,7 +41,7 @@ function ProjectViewsPage({ params }: Route.ComponentProps) {
   // store
   const { getProjectById, currentProjectDetails } = useProject();
   const { filters, updateFilters, clearAllFilters, getProjectViews, fetchedMap } = useProjectView();
-  const { allowPermissions } = useUserPermissions();
+  const { allowPermissions, allowProjectPermissionKeys, workspaceUserInfo } = useUserPermissions();
   // derived values
   const project = getProjectById(projectId);
   const projectViews = getProjectViews(projectId);
@@ -68,6 +69,16 @@ function ProjectViewsPage({ params }: Route.ComponentProps) {
   );
 
   const isFiltersApplied = calculateTotalFilters(filters?.filters ?? {}) !== 0;
+
+  const canViewViews = allowProjectPermissionKeys(
+    [PROJECT_VIEWS_VIEW_PERMISSION_KEY],
+    workspaceSlug,
+    projectId
+  );
+
+  if (workspaceUserInfo && !canViewViews) {
+    return <NotAuthorizedView section="general" isProjectView className="h-auto" />;
+  }
 
   // Show the disabled-feature empty state only when the project has no existing views.
   if (currentProjectDetails?.issue_views_view === false && isViewsFetched && !hasExistingViews)

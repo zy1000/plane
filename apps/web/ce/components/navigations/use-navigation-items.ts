@@ -140,7 +140,7 @@ export const useNavigationItems = ({
         href: `/${workspaceSlug}/projects/${projectId}/views`,
         icon: ViewsIcon,
         access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
-        // Keep the entry visible so users can still reach the disabled-feature empty state.
+        // 保留入口；无 view.view 时由页面展示 NotAuthorizedView
         shouldRender: true,
         sortOrder: 6,
       },

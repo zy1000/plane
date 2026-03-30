@@ -177,7 +177,7 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
         href: `/${workspaceSlug}/projects/${projectId}/views`,
         icon: ViewsIcon,
         access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
-        // Keep the entry visible so users can still reach the disabled-feature empty state.
+        // 保留入口；无 view.view 时由页面展示 NotAuthorizedView（与迭代页类似）
         shouldRender: true,
         sortOrder: 5,
       },

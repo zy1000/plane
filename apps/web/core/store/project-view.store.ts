@@ -233,9 +233,15 @@ export class ProjectViewStore implements IProjectViewStore {
       set(this.viewMap, [viewId], { ...currentView, ...data });
     });
 
-    const response = await this.viewService.patchView(workspaceSlug, projectId, viewId, data);
-
-    return response;
+    try {
+      const response = await this.viewService.patchView(workspaceSlug, projectId, viewId, data);
+      return response;
+    } catch (error) {
+      runInAction(() => {
+        if (currentView) set(this.viewMap, [viewId], currentView);
+      });
+      throw error;
+    }
   }
 
   /**

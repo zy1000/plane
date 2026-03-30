@@ -88,7 +88,8 @@ export const useMultipleSelect = (props: Props) => {
             groupID,
           }))
         )
-        .flat(1),
+        .flat(1)
+        .filter((entity): entity is TEntityDetails => entity !== undefined),
     [entities, groups]
   );
 

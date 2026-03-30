@@ -5,6 +5,8 @@
  */
 
 import { observer } from "mobx-react";
+import { PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
+import { useTranslation } from "@plane/i18n";
 // types
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { IProjectView } from "@plane/types";
@@ -31,6 +33,7 @@ type Props = {
 
 export const CreateUpdateProjectViewModal = observer(function CreateUpdateProjectViewModal(props: Props) {
   const { data, isOpen, onClose, preLoadedData, workspaceSlug, projectId } = props;
+  const { t } = useTranslation();
   // router
   const router = useAppRouter();
   // store hooks
@@ -54,7 +57,17 @@ export const CreateUpdateProjectViewModal = observer(function CreateUpdateProjec
         title: "Success!",
         message: "View created successfully.",
       });
-    } catch (_error) {
+    } catch (error: unknown) {
+      if (isProjectPermissionError(error)) {
+        setToast({
+          type: TOAST_TYPE.ERROR,
+          title: t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title),
+          message: PROJECT_ERROR_MESSAGES.permissionError.i18n_message
+            ? t(PROJECT_ERROR_MESSAGES.permissionError.i18n_message)
+            : undefined,
+        });
+        return;
+      }
       setToast({
         type: TOAST_TYPE.ERROR,
         title: "Error!",
@@ -69,7 +82,17 @@ export const CreateUpdateProjectViewModal = observer(function CreateUpdateProjec
       mutateFilters(workspaceSlug, viewDetails.id, viewDetails);
       resetExpression(EIssuesStoreType.PROJECT_VIEW, viewDetails.id, viewDetails.rich_filters);
       handleClose();
-    } catch (_error) {
+    } catch (error: unknown) {
+      if (isProjectPermissionError(error)) {
+        setToast({
+          type: TOAST_TYPE.ERROR,
+          title: t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title),
+          message: PROJECT_ERROR_MESSAGES.permissionError.i18n_message
+            ? t(PROJECT_ERROR_MESSAGES.permissionError.i18n_message)
+            : undefined,
+        });
+        return;
+      }
       setToast({
         type: TOAST_TYPE.ERROR,
         title: "Error!",
