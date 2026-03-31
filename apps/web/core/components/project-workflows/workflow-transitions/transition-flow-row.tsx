@@ -228,7 +228,12 @@ export const TransitionFlowRow: FC<TTransitionFlowRowProps> = ({
   };
 
   const handleOpenMemberPanel = (forceEditable = false) => {
-    if (!isEditable) return;
+    if (!isEditable) {
+      if (!isNew) {
+        onRequestMemberPanel(approverIds, requiredCount, isNofMApproval, () => {}, true);
+      }
+      return;
+    }
     if (!isNew && !isEditMode && !forceEditable) {
       // View-only: show current approvers without allowing edits
       onRequestMemberPanel(approverIds, requiredCount, isNofMApproval, () => {}, true);
@@ -298,13 +303,16 @@ export const TransitionFlowRow: FC<TTransitionFlowRowProps> = ({
 
   const boxesClickable = isNew || isEditMode;
 
-  const getBoxClassName = (isActive: boolean, isClickable = boxesClickable) =>
+  /** 已有流转时，无编辑权限仍可点击「by」只读查看审批人 */
+  const canOpenMemberPanelReadOnly = !isNew && !isEditable;
+
+  const getBoxClassName = (isActive: boolean, isClickable = boxesClickable, allowReadOnlyView = false) =>
     cn(
       "flex h-9 w-full items-center gap-2 rounded-md border px-3 text-sm transition-colors",
       isActive && "border-accent-primary bg-accent-subtle/10",
       !isActive && isClickable && "border-subtle bg-surface-1 hover:bg-surface-2 cursor-pointer",
       !isActive && !isClickable && "border-subtle bg-surface-1 cursor-default select-none",
-      !isEditable && "cursor-not-allowed opacity-60"
+      !isEditable && !allowReadOnlyView && "cursor-not-allowed opacity-60"
     );
 
   return (
@@ -359,8 +367,8 @@ export const TransitionFlowRow: FC<TTransitionFlowRowProps> = ({
               <button
                 type="button"
                 onClick={() => handleOpenMemberPanel()}
-                disabled={!isEditable}
-                className={getBoxClassName(box3Active, true)}
+                disabled={isNew && !isEditable}
+                className={getBoxClassName(box3Active, true, canOpenMemberPanelReadOnly)}
               >
                 <Users className="h-3.5 w-3.5 flex-shrink-0 text-secondary" />
                 {isAllApprovers ? (

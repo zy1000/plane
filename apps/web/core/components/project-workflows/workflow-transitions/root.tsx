@@ -5,8 +5,11 @@
  */
 
 import type { FC } from "react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { GitPullRequest } from "lucide-react";
+import { PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
+import { useTranslation } from "@plane/i18n";
+import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { IState } from "@plane/types";
 import { useWorkflowTransitions } from "@/hooks/store/use-workflow-transitions";
 import { useProjectState } from "@/hooks/store/use-project-state";
@@ -34,10 +37,38 @@ export const WorkflowTransitionsRoot: FC<TWorkflowTransitionsRootProps> = ({
   projectId,
   workflow,
 }) => {
+  const { t } = useTranslation();
   const { allowProjectPermissionKeys } = useUserPermissions();
   const { getProjectStatesByIssueTypeId, fetchProjectStates } = useProjectState();
-  const { transitions, isLoading, fetchTransitions, createTransition, updateTransition, deleteTransition } =
-    useWorkflowTransitions(workspaceSlug, projectId, workflow.id);
+  const {
+    transitions,
+    isLoading,
+    fetchTransitions,
+    createTransition,
+    updateTransition,
+    deleteTransition: deleteTransitionApi,
+  } = useWorkflowTransitions(workspaceSlug, projectId, workflow.id);
+
+  const toastWorkflowError = useCallback(
+    (error: unknown, fallbackMessage: string) => {
+      if (isProjectPermissionError(error)) {
+        setToast({
+          type: TOAST_TYPE.ERROR,
+          title: t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title),
+          message: PROJECT_ERROR_MESSAGES.permissionError.i18n_message
+            ? t(PROJECT_ERROR_MESSAGES.permissionError.i18n_message)
+            : undefined,
+        });
+        return;
+      }
+      setToast({
+        type: TOAST_TYPE.ERROR,
+        title: t("common.error.label"),
+        message: fallbackMessage,
+      });
+    },
+    [t]
+  );
 
   const [activePanel, setActivePanel] = useState<TPanelConfig | null>(null);
   const [activePanelOwner, setActivePanelOwner] = useState<string | null>(null);
@@ -47,11 +78,7 @@ export const WorkflowTransitionsRoot: FC<TWorkflowTransitionsRootProps> = ({
     if (key === null) setActivePanel(null);
   };
 
-  const isEditable = allowProjectPermissionKeys(
-    ["workflow.transition.create", "workflow.transition.edit", "workflow.transition.delete"],
-    workspaceSlug,
-    projectId
-  );
+  const isEditable = allowProjectPermissionKeys(["workflow.config"], workspaceSlug, projectId);
 
   useEffect(() => {
     fetchTransitions();
@@ -81,23 +108,36 @@ export const WorkflowTransitionsRoot: FC<TWorkflowTransitionsRootProps> = ({
     }
   ) => {
     const requiredCountField = data.required_count !== undefined ? { required_count: data.required_count } : {};
-    if (data.id) {
-      await updateTransition({
-        id: data.id,
-        to_state_id: data.to_state_id,
-        approver_ids: data.approver_ids,
-        approval_type: data.approval_type,
-        ...requiredCountField,
-      });
-    } else {
-      await createTransition({
-        workflow_id: workflow.id,
-        from_state_id: stateId,
-        to_state_id: data.to_state_id,
-        approver_ids: data.approver_ids,
-        approval_type: data.approval_type,
-        ...requiredCountField,
-      });
+    try {
+      if (data.id) {
+        await updateTransition({
+          id: data.id,
+          to_state_id: data.to_state_id,
+          approver_ids: data.approver_ids,
+          approval_type: data.approval_type,
+          ...requiredCountField,
+        });
+      } else {
+        await createTransition({
+          workflow_id: workflow.id,
+          from_state_id: stateId,
+          to_state_id: data.to_state_id,
+          approver_ids: data.approver_ids,
+          approval_type: data.approval_type,
+          ...requiredCountField,
+        });
+      }
+    } catch (error) {
+      toastWorkflowError(error, data.id ? "更新流转配置失败，请重试。" : "创建流转失败，请重试。");
+      throw error;
+    }
+  };
+
+  const handleDeleteTransition = async (transitionId: string) => {
+    try {
+      await deleteTransitionApi(transitionId);
+    } catch (error) {
+      toastWorkflowError(error, "删除流转失败，请重试。");
     }
   };
 
@@ -179,7 +219,7 @@ export const WorkflowTransitionsRoot: FC<TWorkflowTransitionsRootProps> = ({
                     activePanelOwner={activePanelOwner}
                     onSetActivePanelOwner={handleSetActivePanelOwner}
                     onSaveTransition={handleSaveTransition}
-                    onDeleteTransition={deleteTransition}
+                    onDeleteTransition={handleDeleteTransition}
                     onRequestStatePanel={handleRequestStatePanel}
                     onRequestMemberPanel={handleRequestMemberPanel}
                     onRequestFlowPanel={handleRequestFlowPanel}

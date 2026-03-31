@@ -5,9 +5,12 @@
  */
 
 import type { FC } from "react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { GitPullRequest, Plus } from "lucide-react";
 import * as LucideIcons from "lucide-react";
+import { PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
+import { useTranslation } from "@plane/i18n";
+import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Button } from "@plane/ui";
 import { LayersIcon } from "@plane/propel/icons";
 import { cn } from "@plane/utils";
@@ -75,6 +78,7 @@ const WorkflowListSkeleton: FC = () => (
 );
 
 export const ProjectWorkflowRoot: FC<TProjectWorkflowRootProps> = ({ workspaceSlug, projectId }) => {
+  const { t } = useTranslation();
   const { issueTypes, isLoading: issueTypesLoading } = useProjectIssueTypes(workspaceSlug, projectId);
   const { allowProjectPermissionKeys } = useUserPermissions();
   const { fetchWorkflows, createWorkflow, updateWorkflow, deleteWorkflow, getWorkflowsByIssueTypeId, isLoadingForIssueType } =
@@ -87,6 +91,27 @@ export const ProjectWorkflowRoot: FC<TProjectWorkflowRootProps> = ({ workspaceSl
     ["workflow.create", "workflow.edit", "workflow.delete"],
     workspaceSlug,
     projectId
+  );
+
+  const toastWorkflowError = useCallback(
+    (error: unknown, fallbackMessage: string) => {
+      if (isProjectPermissionError(error)) {
+        setToast({
+          type: TOAST_TYPE.ERROR,
+          title: t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title),
+          message: PROJECT_ERROR_MESSAGES.permissionError.i18n_message
+            ? t(PROJECT_ERROR_MESSAGES.permissionError.i18n_message)
+            : undefined,
+        });
+        return;
+      }
+      setToast({
+        type: TOAST_TYPE.ERROR,
+        title: t("common.error.label"),
+        message: fallbackMessage,
+      });
+    },
+    [t]
   );
 
   // auto-select first issue type
@@ -109,7 +134,11 @@ export const ProjectWorkflowRoot: FC<TProjectWorkflowRootProps> = ({ workspaceSl
 
   const handleToggleActive = async (workflow: TWorkflow, value: boolean) => {
     if (!selectedIssueTypeId) return;
-    await updateWorkflow(selectedIssueTypeId, { id: workflow.id, is_active: value });
+    try {
+      await updateWorkflow(selectedIssueTypeId, { id: workflow.id, is_active: value });
+    } catch (error) {
+      toastWorkflowError(error, "更新工作流状态失败，请重试。");
+    }
   };
 
   const handleEdit = (workflow: TWorkflow) => {
@@ -118,15 +147,24 @@ export const ProjectWorkflowRoot: FC<TProjectWorkflowRootProps> = ({ workspaceSl
 
   const handleDelete = async (workflowId: string) => {
     if (!selectedIssueTypeId) return;
-    await deleteWorkflow(selectedIssueTypeId, workflowId);
+    try {
+      await deleteWorkflow(selectedIssueTypeId, workflowId);
+    } catch (error) {
+      toastWorkflowError(error, "删除工作流失败，请重试。");
+    }
   };
 
   const handleModalSubmit = async (data: { name: string; description: string; issue_type_id: string }) => {
     if (!selectedIssueTypeId) return;
-    if (modalState.workflow) {
-      await updateWorkflow(selectedIssueTypeId, { id: modalState.workflow.id, ...data });
-    } else {
-      await createWorkflow({ ...data, is_active: false });
+    try {
+      if (modalState.workflow) {
+        await updateWorkflow(selectedIssueTypeId, { id: modalState.workflow.id, ...data });
+      } else {
+        await createWorkflow({ ...data, is_active: false });
+      }
+    } catch (error) {
+      toastWorkflowError(error, modalState.workflow ? "更新工作流失败，请重试。" : "创建工作流失败，请重试。");
+      throw error;
     }
   };
 
