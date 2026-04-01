@@ -59,6 +59,18 @@ issue.unarchive|恢复工作项|project|issue|unarchive|工作项主体|5|1
 issue.defect.create|创建缺陷类型工作项|project|issue.defect|create|缺陷工作项|1|1
 issue.defect.edit|编辑缺陷类型工作项|project|issue.defect|edit|缺陷工作项|2|1
 issue.defect.delete|删除缺陷类型工作项|project|issue.defect|delete|缺陷工作项|3|1
+issue.defect.archive|归档缺陷类型工作项|project|issue.defect|archive|缺陷工作项|4|1
+issue.defect.unarchive|恢复缺陷类型工作项|project|issue.defect|unarchive|缺陷工作项|5|1
+issue.requirement.create|创建需求类型工作项|project|issue.requirement|create|需求工作项|1|1
+issue.requirement.edit|编辑需求类型工作项|project|issue.requirement|edit|需求工作项|2|1
+issue.requirement.delete|删除需求类型工作项|project|issue.requirement|delete|需求工作项|3|1
+issue.requirement.archive|归档需求类型工作项|project|issue.requirement|archive|需求工作项|4|1
+issue.requirement.unarchive|恢复需求类型工作项|project|issue.requirement|unarchive|需求工作项|5|1
+issue.task.create|创建任务类型工作项|project|issue.task|create|任务工作项|1|1
+issue.task.edit|编辑任务类型工作项|project|issue.task|edit|任务工作项|2|1
+issue.task.delete|删除任务类型工作项|project|issue.task|delete|任务工作项|3|1
+issue.task.archive|归档任务类型工作项|project|issue.task|archive|任务工作项|4|1
+issue.task.unarchive|恢复任务类型工作项|project|issue.task|unarchive|任务工作项|5|1
 issue.comment.create|创建评论|project|issue.comment|create|工作项评论与互动|1|1
 issue.comment.edit|编辑评论|project|issue.comment|edit|工作项评论与互动|2|1
 issue.comment.delete|删除评论|project|issue.comment|delete|工作项评论与互动|3|1
@@ -141,8 +153,6 @@ qa.review.view|查看测试评审|project|qa.review|view|测试|11|1
 qa.review.create|创建测试评审|project|qa.review|create|测试|12|1
 qa.review.edit|编辑测试评审|project|qa.review|edit|测试|13|1
 qa.review.delete|删除测试评审|project|qa.review|delete|测试|14|1
-qa.review.review|执行评审|project|qa.review|review|测试|15|1
-qa.review.confirm|确认评审结果|project|qa.review|confirm|测试|16|1
 qa.mindmap.view|查看用例脑图|project|qa.mindmap|view|测试|17|1
 qa.mindmap.edit|编辑用例脑图|project|qa.mindmap|edit|测试|18|1
 """.strip().splitlines()

@@ -194,7 +194,7 @@ export const IssuesHeader = observer(function IssuesHeader() {
         )}
       </Header.LeftItem>
       <Header.RightItem>
-        <div className="hidden gap-2 md:flex">
+        <div className="hidden items-center gap-2 md:flex">
           <HeaderFilters
             projectId={projectId}
             currentProjectDetails={currentProjectDetails}
@@ -206,6 +206,7 @@ export const IssuesHeader = observer(function IssuesHeader() {
           <>
             <Button
               variant="primary"
+              size="lg"
               onClick={() => {
                 toggleCreateIssueModal(true, EIssuesStoreType.PROJECT);
               }}
@@ -214,7 +215,7 @@ export const IssuesHeader = observer(function IssuesHeader() {
               <div className="block sm:hidden">{t("issue.label", { count: 1 })}</div>
               <div className="hidden sm:block">{t("issue.add.label")}</div>
             </Button>
-            <Button onClick={() => fileInputRef.current?.click()}  variant="secondary">
+            <Button size="lg" onClick={() => fileInputRef.current?.click()} variant="secondary">
               导入
             </Button>
             <input
@@ -227,6 +228,7 @@ export const IssuesHeader = observer(function IssuesHeader() {
             <div className="relative hidden md:block">
               <Button
                 variant="secondary"
+                size="lg"
                 onClick={() => setIsApprovalModalOpen(true)}
                 className="flex items-center gap-1"
               >

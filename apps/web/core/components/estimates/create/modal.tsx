@@ -13,6 +13,7 @@ import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { ChevronLeftIcon } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
+import { qaCaseSetToastError } from "@/utils/qa-case-error";
 import type { IEstimateFormData, TEstimateSystemKeys, TEstimatePointsObject, TEstimateTypeError } from "@plane/types";
 import { EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
 // hooks
@@ -107,13 +108,9 @@ export const CreateEstimateModal = observer(function CreateEstimateModal(props: 
           message: t("project_settings.estimates.toasts.created.success.message"),
         });
         handleClose();
-      } catch {
+      } catch (e: unknown) {
         setButtonLoader(false);
-        setToast({
-          type: TOAST_TYPE.ERROR,
-          title: t("project_settings.estimates.toasts.created.error.title"),
-          message: t("project_settings.estimates.toasts.created.error.message"),
-        });
+        qaCaseSetToastError(e, t, t("project_settings.estimates.toasts.created.error.message"));
       }
     } else {
       setEstimatePointError((prev) => {

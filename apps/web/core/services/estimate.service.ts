@@ -59,16 +59,18 @@ export class EstimateService extends APIService {
     try {
       const { data } = await this.post(`/api/workspaces/${workspaceSlug}/projects/${projectId}/estimates/`, payload);
       return data || undefined;
-    } catch (error) {
-      throw error;
+    } catch (error: unknown) {
+      const ax = error as { response?: { data?: unknown } };
+      throw ax?.response?.data ?? error;
     }
   }
 
   async deleteEstimate(workspaceSlug: string, projectId: string, estimateId: string): Promise<void> {
     try {
       await this.delete(`/api/workspaces/${workspaceSlug}/projects/${projectId}/estimates/${estimateId}/`);
-    } catch (error) {
-      throw error;
+    } catch (error: unknown) {
+      const ax = error as { response?: { data?: unknown } };
+      throw ax?.response?.data ?? error;
     }
   }
 

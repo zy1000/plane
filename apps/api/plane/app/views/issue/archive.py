@@ -17,7 +17,7 @@ from django.views.decorators.gzip import gzip_page
 from rest_framework import status
 from rest_framework.response import Response
 
-from plane.app.permissions import ProjectEntityPermission, allow_project_permission, PermissionKey
+from plane.app.permissions import ProjectEntityPermission, allow_project_permission, PermissionKey, has_project_issue_permission
 from plane.app.serializers import (
     IssueFlatSerializer,
     IssueSerializer,
@@ -254,9 +254,21 @@ class IssueArchiveViewSet(BaseViewSet):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
-    @allow_project_permission(PermissionKey.ISSUE_ARCHIVE)
     def archive(self, request, slug, project_id, pk=None):
-        issue = Issue.issue_objects.get(workspace__slug=slug, project_id=project_id, pk=pk)
+        issue = Issue.issue_objects.select_related("type").get(workspace__slug=slug, project_id=project_id, pk=pk)
+
+        if not has_project_issue_permission(
+            user=request.user,
+            workspace_slug=slug,
+            project_id=str(project_id),
+            action="archive",
+            issue_type_name=issue.type.name if issue.type else None,
+        ):
+            return Response(
+                {"error": "您没有所需的项目权限。"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         if issue.state.group not in ["completed", "cancelled"]:
             return Response(
                 {"error": "Can only archive completed or cancelled state group issue"},
@@ -279,14 +291,26 @@ class IssueArchiveViewSet(BaseViewSet):
         return Response({"archived_at": str(issue.archived_at)}, status=status.HTTP_200_OK)
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
-    @allow_project_permission(PermissionKey.ISSUE_UNARCHIVE)
     def unarchive(self, request, slug, project_id, pk=None):
-        issue = Issue.objects.get(
+        issue = Issue.objects.select_related("type").get(
             workspace__slug=slug,
             project_id=project_id,
             archived_at__isnull=False,
             pk=pk,
         )
+
+        if not has_project_issue_permission(
+            user=request.user,
+            workspace_slug=slug,
+            project_id=str(project_id),
+            action="unarchive",
+            issue_type_name=issue.type.name if issue.type else None,
+        ):
+            return Response(
+                {"error": "您没有所需的项目权限。"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         issue_activity.delay(
             type="issue.activity.updated",
             requested_data=json.dumps({"archived_at": None}),
@@ -315,8 +339,26 @@ class BulkArchiveIssuesEndpoint(BaseAPIView):
             return Response({"error": "Issue IDs are required"}, status=status.HTTP_400_BAD_REQUEST)
 
         issues = Issue.objects.filter(workspace__slug=slug, project_id=project_id, pk__in=issue_ids).select_related(
-            "state"
+            "state", "type"
         )
+
+        issue_type_names = set(
+            issues.filter(type__isnull=False).values_list("type__name", flat=True).distinct()
+        )
+        issue_type_names.add(None)
+
+        for issue_type_name in issue_type_names:
+            if not has_project_issue_permission(
+                user=request.user,
+                workspace_slug=slug,
+                project_id=str(project_id),
+                action="archive",
+                issue_type_name=issue_type_name,
+            ):
+                return Response(
+                    {"error": "您没有所需的项目权限。"},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
         bulk_archive_issues = []
         for issue in issues:
             if issue.state.group not in ["completed", "cancelled"]:

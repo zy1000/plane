@@ -126,9 +126,9 @@ export function RolesSidebar({
       {/* Header */}
       <div className="flex shrink-0 flex-col gap-2 border-b border-subtle px-4 py-3">
         <div className="flex items-center justify-between gap-2">
-          <h4 className="flex items-center gap-2 text-body-sm-semibold text-primary">
+          <h4 className="flex items-center gap-2 !text-13 !font-medium !leading-4 text-primary">
             角色
-            <CountChip count={totalRoleCount} className="h-4" />
+            <CountChip count={totalRoleCount} className="h-4 !text-13 !font-medium !leading-4" />
           </h4>
           {isAdmin && (
             <div className="flex items-center gap-0.5">
@@ -160,7 +160,7 @@ export function RolesSidebar({
         <div className="flex items-center gap-1.5 rounded-md border border-subtle bg-surface-1 px-2.5 py-1.5">
           <SearchIcon className="h-3.5 w-3.5 shrink-0 text-placeholder" />
           <input
-            className="min-w-0 flex-1 border-none bg-transparent text-body-xs-regular outline-none placeholder:text-placeholder"
+            className="min-w-0 flex-1 border-none bg-transparent text-13 font-medium leading-4 outline-none placeholder:text-placeholder"
             placeholder="搜索角色..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -176,15 +176,15 @@ export function RolesSidebar({
               <ShieldCheck className="size-4 text-placeholder" />
             </div>
             {isSearchNoResults ? (
-              <p className="text-body-xs-regular text-tertiary">没有匹配的角色</p>
+              <p className="text-13 font-medium leading-4 text-tertiary">没有匹配的角色</p>
             ) : (
               <>
-                <p className="text-body-xs-regular text-tertiary">暂无角色</p>
+                <p className="text-13 font-medium leading-4 text-tertiary">暂无角色</p>
                 {isAdmin && (
                   <button
                     type="button"
                     onClick={() => setShowCreateModal(true)}
-                    className="mt-2 cursor-pointer text-body-xs-medium text-custom-primary-100 transition-colors hover:underline"
+                    className="mt-2 cursor-pointer text-13 font-medium leading-4 text-custom-primary-100 transition-colors hover:underline"
                   >
                     点击新建
                   </button>
@@ -214,7 +214,7 @@ export function RolesSidebar({
                       />
                       <p
                         className={cn(
-                          "min-w-0 flex-1 truncate text-body-xs-semibold",
+                          "min-w-0 flex-1 truncate !text-13 !font-medium !leading-4",
                           isSelected ? "text-accent-primary" : "text-primary"
                         )}
                       >
@@ -259,7 +259,7 @@ export function RolesSidebar({
                   </div>
                   {/* Description */}
                   {role.description?.trim() && (
-                    <p className="truncate pl-5 text-body-xs-regular text-tertiary">{role.description}</p>
+                    <p className="truncate pl-5 text-13 font-medium leading-4 text-tertiary">{role.description}</p>
                   )}
                 </li>
               );
@@ -272,8 +272,7 @@ export function RolesSidebar({
       {isAdmin && roles.length > 0 && (
         <div className="shrink-0 border-t border-subtle p-2">
           <Button
-            variant="neutral-primary"
-            size="sm"
+            variant="ghost"
             prependIcon={<PlusIcon />}
             onClick={() => setShowCreateModal(true)}
             className="w-full justify-center"

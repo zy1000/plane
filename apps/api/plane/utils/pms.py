@@ -486,7 +486,7 @@ def find_assign_user(name):
 def post_task(title, sub_project, project_code, lead, description, token,
               meter_type='01-电表', level='general',
               software_version='最新版本', tool_version='最新版本', reproduce='操作级'):
-    url = 'http://10.32.232.33/DevTrackAPI/api/Task/Create'
+    url = 'http://192.168.100.133/DevTrackAPI/api/Task/Create'
     data = {
         'ProjectId': 591,
         'FieldValues': [

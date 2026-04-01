@@ -99,18 +99,49 @@ def resolve_project_issue_type_name(project_id: str, issue_type_id: str) -> Opti
     return project_issue_type.issue_type.name
 
 
+REQUIREMENT_TYPE_NAMES = {"史诗", "特性", "用户故事"}
+DEFECT_TYPE_NAMES = {"缺陷"}
+TASK_TYPE_NAMES = {"任务"}
+
+
 def get_issue_permission_key(action: str, issue_type_name: Optional[str] = None) -> str:
     common_permission_map = {
         "create": PermissionKey.ISSUE_CREATE,
         "edit": PermissionKey.ISSUE_EDIT,
         "delete": PermissionKey.ISSUE_DELETE,
+        "archive": PermissionKey.ISSUE_ARCHIVE,
+        "unarchive": PermissionKey.ISSUE_UNARCHIVE,
     }
     defect_permission_map = {
         "create": PermissionKey.ISSUE_DEFECT_CREATE,
         "edit": PermissionKey.ISSUE_DEFECT_EDIT,
         "delete": PermissionKey.ISSUE_DEFECT_DELETE,
+        "archive": PermissionKey.ISSUE_DEFECT_ARCHIVE,
+        "unarchive": PermissionKey.ISSUE_DEFECT_UNARCHIVE,
     }
-    permission_map = defect_permission_map if issue_type_name == "缺陷" else common_permission_map
+    requirement_permission_map = {
+        "create": PermissionKey.ISSUE_REQUIREMENT_CREATE,
+        "edit": PermissionKey.ISSUE_REQUIREMENT_EDIT,
+        "delete": PermissionKey.ISSUE_REQUIREMENT_DELETE,
+        "archive": PermissionKey.ISSUE_REQUIREMENT_ARCHIVE,
+        "unarchive": PermissionKey.ISSUE_REQUIREMENT_UNARCHIVE,
+    }
+    task_permission_map = {
+        "create": PermissionKey.ISSUE_TASK_CREATE,
+        "edit": PermissionKey.ISSUE_TASK_EDIT,
+        "delete": PermissionKey.ISSUE_TASK_DELETE,
+        "archive": PermissionKey.ISSUE_TASK_ARCHIVE,
+        "unarchive": PermissionKey.ISSUE_TASK_UNARCHIVE,
+    }
+
+    if issue_type_name in DEFECT_TYPE_NAMES:
+        permission_map = defect_permission_map
+    elif issue_type_name in REQUIREMENT_TYPE_NAMES:
+        permission_map = requirement_permission_map
+    elif issue_type_name in TASK_TYPE_NAMES:
+        permission_map = task_permission_map
+    else:
+        permission_map = common_permission_map
 
     try:
         return permission_map[action]

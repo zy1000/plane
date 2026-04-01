@@ -6,9 +6,10 @@
 
 import { useState } from "react";
 import { observer } from "mobx-react";
+import { useTranslation } from "@plane/i18n";
 // ui
 import { Button } from "@plane/propel/button";
-import { TOAST_TYPE, setToast } from "@plane/propel/toast";
+import { qaCaseSetToastError, qaCaseSetToastSuccess } from "@/utils/qa-case-error";
 import { EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
 // hooks
 import { useProjectEstimates } from "@/hooks/store/estimates";
@@ -30,6 +31,7 @@ export const DeleteEstimateModal = observer(function DeleteEstimateModal(props: 
   const { areEstimateEnabledByProjectId, deleteEstimate } = useProjectEstimates();
   const { asJson: estimate } = useEstimate(estimateId);
   const { updateProject } = useProject();
+  const { t } = useTranslation();
   // states
   const [buttonLoader, setButtonLoader] = useState(false);
 
@@ -42,19 +44,11 @@ export const DeleteEstimateModal = observer(function DeleteEstimateModal(props: 
         await updateProject(workspaceSlug, projectId, { estimate: null });
       }
       setButtonLoader(false);
-      setToast({
-        type: TOAST_TYPE.SUCCESS,
-        title: "Estimate deleted",
-        message: "Estimate has been removed from your project.",
-      });
+      qaCaseSetToastSuccess("估算已从项目中移除", "估算已删除");
       handleClose();
-    } catch (error) {
+    } catch (e: unknown) {
       setButtonLoader(false);
-      setToast({
-        type: TOAST_TYPE.ERROR,
-        title: "Estimate creation failed",
-        message: "We were unable to delete the estimate, please try again.",
-      });
+      qaCaseSetToastError(e, t, "删除估算失败");
     }
   };
 

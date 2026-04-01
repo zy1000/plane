@@ -15,7 +15,8 @@ from rest_framework import status
 
 # Module imports
 from ..base import BaseViewSet, BaseAPIView
-from plane.app.permissions import ProjectEntityPermission, allow_permission, ROLE
+from plane.app.permissions import ProjectEntityPermission, allow_permission, ROLE, allow_project_permission, \
+    PermissionKey
 from plane.db.models import Project, Estimate, EstimatePoint, Issue
 from plane.app.serializers import (
     EstimateSerializer,
@@ -61,6 +62,7 @@ class BulkEstimatePointEndpoint(BaseViewSet):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     @invalidate_cache(path="/api/workspaces/:slug/estimates/", url_params=True, user=False)
+    @allow_project_permission(PermissionKey.ESTIMATE_CREATE)
     def create(self, request, slug, project_id):
         estimate = request.data.get("estimate")
         estimate_name = estimate.get("name", generate_random_name())
@@ -106,6 +108,7 @@ class BulkEstimatePointEndpoint(BaseViewSet):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     @invalidate_cache(path="/api/workspaces/:slug/estimates/", url_params=True, user=False)
+    @allow_project_permission(PermissionKey.ESTIMATE_EDIT)
     def partial_update(self, request, slug, project_id, estimate_id):
         if not len(request.data.get("estimate_points", [])):
             return Response(
@@ -144,6 +147,7 @@ class BulkEstimatePointEndpoint(BaseViewSet):
         return Response(estimate_serializer.data, status=status.HTTP_200_OK)
 
     @invalidate_cache(path="/api/workspaces/:slug/estimates/", url_params=True, user=False)
+    @allow_project_permission(PermissionKey.ESTIMATE_DELETE)
     def destroy(self, request, slug, project_id, estimate_id):
         estimate = Estimate.objects.get(pk=estimate_id, workspace__slug=slug, project_id=project_id)
         estimate.delete()

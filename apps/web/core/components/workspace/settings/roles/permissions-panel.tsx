@@ -290,7 +290,7 @@ export function PermissionsPanel({
         <div className="flex size-12 items-center justify-center rounded-full bg-layer-1">
           <ShieldCheck className="size-5 text-placeholder" />
         </div>
-        <p className="text-body-sm-regular text-tertiary">请在左侧选择一个角色以管理其权限</p>
+        <p className="text-13 font-medium leading-4 text-tertiary">请在左侧选择一个角色以管理其权限</p>
       </div>
     );
   }
@@ -325,7 +325,7 @@ export function PermissionsPanel({
         <div className="flex size-10 items-center justify-center rounded-full border border-dashed border-subtle">
           <ShieldCheck className="size-4 text-placeholder" />
         </div>
-        <p className="text-body-sm-medium text-secondary">暂无可用权限</p>
+        <p className="text-13 font-medium leading-4 text-secondary">暂无可用权限</p>
       </div>
     );
   }
@@ -343,8 +343,8 @@ export function PermissionsPanel({
     <div className="flex h-full flex-1 flex-col overflow-hidden">
       {isSearching && (
         <div className="flex shrink-0 justify-end border-b border-subtle px-5 py-1.5">
-          <span className="text-[11px] text-tertiary">
-            全部 <span className="font-medium text-primary tabular-nums">{totalSearchHits}</span> 项
+          <span className="text-13 font-medium leading-4 text-tertiary">
+            全部 <span className="text-primary tabular-nums">{totalSearchHits}</span> 项
           </span>
         </div>
       )}
@@ -364,7 +364,7 @@ export function PermissionsPanel({
                     type="button"
                     onClick={() => handleActiveScopeChange(group.scope)}
                     className={cn(
-                      "flex min-w-0 flex-1 items-center justify-center gap-1 rounded-md px-2 py-1.5 text-[11px] font-medium transition-colors duration-150",
+                      "flex min-w-0 flex-1 items-center justify-center gap-1 rounded-md px-2 py-1.5 text-13 font-medium leading-4 transition-colors duration-150",
                       isActive
                         ? "bg-accent-primary/10 text-accent-primary"
                         : "text-tertiary hover:bg-layer-1-hover hover:text-secondary"
@@ -378,7 +378,7 @@ export function PermissionsPanel({
             </div>
           )}
           {!currentScopeGroup || currentScopeGroup.categories.length === 0 ? (
-            <p className="px-4 py-3 text-[11px] text-tertiary">暂无分类</p>
+            <p className="px-4 py-3 text-13 font-medium leading-4 text-tertiary">暂无分类</p>
           ) : (
             currentScopeGroup.categories.map(({ category, permissions: catPerms, boundCount }) => {
               const isActive = !isSearching && effectiveActiveCategory === category;
@@ -404,7 +404,7 @@ export function PermissionsPanel({
                   <div className="flex items-center justify-between gap-2">
                     <span
                       className={cn(
-                        "min-w-0 flex-1 truncate text-body-xs-medium",
+                        "min-w-0 flex-1 truncate text-13 font-medium leading-4",
                         isActive ? "text-accent-primary" : "text-primary"
                       )}
                     >
@@ -412,10 +412,10 @@ export function PermissionsPanel({
                     </span>
                     <span
                       className={cn(
-                        "shrink-0 tabular-nums text-[10px]",
+                        "shrink-0 tabular-nums text-13 font-medium leading-4",
                         isSearching
                           ? matchCount && matchCount > 0
-                            ? "font-medium text-accent-primary"
+                            ? "text-accent-primary"
                             : "text-tertiary"
                           : isActive
                             ? allBound
@@ -465,7 +465,7 @@ export function PermissionsPanel({
                   <div className="mb-2 flex size-9 items-center justify-center rounded-full bg-layer-1">
                     <Search className="size-4 text-placeholder" />
                   </div>
-                  <p className="text-body-xs-regular text-tertiary">没有匹配的权限项</p>
+                  <p className="text-13 font-medium leading-4 text-tertiary">没有匹配的权限项</p>
                 </div>
               ) : (
                 <div className="flex flex-col gap-5 pt-4">
@@ -474,9 +474,7 @@ export function PermissionsPanel({
                       {/* Scope divider */}
                       <div className="mb-2 flex items-center gap-2">
                         <Icon className="size-3.5 text-tertiary" />
-                        <span className="text-[11px] font-semibold uppercase tracking-wider text-tertiary">
-                          {label}
-                        </span>
+                        <span className="text-13 font-medium leading-4 text-tertiary">{label}</span>
                         <div className="h-px flex-1 bg-subtle" />
                       </div>
 
@@ -484,7 +482,7 @@ export function PermissionsPanel({
                       <div className="flex flex-col gap-3">
                         {categories.map(({ category, permissions: matchedPerms }) => (
                           <div key={category}>
-                            <p className="mb-1 px-1 text-[10px] font-medium text-tertiary">{category}</p>
+                            <p className="mb-1 px-1 text-13 font-medium leading-4 text-tertiary">{category}</p>
                             <ul className="overflow-hidden rounded-lg border border-subtle">
                               {matchedPerms.map((perm) => {
                                 const isBound = boundKeySet.has(perm.key);
@@ -523,7 +521,7 @@ export function PermissionsPanel({
                                     <div className="min-w-0 flex-1">
                                       <p
                                         className={cn(
-                                          "text-body-xs-medium",
+                                          "text-13 font-medium leading-4",
                                           isBound ? "text-primary" : "text-secondary"
                                         )}
                                       >
@@ -545,17 +543,17 @@ export function PermissionsPanel({
           ) : !activeCategoryGroup ? (
             /* ── No category selected ── */
             <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center">
-              <p className="text-body-xs-regular text-tertiary">请在左侧选择一个分类</p>
+              <p className="text-13 font-medium leading-4 text-tertiary">请在左侧选择一个分类</p>
             </div>
           ) : (
             /* ── Normal Category Detail ── */
             <>
               <div className="flex shrink-0 items-center gap-3 border-b border-subtle px-5 py-3">
                 <div className="min-w-0 flex-1">
-                  <h4 className="truncate text-body-xs-semibold text-primary">
+                  <h4 className="truncate text-13 font-medium leading-4 text-primary">
                     {activeCategoryGroup.category}
                   </h4>
-                  <p className="text-[11px] tabular-nums text-tertiary">
+                  <p className="text-13 font-medium leading-4 tabular-nums text-tertiary">
                     已启用 {activeCategoryGroup.boundCount} / {activeCategoryGroup.permissions.length} 项权限
                   </p>
                 </div>
@@ -565,7 +563,7 @@ export function PermissionsPanel({
                     onClick={() => void handleToggleCategoryAll(activeCategoryGroup.permissions)}
                     disabled={Boolean(togglingKey)}
                     className={cn(
-                      "flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[11px] font-medium transition-colors duration-150",
+                      "flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-13 font-medium leading-4 transition-colors duration-150",
                       activeCatAllBound
                         ? "border-green-200 bg-green-50 text-green-700 hover:bg-green-100"
                         : activeCatSomeBound
@@ -624,7 +622,7 @@ export function PermissionsPanel({
                         <div className="min-w-0 flex-1">
                           <p
                             className={cn(
-                              "text-body-xs-medium transition-colors duration-150",
+                              "text-13 font-medium leading-4 transition-colors duration-150",
                               isBound ? "text-primary" : "text-secondary"
                             )}
                           >

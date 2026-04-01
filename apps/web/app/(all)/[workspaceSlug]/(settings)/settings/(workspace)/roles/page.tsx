@@ -120,7 +120,7 @@ const WorkspaceRolesPage = observer(function WorkspaceRolesPage({ params }: Rout
     <SettingsContentWrapper header={<RolesWorkspaceSettingsHeader />} hugging>
       <PageHead title={pageTitle} />
 
-      <p className="mb-3 text-body-xs-regular text-tertiary">管理工作区级别的权限，控制成员、设置、项目创建等能力</p>
+      <p className="mb-3 text-13 font-medium leading-4 text-tertiary">管理工作区级别的权限，控制成员、设置、项目创建等能力</p>
 
       <section
         className={cn(
@@ -151,15 +151,15 @@ const WorkspaceRolesPage = observer(function WorkspaceRolesPage({ params }: Rout
             <div className="flex shrink-0 items-center gap-4 border-b border-subtle bg-surface-1 px-6 py-3">
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <h2 className="truncate text-body-md-semibold text-primary">{selectedRole.name}</h2>
+                  <h2 className="truncate text-13 font-medium leading-4 text-primary">{selectedRole.name}</h2>
                   {!searchQuery && activeScopeSummary.totalPermissions > 0 && (
-                    <span className="shrink-0 rounded-full bg-accent-primary/10 px-2 py-0.5 text-xs font-medium text-accent-primary tabular-nums">
+                    <span className="shrink-0 rounded-full bg-accent-primary/10 px-2 py-0.5 text-13 font-medium leading-4 text-accent-primary tabular-nums">
                       {activeScopeSummary.totalBound}/{activeScopeSummary.totalPermissions}
                     </span>
                   )}
                 </div>
                 {selectedRole.description?.trim() && (
-                  <p className="truncate text-body-xs-regular text-tertiary">{selectedRole.description}</p>
+                  <p className="truncate text-13 font-medium leading-4 text-tertiary">{selectedRole.description}</p>
                 )}
               </div>
               <div
@@ -178,7 +178,7 @@ const WorkspaceRolesPage = observer(function WorkspaceRolesPage({ params }: Rout
                 />
                 <input
                   type="text"
-                  className="min-w-0 flex-1 border-none bg-transparent text-body-xs-regular outline-none placeholder:text-placeholder"
+                  className="min-w-0 flex-1 border-none bg-transparent text-13 font-medium leading-4 outline-none placeholder:text-placeholder"
                   placeholder="搜索权限..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
