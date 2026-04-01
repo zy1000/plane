@@ -1,8 +1,10 @@
 "use client";
 
 import { useRef, useState, useEffect } from "react";
-import { Modal, Checkbox, Button, message } from "antd";
+import { Modal, Checkbox, Button } from "antd";
+import { useTranslation } from "@plane/i18n";
 import { CaseService } from "@/services/qa/case.service";
+import { qaCaseSetToastErrorFromAxios, qaCaseSetToastWarning } from "@/utils/qa-case-error";
 
 type ExportFieldOption = { key: string; label: string };
 
@@ -47,6 +49,7 @@ export default function CasesExportModal({
   moduleId,
   selectedCaseIds,
 }: Props) {
+  const { t } = useTranslation();
   const caseService = useRef(new CaseService()).current;
   const [exporting, setExporting] = useState(false);
   const [selectedExportFields, setSelectedExportFields] = useState<string[]>(DEFAULT_SELECTED_FIELDS);
@@ -59,11 +62,11 @@ export default function CasesExportModal({
 
   const handleExport = async () => {
     if (!workspaceSlug) {
-      message.error("缺少必要参数");
+      qaCaseSetToastWarning("缺少必要参数");
       return;
     }
     if (!selectedExportFields.length) {
-      message.error("请至少选择一个字段");
+      qaCaseSetToastWarning("请至少选择一个字段");
       return;
     }
     try {
@@ -88,8 +91,8 @@ export default function CasesExportModal({
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
       onClose();
-    } catch (e: any) {
-      message.error(e?.detail || e?.message || "导出失败");
+    } catch (e: unknown) {
+      await qaCaseSetToastErrorFromAxios(e, t, "导出失败");
     } finally {
       setExporting(false);
     }

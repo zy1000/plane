@@ -82,7 +82,7 @@ export const SendProjectInvitationModal = observer(function SendProjectInvitatio
     const payload = {
       members: formData.members.map((m) => ({
         member_id: m.member_id,
-        role: EUserProjectRoles.GUEST,
+        role: EUserProjectRoles.MEMBER,
       })),
     };
 

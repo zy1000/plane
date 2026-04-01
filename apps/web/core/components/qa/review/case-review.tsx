@@ -5,7 +5,7 @@ import { useParams, useSearchParams, useRouter, usePathname } from "next/navigat
 import { PageHead } from "@/components/core/page-title";
 import { Breadcrumbs } from "@plane/ui";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
-import { Row, Col, Card, Input, Pagination, Tag, Spin, message, Button, Table, Tooltip, Radio, Select, Modal, Badge, Tree } from "antd";
+import { Row, Col, Card, Input, Pagination, Tag, Spin, Button, Table, Tooltip, Radio, Select, Modal, Badge, Tree } from "antd";
 import type { TreeProps } from "antd";
 import { AppstoreOutlined, CheckCircleOutlined, CloseCircleOutlined, ExclamationCircleOutlined, DownOutlined } from "@ant-design/icons";
 import debounce from "lodash-es/debounce";
@@ -23,6 +23,8 @@ import { RichTextEditor } from "../cases/util";
 import { WorkItemDisplayModal } from "../cases/work-item-display-modal";
 import { ReviewRecordsPanel } from "./review-records";
 import { CaseVersionCompareModal } from "../cases/update-modal/case-version-compare-modal";
+import { useTranslation } from "@plane/i18n";
+import { qaCaseErrorContent, qaCaseSetToastError, qaCaseSetToastSuccess, qaCaseSetToastWarning } from "@/utils/qa-case-error";
 
 type ReviewCaseRow = {
   id: string | number;
@@ -36,6 +38,7 @@ type ReviewCaseRow = {
 
 
 export default function CaseReview() {
+  const { t } = useTranslation();
   const { workspaceSlug, projectId } = useParams();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -227,10 +230,10 @@ export default function CaseReview() {
           fetchSuggestionCountForCase(firstCaseId);
         }
       }
-    } catch (e: any) {
-      const msg = e?.message || e?.detail || e?.error || "获取评审用例列表失败";
-      setError(msg);
-      message.error(msg);
+    } catch (e: unknown) {
+      const fallback = "获取评审用例列表失败";
+      setError(qaCaseErrorContent(e, t, fallback));
+      qaCaseSetToastError(e, t, fallback);
     } finally {
       setListLoading(false);
     }
@@ -283,9 +286,8 @@ export default function CaseReview() {
       } catch {
         setAttachments([]);
       }
-    } catch (e: any) {
-      const msg = e?.message || e?.detail || e?.error || "获取用例详情失败";
-      message.error(msg);
+    } catch (e: unknown) {
+      qaCaseSetToastError(e, t, "获取用例详情失败");
     } finally {
       setDetailLoading(false);
     }
@@ -335,9 +337,8 @@ export default function CaseReview() {
     if (workspaceSlug) {
       try {
         fetchWorkspaceMembers(String(workspaceSlug));
-      } catch (e: any) {
-        const msg = e?.message || e?.detail || e?.error || "获取成员信息失败";
-        message.error(msg);
+      } catch (e: unknown) {
+        qaCaseSetToastError(e, t, "获取成员信息失败");
       }
     }
   }, [workspaceSlug, reviewId]);
@@ -685,19 +686,18 @@ export default function CaseReview() {
         setSubmitLoading(true);
         try {
           await caseService.submitCaseReview(String(workspaceSlug), payload);
-          message.success("评审提交成功");
+          qaCaseSetToastSuccess("评审提交成功");
           setReasonModalOpen(false);
           setReason("");
           fetchCases(page, pageSize, keyword, selectedModuleId);
           setRecordsRefreshKey((k) => k + 1);
-        } catch (e: any) {
-          const msg = e?.message || e?.detail || e?.error || "提交评审失败";
-          message.error(msg);
+        } catch (e: unknown) {
+          qaCaseSetToastError(e, t, "提交评审失败");
         } finally {
           setSubmitLoading(false);
         }
       }, 500),
-    [workspaceSlug, page, pageSize, keyword, selectedModuleId]
+    [workspaceSlug, page, pageSize, keyword, selectedModuleId, t]
   );
 
   React.useEffect(() => {
@@ -710,9 +710,9 @@ export default function CaseReview() {
     const payload = buildPayload();
     if (!payload) {
       if (!isCurrentUserReviewer) {
-        message.warning("您不是该评审的评审人员，仅可提交建议");
+        qaCaseSetToastWarning("您不是该评审的评审人员，仅可提交建议");
       } else {
-        message.warning("请选择评审结果");
+        qaCaseSetToastWarning("请选择评审结果");
       }
       return;
     }

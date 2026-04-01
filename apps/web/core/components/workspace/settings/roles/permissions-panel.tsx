@@ -5,7 +5,16 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ShieldCheck, Building2, FolderKanban, Search, CheckSquare, Square, MinusSquare } from "lucide-react";
+import {
+  ShieldCheck,
+  Building2,
+  FolderKanban,
+  Search,
+  CheckSquare,
+  Square,
+  MinusSquare,
+  Check,
+} from "lucide-react";
 import { PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
 import type { IPermission, IWorkspaceRole } from "@plane/types";
 import { useTranslation } from "@plane/i18n";
@@ -477,16 +486,25 @@ export function PermissionsPanel({
                                     )}
                                     onClick={() => handleTogglePermission(perm.key)}
                                   >
-                                    <div className="flex size-4 shrink-0 items-center justify-center">
+                                    <div className="relative flex size-4 shrink-0 items-center justify-center">
                                       <input
                                         type="checkbox"
                                         checked={isBound}
                                         readOnly
                                         disabled={!isAdmin || Boolean(togglingKey)}
-                                        className="size-3.5 cursor-pointer rounded border-subtle accent-accent-primary"
+                                        className="peer sr-only"
                                         onClick={(e) => e.stopPropagation()}
                                         onChange={() => handleTogglePermission(perm.key)}
                                       />
+                                      <span
+                                        className="pointer-events-none flex size-3.5 items-center justify-center rounded border border-black/60 bg-transparent peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-disabled:opacity-50"
+                                        aria-hidden
+                                      >
+                                        <Check
+                                          className={cn("size-2.5 text-black", !isBound && "opacity-0")}
+                                          strokeWidth={2.5}
+                                        />
+                                      </span>
                                     </div>
                                     <div className="min-w-0 flex-1">
                                       <p
@@ -570,16 +588,25 @@ export function PermissionsPanel({
                         )}
                         onClick={() => handleTogglePermission(perm.key)}
                       >
-                        <div className="flex size-4 shrink-0 items-center justify-center">
+                        <div className="relative flex size-4 shrink-0 items-center justify-center">
                           <input
                             type="checkbox"
                             checked={isBound}
                             readOnly
                             disabled={!isAdmin || Boolean(togglingKey)}
-                            className="size-3.5 cursor-pointer rounded border-subtle accent-accent-primary"
+                            className="peer sr-only"
                             onClick={(e) => e.stopPropagation()}
                             onChange={() => handleTogglePermission(perm.key)}
                           />
+                          <span
+                            className="pointer-events-none flex size-3.5 items-center justify-center rounded border border-black/60 bg-transparent peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-disabled:opacity-50"
+                            aria-hidden
+                          >
+                            <Check
+                              className={cn("size-2.5 text-black", !isBound && "opacity-0")}
+                              strokeWidth={2.5}
+                            />
+                          </span>
                         </div>
                         <div className="min-w-0 flex-1">
                           <p

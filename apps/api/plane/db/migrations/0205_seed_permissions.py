@@ -137,7 +137,6 @@ qa.plan.view|查看测试计划|project|qa.plan|view|测试|6|1
 qa.plan.create|创建测试计划|project|qa.plan|create|测试|7|1
 qa.plan.edit|编辑测试计划|project|qa.plan|edit|测试|8|1
 qa.plan.delete|删除测试计划|project|qa.plan|delete|测试|9|1
-qa.plan.execute|执行测试计划|project|qa.plan|execute|测试|10|1
 qa.review.view|查看测试评审|project|qa.review|view|测试|11|1
 qa.review.create|创建测试评审|project|qa.review|create|测试|12|1
 qa.review.edit|编辑测试评审|project|qa.review|edit|测试|13|1
@@ -146,7 +145,6 @@ qa.review.review|执行评审|project|qa.review|review|测试|15|1
 qa.review.confirm|确认评审结果|project|qa.review|confirm|测试|16|1
 qa.mindmap.view|查看用例脑图|project|qa.mindmap|view|测试|17|1
 qa.mindmap.edit|编辑用例脑图|project|qa.mindmap|edit|测试|18|1
-qa.mindmap.asset_upload|上传用例脑图相关资产|project|qa.mindmap|asset_upload|测试|19|1
 """.strip().splitlines()
 
 

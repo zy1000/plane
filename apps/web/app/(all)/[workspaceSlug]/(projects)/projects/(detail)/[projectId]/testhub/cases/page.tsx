@@ -4,7 +4,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, useRef, useMemo } from "react";
 import type { ComponentPropsWithoutRef, CSSProperties, MouseEvent as ReactMouseEvent } from "react";
 import { PageHead } from "@/components/core/page-title";
-import { Table, Tag, Input, Button, Space, Modal, Dropdown, message, Pagination } from "antd";
+import { Table, Tag, Input, Button, Space, Modal, Dropdown, Pagination } from "antd";
 import { EllipsisOutlined, SearchOutlined, EditOutlined, DeleteOutlined } from "@ant-design/icons";
 import type { TableProps, InputRef, TableColumnType } from "antd";
 import { CaseService } from "@/services/qa/case.service";
@@ -24,6 +24,10 @@ import { Breadcrumbs } from "@plane/ui";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { RepositorySelect } from "../repository-select";
 import { ChevronDownIcon } from "@plane/propel/icons";
+import { isProjectPermissionError } from "@plane/constants";
+import { useTranslation } from "@plane/i18n";
+import { qaCaseSetToastError, qaCaseSetToastSuccess, qaCaseSetToastWarning } from "@/utils/qa-case-error";
+import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
 
 type TCreator = {
   display_name?: string;
@@ -173,6 +177,7 @@ const ModuleInput = ({
 };
 
 export default function TestCasesPage() {
+  const { t } = useTranslation();
   const { workspaceSlug, projectId } = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -198,6 +203,7 @@ export default function TestCasesPage() {
   const [cases, setCases] = useState<TestCase[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [accessDenied, setAccessDenied] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState<boolean>(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState<boolean>(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState<boolean>(false);
@@ -348,7 +354,7 @@ export default function TestCasesPage() {
       const ws = String(workspaceSlug || "");
       const current = `/${ws}/projects/${projectId}/testhub/cases${searchParams.toString() ? `?${searchParams.toString()}` : ""}`;
       try {
-        message.warning("未检测到用例库，请选择一个用例库后自动跳回");
+        qaCaseSetToastWarning("未检测到用例库，请选择一个用例库后自动跳回");
       } catch {}
       router.push(`/${ws}/projects/${projectId}/testhub?redirect_to=${encodeURIComponent(current)}`);
     }
@@ -492,16 +498,16 @@ export default function TestCasesPage() {
       cancelText: "取消",
       okButtonProps: { danger: true },
       onOk: async () => {
-        if (!workspaceSlug) return;
+        if (!workspaceSlug || !projectId) return;
         try {
-          await caseService.deleteCase(workspaceSlug as string, selectedCaseIds);
-          message.success("删除成功");
+          await caseService.deleteCase(workspaceSlug as string, String(projectId), selectedCaseIds);
+          qaCaseSetToastSuccess("删除成功");
           setSelectedCaseIds([]);
           await fetchModules();
           await fetchCases(1, pageSize, filters);
         } catch (e) {
           console.error("批量删除失败:", e);
-          message.error("删除失败");
+          qaCaseSetToastError(e, t, "删除失败");
         }
       },
     });
@@ -513,9 +519,10 @@ export default function TestCasesPage() {
     filterParams: typeof filters = filters,
     orderingParam?: string | null
   ) => {
-    if (!workspaceSlug || !repositoryId) return;
+    if (!workspaceSlug || !repositoryId || !projectId) return;
     try {
       setError(null);
+      setAccessDenied(false);
 
       const effectiveOrdering = orderingParam === undefined ? ordering : orderingParam ?? undefined;
       const queryParams: any = {
@@ -541,14 +548,24 @@ export default function TestCasesPage() {
       if (filterParams.priority && filterParams.priority.length > 0)
         queryParams.priority__in = filterParams.priority.join(",");
 
-      const response: TestCaseResponse = await caseService.getCases(workspaceSlug as string, queryParams);
+      const response: TestCaseResponse = await caseService.getCases(
+        workspaceSlug as string,
+        String(projectId),
+        queryParams
+      );
       setCases(response?.data || []);
       setTotal(response?.count || 0); // 保留：用于当前查询的分页
       setCurrentPage(page);
       setPageSize(size);
     } catch (err) {
       console.error("获取测试用例数据失败:", err);
-      setError("获取测试用例数据失败，请稍后重试");
+      if (isProjectPermissionError(err)) {
+        setAccessDenied(true);
+        setError(null);
+      } else {
+        setAccessDenied(false);
+        setError("获取测试用例数据失败，请稍后重试");
+      }
     } finally {
       setLoading(false);
     }
@@ -960,7 +977,7 @@ export default function TestCasesPage() {
   };
 
   const handleDeleteCase = (record: any) => {
-    if (!record || !record.id || !workspaceSlug) return;
+    if (!record || !record.id || !workspaceSlug || !projectId) return;
     Modal.confirm({
       title: "确认删除用例",
       content: "删除后不可恢复，是否继续？",
@@ -969,16 +986,16 @@ export default function TestCasesPage() {
       okButtonProps: { danger: true },
       onOk: async () => {
         try {
-          await caseService.deleteCase(String(workspaceSlug), String(record.id));
+          await caseService.deleteCase(String(workspaceSlug), String(projectId), String(record.id));
           try {
-            message.success("删除成功");
+            qaCaseSetToastSuccess("删除成功");
           } catch {}
           await fetchModules();
           await fetchCases(1, pageSize, filters);
         } catch (e) {
           console.error("删除用例失败:", e);
           try {
-            message.error("删除失败，请稍后重试");
+            qaCaseSetToastError(e, t, "删除失败，请稍后重试");
           } catch {}
         }
       },
@@ -1194,7 +1211,10 @@ export default function TestCasesPage() {
   }, [columns, columnWidths]);
 
 
-  
+  if (accessDenied) {
+    return <NotAuthorizedView section="general" isProjectView className="h-auto" />;
+  }
+
   return (
     <>
       {/* 页面标题 */}

@@ -61,8 +61,8 @@ export class CaseService extends APIService {
         });
   }
 
-  async getReviews(workspaceSlug: string, queries?: any): Promise<{ data: any[]; count: number }> {
-    return this.get(`/api/workspaces/${workspaceSlug}/test/review/`, {
+  async getReviews(workspaceSlug: string, projectId: string, queries?: any): Promise<{ data: any[]; count: number }> {
+    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/test/review/`, {
       params: queries,
     })
       .then((response) => response?.data)
@@ -71,23 +71,24 @@ export class CaseService extends APIService {
       });
   }
 
-  async createReview(workspaceSlug: string, data: any): Promise<any> {
-    return this.post(`/api/workspaces/${workspaceSlug}/test/review/`, data)
+  async createReview(workspaceSlug: string, projectId: string, data: any): Promise<any> {
+    return this.post(`/api/workspaces/${workspaceSlug}/projects/${projectId}/test/review/`, data)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
       });
   }
 
-  async updateReview(workspaceSlug: string, data: any): Promise<any> {
-    return this.put(`/api/workspaces/${workspaceSlug}/test/review/`, data)
+  async updateReview(workspaceSlug: string, projectId: string, data: any): Promise<any> {
+    return this.put(`/api/workspaces/${workspaceSlug}/projects/${projectId}/test/review/`, data)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
       });
   }
-    async deleteReview(workspaceSlug: string, data: { ids: string[] }): Promise<any> {
-    return this.delete(`/api/workspaces/${workspaceSlug}/test/review/`, data)
+
+  async deleteReview(workspaceSlug: string, projectId: string, data: { ids: string[] }): Promise<any> {
+    return this.delete(`/api/workspaces/${workspaceSlug}/projects/${projectId}/test/review/`, data)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
@@ -122,16 +123,16 @@ export class CaseService extends APIService {
         throw error?.response?.data;
       });
   }
-  async CaseCancel(workspaceSlug: string, data: { ids: string[] }): Promise<void> {
-    return this.post(`/api/workspaces/${workspaceSlug}/test/review/cancel-case/`, data)
+  async CaseCancel(workspaceSlug: string, projectId: string, data: { ids: string[] }): Promise<void> {
+    return this.post(`/api/workspaces/${workspaceSlug}/test/review/cancel-case/`, data, { params: { project_id: projectId } })
       .then(() => {})
       .catch((error) => {
         throw error?.response?.data;
       });
   }
 
-  async addReviewCases(workspaceSlug: string, data: { review_id: string; case_ids: string[] }): Promise<void> {
-    return this.post(`/api/workspaces/${workspaceSlug}/test/review/add-cases/`, data)
+  async addReviewCases(workspaceSlug: string, projectId: string, data: { review_id: string; case_ids: string[] }): Promise<void> {
+    return this.post(`/api/workspaces/${workspaceSlug}/test/review/add-cases/`, data, { params: { project_id: projectId } })
       .then(() => {})
       .catch((error) => {
         throw error?.response?.data;

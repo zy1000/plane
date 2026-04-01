@@ -2,7 +2,8 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
-from plane.db.models import WorkspaceMember, ProjectMember, ProjectMemberRole, ProjectRole, ProjectIssueType, Project
+from plane.db.models import WorkspaceMember, ProjectMember, ProjectMemberRole, ProjectRole, ProjectIssueType, Project, \
+    TestCaseRepository
 from functools import wraps
 from rest_framework.response import Response
 from rest_framework import status
@@ -117,6 +118,20 @@ def get_issue_permission_key(action: str, issue_type_name: Optional[str] = None)
         raise ValueError(f"Unsupported issue permission action: {action}") from exc
 
 
+def get_project_from_qa(request):
+    '''测试模块目前传入的参数有一些不带project_id，所以需要从其他关系获取'''
+    project_id = ''
+    repository_id = (
+            request.query_params.get("repository_id")
+            or request.data.get("repository_id")
+            or request.query_params.get("repository")
+            or request.data.get("repository")
+    )
+    if repository_id:
+        project_id = TestCaseRepository.objects.filter(pk=repository_id).values_list('project_id', flat=True).first()
+    return project_id
+
+
 def has_project_issue_permission(
         user,
         workspace_slug: str,
@@ -166,6 +181,8 @@ def allow_project_permission(*permission_keys: str):
             slug = kwargs.get("slug", "")
             project_id = str(kwargs.get("project_id", "")) or str(kwargs.get("pk", "")) or request.query_params.get(
                 'project_id', "")
+            if not project_id:
+                project_id = get_project_from_qa(request)
             user_keys = _get_user_project_permission_keys(request.user, slug, project_id)
             if user_keys.intersection(permission_keys):
                 return view_func(instance, request, *args, **kwargs)

@@ -5,7 +5,7 @@ import { useEffect, useRef, useState, useMemo, type ReactNode } from "react";
 import { PageHead } from "@/components/core/page-title";
 import { Breadcrumbs } from "@plane/ui";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
-import { Row, Col, Tree, Table, Button, Tag, message, Pagination, Popconfirm, Select } from "antd";
+import { Row, Col, Tree, Table, Button, Tag, Pagination, Popconfirm, Select } from "antd";
 import type { TreeProps, TableProps } from "antd";
 import { AppstoreOutlined, DownOutlined } from "@ant-design/icons";
 import { CaseService as CaseApiService } from "@/services/qa/case.service";
@@ -16,6 +16,8 @@ import { FolderOpenDot, Atom } from "lucide-react";
 import UpdateModal from "@/components/qa/cases/update-modal";
 import TestCaseSelectionModal from "@/components/qa/review/TestCaseSelectionModal";
 import { useUser } from "@/hooks/store/user";
+import { useTranslation } from "@plane/i18n";
+import { qaCaseErrorContent, qaCaseSetToastError, qaCaseSetToastSuccess, qaCaseSetToastWarning } from "@/utils/qa-case-error";
 
 
 type ReviewCaseRow = {
@@ -30,6 +32,7 @@ type ReviewCaseRow = {
 };
 
 export default function CaseManagementReviewDetailPage() {
+  const { t } = useTranslation();
   const { workspaceSlug, projectId } = useParams<{ workspaceSlug: string; projectId: string }>();
   const searchParams = useSearchParams();
   const reviewId = searchParams.get("review_id") ?? "";
@@ -164,9 +167,10 @@ export default function CaseManagementReviewDetailPage() {
       setTotal(Number(res?.count || 0));
       setCurrentPage(page);
       setPageSize(size);
-    } catch (e: any) {
-      setError(e?.message || e?.detail || e?.error || "获取评审用例列表失败");
-      message.error(e?.message || e?.detail || e?.error || "获取评审用例列表失败");
+    } catch (e: unknown) {
+      const fallback = "获取评审用例列表失败";
+      setError(qaCaseErrorContent(e, t, fallback));
+      qaCaseSetToastError(e, t, fallback);
     } finally {
       setLoading(false);
     }
@@ -331,7 +335,7 @@ export default function CaseManagementReviewDetailPage() {
             e.preventDefault();
             e.stopPropagation();
             if (!record?.case_id) {
-              message.error("缺少用例信息，无法打开");
+              qaCaseSetToastWarning("缺少用例信息，无法打开");
               return;
             }
             setActiveCaseId(String(record.case_id));
@@ -356,7 +360,7 @@ export default function CaseManagementReviewDetailPage() {
             e.preventDefault();
             e.stopPropagation();
             if (!record?.case_id) {
-              message.error("缺少用例信息，无法打开");
+              qaCaseSetToastWarning("缺少用例信息，无法打开");
               return;
             }
             setActiveCaseId(String(record.case_id));
@@ -461,11 +465,11 @@ export default function CaseManagementReviewDetailPage() {
             onClick={async () => {
               if (!workspaceSlug || !reviewId) return;
               try {
-                await reviewService.CaseCancel(workspaceSlug as string, { ids: [record.id] });
-                message.success("已取消关联");
+                await reviewService.CaseCancel(workspaceSlug as string, projectId as string, { ids: [record.id] });
+                qaCaseSetToastSuccess("已取消关联");
                 fetchReviewCaseList(currentPage, pageSize);
-              } catch (e: any) {
-                message.error(e?.message || e?.detail || e?.error || "操作失败");
+              } catch (e: unknown) {
+                qaCaseSetToastError(e, t, "操作失败");
               }
             }}
           >
@@ -680,12 +684,12 @@ export default function CaseManagementReviewDetailPage() {
                                     assignee: currentUser?.id ? String(currentUser.id) : undefined,
                                   });
                                   
-                                  message.success("已批量通过用例");
+                                  qaCaseSetToastSuccess("已批量通过用例");
                                   setSelectedCaseIds([]);
                                   setSelectedCaseMap({});
                                   fetchReviewCaseList(1, pageSize);
-                                } catch (e: any) {
-                                  message.error(e?.message || e?.detail || e?.error || "操作失败");
+                                } catch (e: unknown) {
+                                  qaCaseSetToastError(e, t, "操作失败");
                                 }
                               }}
                               okText="确定"
@@ -703,13 +707,13 @@ export default function CaseManagementReviewDetailPage() {
                               onConfirm={async () => {
                                 if (!workspaceSlug || !reviewId) return;
                                 try {
-                                  await reviewService.CaseCancel(workspaceSlug as string, { ids: selectedCaseIds });
-                                  message.success("已批量取消关联");
+                                  await reviewService.CaseCancel(workspaceSlug as string, projectId as string, { ids: selectedCaseIds });
+                                  qaCaseSetToastSuccess("已批量取消关联");
                                   setSelectedCaseIds([]);
                                   setSelectedCaseMap({});
                                   fetchReviewCaseList(1, pageSize);
-                                } catch (e: any) {
-                                  message.error(e?.message || e?.detail || e?.error || "操作失败");
+                                } catch (e: unknown) {
+                                  qaCaseSetToastError(e, t, "操作失败");
                                 }
                               }}
                               okText="确定"
@@ -796,13 +800,13 @@ export default function CaseManagementReviewDetailPage() {
           onConfirm={async (ids) => {
             if (!workspaceSlug || !reviewId) return;
             try {
-              await reviewService.addReviewCases(String(workspaceSlug), { review_id: String(reviewId), case_ids: ids || [] });
-              message.success("已关联所选用例");
+              await reviewService.addReviewCases(String(workspaceSlug), String(projectId), { review_id: String(reviewId), case_ids: ids || [] });
+              qaCaseSetToastSuccess("已关联所选用例");
               setIsCaseSelectionOpen(false);
               fetchReviewTree();
               fetchReviewCaseList(1, pageSize, selectedModuleId);
-            } catch (e: any) {
-              message.error(e?.message || e?.detail || e?.error || "关联用例失败");
+            } catch (e: unknown) {
+              qaCaseSetToastError(e, t, "关联用例失败");
             }
           }}
         />

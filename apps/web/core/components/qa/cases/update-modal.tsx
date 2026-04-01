@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { useParams } from "next/navigation";
 import { CaseService } from "../../../services/qa/case.service";
 import { CaseService as ReviewApiService } from "../../../services/qa/review.service";
-import { Tag, Spin, Tooltip, message, Input, Table, Select, Button } from "antd";
+import { Tag, Spin, Tooltip, Input, Table, Select, Button } from "antd";
 import { getEnums } from "@/app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/util";
 import { useMember } from "@/hooks/store/use-member";
 import * as LucideIcons from "lucide-react";
@@ -25,6 +25,13 @@ import { IssuePeekOverview } from "@/components/issues/peek-overview";
 import { formatCNDateTime } from "./util";
 import styles from "./update-modal.module.css";
 import { ExecutionRecordDetailModal } from "../execution/execution-records";
+import { useTranslation } from "@plane/i18n";
+import {
+  qaCaseErrorContent,
+  qaCaseSetToastError,
+  qaCaseSetToastSuccess,
+  qaCaseSetToastWarning,
+} from "@/utils/qa-case-error";
 
 type UpdateModalProps = {
   open: boolean;
@@ -34,14 +41,15 @@ type UpdateModalProps = {
   projectId?: string;
 };
 
-function UpdateModal({ open, onClose, caseId, workspaceSlug: propWorkspaceSlug, projectId: propProjectId }: UpdateModalProps) {
-  if (!open || !caseId) return null;
+function UpdateModalBody({ open, onClose, caseId, workspaceSlug: propWorkspaceSlug, projectId: propProjectId }: UpdateModalProps) {
+  const { t } = useTranslation();
 
   const [activeTab, setActiveTab] = useState<string>("basic");
   // 增加：本地状态与失焦更新逻辑
   const params = useParams() as { workspaceSlug?: string; projectId?: string };
   const workspaceSlug = propWorkspaceSlug || params.workspaceSlug;
   const projectId = propProjectId || params.projectId;
+  const projectIdStr = projectId ? String(projectId) : "";
   const caseService = React.useMemo(() => new CaseService(), []);
   const reviewService = React.useMemo(() => new ReviewApiService(), []);
   const loadSeqRef = React.useRef<number>(0);
@@ -59,26 +67,27 @@ function UpdateModal({ open, onClose, caseId, workspaceSlug: propWorkspaceSlug, 
   const handleBlurTitle = async () => {
     const newName = title?.trim();
     const oldName = (caseData?.name ?? "").trim();
-    if (!workspaceSlug || !caseId) return;
+    if (!workspaceSlug || !caseId || !projectIdStr) return;
     if (newName === oldName) return;
     try {
-      await caseService.updateCase(String(workspaceSlug), { id: caseId, name: newName });
+      await caseService.updateCase(String(workspaceSlug), projectIdStr, { id: caseId, name: newName });
       // 本地 optimistic 更新，避免再次请求导致闪动
       setCaseData((prev: any) => (prev ? { ...prev, name: newName } : prev));
-    } catch {
-      // 静默处理（可接入通知）
+    } catch (e) {
+      qaCaseSetToastError(e, t, "更新名称失败");
     }
   };
 
   const handleBlurCode = async () => {
     const newCode = (codeValue ?? "").trim();
     const oldCode = String(caseData?.code ?? "");
-    if (!workspaceSlug || !caseId) return;
+    if (!workspaceSlug || !caseId || !projectIdStr) return;
     if (newCode === oldCode) return;
     try {
-      await caseService.updateCase(String(workspaceSlug), { id: caseId, code: newCode });
+      await caseService.updateCase(String(workspaceSlug), projectIdStr, { id: caseId, code: newCode });
       setCaseData((prev: any) => (prev ? { ...prev, code: newCode } : prev));
-    } catch {
+    } catch (e) {
+      qaCaseSetToastError(e, t, "更新编号失败");
     }
   };
 
@@ -95,7 +104,7 @@ function UpdateModal({ open, onClose, caseId, workspaceSlug: propWorkspaceSlug, 
       }
     } catch (error) {
       console.error("创建标签失败:", error);
-      message.error("创建标签失败");
+      qaCaseSetToastError(error, t, "创建标签失败");
     }
   };
 
@@ -106,7 +115,7 @@ function UpdateModal({ open, onClose, caseId, workspaceSlug: propWorkspaceSlug, 
       setLabelList((prev) => prev.filter((l) => l.id !== labelId));
     } catch (error) {
       console.error("删除标签失败:", error);
-      message.error("删除标签失败");
+      qaCaseSetToastError(error, t, "删除标签失败");
     }
   };
 
@@ -172,9 +181,9 @@ function UpdateModal({ open, onClose, caseId, workspaceSlug: propWorkspaceSlug, 
       setExecTotal(count);
       setExecPage(1);
     } catch (e: any) {
-      const msg = e?.message || e?.detail || e?.error || "获取执行记录失败";
+      const msg = qaCaseErrorContent(e, t, "获取执行记录失败");
       setExecError(msg);
-      message.error(msg);
+      qaCaseSetToastError(e, t, "获取执行记录失败");
     } finally {
       setExecLoading(false);
     }
@@ -216,9 +225,9 @@ function UpdateModal({ open, onClose, caseId, workspaceSlug: propWorkspaceSlug, 
       setReviewTotal(count);
       setReviewPage(1);
     } catch (e: any) {
-      const msg = e?.message || e?.detail || e?.error || "获取评审记录失败";
+      const msg = qaCaseErrorContent(e, t, "获取评审记录失败");
       setReviewError(msg);
-      message.error(msg);
+      qaCaseSetToastError(e, t, "获取评审记录失败");
     } finally {
       setReviewLoading(false);
     }
@@ -248,15 +257,15 @@ function UpdateModal({ open, onClose, caseId, workspaceSlug: propWorkspaceSlug, 
 
   const handleWorkItemConfirm = async (issues: any[]) => {
     try {
-      if (!workspaceSlug || !caseId) return;
+      if (!workspaceSlug || !caseId || !projectIdStr) return;
       const issueIds = (issues || []).map((i) => i.id);
-      await caseService.updateCase(String(workspaceSlug), { id: caseId, issues: issueIds });
+      await caseService.updateCase(String(workspaceSlug), projectIdStr, { id: caseId, issues: issueIds });
       setIsWorkItemModalOpen(false);
       setReloadToken((t) => t + 1);
       await fetchCaseData();
-      message.success("关联工作项已更新");
+      qaCaseSetToastSuccess("关联工作项已更新");
     } catch (e: any) {
-      message.error(e?.message || e?.detail || e?.error || "更新失败");
+      qaCaseSetToastError(e, t, "更新失败");
     }
   };
 
@@ -293,7 +302,7 @@ function UpdateModal({ open, onClose, caseId, workspaceSlug: propWorkspaceSlug, 
     const key = `${file.name}-${file.size}-${file.lastModified}`;
     const uploading = !!attachmentUploading[key];
     if (uploading) {
-      message.warning("该附件正在上传，无法删除");
+      qaCaseSetToastWarning("该附件正在上传，无法删除");
       return;
     }
     const assetId = attachmentAssetMap[key];
@@ -311,17 +320,16 @@ function UpdateModal({ open, onClose, caseId, workspaceSlug: propWorkspaceSlug, 
         const { [key]: _, ...rest } = prev;
         return rest;
       });
-      message.success("附件已删除");
+      qaCaseSetToastSuccess("附件已删除");
     } catch (e: any) {
-      const msg = e?.message || e?.detail || e?.error || "附件删除失败";
-      message.error(msg);
+      qaCaseSetToastError(e, t, "附件删除失败");
     }
   };
 
   const uploadAttachmentViaProjectAssetEndpoint = async (file: File) => {
     try {
       if (!workspaceSlug) {
-        message.error("缺少必要参数(workspaceSlug)，无法上传附件");
+        qaCaseSetToastWarning("缺少必要参数(workspaceSlug)，无法上传附件");
         return;
       }
       const key = `${file.name}-${file.size}-${file.lastModified}`;
@@ -356,10 +364,9 @@ function UpdateModal({ open, onClose, caseId, workspaceSlug: propWorkspaceSlug, 
         const refreshed = await caseService.getCaseAssetList(String(workspaceSlug), String(caseId));
         setCaseAttachments(Array.isArray(refreshed) ? refreshed : []);
       } catch {}
-      message.success(`附件 ${file.name} 上传完成`);
+      qaCaseSetToastSuccess(`附件 ${file.name} 上传完成`);
     } catch (e: any) {
-      const msg = e?.message || e?.detail || e?.error || "附件上传失败";
-      message.error(msg);
+      qaCaseSetToastError(e, t, "附件上传失败");
     } finally {
       const key = `${file.name}-${file.size}-${file.lastModified}`;
       setAttachmentUploading((prev) => ({ ...prev, [key]: false }));
@@ -458,7 +465,7 @@ function UpdateModal({ open, onClose, caseId, workspaceSlug: propWorkspaceSlug, 
     if (!workspaceSlug || !caseId) return;
     const content = newComment.trim();
     if (!content) {
-      message.warning("请输入评论内容");
+      qaCaseSetToastWarning("请输入评论内容");
       return;
     }
     try {
@@ -468,7 +475,7 @@ function UpdateModal({ open, onClose, caseId, workspaceSlug: propWorkspaceSlug, 
       setCommentPlaceholder("输入评论内容");
       fetchComments(true);
     } catch (e: any) {
-      message.error(e?.message || e?.detail || e?.error || "创建失败");
+      qaCaseSetToastError(e, t, "创建失败");
     }
   };
 
@@ -476,7 +483,7 @@ function UpdateModal({ open, onClose, caseId, workspaceSlug: propWorkspaceSlug, 
     if (!workspaceSlug || !caseId) return;
     const content = (replyContent[parentId] || "").trim();
     if (!content) {
-      message.warning("请输入回复内容");
+      qaCaseSetToastWarning("请输入回复内容");
       return;
     }
     try {
@@ -489,7 +496,7 @@ function UpdateModal({ open, onClose, caseId, workspaceSlug: propWorkspaceSlug, 
       setReplyContent((prev) => ({ ...prev, [parentId]: "" }));
       fetchComments(true);
     } catch (e: any) {
-      message.error(e?.message || e?.detail || e?.error || "回复失败");
+      qaCaseSetToastError(e, t, "回复失败");
     }
   };
   const handleDelete = async (id: string) => {
@@ -498,7 +505,7 @@ function UpdateModal({ open, onClose, caseId, workspaceSlug: propWorkspaceSlug, 
       await caseService.deleteComment(String(workspaceSlug), String(id));
       fetchComments(true);
     } catch (e: any) {
-      message.error(e?.message || e?.detail || e?.error || "删除失败");
+      qaCaseSetToastError(e, t, "删除失败");
     }
   };
 
@@ -746,11 +753,13 @@ function UpdateModal({ open, onClose, caseId, workspaceSlug: propWorkspaceSlug, 
   };
 
   const handleChangeTestType = async (v: string) => {
-    if (!workspaceSlug || !caseId) return;
+    if (!workspaceSlug || !caseId || !projectIdStr) return;
     setCaseData((prev: any) => (prev ? { ...prev, test_type: Number(v) } : prev));
     try {
-      await caseService.updateCase(String(workspaceSlug), { id: String(caseId), test_type: Number(v) });
-    } catch {}
+      await caseService.updateCase(String(workspaceSlug), projectIdStr, { id: String(caseId), test_type: Number(v) });
+    } catch (e) {
+      qaCaseSetToastError(e, t, "更新测试类型失败");
+    }
   };
 
   const hydrateFromCaseData = (data: any) => {
@@ -904,59 +913,59 @@ function UpdateModal({ open, onClose, caseId, workspaceSlug: propWorkspaceSlug, 
 
   // 新增：失焦更新（各字段）
   const handleBlurAssignee = async () => {
-    if (!workspaceSlug || !caseId) return;
+    if (!workspaceSlug || !caseId || !projectIdStr) return;
     if (assignee === normalizeId(caseData?.assignee)) return;
     try {
-      await caseService.updateCase(String(workspaceSlug), { id: caseId, assignee });
+      await caseService.updateCase(String(workspaceSlug), projectIdStr, { id: caseId, assignee });
       setCaseData((prev: any) => (prev ? { ...prev, assignee } : prev));
-    } catch {
-      // 静默处理
+    } catch (e) {
+      qaCaseSetToastError(e, t, "更新负责人失败");
     }
   };
 
   const handleUpdateAssine = async (v: any) => {
-    if (!workspaceSlug || !caseId) return;
+    if (!workspaceSlug || !caseId || !projectIdStr) return;
 
     if (v === normalizeId(caseData?.assignee)) return;
     try {
-      await caseService.updateCase(String(workspaceSlug), { id: caseId, assignee: v });
+      await caseService.updateCase(String(workspaceSlug), projectIdStr, { id: caseId, assignee: v });
       setCaseData((prev: any) => (prev ? { ...prev, assignee: normalizeId(v) } : prev));
       setAssignee(normalizeId(v));
-    } catch {
-      // 静默处理
+    } catch (e) {
+      qaCaseSetToastError(e, t, "更新负责人失败");
     }
   };
 
   const handleBlurState = async () => {
-    if (!workspaceSlug || !caseId) return;
+    if (!workspaceSlug || !caseId || !projectIdStr) return;
     if (stateValue === normalizeId(caseData?.state)) return;
     try {
-      await caseService.updateCase(String(workspaceSlug), { id: caseId, state: stateValue });
+      await caseService.updateCase(String(workspaceSlug), projectIdStr, { id: caseId, state: stateValue });
       setCaseData((prev: any) => (prev ? { ...prev, state: stateValue } : prev));
-    } catch {
-      // 静默处理
+    } catch (e) {
+      qaCaseSetToastError(e, t, "更新状态失败");
     }
   };
 
   const handleBlurType = async () => {
-    if (!workspaceSlug || !caseId) return;
+    if (!workspaceSlug || !caseId || !projectIdStr) return;
     if (typeValue === normalizeId(caseData?.type)) return;
     try {
-      await caseService.updateCase(String(workspaceSlug), { id: caseId, type: typeValue });
+      await caseService.updateCase(String(workspaceSlug), projectIdStr, { id: caseId, type: typeValue });
       setCaseData((prev: any) => (prev ? { ...prev, type: typeValue } : prev));
-    } catch {
-      // 静默处理
+    } catch (e) {
+      qaCaseSetToastError(e, t, "更新类型失败");
     }
   };
 
   const handleBlurPriority = async () => {
-    if (!workspaceSlug || !caseId) return;
+    if (!workspaceSlug || !caseId || !projectIdStr) return;
     if (priorityValue === normalizeId(caseData?.priority)) return;
     try {
-      await caseService.updateCase(String(workspaceSlug), { id: caseId, priority: priorityValue });
+      await caseService.updateCase(String(workspaceSlug), projectIdStr, { id: caseId, priority: priorityValue });
       setCaseData((prev: any) => (prev ? { ...prev, priority: priorityValue } : prev));
-    } catch {
-      // 静默处理
+    } catch (e) {
+      qaCaseSetToastError(e, t, "更新优先级失败");
     }
   };
 
@@ -970,7 +979,7 @@ function UpdateModal({ open, onClose, caseId, workspaceSlug: propWorkspaceSlug, 
     textResult: string;
     remark: string;
   }) => {
-    if (!workspaceSlug || !caseId) return;
+    if (!workspaceSlug || !caseId || !projectIdStr) return;
 
     const payload: any = {};
     let hasChange = false;
@@ -1020,11 +1029,11 @@ function UpdateModal({ open, onClose, caseId, workspaceSlug: propWorkspaceSlug, 
     if (!hasChange) return;
 
     try {
-      await caseService.updateCase(String(workspaceSlug), { id: caseId, ...payload });
+      await caseService.updateCase(String(workspaceSlug), projectIdStr, { id: caseId, ...payload });
       setCaseData((prev: any) => (prev ? { ...prev, ...payload } : prev));
-      message.success("保存成功");
+      qaCaseSetToastSuccess("保存成功");
     } catch (e: any) {
-      message.error(e?.message || "保存失败");
+      qaCaseSetToastError(e, t, "保存失败");
     }
   };
 
@@ -1485,4 +1494,7 @@ function UpdateModal({ open, onClose, caseId, workspaceSlug: propWorkspaceSlug, 
   );
 }
 
-export default UpdateModal;
+export default function UpdateModal(props: UpdateModalProps) {
+  if (!props.open || !props.caseId) return null;
+  return <UpdateModalBody {...props} />;
+}

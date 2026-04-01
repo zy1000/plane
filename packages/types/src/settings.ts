@@ -15,6 +15,7 @@ export type TWorkspaceSettingsTabs =
   | "members"
   | "groups"
   | "roles"
+  | "templates"
   | "export"
   | "webhooks";
 export type TWorkspaceSettingsItem = {

@@ -80,6 +80,8 @@ export const CaseMindmap = ({ data, editable = true, before, onOperation, onCont
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mindRef = useRef<MindElixirInstance | null>(null);
   const decorateScheduledRef = useRef(false);
+  const editableRef = useRef(editable);
+  editableRef.current = editable;
   const decorateTags = () => {
     const container = containerRef.current;
     if (!container) return;
@@ -249,8 +251,8 @@ export const CaseMindmap = ({ data, editable = true, before, onOperation, onCont
       const isNode = target.tagName === "ME-TPC" || target.closest("me-tpc");
       const menus = document.querySelectorAll(".context-menu");
 
-      if (!isNode) {
-        // If clicking on background, hide menu
+      if (!isNode || !editableRef.current) {
+        // If clicking on background or edit is disabled, hide menu
         menus.forEach((m) => ((m as HTMLElement).style.display = "none"));
         return;
       }
@@ -362,9 +364,47 @@ export const CaseMindmap = ({ data, editable = true, before, onOperation, onCont
 
   const isFirstRender = useRef(true);
 
+  const collectExpandedState = (node: NodeObj | null | undefined, map: Map<string, boolean>) => {
+    if (!node) return;
+    map.set(String(node.id), (node as any).expanded !== false);
+    const children = Array.isArray(node.children) ? node.children : [];
+    for (const child of children) {
+      collectExpandedState(child, map);
+    }
+  };
+
+  const applyExpandedState = (node: NodeObj, map: Map<string, boolean>): NodeObj => {
+    if (!node) return node;
+    const id = String((node as any).id || "");
+    const children = Array.isArray(node.children)
+      ? node.children.map((c: NodeObj) => applyExpandedState(c, map))
+      : [];
+    if (map.has(id)) {
+      return { ...node, expanded: map.get(id), children } as NodeObj;
+    }
+    return { ...node, children };
+  };
+
   useEffect(() => {
     if (!mindRef.current) return;
-    mindRef.current.refresh(data);
+
+    let dataToRender = data;
+
+    if (!isFirstRender.current) {
+      const expandedMap = new Map<string, boolean>();
+      const currentNodeData = (mindRef.current as any)?.nodeData as NodeObj | undefined;
+      if (currentNodeData) {
+        collectExpandedState(currentNodeData, expandedMap);
+        if (expandedMap.size > 0 && data.nodeData) {
+          dataToRender = {
+            ...data,
+            nodeData: applyExpandedState(data.nodeData, expandedMap),
+          };
+        }
+      }
+    }
+
+    mindRef.current.refresh(dataToRender);
     scheduleDecorateTags();
     if (isFirstRender.current) {
       try {

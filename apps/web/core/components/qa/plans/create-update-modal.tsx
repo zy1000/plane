@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
-import { TOAST_TYPE, setToast } from "@plane/propel/toast";
+import { useTranslation } from "@plane/i18n";
+import { qaCaseSetToastError, qaCaseSetToastSuccess } from "@/utils/qa-case-error";
 import { Button } from "@plane/propel/button";
 import { Input, TextArea, EModalPosition, EModalWidth, ModalCore, CustomSearchSelect } from "@plane/ui";
 import { CalendarDays } from "lucide-react";
@@ -57,6 +58,8 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
     initialData,
     onSuccess,
   } = props;
+
+  const { t } = useTranslation();
 
   // 表单状态
   const [name, setName] = useState<string>(initialData?.name ?? "");
@@ -227,9 +230,9 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
       };
 
       if (mode === "create") {
-        await planService.createPlan(workspaceSlug, payload);
+        await planService.createPlan(workspaceSlug, projectId, payload);
       } else if (mode === "edit" && planId) {
-        await planService.updatePlan(workspaceSlug, {
+        await planService.updatePlan(workspaceSlug, projectId, {
           id: planId,
           name: payload.name,
           description: payload.description,
@@ -242,22 +245,14 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
         });
       }
 
-      setToast({
-        type: TOAST_TYPE.SUCCESS,
-        title: "成功",
-        message: mode === "edit" ? "测试计划更新成功" : "测试计划创建成功",
-      });
+      qaCaseSetToastSuccess(mode === "edit" ? "测试计划更新成功" : "测试计划创建成功");
 
       await onSuccess?.();
 
       // 关闭并重置
       onCloseWithReset();
-    } catch (e: any) {
-      setToast({
-        type: TOAST_TYPE.ERROR,
-        title: "失败",
-        message: e?.message || e?.detail || e?.error || "操作失败，请稍后重试",
-      });
+    } catch (e: unknown) {
+      qaCaseSetToastError(e, t, "操作失败，请稍后重试");
     } finally {
       setSubmitting(false);
     }
@@ -271,15 +266,16 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
           {/* 计划名称（必填，红色星号） */}
           <div className="col-span-1">
             <label className="text-sm text-secondary mb-1 block">
-              计划名称<span className="text-red-500">*</span>
+              计划名称<span className="text-danger-primary">*</span>
             </label>
             <Input
               placeholder="请输入计划名称"
               value={name}
               onChange={(e) => setName(e.target.value)}
               className="w-full"
+              hasError={Boolean(errors.name)}
             />
-            {errors.name && <p className="text-xs text-red-500 mt-1">{errors.name}</p>}
+            <span className="text-caption-sm-medium text-danger-primary">{errors.name}</span>
           </div>
 
           {/* 描述（可选） */}
@@ -297,7 +293,7 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
           {/* 所属模块（下拉选择，可搜索，必选） */}
           <div className="col-span-1">
             <label className="text-sm text-secondary mb-1 block">
-              所属模块<span className="text-red-500">*</span>
+              所属模块<span className="text-danger-primary">*</span>
             </label>
             <CustomSearchSelect
               className="w-[320px]"
@@ -307,7 +303,9 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
               multiple={false}
               customButtonClassName="w-full hover:bg-transparent focus:bg-transparent active:bg-transparent"
               customButton={
-                <div className="flex w-full max-w-[320px] items-center justify-between gap-1 rounded border-[0.5px] border-subtle-1 px-3 py-2 text-sm">
+                <div
+                  className={`flex w-full max-w-[320px] items-center justify-between gap-1 rounded border-[0.5px] px-3 py-2 text-sm ${errors.module ? "border-danger-strong" : "border-subtle-1"}`}
+                >
                   <span className="flex-grow truncate">
                     {moduleOptions.find((o) => o.value === moduleId)?.content || (
                       <span className="text-placeholder">请选择所属模块</span>
@@ -316,7 +314,7 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
                 </div>
               }
             />
-            {errors.module && <p className="text-xs text-red-500 mt-1">{errors.module}</p>}
+            <span className="text-caption-sm-medium text-danger-primary">{errors.module}</span>
           </div>
 
           {/* 关联迭代（下拉选择，可搜索，单选） */}
@@ -343,7 +341,7 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
 
           <div className="col-span-1">
             <label className="text-sm text-secondary mb-1 block">
-              执行人<span className="text-red-500">*</span>
+              执行人<span className="text-danger-primary">*</span>
             </label>
             <div className="h-9 w-full max-w-[320px]">
               <MemberDropdown
@@ -359,7 +357,7 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
                 optionsClassName="z-[1100]"
               />
             </div>
-            {errors.assignees && <p className="text-xs text-red-500 mt-1">{errors.assignees}</p>}
+            <span className="text-caption-sm-medium text-danger-primary">{errors.assignees}</span>
           </div>
 
           {/* 计划起止时间样式参照 CreateReviewModal.tsx L177-200 */}
@@ -398,7 +396,7 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
                 />
               </div>
             </div>
-            {errors.time && <p className="text-xs text-red-500 mt-1">{errors.time}</p>}
+            <span className="text-caption-sm-medium text-danger-primary">{errors.time}</span>
           </div>
 
           {/* 通过阀值（数字输入，带加减按钮，范围 0-100） */}
@@ -406,8 +404,7 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
             <label className="text-sm text-secondary mb-1 block">通过阀值</label>
             <div className="flex items-center gap-2">
               <Button
-                variant="primary"
-                size="sm"
+                variant="secondary"
                 onClick={() => setThreshold((prev) => Math.max(0, Math.min(100, (Number(prev) || 0) - 1)))}
               >
                 -
@@ -421,28 +418,27 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
                   if (Number.isFinite(num)) setThreshold(Math.max(0, Math.min(100, num)));
                 }}
                 className="w-24"
+                hasError={Boolean(errors.threshold)}
               />
               <Button
-                variant="primary"
-                size="sm"
+                variant="secondary"
                 onClick={() => setThreshold((prev) => Math.max(0, Math.min(100, (Number(prev) || 0) + 1)))}
               >
                 +
               </Button>
               <span className="text-sm text-placeholder">范围 0 - 100%</span>
             </div>
-            {errors.threshold && <p className="text-xs text-red-500 mt-1">{errors.threshold}</p>}
+            <span className="text-caption-sm-medium text-danger-primary">{errors.threshold}</span>
           </div>
         </div>
 
         {/* 操作区 */}
         <div className="flex items-center justify-end gap-2 mt-6">
-          <Button variant="primary" size="sm" onClick={onCloseWithReset} disabled={submitting}>
+          <Button variant="secondary" onClick={onCloseWithReset} disabled={submitting}>
             取消
           </Button>
           <Button
             variant="primary"
-            size="sm"
             onClick={handleSubmit}
             loading={submitting}
             disabled={submitting}

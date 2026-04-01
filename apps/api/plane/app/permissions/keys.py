@@ -150,16 +150,12 @@ class PermissionKey(str, Enum):
     QA_PLAN_CREATE = "qa.plan.create"
     QA_PLAN_EDIT = "qa.plan.edit"
     QA_PLAN_DELETE = "qa.plan.delete"
-    QA_PLAN_EXECUTE = "qa.plan.execute"
     QA_REVIEW_VIEW = "qa.review.view"
     QA_REVIEW_CREATE = "qa.review.create"
     QA_REVIEW_EDIT = "qa.review.edit"
     QA_REVIEW_DELETE = "qa.review.delete"
-    QA_REVIEW_REVIEW = "qa.review.review"
-    QA_REVIEW_CONFIRM = "qa.review.confirm"
     QA_MINDMAP_VIEW = "qa.mindmap.view"
     QA_MINDMAP_EDIT = "qa.mindmap.edit"
-    QA_MINDMAP_ASSET_UPLOAD = "qa.mindmap.asset_upload"
 
     def __str__(self) -> str:
         return self.value

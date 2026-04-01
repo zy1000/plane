@@ -1114,7 +1114,13 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
         return;
       }
 
-      const createdCase = await caseService.createCase(workspaceSlug, payload);
+      if (!projectId) {
+        message.warning("缺少项目上下文");
+        setSubmitting(false);
+        return;
+      }
+
+      const createdCase = await caseService.createCase(workspaceSlug, String(projectId), payload);
       message.success("测试用例创建成功");
 
       const caseId: string | undefined = createdCase?.id ?? createdCase?.case?.id;

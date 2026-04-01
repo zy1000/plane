@@ -7,15 +7,25 @@ import { Breadcrumbs } from "@plane/ui";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { RepositorySelect } from "../../repository-select";
 import { UnorderedListOutlined, ShareAltOutlined } from "@ant-design/icons";
-import { Col, Input, Modal, Row, Tree, message } from "antd";
+import { Col, Input, Modal, Row, Tree } from "antd";
 import type { TreeProps } from "antd";
 import { CaseService } from "@/services/qa/case.service";
 import { CaseModuleService } from "@/services/qa/case-module.service";
 import { CaseMindmap } from "@/components/qa/cases/case-mindmap";
 import type { MindElixirData, NodeObj, Operation, Topic } from "mind-elixir";
 import { useUser } from "@/hooks/store/user";
+import { useTranslation } from "@plane/i18n";
+import {
+  qaCaseSetToastError,
+  qaCaseSetToastInfo,
+  qaCaseSetToastSuccess,
+  qaCaseSetToastWarning,
+} from "@/utils/qa-case-error";
+import { useProjectPermissions } from "@/hooks/store/use-project-permissions";
+import UnauthorizedImg from "@/app/assets/auth/unauthorized.svg?url";
 
 export default function TestCasesMindPage() {
+  const { t } = useTranslation();
   const { workspaceSlug, projectId } = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -66,6 +76,15 @@ export default function TestCasesMindPage() {
   const caseModuleService = useMemo(() => new CaseModuleService(), []);
   const { data: currentUser } = useUser();
   const currentUserId = currentUser?.id ? String(currentUser.id) : null;
+
+  const {
+    isLoading: permissionsLoading,
+    fetched: permissionsFetched,
+    hasPermission,
+  } = useProjectPermissions(String(workspaceSlug || ""), String(projectId || ""));
+
+  const canViewMindmap = !permissionsFetched || hasPermission("qa.mindmap.view");
+  const canEditMindmap = hasPermission("qa.mindmap.edit");
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -370,7 +389,8 @@ export default function TestCasesMindPage() {
 
   const handleMindOperation = async (op: Operation) => {
     const ws = String(workspaceSlug || "");
-    if (!ws) return;
+    const pid = String(projectId || "");
+    if (!ws || !pid) return;
 
     if (op.name === "finishEdit") {
       const tpc = op.obj as any;
@@ -387,7 +407,7 @@ export default function TestCasesMindPage() {
           const existing = caseMapRef.current[caseId];
           const code = existing?.code ? String(existing.code) : "";
           const name = code && saveText.startsWith(code + " ") ? saveText.slice(code.length + 1) : saveText;
-          await caseService.updateCase(ws, { id: caseId, name: name || "" });
+          await caseService.updateCase(ws, pid, { id: caseId, name: name || "" });
           caseMapRef.current[caseId] = { ...(existing || {}), name: name || "" };
           return;
         }
@@ -399,22 +419,22 @@ export default function TestCasesMindPage() {
           if (!caseId || !field) return;
 
           if (field === "precondition") {
-            await caseService.updateCase(ws, { id: caseId, precondition: plainToHtml(saveText) });
+            await caseService.updateCase(ws, pid, { id: caseId, precondition: plainToHtml(saveText) });
             caseMapRef.current[caseId] = { ...existing, precondition: plainToHtml(saveText) };
             return;
           }
           if (field === "remark") {
-            await caseService.updateCase(ws, { id: caseId, remark: plainToHtml(saveText) });
+            await caseService.updateCase(ws, pid, { id: caseId, remark: plainToHtml(saveText) });
             caseMapRef.current[caseId] = { ...existing, remark: plainToHtml(saveText) };
             return;
           }
           if (field === "text_description") {
-            await caseService.updateCase(ws, { id: caseId, text_description: plainToHtml(saveText) });
+            await caseService.updateCase(ws, pid, { id: caseId, text_description: plainToHtml(saveText) });
             caseMapRef.current[caseId] = { ...existing, text_description: plainToHtml(saveText) };
             return;
           }
           if (field === "text_result") {
-            await caseService.updateCase(ws, { id: caseId, text_result: plainToHtml(saveText) });
+            await caseService.updateCase(ws, pid, { id: caseId, text_result: plainToHtml(saveText) });
             caseMapRef.current[caseId] = { ...existing, text_result: plainToHtml(saveText) };
             return;
           }
@@ -434,13 +454,13 @@ export default function TestCasesMindPage() {
           if (isDesc) row.description = saveText;
           else row.result = saveText;
           steps[idx] = row;
-          await caseService.updateCase(ws, { id: caseId, steps });
+          await caseService.updateCase(ws, pid, { id: caseId, steps });
           caseMapRef.current[caseId] = { ...existing, steps };
           return;
         }
       } catch (e: any) {
         try {
-          message.error((e as any)?.error || "保存失败");
+          qaCaseSetToastError(e, t, "保存失败");
         } catch {}
       }
       return;
@@ -483,7 +503,7 @@ export default function TestCasesMindPage() {
       } catch (e: any) {
         failed = true;
         try {
-          message.error((e as any)?.error || "移动失败");
+          qaCaseSetToastError(e, t, "移动失败");
         } catch {}
       }
 
@@ -566,10 +586,11 @@ export default function TestCasesMindPage() {
 
   const handleContextAction = async (action: string, node: NodeObj) => {
     const ws = String(workspaceSlug || "");
+    const pid = String(projectId || "");
     const repoId = repositoryId ? String(repositoryId) : "";
     const nodeId = String((node as any)?.id || "");
 
-    if (!ws || !repoId || !nodeId) return;
+    if (!ws || !pid || !repoId || !nodeId) return;
 
     const refreshAll = async () => {
       await Promise.allSettled([fetchModules(), fetchMind(true)]);
@@ -578,7 +599,7 @@ export default function TestCasesMindPage() {
     try {
       if (action === "add_case") {
         if (!nodeId.startsWith("module:")) {
-          message.warning("请在模块节点上新增用例");
+          qaCaseSetToastWarning("请在模块节点上新增用例");
           return;
         }
         const moduleId = nodeId.slice("module:".length);
@@ -590,14 +611,14 @@ export default function TestCasesMindPage() {
         };
         if (currentUserId) payload.assignee = currentUserId;
         if (moduleId && moduleId !== "all") payload.module = moduleId;
-        await caseService.createCase(ws, payload);
+        await caseService.createCase(ws, pid, payload);
         await refreshAll();
         return;
       }
 
       if (action === "rename_module") {
         if (!nodeId.startsWith("module:")) {
-          message.warning("请在模块节点上重命名");
+          qaCaseSetToastWarning("请在模块节点上重命名");
           return;
         }
         const moduleId = nodeId.slice("module:".length);
@@ -610,32 +631,32 @@ export default function TestCasesMindPage() {
       if (action === "add_precondition" || action === "add_remark" || action === "add_text_description") {
         const caseId = getCaseIdFromNodeId(nodeId);
         if (!caseId) {
-          message.warning("请在用例节点上操作");
+          qaCaseSetToastWarning("请在用例节点上操作");
           return;
         }
         const existing = caseMapRef.current[caseId] || {};
         if (action === "add_precondition") {
           if (stripHtml(existing?.precondition)) {
-            message.info("前置条件已存在");
+            qaCaseSetToastInfo("前置条件已存在");
             return;
           }
-          await caseService.updateCase(ws, { id: caseId, precondition: "<p>（空）</p>" });
+          await caseService.updateCase(ws, pid, { id: caseId, precondition: "<p>（空）</p>" });
         } else if (action === "add_remark") {
           if (stripHtml(existing?.remark)) {
-            message.info("备注已存在");
+            qaCaseSetToastInfo("备注已存在");
             return;
           }
-          await caseService.updateCase(ws, { id: caseId, remark: "<p>（空）</p>" });
+          await caseService.updateCase(ws, pid, { id: caseId, remark: "<p>（空）</p>" });
         } else {
           if ((typeof existing?.mode === "number" ? existing.mode : 0) !== 1) {
-            await caseService.updateCase(ws, { id: caseId, mode: 1 });
+            await caseService.updateCase(ws, pid, { id: caseId, mode: 1 });
           }
           if (stripHtml(existing?.text_description)) {
-            message.info("文本描述已存在");
+            qaCaseSetToastInfo("文本描述已存在");
             await refreshAll();
             return;
           }
-          await caseService.updateCase(ws, { id: caseId, text_description: "<p>（空）</p>" });
+          await caseService.updateCase(ws, pid, { id: caseId, text_description: "<p>（空）</p>" });
         }
         await refreshAll();
         return;
@@ -644,14 +665,14 @@ export default function TestCasesMindPage() {
       if (action === "switch_to_text" || action === "switch_to_steps") {
         const caseId = getCaseIdFromNodeId(nodeId);
         if (!caseId) {
-          message.warning("请在用例节点上操作");
+          qaCaseSetToastWarning("请在用例节点上操作");
           return;
         }
         const existing = caseMapRef.current[caseId] || {};
         if (action === "switch_to_text") {
           const patch: any = { id: caseId, mode: 1 };
           if (!stripHtml(existing?.text_description)) patch.text_description = "<p>（空）</p>";
-          await caseService.updateCase(ws, patch);
+          await caseService.updateCase(ws, pid, patch);
           
           // 只更新当前用例节点的数据
           caseMapRef.current[caseId] = { ...existing, ...patch };
@@ -664,7 +685,7 @@ export default function TestCasesMindPage() {
           const steps = Array.isArray(existing?.steps) ? existing.steps : [];
           const patch: any = { id: caseId, mode: 0 };
           if (!Array.isArray(steps) || steps.length === 0) patch.steps = [{ description: "", result: "" }];
-          await caseService.updateCase(ws, patch);
+          await caseService.updateCase(ws, pid, patch);
 
           caseMapRef.current[caseId] = { ...existing, ...patch };
           await refreshAll();
@@ -675,13 +696,13 @@ export default function TestCasesMindPage() {
       if (action === "add_step" || action === "insert_step_above" || action === "insert_step_below") {
         const caseId = getCaseIdFromNodeId(nodeId);
         if (!caseId) {
-          message.warning("请在用例/步骤节点上新增步骤");
+          qaCaseSetToastWarning("请在用例/步骤节点上新增步骤");
           return;
         }
         const existing = caseMapRef.current[caseId] || {};
         const mode = typeof existing?.mode === "number" ? existing.mode : 0;
         if (mode === 1) {
-          message.warning("当前用例为文本模式，请先切换为步骤模式");
+          qaCaseSetToastWarning("当前用例为文本模式，请先切换为步骤模式");
           return;
         }
         const steps = Array.isArray(existing?.steps) ? [...existing.steps] : [];
@@ -692,14 +713,14 @@ export default function TestCasesMindPage() {
         } else {
           const idx = getStepIndexFromNodeId(nodeId);
           if (idx === null) {
-            message.warning("请在步骤节点上插入步骤");
+            qaCaseSetToastWarning("请在步骤节点上插入步骤");
             return;
           }
           const insertIndex = action === "insert_step_above" ? idx : idx + 1;
           steps.splice(Math.max(0, Math.min(insertIndex, steps.length)), 0, blank);
         }
 
-        await caseService.updateCase(ws, { id: caseId, steps });
+        await caseService.updateCase(ws, pid, { id: caseId, steps });
         await refreshAll();
         return;
       }
@@ -723,9 +744,9 @@ export default function TestCasesMindPage() {
                 params.set("moduleId", "all");
                 router.push(`/${ws}/projects/${pid}/testhub/cases/mind?${params.toString()}`);
                 await refreshAll();
-                message.success("删除成功");
+                qaCaseSetToastSuccess("删除成功");
               } catch (e: any) {
-                message.error((e as any)?.error || "删除失败");
+                qaCaseSetToastError(e, t, "删除失败");
                 throw e;
               }
             },
@@ -743,11 +764,11 @@ export default function TestCasesMindPage() {
             okButtonProps: { danger: true },
             onOk: async () => {
               try {
-                await caseService.deleteCase(ws, caseId);
+                await caseService.deleteCase(ws, pid, caseId);
                 await refreshAll();
-                message.success("删除成功");
+                qaCaseSetToastSuccess("删除成功");
               } catch (e: any) {
-                message.error((e as any)?.error || "删除失败");
+                qaCaseSetToastError(e, t, "删除失败");
                 throw e;
               }
             },
@@ -760,15 +781,15 @@ export default function TestCasesMindPage() {
           const [caseId, field] = rest.split(":");
           if (!caseId || !field) return;
           if (field === "precondition") {
-            await caseService.updateCase(ws, { id: caseId, precondition: "<p></p>" });
+            await caseService.updateCase(ws, pid, { id: caseId, precondition: "<p></p>" });
           } else if (field === "remark") {
-            await caseService.updateCase(ws, { id: caseId, remark: "<p></p>" });
+            await caseService.updateCase(ws, pid, { id: caseId, remark: "<p></p>" });
           } else if (field === "text_description") {
-            await caseService.updateCase(ws, { id: caseId, text_description: "<p></p>", text_result: "<p></p>" });
+            await caseService.updateCase(ws, pid, { id: caseId, text_description: "<p></p>", text_result: "<p></p>" });
           } else if (field === "text_result") {
-            await caseService.updateCase(ws, { id: caseId, text_result: "<p></p>" });
+            await caseService.updateCase(ws, pid, { id: caseId, text_result: "<p></p>" });
           } else if (field === "steps") {
-            await caseService.updateCase(ws, { id: caseId, steps: [] });
+            await caseService.updateCase(ws, pid, { id: caseId, steps: [] });
           }
           await refreshAll();
           return;
@@ -781,16 +802,16 @@ export default function TestCasesMindPage() {
           const existing = caseMapRef.current[caseId] || {};
           const steps = Array.isArray(existing?.steps) ? [...existing.steps] : [];
           if (idx >= 0 && idx < steps.length) steps.splice(idx, 1);
-          await caseService.updateCase(ws, { id: caseId, steps });
+          await caseService.updateCase(ws, pid, { id: caseId, steps });
           await refreshAll();
           return;
         }
 
-        message.info("该节点暂不支持删除");
+        qaCaseSetToastInfo("该节点暂不支持删除");
       }
     } catch (e: any) {
       try {
-        message.error((e as any)?.error || "操作失败");
+        qaCaseSetToastError(e, t, "操作失败");
       } catch {}
     }
   };
@@ -980,23 +1001,34 @@ export default function TestCasesMindPage() {
             </Col>
             <Col flex="auto" className="h-full overflow-hidden">
               <div className="h-full w-full overflow-hidden">
-                {!repositoryId && (
-                  <div className="flex h-full items-center justify-center text-secondary">请先选择一个用例库</div>
-                )}
-                {repositoryId && loadingMind && (
-                  <div className="flex h-full items-center justify-center text-secondary">加载中...</div>
-                )}
-                {repositoryId && !loadingMind && mindData && (
-                  <CaseMindmap
-                    data={mindData}
-                    editable={true}
-                    before={mindBefore}
-                    onOperation={handleMindOperation}
-                    onContextAction={handleContextAction}
-                  />
-                )}
-                {repositoryId && !loadingMind && !mindData && (
-                  <div className="flex h-full items-center justify-center text-secondary">暂无数据</div>
+                {permissionsFetched && !canViewMindmap ? (
+                  <div className="flex h-full w-full flex-col items-center justify-center gap-y-5 text-center">
+                    <div className="h-44 w-72">
+                      <img src={UnauthorizedImg} className="h-[176px] w-[288px] object-contain" alt="unauthorized" />
+                    </div>
+                    <h1 className="text-xl font-medium text-primary">您没有查看此页面的权限</h1>
+                  </div>
+                ) : (
+                  <>
+                    {!repositoryId && (
+                      <div className="flex h-full items-center justify-center text-secondary">请先选择一个用例库</div>
+                    )}
+                    {(permissionsLoading || (repositoryId && loadingMind)) && (
+                      <div className="flex h-full items-center justify-center text-secondary">加载中...</div>
+                    )}
+                    {repositoryId && !permissionsLoading && !loadingMind && mindData && (
+                      <CaseMindmap
+                        data={mindData}
+                        editable={canEditMindmap}
+                        before={mindBefore}
+                        onOperation={canEditMindmap ? handleMindOperation : undefined}
+                        onContextAction={canEditMindmap ? handleContextAction : undefined}
+                      />
+                    )}
+                    {repositoryId && !permissionsLoading && !loadingMind && !mindData && (
+                      <div className="flex h-full items-center justify-center text-secondary">暂无数据</div>
+                    )}
+                  </>
                 )}
               </div>
             </Col>
@@ -1018,7 +1050,7 @@ export default function TestCasesMindPage() {
           const nextName = (renameValue || "").trim();
           if (!moduleId) return;
           if (!nextName) {
-            message.warning("模块名称不能为空");
+            qaCaseSetToastWarning("模块名称不能为空");
             return Promise.reject();
           }
           try {
@@ -1027,9 +1059,9 @@ export default function TestCasesMindPage() {
             setRenamingModuleId(null);
             setRenameValue("");
             await Promise.allSettled([fetchModules(), fetchMind(true)]);
-            message.success("重命名成功");
+            qaCaseSetToastSuccess("重命名成功");
           } catch (e: any) {
-            message.error((e as any)?.error || "重命名失败");
+            qaCaseSetToastError(e, t, "重命名失败");
             return Promise.reject(e);
           }
         }}

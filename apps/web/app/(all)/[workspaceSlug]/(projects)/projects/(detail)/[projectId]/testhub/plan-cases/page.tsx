@@ -20,6 +20,8 @@ import { FolderOpenDot, Atom } from "lucide-react";
 import { formatDateTime, globalEnums } from "../util";
 import { useUser } from "@/hooks/store/user";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
+import { useTranslation } from "@plane/i18n";
+import { qaCaseErrorContent, qaCaseSetToastError, qaCaseSetToastSuccess } from "@/utils/qa-case-error";
 import { ChevronDownIcon } from "@plane/propel/icons";
 
 type TLabel = { id?: string; name?: string } | string;
@@ -47,6 +49,7 @@ type PlanCaseItem = {
 type PlanCaseResponse = { count: number; data: PlanCaseItem[] };
 
 export default function PlanCasesPage() {
+  const { t } = useTranslation();
   const { workspaceSlug, projectId } = useParams();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -186,8 +189,10 @@ export default function PlanCasesPage() {
       setTotal(response?.count || 0);
       setCurrentPage(page);
       setPageSize(size);
-    } catch (e) {
-      setError("用例加载失败");
+    } catch (e: unknown) {
+      const fallback = "用例加载失败";
+      setError(qaCaseErrorContent(e, t, fallback));
+      qaCaseSetToastError(e, t, fallback);
     } finally {
       setLoading(false);
     }
@@ -386,7 +391,7 @@ export default function PlanCasesPage() {
   const onCancelRelation = async (ids: string | string[]) => {
     if (!workspaceSlug || !planId) return;
     try {
-      await planService.cancelPlanCase(String(workspaceSlug), ids);
+      await planService.cancelPlanCase(String(workspaceSlug), String(projectId), ids);
       if (Array.isArray(ids)) {
         setSelectedCaseIds([]);
         setSelectedPlanCaseToCaseIdMap({});
@@ -398,9 +403,10 @@ export default function PlanCasesPage() {
         selectedRepositoryId || undefined,
         selectedModuleId || undefined
       );
-      message.success("取消关联成功");
-    } catch (e) {
-      setError("取消关联失败");
+      qaCaseSetToastSuccess("取消关联成功");
+    } catch (e: unknown) {
+      const fallback = "取消关联失败";
+      qaCaseSetToastError(e, t, fallback);
     }
   };
 
@@ -1003,6 +1009,7 @@ export default function PlanCasesPage() {
         isOpen={isPlanModalOpen}
         onClose={() => setIsPlanModalOpen(false)}
         workspaceSlug={String(workspaceSlug)}
+        projectId={String(projectId || "")}
         repositoryId={String(repositoryId)}
         repositoryName={repositoryName || ""}
         planId={String(planId || "")}

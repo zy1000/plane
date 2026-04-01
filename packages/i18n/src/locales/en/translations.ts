@@ -1504,7 +1504,7 @@ export default {
         title: "Member groups",
       },
       roles: {
-        title: "Roles",
+        title: "Permissions",
       },
       exports: {
         heading: "Exports",
@@ -1842,7 +1842,7 @@ export default {
       label: "Workflow",
     },
     roles: {
-      label: "Project Roles",
+      label: "Permissions",
     },
     pms_sync: {
       label: "PMS defect sync",

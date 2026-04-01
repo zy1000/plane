@@ -105,6 +105,13 @@ export const WORKSPACE_SETTINGS = {
     access: [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER, EUserWorkspaceRoles.GUEST],
     highlight: (pathname: string, baseUrl: string) => pathname === `${baseUrl}/settings/roles/`,
   },
+  templates: {
+    key: "templates",
+    i18n_label: "workspace_settings.settings.templates.title",
+    href: `/settings/templates`,
+    access: [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER, EUserWorkspaceRoles.GUEST],
+    highlight: (pathname: string, baseUrl: string) => pathname === `${baseUrl}/settings/templates/`,
+  },
   export: {
     key: "export",
     i18n_label: "workspace_settings.settings.exports.title",

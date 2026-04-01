@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { PageHead } from "@/components/core/page-title";
-import { Input, Table, Dropdown, Button, Modal, Tag, message, Tooltip, Space, Pagination, Tree } from "antd";
+import { Input, Table, Dropdown, Button, Modal, Tag, Tooltip, Space, Pagination, Tree } from "antd";
 import type { TableProps, TableColumnType, InputRef } from "antd";
 import type { TreeProps } from "antd";
 import {
@@ -25,6 +25,10 @@ import { debounce } from "lodash-es";
 import CreateReviewModal from "@/components/qa/review/CreateReviewModal";
 import { useAppRouter } from "@/hooks/use-app-router";
 import { useTestHub } from "../testhub-context";
+import { useProjectPermissions } from "@/hooks/store/use-project-permissions";
+import UnauthorizedImg from "@/app/assets/auth/unauthorized.svg?url";
+import { useTranslation } from "@plane/i18n";
+import { qaCaseErrorContent, qaCaseSetToastError, qaCaseSetToastSuccess } from "@/utils/qa-case-error";
 
 type ModuleNode = {
   id: string;
@@ -98,6 +102,7 @@ const ModuleInput = ({
 };
 
 export default function ReviewsPage() {
+  const { t } = useTranslation();
   const { workspaceSlug, projectId } = useParams<{ workspaceSlug: string; projectId: string }>();
   const searchParams = useSearchParams();
   const router = useAppRouter();
@@ -105,6 +110,10 @@ export default function ReviewsPage() {
   const repositoryId =
     repositoryIdFromUrl || (typeof window !== "undefined" ? sessionStorage.getItem("selectedRepositoryId") : null);
   const repositoryKey = repositoryId ? String(repositoryId) : "all";
+  const { fetched: permissionsFetched, hasPermission } = useProjectPermissions(
+    String(workspaceSlug || ""),
+    String(projectId || "")
+  );
   const [leftWidth, setLeftWidth] = useState<number>(300);
   const isDraggingRef = useRef<boolean>(false);
   const startXRef = useRef<number>(0);
@@ -182,6 +191,8 @@ export default function ReviewsPage() {
 
   useEffect(() => {
     if (!workspaceSlug) return;
+    if (!permissionsFetched) return;
+    if (!hasPermission("qa.review.view")) return;
     try {
       if (repositoryIdFromUrl) sessionStorage.setItem("selectedRepositoryId", repositoryIdFromUrl);
     } catch {}
@@ -194,7 +205,7 @@ export default function ReviewsPage() {
     setFilters(initFilters);
     debouncedFetchReviews(1, pageSize, selectedModuleId, initFilters);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workspaceSlug, repositoryKey]);
+  }, [workspaceSlug, repositoryKey, permissionsFetched, hasPermission]);
 
   const fetchModules = async () => {
     if (!workspaceSlug || !projectId) return;
@@ -218,8 +229,7 @@ export default function ReviewsPage() {
     if (!workspaceSlug || !projectId) return;
     try {
       const params: any = { page: 1, page_size: 1 };
-      params.project_id = projectId;
-      const res = await caseService.getReviews(workspaceSlug as string, params);
+      const res = await caseService.getReviews(workspaceSlug as string, projectId as string, params);
       setAllTotal(Number(res?.count || 0));
     } catch (e) {
       setAllTotal(undefined);
@@ -237,20 +247,17 @@ export default function ReviewsPage() {
     setError("");
     try {
       const params: any = { page, page_size: size };
-      if (moduleId) {
-        params.module_id = moduleId;
-      } else {
-        params.project_id = projectId;
-      }
+      if (moduleId) params.module_id = moduleId;
       if (extraFilters?.name) params.name__icontains = extraFilters.name;
       if (extraFilters?.state && extraFilters.state.length) params.state__in = extraFilters.state.join(",");
       if (extraFilters?.mode && extraFilters.mode.length) params.mode__in = extraFilters.mode.join(",");
-      const res = await caseService.getReviews(workspaceSlug as string, params);
+      const res = await caseService.getReviews(workspaceSlug as string, projectId as string, params);
       setReviews(Array.isArray(res?.data) ? res.data : []);
       setTotal(Number(res?.count || 0));
-    } catch (e: any) {
-      setError(e?.message || e?.detail || e?.error || "加载失败");
-      message.error(e?.message || e?.detail || e?.error || "加载失败");
+    } catch (e: unknown) {
+      const fallback = "加载失败";
+      setError(qaCaseErrorContent(e, t, fallback));
+      qaCaseSetToastError(e, t, fallback);
     } finally {
       setLoading(false);
     }
@@ -380,8 +387,9 @@ export default function ReviewsPage() {
       setCreatingParentId(null);
       await fetchModules();
       await fetchAllReviewsTotal();
-    } catch (e) {
+    } catch (e: unknown) {
       setCreatingParentId(null);
+      qaCaseSetToastError(e, t, "创建评审模块失败");
     }
   };
 
@@ -402,8 +410,9 @@ export default function ReviewsPage() {
       await caseService.updateReviewModule(workspaceSlug as string, moduleId, { name });
       setRenamingModuleId(null);
       await fetchModules();
-    } catch (e) {
+    } catch (e: unknown) {
       setRenamingModuleId(null);
+      qaCaseSetToastError(e, t, "重命名评审模块失败");
     }
   };
 
@@ -421,8 +430,8 @@ export default function ReviewsPage() {
           if (selectedModuleId === module.id) setSelectedModuleId(null);
           await fetchModules();
           await fetchAllReviewsTotal();
-        } catch (e) {
-          // ignore
+        } catch (e: unknown) {
+          qaCaseSetToastError(e, t, "删除评审模块失败");
         }
       },
     });
@@ -438,12 +447,14 @@ export default function ReviewsPage() {
       onOk: async () => {
         if (!workspaceSlug || !review?.id) return;
         try {
-          await caseService.deleteReview(workspaceSlug as string, { ids: [review.id] });
+          await caseService.deleteReview(workspaceSlug as string, projectId as string, { ids: [review.id] });
           await fetchReviews(currentPage, pageSize, selectedModuleId, filters);
           await fetchModules();
           await fetchAllReviewsTotal();
-          message.success("删除成功");
-        } catch (e) {}
+          qaCaseSetToastSuccess("评审已删除");
+        } catch (e: unknown) {
+          qaCaseSetToastError(e, t, "删除评审失败");
+        }
       },
     });
   };
@@ -922,9 +933,23 @@ export default function ReviewsPage() {
     },
   ];
 
+  const canViewReviews = permissionsFetched && hasPermission("qa.review.view");
+
   return (
     <div className={styles.container}>
       <PageHead title="评审" />
+      {!permissionsFetched ? (
+        <div className="flex h-full w-full min-h-[50vh] items-center justify-center">
+          <div className="text-secondary">加载中...</div>
+        </div>
+      ) : !canViewReviews ? (
+        <div className="flex h-full w-full min-h-[50vh] flex-col items-center justify-center gap-y-5 text-center">
+          <div className="h-44 w-72">
+            <img src={UnauthorizedImg} className="h-[176px] w-[288px] object-contain" alt="unauthorized" />
+          </div>
+          <h1 className="text-xl font-medium text-primary">您没有查看此页面的权限</h1>
+        </div>
+      ) : (
       <div className={styles.split}>
         <div className={`${styles.left} flex flex-col h-full`} style={{ width: leftWidth }}>
           <div className={`${styles.treeRoot} flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm pt-2`}>
@@ -1108,6 +1133,7 @@ export default function ReviewsPage() {
           />
         )}
       </div>
+      )}
     </div>
   );
 }

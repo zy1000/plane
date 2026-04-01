@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useParams } from "next/navigation";
-import { Modal, Space, Button, Input, Tree, Table, Tag, message } from "antd";
+import { Modal, Space, Button, Input, Tree, Table, Tag } from "antd";
 import { globalEnums, getEnums } from "@/app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/util";
 import type { TableProps } from "antd";
 import type { TreeProps } from "antd";
@@ -9,6 +9,8 @@ import { CaseService as QaCaseService } from "@/services/qa/case.service";
 import styles from "./TestCaseSelectionModal.module.css";
 import { AppstoreOutlined, DownOutlined } from "@ant-design/icons";
 import { Atom } from "lucide-react";
+import { useTranslation } from "@plane/i18n";
+import { qaCaseSetToastError } from "@/utils/qa-case-error";
 
 type TTestCase = {
   id: string;
@@ -56,6 +58,7 @@ export default function TestCaseSelectionModal({
   onConfirm,
   onChangeSelected,
 }: Props) {
+  const { t } = useTranslation();
   const { workspaceSlug, projectId: projectIdFromParams } = useParams() as { workspaceSlug?: string; projectId?: string };
   const qaCaseService = useMemo(() => new QaCaseService(), []);
   const projectId = projectIdProp ?? projectIdFromParams;
@@ -140,8 +143,8 @@ export default function TestCaseSelectionModal({
       setTotal(Number(res?.count || 0));
       setCurrentPage(page);
       setPageSize(size);
-    } catch (err: any) {
-      message.error(err?.message || "获取用例失败");
+    } catch (err: unknown) {
+      qaCaseSetToastError(err, t, "获取用例失败");
     } finally {
       setLoadingCases(false);
     }

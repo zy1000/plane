@@ -25,8 +25,8 @@ export class PlanService extends APIService {
       });
   }
 
-  async getPlans(workspaceSlug: string, queries?: any): Promise<any> {
-    return this.get(`/api/workspaces/${workspaceSlug}/test/plane/`, {
+  async getPlans(workspaceSlug: string, projectId: string, queries?: any): Promise<any> {
+    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/test/plane/`, {
       params: queries,
     })
       .then((response) => response?.data)
@@ -35,24 +35,24 @@ export class PlanService extends APIService {
       });
   }
 
-  async createPlan(workspaceSlug: string, data: any): Promise<any> {
-    return this.post(`/api/workspaces/${workspaceSlug}/test/plane/`, data)
+  async createPlan(workspaceSlug: string, projectId: string, data: any): Promise<any> {
+    return this.post(`/api/workspaces/${workspaceSlug}/projects/${projectId}/test/plane/`, data)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
       });
   }
 
-  async updatePlan(workspaceSlug: string, data: any): Promise<any> {
-    return this.put(`/api/workspaces/${workspaceSlug}/test/plane/`, data)
+  async updatePlan(workspaceSlug: string, projectId: string, data: any): Promise<any> {
+    return this.put(`/api/workspaces/${workspaceSlug}/projects/${projectId}/test/plane/`, data)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
       });
   }
 
-  async addPlanCases(workspaceSlug: string, data: { plan_id: string; case_ids: string[] }): Promise<any> {
-    return this.post(`/api/workspaces/${workspaceSlug}/test/plan/add-cases/`, data)
+  async addPlanCases(workspaceSlug: string, projectId: string, data: { plan_id: string; case_ids: string[] }): Promise<any> {
+    return this.post(`/api/workspaces/${workspaceSlug}/test/plan/add-cases/`, data, { params: { project_id: projectId } })
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
@@ -94,8 +94,8 @@ export class PlanService extends APIService {
       });
   }
 
-  async deletePlan(workspaceSlug: string, planIds: Array<string>): Promise<any> {
-    return this.delete(`/api/workspaces/${workspaceSlug}/test/plane/`, {
+  async deletePlan(workspaceSlug: string, projectId: string, planIds: Array<string>): Promise<any> {
+    return this.delete(`/api/workspaces/${workspaceSlug}/projects/${projectId}/test/plane/`, {
       ids: planIds,
     })
       .then((response) => response?.data)
@@ -148,9 +148,9 @@ export class PlanService extends APIService {
       });
   }
 
-  async cancelPlanCase(workspaceSlug: string, planCaseId: string | string[]): Promise<any> {
+  async cancelPlanCase(workspaceSlug: string, projectId: string, planCaseId: string | string[]): Promise<any> {
     const data = { id: planCaseId };
-    return this.post(`/api/workspaces/${workspaceSlug}/test/plan/cancel/`, data)
+    return this.post(`/api/workspaces/${workspaceSlug}/test/plan/cancel/`, data, { params: { project_id: projectId } })
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;

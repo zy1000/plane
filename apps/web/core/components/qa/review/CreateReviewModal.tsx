@@ -2,11 +2,13 @@
 import dayjs from "dayjs";
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
-import { Modal, Form, Input, Select, DatePicker, Button, Space, message } from "antd";
+import { Modal, Form, Input, Select, DatePicker, Button, Space } from "antd";
 // 说明：替换评审人选择器为统一的 MemberDropdown 组件，保持参数结构不变
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import type { RangePickerProps } from "antd/es/date-picker";
+import { useTranslation } from "@plane/i18n";
 import { CaseService as ReviewService } from "@/services/qa/review.service";
+import { qaCaseSetToastError, qaCaseSetToastSuccess } from "@/utils/qa-case-error";
 
 type Props = {
   open: boolean;
@@ -25,6 +27,7 @@ type ReviewFormValues = {
 };
 
 export default function CreateReviewModal({ open, onClose, mode = "create", initialValues }: Props) {
+  const { t } = useTranslation();
   const { workspaceSlug, projectId } = useParams() as { workspaceSlug?: string; projectId?: string };
   const [submitting, setSubmitting] = useState(false);
   const reviewService = useMemo(() => new ReviewService(), []);
@@ -77,7 +80,7 @@ export default function CreateReviewModal({ open, onClose, mode = "create", init
   }, [open, initialValues, form]);
 
   const handleSubmit = async () => {
-    if (!workspaceSlug) return;
+    if (!workspaceSlug || !projectId) return;
     try {
       setSubmitting(true);
       const v = await form.validateFields();
@@ -88,25 +91,25 @@ export default function CreateReviewModal({ open, onClose, mode = "create", init
         module: v.module_id,
         assignees: selectedAssignees,
         mode: selectedAssignees.length <= 1 ? "单人评审" : "多人评审",
+        project: projectId,
       };
-      if (projectId) payload.project = projectId;
       if (mode === "create") {
         payload.started_at = v.started_at ? v.started_at.format("YYYY-MM-DD") : null;
         payload.ended_at = v.ended_at ? v.ended_at.format("YYYY-MM-DD") : null;
-        await reviewService.createReview(String(workspaceSlug), payload);
-        message.success("评审已创建");
+        await reviewService.createReview(String(workspaceSlug), String(projectId), payload);
+        qaCaseSetToastSuccess("评审已创建");
       } else {
         if (v.started_at) payload.started_at = v.started_at.format("YYYY-MM-DD");
         if (v.ended_at) payload.ended_at = v.ended_at.format("YYYY-MM-DD");
-        await reviewService.updateReview(String(workspaceSlug), { id: initialValues?.id, ...payload });
-        message.success("评审已更新");
+        await reviewService.updateReview(String(workspaceSlug), String(projectId), { id: initialValues?.id, ...payload });
+        qaCaseSetToastSuccess("评审已更新");
       }
       onClose();
       form.resetFields();
-    } catch (e: any) {
-      if (e?.errorFields) {
+    } catch (e: unknown) {
+      if ((e as { errorFields?: unknown })?.errorFields) {
       } else {
-        message.error(e?.message || e?.detail || e?.error || (mode === "edit" ? "更新失败" : "创建失败"));
+        qaCaseSetToastError(e, t, mode === "edit" ? "更新评审失败" : "创建评审失败");
       }
     } finally {
       setSubmitting(false);

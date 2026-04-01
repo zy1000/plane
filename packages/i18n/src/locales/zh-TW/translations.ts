@@ -1629,7 +1629,7 @@ export default {
         title: "成員組",
       },
       roles: {
-        title: "角色",
+        title: "權限",
       },
       exports: {
         title: "匯出",

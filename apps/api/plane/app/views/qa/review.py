@@ -8,6 +8,7 @@ from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 
+from plane.app.permissions import allow_project_permission, PermissionKey
 from plane.app.serializers.qa import ReviewModuleCreateUpdateSerializer, ReviewModuleDetailSerializer, \
     ReviewModuleListSerializer, ReviewListSerializer, ReviewCreateUpdateSerializer, ReviewCaseListSerializer, \
     ReviewCaseRecordsSerializer, ReviewSerializer
@@ -72,32 +73,36 @@ class CaseReviewAPIView(BaseAPIView):
     filterset_class = CaseReviewFilter
     ordering_fields = ["case__updated_at", "case__code"]
 
-    def post(self, request, slug):
+    @allow_project_permission(PermissionKey.QA_REVIEW_CREATE)
+    def post(self, request, slug, project_id):
         serializer = ReviewCreateUpdateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         test_plan = serializer.save()
         serializer = self.serializer_class(instance=test_plan)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-    def get(self, request, slug):
-        cases = self.filter_queryset(self.queryset)
+    @allow_project_permission(PermissionKey.QA_REVIEW_VIEW)
+    def get(self, request, slug, project_id):
+        cases = self.filter_queryset(self.queryset.filter(project_id=project_id))
         paginator = self.pagination_class()
         paginated_queryset = paginator.paginate_queryset(cases, request)
         serializer = self.serializer_class(instance=paginated_queryset, many=True)
         return list_response(data=serializer.data, count=cases.count())
 
-    def put(self, request, slug):
+    @allow_project_permission(PermissionKey.QA_REVIEW_EDIT)
+    def put(self, request, slug, project_id):
         review_id = request.data.pop('id')
-        review = self.queryset.get(id=review_id)
+        review = self.queryset.get(id=review_id, project_id=project_id)
         update_serializer = ReviewCreateUpdateSerializer(instance=review, data=request.data, partial=True)
         update_serializer.is_valid(raise_exception=True)
         update_serializer.save()
         serializer = self.serializer_class(instance=review)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    def delete(self, request, slug):
+    @allow_project_permission(PermissionKey.QA_REVIEW_DELETE)
+    def delete(self, request, slug, project_id):
         ids = request.data.pop('ids')
-        self.queryset.filter(id__in=ids).delete()
+        self.queryset.filter(id__in=ids, project_id=project_id).delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -131,13 +136,18 @@ class CaseReviewView(BaseViewSet):
         return Response(result, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=['post'], url_path='cancel-case')
+    @allow_project_permission(PermissionKey.QA_REVIEW_EDIT)
     def cancel_case(self, request, slug):
-        CaseReviewThrough.objects.filter(id__in=request.data['ids']).delete(
-            soft=False)
+        project_id = request.query_params.get('project_id')
+        qs = CaseReviewThrough.objects.filter(id__in=request.data['ids'])
+        if project_id:
+            qs = qs.filter(review__project_id=project_id)
+        qs.delete(soft=False)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     @transaction.atomic
     @action(detail=False, methods=['post'], url_path='add-cases')
+    @allow_project_permission(PermissionKey.QA_REVIEW_EDIT)
     def add_cases(self, request, slug):
         review_id = request.data.get('review_id')
         raw_case_ids = request.data.get('case_ids')
@@ -156,7 +166,11 @@ class CaseReviewView(BaseViewSet):
         if not case_ids:
             return Response({"error": "case_ids must be a non-empty list"}, status=status.HTTP_400_BAD_REQUEST)
 
-        review = get_object_or_404(CaseReview, id=review_id, deleted_at__isnull=True, project__workspace__slug=slug)
+        project_id = request.query_params.get('project_id')
+        review_lookup = {"id": review_id, "deleted_at__isnull": True, "project__workspace__slug": slug}
+        if project_id:
+            review_lookup["project_id"] = project_id
+        review = get_object_or_404(CaseReview, **review_lookup)
 
         repo_ids = list(
             TestCaseRepository.objects.filter(

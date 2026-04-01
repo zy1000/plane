@@ -1,13 +1,15 @@
 "use client";
 
 import React from "react";
-import { Button, Spin, message } from "antd";
+import { Button, Spin } from "antd";
 import { CheckCircleOutlined, CloseCircleOutlined, ExclamationCircleOutlined } from "@ant-design/icons";
 import { cn, renderFormattedDate } from "@plane/utils";
 import { CaseService as ReviewApiService } from "@/services/qa/review.service";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { ButtonAvatars } from "@/components/dropdowns/member/avatar";
 import { useMember } from "@/hooks/store/use-member";
+import { useTranslation } from "@plane/i18n";
+import { qaCaseErrorContent, qaCaseSetToastError, qaCaseSetToastSuccess } from "@/utils/qa-case-error";
 
 type ReviewRecord = {
   id: string;
@@ -28,6 +30,7 @@ type Props = {
 };
 
 export const ReviewRecordsPanel: React.FC<Props> = (props) => {
+  const { t } = useTranslation();
   const { workspaceSlug, reviewId, caseId, className = "", onRecordsUpdated } = props;
   const reviewService = React.useMemo(() => new ReviewApiService(), []);
   const { getUserDetails } = useMember();
@@ -44,10 +47,10 @@ export const ReviewRecordsPanel: React.FC<Props> = (props) => {
       setError(null);
       const data = await reviewService.getRecords(String(workspaceSlug), String(reviewId), String(caseId));
       setRecords(Array.isArray(data) ? (data as ReviewRecord[]) : []);
-    } catch (e: any) {
-      const msg = e?.message || e?.detail || e?.error || "获取评审记录失败";
-      setError(msg);
-      message.error(msg);
+    } catch (e: unknown) {
+      const fallback = "获取评审记录失败";
+      setError(qaCaseErrorContent(e, t, fallback));
+      qaCaseSetToastError(e, t, fallback);
       setRecords([]);
     } finally {
       setLoading(false);
@@ -67,10 +70,9 @@ export const ReviewRecordsPanel: React.FC<Props> = (props) => {
         prev.map((r) => (String(r.id) === String(recordId) ? { ...r, confirmed: true } : r))
       );
       onRecordsUpdated?.();
-      message.success("已确认");
-    } catch (e: any) {
-      const msg = e?.message || e?.detail || e?.error || "确认失败";
-      message.error(msg);
+      qaCaseSetToastSuccess("已确认");
+    } catch (e: unknown) {
+      qaCaseSetToastError(e, t, "确认失败");
     } finally {
       setConfirmingRecordId(null);
     }

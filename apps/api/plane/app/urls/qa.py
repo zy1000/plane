@@ -21,7 +21,7 @@ router.register('case', CaseAPI, basename='case')
 router.register('execution-file', PlanCaseRecordFileAPI, basename='execution-file')
 
 urlpatterns = [
-    path('workspaces/<str:slug>/test/plane/', PlanAPIView.as_view(), name='test-plan'),
+    path('workspaces/<str:slug>/projects/<uuid:project_id>/test/plane/', PlanAPIView.as_view(), name='test-plan'),
     path('workspaces/<str:slug>/test/plan/list/', PlanListAPIView.as_view(), name='test-plan'),
     path('workspaces/<str:slug>/test/plane/case/', PlanCaseAPIView.as_view(), name='test-plan'),
     path('workspaces/<str:slug>/test/plan/module/', PlanModuleAPIView.as_view(), name='test-plan'),
@@ -33,7 +33,11 @@ urlpatterns = [
     path('workspaces/<str:slug>/test/module/<uuid:module_id>/', CaseModuleDetailAPIView.as_view(),
          name='test-case-module-detail'),
     path('workspaces/<str:slug>/test/module/count/', CaseModuleCountAPIView.as_view(), name='test-case'),
-    path('workspaces/<str:slug>/test/case/', CaseAPIView.as_view(), name='test-case'),
+    path(
+        'workspaces/<str:slug>/projects/<uuid:project_id>/test/case/',
+        CaseAPIView.as_view(),
+        name='test-case',
+    ),
     path('workspaces/<str:slug>/test/case/mindmap/', CaseMindmapAPIView.as_view(), name='test-case-mindmap'),
     path('workspaces/<str:slug>/test/case/issues/', CaseIssueWithType.as_view(), name='test-case'),
     path('workspaces/<str:slug>/test/case/label/', LabelAPIView.as_view(), name='test-case'),
@@ -46,7 +50,7 @@ urlpatterns = [
     path('workspaces/<str:slug>/test/review/module/', ReviewModuleAPIView.as_view(), name='test-repository-enums'),
     path('workspaces/<str:slug>/test/review/module/<uuid:module_id>/', ReviewModuleDetailAPIView.as_view(),
          name='test-review-module-detail'),
-    path('workspaces/<str:slug>/test/review/', CaseReviewAPIView.as_view(), name='test-repository-enums'),
+    path('workspaces/<str:slug>/projects/<uuid:project_id>/test/review/', CaseReviewAPIView.as_view(), name='test-repository-enums'),
     path('workspaces/<str:slug>/test/review/list/', ReviewListAPIView.as_view(), name='test-repository-enums'),
     path('workspaces/<str:slug>/test/mindmap/assets/', MindmapAssetAPIView.as_view(), name='test-mindmap-assets'),
     path('workspaces/<str:slug>/test/mindmap/assets/<uuid:pk>/', MindmapAssetDetailAPIView.as_view(), name='test-mindmap-asset-detail'),

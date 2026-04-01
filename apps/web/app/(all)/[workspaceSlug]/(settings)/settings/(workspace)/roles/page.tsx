@@ -7,10 +7,9 @@
 import { useEffect, useState } from "react";
 import { observer } from "mobx-react";
 import useSWR from "swr";
-import { Building2, FolderKanban, Search, X } from "lucide-react";
+import { Search, X } from "lucide-react";
 // plane imports
 import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
-import type { TWorkspaceRoleType } from "@plane/types";
 import { cn } from "@plane/utils";
 // components
 import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
@@ -26,28 +25,9 @@ import { useUserPermissions } from "@/hooks/store/user";
 import type { Route } from "./+types/page";
 import { RolesWorkspaceSettingsHeader } from "./header";
 
-type TActiveTab = TWorkspaceRoleType;
-
-const TAB_CONFIG: { type: TActiveTab; label: string; icon: typeof Building2; description: string }[] = [
-  {
-    type: "workspace",
-    label: "工作区角色",
-    icon: Building2,
-    description: "管理工作区级别的权限，控制成员、设置、项目创建等能力",
-  },
-  {
-    type: "project_template",
-    label: "项目角色模板",
-    icon: FolderKanban,
-    description: "定义可复用的项目角色模板，可导入到具体项目后生效",
-  },
-];
-
 const WorkspaceRolesPage = observer(function WorkspaceRolesPage({ params }: Route.ComponentProps) {
   const { workspaceSlug } = params;
 
-  // active tab: workspace | project_template
-  const [activeTab, setActiveTab] = useState<TActiveTab>("workspace");
   const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -62,7 +42,6 @@ const WorkspaceRolesPage = observer(function WorkspaceRolesPage({ params }: Rout
     EUserPermissionsLevel.WORKSPACE
   );
 
-  // 全量 hook，按 activeTab 过滤
   const {
     roles,
     isLoading,
@@ -73,18 +52,11 @@ const WorkspaceRolesPage = observer(function WorkspaceRolesPage({ params }: Rout
     updateRole,
     deleteRole,
     togglePermission,
-  } = useWorkspaceRoles(workspaceSlug, activeTab);
+  } = useWorkspaceRoles(workspaceSlug, "workspace");
 
-  // fetch roles on mount（全量拉取一次，切 tab 不会重复请求）
   useSWR(canView ? `WORKSPACE_ROLES_${workspaceSlug}` : null, canView ? fetchRoles : null);
 
-  // 切 tab 时重置选中角色和搜索词
-  useEffect(() => {
-    setSelectedRoleId(null);
-    setSearchQuery("");
-  }, [activeTab]);
-
-  // auto-select first role in current tab
+  // auto-select first role
   useEffect(() => {
     if (roles.length > 0 && !selectedRoleId) {
       setSelectedRoleId(roles[0].id);
@@ -113,10 +85,9 @@ const WorkspaceRolesPage = observer(function WorkspaceRolesPage({ params }: Rout
     return () => document.removeEventListener("visibilitychange", onVisibilityChange);
   }, [selectedRoleId, loadRolePermissions]);
 
-  const pageTitle = currentWorkspace?.name ? `${currentWorkspace.name} - 角色` : undefined;
+  const pageTitle = currentWorkspace?.name ? `${currentWorkspace.name} - 权限` : undefined;
   const selectedRole = selectedRoleId ? (roles.find((r) => r.id === selectedRoleId) ?? null) : null;
   const rolePermissionState = selectedRoleId ? getRolePermissionState(selectedRoleId) : null;
-  const activeTabConfig = TAB_CONFIG.find((t) => t.type === activeTab)!;
 
   const handleSelectRole = (roleId: string) => {
     setSelectedRoleId(roleId);
@@ -135,32 +106,7 @@ const WorkspaceRolesPage = observer(function WorkspaceRolesPage({ params }: Rout
     <SettingsContentWrapper header={<RolesWorkspaceSettingsHeader />} hugging>
       <PageHead title={pageTitle} />
 
-      {/* Tab 切换 */}
-      <div className="mb-4 flex items-end gap-0 border-b border-subtle">
-        {TAB_CONFIG.map(({ type, label, icon: Icon }) => {
-          const isActive = activeTab === type;
-          return (
-            <button
-              key={type}
-              type="button"
-              onClick={() => setActiveTab(type)}
-              className={cn(
-                "relative flex cursor-pointer items-center gap-1.5 px-4 py-2.5 text-body-sm-medium transition-colors duration-150",
-                isActive ? "text-primary" : "text-tertiary hover:text-secondary"
-              )}
-            >
-              <Icon className="size-3.5" />
-              <span>{label}</span>
-              {isActive && (
-                <span className="absolute inset-x-0 -bottom-px h-0.5 rounded-t-full bg-accent-primary" />
-              )}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Tab 说明 */}
-      <p className="mb-3 text-body-xs-regular text-tertiary">{activeTabConfig.description}</p>
+      <p className="mb-3 text-body-xs-regular text-tertiary">管理工作区级别的权限，控制成员、设置、项目创建等能力</p>
 
       <section
         className={cn(
@@ -178,7 +124,7 @@ const WorkspaceRolesPage = observer(function WorkspaceRolesPage({ params }: Rout
           isAdmin={isAdmin}
           selectedRoleId={selectedRoleId}
           onSelectRole={handleSelectRole}
-          onCreate={(data) => createRole({ ...data, type: activeTab })}
+          onCreate={(data) => createRole({ ...data, type: "workspace" })}
           onUpdate={async (roleId, data) => {
             await updateRole(roleId, data);
           }}
@@ -187,7 +133,6 @@ const WorkspaceRolesPage = observer(function WorkspaceRolesPage({ params }: Rout
 
         {/* Right: Permissions panel */}
         <div className="flex flex-1 flex-col overflow-hidden">
-          {/* Selected role info header */}
           {selectedRole && (
             <div className="flex shrink-0 items-center gap-4 border-b border-subtle bg-surface-1 px-6 py-3">
               <div className="min-w-0 flex-1">
@@ -196,7 +141,6 @@ const WorkspaceRolesPage = observer(function WorkspaceRolesPage({ params }: Rout
                   <p className="truncate text-body-xs-regular text-tertiary">{selectedRole.description}</p>
                 )}
               </div>
-              {/* Global permission search */}
               <div
                 className={cn(
                   "flex w-52 shrink-0 items-center gap-1.5 rounded-md border py-1.5 pl-2.5 pr-1.5 transition-colors duration-150",
@@ -232,7 +176,6 @@ const WorkspaceRolesPage = observer(function WorkspaceRolesPage({ params }: Rout
             </div>
           )}
 
-          {/* Permissions panel */}
           <div className="min-h-0 flex-1 overflow-hidden">
             <PermissionsPanel
               role={selectedRole}

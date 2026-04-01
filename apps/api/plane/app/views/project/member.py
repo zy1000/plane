@@ -18,6 +18,7 @@ from plane.app.serializers import (
 )
 
 from plane.app.permissions import WorkspaceUserPermission, PermissionKey
+from plane.app.permissions.base import _get_user_project_permission_keys
 
 from plane.db.models import Project, ProjectMember, ProjectUserProperty, WorkspaceMember
 from plane.db.models.project import ProjectRole, ProjectMemberRole
@@ -117,7 +118,7 @@ class ProjectMemberViewSet(BaseViewSet):
             bulk_project_members.append(
                 ProjectMember(
                     member_id=member.get("member_id"),
-                    role=member.get("role", 5),
+                    role=member.get("role", ROLE.MEMBER.value),
                     project_id=project_id,
                     workspace_id=project.workspace_id,
                 )
@@ -430,6 +431,17 @@ class ProjectMemberCustomRolesAPIView(BaseAPIView):
             ).values_list("role_id", flat=True)
         ]
         return Response({"custom_role_ids": final_role_ids}, status=status.HTTP_200_OK)
+
+
+class ProjectMyPermissionKeysAPIView(BaseAPIView):
+    """返回当前登录用户在指定项目内的有效 permission_keys 列表。"""
+
+    def get(self, request, slug, project_id):
+        try:
+            keys = _get_user_project_permission_keys(request.user, slug, str(project_id))
+        except Exception:
+            keys = set()
+        return Response({"permission_keys": sorted(keys)}, status=status.HTTP_200_OK)
 
 
 class ProjectMemberPreferenceEndpoint(BaseAPIView):

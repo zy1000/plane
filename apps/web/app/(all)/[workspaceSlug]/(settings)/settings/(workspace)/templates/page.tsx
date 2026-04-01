@@ -9,8 +9,8 @@ import { observer } from "mobx-react";
 import useSWR from "swr";
 import { Search, X } from "lucide-react";
 // plane imports
-import { PROJECT_SETTINGS } from "@plane/constants";
-import type { IWorkspaceRole } from "@plane/types";
+import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import type { TWorkspaceRoleType } from "@plane/types";
 import { cn } from "@plane/utils";
 // components
 import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
@@ -18,34 +18,33 @@ import { PageHead } from "@/components/core/page-title";
 import { SettingsContentWrapper } from "@/components/settings/content-wrapper";
 import { PermissionsPanel } from "@/components/workspace/settings/roles/permissions-panel";
 import { RolesSidebar } from "@/components/workspace/settings/roles/roles-sidebar";
-import { ImportTemplateModal } from "@/components/project/settings/roles/import-template-modal";
 // hooks
-import { useProjectRoles } from "@/hooks/store/use-project-roles";
 import { useWorkspaceRoles } from "@/hooks/store/use-workspace-roles";
-import { useProject } from "@/hooks/store/use-project";
+import { useWorkspace } from "@/hooks/store/use-workspace";
 import { useUserPermissions } from "@/hooks/store/user";
 // local imports
 import type { Route } from "./+types/page";
-import { RolesProjectSettingsHeader } from "./header";
+import { TemplatesWorkspaceSettingsHeader } from "./header";
 
-const ProjectRolesPage = observer(function ProjectRolesPage({ params }: Route.ComponentProps) {
-  const { workspaceSlug, projectId } = params;
+const ROLE_TYPE: TWorkspaceRoleType = "project_template";
+
+const WorkspaceTemplatesPage = observer(function WorkspaceTemplatesPage({ params }: Route.ComponentProps) {
+  const { workspaceSlug } = params;
 
   const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [showImportModal, setShowImportModal] = useState(false);
 
-  const { workspaceUserInfo, allowProjectPermissionKeys } = useUserPermissions();
-  const { currentProjectDetails } = useProject();
+  // store hooks
+  const { workspaceUserInfo, allowPermissions } = useUserPermissions();
+  const { currentWorkspace } = useWorkspace();
 
-  const isAdmin = allowProjectPermissionKeys(
-    ["project.role.create", "project.role.edit", "project.role.delete"],
-    workspaceSlug,
-    projectId
+  // derived permissions
+  const isAdmin = allowPermissions([EUserPermissions.ADMIN], EUserPermissionsLevel.WORKSPACE);
+  const canView = allowPermissions(
+    [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
+    EUserPermissionsLevel.WORKSPACE
   );
-  const canView = allowProjectPermissionKeys(PROJECT_SETTINGS.roles.permissionKeys ?? [], workspaceSlug, projectId);
 
-  // 项目角色
   const {
     roles,
     isLoading,
@@ -55,23 +54,12 @@ const ProjectRolesPage = observer(function ProjectRolesPage({ params }: Route.Co
     createRole,
     updateRole,
     deleteRole,
-    importFromTemplate,
     togglePermission,
-  } = useProjectRoles(workspaceSlug, projectId);
+  } = useWorkspaceRoles(workspaceSlug, ROLE_TYPE);
 
-  // 工作区项目角色模板（只取 project_template 类型）
-  const {
-    roles: templates,
-    isLoading: isTemplatesLoading,
-    fetchRoles: fetchTemplates,
-  } = useWorkspaceRoles(workspaceSlug, "project_template");
+  useSWR(canView ? `WORKSPACE_ROLES_${workspaceSlug}` : null, canView ? fetchRoles : null);
 
-  useSWR(canView ? `PROJECT_ROLES_${workspaceSlug}_${projectId}` : null, canView ? fetchRoles : null);
-  useSWR(
-    showImportModal ? `WORKSPACE_TEMPLATES_${workspaceSlug}` : null,
-    showImportModal ? fetchTemplates : null
-  );
-
+  // auto-select first role
   useEffect(() => {
     if (roles.length > 0 && !selectedRoleId) {
       setSelectedRoleId(roles[0].id);
@@ -81,12 +69,14 @@ const ProjectRolesPage = observer(function ProjectRolesPage({ params }: Route.Co
     }
   }, [roles, selectedRoleId]);
 
+  // load role permissions when selection changes
   useEffect(() => {
     if (selectedRoleId) {
       void loadRolePermissions(selectedRoleId);
     }
   }, [selectedRoleId, loadRolePermissions]);
 
+  // 切回浏览器标签时刷新当前角色权限
   useEffect(() => {
     if (!selectedRoleId) return;
     const onVisibilityChange = () => {
@@ -98,7 +88,7 @@ const ProjectRolesPage = observer(function ProjectRolesPage({ params }: Route.Co
     return () => document.removeEventListener("visibilitychange", onVisibilityChange);
   }, [selectedRoleId, loadRolePermissions]);
 
-  const pageTitle = currentProjectDetails?.name ? `${currentProjectDetails.name} - 权限` : undefined;
+  const pageTitle = currentWorkspace?.name ? `${currentWorkspace.name} - 模板` : undefined;
   const selectedRole = selectedRoleId ? (roles.find((r) => r.id === selectedRoleId) ?? null) : null;
   const rolePermissionState = selectedRoleId ? getRolePermissionState(selectedRoleId) : null;
 
@@ -107,18 +97,8 @@ const ProjectRolesPage = observer(function ProjectRolesPage({ params }: Route.Co
     setSearchQuery("");
   };
 
-  const handleImport = async (workspaceRoleId: string) => {
-    const newRole = await importFromTemplate(workspaceRoleId);
-    setSelectedRoleId(newRole.id);
-  };
-
   const handleDeleteRole = async (roleId: string) => {
     await deleteRole(roleId);
-  };
-
-  // RolesSidebar 的 onUpdate 接口签名 —— 转换为 IWorkspaceRole 类型（复用组件）
-  const handleUpdate = async (roleId: string, data: { name: string; description: string }) => {
-    await updateRole(roleId, data);
   };
 
   if (workspaceUserInfo && !canView) {
@@ -126,37 +106,32 @@ const ProjectRolesPage = observer(function ProjectRolesPage({ params }: Route.Co
   }
 
   return (
-    <SettingsContentWrapper header={<RolesProjectSettingsHeader />} hugging>
+    <SettingsContentWrapper header={<TemplatesWorkspaceSettingsHeader />} hugging>
       <PageHead title={pageTitle} />
 
-      {/* Header row */}
-      <div className="mb-4">
-        <p className="text-body-xs-regular text-tertiary">
-          管理此项目内生效的自定义角色，可从工作区模板导入或手动创建
-        </p>
-      </div>
+      <p className="mb-3 text-body-xs-regular text-tertiary">定义可复用的项目角色模板，可导入到具体项目后生效</p>
 
       <section
         className={cn(
           "flex h-[calc(100svh-12rem)] min-h-[520px] w-full overflow-hidden rounded-lg border border-subtle bg-surface-1",
-          { "opacity-60 pointer-events-none": !canView }
+          {
+            "opacity-60 pointer-events-none": !canView,
+          }
         )}
       >
-        {/* Left: Project roles sidebar — 复用工作区角色侧边栏，角色 type 无关 */}
+        {/* Left: Roles list sidebar */}
         <RolesSidebar
-          roles={roles as unknown as IWorkspaceRole[]}
+          roles={roles}
           totalRoleCount={roles.length}
           isLoading={isLoading}
           isAdmin={isAdmin}
           selectedRoleId={selectedRoleId}
           onSelectRole={handleSelectRole}
-          onCreate={async (data) => {
-            const newRole = await createRole(data);
-            return newRole as unknown as IWorkspaceRole;
+          onCreate={(data) => createRole({ ...data, type: ROLE_TYPE })}
+          onUpdate={async (roleId, data) => {
+            await updateRole(roleId, data);
           }}
-          onUpdate={handleUpdate}
           onDelete={handleDeleteRole}
-          onImport={isAdmin ? () => setShowImportModal(true) : undefined}
         />
 
         {/* Right: Permissions panel */}
@@ -164,18 +139,9 @@ const ProjectRolesPage = observer(function ProjectRolesPage({ params }: Route.Co
           {selectedRole && (
             <div className="flex shrink-0 items-center gap-4 border-b border-subtle bg-surface-1 px-6 py-3">
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <h2 className="truncate text-body-md-semibold text-primary">{selectedRole.name}</h2>
-                  {(selectedRole as unknown as { source_template_name?: string | null }).source_template_name && (
-                    <span className="shrink-0 rounded-full bg-accent-primary/10 px-2 py-0.5 text-[10px] font-medium text-accent-primary">
-                      来自：{(selectedRole as unknown as { source_template_name?: string | null }).source_template_name}
-                    </span>
-                  )}
-                </div>
-                {(selectedRole as unknown as { description?: string }).description?.trim() && (
-                  <p className="truncate text-body-xs-regular text-tertiary">
-                    {(selectedRole as unknown as { description?: string }).description}
-                  </p>
+                <h2 className="truncate text-body-md-semibold text-primary">{selectedRole.name}</h2>
+                {selectedRole.description?.trim() && (
+                  <p className="truncate text-body-xs-regular text-tertiary">{selectedRole.description}</p>
                 )}
               </div>
               <div
@@ -186,7 +152,12 @@ const ProjectRolesPage = observer(function ProjectRolesPage({ params }: Route.Co
                     : "border-subtle bg-surface-2 focus-within:border-accent-primary/40 focus-within:bg-surface-1"
                 )}
               >
-                <Search className={cn("size-3.5 shrink-0", searchQuery ? "text-accent-primary" : "text-placeholder")} />
+                <Search
+                  className={cn(
+                    "size-3.5 shrink-0",
+                    searchQuery ? "text-accent-primary" : "text-placeholder"
+                  )}
+                />
                 <input
                   type="text"
                   className="min-w-0 flex-1 border-none bg-transparent text-body-xs-regular outline-none placeholder:text-placeholder"
@@ -199,6 +170,7 @@ const ProjectRolesPage = observer(function ProjectRolesPage({ params }: Route.Co
                     type="button"
                     onClick={() => setSearchQuery("")}
                     className="flex size-4 cursor-pointer items-center justify-center rounded text-placeholder transition-colors hover:bg-layer-1-hover hover:text-primary"
+                    aria-label="清除搜索"
                   >
                     <X className="size-3" />
                   </button>
@@ -209,7 +181,7 @@ const ProjectRolesPage = observer(function ProjectRolesPage({ params }: Route.Co
 
           <div className="min-h-0 flex-1 overflow-hidden">
             <PermissionsPanel
-              role={selectedRole as unknown as IWorkspaceRole}
+              role={selectedRole}
               permissions={rolePermissionState?.data?.permissions ?? []}
               permissionKeys={rolePermissionState?.data?.permission_keys ?? []}
               isLoading={Boolean(rolePermissionState?.isLoading)}
@@ -220,17 +192,8 @@ const ProjectRolesPage = observer(function ProjectRolesPage({ params }: Route.Co
           </div>
         </div>
       </section>
-
-      {/* Import template modal */}
-      <ImportTemplateModal
-        isOpen={showImportModal}
-        onClose={() => setShowImportModal(false)}
-        templates={templates}
-        isTemplatesLoading={isTemplatesLoading}
-        onImport={handleImport}
-      />
     </SettingsContentWrapper>
   );
 });
 
-export default ProjectRolesPage;
+export default WorkspaceTemplatesPage;

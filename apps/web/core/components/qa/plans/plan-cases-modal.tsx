@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Tree, Table, Row, Col, Tag, message, Tooltip } from "antd";
+import { Tree, Table, Row, Col, Tag, Tooltip } from "antd";
 import type { TreeProps } from "antd";
 import type { TableProps } from "antd";
 import { AppstoreOutlined, DownOutlined } from "@ant-design/icons";
@@ -13,6 +13,8 @@ import {
   formatDateTime,
   globalEnums,
 } from "@/app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/util";
+import { useTranslation } from "@plane/i18n";
+import { qaCaseErrorContent, qaCaseSetToastError, qaCaseSetToastSuccess, qaCaseSetToastWarning } from "@/utils/qa-case-error";
 
 type TLabel = { id?: string; name?: string } | string;
 type TestCase = {
@@ -33,6 +35,7 @@ type Props = {
   isOpen: boolean;
   onClose: () => void;
   workspaceSlug: string;
+  projectId?: string;
   repositoryId: string;
   repositoryName?: string;
   planId?: string;
@@ -44,10 +47,12 @@ export const PlanCasesModal: React.FC<Props> = ({
   isOpen,
   onClose,
   workspaceSlug,
+  projectId,
   planId,
   initialSelectedCaseIds,
   onClosed,
 }) => {
+  const { t } = useTranslation();
   const Enums = globalEnums.Enums;
   const caseService = useRef(new CaseService()).current;
   const planService = useRef(new PlanService()).current;
@@ -143,8 +148,10 @@ export const PlanCasesModal: React.FC<Props> = ({
       setCases(response?.data || []);
       setTotal(response?.count || 0);
       setCurrentPage(page);
-    } catch (e) {
-      setError("用例加载失败");
+    } catch (e: unknown) {
+      const fallback = "用例加载失败";
+      setError(qaCaseErrorContent(e, t, fallback));
+      qaCaseSetToastError(e, t, fallback);
     } finally {
       setLoading(false);
     }
@@ -511,24 +518,24 @@ export const PlanCasesModal: React.FC<Props> = ({
             disabled={saving || !workspaceSlug || !planId}
             onClick={async () => {
               if (!workspaceSlug || !planId) {
-                message.error("缺少必要参数：workspace或计划ID");
+                qaCaseSetToastWarning("缺少必要参数：workspace或计划ID");
                 return;
               }
               try {
                 if (!selectedNewIds || selectedNewIds.length === 0) {
-                  message.warning("请先选择要关联的用例");
+                  qaCaseSetToastWarning("请先选择要关联的用例");
                   return;
                 }
                 setSaving(true);
-                await planService.addPlanCases(String(workspaceSlug), {
+                await planService.addPlanCases(String(workspaceSlug), String(projectId || ""), {
                   plan_id: String(planId),
                   case_ids: selectedNewIds.map(String),
                 });
-                message.success("用例关联已更新");
+                qaCaseSetToastSuccess("用例关联已更新");
                 onClose();
                 onClosed && onClosed();
-              } catch (e: any) {
-                message.error(e?.detail || e?.message || "用例关联失败");
+              } catch (e: unknown) {
+                qaCaseSetToastError(e, t, "用例关联失败");
               } finally {
                 setSaving(false);
               }

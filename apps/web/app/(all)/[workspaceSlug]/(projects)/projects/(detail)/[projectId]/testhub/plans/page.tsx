@@ -47,8 +47,13 @@ import { formatDate, formatDateTime, globalEnums } from "../util";
 import { CreateUpdatePlanModal } from "@/components/qa/plans/create-update-modal";
 import styles from "../reviews/reviews.module.css";
 import { useTestHub } from "../testhub-context";
+import { useProjectPermissions } from "@/hooks/store/use-project-permissions";
+import UnauthorizedImg from "@/app/assets/auth/unauthorized.svg?url";
+import { useTranslation } from "@plane/i18n";
+import { qaCaseSetToastError } from "@/utils/qa-case-error";
 
 export default function TestPlanDetailPage() {
+  const { t } = useTranslation();
   const { workspaceSlug, projectId } = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -58,6 +63,11 @@ export default function TestPlanDetailPage() {
     repositoryIdFromUrl || (typeof window !== "undefined" ? sessionStorage.getItem("selectedRepositoryId") : null);
   const repositoryName = typeof window !== "undefined" ? sessionStorage.getItem("selectedRepositoryName") : "";
   const decodedRepositoryName = repositoryName || "";
+
+  const { fetched: permissionsFetched, hasPermission } = useProjectPermissions(
+    String(workspaceSlug || ""),
+    String(projectId || "")
+  );
 
   const [testPlans, setTestPlans] = useState<TestPlan[]>([]);
   const [loading, setLoading] = useState(true);
@@ -131,6 +141,8 @@ export default function TestPlanDetailPage() {
 
   useEffect(() => {
     if (!workspaceSlug || !projectId) return;
+    if (!permissionsFetched) return;
+    if (!hasPermission("qa.plan.view")) return;
     try {
       if (repositoryIdFromUrl) {
         sessionStorage.setItem("selectedRepositoryId", repositoryIdFromUrl);
@@ -138,7 +150,7 @@ export default function TestPlanDetailPage() {
     } catch {}
     fetchModules();
     fetchTestPlans(1, pageSize);
-  }, [workspaceSlug, projectId]);
+  }, [workspaceSlug, projectId, permissionsFetched, hasPermission, repositoryIdFromUrl, pageSize]);
 
   const batchUpdateModuleCounts = (list: any[], countsMap: Record<string, number>): any[] => {
     return (list || []).map((m: any) => {
@@ -418,10 +430,12 @@ export default function TestPlanDetailPage() {
       okButtonProps: { danger: true },
       onOk: async () => {
         try {
-          await planService.deletePlan(workspaceSlug as string, [plan.id]);
+          await planService.deletePlan(workspaceSlug as string, Array.isArray(projectId) ? projectId[0] : projectId as string, [plan.id]);
           await fetchTestPlans(currentPage, pageSize, filters, selectedModuleId ?? undefined);
           await fetchModules();
-        } catch (e: any) {}
+        } catch (e: unknown) {
+          qaCaseSetToastError(e, t, "删除测试计划失败，请稍后重试");
+        }
       },
     });
   };
@@ -543,7 +557,7 @@ export default function TestPlanDetailPage() {
       if (filterParams.name) queryParams.name__icontains = filterParams.name;
       if (filterParams.assigneeName) queryParams.assignee_display_name = filterParams.assigneeName;
       if (filterParams.states && filterParams.states.length > 0) queryParams.state__in = filterParams.states.join(",");
-      const response: TestPlanResponse = await planService.getPlans(workspaceSlug as string, queryParams);
+      const response: TestPlanResponse = await planService.getPlans(workspaceSlug as string, pid, queryParams);
       setTestPlans(response.data || []);
       setTotal(response.count || 0);
       setCurrentPage(page);
@@ -878,9 +892,23 @@ export default function TestPlanDetailPage() {
     } catch (e) {}
   };
 
+  const canViewPlans = permissionsFetched && hasPermission("qa.plan.view");
+
   return (
     <>
       <PageHead title={`测试计划 - ${decodedRepositoryName}`} />
+      {!permissionsFetched ? (
+        <div className="flex h-full w-full min-h-[50vh] items-center justify-center">
+          <div className="text-secondary">加载中...</div>
+        </div>
+      ) : !canViewPlans ? (
+        <div className="flex h-full w-full min-h-[50vh] flex-col items-center justify-center gap-y-5 text-center">
+          <div className="h-44 w-72">
+            <img src={UnauthorizedImg} className="h-[176px] w-[288px] object-contain" alt="unauthorized" />
+          </div>
+          <h1 className="text-xl font-medium text-primary">您没有查看此页面的权限</h1>
+        </div>
+      ) : (
       <div className="h-full w-full">
         <div className="flex h-full w-full flex-col">
           <div className="flex-1 overflow-hidden p-0">
@@ -1097,7 +1125,9 @@ export default function TestPlanDetailPage() {
           </div>
         </div>
       </div>
+      )}
 
+      {canViewPlans && (
       <CreateUpdatePlanModal
         isOpen={showCreateModal}
         handleClose={() => {
@@ -1113,7 +1143,9 @@ export default function TestPlanDetailPage() {
         initialData={selectedModuleId ? ({ module: selectedModuleId } as any) : null}
         onSuccess={refreshAll}
       />
+      )}
 
+      {canViewPlans && (
       <CreateUpdatePlanModal
         key={editingPlan?.id || "edit"}
         isOpen={showEditModal}
@@ -1142,6 +1174,7 @@ export default function TestPlanDetailPage() {
         }
         onSuccess={refreshAll}
       />
+      )}
     </>
   );
 }

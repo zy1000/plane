@@ -87,6 +87,14 @@ export class ProjectMemberService extends APIService {
         throw error?.response?.data;
       });
   }
+
+  async getMyPermissionKeys(workspaceSlug: string, projectId: string): Promise<string[]> {
+    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/my-permission-keys/`)
+      .then((response) => (response?.data?.permission_keys as string[]) ?? [])
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
 }
 
 const projectMemberService = new ProjectMemberService();

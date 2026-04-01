@@ -63,7 +63,7 @@ class ProjectInvitationsViewset(BaseViewSet):
                 workspace__slug=slug, member__email=email.get("email"), is_active=True
             ).role
 
-            if workspace_role in [5, 20] and workspace_role != email.get("role", 5):
+            if workspace_role in [5, 20] and workspace_role != email.get("role", ROLE.MEMBER.value):
                 return Response({"error": "You cannot invite a user with different role than workspace role"})
 
         workspace = Workspace.objects.get(slug=slug)
@@ -82,7 +82,7 @@ class ProjectInvitationsViewset(BaseViewSet):
                             settings.SECRET_KEY,
                             algorithm="HS256",
                         ),
-                        role=email.get("role", 5),
+                        role=email.get("role", ROLE.MEMBER.value),
                         created_by=request.user,
                     )
                 )
@@ -142,12 +142,12 @@ class UserProjectInvitationsViewset(BaseViewSet):
                     status=status.HTTP_403_FORBIDDEN,
                 )
 
-        workspace_role = workspace_member.role
         workspace = workspace_member.workspace
 
         # If the user was already part of workspace
         _ = ProjectMember.objects.filter(workspace__slug=slug, project_id__in=project_ids, member=request.user).update(
-            is_active=True
+            is_active=True,
+            role=ROLE.MEMBER.value,
         )
 
         ProjectMember.objects.bulk_create(
@@ -155,7 +155,7 @@ class UserProjectInvitationsViewset(BaseViewSet):
                 ProjectMember(
                     project_id=project_id,
                     member=request.user,
-                    role=workspace_role,
+                    role=ROLE.MEMBER.value,
                     workspace=workspace,
                     created_by=request.user,
                 )

@@ -14,8 +14,8 @@ export class CaseService extends APIService {
     super(API_BASE_URL);
   }
 
-  async getCases(workspaceSlug: string, queries?: any): Promise<any> {
-    return this.get(`/api/workspaces/${workspaceSlug}/test/case/`, {
+  async getCases(workspaceSlug: string, projectId: string, queries?: any): Promise<any> {
+    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/test/case/`, {
       params: queries,
     })
       .then((response) => response?.data)
@@ -130,8 +130,8 @@ export class CaseService extends APIService {
       });
   }
 
-  async createCase(workspaceSlug: string, data: any): Promise<any> {
-    return this.post(`/api/workspaces/${workspaceSlug}/test/case/`, data)
+  async createCase(workspaceSlug: string, projectId: string, data: any): Promise<any> {
+    return this.post(`/api/workspaces/${workspaceSlug}/projects/${projectId}/test/case/`, data)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
@@ -190,18 +190,20 @@ export class CaseService extends APIService {
       });
   }
 
-  async updateCase(workspaceSlug: string,  data: any): Promise<any> {
-    return this.put(`/api/workspaces/${workspaceSlug}/test/case/`, data)
+  async updateCase(workspaceSlug: string, projectId: string, data: any): Promise<any> {
+    return this.put(`/api/workspaces/${workspaceSlug}/projects/${projectId}/test/case/`, data)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
       });
   }
 
-  async deleteCase(workspaceSlug: string, caseId: string | string[]): Promise<any> {
+  async deleteCase(workspaceSlug: string, projectId: string, caseId: string | string[]): Promise<any> {
     const ids = Array.isArray(caseId) ? caseId.join(",") : caseId;
     const query = { id__in: ids };
-    return this.delete(`/api/workspaces/${workspaceSlug}/test/case/?${new URLSearchParams(query).toString()}`)
+    return this.delete(
+      `/api/workspaces/${workspaceSlug}/projects/${projectId}/test/case/?${new URLSearchParams(query).toString()}`
+    )
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;

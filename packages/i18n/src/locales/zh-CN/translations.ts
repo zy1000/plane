@@ -1637,7 +1637,10 @@ export default {
         title: "团队",
       },
       roles: {
-        title: "角色",
+        title: "权限",
+      },
+      templates: {
+        title: "模板",
       },
       exports: {
         title: "导出",
@@ -1943,7 +1946,7 @@ export default {
       label: "工作流",
     },
     roles: {
-      label: "项目角色",
+      label: "权限",
     },
     pms_sync: {
       label: "PMS 缺陷同步",

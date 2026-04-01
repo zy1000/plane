@@ -21,6 +21,7 @@ from plane.app.views import (
     ProjectMemberPreferenceEndpoint,
     ProjectMemberCustomRolesAPIView,
 )
+from plane.app.views.project.member import ProjectMyPermissionKeysAPIView
 from plane.app.views.project.announcement import AnnouncementAPIView
 from plane.app.views.project.base import ProjectAPI
 from plane.app.views.project.pms import PmsSyncAPIView, ProjectPmsInfoAPIView, ProjectPmsInfoDetailAPIView
@@ -113,6 +114,11 @@ urlpatterns = [
         "workspaces/<str:slug>/projects/<uuid:project_id>/project-members/me/",
         ProjectMemberUserEndpoint.as_view(),
         name="project-member-view",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/my-permission-keys/",
+        ProjectMyPermissionKeysAPIView.as_view(),
+        name="project-my-permission-keys",
     ),
     path(
         "workspaces/<str:slug>/user-favorite-projects/",
