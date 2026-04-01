@@ -64,7 +64,7 @@ export const UserMenuRoot = observer(function UserMenuRoot(props: Props) {
 
   return (
     <CustomMenu
-      className="flex items-center"
+      className="flex items-center pl-0.5"
       customButton={
         showLabel ? (
           <button
@@ -82,7 +82,7 @@ export const UserMenuRoot = observer(function UserMenuRoot(props: Props) {
                 shape="circle"
               />
             </div>
-            <span className="text-sm text-primary truncate max-w-[160px] group-hover:text-primary">
+            <span className="-ml-1.5 text-sm text-primary truncate max-w-[160px] group-hover:text-primary">
               {displayLabel}
             </span>
           </button>

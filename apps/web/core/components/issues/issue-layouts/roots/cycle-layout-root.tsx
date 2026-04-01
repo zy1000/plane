@@ -42,7 +42,7 @@ function CycleIssueLayout(props: {
     case EIssueLayoutTypes.CALENDAR:
       return <CycleCalendarLayout />;
     case EIssueLayoutTypes.GANTT:
-      return <BaseGanttRoot viewId={props.cycleId} isCompletedCycle={props.isCompletedCycle} />;
+      return <BaseGanttRoot viewId={props.cycleId} />;
     case EIssueLayoutTypes.SPREADSHEET:
       return <CycleSpreadsheetLayout />;
     default:

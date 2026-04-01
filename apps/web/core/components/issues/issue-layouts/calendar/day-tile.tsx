@@ -10,7 +10,7 @@ import { dropTargetForElements } from "@atlaskit/pragmatic-drag-and-drop/element
 import { differenceInCalendarDays } from "date-fns/differenceInCalendarDays";
 import { observer } from "mobx-react";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import type { TGroupedIssues, TIssue, TIssueMap, TPaginationData, ICalendarDate } from "@plane/types";
+import type { TGroupedIssues, TIssueMap, TPaginationData, ICalendarDate } from "@plane/types";
 // types
 // ui
 // components
@@ -36,9 +36,6 @@ type Props = {
   loadMoreIssues: (dateString: string) => void;
   getPaginationData: (groupId: string | undefined) => TPaginationData | undefined;
   getGroupIssueCount: (groupId: string | undefined) => number | undefined;
-  enableQuickIssueCreate?: boolean;
-  disableIssueCreation?: boolean;
-  quickAddCallback?: (projectId: string | null | undefined, data: TIssue) => Promise<TIssue | undefined>;
   quickActions: TRenderQuickActions;
   handleDragAndDrop: (
     issueId: string | undefined,
@@ -46,7 +43,6 @@ type Props = {
     sourceDate: string | undefined,
     destinationDate: string | undefined
   ) => Promise<void>;
-  addIssuesToView?: (issueIds: string[]) => Promise<any>;
   readOnly?: boolean;
   selectedDate: Date;
   setSelectedDate: (date: Date) => void;
@@ -64,10 +60,6 @@ export const CalendarDayTile = observer(function CalendarDayTile(props: Props) {
     getPaginationData,
     getGroupIssueCount,
     quickActions,
-    enableQuickIssueCreate,
-    disableIssueCreation,
-    quickAddCallback,
-    addIssuesToView,
     readOnly = false,
     selectedDate,
     handleDragAndDrop,
@@ -185,10 +177,6 @@ export const CalendarDayTile = observer(function CalendarDayTile(props: Props) {
               getPaginationData={getPaginationData}
               getGroupIssueCount={getGroupIssueCount}
               isDragDisabled={readOnly}
-              addIssuesToView={addIssuesToView}
-              disableIssueCreation={disableIssueCreation}
-              enableQuickIssueCreate={enableQuickIssueCreate}
-              quickAddCallback={quickAddCallback}
               readOnly={readOnly}
               canEditProperties={canEditProperties}
               isEpic={isEpic}

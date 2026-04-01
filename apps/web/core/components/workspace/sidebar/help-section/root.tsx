@@ -10,6 +10,7 @@ import { useParams, useRouter } from "next/navigation";
 import { BookText, HelpCircle, MessagesSquare, Sparkles } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { PageIcon } from "@plane/propel/icons";
+import { cn } from "@plane/utils";
 // ui
 import { CustomMenu } from "@plane/ui";
 // components
@@ -18,7 +19,11 @@ import { AppSidebarItem } from "@/components/sidebar/sidebar-item";
 import { useChatSupport } from "@/hooks/use-chat-support";
 import packageJson from "package.json";
 
-export const HelpMenuRoot = observer(function HelpMenuRoot() {
+type HelpMenuRootProps = {
+  showLabel?: boolean;
+};
+
+export const HelpMenuRoot = observer(function HelpMenuRoot({ showLabel = false }: HelpMenuRootProps) {
   const router = useRouter();
   const params = useParams();
   const workspaceSlug = typeof params.workspaceSlug === "string" ? params.workspaceSlug : params.workspaceSlug?.[0];
@@ -30,16 +35,31 @@ export const HelpMenuRoot = observer(function HelpMenuRoot() {
 
   return (
     <CustomMenu
+        className={showLabel ? "relative w-full" : undefined}
+        customButtonClassName={cn(
+          showLabel &&
+            "group relative flex w-full cursor-pointer items-center justify-between gap-1.5 rounded-md px-2 py-1 outline-none",
+          showLabel &&
+            (isNeedHelpOpen
+              ? "!bg-layer-transparent-active text-primary"
+              : "text-secondary hover:bg-layer-transparent-hover active:bg-layer-transparent-active")
+        )}
         customButton={
-          <AppSidebarItem
-            variant="button"
-            item={{
-              icon: <HelpCircle className="size-5" />,
-              isActive: isNeedHelpOpen,
-            }}
-          />
+          showLabel ? (
+            <div className="flex min-w-0 items-center gap-1.5 py-[1px]">
+              <HelpCircle className="size-5 shrink-0" />
+              <p className="truncate text-13 leading-5 font-medium">{t("sidebar.help")}</p>
+            </div>
+          ) : (
+            <AppSidebarItem
+              variant="button"
+              item={{
+                icon: <HelpCircle className="size-5" />,
+                isActive: isNeedHelpOpen,
+              }}
+            />
+          )
         }
-        // customButtonClassName="relative grid place-items-center rounded-md p-1.5 outline-none"
         menuButtonOnClick={() => !isNeedHelpOpen && setIsNeedHelpOpen(true)}
         onMenuClose={() => setIsNeedHelpOpen(false)}
         placement="bottom-end"

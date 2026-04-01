@@ -205,7 +205,7 @@ export const IssuesHeader = observer(function IssuesHeader() {
         {canUserCreateIssue && (
           <>
             <Button
-              variant="primary"
+              variant="secondary"
               size="lg"
               onClick={() => {
                 toggleCreateIssueModal(true, EIssuesStoreType.PROJECT);

@@ -74,7 +74,6 @@ export const BaseKanBanRoot = observer(function BaseKanBanRoot(props: IBaseKanBa
   const {
     fetchIssues,
     fetchNextIssues,
-    quickAddIssue,
     updateIssue,
     removeIssue,
     removeIssueFromView,
@@ -115,7 +114,7 @@ export const BaseKanBanRoot = observer(function BaseKanBanRoot(props: IBaseKanBa
 
   const KanBanView = sub_group_by ? KanBanSwimLanes : KanBan;
 
-  const { enableInlineEditing, enableQuickAdd, enableIssueCreation } = issues?.viewFlags || {};
+  const { enableInlineEditing, enableIssueCreation } = issues?.viewFlags || {};
 
   const scrollableContainerRef = useRef<HTMLDivElement | null>(null);
 
@@ -305,9 +304,7 @@ export const BaseKanBanRoot = observer(function BaseKanBanRoot(props: IBaseKanBa
                 quickActions={renderQuickActions}
                 handleCollapsedGroups={handleCollapsedGroups}
                 collapsedGroups={collapsedGroups}
-                enableQuickIssueCreate={enableQuickAdd}
                 showEmptyGroup={userDisplayFilters?.show_empty_groups ?? true}
-                quickAddCallback={quickAddIssue}
                 disableIssueCreation={!enableIssueCreation || !isEditingAllowed || isCompletedCycle}
                 canEditProperties={canEditProperties}
                 hideColumnHeaderAddButton={hideColumnHeaderAddButton}

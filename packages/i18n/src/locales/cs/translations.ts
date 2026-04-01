@@ -24,6 +24,7 @@ export default {
     pro: "Pro",
     upgrade: "Upgrade",
     stickies: "Poznámky",
+    help: "Nápověda",
   },
   auth: {
     common: {

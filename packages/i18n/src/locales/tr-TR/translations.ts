@@ -24,6 +24,7 @@ export default {
     pro: "Pro",
     upgrade: "Yükselt",
     stickies: "Yapışkan notlar",
+    help: "Yardım",
   },
   auth: {
     common: {

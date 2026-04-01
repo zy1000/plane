@@ -43,10 +43,8 @@ export interface IList {
   updateIssue: ((projectId: string | null, issueId: string, data: Partial<TIssue>) => Promise<void>) | undefined;
   quickActions: TRenderQuickActions;
   displayProperties: IIssueDisplayProperties | undefined;
-  enableIssueQuickAdd: boolean;
   showEmptyGroup?: boolean;
   canEditProperties: (projectId: string | undefined) => boolean;
-  quickAddCallback?: (projectId: string | null | undefined, data: TIssue) => Promise<TIssue | undefined>;
   disableIssueCreation?: boolean;
   hideColumnHeaderAddButton?: boolean;
   handleOnDrop: (source: GroupDropLocation, destination: GroupDropLocation) => Promise<void>;
@@ -68,10 +66,8 @@ export const List = observer(function List(props: IList) {
     updateIssue,
     quickActions,
     displayProperties,
-    enableIssueQuickAdd,
     showEmptyGroup,
     canEditProperties,
-    quickAddCallback,
     disableIssueCreation,
     hideColumnHeaderAddButton,
     handleOnDrop,
@@ -157,10 +153,8 @@ export const List = observer(function List(props: IList) {
                     getGroupIndex={getGroupIndex}
                     handleOnDrop={handleOnDrop}
                     displayProperties={displayProperties}
-                    enableIssueQuickAdd={enableIssueQuickAdd}
                     showEmptyGroup={showEmptyGroup}
                     canEditProperties={canEditProperties}
-                    quickAddCallback={quickAddCallback}
                     disableIssueCreation={disableIssueCreation}
                     hideColumnHeaderAddButton={hideColumnHeaderAddButton}
                     addIssuesToView={addIssuesToView}

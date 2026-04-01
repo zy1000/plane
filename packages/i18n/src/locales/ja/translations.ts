@@ -24,6 +24,7 @@ export default {
     pro: "プロ",
     upgrade: "アップグレード",
     stickies: "付箋",
+    help: "ヘルプ",
   },
   auth: {
     common: {

@@ -59,8 +59,6 @@ export interface IKanBan {
   collapsedGroups: TIssueKanbanFilters;
   handleCollapsedGroups: (toggle: "group_by" | "sub_group_by", value: string) => void;
   loadMoreIssues: (groupId?: string, subGroupId?: string) => void;
-  enableQuickIssueCreate?: boolean;
-  quickAddCallback?: (projectId: string | null | undefined, data: TIssue) => Promise<TIssue | undefined>;
   disableIssueCreation?: boolean;
   hideColumnHeaderAddButton?: boolean;
   addIssuesToView?: (issueIds: string[]) => Promise<TIssue>;
@@ -85,8 +83,6 @@ export const KanBan = observer(function KanBan(props: IKanBan) {
     quickActions,
     collapsedGroups,
     handleCollapsedGroups,
-    enableQuickIssueCreate,
-    quickAddCallback,
     loadMoreIssues,
     disableIssueCreation,
     hideColumnHeaderAddButton,
@@ -226,8 +222,6 @@ export const KanBan = observer(function KanBan(props: IKanBan) {
                     dropErrorMessage={subList.dropErrorMessage ?? dropErrorMessage}
                     updateIssue={updateIssue}
                     quickActions={quickActions}
-                    enableQuickIssueCreate={enableQuickIssueCreate}
-                    quickAddCallback={quickAddCallback}
                     disableIssueCreation={disableIssueCreation}
                     canEditProperties={canEditProperties}
                     scrollableContainerRef={scrollableContainerRef}

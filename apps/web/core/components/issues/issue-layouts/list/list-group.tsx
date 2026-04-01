@@ -22,13 +22,11 @@ import type {
   IIssueDisplayProperties,
   TIssueKanbanFilters,
 } from "@plane/types";
-import { EIssueLayoutTypes } from "@plane/types";
 import { Row } from "@plane/ui";
 import { cn } from "@plane/utils";
 // components
 import { ListLoaderItemRow } from "@/components/ui/loader/layouts/list-layout-loader";
 // hooks
-import { useProjectState } from "@/hooks/store/use-project-state";
 import { useIntersectionObserver } from "@/hooks/use-intersection-observer";
 import { useIssuesStore } from "@/hooks/use-issue-layout-store";
 import type { TSelectionHelper } from "@/hooks/use-multiple-select";
@@ -36,7 +34,6 @@ import type { TSelectionHelper } from "@/hooks/use-multiple-select";
 import { useWorkFlowFDragNDrop } from "@/plane-web/components/workflow";
 //
 import { GroupDragOverlay } from "../group-drag-overlay";
-import { ListQuickAddIssueButton, QuickAddIssueRoot } from "../quick-add";
 import type { GroupDropLocation } from "../utils";
 import {
   getDestinationFromDropPayload,
@@ -59,10 +56,8 @@ interface Props {
   updateIssue: ((projectId: string | null, issueId: string, data: Partial<TIssue>) => Promise<void>) | undefined;
   quickActions: TRenderQuickActions;
   displayProperties: IIssueDisplayProperties | undefined;
-  enableIssueQuickAdd: boolean;
   canEditProperties: (projectId: string | undefined) => boolean;
   containerRef: MutableRefObject<HTMLDivElement | null>;
-  quickAddCallback?: ((projectId: string | null | undefined, data: TIssue) => Promise<TIssue | undefined>) | undefined;
   handleOnDrop: (source: GroupDropLocation, destination: GroupDropLocation) => Promise<void>;
   disableIssueCreation?: boolean;
   hideColumnHeaderAddButton?: boolean;
@@ -88,10 +83,8 @@ export const ListGroup = observer(function ListGroup(props: Props) {
     updateIssue,
     quickActions,
     displayProperties,
-    enableIssueQuickAdd,
     canEditProperties,
     containerRef,
-    quickAddCallback,
     handleOnDrop,
     disableIssueCreation,
     hideColumnHeaderAddButton,
@@ -110,7 +103,6 @@ export const ListGroup = observer(function ListGroup(props: Props) {
   const isExpanded = !collapsedGroups?.group_by.includes(group.id);
   const groupRef = useRef<HTMLDivElement | null>(null);
   const { t } = useTranslation();
-  const projectState = useProjectState();
 
   const {
     issues: { getGroupIssueCount, getPaginationData, getIssueLoader },
@@ -149,35 +141,6 @@ export const ListGroup = observer(function ListGroup(props: Props) {
   const validateEmptyIssueGroups = (issueCount: number = 0) => {
     if (!showEmptyGroup && issueCount <= 0) return false;
     return true;
-  };
-
-  const prePopulateQuickAddData = (groupByKey: string | null, value: any) => {
-    const defaultState = projectState.projectStates?.find((state) => state.default);
-    let preloadedData: object = { state_id: defaultState?.id };
-
-    if (groupByKey === null) {
-      preloadedData = { ...preloadedData };
-    } else {
-      if (groupByKey === "state") {
-        preloadedData = { ...preloadedData, state_id: value };
-      } else if (groupByKey === "priority") {
-        preloadedData = { ...preloadedData, priority: value };
-      } else if (groupByKey === "labels" && value != "None") {
-        preloadedData = { ...preloadedData, label_ids: [value] };
-      } else if (groupByKey === "assignees" && value != "None") {
-        preloadedData = { ...preloadedData, assignee_ids: [value] };
-      } else if (groupByKey === "cycle" && value != "None") {
-        preloadedData = { ...preloadedData, cycle_id: value };
-      } else if (groupByKey === "module" && value != "None") {
-        preloadedData = { ...preloadedData, module_ids: [value] };
-      } else if (groupByKey === "created_by") {
-        preloadedData = { ...preloadedData };
-      } else {
-        preloadedData = { ...preloadedData, [groupByKey]: value };
-      }
-    }
-
-    return preloadedData;
   };
 
   useEffect(() => {
@@ -330,22 +293,6 @@ export const ListGroup = observer(function ListGroup(props: Props) {
               </>
             ))}
 
-          {enableIssueQuickAdd &&
-            !disableIssueCreation &&
-            !isGroupByCreatedBy &&
-            !isCompletedCycle &&
-            !isWorkflowIssueCreationDisabled && (
-              <div className="sticky bottom-0 z-[1] w-full flex-shrink-0">
-                <QuickAddIssueRoot
-                  layout={EIssueLayoutTypes.LIST}
-                  QuickAddButton={ListQuickAddIssueButton}
-                  prePopulatedData={prePopulateQuickAddData(group_by, group.id)}
-                  containerClassName="border-b border-t border-subtle bg-surface-1 "
-                  quickAddCallback={quickAddCallback}
-                  isEpic={isEpic}
-                />
-              </div>
-            )}
         </div>
       )}
     </div>

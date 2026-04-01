@@ -24,6 +24,7 @@ export default {
     pro: "Pro",
     upgrade: "Upgrade",
     stickies: "Catatan tempel",
+    help: "Bantuan",
   },
   auth: {
     common: {

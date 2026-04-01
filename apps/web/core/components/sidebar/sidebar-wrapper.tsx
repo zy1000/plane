@@ -8,7 +8,6 @@ import { useEffect, useRef, useState } from "react";
 import { observer } from "mobx-react";
 // plane helpers
 import { useOutsideClickDetector } from "@plane/hooks";
-import { PreferencesIcon } from "@plane/propel/icons";
 import { ScrollArea } from "@plane/propel/scrollarea";
 // components
 import { CustomizeNavigationDialog } from "@/components/navigation/customize-navigation-dialog";
@@ -20,7 +19,6 @@ import { useAppTheme } from "@/hooks/store/use-app-theme";
 import useSize from "@/hooks/use-window-size";
 // plane web components
 import { AppSidebarToggleButton } from "./sidebar-toggle-button";
-import { IconButton } from "@plane/propel/icon-button";
 
 type TSidebarWrapperProps = {
   title: string;
@@ -58,11 +56,6 @@ export const SidebarWrapper = observer(function SidebarWrapper(props: TSidebarWr
 
           <div className="flex items-center justify-between gap-2 px-2">
             <WorkspaceMenuRoot variant="top-navigation" />
-            {title === "Projects" && (
-              <div className="flex items-center gap-2">
-                <AppSidebarToggleButton />
-              </div>
-            )}
           </div>
           {/* Quick actions */}
           {quickActions}
@@ -77,10 +70,16 @@ export const SidebarWrapper = observer(function SidebarWrapper(props: TSidebarWr
         >
           {children}
         </ScrollArea>
-        {/* Help Section */}
-        <div className="flex h-12 items-center justify-between border-t border-subtle bg-surface-1 p-3">
-          <UserMenuRoot size="xs" showLabel />
-          <HelpMenuRoot />
+        <div className="flex flex-col gap-0 bg-surface-1 px-3 pt-3 pb-3">
+          <HelpMenuRoot showLabel />
+          <div className="flex h-12 items-center justify-between bg-surface-1">
+            <UserMenuRoot size="xs" showLabel />
+            {title === "Projects" && (
+              <div className="flex items-center gap-2">
+                <AppSidebarToggleButton />
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </>

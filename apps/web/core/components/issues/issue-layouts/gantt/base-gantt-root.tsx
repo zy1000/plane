@@ -13,7 +13,6 @@ import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { EIssuesStoreType, IBlockUpdateData, TIssue } from "@plane/types";
 import { EIssueLayoutTypes, EIssueServiceType, GANTT_TIMELINE_TYPE } from "@plane/types";
-import { renderFormattedPayloadDate } from "@plane/utils";
 // components
 import { TimeLineTypeContext } from "@/components/gantt-chart/contexts";
 import { GanttChartRoot } from "@/components/gantt-chart/root";
@@ -29,12 +28,10 @@ import { useTimeLineChart } from "@/hooks/use-timeline-chart";
 import { useBulkOperationStatus } from "@/plane-web/hooks/use-bulk-operation-status";
 
 import { IssueLayoutHOC } from "../issue-layout-HOC";
-import { GanttQuickAddIssueButton, QuickAddIssueRoot } from "../quick-add";
 import { IssueGanttBlock } from "./blocks";
 
 interface IBaseGanttRoot {
   viewId?: string | undefined;
-  isCompletedCycle?: boolean;
   isEpic?: boolean;
 }
 
@@ -46,14 +43,14 @@ export type GanttStoreType =
   | EIssuesStoreType.EPIC;
 
 export const BaseGanttRoot = observer(function BaseGanttRoot(props: IBaseGanttRoot) {
-  const { viewId, isCompletedCycle = false, isEpic = false } = props;
+  const { viewId, isEpic = false } = props;
   const { t } = useTranslation();
   // router
   const { workspaceSlug, projectId } = useParams();
 
   const storeType = useIssueStoreType() as GanttStoreType;
   const { issues, issuesFilter } = useIssues(storeType);
-  const { fetchIssues, fetchNextIssues, updateIssue, quickAddIssue } = useIssuesActions(storeType);
+  const { fetchIssues, fetchNextIssues, updateIssue } = useIssuesActions(storeType);
   const { initGantt } = useTimeLineChart(GANTT_TIMELINE_TYPE.ISSUE);
   // store hooks
   const { allowPermissions } = useUserPermissions();
@@ -65,9 +62,6 @@ export const BaseGanttRoot = observer(function BaseGanttRoot(props: IBaseGanttRo
   // plane web hooks
   const isBulkOperationsEnabled = useBulkOperationStatus();
   // derived values
-  const targetDate = new Date();
-  targetDate.setDate(targetDate.getDate() + 1);
-
   useEffect(() => {
     fetchIssues("init-loader", { canGroup: false, perPageCount: 100 }, viewId);
   }, [fetchIssues, storeType, viewId]);
@@ -78,8 +72,6 @@ export const BaseGanttRoot = observer(function BaseGanttRoot(props: IBaseGanttRo
 
   const issuesIds = (issues.groupedIssueIds?.[ALL_ISSUES] as string[]) ?? [];
   const nextPageResults = issues.getPaginationData(undefined, undefined)?.nextPageResults;
-
-  const { enableIssueCreation } = issues?.viewFlags || {};
 
   const [expandedIssueIds, setExpandedIssueIds] = useState<Set<string>>(() => new Set());
 
@@ -179,21 +171,6 @@ export const BaseGanttRoot = observer(function BaseGanttRoot(props: IBaseGanttRo
     [issues, projectId, workspaceSlug]
   );
 
-  const quickAdd =
-    enableIssueCreation && isAllowed && !isCompletedCycle ? (
-      <QuickAddIssueRoot
-        layout={EIssueLayoutTypes.GANTT}
-        QuickAddButton={GanttQuickAddIssueButton}
-        containerClassName="sticky bottom-0 z-[1]"
-        prePopulatedData={{
-          start_date: renderFormattedPayloadDate(new Date()),
-          target_date: renderFormattedPayloadDate(targetDate),
-        }}
-        quickAddCallback={quickAddIssue}
-        isEpic={isEpic}
-      />
-    ) : undefined;
-
   return (
     <IssueLayoutHOC layout={EIssueLayoutTypes.GANTT}>
       <TimeLineTypeContext.Provider value={GANTT_TIMELINE_TYPE.ISSUE}>
@@ -222,7 +199,6 @@ export const BaseGanttRoot = observer(function BaseGanttRoot(props: IBaseGanttRo
             enableReorder={appliedDisplayFilters?.order_by === "sort_order" && isAllowed}
             enableAddBlock={isAllowed}
             enableSelection={isBulkOperationsEnabled && isAllowed}
-            quickAdd={quickAdd}
             loadMoreBlocks={loadMoreIssues}
             canLoadMoreBlocks={nextPageResults}
             updateBlockDates={updateBlockDates}

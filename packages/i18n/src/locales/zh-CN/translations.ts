@@ -30,6 +30,7 @@ export default {
     statistics: "统计",
     milestones: "里程碑",
     filestore: "文件",
+    help: "帮助",
   },
   auth: {
     common: {

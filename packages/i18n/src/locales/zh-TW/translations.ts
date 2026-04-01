@@ -24,6 +24,7 @@ export default {
     pro: "專業版",
     upgrade: "升級",
     stickies: "便利貼",
+    help: "說明",
   },
   auth: {
     common: {

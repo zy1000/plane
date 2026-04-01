@@ -44,7 +44,7 @@ export function ResizableSidebar({
   width,
   setWidth,
   onWidthChange,
-  minWidth = 236,
+  minWidth = 180,
   maxWidth = 350,
   className = "",
   children,

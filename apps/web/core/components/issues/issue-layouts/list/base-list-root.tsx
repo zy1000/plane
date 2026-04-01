@@ -65,7 +65,6 @@ export const BaseListRoot = observer(function BaseListRoot(props: IBaseListRoot)
   const {
     fetchIssues,
     fetchNextIssues,
-    quickAddIssue,
     updateIssue,
     removeIssue,
     removeIssueFromView,
@@ -98,7 +97,7 @@ export const BaseListRoot = observer(function BaseListRoot(props: IBaseListRoot)
     [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
     EUserPermissionsLevel.PROJECT
   );
-  const { enableInlineEditing, enableQuickAdd, enableIssueCreation } = issues?.viewFlags || {};
+  const { enableInlineEditing, enableIssueCreation } = issues?.viewFlags || {};
 
   const canEditProperties = useCallback(
     (projectId: string | undefined) => {
@@ -216,8 +215,6 @@ export const BaseListRoot = observer(function BaseListRoot(props: IBaseListRoot)
           groupedIssueIds={groupedIssueIds ?? {}}
           loadMoreIssues={loadMoreIssues}
           showEmptyGroup={showEmptyGroup}
-          quickAddCallback={quickAddIssue}
-          enableIssueQuickAdd={!!enableQuickAdd}
           canEditProperties={canEditProperties}
           disableIssueCreation={!enableIssueCreation || !isEditingAllowed}
           hideColumnHeaderAddButton={hideColumnHeaderAddButton}

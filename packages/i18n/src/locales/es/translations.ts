@@ -24,6 +24,7 @@ export default {
     pro: "Pro",
     upgrade: "Mejorar",
     stickies: "Notas adhesivas",
+    help: "Ayuda",
   },
   auth: {
     common: {

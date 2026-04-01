@@ -35,7 +35,6 @@ export type CalendarStoreType =
 
 interface IBaseCalendarRoot {
   QuickActions: FC<IQuickActionProps>;
-  addIssuesToView?: (issueIds: string[]) => Promise<any>;
   isCompletedCycle?: boolean;
   viewId?: string | undefined;
   isEpic?: boolean;
@@ -45,7 +44,6 @@ interface IBaseCalendarRoot {
 export const BaseCalendarRoot = observer(function BaseCalendarRoot(props: IBaseCalendarRoot) {
   const {
     QuickActions,
-    addIssuesToView,
     isCompletedCycle = false,
     viewId,
     isEpic = false,
@@ -63,7 +61,6 @@ export const BaseCalendarRoot = observer(function BaseCalendarRoot(props: IBaseC
   const {
     fetchIssues,
     fetchNextIssues,
-    quickAddIssue,
     updateIssue,
     removeIssue,
     removeIssueFromView,
@@ -197,8 +194,6 @@ export const BaseCalendarRoot = observer(function BaseCalendarRoot(props: IBaseC
           loadMoreIssues={loadMoreIssues}
           getPaginationData={getPaginationData}
           getGroupIssueCount={getGroupIssueCount}
-          addIssuesToView={addIssuesToView}
-          quickAddCallback={quickAddIssue}
           readOnly={isCompletedCycle}
           updateFilters={updateFilters}
           handleDragAndDrop={handleDragAndDrop}

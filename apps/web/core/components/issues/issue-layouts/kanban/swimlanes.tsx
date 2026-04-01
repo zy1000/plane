@@ -113,7 +113,6 @@ interface ISubGroupSwimlane extends ISubGroupSwimlaneHeader {
   collapsedGroups: TIssueKanbanFilters;
   disableIssueCreation?: boolean;
   displayProperties: IIssueDisplayProperties | undefined;
-  enableQuickIssueCreate: boolean;
   getGroupIssueCount: (
     groupId: string | undefined,
     subGroupId: string | undefined,
@@ -127,7 +126,6 @@ interface ISubGroupSwimlane extends ISubGroupSwimlaneHeader {
   loadMoreIssues: (groupId?: string, subGroupId?: string) => void;
   orderBy: TIssueOrderByOptions | undefined;
   quickActions: TRenderQuickActions;
-  quickAddCallback?: (projectId: string | null | undefined, data: TIssue) => Promise<TIssue | undefined>;
   scrollableContainerRef?: MutableRefObject<HTMLDivElement | null>;
   showEmptyGroup: boolean;
   updateIssue: ((projectId: string | null, issueId: string, data: Partial<TIssue>) => Promise<void>) | undefined;
@@ -141,7 +139,6 @@ const SubGroupSwimlane = observer(function SubGroupSwimlane(props: ISubGroupSwim
     hideColumnHeaderAddButton,
     disableIssueCreation,
     displayProperties,
-    enableQuickIssueCreate,
     getGroupIssueCount,
     group_by,
     groupedIssueIds,
@@ -153,7 +150,6 @@ const SubGroupSwimlane = observer(function SubGroupSwimlane(props: ISubGroupSwim
     loadMoreIssues,
     orderBy,
     quickActions,
-    quickAddCallback,
     scrollableContainerRef,
     showEmptyGroup,
     sub_group_by,
@@ -217,12 +213,10 @@ const SubGroupSwimlane = observer(function SubGroupSwimlane(props: ISubGroupSwim
                     collapsedGroups={collapsedGroups}
                     handleCollapsedGroups={handleCollapsedGroups}
                     showEmptyGroup={showEmptyGroup}
-                    enableQuickIssueCreate={enableQuickIssueCreate}
                     disableIssueCreation={disableIssueCreation}
                     canEditProperties={canEditProperties}
                     hideColumnHeaderAddButton={hideColumnHeaderAddButton}
                     addIssuesToView={addIssuesToView}
-                    quickAddCallback={quickAddCallback}
                     scrollableContainerRef={scrollableContainerRef}
                     loadMoreIssues={loadMoreIssues}
                     handleOnDrop={handleOnDrop}
@@ -247,7 +241,6 @@ export interface IKanBanSwimLanes {
   collapsedGroups: TIssueKanbanFilters;
   disableIssueCreation?: boolean;
   displayProperties: IIssueDisplayProperties | undefined;
-  enableQuickIssueCreate: boolean;
   getGroupIssueCount: (
     groupId: string | undefined,
     subGroupId: string | undefined,
@@ -262,7 +255,6 @@ export interface IKanBanSwimLanes {
   loadMoreIssues: (groupId?: string, subGroupId?: string) => void;
   orderBy: TIssueOrderByOptions | undefined;
   quickActions: TRenderQuickActions;
-  quickAddCallback?: (projectId: string | null | undefined, data: TIssue) => Promise<TIssue | undefined>;
   scrollableContainerRef?: MutableRefObject<HTMLDivElement | null>;
   showEmptyGroup: boolean;
   sub_group_by: TIssueGroupByOptions | undefined;
@@ -286,11 +278,9 @@ export const KanBanSwimLanes = observer(function KanBanSwimLanes(props: IKanBanS
     showEmptyGroup,
     handleOnDrop,
     disableIssueCreation,
-    enableQuickIssueCreate,
     canEditProperties,
     hideColumnHeaderAddButton,
     addIssuesToView,
-    quickAddCallback,
     scrollableContainerRef,
     isEpic = false,
   } = props;
@@ -346,11 +336,9 @@ export const KanBanSwimLanes = observer(function KanBanSwimLanes(props: IKanBanS
           showEmptyGroup={showEmptyGroup}
           handleOnDrop={handleOnDrop}
           disableIssueCreation={disableIssueCreation}
-          enableQuickIssueCreate={enableQuickIssueCreate}
           hideColumnHeaderAddButton={hideColumnHeaderAddButton}
           addIssuesToView={addIssuesToView}
           canEditProperties={canEditProperties}
-          quickAddCallback={quickAddCallback}
           scrollableContainerRef={scrollableContainerRef}
           isEpic={isEpic}
         />

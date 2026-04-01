@@ -195,8 +195,8 @@ export const CollapsedSidebar = observer(function CollapsedSidebar() {
 
       {/* Bottom area */}
       <div className="mt-auto flex w-full flex-col items-center gap-1 px-1.5">
-        <UserMenuRoot size="xs" />
         <HelpMenuRoot />
+        <UserMenuRoot size="xs" />
         <Tooltip tooltipContent="展开侧栏" position="right">
           <button
             type="button"

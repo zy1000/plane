@@ -24,6 +24,7 @@ export default {
     favorites: "Вибране",
     pro: "Pro",
     upgrade: "Підвищити",
+    help: "Допомога",
   },
   auth: {
     common: {

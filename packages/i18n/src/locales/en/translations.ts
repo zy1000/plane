@@ -2804,5 +2804,6 @@ export default {
   sidebar: {
     stickies: "便签",
     your_work: "Your work",
+    help: "Help",
   },
 } as const;

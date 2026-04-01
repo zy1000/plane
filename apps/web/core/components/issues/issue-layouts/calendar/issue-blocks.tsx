@@ -6,14 +6,13 @@
 
 import { observer } from "mobx-react";
 import { useTranslation } from "@plane/i18n";
-import type { TIssue, TPaginationData } from "@plane/types";
+import type { TPaginationData } from "@plane/types";
 // components
 import { renderFormattedPayloadDate } from "@plane/utils";
 // helpers
 import { useIssuesStore } from "@/hooks/use-issue-layout-store";
 import type { TRenderQuickActions } from "../list/list-view-types";
 import { CalendarIssueBlockRoot } from "./issue-block-root";
-import { CalendarQuickAddIssueActions } from "./quick-add-issue-actions";
 // types
 
 type Props = {
@@ -24,10 +23,6 @@ type Props = {
   issueIdList: string[];
   quickActions: TRenderQuickActions;
   isDragDisabled?: boolean;
-  enableQuickIssueCreate?: boolean;
-  disableIssueCreation?: boolean;
-  quickAddCallback?: (projectId: string | null | undefined, data: TIssue) => Promise<TIssue | undefined>;
-  addIssuesToView?: (issueIds: string[]) => Promise<any>;
   readOnly?: boolean;
   isMobileView?: boolean;
   canEditProperties: (projectId: string | undefined) => boolean;
@@ -41,10 +36,6 @@ export const CalendarIssueBlocks = observer(function CalendarIssueBlocks(props: 
     quickActions,
     loadMoreIssues,
     isDragDisabled = false,
-    enableQuickIssueCreate,
-    disableIssueCreation,
-    quickAddCallback,
-    addIssuesToView,
     readOnly,
     isMobileView = false,
     canEditProperties,
@@ -85,19 +76,6 @@ export const CalendarIssueBlocks = observer(function CalendarIssueBlocks(props: 
       {isPaginating && (
         <div className="p-1 px-2">
           <div className="flex h-10 w-full animate-pulse items-center justify-between gap-1.5 rounded-sm bg-layer-1 px-4 py-1.5 md:h-8 md:px-1" />
-        </div>
-      )}
-
-      {enableQuickIssueCreate && !disableIssueCreation && !readOnly && (
-        <div className="border-b border-subtle px-1 py-1 md:border-none md:px-2">
-          <CalendarQuickAddIssueActions
-            prePopulatedData={{
-              target_date: formattedDatePayload,
-            }}
-            quickAddCallback={quickAddCallback}
-            addIssuesToView={addIssuesToView}
-            isEpic={isEpic}
-          />
         </div>
       )}
 

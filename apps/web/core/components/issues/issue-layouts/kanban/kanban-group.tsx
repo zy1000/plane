@@ -25,7 +25,6 @@ import type {
   TIssueGroupByOptions,
   TIssueOrderByOptions,
 } from "@plane/types";
-import { EIssueLayoutTypes } from "@plane/types";
 import { cn } from "@plane/utils";
 import type { GroupDropLocation } from "@/components/issues/issue-layouts/utils";
 import {
@@ -36,7 +35,6 @@ import {
 } from "@/components/issues/issue-layouts/utils";
 import { KanbanIssueBlockLoader } from "@/components/ui/loader/layouts/kanban-layout-loader";
 // hooks
-import { useProjectState } from "@/hooks/store/use-project-state";
 import { useIntersectionObserver } from "@/hooks/use-intersection-observer";
 import { useIssuesStore } from "@/hooks/use-issue-layout-store";
 // Plane-web
@@ -44,7 +42,6 @@ import { useWorkFlowFDragNDrop } from "@/plane-web/components/workflow";
 //
 import { GroupDragOverlay } from "../group-drag-overlay";
 import type { TRenderQuickActions } from "../list/list-view-types";
-import { KanbanQuickAddIssueButton, QuickAddIssueRoot } from "../quick-add";
 import { KanbanIssueBlocksList } from "./blocks-list";
 
 interface IKanbanGroup {
@@ -60,10 +57,7 @@ interface IKanbanGroup {
   dropErrorMessage: string | undefined;
   updateIssue: ((projectId: string | null, issueId: string, data: Partial<TIssue>) => Promise<void>) | undefined;
   quickActions: TRenderQuickActions;
-  enableQuickIssueCreate?: boolean;
-  quickAddCallback?: (projectId: string | null | undefined, data: TIssue) => Promise<TIssue | undefined>;
   loadMoreIssues: (groupId?: string, subGroupId?: string) => void;
-  disableIssueCreation?: boolean;
   canEditProperties: (projectId: string | undefined) => boolean;
   groupByVisibilityToggle?: boolean;
   scrollableContainerRef?: MutableRefObject<HTMLDivElement | null>;
@@ -88,18 +82,12 @@ export const KanbanGroup = observer(function KanbanGroup(props: IKanbanGroup) {
     quickActions,
     canEditProperties,
     loadMoreIssues,
-    enableQuickIssueCreate,
-    disableIssueCreation,
-    quickAddCallback,
     scrollableContainerRef,
     handleOnDrop,
     isEpic = false,
   } = props;
   // i18n
   const { t } = useTranslation();
-  // hooks
-  const projectState = useProjectState();
-
   const {
     issues: { getGroupIssueCount, getPaginationData, getIssueLoader },
   } = useIssuesStore();
@@ -123,8 +111,10 @@ export const KanbanGroup = observer(function KanbanGroup(props: IKanbanGroup) {
   );
   const [isDraggingOverColumn, setIsDraggingOverColumn] = useState(false);
 
-  const { workflowDisabledSource, isWorkflowDropDisabled, handleWorkFlowState, getIsWorkflowWorkItemCreationDisabled } =
-    useWorkFlowFDragNDrop(group_by, sub_group_by);
+  const { workflowDisabledSource, isWorkflowDropDisabled, handleWorkFlowState } = useWorkFlowFDragNDrop(
+    group_by,
+    sub_group_by
+  );
 
   // Enable Kanban Columns as Drop Targets
   useEffect(() => {
@@ -194,58 +184,6 @@ export const KanbanGroup = observer(function KanbanGroup(props: IKanbanGroup) {
     dropErrorMessage,
     handleOnDrop,
   ]);
-
-  const prePopulateQuickAddData = (
-    groupByKey: string | undefined,
-    subGroupByKey: string | undefined | null,
-    groupValue: string,
-    subGroupValue: string
-  ) => {
-    const defaultState = projectState.projectStates?.find((state) => state.default);
-    let preloadedData: object = { state_id: defaultState?.id };
-
-    if (groupByKey) {
-      if (groupByKey === "state") {
-        preloadedData = { ...preloadedData, state_id: groupValue };
-      } else if (groupByKey === "priority") {
-        preloadedData = { ...preloadedData, priority: groupValue };
-      } else if (groupByKey === "cycle") {
-        preloadedData = { ...preloadedData, cycle_id: groupValue };
-      } else if (groupByKey === "module") {
-        preloadedData = { ...preloadedData, module_ids: [groupValue] };
-      } else if (groupByKey === "labels" && groupValue != "None") {
-        preloadedData = { ...preloadedData, label_ids: [groupValue] };
-      } else if (groupByKey === "assignees" && groupValue != "None") {
-        preloadedData = { ...preloadedData, assignee_ids: [groupValue] };
-      } else if (groupByKey === "created_by") {
-        preloadedData = { ...preloadedData };
-      } else {
-        preloadedData = { ...preloadedData, [groupByKey]: groupValue };
-      }
-    }
-
-    if (subGroupByKey) {
-      if (subGroupByKey === "state") {
-        preloadedData = { ...preloadedData, state_id: subGroupValue };
-      } else if (subGroupByKey === "priority") {
-        preloadedData = { ...preloadedData, priority: subGroupValue };
-      } else if (subGroupByKey === "cycle") {
-        preloadedData = { ...preloadedData, cycle_id: subGroupValue };
-      } else if (subGroupByKey === "module") {
-        preloadedData = { ...preloadedData, module_ids: [subGroupValue] };
-      } else if (subGroupByKey === "labels" && subGroupValue != "None") {
-        preloadedData = { ...preloadedData, label_ids: [subGroupValue] };
-      } else if (subGroupByKey === "assignees" && subGroupValue != "None") {
-        preloadedData = { ...preloadedData, assignee_ids: [subGroupValue] };
-      } else if (subGroupByKey === "created_by") {
-        preloadedData = { ...preloadedData };
-      } else {
-        preloadedData = { ...preloadedData, [subGroupByKey]: subGroupValue };
-      }
-    }
-
-    return preloadedData;
-  };
 
   const isSubGroup = !!sub_group_id && sub_group_id !== "null";
 
@@ -323,21 +261,6 @@ export const KanbanGroup = observer(function KanbanGroup(props: IKanbanGroup) {
           </div>
         ))}
 
-      {enableQuickIssueCreate &&
-        !disableIssueCreation &&
-        !getIsWorkflowWorkItemCreationDisabled(groupId, sub_group_id) && (
-          <div className="sticky bottom-0 w-full bg-surface-2 py-0.5">
-            <QuickAddIssueRoot
-              layout={EIssueLayoutTypes.KANBAN}
-              QuickAddButton={KanbanQuickAddIssueButton}
-              prePopulatedData={{
-                ...(group_by && prePopulateQuickAddData(group_by, sub_group_by, groupId, sub_group_id)),
-              }}
-              quickAddCallback={quickAddCallback}
-              isEpic={isEpic}
-            />
-          </div>
-        )}
     </div>
   );
 });

@@ -157,11 +157,11 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
             <div className="flex items-center justify-between mb-3">
               <h4 className="text-lg font-medium text-primary">项目公告</h4>
               <Button
-                variant="primary"
+                variant="secondary"
+                size="lg"
                 onClick={() => setIsCreateModalOpen(true)}
-                className="flex items-center gap-1"
               >
-                <Plus className="h-4 w-4" />
+                <Plus className="size-4 shrink-0" />
                 新增公告
               </Button>
             </div>

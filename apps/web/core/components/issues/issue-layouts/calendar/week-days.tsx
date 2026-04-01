@@ -6,7 +6,7 @@
 
 import { observer } from "mobx-react";
 // plane imports
-import type { TGroupedIssues, TIssue, TIssueMap, TPaginationData, ICalendarDate, ICalendarWeek } from "@plane/types";
+import type { TGroupedIssues, TIssueMap, TPaginationData, ICalendarDate, ICalendarWeek } from "@plane/types";
 import { cn, getOrderedDays, renderFormattedPayloadDate } from "@plane/utils";
 // hooks
 import { useUserProfile } from "@/hooks/store/user";
@@ -28,16 +28,12 @@ type Props = {
   loadMoreIssues: (dateString: string) => void;
   getPaginationData: (groupId: string | undefined) => TPaginationData | undefined;
   getGroupIssueCount: (groupId: string | undefined) => number | undefined;
-  enableQuickIssueCreate?: boolean;
-  disableIssueCreation?: boolean;
-  quickAddCallback?: (projectId: string | null | undefined, data: TIssue) => Promise<TIssue | undefined>;
   handleDragAndDrop: (
     issueId: string | undefined,
     issueProjectId: string | undefined,
     sourceDate: string | undefined,
     destinationDate: string | undefined
   ) => Promise<void>;
-  addIssuesToView?: (issueIds: string[]) => Promise<any>;
   readOnly?: boolean;
   selectedDate: Date;
   setSelectedDate: (date: Date) => void;
@@ -56,10 +52,6 @@ export const CalendarWeekDays = observer(function CalendarWeekDays(props: Props)
     getPaginationData,
     getGroupIssueCount,
     quickActions,
-    enableQuickIssueCreate,
-    disableIssueCreation,
-    quickAddCallback,
-    addIssuesToView,
     readOnly = false,
     selectedDate,
     setSelectedDate,
@@ -107,10 +99,6 @@ export const CalendarWeekDays = observer(function CalendarWeekDays(props: Props)
             getPaginationData={getPaginationData}
             getGroupIssueCount={getGroupIssueCount}
             quickActions={quickActions}
-            enableQuickIssueCreate={enableQuickIssueCreate}
-            disableIssueCreation={disableIssueCreation}
-            quickAddCallback={quickAddCallback}
-            addIssuesToView={addIssuesToView}
             readOnly={readOnly}
             handleDragAndDrop={handleDragAndDrop}
             canEditProperties={canEditProperties}

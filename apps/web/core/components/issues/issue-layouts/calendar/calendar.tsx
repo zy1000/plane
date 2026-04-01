@@ -13,13 +13,12 @@ import type { TSupportedFilterTypeForUpdate } from "@plane/constants";
 // types
 import type {
   TGroupedIssues,
-  TIssue,
   TIssueMap,
   TPaginationData,
   ICalendarWeek,
   TSupportedFilterForUpdate,
 } from "@plane/types";
-import { EIssuesStoreType, EIssueLayoutTypes } from "@plane/types";
+import { EIssueLayoutTypes } from "@plane/types";
 // ui
 import { Spinner } from "@plane/ui";
 import { renderFormattedPayloadDate, cn } from "@plane/utils";
@@ -27,7 +26,6 @@ import { renderFormattedPayloadDate, cn } from "@plane/utils";
 import { MONTHS_LIST } from "@/constants/calendar";
 // helpers
 // hooks
-import { useIssues } from "@/hooks/store/use-issues";
 import useSize from "@/hooks/use-window-size";
 // store
 import type { IProjectEpicsFilter } from "@/plane-web/store/issue/epic";
@@ -54,7 +52,6 @@ type Props = {
   loadMoreIssues: (dateString: string) => void;
   getPaginationData: (groupId: string | undefined) => TPaginationData | undefined;
   getGroupIssueCount: (groupId: string | undefined) => number | undefined;
-  quickAddCallback?: (projectId: string | null | undefined, data: TIssue) => Promise<TIssue | undefined>;
   quickActions: TRenderQuickActions;
   handleDragAndDrop: (
     issueId: string | undefined,
@@ -62,7 +59,6 @@ type Props = {
     sourceDate: string | undefined,
     destinationDate: string | undefined
   ) => Promise<void>;
-  addIssuesToView?: (issueIds: string[]) => Promise<any>;
   readOnly?: boolean;
   updateFilters?: (
     projectId: string,
@@ -84,8 +80,6 @@ export const CalendarChart = observer(function CalendarChart(props: Props) {
     loadMoreIssues,
     handleDragAndDrop,
     quickActions,
-    quickAddCallback,
-    addIssuesToView,
     getPaginationData,
     getGroupIssueCount,
     updateFilters,
@@ -97,14 +91,7 @@ export const CalendarChart = observer(function CalendarChart(props: Props) {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   //refs
   const scrollableContainerRef = useRef<HTMLDivElement | null>(null);
-  // store hooks
-  const {
-    issues: { viewFlags },
-  } = useIssues(EIssuesStoreType.PROJECT);
-
   const [windowWidth] = useSize();
-
-  const { enableIssueCreation, enableQuickAdd } = viewFlags || {};
 
   const calendarPayload = issueCalendarView.calendarPayload;
 
@@ -168,11 +155,7 @@ export const CalendarChart = observer(function CalendarChart(props: Props) {
                         loadMoreIssues={loadMoreIssues}
                         getPaginationData={getPaginationData}
                         getGroupIssueCount={getGroupIssueCount}
-                        enableQuickIssueCreate={enableQuickAdd}
-                        disableIssueCreation={!enableIssueCreation}
                         quickActions={quickActions}
-                        quickAddCallback={quickAddCallback}
-                        addIssuesToView={addIssuesToView}
                         readOnly={readOnly}
                         canEditProperties={canEditProperties}
                         isEpic={isEpic}
@@ -192,11 +175,7 @@ export const CalendarChart = observer(function CalendarChart(props: Props) {
                   loadMoreIssues={loadMoreIssues}
                   getPaginationData={getPaginationData}
                   getGroupIssueCount={getGroupIssueCount}
-                  enableQuickIssueCreate={enableQuickAdd}
-                  disableIssueCreation={!enableIssueCreation}
                   quickActions={quickActions}
-                  quickAddCallback={quickAddCallback}
-                  addIssuesToView={addIssuesToView}
                   readOnly={readOnly}
                   canEditProperties={canEditProperties}
                   isEpic={isEpic}
@@ -218,10 +197,6 @@ export const CalendarChart = observer(function CalendarChart(props: Props) {
                 getPaginationData={getPaginationData}
                 getGroupIssueCount={getGroupIssueCount}
                 quickActions={quickActions}
-                enableQuickIssueCreate={enableQuickAdd}
-                disableIssueCreation={!enableIssueCreation}
-                quickAddCallback={quickAddCallback}
-                addIssuesToView={addIssuesToView}
                 readOnly={readOnly}
                 canEditProperties={canEditProperties}
                 isDragDisabled
@@ -246,10 +221,6 @@ export const CalendarChart = observer(function CalendarChart(props: Props) {
             loadMoreIssues={loadMoreIssues}
             getPaginationData={getPaginationData}
             getGroupIssueCount={getGroupIssueCount}
-            enableQuickIssueCreate={enableQuickAdd}
-            disableIssueCreation={!enableIssueCreation}
-            quickAddCallback={quickAddCallback}
-            addIssuesToView={addIssuesToView}
             readOnly={readOnly}
             canEditProperties={canEditProperties}
             isDragDisabled

@@ -24,6 +24,7 @@ export default {
     pro: "Pro",
     upgrade: "Mettre à niveau",
     stickies: "Post-it",
+    help: "Aide",
   },
   auth: {
     common: {

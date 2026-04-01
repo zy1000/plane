@@ -105,13 +105,6 @@ TASK_TYPE_NAMES = {"任务"}
 
 
 def get_issue_permission_key(action: str, issue_type_name: Optional[str] = None) -> str:
-    common_permission_map = {
-        "create": PermissionKey.ISSUE_CREATE,
-        "edit": PermissionKey.ISSUE_EDIT,
-        "delete": PermissionKey.ISSUE_DELETE,
-        "archive": PermissionKey.ISSUE_ARCHIVE,
-        "unarchive": PermissionKey.ISSUE_UNARCHIVE,
-    }
     defect_permission_map = {
         "create": PermissionKey.ISSUE_DEFECT_CREATE,
         "edit": PermissionKey.ISSUE_DEFECT_EDIT,
@@ -140,8 +133,6 @@ def get_issue_permission_key(action: str, issue_type_name: Optional[str] = None)
         permission_map = requirement_permission_map
     elif issue_type_name in TASK_TYPE_NAMES:
         permission_map = task_permission_map
-    else:
-        permission_map = common_permission_map
 
     try:
         return permission_map[action]

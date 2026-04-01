@@ -41,7 +41,7 @@ export const ProjectAppSidebar = observer(function ProjectAppSidebar() {
     <>
       <ResizableSidebar
         showPeek={sidebarPeek}
-        defaultWidth={storedValue ?? 250}
+        defaultWidth={storedValue ?? SIDEBAR_WIDTH}
         width={sidebarWidth}
         setWidth={setSidebarWidth}
         defaultCollapsed={sidebarCollapsed}
