@@ -29,9 +29,13 @@ type Props = {
   isAdmin: boolean;
   searchQuery: string;
   onTogglePermission: (roleId: string, permissionKey: string) => Promise<void>;
+  activeScope?: PermissionScope;
+  onActiveScopeChange?: (scope: PermissionScope) => void;
 };
 
-type TScope = "workspace" | "project";
+export type PermissionScope = "workspace" | "project";
+
+type TScope = PermissionScope;
 
 type TCategoryGroup = {
   category: string;
@@ -62,6 +66,20 @@ const SCOPE_CONFIG: Record<TScope, { label: string; icon: typeof Building2 }> = 
   project: { label: "项目", icon: FolderKanban },
 };
 
+export const getPermissionScopeSummary = (
+  permissions: IPermission[],
+  permissionKeys: string[],
+  scope: PermissionScope
+) => {
+  const boundKeySet = new Set(permissionKeys);
+  const scopedPermissions = permissions.filter((perm) => (perm.scope ?? "workspace") === scope);
+
+  return {
+    totalPermissions: scopedPermissions.length,
+    totalBound: scopedPermissions.filter((perm) => boundKeySet.has(perm.key)).length,
+  };
+};
+
 export function PermissionsPanel({
   role,
   permissions,
@@ -70,15 +88,27 @@ export function PermissionsPanel({
   isAdmin,
   searchQuery,
   onTogglePermission,
+  activeScope: controlledActiveScope,
+  onActiveScopeChange,
 }: Props) {
   const { t } = useTranslation();
-  const [activeScope, setActiveScope] = useState<TScope>("workspace");
+  const [internalActiveScope, setInternalActiveScope] = useState<TScope>("workspace");
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [togglingKey, setTogglingKey] = useState<string | null>(null);
+  const activeScope = controlledActiveScope ?? internalActiveScope;
 
   const isSearching = searchQuery.trim().length > 0;
 
   const boundKeySet = useMemo(() => new Set(permissionKeys), [permissionKeys]);
+  const handleActiveScopeChange = useCallback(
+    (scope: TScope) => {
+      if (controlledActiveScope === undefined) {
+        setInternalActiveScope(scope);
+      }
+      onActiveScopeChange?.(scope);
+    },
+    [controlledActiveScope, onActiveScopeChange]
+  );
 
   const scopeGroups = useMemo<TScopeGroup[]>(() => {
     const scopeMap = new Map<TScope, Map<string, IPermission[]>>();
@@ -118,11 +148,11 @@ export function PermissionsPanel({
   useEffect(() => {
     const roleId = role?.id ?? null;
     if (roleId !== prevRoleId.current && visibleScopeGroups.length > 0) {
-      setActiveScope(visibleScopeGroups[0].scope);
+      handleActiveScopeChange(visibleScopeGroups[0].scope);
       setActiveCategory(null);
       prevRoleId.current = roleId;
     }
-  }, [role?.id, visibleScopeGroups]);
+  }, [role?.id, visibleScopeGroups, handleActiveScopeChange]);
 
   const currentScopeGroup = useMemo(
     () => scopeGroups.find((g) => g.scope === activeScope) ?? null,
@@ -269,13 +299,8 @@ export function PermissionsPanel({
   if (isLoading) {
     return (
       <div className="flex h-full flex-1 flex-col overflow-hidden">
-        <div className="flex shrink-0 gap-1 border-b border-subtle px-5 pt-1">
-          {[1, 2].map((i) => (
-            <div key={i} className="h-9 w-20 animate-pulse rounded-t-md bg-layer-transparent-hover" />
-          ))}
-        </div>
         <div className="flex min-h-0 flex-1 overflow-hidden">
-          <div className="flex w-48 shrink-0 flex-col gap-1 border-r border-subtle p-2">
+          <div className="flex w-[310px] shrink-0 flex-col gap-1 border-r border-subtle p-2">
             {[1, 2, 3, 4, 5, 6].map((i) => (
               <div key={i} className="flex flex-col gap-1 rounded-md px-3 py-2.5">
                 <div className="h-3 w-3/4 animate-pulse rounded bg-layer-transparent-hover" />
@@ -316,52 +341,42 @@ export function PermissionsPanel({
 
   return (
     <div className="flex h-full flex-1 flex-col overflow-hidden">
-      {/* ── Scope Tabs（仅展示有数据的 scope）── */}
-      <div className="flex shrink-0 items-end gap-0 border-b border-subtle px-5">
-        {visibleScopeGroups.map((group) => {
-          const isActive = activeScope === group.scope;
-          const Icon = group.icon;
-          return (
-            <button
-              key={group.scope}
-              type="button"
-              onClick={() => setActiveScope(group.scope)}
-              className={cn(
-                "relative flex cursor-pointer items-center gap-1.5 px-3.5 py-2.5 text-body-xs-medium transition-colors duration-150",
-                isActive ? "text-primary" : "text-tertiary hover:text-secondary"
-              )}
-            >
-              <Icon className="size-3.5" />
-              <span>{group.label}</span>
-              <span
-                className={cn(
-                  "ml-0.5 rounded-full px-1.5 py-px text-[10px] font-medium tabular-nums",
-                  isActive ? "bg-accent-primary/10 text-accent-primary" : "bg-layer-1 text-tertiary"
-                )}
-              >
-                {isSearching
-                  ? `${(crossScopeResults.find((g) => g.scope === group.scope)?.total ?? 0)} 项`
-                  : `${group.totalBound}/${group.totalPermissions}`}
-              </span>
-              {isActive && (
-                <span className="absolute inset-x-0 -bottom-px h-0.5 rounded-t-full bg-accent-primary" />
-              )}
-            </button>
-          );
-        })}
-
-        {/* Search hint */}
-        {isSearching && (
-          <span className="ml-auto self-center pr-1 text-[11px] text-tertiary">
+      {isSearching && (
+        <div className="flex shrink-0 justify-end border-b border-subtle px-5 py-1.5">
+          <span className="text-[11px] text-tertiary">
             全部 <span className="font-medium text-primary tabular-nums">{totalSearchHits}</span> 项
           </span>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* ── Two-Pane Body ── */}
       <div className="flex min-h-0 flex-1 overflow-hidden">
         {/* Left: Category Nav */}
-        <div className="vertical-scrollbar scrollbar-sm flex w-[196px] shrink-0 flex-col overflow-y-auto border-r border-subtle py-2 [scrollbar-gutter:stable]">
+        <div className="vertical-scrollbar scrollbar-sm flex w-[310px] shrink-0 flex-col overflow-y-auto border-r border-subtle py-2 [scrollbar-gutter:stable]">
+          {visibleScopeGroups.length > 1 && (
+            <div className="mb-2 flex gap-1 px-2">
+              {visibleScopeGroups.map((group) => {
+                const isActive = activeScope === group.scope;
+                const Icon = group.icon;
+                return (
+                  <button
+                    key={group.scope}
+                    type="button"
+                    onClick={() => handleActiveScopeChange(group.scope)}
+                    className={cn(
+                      "flex min-w-0 flex-1 items-center justify-center gap-1 rounded-md px-2 py-1.5 text-[11px] font-medium transition-colors duration-150",
+                      isActive
+                        ? "bg-accent-primary/10 text-accent-primary"
+                        : "text-tertiary hover:bg-layer-1-hover hover:text-secondary"
+                    )}
+                  >
+                    <Icon className="size-3 shrink-0" />
+                    <span className="truncate">{group.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
           {!currentScopeGroup || currentScopeGroup.categories.length === 0 ? (
             <p className="px-4 py-3 text-[11px] text-tertiary">暂无分类</p>
           ) : (
@@ -480,8 +495,7 @@ export function PermissionsPanel({
                                     className={cn(
                                       "group flex items-center gap-3 px-3 py-2.5 transition-colors duration-150",
                                       "border-b border-subtle/60 last:border-0",
-                                      isAdmin && !isToggling && "cursor-pointer hover:bg-layer-1-hover",
-                                      isToggling && "opacity-50",
+                                      isAdmin && "cursor-pointer hover:bg-layer-1-hover",
                                       isBound && "bg-accent-primary/4"
                                     )}
                                     onClick={() => handleTogglePermission(perm.key)}
@@ -582,8 +596,7 @@ export function PermissionsPanel({
                         key={perm.key}
                         className={cn(
                           "group flex items-center gap-3 rounded-md px-3 py-2.5 transition-colors duration-150",
-                          isAdmin && !isToggling && "cursor-pointer hover:bg-layer-1-hover",
-                          isToggling && "opacity-50",
+                          isAdmin && "cursor-pointer hover:bg-layer-1-hover",
                           isBound && "bg-accent-primary/4"
                         )}
                         onClick={() => handleTogglePermission(perm.key)}

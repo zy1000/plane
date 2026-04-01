@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { observer } from "mobx-react";
 import useSWR from "swr";
 import { Search, X } from "lucide-react";
@@ -16,7 +16,11 @@ import { cn } from "@plane/utils";
 import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
 import { PageHead } from "@/components/core/page-title";
 import { SettingsContentWrapper } from "@/components/settings/content-wrapper";
-import { PermissionsPanel } from "@/components/workspace/settings/roles/permissions-panel";
+import {
+  getPermissionScopeSummary,
+  PermissionsPanel,
+  type PermissionScope,
+} from "@/components/workspace/settings/roles/permissions-panel";
 import { RolesSidebar } from "@/components/workspace/settings/roles/roles-sidebar";
 // hooks
 import { useWorkspaceRoles } from "@/hooks/store/use-workspace-roles";
@@ -33,6 +37,7 @@ const WorkspaceTemplatesPage = observer(function WorkspaceTemplatesPage({ params
 
   const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [activeScope, setActiveScope] = useState<PermissionScope>("workspace");
 
   // store hooks
   const { workspaceUserInfo, allowPermissions } = useUserPermissions();
@@ -91,6 +96,15 @@ const WorkspaceTemplatesPage = observer(function WorkspaceTemplatesPage({ params
   const pageTitle = currentWorkspace?.name ? `${currentWorkspace.name} - 模板` : undefined;
   const selectedRole = selectedRoleId ? (roles.find((r) => r.id === selectedRoleId) ?? null) : null;
   const rolePermissionState = selectedRoleId ? getRolePermissionState(selectedRoleId) : null;
+  const activeScopeSummary = useMemo(
+    () =>
+      getPermissionScopeSummary(
+        rolePermissionState?.data?.permissions ?? [],
+        rolePermissionState?.data?.permission_keys ?? [],
+        activeScope
+      ),
+    [rolePermissionState?.data?.permissions, rolePermissionState?.data?.permission_keys, activeScope]
+  );
 
   const handleSelectRole = (roleId: string) => {
     setSelectedRoleId(roleId);
@@ -139,7 +153,14 @@ const WorkspaceTemplatesPage = observer(function WorkspaceTemplatesPage({ params
           {selectedRole && (
             <div className="flex shrink-0 items-center gap-4 border-b border-subtle bg-surface-1 px-6 py-3">
               <div className="min-w-0 flex-1">
-                <h2 className="truncate text-body-md-semibold text-primary">{selectedRole.name}</h2>
+                <div className="flex items-center gap-2">
+                  <h2 className="truncate text-body-md-semibold text-primary">{selectedRole.name}</h2>
+                  {!searchQuery && activeScopeSummary.totalPermissions > 0 && (
+                    <span className="shrink-0 rounded-full bg-accent-primary/10 px-2 py-0.5 text-xs font-medium text-accent-primary tabular-nums">
+                      {activeScopeSummary.totalBound}/{activeScopeSummary.totalPermissions}
+                    </span>
+                  )}
+                </div>
                 {selectedRole.description?.trim() && (
                   <p className="truncate text-body-xs-regular text-tertiary">{selectedRole.description}</p>
                 )}
@@ -188,6 +209,8 @@ const WorkspaceTemplatesPage = observer(function WorkspaceTemplatesPage({ params
               isAdmin={isAdmin}
               searchQuery={searchQuery}
               onTogglePermission={togglePermission}
+              activeScope={activeScope}
+              onActiveScopeChange={setActiveScope}
             />
           </div>
         </div>
