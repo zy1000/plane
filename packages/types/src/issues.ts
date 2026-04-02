@@ -131,6 +131,7 @@ export type GroupByColumnTypes =
 export type TGetColumns = {
   isWorkspaceLevel?: boolean;
   projectId?: string;
+  issueTypeIds?: string[];
 };
 
 export interface IGroupByColumn {

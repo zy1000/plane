@@ -410,6 +410,14 @@ export class CaseService extends APIService {
       });
   }
 
+  async associateModules(workspaceSlug: string, data: { plan_id: string; module_ids: string[] }): Promise<any> {
+    return this.post(`/api/workspaces/${workspaceSlug}/test/plan/associate-modules/`, data)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
   async issueList(workspaceSlug: string, query: any): Promise<any> {
     return this.get(`/api/workspaces/${workspaceSlug}/test/case/issues-list/`, {params: query})
       .then((response) => response?.data)

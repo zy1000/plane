@@ -3,13 +3,13 @@
 import React, { useEffect, useRef, useState } from "react";
 import { ModalCore, EModalPosition, EModalWidth } from "@plane/ui";
 import { Button } from "@plane/propel/button";
-import { Row, Col, Table, Tag, Progress, message } from "antd";
+import { Row, Col, Table, Tag, message } from "antd";
 import { X } from "lucide-react";
-import { CycleService } from "@/services/cycle.service";
+import { ModuleService } from "@/services/module.service";
 import { CaseService } from "@/services/qa/case.service";
 import dayjs from "dayjs";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
-import type { ICycle } from "@plane/types";
+import type { IModule } from "@plane/types";
 
 type Props = {
   isOpen: boolean;
@@ -20,40 +20,45 @@ type Props = {
   onClosed?: () => void;
 };
 
-const PlanIterationModal: React.FC<Props> = (props) => {
+const PlanReleaseModal: React.FC<Props> = (props) => {
   const { isOpen, onClose, onClosed, workspaceSlug, projectId } = props;
 
-  const cycleService = useRef(new CycleService()).current;
-  const [cycles, setCycles] = useState<ICycle[]>([]);
-  const [cyclesLoading, setCyclesLoading] = useState(false);
-  const [cyclesError, setCyclesError] = useState<string | null>(null);
+  const moduleService = useRef(new ModuleService()).current;
+  const caseService = useRef(new CaseService()).current;
+  const [modules, setModules] = useState<IModule[]>([]);
+  const [modulesLoading, setModulesLoading] = useState(false);
+  const [modulesError, setModulesError] = useState<string | null>(null);
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
   const [submitting, setSubmitting] = useState(false);
-  const caseService = useRef(new CaseService()).current;
 
-  const fetchCycles = async (projectId: string) => {
+  const fetchModules = async (projectId: string) => {
     try {
-      setCyclesLoading(true);
-      setCyclesError(null);
-      const res = await cycleService.getCyclesWithParams(workspaceSlug, projectId, "all" as any);
-      setCycles(res);
-    } catch (e) {
-      setCycles([]);
-      setCyclesError("周期加载失败");
+      setModulesLoading(true);
+      setModulesError(null);
+      const res = await moduleService.getModules(workspaceSlug, projectId);
+      setModules(Array.isArray(res) ? res : []);
+    } catch {
+      setModules([]);
+      setModulesError("发布规划加载失败");
     } finally {
-      setCyclesLoading(false);
+      setModulesLoading(false);
     }
   };
 
   useEffect(() => {
     if (!isOpen || !workspaceSlug || !projectId) return;
-    fetchCycles(projectId);
+    fetchModules(projectId);
     setSelectedRowKeys([]);
   }, [isOpen, workspaceSlug, projectId]);
 
+  const handleClose = () => {
+    onClose();
+    onClosed?.();
+  };
+
   const handleConfirm = async () => {
     if (selectedRowKeys.length === 0) {
-      message.warning("请至少选择一个周期");
+      message.warning("请至少选择一个发布规划");
       return;
     }
     if (!props.planId) {
@@ -63,43 +68,41 @@ const PlanIterationModal: React.FC<Props> = (props) => {
 
     try {
       setSubmitting(true);
-      const payload = {
+      await caseService.associateModules(workspaceSlug, {
         plan_id: props.planId,
-        cycle_id: selectedRowKeys as string[],
-      };
-
-      await caseService.assocateCycle(workspaceSlug, payload);
+        module_ids: selectedRowKeys as string[],
+      });
       message.success("关联成功");
-
-      onClose();
-      onClosed && onClosed();
-    } catch (error) {
-      console.error(error);
+      handleClose();
+    } catch {
       message.error("关联失败，请重试");
     } finally {
       setSubmitting(false);
     }
   };
 
+  const statusMap: Record<string, { label: string; color: string }> = {
+    backlog: { label: "未开始", color: "default" },
+    planned: { label: "已规划", color: "blue" },
+    "in-progress": { label: "进行中", color: "processing" },
+    paused: { label: "已暂停", color: "warning" },
+    completed: { label: "已完成", color: "success" },
+    cancelled: { label: "已取消", color: "error" },
+  };
+
   return (
     <ModalCore
       isOpen={isOpen}
-      handleClose={() => {
-        onClose();
-        onClosed && onClosed();
-      }}
+      handleClose={handleClose}
       position={EModalPosition.CENTER}
       width={EModalWidth.VIXL}
     >
       <div className="w-full">
         <div className="flex items-center justify-between gap-4 border-b border-subtle px-6 py-4">
-          <h3 className="text-lg font-medium">迭代规划</h3>
+          <h3 className="text-lg font-medium">发布规划</h3>
           <button
             className="flex items-center justify-center rounded p-1 text-secondary hover:bg-surface-3 hover:text-primary transition-colors"
-            onClick={() => {
-              onClose();
-              onClosed && onClosed();
-            }}
+            onClick={handleClose}
           >
             <X className="h-5 w-5" />
           </button>
@@ -107,20 +110,20 @@ const PlanIterationModal: React.FC<Props> = (props) => {
         <Row wrap={false} className="h-[70vh] max-h-[70vh] overflow-hidden p-6" gutter={[16, 16]}>
           <Col flex="auto" className="h-full overflow-y-auto">
             <div className="w-full h-full">
-              {cyclesLoading && (
+              {modulesLoading && (
                 <div className="flex items-center justify-center py-12 text-secondary">加载中...</div>
               )}
-              {cyclesError && (
+              {modulesError && (
                 <div className="bg-red-50 border border-red-200 rounded-md p-3 text-red-800 text-sm m-6">
-                  {cyclesError}
+                  {modulesError}
                 </div>
               )}
-              {!cyclesLoading && !cyclesError && cycles.length === 0 && (
-                <div className="flex items-center justify-center py-12 text-secondary">暂无迭代</div>
+              {!modulesLoading && !modulesError && modules.length === 0 && (
+                <div className="flex items-center justify-center py-12 text-secondary">暂无发布规划</div>
               )}
-              {!cyclesLoading && !cyclesError && cycles.length > 0 && (
+              {!modulesLoading && !modulesError && modules.length > 0 && (
                 <Table
-                  dataSource={cycles}
+                  dataSource={modules}
                   rowKey="id"
                   pagination={false}
                   rowSelection={{
@@ -139,51 +142,22 @@ const PlanIterationModal: React.FC<Props> = (props) => {
                       title: "状态",
                       dataIndex: "status",
                       key: "status",
-                      render: (_, record) => {
-                        const currentDate = dayjs();
-                        const startDate = record.start_date ? dayjs(record.start_date) : null;
-                        const endDate = record.end_date ? dayjs(record.end_date) : null;
-
-                        let status = "未开始";
-                        let color = "default";
-
-                        if (startDate && endDate) {
-                          if (currentDate.isBefore(startDate)) {
-                            status = "未开始";
-                            color = "default";
-                          } else if (currentDate.isAfter(endDate)) {
-                            status = "已完成";
-                            color = "success";
-                          } else {
-                            status = "进行中";
-                            color = "processing";
-                          }
-                        }
-
-                        return <Tag color={color}>{status}</Tag>;
-                      },
-                    },
-                    {
-                      title: "进度",
-                      key: "progress",
-                      render: (_, record) => {
-                        const totalIssues = record.total_issues || 0;
-                        const completedIssues = record.completed_issues || 0;
-                        const percent = totalIssues > 0 ? Math.round((completedIssues / totalIssues) * 100) : 0;
-                        return <Progress percent={percent} size="small" />;
+                      render: (val: string | undefined) => {
+                        const info = statusMap[val ?? ""] ?? { label: val ?? "-", color: "default" };
+                        return <Tag color={info.color}>{info.label}</Tag>;
                       },
                     },
                     {
                       title: "负责人",
-                      dataIndex: "owned_by_id",
-                      key: "owned_by_id",
+                      dataIndex: "lead_id",
+                      key: "lead_id",
                       render: (uid: string | null) => (
                         <MemberDropdown
                           multiple={false}
                           value={uid ?? null}
                           onChange={() => {}}
                           disabled={true}
-                          placeholder={"未知用户"}
+                          placeholder={"未指定"}
                           className="w-full text-sm"
                           buttonContainerClassName="w-full text-left p-0 cursor-default"
                           buttonVariant="transparent-with-text"
@@ -205,8 +179,8 @@ const PlanIterationModal: React.FC<Props> = (props) => {
                     },
                     {
                       title: "结束时间",
-                      dataIndex: "end_date",
-                      key: "end_date",
+                      dataIndex: "target_date",
+                      key: "target_date",
                       render: (date: string | null) => (
                         <span className="text-xs text-primary">
                           {date ? dayjs(date).format("YYYY-MM-DD") : "-"}
@@ -220,14 +194,7 @@ const PlanIterationModal: React.FC<Props> = (props) => {
           </Col>
         </Row>
         <div className="sticky bottom-0 w-full bg-surface-1 border-t border-subtle px-6 py-3 flex items-center justify-end gap-3">
-          <Button
-            onClick={() => {
-              onClose();
-              onClosed && onClosed();
-            }}
-          >
-            取消
-          </Button>
+          <Button onClick={handleClose}>取消</Button>
           <Button onClick={handleConfirm} loading={submitting}>
             确定
           </Button>
@@ -237,4 +204,4 @@ const PlanIterationModal: React.FC<Props> = (props) => {
   );
 };
 
-export default PlanIterationModal;
+export default PlanReleaseModal;

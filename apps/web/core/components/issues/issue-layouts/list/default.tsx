@@ -24,7 +24,7 @@ import type {
 // components
 import { MultipleSelectGroup } from "@/components/core/multiple-select";
 // hooks
-import { useIssueStoreType } from "@/hooks/use-issue-layout-store";
+import { useIssueStoreType, useTypedPageIssueTypeIds } from "@/hooks/use-issue-layout-store";
 // plane web components
 import { IssueBulkOperationsRoot } from "@/plane-web/components/issues/bulk-operations";
 // plane web hooks
@@ -80,6 +80,7 @@ export const List = observer(function List(props: IList) {
   } = props;
 
   const storeType = useIssueStoreType();
+  const typedPageIssueTypeIds = useTypedPageIssueTypeIds();
   // plane web hooks
   const isBulkOperationsEnabled = useBulkOperationStatus();
 
@@ -90,6 +91,7 @@ export const List = observer(function List(props: IList) {
     includeNone: true,
     isWorkspaceLevel: isWorkspaceLevel(storeType),
     isEpic: isEpic,
+    issueTypeIds: typedPageIssueTypeIds,
   });
 
   // Enable Auto Scroll for Main Kanban

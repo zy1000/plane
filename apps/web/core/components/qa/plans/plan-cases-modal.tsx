@@ -378,12 +378,11 @@ export const PlanCasesModal: React.FC<Props> = ({
             规划用例
           </h3>
           <Button
-            variant="neutral-primary"
+            variant="primary"
             onClick={() => {
               onClose();
               onClosed && onClosed();
             }}
-            size="sm"
           >
             关闭
           </Button>

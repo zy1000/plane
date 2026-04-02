@@ -11,6 +11,9 @@ import { useIssues } from "./store/use-issues";
 
 export const IssuesStoreContext = createContext<EIssuesStoreType | undefined>(undefined);
 
+export const TypedPageIssueTypeIdsContext = createContext<string[] | undefined>(undefined);
+export const useTypedPageIssueTypeIds = () => useContext(TypedPageIssueTypeIdsContext);
+
 export const useIssueStoreType = () => {
   const storeType = useContext(IssuesStoreContext);
   const { globalViewId, viewId, projectId, cycleId, moduleId, userId, epicId, teamspaceId } = useParams();

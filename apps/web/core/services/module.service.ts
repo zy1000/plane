@@ -269,6 +269,16 @@ export class ModuleService extends APIService {
   }
 
   
+  async getModulePlans(workspaceSlug: string, projectId: string, moduleId: string): Promise<any[]> {
+    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/module/plans/`, {
+      params: { module_id: moduleId },
+    })
+      .then((response) => response?.data ?? [])
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
   async getModuleStatistics(workspaceSlug: string, projectId: string, moduleId: string): Promise<any> {
     const queryParams = {
       module_id: moduleId,

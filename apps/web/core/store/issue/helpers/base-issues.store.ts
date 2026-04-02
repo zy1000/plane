@@ -1257,7 +1257,9 @@ export abstract class BaseIssuesStore implements IBaseIssuesStore {
         //if update is delete, remove it at a particular path
         if (issueUpdate.action === EIssueGroupedAction.DELETE) {
           // remove issue Id from the path
-          update(this, ["groupedIssueIds", ...issueUpdate.path], (issueIds: string[] = []) => pull(issueIds, issueId));
+          update(this, ["groupedIssueIds", ...issueUpdate.path], (issueIds: string[] = []) =>
+            issueIds.filter((id) => id !== issueId)
+          );
         }
 
         // accumulate the updates so that we don't end up updating the count twice for the same issue

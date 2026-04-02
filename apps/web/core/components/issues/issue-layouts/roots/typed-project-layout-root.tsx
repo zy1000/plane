@@ -24,7 +24,7 @@ import { WorkItemFiltersRow } from "@/components/work-item-filters/filters-row";
 // hooks
 import { useIssues } from "@/hooks/store/use-issues";
 import { useProjectIssueTypes } from "@/hooks/store/use-project-issue-types";
-import { IssuesStoreContext } from "@/hooks/use-issue-layout-store";
+import { IssuesStoreContext, TypedPageIssueTypeIdsContext } from "@/hooks/use-issue-layout-store";
 import { getProjectScopeFilterConfig } from "@/components/issues/typed-page-filter-config";
 import { type TProjectIssueScope } from "@/store/issue/project";
 // local imports
@@ -246,6 +246,7 @@ export const TypedProjectLayoutRoot = observer(function TypedProjectLayoutRoot({
 
   return (
     <IssuesStoreContext.Provider value={EIssuesStoreType.PROJECT}>
+      <TypedPageIssueTypeIdsContext.Provider value={fixedTypeIds}>
       <ProjectLevelWorkItemFiltersHOC
         enableSaveView
         deleteOnUnmount
@@ -279,6 +280,7 @@ export const TypedProjectLayoutRoot = observer(function TypedProjectLayoutRoot({
           </div>
         )}
       </ProjectLevelWorkItemFiltersHOC>
+      </TypedPageIssueTypeIdsContext.Provider>
     </IssuesStoreContext.Provider>
   );
 });

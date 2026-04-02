@@ -21,7 +21,7 @@ import type {
 } from "@plane/types";
 import { Row } from "@plane/ui";
 // hooks
-import { useIssueStoreType } from "@/hooks/use-issue-layout-store";
+import { useIssueStoreType, useTypedPageIssueTypeIds } from "@/hooks/use-issue-layout-store";
 // plane web imports
 import { useWorkFlowFDragNDrop } from "@/plane-web/components/workflow";
 // local imports
@@ -286,18 +286,21 @@ export const KanBanSwimLanes = observer(function KanBanSwimLanes(props: IKanBanS
   } = props;
   // store hooks
   const storeType = useIssueStoreType();
+  const typedPageIssueTypeIds = useTypedPageIssueTypeIds();
   // derived values
   const groupByList = getGroupByColumns({
     groupBy: group_by as GroupByColumnTypes,
     includeNone: true,
     isWorkspaceLevel: isWorkspaceLevel(storeType),
     isEpic: isEpic,
+    issueTypeIds: typedPageIssueTypeIds,
   });
   const subGroupByList = getGroupByColumns({
     groupBy: sub_group_by as GroupByColumnTypes,
     includeNone: true,
     isWorkspaceLevel: isWorkspaceLevel(storeType),
     isEpic: isEpic,
+    issueTypeIds: typedPageIssueTypeIds,
   });
 
   if (!groupByList || !subGroupByList) return null;

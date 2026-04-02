@@ -10,7 +10,7 @@ import { PROJECT_ERROR_MESSAGES, STATE_GROUPS, isProjectPermissionError } from "
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Dialog, Transition } from "@headlessui/react";
-import { Pagination, Popconfirm } from "antd";
+import { Pagination, Popconfirm, Tag, Tooltip } from "antd";
 import { ReadonlyDate } from "@/components/readonly/date";
 import { ModuleService } from "@/services/module.service";
 import { WorkspaceService } from "@/services/workspace.service";
@@ -34,6 +34,87 @@ type TModuleFile = {
   created_at: string;
 };
 
+
+const PASS_RATE_KEYS = ["成功", "失败", "阻塞", "无效", "未执行"] as const;
+const PASS_RATE_COLORS: Record<string, string> = {
+  成功: "#52c41a",
+  失败: "#ff4d4f",
+  阻塞: "#faad14",
+  无效: "#3b5999",
+  未执行: "#bfbfbf",
+};
+
+const renderPlanStateTag = (state: string | null | undefined) => {
+  const colorMap: Record<string, string> = {
+    未开始: "default",
+    进行中: "processing",
+    已完成: "success",
+  };
+  const color = colorMap[state ?? ""] || "default";
+  const text = state ? String(state) : "-";
+  return <Tag color={color}>{text}</Tag>;
+};
+
+const PlanPassRate: React.FC<{ passRate: Record<string, number> | null | undefined }> = ({ passRate }) => {
+  if (!passRate) return <span className="text-sm text-secondary">-</span>;
+
+  const totalCount = PASS_RATE_KEYS.reduce((s, k) => s + Number(passRate[k] || 0), 0);
+  const passed = Number(passRate["成功"] || 0);
+  const percent = totalCount > 0 ? Math.floor((passed / totalCount) * 100) : 0;
+
+  const segments = PASS_RATE_KEYS.map((k) => {
+    const count = Number(passRate[k] || 0);
+    const widthPct = totalCount > 0 ? (count / totalCount) * 100 : 0;
+    return { key: k, count, color: PASS_RATE_COLORS[k] ?? "#d9d9d9", widthPct };
+  });
+
+  const tooltipContent = (
+    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+      {PASS_RATE_KEYS.map((k) => (
+        <div key={k} style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <span
+            style={{
+              width: "10px",
+              height: "10px",
+              borderRadius: "2px",
+              backgroundColor: PASS_RATE_COLORS[k] ?? "#d9d9d9",
+              display: "inline-block",
+            }}
+          />
+          <span style={{ fontSize: "12px", color: "var(--text-color-primary)" }}>{k}</span>
+          <span style={{ marginLeft: "auto", fontSize: "12px", color: "#8c8c8c" }}>{Number(passRate[k] || 0)}</span>
+        </div>
+      ))}
+    </div>
+  );
+
+  return (
+    <Tooltip mouseEnterDelay={0.25} title={tooltipContent} color="#fff" overlayInnerStyle={{ color: "#333" }}>
+      <div className="flex max-w-[76px] items-center gap-1">
+        <div className="min-w-0 flex-1" style={{ maxWidth: "48px" }}>
+          <div
+            style={{
+              width: "100%",
+              height: "5px",
+              border: "1px solid #e8e8e8",
+              borderRadius: "5px",
+              overflow: "hidden",
+              display: "flex",
+            }}
+          >
+            {segments.map((seg, idx) => (
+              <div
+                key={`${seg.key}-${idx}`}
+                style={{ width: `${seg.widthPct}%`, backgroundColor: seg.color, height: "100%" }}
+              />
+            ))}
+          </div>
+        </div>
+        <span className="shrink-0 text-[11px] tabular-nums text-primary">{percent}%</span>
+      </div>
+    </Tooltip>
+  );
+};
 
 export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen }) => {
   const { t } = useTranslation();
@@ -86,6 +167,10 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
   const [statsError, setStatsError] = useState<string | null>(null);
   const [stats, setStats] = useState<any | null>(null);
 
+  const [plans, setPlans] = useState<any[]>([]);
+  const [plansLoading, setPlansLoading] = useState(false);
+  const [plansError, setPlansError] = useState<string | null>(null);
+
   const [noteOpen, setNoteOpen] = useState(false);
   const [noteHtml, setNoteHtml] = useState<string>("");
   const [noteSubmitting, setNoteSubmitting] = useState(false);
@@ -126,6 +211,20 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
       setStatsError(e?.detail || e?.error || "获取统计信息失败");
     } finally {
       setStatsLoading(false);
+    }
+  };
+
+  const fetchPlans = async () => {
+    if (!workspaceSlug || !projectId || !moduleId) return;
+    try {
+      setPlansLoading(true);
+      setPlansError(null);
+      const data = await moduleService.getModulePlans(workspaceSlug.toString(), projectId.toString(), moduleId);
+      setPlans(Array.isArray(data) ? data : []);
+    } catch (e: any) {
+      setPlansError(e?.detail || e?.error || "获取测试计划失败");
+    } finally {
+      setPlansLoading(false);
     }
   };
 
@@ -271,6 +370,7 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
     fetchCycles();
     fetchModuleStatistics();
     fetchModuleFiles(1);
+    fetchPlans();
   }, [fetchModuleDetails, isOpen, moduleId, projectId, workspaceSlug]);
 
   const handleNoteEditorUploadFile = async (blockId: string | undefined, file: File) => {
@@ -666,8 +766,73 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
             )}
           </div>
         </div>
-        <div className="h-[300px] relative bg-surface-1 border border-subtle shadow-md p-4 group">
+        <div className="h-[300px] relative bg-surface-1 border border-subtle shadow-md p-4 group flex flex-col overflow-hidden">
           <div className="text-base font-semibold text-primary">测试计划</div>
+          <div className="mt-3 flex-1 min-h-0 overflow-y-auto vertical-scrollbar scrollbar-sm">
+            {plansLoading && (
+              <div className="flex items-center justify-center py-8 text-sm text-secondary">加载中...</div>
+            )}
+            {plansError && (
+              <div className="bg-red-50 border border-red-200 rounded-md p-3 text-sm text-red-800">{plansError}</div>
+            )}
+            {!plansLoading && !plansError && (
+              <div className="overflow-x-auto">
+                <table className="min-w-full table-fixed">
+                  <thead>
+                    <tr className="text-left text-xs text-secondary border-b border-subtle">
+                      <th className="w-[34%] px-2 py-2">名称</th>
+                      <th className="w-[14%] px-2 py-2">状态</th>
+                      <th className="w-[18%] px-2 py-2">通过率</th>
+                      <th className="w-[17%] px-2 py-2">开始时间</th>
+                      <th className="w-[17%] px-2 py-2">结束时间</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {plans.length === 0 && (
+                      <tr>
+                        <td className="px-2 py-6 text-sm text-secondary" colSpan={5}>
+                          暂无关联测试计划
+                        </td>
+                      </tr>
+                    )}
+                    {plans.map((p) => {
+                      return (
+                        <tr
+                          key={p.id}
+                          className="border-b border-subtle hover:bg-layer-1-hover cursor-pointer"
+                          onClick={() => {
+                            router.push(
+                              `/${workspaceSlug}/projects/${projectId}/testhub/plan-cases?planId=${p.id}`
+                            );
+                          }}
+                        >
+                          <td className="px-2 py-2">
+                            <span className="truncate text-sm text-primary">{p.name}</span>
+                          </td>
+                          <td className="px-2 py-2">
+                            <div className="flex items-center">{renderPlanStateTag(p.state)}</div>
+                          </td>
+                          <td className="px-2 py-2">
+                            <PlanPassRate passRate={p.pass_rate} />
+                          </td>
+                          <td className="px-2 py-2">
+                            <span className="text-sm text-primary">
+                              {p.begin_time || "-"}
+                            </span>
+                          </td>
+                          <td className="px-2 py-2">
+                            <span className="text-sm text-primary">
+                              {p.end_time || "-"}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </div>
         <div className="h-[360px] relative bg-surface-1 border border-subtle shadow-md p-4 group flex flex-col">
           <div className="flex items-center justify-between">

@@ -80,6 +80,7 @@ type TGetGroupByColumns = {
   isWorkspaceLevel: boolean;
   isEpic?: boolean;
   projectId?: string;
+  issueTypeIds?: string[];
 };
 
 // NOTE: Type of groupBy is different compared to what's being passed from the components.
@@ -91,6 +92,7 @@ export const getGroupByColumns = ({
   isWorkspaceLevel,
   isEpic = false,
   projectId,
+  issueTypeIds,
 }: TGetGroupByColumns): IGroupByColumn[] | undefined => {
   // If no groupBy is specified and includeNone is true, return "All Issues" group
   if (!groupBy && includeNone) {
@@ -110,7 +112,7 @@ export const getGroupByColumns = ({
   // Map of group by options to their corresponding column getter functions
   const groupByColumnMap: Record<
     GroupByColumnTypes,
-    ({ isWorkspaceLevel, projectId }: TGetColumns) => IGroupByColumn[] | undefined
+    (params: TGetColumns) => IGroupByColumn[] | undefined
   > = {
     project: getProjectColumns,
     cycle: getCycleColumns,
@@ -125,7 +127,7 @@ export const getGroupByColumns = ({
   };
 
   // Get and return the columns for the specified group by option
-  return groupByColumnMap[groupBy]?.({ isWorkspaceLevel, projectId });
+  return groupByColumnMap[groupBy]?.({ isWorkspaceLevel, projectId, issueTypeIds });
 };
 
 const getProjectColumns = (): IGroupByColumn[] | undefined => {
@@ -208,10 +210,15 @@ const getModuleColumns = (): IGroupByColumn[] | undefined => {
   return modules;
 };
 
-const getStateColumns = ({ projectId }: TGetColumns): IGroupByColumn[] | undefined => {
+const getStateColumns = ({ projectId, issueTypeIds }: TGetColumns): IGroupByColumn[] | undefined => {
   const { getProjectStates, projectStates } = store.state;
-  const _states = projectId ? getProjectStates(projectId) : projectStates;
+  let _states = projectId ? getProjectStates(projectId) : projectStates;
   if (!_states) return;
+  // When on a typed page (e.g. defects / requirements), only show states
+  // that belong to the matching issue type(s).
+  if (issueTypeIds && issueTypeIds.length > 0) {
+    _states = _states.filter((state) => state.issue_type_id && issueTypeIds.includes(state.issue_type_id));
+  }
   // Deduplicate by state name so that same-named states across different issue types
   // appear as a single column. The first occurrence provides icon/color metadata.
   const seenNames = new Map<string, (typeof _states)[number]>();

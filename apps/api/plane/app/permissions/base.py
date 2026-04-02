@@ -4,6 +4,7 @@
 
 from plane.db.models import WorkspaceMember, ProjectMember, ProjectMemberRole, ProjectRole, ProjectIssueType, Project, \
     TestCaseRepository
+from plane.license.models import Instance, InstanceAdmin
 from functools import wraps
 from rest_framework.response import Response
 from rest_framework import status
@@ -50,6 +51,13 @@ def _get_user_workspace_permission_keys(user, workspace_slug: str) -> set:
     return keys
 
 
+def _is_instance_admin(user) -> bool:
+    instance = Instance.objects.first()
+    if not instance:
+        return False
+    return InstanceAdmin.objects.filter(instance=instance, user=user).exists()
+
+
 def _get_user_project_permission_keys(user, workspace_slug: str, project_id: str) -> set:
     """
     计算用户在某项目内的有效 permission_keys 集合。
@@ -57,7 +65,7 @@ def _get_user_project_permission_keys(user, workspace_slug: str, project_id: str
     此函数是第二阶段细粒度鉴权的基础，首阶段暂不强制使用。
     """
     project = Project.objects.get(pk=project_id)
-    if user == project.created_by:
+    if user == project.created_by or _is_instance_admin(user):
         return set(PermissionKey.values())
 
     project_member = ProjectMember.objects.filter(

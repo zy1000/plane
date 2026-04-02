@@ -1,13 +1,15 @@
 "use client";
 
 import { useParams, useSearchParams, useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState, cloneElement, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { PageHead } from "@/components/core/page-title";
 import { Breadcrumbs } from "@plane/ui";
 import { Button } from "antd";
+import { Button as PlaneButton } from "@plane/propel/button";
 import { Tooltip } from "@plane/propel/tooltip";
 import PlanCasesModal from "@/components/qa/plans/plan-cases-modal";
 import PlanIterationModal from "@/components/qa/plans/plan-iteration-modal";
+import PlanReleaseModal from "@/components/qa/plans/plan-release-modal";
 import PlanCasesExportModal from "@/components/qa/plans/plan-cases-export-modal";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { Tree, Table, Space, Tag, message, Dropdown, Pagination, Popconfirm, Select } from "antd";
@@ -15,7 +17,7 @@ import type { TableProps } from "antd";
 import type { TreeProps } from "antd";
 import { CaseService } from "@/services/qa/case.service";
 import { PlanService } from "@/services/qa/plan.service";
-import { AppstoreOutlined, DownOutlined } from "@ant-design/icons";
+import { AppstoreOutlined } from "@ant-design/icons";
 import { FolderOpenDot, Atom } from "lucide-react";
 import { formatDateTime, globalEnums } from "../util";
 import { useUser } from "@/hooks/store/user";
@@ -86,6 +88,7 @@ export default function PlanCasesPage() {
   const [detailLoading, setDetailLoading] = useState<boolean>(false);
   const [isPlanModalOpen, setIsPlanModalOpen] = useState(false);
   const [isIterationModalOpen, setIsIterationModalOpen] = useState(false);
+  const [isReleaseModalOpen, setIsReleaseModalOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [selectedCaseIds, setSelectedCaseIds] = useState<string[]>([]);
   const [selectedPlanCaseToCaseIdMap, setSelectedPlanCaseToCaseIdMap] = useState<Record<string, string>>({});
@@ -759,35 +762,38 @@ export default function PlanCasesPage() {
                   </Breadcrumbs>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Dropdown.Button
-                    type="primary"
-                    icon={<DownOutlined />}
-                    menu={{
-                      items: dropdownItems,
-                      onClick: ({ key }) => {
-                        if (key === "by_work_item") {
-                          setIsPlanModalOpen(true);
-                        } else if (key === "by_iteration") {
-                          setIsIterationModalOpen(true);
-                        } else if (key === "by_release") {
-                          message.info("通过发布规划暂未实现");
-                        }
-                      },
-                    }}
-                    onClick={() => setIsPlanModalOpen(true)}
-                    buttonsRender={(buttons) => [
-                      cloneElement(buttons[0] as any, {
-                        className:
-                          "text-on-color bg-accent-primary hover:bg-accent-primary-hover focus:text-on-color focus:bg-accent-primary-hover px-3 py-0.5 font-medium text-xs rounded-l flex items-center gap-1.5 whitespace-nowrap transition-all justify-center disabled:opacity-50 disabled:cursor-not-allowed",
-                      }),
-                      cloneElement(buttons[1] as any, {
-                        className:
-                          "text-on-color bg-accent-primary hover:bg-accent-primary-hover focus:text-on-color focus:bg-accent-primary-hover px-2 py-0.5 font-medium text-xs rounded-r flex items-center justify-center transition-all disabled:opacity-50 disabled:cursor-not-allowed",
-                      }),
-                    ]}
-                  >
-                    规划用例
-                  </Dropdown.Button>
+                  <div className="inline-flex items-center [&>*:first-child]:rounded-r-none [&>*:last-child]:rounded-l-none">
+                    <PlaneButton
+                      variant="primary"
+                      size="base"
+                      onClick={() => setIsPlanModalOpen(true)}
+                    >
+                      规划用例
+                    </PlaneButton>
+                    <Dropdown
+                      menu={{
+                        items: dropdownItems,
+                        onClick: ({ key }) => {
+                          if (key === "by_work_item") {
+                            setIsPlanModalOpen(true);
+                          } else if (key === "by_iteration") {
+                            setIsIterationModalOpen(true);
+                          } else if (key === "by_release") {
+                            setIsReleaseModalOpen(true);
+                          }
+                        },
+                      }}
+                      trigger={["click"]}
+                    >
+                      <PlaneButton
+                        variant="primary"
+                        size="base"
+                        className="px-1"
+                      >
+                        <ChevronDownIcon className="h-3.5 w-3.5" />
+                      </PlaneButton>
+                    </Dropdown>
+                  </div>
                   <Button
                     type="default"
                     className="px-3 text-accent-primary bg-transparent border border-accent-strong hover:bg-accent-subtle focus:text-accent-primary focus:bg-accent-subtle-hover px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center disabled:opacity-50 disabled:cursor-not-allowed mr-4"
@@ -1023,6 +1029,17 @@ export default function PlanCasesPage() {
       <PlanIterationModal
         isOpen={isIterationModalOpen}
         onClose={() => setIsIterationModalOpen(false)}
+        workspaceSlug={String(workspaceSlug)}
+        projectId={String(projectId)}
+        planId={String(planId || "")}
+        onClosed={() => {
+          fetchPlanTree();
+          fetchCases(currentPage, pageSize, selectedRepositoryId || undefined, selectedModuleId || undefined);
+        }}
+      />
+      <PlanReleaseModal
+        isOpen={isReleaseModalOpen}
+        onClose={() => setIsReleaseModalOpen(false)}
         workspaceSlug={String(workspaceSlug)}
         projectId={String(projectId)}
         planId={String(planId || "")}

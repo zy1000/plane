@@ -18,7 +18,7 @@ from plane.app.serializers.qa.plan import PlanModuleCreateUpdateSerializer, Plan
     PlanCaseListSerializer, PlanCaseCardSerializer, PlanCaseRecordSerializer
 from plane.app.views.qa.filters import TestPlanFilter
 from plane.db.models import TestPlan, TestCaseRepository, TestCase, CaseModule, CaseLabel, FileAsset, Workspace, \
-    PlanModule, PlanCase, PlanCaseRecord, Issue, Cycle, CycleIssue, WorkspaceMember
+    PlanModule, PlanCase, PlanCaseRecord, Issue, Cycle, CycleIssue, WorkspaceMember, ModuleIssue
 from plane.utils.paginator import CustomPaginator
 from plane.utils.response import list_response
 from plane.app.views import BaseAPIView, BaseViewSet
@@ -689,7 +689,50 @@ class PlanView(BaseViewSet):
 
     @action(detail=False, methods=['post'], url_path='associate-modules')
     def associate_modules(self, request, slug):
-        ...
+        plan_id = request.data.get('plan_id')
+        module_ids = request.data.get('module_ids', [])
+
+        if not plan_id:
+            return Response({"error": "plan_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+        if not isinstance(module_ids, list) or len(module_ids) == 0:
+            return Response({"error": "module_ids must be a non-empty list"}, status=status.HTTP_400_BAD_REQUEST)
+
+        plan = get_object_or_404(TestPlan, pk=plan_id, deleted_at__isnull=True, project__workspace__slug=slug)
+
+        related_case_ids = ModuleIssue.objects.filter(
+            module_id__in=module_ids,
+            deleted_at__isnull=True,
+        ).values_list('issue__cases__id', flat=True).distinct()
+
+        valid_case_ids = [cid for cid in related_case_ids if cid]
+
+        if not valid_case_ids:
+            plan.modules.add(*module_ids)
+            return Response(status=status.HTTP_200_OK)
+
+        existing_plan_case_ids = set(
+            PlanCase.objects.filter(
+                plan=plan,
+                case_id__in=valid_case_ids,
+            ).values_list('case_id', flat=True)
+        )
+
+        soft_deleted_qs = PlanCase.all_objects.filter(
+            plan=plan, case_id__in=valid_case_ids,
+        ).exclude(deleted_at__isnull=True)
+        soft_deleted_case_ids = set(soft_deleted_qs.values_list('case_id', flat=True))
+        if soft_deleted_case_ids:
+            soft_deleted_qs.update(deleted_at=None)
+
+        new_case_ids = set(valid_case_ids) - existing_plan_case_ids - soft_deleted_case_ids
+        if new_case_ids:
+            PlanCase.objects.bulk_create(
+                [PlanCase(plan=plan, case_id=case_id) for case_id in new_case_ids],
+                batch_size=1000,
+            )
+
+        plan.modules.add(*module_ids)
+        return Response(status=status.HTTP_200_OK)
 
 
 class CaseAPIView(BaseAPIView):

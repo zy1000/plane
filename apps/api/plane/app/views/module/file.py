@@ -21,7 +21,7 @@ class ModuleFileAPI(BaseViewSet):
     pagination_class = CustomPaginator
 
     @action(detail=False, methods=['post'], url_path='upload')
-    @allow_fine_permission(PermissionKey.RELEASES_FILE_UPLOAD)
+    @allow_fine_permission(PermissionKey.RELEASES_FILE_DOWNLOAD)
     def upload(self, request, slug, project_id):
         with transaction.atomic():
             minio = get_minio_utils()

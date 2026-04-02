@@ -59,7 +59,7 @@ from plane.db.models import (
     ModuleLink,
     ModuleUserProperties,
     Project,
-    UserRecentVisit, Cycle, CycleIssue,
+    UserRecentVisit, Cycle, CycleIssue, TestPlan, PlanCase,
 )
 from plane.utils.analytics_plot import burndown_plot
 from plane.utils.paginator import CustomPaginator
@@ -1006,3 +1006,33 @@ class ModuleAPI(BaseViewSet):
         note = request.data.get("note")
         Module.objects.filter(pk=module_id).update(note=note)
         return Response(status=status.HTTP_200_OK)
+
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
+    @action(detail=False, methods=["get"], url_path="plans")
+    def plan_list(self, request, slug, project_id):
+        module_id = request.query_params.get("module_id")
+        if not module_id:
+            return Response({"error": "module_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+        plans = TestPlan.objects.filter(
+            modules__id=module_id,
+            deleted_at__isnull=True,
+        )
+        result = []
+        for plan in plans:
+            stats = dict(
+                PlanCase.objects.filter(plan=plan)
+                .values_list("result")
+                .annotate(count=Count("result"))
+                .values_list("result", "count")
+            )
+            pass_rate = {label: stats.get(label, 0) for label in PlanCase.Result.values}
+            result.append({
+                "id": str(plan.id),
+                "name": plan.name,
+                "state": plan.state,
+                "result": plan.result,
+                "begin_time": plan.begin_time,
+                "end_time": plan.end_time,
+                "pass_rate": pass_rate,
+            })
+        return Response(result, status=status.HTTP_200_OK)
