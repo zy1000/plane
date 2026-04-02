@@ -5,10 +5,11 @@ from plane.app.views import PlanAPIView, RepositoryAPIView, CaseModuleAPIView, L
     EnumDataAPIView, CaseAttachmentV2Endpoint, CaseDetailAPIView, PlanView, PlanModuleAPIView, PlanCaseAPIView, \
     PlanModuleCountAPIView
 from plane.app.views.qa.case import CaseAssetAPIView, CaseIssueWithType, TestCaseCommentAPIView, CaseAPI, \
-    CaseLabelAPIView
+    CaseLabelAPIView, CaseModuleView
 from plane.app.views.qa.case_version import CaseVersionAPIView, CaseVersionCompareAPIView
 from plane.app.views.qa.module import CaseModuleCountAPIView, CaseModuleDetailAPIView
-from plane.app.views.qa.plan import PlanModuleDetailAPIView, PlanListAPIView, CaseMindmapAPIView
+from plane.app.views.qa.plan import PlanModuleDetailAPIView, PlanListAPIView, CaseMindmapAPIView, \
+    UserCaseModuleTreeAPIView
 from plane.app.views.qa.mindmap import MindmapAssetAPIView, MindmapAssetDetailAPIView, MindmapAssetDownloadAPIView
 from plane.app.views.qa.review import ReviewModuleAPIView, ReviewModuleDetailAPIView, CaseReviewAPIView, CaseReviewView, \
     ReviewListAPIView
@@ -21,6 +22,7 @@ router.register('case', CaseAPI, basename='case')
 router.register('execution-file', PlanCaseRecordFileAPI, basename='execution-file')
 
 urlpatterns = [
+    path('users/me/test/module-tree/', UserCaseModuleTreeAPIView.as_view(), name='user-test-module-tree'),
     path('workspaces/<str:slug>/projects/<uuid:project_id>/test/plane/', PlanAPIView.as_view(), name='test-plan'),
     path('workspaces/<str:slug>/test/plan/list/', PlanListAPIView.as_view(), name='test-plan'),
     path('workspaces/<str:slug>/test/plane/case/', PlanCaseAPIView.as_view(), name='test-plan'),
@@ -30,6 +32,7 @@ urlpatterns = [
     path('workspaces/<str:slug>/test/plan/module/count/', PlanModuleCountAPIView.as_view(), name='test-plan'),
     path('workspaces/<str:slug>/test/plane-assignee/', PlanAPIView.as_view(), name='test-plan'),
     path('workspaces/<str:slug>/test/module/', CaseModuleAPIView.as_view(), name='test-case'),
+    path('workspaces/<str:slug>/test/module/copy/', CaseModuleView.as_view({'post': 'copy'}), name='test-case-module-copy'),
     path('workspaces/<str:slug>/test/module/<uuid:module_id>/', CaseModuleDetailAPIView.as_view(),
          name='test-case-module-detail'),
     path('workspaces/<str:slug>/test/module/count/', CaseModuleCountAPIView.as_view(), name='test-case'),

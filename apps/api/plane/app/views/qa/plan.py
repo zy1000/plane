@@ -5,6 +5,8 @@ from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.response import Response
 from yaml import serialize
 
+from collections import defaultdict
+
 from django.db import connection, transaction
 from django.db.models import Case, CharField, Count, F, Func, IntegerField, Prefetch, Q, Value, When
 from django.db.models.functions import Cast
@@ -16,7 +18,7 @@ from plane.app.serializers.qa.plan import PlanModuleCreateUpdateSerializer, Plan
     PlanCaseListSerializer, PlanCaseCardSerializer, PlanCaseRecordSerializer
 from plane.app.views.qa.filters import TestPlanFilter
 from plane.db.models import TestPlan, TestCaseRepository, TestCase, CaseModule, CaseLabel, FileAsset, Workspace, \
-    PlanModule, PlanCase, PlanCaseRecord, Issue, Cycle, CycleIssue
+    PlanModule, PlanCase, PlanCaseRecord, Issue, Cycle, CycleIssue, WorkspaceMember
 from plane.utils.paginator import CustomPaginator
 from plane.utils.response import list_response
 from plane.app.views import BaseAPIView, BaseViewSet
@@ -895,7 +897,12 @@ class CaseModuleAPIView(BaseAPIView):
     }
 
     def get(self, request, slug):
-        modules = self.filter_queryset(self.queryset.filter(parent=None))
+        repository_ids_raw = request.query_params.get('repository_id__in')
+        if repository_ids_raw:
+            ids = [r.strip() for r in repository_ids_raw.split(',') if r.strip()]
+            modules = self.queryset.filter(parent=None, repository_id__in=ids)
+        else:
+            modules = self.filter_queryset(self.queryset.filter(parent=None))
         serializer = CaseModuleListSerializer(instance=modules, many=True)
         return Response(data=serializer.data)
 
@@ -1060,3 +1067,110 @@ class CaseAttachmentV2Endpoint(BaseAPIView):
         case_attachment.attributes = request.data.get("attributes", case_attachment.attributes)
         case_attachment.save(update_fields=["is_uploaded", "attributes"])
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class UserCaseModuleTreeAPIView(BaseAPIView):
+    """
+    返回当前用户所有工作区的完整用例库模块树，仅需一次请求。
+    响应结构：
+    [
+      { id, slug, name, projects: [
+          { id, name,                              # id=null 表示"未关联项目"
+            repositories: [
+              { id, name,
+                modules: [ { id, name, sort_order, repository, children: [...] } ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+    """
+
+    def get(self, request):
+        # 1. 获取用户所在的所有工作区 ID
+        workspace_ids = list(
+            WorkspaceMember.objects.filter(
+                member=request.user,
+                deleted_at__isnull=True,
+            ).values_list("workspace_id", flat=True)
+        )
+        if not workspace_ids:
+            return Response([])
+
+        # 2. 获取这些工作区下所有用例库（含 workspace、project 关联，用于分组）
+        repositories = list(
+            TestCaseRepository.objects.filter(
+                workspace_id__in=workspace_ids,
+                deleted_at__isnull=True,
+            )
+            .select_related("workspace", "project")
+            .order_by("workspace_id", "project_id", "-created_at")
+        )
+        if not repositories:
+            return Response([])
+
+        repo_ids = [str(r.id) for r in repositories]
+
+        # 3. 一次性拉取所有层级的模块（flat），避免 N+1
+        all_modules = list(
+            CaseModule.objects.filter(
+                repository_id__in=repo_ids,
+                deleted_at__isnull=True,
+            ).order_by("sort_order", "-created_at")
+        )
+
+        # 4. 在 Python 侧构建父子关系（O(n)）
+        children_map: dict = defaultdict(list)
+        repo_roots_map: dict = defaultdict(list)
+        for m in all_modules:
+            if m.parent_id:
+                children_map[str(m.parent_id)].append(m)
+            else:
+                repo_roots_map[str(m.repository_id)].append(m)
+
+        def _build_node(module) -> dict:
+            return {
+                "id": str(module.id),
+                "name": module.name,
+                "sort_order": module.sort_order,
+                "repository": str(module.repository_id),
+                "children": [_build_node(c) for c in children_map.get(str(module.id), [])],
+            }
+
+        # 5. 按工作区 → 项目 → 用例库 三层分组
+        # workspace_map[ws_id] = { ..., project_map: { proj_key: { id, name, repos: [] } } }
+        workspace_map: dict = {}
+        for repo in repositories:
+            ws = repo.workspace
+            ws_id = str(ws.id)
+            if ws_id not in workspace_map:
+                workspace_map[ws_id] = {
+                    "id": ws_id,
+                    "slug": ws.slug,
+                    "name": ws.name,
+                    "_project_map": {},
+                }
+
+            proj = repo.project
+            proj_key = str(proj.id) if proj else "__no_project__"
+            proj_map = workspace_map[ws_id]["_project_map"]
+            if proj_key not in proj_map:
+                proj_map[proj_key] = {
+                    "id": str(proj.id) if proj else None,
+                    "name": proj.name if proj else "未关联项目",
+                    "repositories": [],
+                }
+            proj_map[proj_key]["repositories"].append({
+                "id": str(repo.id),
+                "name": repo.name,
+                "modules": [_build_node(m) for m in repo_roots_map.get(str(repo.id), [])],
+            })
+
+        # 6. 整理最终结构（去掉内部 _project_map 辅助键）
+        result = []
+        for ws_data in workspace_map.values():
+            projects = list(ws_data.pop("_project_map").values())
+            result.append({**ws_data, "projects": projects})
+
+        return Response(result)

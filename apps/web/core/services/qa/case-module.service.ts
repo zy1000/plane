@@ -49,4 +49,34 @@ export class CaseModuleService extends APIService {
         throw error?.response?.data;
       });
   }
+
+  async getModulesByRepositories(workspaceSlug: string, repositoryIds: string[]): Promise<any[]> {
+    if (!repositoryIds.length) return [];
+    return this.get(`/api/workspaces/${workspaceSlug}/test/module/`, {
+      params: { repository_id__in: repositoryIds.join(",") },
+    })
+      .then((response) => response?.data ?? [])
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async getUserModuleTree(): Promise<any[]> {
+    return this.get("/api/users/me/test/module-tree/")
+      .then((response) => response?.data ?? [])
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async copyModule(
+    workspaceSlug: string,
+    data: { module_id: string; target_module_id?: string; repository_id?: string }
+  ): Promise<any> {
+    return this.post(`/api/workspaces/${workspaceSlug}/test/module/copy/`, data)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
 }

@@ -232,7 +232,8 @@ class CaseAPI(BaseViewSet):
             frontier = [str(module_id)]
             while frontier:
                 children = list(
-                    CaseModule.objects.filter(parent_id__in=frontier, deleted_at__isnull=True).values_list("id", flat=True)
+                    CaseModule.objects.filter(parent_id__in=frontier, deleted_at__isnull=True).values_list("id",
+                                                                                                           flat=True)
                 )
                 new_children = [str(c) for c in children if str(c) not in expanded]
                 if not new_children:
@@ -1463,20 +1464,130 @@ class CaseAPI(BaseViewSet):
 
 class CaseMindmapAPIView(BaseAPIView):
     model = TestCase
-    def get(self,request,slug):
+
+    def get(self, request, slug):
         repository_id = request.query_params.get("repository_id")
         module_id = request.query_params.get("module_id")
 
         if not repository_id:
             return Response(status=status.HTTP_400_BAD_REQUEST)
 
-        modules = list(CaseModule.objects.filter(repository_id=repository_id, module_id=module_id).values("id",'name','parent_id','sort_order'))
-        module_map = {str(m['id']): m for m in modules }
+        modules = list(CaseModule.objects.filter(repository_id=repository_id, module_id=module_id).values("id", 'name',
+                                                                                                          'parent_id',
+                                                                                                          'sort_order'))
+        module_map = {str(m['id']): m for m in modules}
         children_map = {}
         for module in modules:
             mid = str(module['id'])
             pid = str(module['parent_id'])
 
 
+class CaseModuleView(BaseViewSet):
 
+    def copy(self, request, slug):
+        case_module_id = request.data.get('module_id')
+        target_module_id = request.data.get('target_module_id')
+        target_repository_id = request.data.get('repository_id')
+
+        if not case_module_id:
+            return Response({"error": "module_id 为必填项"}, status=status.HTTP_400_BAD_REQUEST)
+        if not target_module_id and not target_repository_id:
+            return Response(
+                {"error": "target_module_id 和 repository_id 必须填写其中一个"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if target_module_id and target_repository_id:
+            return Response(
+                {"error": "target_module_id 和 repository_id 只能填写一个"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        source_module = get_object_or_404(
+            CaseModule, id=case_module_id, repository__workspace__slug=slug, deleted_at__isnull=True
+        )
+
+        if target_module_id:
+            # 复制到指定模块下作为子模块，目标库从该模块推断
+            target_parent = get_object_or_404(
+                CaseModule, id=target_module_id, repository__workspace__slug=slug, deleted_at__isnull=True
+            )
+            target_repository = target_parent.repository
+            target_repository_id = target_repository.id
+        else:
+            # 复制到目标库根级，无父模块
+            target_parent = None
+            target_repository = get_object_or_404(
+                TestCaseRepository, id=target_repository_id, workspace__slug=slug
+            )
+
+        # 检查目标库同级下是否已存在同名模板
+        if CaseModule.objects.filter(
+            repository=target_repository,
+            name=source_module.name,
+            parent=target_parent,
+            deleted_at__isnull=True,
+        ).exists():
+            return Response(
+                {"error": f"目标用例库中已存在同名模板「{source_module.name}」，请重命名后再复制"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        def _sync_labels(source_case, new_case, repo_id):
+            label_names = list(source_case.labels.values_list("name", flat=True))
+            if not label_names:
+                return
+            existing = CaseLabel.objects.filter(
+                repository_id=repo_id, name__in=label_names, deleted_at__isnull=True
+            )
+            existing_by_name = {lb.name: lb for lb in existing}
+            labels = list(existing_by_name.values())
+            for name in label_names:
+                if name not in existing_by_name:
+                    labels.append(CaseLabel.objects.create(repository_id=repo_id, name=name))
+            new_case.labels.set(labels)
+
+        def _copy_cases(source_mod, new_mod, repo_id):
+            source_cases = (
+                TestCase.objects.filter(module=source_mod, deleted_at__isnull=True)
+                .prefetch_related("labels", "issues")
+            )
+            for sc in source_cases:
+                new_case = TestCase.objects.create(
+                    code="",
+                    name=sc.name,
+                    precondition=sc.precondition,
+                    steps=sc.steps,
+                    mode=sc.mode,
+                    text_description=sc.text_description,
+                    text_result=sc.text_result,
+                    remark=sc.remark,
+                    type=sc.type,
+                    test_type=sc.test_type,
+                    priority=sc.priority,
+                    repository_id=repo_id,
+                    module=new_mod,
+                    assignee_id=getattr(request.user, "id", None),
+                )
+                _sync_labels(sc, new_case, repo_id)
+                new_case.issues.set(list(sc.issues.all()))
+
+        def _copy_module_recursive(source_mod, parent_mod, repo_id):
+            new_mod = CaseModule.objects.create(
+                name=source_mod.name,
+                sort_order=source_mod.sort_order,
+                repository_id=repo_id,
+                parent=parent_mod,
+            )
+            _copy_cases(source_mod, new_mod, repo_id)
+            for child in source_mod.children.filter(deleted_at__isnull=True).order_by("sort_order"):
+                _copy_module_recursive(child, new_mod, repo_id)
+            return new_mod
+
+        with transaction.atomic():
+            new_root = _copy_module_recursive(source_module, target_parent, str(target_repository_id))
+
+        return Response(
+            {"id": str(new_root.id), "name": new_root.name},
+            status=status.HTTP_201_CREATED,
+        )
 

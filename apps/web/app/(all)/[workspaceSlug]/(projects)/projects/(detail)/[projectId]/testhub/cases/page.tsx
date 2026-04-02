@@ -65,6 +65,7 @@ type TestCaseResponse = {
 
 import { MoveCaseModal } from "@/components/qa/cases/move-modal";
 import { CopyCaseModal } from "@/components/qa/cases/copy-modal";
+import { CopyModuleModal } from "@/components/qa/cases/copy-module-modal";
 import CasesExportModal from "@/components/qa/cases/cases-export-modal";
 
 type ResizableHeaderCellProps = ComponentPropsWithoutRef<"th"> & {
@@ -241,6 +242,7 @@ export default function TestCasesPage() {
   // 新增：创建子模块的临时状态
   const [creatingParentId, setCreatingParentId] = useState<string | "all" | null>(null);
   const [renamingModuleId, setRenamingModuleId] = useState<string | null>(null);
+  const [copyingModule, setCopyingModule] = useState<{ id: string; name: string } | null>(null);
 
   // 新增状态：模块树数据、选中模块
   const [modules, setModules] = useState<any[]>([]);
@@ -633,6 +635,22 @@ export default function TestCasesPage() {
         label: (
           <Button type="text" size="small" onClick={() => startRenameNode(actualId, title)}>
             重命名
+          </Button>
+        ),
+      },
+      {
+        key: "copy",
+        label: (
+          <Button
+            type="text"
+            size="small"
+            onClick={() => {
+              if (actualId && actualId !== "all") {
+                setCopyingModule({ id: actualId, name: title });
+              }
+            }}
+          >
+            复制
           </Button>
         ),
       },
@@ -1614,6 +1632,20 @@ export default function TestCasesPage() {
             fetchModules();
             fetchCases(currentPage, pageSize, filters);
             setSelectedCaseIds([]);
+          }}
+        />
+      )}
+
+      {copyingModule && (
+        <CopyModuleModal
+          isOpen={!!copyingModule}
+          handleClose={() => setCopyingModule(null)}
+          workspaceSlug={workspaceSlug as string}
+          moduleId={copyingModule.id}
+          moduleName={copyingModule.name}
+          onSuccess={() => {
+            setCopyingModule(null);
+            fetchModules();
           }}
         />
       )}
