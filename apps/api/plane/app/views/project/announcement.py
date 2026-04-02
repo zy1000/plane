@@ -1,7 +1,7 @@
 from rest_framework import status
 from rest_framework.response import Response
 
-from plane.app.permissions import allow_project_permission, PermissionKey
+from plane.app.permissions import allow_fine_permission, PermissionKey
 from plane.app.serializers.project import ProjectAnnouncementListSerializer, ProjectAnnouncementCreateSerializer
 from plane.app.views import BaseAPIView
 from plane.db.models.project import ProjectAnnouncement
@@ -21,7 +21,7 @@ class AnnouncementAPIView(BaseAPIView):
         serializer = ProjectAnnouncementListSerializer(paginated_queryset, many=True)
         return list_response(data=serializer.data, count=query.count())
 
-    @allow_project_permission(PermissionKey.PROJECT_ANNOUNCEMENT_EDIT)
+    @allow_fine_permission(PermissionKey.PROJECT_ANNOUNCEMENT_EDIT)
     def post(self, request, slug: str, project_id: str) -> Response:
         serializer = ProjectAnnouncementCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -30,7 +30,7 @@ class AnnouncementAPIView(BaseAPIView):
 
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-    @allow_project_permission(PermissionKey.PROJECT_ANNOUNCEMENT_EDIT)
+    @allow_fine_permission(PermissionKey.PROJECT_ANNOUNCEMENT_EDIT)
     def delete(self, request, slug: str, project_id: str) -> Response:
         announcement_ids = request.data.pop('ids')
         self.queryset.filter(id__in=announcement_ids).delete(soft=False)

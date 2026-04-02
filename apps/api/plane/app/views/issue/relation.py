@@ -20,7 +20,7 @@ from rest_framework import status
 # Module imports
 from .. import BaseViewSet
 from plane.app.serializers import IssueRelationSerializer, RelatedIssueSerializer
-from plane.app.permissions import ProjectEntityPermission, allow_project_permission, PermissionKey
+from plane.app.permissions import ProjectEntityPermission, allow_fine_permission, PermissionKey
 from plane.db.models import (
     Project,
     IssueRelation,
@@ -206,7 +206,7 @@ class IssueRelationViewSet(BaseViewSet):
 
         return Response(response_data, status=status.HTTP_200_OK)
 
-    @allow_project_permission(PermissionKey.ISSUE_RELATION_MANAGE)
+    @allow_fine_permission(PermissionKey.ISSUE_RELATION_MANAGE)
     def create(self, request, slug, project_id, issue_id):
         relation_type = request.data.get("relation_type", None)
         if relation_type is None:
@@ -260,7 +260,7 @@ class IssueRelationViewSet(BaseViewSet):
                 status=status.HTTP_201_CREATED,
             )
 
-    @allow_project_permission(PermissionKey.ISSUE_RELATION_MANAGE)
+    @allow_fine_permission(PermissionKey.ISSUE_RELATION_MANAGE)
     def remove_relation(self, request, slug, project_id, issue_id):
         related_issue = request.data.get("related_issue", None)
 

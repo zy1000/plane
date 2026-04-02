@@ -24,7 +24,7 @@ from plane.db.models import Project, ProjectMember, ProjectUserProperty, Workspa
 from plane.db.models.project import ProjectRole, ProjectMemberRole
 from plane.bgtasks.project_add_user_email_task import project_add_user_email
 from plane.utils.host import base_host
-from plane.app.permissions.base import allow_permission, ROLE, allow_project_permission
+from plane.app.permissions.base import allow_permission, ROLE, allow_fine_permission
 
 
 class ProjectMemberViewSet(BaseViewSet):
@@ -46,7 +46,7 @@ class ProjectMemberViewSet(BaseViewSet):
             .select_related("workspace", "workspace__owner")
         )
 
-    @allow_project_permission(PermissionKey.PROJECT_MEMBER_INVITE)
+    @allow_fine_permission(PermissionKey.PROJECT_MEMBER_INVITE)
     def create(self, request, slug, project_id):
         # Get the list of members to be added to the project and their roles i.e. the user_id and the role
         members = request.data.get("members", [])
@@ -254,7 +254,7 @@ class ProjectMemberViewSet(BaseViewSet):
             return Response(serializer.data, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    @allow_project_permission(PermissionKey.PROJECT_MEMBER_REMOVE)
+    @allow_fine_permission(PermissionKey.PROJECT_MEMBER_REMOVE)
     def destroy(self, request, slug, project_id, pk):
         project_member = ProjectMember.objects.get(
             workspace__slug=slug,
@@ -287,7 +287,7 @@ class ProjectMemberViewSet(BaseViewSet):
         project_member.save()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-    @allow_project_permission(PermissionKey.PROJECT_MEMBER_LEAVE)
+    @allow_fine_permission(PermissionKey.PROJECT_MEMBER_LEAVE)
     def leave(self, request, slug, project_id):
         project_member = ProjectMember.objects.get(
             workspace__slug=slug,
@@ -369,7 +369,7 @@ class ProjectMemberCustomRolesAPIView(BaseAPIView):
         custom_role_ids = [str(r.id) for r in project_member.custom_roles.all()]
         return Response({"custom_role_ids": custom_role_ids}, status=status.HTTP_200_OK)
 
-    @allow_project_permission(PermissionKey.PROJECT_MEMBER_BIND_ROLE)
+    @allow_fine_permission(PermissionKey.PROJECT_MEMBER_BIND_ROLE)
     def put(self, request, slug, project_id, pk):
         project_member = self.get_project_member(slug, project_id, pk)
         if not project_member:

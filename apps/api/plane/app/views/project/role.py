@@ -5,7 +5,7 @@
 from rest_framework import status
 from rest_framework.response import Response
 
-from plane.app.permissions import ROLE, allow_permission, allow_project_permission, PermissionKey
+from plane.app.permissions import ROLE, allow_permission, allow_fine_permission, PermissionKey
 from plane.app.serializers import (
     ImportProjectRoleSerializer,
     PermissionSerializer,
@@ -52,7 +52,7 @@ class ProjectRoleViewSet(BaseViewSet):
             return Response({"error": "Project role not found."}, status=status.HTTP_404_NOT_FOUND)
         return Response(self.get_serializer(role).data, status=status.HTTP_200_OK)
 
-    @allow_project_permission(PermissionKey.PROJECT_ROLE_CREATE)
+    @allow_fine_permission(PermissionKey.PROJECT_ROLE_CREATE)
     def create(self, request, slug, project_id):
         project = self.get_project(slug, project_id)
         if not project:
@@ -64,7 +64,7 @@ class ProjectRoleViewSet(BaseViewSet):
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    @allow_project_permission(PermissionKey.PROJECT_ROLE_EDIT)
+    @allow_fine_permission(PermissionKey.PROJECT_ROLE_EDIT)
     def partial_update(self, request, slug, project_id, pk):
         role = self.get_role(pk)
         if not role:
@@ -78,7 +78,7 @@ class ProjectRoleViewSet(BaseViewSet):
             return Response(serializer.data, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    @allow_project_permission(PermissionKey.PROJECT_ROLE_DELETE)
+    @allow_fine_permission(PermissionKey.PROJECT_ROLE_DELETE)
     def destroy(self, request, slug, project_id, pk):
         role = self.get_role(pk)
         if not role:
@@ -225,7 +225,7 @@ class ProjectRolePermissionAPIView(BaseAPIView):
             return Response({"error": "Project role not found."}, status=status.HTTP_404_NOT_FOUND)
         return Response(self.build_response_data(role), status=status.HTTP_200_OK)
 
-    @allow_project_permission(PermissionKey.PROJECT_ROLE_EDIT)
+    @allow_fine_permission(PermissionKey.PROJECT_ROLE_EDIT)
     def patch(self, request, slug, project_id, pk):
         role = self.get_role(slug, project_id, pk)
         if not role:

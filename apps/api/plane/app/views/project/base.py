@@ -20,7 +20,7 @@ from rest_framework import status
 from rest_framework.response import Response
 
 # Module imports
-from plane.app.permissions import ROLE, ProjectMemberPermission, allow_permission, allow_project_permission, \
+from plane.app.permissions import ROLE, ProjectMemberPermission, allow_permission, allow_fine_permission, \
     PermissionKey
 from plane.app.permissions.base import _get_user_project_permission_keys
 from plane.app.serializers import (
@@ -492,7 +492,7 @@ class ProjectViewSet(BaseViewSet):
             return Response(serializer.data, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    @allow_project_permission(PermissionKey.PROJECT_DELETE)
+    @allow_fine_permission(PermissionKey.PROJECT_DELETE)
     def destroy(self, request, slug, pk):
         if (
                 WorkspaceMember.objects.filter(
@@ -540,7 +540,7 @@ class ProjectViewSet(BaseViewSet):
 
 class ProjectArchiveUnarchiveEndpoint(BaseAPIView):
 
-    @allow_project_permission(PermissionKey.PROJECT_ARCHIVE)
+    @allow_fine_permission(PermissionKey.PROJECT_ARCHIVE)
     def post(self, request, slug, project_id):
         project = Project.objects.get(pk=project_id, workspace__slug=slug)
         project.archived_at = timezone.now()
@@ -548,7 +548,7 @@ class ProjectArchiveUnarchiveEndpoint(BaseAPIView):
         UserFavorite.objects.filter(workspace__slug=slug, project=project_id).delete()
         return Response({"archived_at": str(project.archived_at)}, status=status.HTTP_200_OK)
 
-    @allow_project_permission(PermissionKey.PROJECT_UNARCHIVE)
+    @allow_fine_permission(PermissionKey.PROJECT_UNARCHIVE)
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
     def delete(self, request, slug, project_id):
         project = Project.objects.get(pk=project_id, workspace__slug=slug)
@@ -661,7 +661,7 @@ class DeployBoardViewSet(BaseViewSet):
         serializer = DeployBoardSerializer(project_deploy_board)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    @allow_project_permission(PermissionKey.PROJECT_PUBLISH_CREATE)
+    @allow_fine_permission(PermissionKey.PROJECT_PUBLISH_CREATE)
     def create(self, request, slug, project_id):
         comments = request.data.get("is_comments_enabled", False)
         reactions = request.data.get("is_reactions_enabled", False)
@@ -692,11 +692,11 @@ class DeployBoardViewSet(BaseViewSet):
         serializer = DeployBoardSerializer(project_deploy_board)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    @allow_project_permission(PermissionKey.PROJECT_PUBLISH_DELETE)
+    @allow_fine_permission(PermissionKey.PROJECT_PUBLISH_DELETE)
     def destroy(self, request, slug, project_id, pk):
         return super().destroy(request, slug, project_id)
 
-    @allow_project_permission(PermissionKey.PROJECT_PUBLISH_EDIT)
+    @allow_fine_permission(PermissionKey.PROJECT_PUBLISH_EDIT)
     def partial_update(self, request, slug, project_id, pk):
         return super().partial_update(request, slug, project_id)
 
@@ -742,7 +742,7 @@ class ProjectAPI(BaseViewSet):
         )
 
     @action(detail=False, methods=['get'], url_path='statistic')
-    @allow_project_permission(PermissionKey.PROJECT_ANALYTICS_VIEW)
+    @allow_fine_permission(PermissionKey.PROJECT_ANALYTICS_VIEW)
     def get_statistic(self, request, slug):
         project_id = request.query_params.get('project_id')
         if not project_id:

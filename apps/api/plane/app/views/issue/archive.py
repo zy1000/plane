@@ -17,7 +17,7 @@ from django.views.decorators.gzip import gzip_page
 from rest_framework import status
 from rest_framework.response import Response
 
-from plane.app.permissions import ProjectEntityPermission, allow_project_permission, PermissionKey, has_project_issue_permission
+from plane.app.permissions import ProjectEntityPermission, allow_fine_permission, PermissionKey, has_project_issue_permission
 from plane.app.serializers import (
     IssueFlatSerializer,
     IssueSerializer,

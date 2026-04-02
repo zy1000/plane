@@ -30,7 +30,7 @@ from plane.utils.grouper import (
 from plane.utils.issue_filters import issue_filters
 from plane.utils.order_queryset import order_issue_queryset
 from plane.utils.paginator import GroupedOffsetPaginator, SubGroupedOffsetPaginator
-from plane.app.permissions import allow_permission, ROLE, allow_project_permission, PermissionKey
+from plane.app.permissions import allow_permission, ROLE, allow_fine_permission, PermissionKey
 from plane.utils.host import base_host
 from plane.utils.filters import ComplexFilterBackend
 from plane.utils.filters import IssueFilterSet
@@ -219,7 +219,7 @@ class CycleIssueViewSet(BaseViewSet):
                 on_results=lambda issues: issue_on_results(group_by=group_by, issues=issues, sub_group_by=sub_group_by),
             )
 
-    @allow_project_permission(PermissionKey.SPRINTS_ISSUE_MANAGE)
+    @allow_fine_permission(PermissionKey.SPRINTS_ISSUE_MANAGE)
     def create(self, request, slug, project_id, cycle_id):
         issues = request.data.get("issues", [])
         if not issues:
@@ -299,7 +299,7 @@ class CycleIssueViewSet(BaseViewSet):
                                            project=cycle.project)
         return Response({"message": "success"}, status=status.HTTP_201_CREATED)
 
-    @allow_project_permission(PermissionKey.SPRINTS_ISSUE_MANAGE)
+    @allow_fine_permission(PermissionKey.SPRINTS_ISSUE_MANAGE)
     def destroy(self, request, slug, project_id, cycle_id, issue_id):
         cycle_issue = CycleIssue.objects.filter(
             issue_id=issue_id,

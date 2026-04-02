@@ -6,7 +6,7 @@ from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from plane.app.permissions import allow_project_permission, PermissionKey
+from plane.app.permissions import allow_fine_permission, PermissionKey
 from plane.app.serializers.asset import FileSerializer
 from plane.app.views import BaseViewSet
 from plane.db.models import Module
@@ -21,7 +21,7 @@ class ModuleFileAPI(BaseViewSet):
     pagination_class = CustomPaginator
 
     @action(detail=False, methods=['post'], url_path='upload')
-    @allow_project_permission(PermissionKey.RELEASES_FILE_UPLOAD)
+    @allow_fine_permission(PermissionKey.RELEASES_FILE_UPLOAD)
     def upload(self, request, slug, project_id):
         with transaction.atomic():
             minio = get_minio_utils()
@@ -47,7 +47,7 @@ class ModuleFileAPI(BaseViewSet):
         serializer = FileSerializer(paginated_queryset, many=True)
         return list_response(data=serializer.data, count=files.count())
 
-    @allow_project_permission(PermissionKey.RELEASES_FILE_DELETE)
+    @allow_fine_permission(PermissionKey.RELEASES_FILE_DELETE)
     def delete_file(self, request, slug, project_id, file_id):
         module = Module.objects.filter(
             workspace__slug=slug,
@@ -67,7 +67,7 @@ class ModuleFileAPI(BaseViewSet):
         minio.remove_object(object_name=file.path + file.name)
         return Response(status=status.HTTP_200_OK)
 
-    @allow_project_permission(PermissionKey.RELEASES_FILE_DOWNLOAD)
+    @allow_fine_permission(PermissionKey.RELEASES_FILE_DOWNLOAD)
     def download(self, request, slug, project_id, file_id):
         file = File.objects.filter(
             id=file_id,

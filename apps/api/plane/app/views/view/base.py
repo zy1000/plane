@@ -23,7 +23,7 @@ from rest_framework import status
 from rest_framework.response import Response
 
 # Module imports
-from plane.app.permissions import allow_permission, ROLE, allow_project_permission, PermissionKey
+from plane.app.permissions import allow_permission, ROLE, allow_fine_permission, PermissionKey
 from plane.app.serializers import IssueViewSerializer, ViewIssueListSerializer
 from plane.db.models import (
     Issue,
@@ -286,7 +286,7 @@ class IssueViewViewSet(BaseViewSet):
             .distinct()
         )
 
-    @allow_project_permission(PermissionKey.VIEW_VIEW)
+    @allow_fine_permission(PermissionKey.VIEW_VIEW)
     def list(self, request, slug, project_id):
         queryset = self.get_queryset()
         project = Project.objects.get(id=project_id)
@@ -305,7 +305,7 @@ class IssueViewViewSet(BaseViewSet):
         views = IssueViewSerializer(queryset, many=True, fields=fields if fields else None).data
         return Response(views, status=status.HTTP_200_OK)
 
-    @allow_project_permission(PermissionKey.VIEW_VIEW)
+    @allow_fine_permission(PermissionKey.VIEW_VIEW)
     def retrieve(self, request, slug, project_id, pk):
         issue_view = self.get_queryset().filter(pk=pk, project_id=project_id).first()
         project = Project.objects.get(id=project_id)
@@ -340,7 +340,7 @@ class IssueViewViewSet(BaseViewSet):
         )
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    @allow_project_permission(PermissionKey.VIEW_EDIT)
+    @allow_fine_permission(PermissionKey.VIEW_EDIT)
     def partial_update(self, request, slug, project_id, pk):
         with transaction.atomic():
             issue_view = IssueView.objects.select_for_update().get(pk=pk, workspace__slug=slug, project_id=project_id)
@@ -362,7 +362,7 @@ class IssueViewViewSet(BaseViewSet):
                 return Response(serializer.data, status=status.HTTP_200_OK)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    @allow_project_permission(PermissionKey.VIEW_DELETE)
+    @allow_fine_permission(PermissionKey.VIEW_DELETE)
     def destroy(self, request, slug, project_id, pk):
         project_view = IssueView.objects.get(pk=pk, project_id=project_id, workspace__slug=slug)
         if (
@@ -397,7 +397,7 @@ class IssueViewViewSet(BaseViewSet):
             )
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-    @allow_project_permission(PermissionKey.VIEW_CREATE)
+    @allow_fine_permission(PermissionKey.VIEW_CREATE)
     def create(self, request, slug, project_id, *args, **kwargs):
         return super().create(request, slug, project_id, *args, **kwargs)
 

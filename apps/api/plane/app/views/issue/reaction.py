@@ -16,7 +16,7 @@ from rest_framework import status
 # Module imports
 from .. import BaseViewSet
 from plane.app.serializers import IssueReactionSerializer
-from plane.app.permissions import allow_permission, ROLE, allow_project_permission, PermissionKey
+from plane.app.permissions import allow_permission, ROLE, allow_fine_permission, PermissionKey
 from plane.db.models import IssueReaction
 from plane.bgtasks.issue_activities_task import issue_activity
 from plane.utils.host import base_host

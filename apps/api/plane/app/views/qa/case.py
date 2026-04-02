@@ -17,7 +17,7 @@ from django.db.utils import IntegrityError
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 
-from plane.app.permissions import allow_project_permission, PermissionKey
+from plane.app.permissions import allow_fine_permission, PermissionKey
 from plane.app.serializers.qa import CaseAttachmentSerializer, IssueListSerializer, CaseIssueSerializer, \
     TestCaseCommentSerializer, PlanCaseRecordSerializer, CaseListSerializer, CaseLabelListSerializer, \
     IssueUnselectSerializer, ReviewCaseRecordsSerializer
@@ -183,7 +183,7 @@ class CaseAPI(BaseViewSet):
         return list_response(data=result, count=len(result))
 
     @action(detail=False, methods=['post'], url_path='export')
-    @allow_project_permission(PermissionKey.QA_CASE_IMPORT_EXPORT)
+    @allow_fine_permission(PermissionKey.QA_CASE_IMPORT_EXPORT)
     def export(self, request, slug):
         fields = request.data.get('fields') or []
         if not isinstance(fields, list) or not fields:
@@ -1187,7 +1187,7 @@ class CaseAPI(BaseViewSet):
         return Response(status=status.HTTP_201_CREATED)
 
     @action(detail=False, methods=['post'], url_path='import-case')
-    @allow_project_permission(PermissionKey.QA_CASE_IMPORT_EXPORT)
+    @allow_fine_permission(PermissionKey.QA_CASE_IMPORT_EXPORT)
     def import_case(self, request, slug):
         repository_id = request.data.get('repository_id')
         if not repository_id:
@@ -1283,7 +1283,7 @@ class CaseAPI(BaseViewSet):
                         status=status.HTTP_200_OK)
 
     @action(detail=False, methods=['post'], url_path='validate-import-case')
-    @allow_project_permission(PermissionKey.QA_CASE_IMPORT_EXPORT)
+    @allow_fine_permission(PermissionKey.QA_CASE_IMPORT_EXPORT)
     def validate_import_case(self, request, slug):
         repository_id = request.data.get('repository_id')
         if not repository_id:

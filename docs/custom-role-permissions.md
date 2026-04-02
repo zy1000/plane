@@ -289,12 +289,12 @@
 
 ## 五、项目接口鉴权落地清单
 
-下面这部分用于指导把现有项目级接口从粗粒度 `@allow_permission(...)` 逐步迁移到细粒度 `@allow_project_permission(...)` / `@allow_workspace_permission(...)`。
+下面这部分用于指导把现有项目级接口从粗粒度 `@allow_permission(...)` 逐步迁移到细粒度 `@allow_fine_permission(...)` / `@allow_fine_permission("...", level="WORKSPACE")`。
 
 ### 1. 使用原则
 
-- 项目级接口优先使用 `@allow_project_permission(...)`
-- 工作区级接口优先使用 `@allow_workspace_permission(...)`
+- 项目级接口优先使用 `@allow_fine_permission(...)`
+- 工作区级接口优先使用 `@allow_fine_permission("...", level="WORKSPACE")`
 - 仅用于个人偏好、收藏、邀请接受这类“用户自有行为”的接口，不强制套用细粒度业务权限
 - 迁移过程中可以保留少量旧的 `@allow_permission(...)` 作为过渡，但最终应以后者为主
 
@@ -311,14 +311,14 @@
 
 | 接口方法 | 当前职责 | 推荐权限 key | 推荐装饰器 |
 | --- | --- | --- | --- |
-| `ProjectRoleViewSet.list` | 查看项目角色列表 | `project.role.view` | `@allow_project_permission("project.role.view")` |
-| `ProjectRoleViewSet.retrieve` | 查看项目角色详情 | `project.role.view` | `@allow_project_permission("project.role.view")` |
-| `ProjectRoleViewSet.create` | 创建项目角色 | `project.role.create` | `@allow_project_permission("project.role.create")` |
-| `ProjectRoleViewSet.partial_update` | 编辑项目角色 | `project.role.edit` | `@allow_project_permission("project.role.edit")` |
-| `ProjectRoleViewSet.destroy` | 删除项目角色 | `project.role.delete` | `@allow_project_permission("project.role.delete")` |
-| `ProjectRoleImportAPIView.post` | 从工作区模板导入项目角色 | `project.role.create` | `@allow_project_permission("project.role.create")` |
-| `ProjectRolePermissionAPIView.get` | 查看项目角色权限绑定 | `project.role.view` | `@allow_project_permission("project.role.view")` |
-| `ProjectRolePermissionAPIView.patch` | 修改项目角色权限绑定 | `project.role.edit` | `@allow_project_permission("project.role.edit")` |
+| `ProjectRoleViewSet.list` | 查看项目角色列表 | `project.role.view` | `@allow_fine_permission("project.role.view")` |
+| `ProjectRoleViewSet.retrieve` | 查看项目角色详情 | `project.role.view` | `@allow_fine_permission("project.role.view")` |
+| `ProjectRoleViewSet.create` | 创建项目角色 | `project.role.create` | `@allow_fine_permission("project.role.create")` |
+| `ProjectRoleViewSet.partial_update` | 编辑项目角色 | `project.role.edit` | `@allow_fine_permission("project.role.edit")` |
+| `ProjectRoleViewSet.destroy` | 删除项目角色 | `project.role.delete` | `@allow_fine_permission("project.role.delete")` |
+| `ProjectRoleImportAPIView.post` | 从工作区模板导入项目角色 | `project.role.create` | `@allow_fine_permission("project.role.create")` |
+| `ProjectRolePermissionAPIView.get` | 查看项目角色权限绑定 | `project.role.view` | `@allow_fine_permission("project.role.view")` |
+| `ProjectRolePermissionAPIView.patch` | 修改项目角色权限绑定 | `project.role.edit` | `@allow_fine_permission("project.role.edit")` |
 
 说明：
 
@@ -329,15 +329,15 @@
 
 | 接口方法 | 当前职责 | 推荐权限 key | 推荐装饰器 |
 | --- | --- | --- | --- |
-| `ProjectMemberViewSet.list` | 查看项目成员列表 | `project.member.view` | `@allow_project_permission("project.member.view")` |
-| `ProjectMemberViewSet.retrieve` | 查看项目成员详情 | `project.member.view` | `@allow_project_permission("project.member.view")` |
-| `ProjectMemberViewSet.create` | 直接添加项目成员 | `project.member.invite` | `@allow_project_permission("project.member.invite")` |
-| `ProjectMemberViewSet.partial_update` | 修改项目成员属性/角色 | `project.member.edit` | `@allow_project_permission("project.member.edit")` |
-| `ProjectMemberViewSet.destroy` | 移除项目成员 | `project.member.remove` | `@allow_project_permission("project.member.remove")` |
-| `ProjectMemberViewSet.leave` | 当前用户主动退出项目 | `project.member.leave` | `@allow_project_permission("project.member.leave")` |
-| `ProjectMemberUserEndpoint.get` | 查看当前用户自己的项目成员信息 | `project.member.view` | `@allow_project_permission("project.member.view")` 或仅保留成员校验 |
-| `ProjectMemberPreferenceEndpoint.get` | 查看成员偏好 | `project.member.view` | `@allow_project_permission("project.member.view")` |
-| `ProjectMemberPreferenceEndpoint.patch` | 修改成员偏好 | `project.member.edit` | `@allow_project_permission("project.member.edit")`；若仅允许改自己，可单独放宽 |
+| `ProjectMemberViewSet.list` | 查看项目成员列表 | `project.member.view` | `@allow_fine_permission("project.member.view")` |
+| `ProjectMemberViewSet.retrieve` | 查看项目成员详情 | `project.member.view` | `@allow_fine_permission("project.member.view")` |
+| `ProjectMemberViewSet.create` | 直接添加项目成员 | `project.member.invite` | `@allow_fine_permission("project.member.invite")` |
+| `ProjectMemberViewSet.partial_update` | 修改项目成员属性/角色 | `project.member.edit` | `@allow_fine_permission("project.member.edit")` |
+| `ProjectMemberViewSet.destroy` | 移除项目成员 | `project.member.remove` | `@allow_fine_permission("project.member.remove")` |
+| `ProjectMemberViewSet.leave` | 当前用户主动退出项目 | `project.member.leave` | `@allow_fine_permission("project.member.leave")` |
+| `ProjectMemberUserEndpoint.get` | 查看当前用户自己的项目成员信息 | `project.member.view` | `@allow_fine_permission("project.member.view")` 或仅保留成员校验 |
+| `ProjectMemberPreferenceEndpoint.get` | 查看成员偏好 | `project.member.view` | `@allow_fine_permission("project.member.view")` |
+| `ProjectMemberPreferenceEndpoint.patch` | 修改成员偏好 | `project.member.edit` | `@allow_fine_permission("project.member.edit")`；若仅允许改自己，可单独放宽 |
 
 说明：
 
@@ -348,39 +348,39 @@
 
 | 接口方法 | 当前职责 | 推荐权限 key | 推荐装饰器 |
 | --- | --- | --- | --- |
-| `ProjectInvitationsViewset.create` | 发送项目邀请 | `project.member.invite` | `@allow_project_permission("project.member.invite")` |
-| `ProjectInvitationsViewset.list` | 查看项目邀请列表 | `project.member.view` | `@allow_project_permission("project.member.view")` |
-| `ProjectInvitationsViewset.retrieve` | 查看单条项目邀请 | `project.member.view` | `@allow_project_permission("project.member.view")` |
-| `ProjectInvitationsViewset.destroy` | 撤销项目邀请 | `project.member.invite` | `@allow_project_permission("project.member.invite")` |
+| `ProjectInvitationsViewset.create` | 发送项目邀请 | `project.member.invite` | `@allow_fine_permission("project.member.invite")` |
+| `ProjectInvitationsViewset.list` | 查看项目邀请列表 | `project.member.view` | `@allow_fine_permission("project.member.view")` |
+| `ProjectInvitationsViewset.retrieve` | 查看单条项目邀请 | `project.member.view` | `@allow_fine_permission("project.member.view")` |
+| `ProjectInvitationsViewset.destroy` | 撤销项目邀请 | `project.member.invite` | `@allow_fine_permission("project.member.invite")` |
 
 说明：
 
 - 当前 `urls/project.py` 已经给 `ProjectInvitationsViewset` 配了 `list/retrieve/destroy` 路由，但 view 中尚未完整实现，补实现时可直接按上表接权限
 - `UserProjectInvitationsViewset.create` 属于“当前用户把自己加入项目”的能力，不建议简单替换成细粒度项目权限，应保留现有工作区成员和项目可见性规则
-- `ProjectJoinEndpoint.get/post` 是邀请链接接受流程，用户此时可能尚未成为项目成员，不应使用 `@allow_project_permission(...)`
+- `ProjectJoinEndpoint.get/post` 是邀请链接接受流程，用户此时可能尚未成为项目成员，不应使用 `@allow_fine_permission(...)`
 
 #### D. `apps/api/plane/app/views/project/announcement.py`
 
 | 接口方法 | 当前职责 | 推荐权限 key | 推荐装饰器 |
 | --- | --- | --- | --- |
-| `AnnouncementAPIView.get` | 查看项目公告 | `project.announcement.view` | `@allow_project_permission("project.announcement.view")` |
-| `AnnouncementAPIView.post` | 新增项目公告 | `project.announcement.edit` | `@allow_project_permission("project.announcement.edit")` |
-| `AnnouncementAPIView.delete` | 删除项目公告 | `project.announcement.edit` | `@allow_project_permission("project.announcement.edit")` |
+| `AnnouncementAPIView.get` | 查看项目公告 | `project.announcement.view` | `@allow_fine_permission("project.announcement.view")` |
+| `AnnouncementAPIView.post` | 新增项目公告 | `project.announcement.edit` | `@allow_fine_permission("project.announcement.edit")` |
+| `AnnouncementAPIView.delete` | 删除项目公告 | `project.announcement.edit` | `@allow_fine_permission("project.announcement.edit")` |
 
 #### E. `apps/api/plane/app/views/project/base.py`
 
 | 接口方法 | 当前职责 | 推荐权限 key | 推荐装饰器 |
 | --- | --- | --- | --- |
-| `ProjectViewSet.list_detail` | 查看项目详情列表/概览 | `project.settings.view` | `@allow_project_permission("project.settings.view")` |
-| `ProjectViewSet.list` | 查看项目列表 | 更适合 `workspace.project.view` | `@allow_workspace_permission("workspace.project.view")` |
-| `ProjectViewSet.retrieve` | 查看单个项目详情 | `project.settings.view` | `@allow_project_permission("project.settings.view")` |
-| `ProjectViewSet.create` | 创建项目 | `workspace.project.create` | `@allow_workspace_permission("workspace.project.create")` |
-| `ProjectViewSet.partial_update` | 修改项目设置 | `project.settings.edit` | `@allow_project_permission("project.settings.edit")` |
-| `ProjectViewSet.destroy` | 删除项目 | `project.delete` | `@allow_project_permission("project.delete")` |
-| `ProjectArchiveUnarchiveEndpoint.post` | 归档项目 | `project.archive` | `@allow_project_permission("project.archive")` |
-| `ProjectArchiveUnarchiveEndpoint.delete` | 恢复项目 | `project.unarchive` | `@allow_project_permission("project.unarchive")` |
-| `ProjectIdentifierEndpoint.get` | 检查项目标识符 | `workspace.project.create` | `@allow_workspace_permission("workspace.project.create")` |
-| `ProjectIdentifierEndpoint.delete` | 删除未使用的项目标识符 | `workspace.project.create` | `@allow_workspace_permission("workspace.project.create")` |
+| `ProjectViewSet.list_detail` | 查看项目详情列表/概览 | `project.settings.view` | `@allow_fine_permission("project.settings.view")` |
+| `ProjectViewSet.list` | 查看项目列表 | 更适合 `workspace.project.view` | `@allow_fine_permission("workspace.project.view")` |
+| `ProjectViewSet.retrieve` | 查看单个项目详情 | `project.settings.view` | `@allow_fine_permission("project.settings.view")` |
+| `ProjectViewSet.create` | 创建项目 | `workspace.project.create` | `@allow_fine_permission("workspace.project.create")` |
+| `ProjectViewSet.partial_update` | 修改项目设置 | `project.settings.edit` | `@allow_fine_permission("project.settings.edit")` |
+| `ProjectViewSet.destroy` | 删除项目 | `project.delete` | `@allow_fine_permission("project.delete")` |
+| `ProjectArchiveUnarchiveEndpoint.post` | 归档项目 | `project.archive` | `@allow_fine_permission("project.archive")` |
+| `ProjectArchiveUnarchiveEndpoint.delete` | 恢复项目 | `project.unarchive` | `@allow_fine_permission("project.unarchive")` |
+| `ProjectIdentifierEndpoint.get` | 检查项目标识符 | `workspace.project.create` | `@allow_fine_permission("workspace.project.create")` |
+| `ProjectIdentifierEndpoint.delete` | 删除未使用的项目标识符 | `workspace.project.create` | `@allow_fine_permission("workspace.project.create")` |
 
 说明：
 
@@ -395,11 +395,11 @@
 
 | 接口方法 | 当前职责 | 现阶段推荐权限 key | 推荐装饰器 |
 | --- | --- | --- | --- |
-| `ProjectPmsInfoAPIView.get` | 查看 PMS 配置列表 | `project.settings.view` | `@allow_project_permission("project.settings.view")` |
-| `ProjectPmsInfoAPIView.post` | 新建 PMS 配置 | `project.settings.edit` | `@allow_project_permission("project.settings.edit")` |
-| `ProjectPmsInfoDetailAPIView.patch` | 修改 PMS 配置 | `project.settings.edit` | `@allow_project_permission("project.settings.edit")` |
-| `ProjectPmsInfoDetailAPIView.delete` | 删除 PMS 配置 | `project.settings.edit` | `@allow_project_permission("project.settings.edit")` |
-| `PmsSyncAPIView.post` | 执行 PMS 同步 | `project.settings.edit` | `@allow_project_permission("project.settings.edit")` |
+| `ProjectPmsInfoAPIView.get` | 查看 PMS 配置列表 | `project.settings.view` | `@allow_fine_permission("project.settings.view")` |
+| `ProjectPmsInfoAPIView.post` | 新建 PMS 配置 | `project.settings.edit` | `@allow_fine_permission("project.settings.edit")` |
+| `ProjectPmsInfoDetailAPIView.patch` | 修改 PMS 配置 | `project.settings.edit` | `@allow_fine_permission("project.settings.edit")` |
+| `ProjectPmsInfoDetailAPIView.delete` | 删除 PMS 配置 | `project.settings.edit` | `@allow_fine_permission("project.settings.edit")` |
+| `PmsSyncAPIView.post` | 执行 PMS 同步 | `project.settings.edit` | `@allow_fine_permission("project.settings.edit")` |
 
 后续更推荐补充以下独立权限键：
 
@@ -411,7 +411,7 @@
 
 | 接口方法 | 当前职责 | 推荐权限 key | 推荐装饰器 |
 | --- | --- | --- | --- |
-| `ProjectTemplateAPIView.post` | 创建项目模板 | 暂无现成 key，建议新增 `workspace.project_template.create` | `@allow_workspace_permission("workspace.project_template.create")` |
+| `ProjectTemplateAPIView.post` | 创建项目模板 | 暂无现成 key，建议新增 `workspace.project_template.create` | `@allow_fine_permission("workspace.project_template.create")` |
 
 ### 4. 当前不建议直接迁移为细粒度项目权限的接口
 

@@ -22,7 +22,7 @@ from plane.utils.response import list_response
 from plane.app.views import BaseAPIView, BaseViewSet
 from plane.app.serializers import TestPlanCreateUpdateSerializer, TestCaseRepositorySerializer, \
     TestCaseRepositoryDetailSerializer, CycleSerializer
-from plane.app.permissions import allow_permission, ROLE, allow_project_permission, PermissionKey
+from plane.app.permissions import allow_permission, ROLE, allow_fine_permission, PermissionKey
 from plane.settings.storage import S3Storage
 from plane.bgtasks.storage_metadata_task import get_asset_object_metadata
 from django.conf import settings
@@ -153,7 +153,7 @@ class PlanAPIView(BaseAPIView):
     def get_queryset(self):
         return TestPlan.objects.all().prefetch_related('cases')
 
-    @allow_project_permission(PermissionKey.QA_PLAN_CREATE)
+    @allow_fine_permission(PermissionKey.QA_PLAN_CREATE)
     def post(self, request, slug, project_id):
         serializer = self.serializer_class(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -161,7 +161,7 @@ class PlanAPIView(BaseAPIView):
         serializer = TestPlanDetailSerializer(instance=test_plan)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-    @allow_project_permission(PermissionKey.QA_PLAN_VIEW)
+    @allow_fine_permission(PermissionKey.QA_PLAN_VIEW)
     def get(self, request, slug, project_id):
         planes = self.filter_queryset(self.get_queryset()).distinct()
         paginator = self.pagination_class()
@@ -169,7 +169,7 @@ class PlanAPIView(BaseAPIView):
         serializer = TestPlanDetailSerializer(instance=paginated_queryset, many=True)
         return list_response(data=serializer.data, count=planes.count())
 
-    @allow_project_permission(PermissionKey.QA_PLAN_EDIT)
+    @allow_fine_permission(PermissionKey.QA_PLAN_EDIT)
     def put(self, request, slug, project_id):
         plan_id = request.data.pop('id')
         plan = self.queryset.get(id=plan_id)
@@ -179,7 +179,7 @@ class PlanAPIView(BaseAPIView):
         serializer = TestPlanDetailSerializer(instance=plan)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    @allow_project_permission(PermissionKey.QA_PLAN_DELETE)
+    @allow_fine_permission(PermissionKey.QA_PLAN_DELETE)
     def delete(self, request, slug, project_id):
         plan_ids = request.data.pop('ids')
         self.queryset.filter(id__in=plan_ids).delete()
@@ -318,7 +318,7 @@ class PlanView(BaseViewSet):
     pagination_class = CustomPaginator
 
     @action(detail=False, methods=['post'], url_path='cancel')
-    @allow_project_permission(PermissionKey.QA_PLAN_EDIT)
+    @allow_fine_permission(PermissionKey.QA_PLAN_EDIT)
     def cancel(self, request, slug):
         project_id = request.query_params.get('project_id')
         qs = PlanCase.objects.filter(id__in=request.data['id'])
@@ -624,7 +624,7 @@ class PlanView(BaseViewSet):
 
     @transaction.atomic 
     @action(detail=False, methods=['post'], url_path='add-cases')
-    @allow_project_permission(PermissionKey.QA_PLAN_EDIT)
+    @allow_fine_permission(PermissionKey.QA_PLAN_EDIT)
     def add_cases(self, request, slug):
         plan_id = request.data.get('plan_id')
         raw_case_ids = request.data.get('case_ids')
@@ -713,7 +713,7 @@ class CaseAPIView(BaseAPIView):
     }
     ordering_fields = ['updated_at', 'code']
 
-    @allow_project_permission(PermissionKey.QA_CASE_VIEW)
+    @allow_fine_permission(PermissionKey.QA_CASE_VIEW)
     def get(self, request, slug, project_id):
         cases = self.filter_queryset(self.queryset)
         paginator = self.pagination_class()
@@ -723,7 +723,7 @@ class CaseAPIView(BaseAPIView):
 
         return list_response(data=data, count=cases.count())
 
-    @allow_project_permission(PermissionKey.QA_CASE_CREATE)
+    @allow_fine_permission(PermissionKey.QA_CASE_CREATE)
     def post(self, request, slug, project_id):
         serializer = CaseCreateUpdateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -732,7 +732,7 @@ class CaseAPIView(BaseAPIView):
 
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-    @allow_project_permission(PermissionKey.QA_CASE_EDIT)
+    @allow_fine_permission(PermissionKey.QA_CASE_EDIT)
     def put(self, request, slug, project_id):
         case_id = request.data.pop('id')
         case = self.queryset.get(id=case_id)
@@ -742,7 +742,7 @@ class CaseAPIView(BaseAPIView):
         serializer = self.serializer_class(instance=case)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    @allow_project_permission(PermissionKey.QA_CASE_DELETE)
+    @allow_fine_permission(PermissionKey.QA_CASE_DELETE)
     def delete(self, request, slug, project_id):
         self.filter_queryset(self.queryset).all().delete(soft=False)
         return Response(status=status.HTTP_204_NO_CONTENT)
@@ -761,7 +761,7 @@ class CaseDetailAPIView(BaseAPIView):
 
 
 class CaseMindmapAPIView(BaseAPIView):
-    @allow_project_permission(PermissionKey.QA_MINDMAP_VIEW)
+    @allow_fine_permission(PermissionKey.QA_MINDMAP_VIEW)
     def get(self, request, slug):
         repository_id = request.query_params.get("repository_id")
         module_ids_raw = (

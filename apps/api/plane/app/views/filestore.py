@@ -14,7 +14,7 @@ from rest_framework.permissions import AllowAny
 import jwt
 import requests
 
-from plane.app.permissions import allow_permission, ROLE, allow_project_permission, PermissionKey
+from plane.app.permissions import allow_permission, ROLE, allow_fine_permission, PermissionKey
 from plane.app.views import BaseAPIView
 from plane.bgtasks.storage_metadata_task import get_asset_object_metadata
 from plane.db.models import FileAsset, Workspace
@@ -143,7 +143,7 @@ def _set_onlyoffice_state(attributes: dict, patch: dict) -> dict:
 
 class FilestoreAssetAPIView(BaseAPIView):
 
-    @allow_project_permission(PermissionKey.PROJECT_ASSET_VIEW)
+    @allow_fine_permission(PermissionKey.PROJECT_ASSET_VIEW)
     def get(self, request, slug, project_id):
         name__icontains = request.query_params.get("name__icontains")
 
@@ -180,7 +180,7 @@ class FilestoreAssetAPIView(BaseAPIView):
         ]
         return list_response(data=data, count=count)
 
-    @allow_project_permission(PermissionKey.PROJECT_ASSET_UPLOAD)
+    @allow_fine_permission(PermissionKey.PROJECT_ASSET_UPLOAD)
     def post(self, request, slug, project_id):
         name = request.data.get("name")
         file_type = request.data.get("type", False)
@@ -249,7 +249,7 @@ class FilestoreAssetDetailAPIView(BaseAPIView):
         asset.save(update_fields=["is_uploaded", "attributes"])
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-    @allow_project_permission(PermissionKey.PROJECT_ASSET_DELETE)
+    @allow_fine_permission(PermissionKey.PROJECT_ASSET_DELETE)
     def delete(self, request, slug, project_id, pk):
         asset = FileAsset.objects.get(
             id=pk,
@@ -265,7 +265,7 @@ class FilestoreAssetDetailAPIView(BaseAPIView):
 
 
 class FilestoreAssetDownloadAPIView(BaseAPIView):
-    @allow_project_permission(PermissionKey.PROJECT_ASSET_DOWNLOAD)
+    @allow_fine_permission(PermissionKey.PROJECT_ASSET_DOWNLOAD)
     def get(self, request, slug, project_id, pk):
         disposition = request.query_params.get("disposition") or "attachment"
         if disposition not in ["attachment", "inline"]:

@@ -15,7 +15,7 @@ from rest_framework import status
 # Module imports
 from .. import BaseViewSet, BaseAPIView
 from plane.app.serializers import LabelSerializer
-from plane.app.permissions import allow_permission, ProjectBasePermission, ROLE, allow_project_permission, PermissionKey
+from plane.app.permissions import allow_permission, ProjectBasePermission, ROLE, allow_fine_permission, PermissionKey
 from plane.db.models import Project, Label
 from plane.utils.cache import invalidate_cache
 
@@ -40,13 +40,13 @@ class LabelViewSet(BaseViewSet):
         )
 
 
-    @allow_project_permission(PermissionKey.LABEL_VIEW)
+    @allow_fine_permission(PermissionKey.LABEL_VIEW)
     def list(self, request, *args, **kwargs):
         return super().list(request, *args, **kwargs)
 
     @invalidate_cache(path="/api/workspaces/:slug/labels/", url_params=True, user=False, multiple=True)
     @allow_permission([ROLE.ADMIN])
-    @allow_project_permission(PermissionKey.LABEL_CREATE)
+    @allow_fine_permission(PermissionKey.LABEL_CREATE)
     def create(self, request, slug, project_id):
         try:
             serializer = LabelSerializer(data=request.data, context={"project_id": project_id})
@@ -62,7 +62,7 @@ class LabelViewSet(BaseViewSet):
 
     @invalidate_cache(path="/api/workspaces/:slug/labels/", url_params=True, user=False)
     @allow_permission([ROLE.ADMIN])
-    @allow_project_permission(PermissionKey.LABEL_EDIT)
+    @allow_fine_permission(PermissionKey.LABEL_EDIT)
     def partial_update(self, request, *args, **kwargs):
         # Check if the label name is unique within the project
         if (
@@ -90,7 +90,7 @@ class LabelViewSet(BaseViewSet):
 
     @invalidate_cache(path="/api/workspaces/:slug/labels/", url_params=True, user=False)
     @allow_permission([ROLE.ADMIN])
-    @allow_project_permission(PermissionKey.LABEL_DELETE)
+    @allow_fine_permission(PermissionKey.LABEL_DELETE)
     def destroy(self, request, *args, **kwargs):
         return super().destroy(request, *args, **kwargs)
 

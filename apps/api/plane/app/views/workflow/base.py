@@ -1,7 +1,7 @@
 from rest_framework import status
 from rest_framework.response import Response
 
-from plane.app.permissions import ROLE, allow_permission, allow_project_permission, PermissionKey
+from plane.app.permissions import ROLE, allow_permission, allow_fine_permission, PermissionKey
 from plane.app.serializers.workflow import (
     IssueTransitionActionSerializer,
     IssueTransitionRecordListSerializer,
@@ -38,13 +38,13 @@ class WorkflowAPIView(BaseAPIView):
     def get_project_queryset(self, project_id):
         return Workflow.objects.filter(project_id=project_id)
 
-    @allow_project_permission(PermissionKey.WORKFLOW_VIEW)
+    @allow_fine_permission(PermissionKey.WORKFLOW_VIEW)
     def get(self, request, slug, project_id):
         workflows = self.filter_queryset(self.get_project_queryset(project_id))
         serializer = self.serializer_class(instance=workflows, many=True)
         return Response(serializer.data)
 
-    @allow_project_permission(PermissionKey.WORKFLOW_CREATE)
+    @allow_fine_permission(PermissionKey.WORKFLOW_CREATE)
     def post(self, request, slug, project_id):
         serializer = self.serializer_class(data=request.data)
         if serializer.is_valid():
@@ -52,12 +52,12 @@ class WorkflowAPIView(BaseAPIView):
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    @allow_project_permission(PermissionKey.WORKFLOW_DELETE)
+    @allow_fine_permission(PermissionKey.WORKFLOW_DELETE)
     def delete(self, request, slug, project_id):
         self.filter_queryset(self.get_project_queryset(project_id)).delete(soft=False)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-    @allow_project_permission(PermissionKey.WORKFLOW_EDIT)
+    @allow_fine_permission(PermissionKey.WORKFLOW_EDIT)
     def put(self, request, slug, project_id):
         data = request.data.copy()
         workflow_id = data.pop('id')
@@ -112,14 +112,14 @@ class WorkflowTransitionAPIView(BaseAPIView):
         )
         return {**serializer_data, "approver_ids": approver_ids}
 
-    @allow_project_permission(PermissionKey.WORKFLOW_VIEW)
+    @allow_fine_permission(PermissionKey.WORKFLOW_VIEW)
     def get(self, request, slug, project_id, workflow_id):
         transitions = self.get_workflow_queryset(project_id, workflow_id).prefetch_related("approvals")
         serializer = self.serializer_class(instance=transitions, many=True)
         data = [self._with_approvers(item, transition) for item, transition in zip(serializer.data, transitions)]
         return Response(data)
 
-    @allow_project_permission(PermissionKey.WORKFLOW_CONFIG)
+    @allow_fine_permission(PermissionKey.WORKFLOW_CONFIG)
     def post(self, request, slug, project_id, workflow_id):
         data = {**request.data, "workflow_id": str(workflow_id)}
         serializer = self.serializer_class(data=data)
@@ -135,7 +135,7 @@ class WorkflowTransitionAPIView(BaseAPIView):
             return Response(self._with_approvers(serializer.data, transition), status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    @allow_project_permission(PermissionKey.WORKFLOW_CONFIG)
+    @allow_fine_permission(PermissionKey.WORKFLOW_CONFIG)
     def put(self, request, slug, project_id, workflow_id):
         data = request.data.copy()
         transition_id = data.pop("id")
@@ -154,7 +154,7 @@ class WorkflowTransitionAPIView(BaseAPIView):
             transition.save(update_fields=["dynamic_approver_types", "updated_at"])
         return Response(self._with_approvers(serializer.data, transition), status=status.HTTP_200_OK)
 
-    @allow_project_permission(PermissionKey.WORKFLOW_CONFIG)
+    @allow_fine_permission(PermissionKey.WORKFLOW_CONFIG)
     def delete(self, request, slug, project_id, workflow_id):
         transition_id = request.data.get("id") or request.query_params.get("id")
         qs = self.get_workflow_queryset(project_id, workflow_id)

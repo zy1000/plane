@@ -22,7 +22,7 @@ from .. import BaseAPIView
 from plane.app.serializers import IssueAttachmentSerializer
 from plane.db.models import FileAsset, Workspace
 from plane.bgtasks.issue_activities_task import issue_activity
-from plane.app.permissions import allow_permission, ROLE, allow_project_permission, PermissionKey
+from plane.app.permissions import allow_permission, ROLE, allow_fine_permission, PermissionKey
 from plane.settings.storage import S3Storage
 from plane.bgtasks.storage_metadata_task import get_asset_object_metadata
 from plane.utils.host import base_host
@@ -93,7 +93,7 @@ class IssueAttachmentV2Endpoint(BaseAPIView):
     model = FileAsset
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
-    @allow_project_permission(PermissionKey.ISSUE_ATTACHMENT_UPLOAD)
+    @allow_fine_permission(PermissionKey.ISSUE_ATTACHMENT_UPLOAD)
     def post(self, request, slug, project_id, issue_id):
         name = request.data.get("name")
         type = request.data.get("type", False)
@@ -144,7 +144,7 @@ class IssueAttachmentV2Endpoint(BaseAPIView):
         )
 
     @allow_permission([ROLE.ADMIN], creator=True, model=FileAsset)
-    @allow_project_permission(PermissionKey.ISSUE_DEFECT_DELETE)
+    @allow_fine_permission(PermissionKey.ISSUE_DEFECT_DELETE)
     def delete(self, request, slug, project_id, issue_id, pk):
         issue_attachment = FileAsset.objects.get(pk=pk, workspace__slug=slug, project_id=project_id)
         issue_attachment.is_deleted = True
@@ -166,7 +166,7 @@ class IssueAttachmentV2Endpoint(BaseAPIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
-    @allow_project_permission(PermissionKey.ISSUE_ATTACHMENT_DOWNLOAD)
+    @allow_fine_permission(PermissionKey.ISSUE_ATTACHMENT_DOWNLOAD)
     def get(self, request, slug, project_id, issue_id, pk=None):
         if pk:
             # Get the asset

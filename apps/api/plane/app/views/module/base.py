@@ -40,7 +40,7 @@ from plane.app.permissions import (
     ProjectEntityPermission,
     ProjectLitePermission,
     allow_permission,
-    ROLE, allow_project_permission, PermissionKey,
+    ROLE, allow_fine_permission, PermissionKey,
 )
 
 from plane.app.serializers import (
@@ -294,7 +294,7 @@ class ModuleViewSet(BaseViewSet):
             .order_by("-is_favorite", "-created_at")
         )
 
-    @allow_project_permission(PermissionKey.RELEASES_CREATE)
+    @allow_fine_permission(PermissionKey.RELEASES_CREATE)
     def create(self, request, slug, project_id):
         project = Project.objects.get(workspace__slug=slug, pk=project_id)
         serializer = ModuleWriteSerializer(data=request.data, context={"project": project})
@@ -353,7 +353,7 @@ class ModuleViewSet(BaseViewSet):
             return Response(module, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    @allow_project_permission(PermissionKey.RELEASES_VIEW)
+    @allow_fine_permission(PermissionKey.RELEASES_VIEW)
     def list(self, request, slug, project_id):
         queryset = self.get_queryset().filter(archived_at__isnull=True)
         if self.fields:
@@ -395,7 +395,7 @@ class ModuleViewSet(BaseViewSet):
             modules = user_timezone_converter(modules, datetime_fields, request.user.user_timezone)
         return Response(modules, status=status.HTTP_200_OK)
 
-    @allow_project_permission(PermissionKey.RELEASES_VIEW)
+    @allow_fine_permission(PermissionKey.RELEASES_VIEW)
     def retrieve(self, request, slug, project_id, pk):
         queryset = (
             self.get_queryset()
@@ -651,7 +651,7 @@ class ModuleViewSet(BaseViewSet):
 
         return Response(data, status=status.HTTP_200_OK)
 
-    @allow_project_permission(PermissionKey.RELEASES_EDIT)
+    @allow_fine_permission(PermissionKey.RELEASES_EDIT)
     def partial_update(self, request, slug, project_id, pk):
         module_queryset = self.get_queryset().filter(pk=pk)
 
@@ -723,7 +723,7 @@ class ModuleViewSet(BaseViewSet):
             return Response(module, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    @allow_project_permission(PermissionKey.RELEASES_DELETE)
+    @allow_fine_permission(PermissionKey.RELEASES_DELETE)
     def destroy(self, request, slug, project_id, pk):
         module = Module.objects.get(workspace__slug=slug, project_id=project_id, pk=pk)
 
@@ -861,7 +861,7 @@ class ModuleUserPropertiesEndpoint(BaseAPIView):
 class ModuleAPI(BaseViewSet):
     pagination_class = CustomPaginator
 
-    @allow_project_permission(PermissionKey.RELEASES_EDIT)
+    @allow_fine_permission(PermissionKey.RELEASES_EDIT)
     @action(detail=False, methods=["post"], url_path="associate-cycle")
     def associate_cycle(self, request, slug, project_id):
         module_id = request.data.get("module_id")
@@ -933,7 +933,7 @@ class ModuleAPI(BaseViewSet):
         serializer = CycleSerializer(query, many=True)
         return Response(data=serializer.data)
 
-    @allow_project_permission(PermissionKey.RELEASES_EDIT)
+    @allow_fine_permission(PermissionKey.RELEASES_EDIT)
     @action(detail=False, methods=["post"], url_path="cancel-cycle")
     def cancel_cycle(self, request, slug, project_id):
         module_id = request.data.get("module_id")

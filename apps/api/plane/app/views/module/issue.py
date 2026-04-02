@@ -18,7 +18,7 @@ from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from plane.app.permissions import allow_permission, ROLE, allow_project_permission, PermissionKey
+from plane.app.permissions import allow_permission, ROLE, allow_fine_permission, PermissionKey
 from plane.app.serializers import ModuleIssueSerializer
 from plane.bgtasks.issue_activities_task import issue_activity
 from plane.db.models import (
@@ -207,7 +207,7 @@ class ModuleIssueViewSet(BaseViewSet):
                 on_results=lambda issues: issue_on_results(group_by=group_by, issues=issues, sub_group_by=sub_group_by),
             )
 
-    @allow_project_permission(PermissionKey.RELEASES_ISSUE_MANAGE)
+    @allow_fine_permission(PermissionKey.RELEASES_ISSUE_MANAGE)
     # create multiple issues inside a module
     def create_module_issues(self, request, slug, project_id, module_id):
         issues = request.data.get("issues", [])
@@ -246,7 +246,7 @@ class ModuleIssueViewSet(BaseViewSet):
         ]
         return Response({"message": "success"}, status=status.HTTP_201_CREATED)
 
-    @allow_project_permission(PermissionKey.RELEASES_ISSUE_MANAGE)
+    @allow_fine_permission(PermissionKey.RELEASES_ISSUE_MANAGE)
     # add multiple module inside an issue and remove multiple modules from an issue
     def create_issue_modules(self, request, slug, project_id, issue_id):
         modules = request.data.get("modules", [])
@@ -315,7 +315,7 @@ class ModuleIssueViewSet(BaseViewSet):
 
         return Response({"message": "success"}, status=status.HTTP_201_CREATED)
 
-    @allow_project_permission(PermissionKey.RELEASES_ISSUE_MANAGE)
+    @allow_fine_permission(PermissionKey.RELEASES_ISSUE_MANAGE)
     def destroy(self, request, slug, project_id, module_id, issue_id):
         module_issue = ModuleIssue.objects.filter(
             workspace__slug=slug,
