@@ -415,14 +415,15 @@ class IssueViewSet(BaseViewSet):
 
         issue_type_name = resolve_project_issue_type_name(str(project_id), str(data["type_id"]))
         if issue_type_name is None:
-            return Response({"error": "Issue type is not valid please pass a valid type_id"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": "Issue type is not valid please pass a valid type_id"},
+                            status=status.HTTP_400_BAD_REQUEST)
 
         if not has_project_issue_permission(
-            user=request.user,
-            workspace_slug=slug,
-            project_id=str(project_id),
-            action="create",
-            issue_type_name=issue_type_name,
+                user=request.user,
+                workspace_slug=slug,
+                project_id=str(project_id),
+                action="create",
+                issue_type_name=issue_type_name,
         ):
             return Response(
                 {"error": f"您没有所需的项目权限。"},
@@ -624,8 +625,6 @@ class IssueViewSet(BaseViewSet):
         the requesting user then dont show the issue
         """
 
-
-
         if (
                 ProjectMember.objects.filter(
                     workspace__slug=slug,
@@ -710,15 +709,15 @@ class IssueViewSet(BaseViewSet):
             return Response({"error": "Issue not found"}, status=status.HTTP_404_NOT_FOUND)
 
         if not has_project_issue_permission(
-            user=request.user,
-            workspace_slug=slug,
-            project_id=str(project_id),
-            action="edit",
-            issue_type_name=issue.type.name,
-        ):
+                user=request.user,
+                workspace_slug=slug,
+                project_id=str(project_id),
+                action="edit",
+                issue_type_name=issue.type.name,
+        ) and request.user.pk not in issue.assignee_ids:
             redis_client.delete(lock_id)
             return Response(
-                {"error": f"您没有所需的项目权限。"},
+                {"error": "您没有所需的项目权限。"},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
@@ -886,11 +885,11 @@ class IssueViewSet(BaseViewSet):
         issue = Issue.objects.select_related("type").get(workspace__slug=slug, project_id=project_id, pk=pk)
 
         if not has_project_issue_permission(
-            user=request.user,
-            workspace_slug=slug,
-            project_id=str(project_id),
-            action="delete",
-            issue_type_name=issue.type.name,
+                user=request.user,
+                workspace_slug=slug,
+                project_id=str(project_id),
+                action="delete",
+                issue_type_name=issue.type.name,
         ):
             return Response(
                 {"error": f"您没有所需的项目权限。"},
@@ -965,11 +964,11 @@ class BulkDeleteIssuesEndpoint(BaseAPIView):
 
         for issue_type_name in issue_type_names:
             if not has_project_issue_permission(
-                user=request.user,
-                workspace_slug=slug,
-                project_id=str(project_id),
-                action="delete",
-                issue_type_name=issue_type_name,
+                    user=request.user,
+                    workspace_slug=slug,
+                    project_id=str(project_id),
+                    action="delete",
+                    issue_type_name=issue_type_name,
             ):
                 return Response(
                     {"error": f"您没有所需的项目权限。"},
