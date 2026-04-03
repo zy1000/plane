@@ -136,6 +136,20 @@ export class IssueService extends APIService {
       });
   }
 
+  async bulkExportIssues(
+    workspaceSlug: string,
+    projectId: string,
+    issueIds: string[]
+  ): Promise<Record<string, unknown>[]> {
+    return this.post(`/api/workspaces/${workspaceSlug}/projects/${projectId}/issues/bulk-export/`, {
+      issue_ids: issueIds,
+    })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
   async getIssueActivities(workspaceSlug: string, projectId: string, issueId: string): Promise<TIssueActivity[]> {
     return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/${this.serviceType}/${issueId}/history/`)
       .then((response) => response?.data)

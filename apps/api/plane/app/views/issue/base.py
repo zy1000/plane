@@ -992,6 +992,114 @@ class BulkDeleteIssuesEndpoint(BaseAPIView):
         )
 
 
+class BulkExportIssuesEndpoint(BaseAPIView):
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    def post(self, request, slug, project_id):
+        issue_ids = request.data.get("issue_ids", [])
+
+        if not issue_ids:
+            return Response({"error": "issue_ids is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        issues = (
+            Issue.issue_objects.filter(
+                workspace__slug=slug,
+                project_id=project_id,
+                pk__in=issue_ids,
+            )
+            .select_related(
+                "state",
+                "type",
+                "estimate_point",
+                "project",
+                "parent",
+                "created_by",
+                "updated_by",
+            )
+            .prefetch_related(
+                Prefetch(
+                    "label_issue",
+                    queryset=IssueLabel.objects.filter(deleted_at__isnull=True).select_related("label"),
+                ),
+                Prefetch(
+                    "issue_assignee",
+                    queryset=IssueAssignee.objects.filter(deleted_at__isnull=True).select_related("assignee"),
+                ),
+                Prefetch(
+                    "issue_cycle",
+                    queryset=CycleIssue.objects.filter(deleted_at__isnull=True).select_related("cycle"),
+                ),
+                Prefetch(
+                    "issue_module",
+                    queryset=ModuleIssue.objects.filter(deleted_at__isnull=True).select_related("module"),
+                ),
+            )
+            .annotate(
+                sub_issues_count=Subquery(
+                    Issue.issue_objects.filter(parent=OuterRef("id"))
+                    .values("parent")
+                    .annotate(count=Count("id"))
+                    .values("count")
+                ),
+                link_count=Subquery(
+                    IssueLink.objects.filter(issue=OuterRef("id"))
+                    .values("issue")
+                    .annotate(count=Count("id"))
+                    .values("count")
+                ),
+                attachment_count=Subquery(
+                    FileAsset.objects.filter(
+                        issue_id=OuterRef("id"),
+                        entity_type=FileAsset.EntityTypeContext.ISSUE_ATTACHMENT,
+                    )
+                    .values("issue_id")
+                    .annotate(count=Count("id"))
+                    .values("count")
+                ),
+            )
+        )
+
+        result = []
+        for issue in issues:
+            labels = [il.label.name for il in issue.label_issue.all() if il.label]
+            assignees = [ia.assignee.display_name for ia in issue.issue_assignee.all() if ia.assignee]
+            cycles = [ci.cycle.name for ci in issue.issue_cycle.all() if ci.cycle]
+            modules = [mi.module.name for mi in issue.issue_module.all() if mi.module]
+
+            result.append({
+                "id": str(issue.id),
+                "sequence_id": issue.sequence_id,
+                "name": issue.name,
+                "description_html": issue.description_html,
+                "priority": issue.priority,
+                "state": issue.state.name if issue.state else None,
+                "state_group": issue.state.group if issue.state else None,
+                "type": issue.type.name if issue.type else None,
+                "project": issue.project.name if issue.project else None,
+                "project_identifier": issue.project.identifier if issue.project else None,
+                "parent_sequence_id": issue.parent.sequence_id if issue.parent else None,
+                "parent_name": issue.parent.name if issue.parent else None,
+                "estimate": issue.estimate_point.value if issue.estimate_point else None,
+                "labels": labels,
+                "assignees": assignees,
+                "cycles": cycles,
+                "modules": modules,
+                "start_date": str(issue.start_date) if issue.start_date else None,
+                "target_date": str(issue.target_date) if issue.target_date else None,
+                "completed_at": issue.completed_at.isoformat() if issue.completed_at else None,
+                "created_at": issue.created_at.isoformat() if issue.created_at else None,
+                "updated_at": issue.updated_at.isoformat() if issue.updated_at else None,
+                "created_by": issue.created_by.display_name if issue.created_by else None,
+                "updated_by": issue.updated_by.display_name if issue.updated_by else None,
+                "is_draft": issue.is_draft,
+                "sub_issues_count": issue.sub_issues_count or 0,
+                "link_count": issue.link_count or 0,
+                "attachment_count": issue.attachment_count or 0,
+                "sort_order": issue.sort_order,
+            })
+
+        return Response(result, status=status.HTTP_200_OK)
+
+
 class DeletedIssuesListViewSet(BaseAPIView):
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
     def get(self, request, slug, project_id):

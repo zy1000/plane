@@ -31,8 +31,10 @@ const useReloadConfirmations = (isActive = true, message?: string, defaultShowAl
       // check if the event target is an anchor or a child of an anchor tag
       const eventTarget = event.target as HTMLElement;
       if (!eventTarget.closest("a")) return; // This is intentionally not type safe
-      // check if anchor target is _blank
       const anchorElement = eventTarget.closest("a") as HTMLAnchorElement;
+      // File downloads (e.g. export JSON/CSV) use <a download>; they do not navigate away
+      if (anchorElement.hasAttribute("download")) return;
+      // check if anchor target is _blank
       const isAnchorTargetBlank = anchorElement.getAttribute("target") === "_blank";
       if (isAnchorTargetBlank) return;
       // show confirm dialog

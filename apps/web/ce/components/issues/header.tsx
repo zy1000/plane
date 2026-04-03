@@ -7,7 +7,7 @@
 import { observer } from "mobx-react";
 import { useParams, usePathname } from "next/navigation";
 // icons
-import { Circle, ClipboardCheck } from "lucide-react";
+import { Circle, ClipboardCheck, ChevronDown } from "lucide-react";
 // plane imports
 import {
   EUserPermissions,
@@ -29,12 +29,14 @@ import { CountChip } from "@/components/common/count-chip";
 import { HeaderFilters } from "@/components/issues/filters";
 import { WorkflowApprovalModal } from "@/components/issues/workflow-approval-modal";
 import { IssueService } from "@/services/issue";
-import { message } from "antd";
+import { Dropdown, message } from "antd";
+import type { MenuProps } from "antd";
 import { useEffect, useRef, useState } from "react";
 // helpers
 // hooks
 import { useCommandPalette } from "@/hooks/store/use-command-palette";
 import { useIssues } from "@/hooks/store/use-issues";
+import { useMultipleSelectStore } from "@/hooks/store/use-multiple-select-store";
 import { useLabel } from "@/hooks/store/use-label";
 import { useProject } from "@/hooks/store/use-project";
 import { useUserPermissions } from "@/hooks/store/user";
@@ -52,10 +54,7 @@ export const IssuesHeader = observer(function IssuesHeader() {
   const pathname = usePathname();
   const scope = getProjectIssueScopeFromPathname(pathname);
   const { issues } = useIssues(EIssuesStoreType.PROJECT);
-  // store hooks
-  const {
-    issues: { getGroupIssueCount },
-  } = useIssues(EIssuesStoreType.PROJECT);
+  const { selectedEntityIds } = useMultipleSelectStore();
   const { fetchProjectLabels } = useLabel();
   // i18n
   const { t } = useTranslation();
@@ -141,6 +140,60 @@ export const IssuesHeader = observer(function IssuesHeader() {
     }
   };
 
+  const convertToCSV = (data: Record<string, unknown>[]): string => {
+    if (!data.length) return "";
+    const headers = Object.keys(data[0]);
+    const escape = (val: unknown): string => {
+      if (val === null || val === undefined) return "";
+      const str = Array.isArray(val) ? val.join(";") : String(val);
+      if (str.includes(",") || str.includes('"') || str.includes("\n")) {
+        return `"${str.replace(/"/g, '""')}"`;
+      }
+      return str;
+    };
+    const rows = data.map((row) => headers.map((h) => escape(row[h])).join(","));
+    return [headers.join(","), ...rows].join("\n");
+  };
+
+  const handleExport = async (format: "json" | "csv") => {
+    if (selectedEntityIds.length < 1) return;
+    try {
+      const data = await issueService.bulkExportIssues(
+        workspaceSlug?.toString(),
+        projectId?.toString(),
+        selectedEntityIds
+      );
+      let blob: Blob;
+      let filename: string;
+      if (format === "csv") {
+        const csv = "\uFEFF" + convertToCSV(data);
+        blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+        filename = `工作项导出_${Date.now()}.csv`;
+      } else {
+        blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json;charset=utf-8" });
+        filename = `工作项导出_${Date.now()}.json`;
+      }
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      link.style.visibility = "hidden";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      message.success(`已导出 ${data.length} 条工作项（${format.toUpperCase()}）`);
+    } catch (err: any) {
+      console.error(err);
+      message.error(err?.error || "导出失败");
+    }
+  };
+
+  const exportMenuItems: MenuProps["items"] = [
+    { key: "json", label: "导出为 JSON" },
+    { key: "csv", label: "导出为 CSV" },
+  ];
+
   const SPACE_APP_URL = (SPACE_BASE_URL.trim() === "" ? window.location.origin : SPACE_BASE_URL) + SPACE_BASE_PATH;
   const publishedURL = `${SPACE_APP_URL}/issues/${currentProjectDetails?.anchor}`;
 
@@ -218,6 +271,20 @@ export const IssuesHeader = observer(function IssuesHeader() {
             <Button size="lg" onClick={() => fileInputRef.current?.click()} variant="secondary">
               导入
             </Button>
+            {selectedEntityIds.length >= 1 && (
+              <Dropdown
+                menu={{
+                  items: exportMenuItems,
+                  onClick: ({ key }) => handleExport(key as "json" | "csv"),
+                }}
+                trigger={["click"]}
+              >
+                <Button size="lg" variant="secondary" className="flex items-center gap-1">
+                  导出
+                  <ChevronDown className="h-3 w-3" />
+                </Button>
+              </Dropdown>
+            )}
             <input
               type="file"
               ref={fileInputRef}
