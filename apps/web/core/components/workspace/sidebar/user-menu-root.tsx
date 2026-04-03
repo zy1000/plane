@@ -14,10 +14,9 @@ import { GOD_MODE_URL } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Avatar, CustomMenu } from "@plane/ui";
-import { getFileURL } from "@plane/utils";
+import { cn, getFileURL } from "@plane/utils";
 // components
 import { CoverImage } from "@/components/common/cover-image";
-import { AppSidebarItem } from "@/components/sidebar/sidebar-item";
 // hooks
 import { useAppTheme } from "@/hooks/store/use-app-theme";
 import { useCommandPalette } from "@/hooks/store/use-command-palette";
@@ -67,13 +66,9 @@ export const UserMenuRoot = observer(function UserMenuRoot(props: Props) {
       className="flex items-center pl-0.5"
       customButton={
         showLabel ? (
-          <button
-            type="button"
-            className="flex items-center gap-2 min-w-0 group "
-          >
+          <div className="flex min-w-0 items-center gap-2 group">
             <div
-              className={`flex items-center justify-center size-8 rounded-md text-secondary group-hover:text-primary"
-              }`}
+              className="flex items-center justify-center size-8 rounded-md text-secondary group-hover:text-primary"
             >
               <Avatar
                 name={currentUser?.display_name}
@@ -85,22 +80,22 @@ export const UserMenuRoot = observer(function UserMenuRoot(props: Props) {
             <span className="-ml-1.5 text-sm text-primary truncate max-w-[160px] group-hover:text-primary">
               {displayLabel}
             </span>
-          </button>
+          </div>
         ) : (
-          <AppSidebarItem
-            variant="button"
-            item={{
-              icon: (
-                <Avatar
-                  name={currentUser?.display_name}
-                  src={getFileURL(currentUser?.avatar_url ?? "")}
-                  size={size === "xs" ? 20 : size === "sm" ? 24 : 28}
-                  shape="circle"
-                />
-              ),
-              isActive: isUserMenuOpen,
-            }}
-          />
+          <div
+            className={cn("flex items-center justify-center size-8 rounded-md text-tertiary", {
+              "bg-layer-transparent-selected text-secondary !text-icon-primary": isUserMenuOpen,
+              "group-hover:text-icon-secondary group-hover:bg-layer-transparent-hover !text-icon-tertiary":
+                !isUserMenuOpen,
+            })}
+          >
+            <Avatar
+              name={currentUser?.display_name}
+              src={getFileURL(currentUser?.avatar_url ?? "")}
+              size={size === "xs" ? 20 : size === "sm" ? 24 : 28}
+              shape="circle"
+            />
+          </div>
         )
       }
       menuButtonOnClick={() => !isUserMenuOpen && setIsUserMenuOpen(true)}

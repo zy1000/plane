@@ -4,19 +4,20 @@
  * See the LICENSE file for details.
  */
 
-import { useTheme } from "next-themes";
 // assets
 import LogoSpinnerDark from "@/app/assets/images/logo-spinner-dark.gif?url";
 import LogoSpinnerLight from "@/app/assets/images/logo-spinner-light.gif?url";
 
 export function LogoSpinner() {
-  const { resolvedTheme } = useTheme();
-
-  const logoSrc = resolvedTheme === "dark" ? LogoSpinnerDark : LogoSpinnerLight;
-
   return (
     <div className="flex items-center justify-center">
-      <img src={logoSrc} alt="logo" className="h-6 w-auto object-contain sm:h-11" />
+      <img src={LogoSpinnerLight} alt="logo" className="logo-spinner-light h-6 w-auto object-contain sm:h-11" />
+      <img
+        src={LogoSpinnerDark}
+        alt=""
+        aria-hidden="true"
+        className="logo-spinner-dark hidden h-6 w-auto object-contain sm:h-11"
+      />
     </div>
   );
 }

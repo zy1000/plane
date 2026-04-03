@@ -188,18 +188,16 @@ export function FavoriteFolder(props: Props) {
                         position="top-end"
                         disabled={isDragging}
                       >
-                        <button
-                          type="button"
+                        <DragHandle
                           className={cn(
-                            "absolute top-1/2 -left-3 hidden -translate-y-1/2 cursor-grab items-center justify-center rounded-sm text-placeholder group-hover/project-item:flex",
+                            "absolute top-1/2 -left-3 hidden -translate-y-1/2 rounded-sm text-placeholder group-hover/project-item:flex",
                             {
                               "cursor-not-allowed opacity-60": favorite.sort_order === null,
                               "cursor-grabbing": isDragging,
-                            }
+                            },
+                            "bg-transparent"
                           )}
-                        >
-                          <DragHandle className="bg-transparent" />
-                        </button>
+                        />
                       </Tooltip>
                       <div className="grid size-5 flex-shrink-0 place-items-center">
                         <FavoriteFolderIcon />

@@ -309,20 +309,18 @@ export const SidebarProjectsListItem = observer(function SidebarProjectsListItem
                 position="top-end"
                 disabled={isDragging}
               >
-                <button
-                  type="button"
+                <DragHandle
                   className={cn(
-                    "absolute top-1/2 -left-3 hidden -translate-y-1/2 cursor-grab items-center justify-center rounded-sm text-placeholder group-hover/project-item:flex",
+                    "absolute top-1/2 -left-3 hidden -translate-y-1/2 rounded-sm text-placeholder group-hover/project-item:flex",
                     {
                       "cursor-not-allowed opacity-60": project.sort_order === null,
                       "cursor-grabbing": isDragging,
                       flex: isMenuActive || renderInExtendedSidebar,
-                    }
+                    },
+                    "bg-transparent"
                   )}
                   ref={dragHandleRef}
-                >
-                  <DragHandle className="bg-transparent" />
-                </button>
+                />
               </Tooltip>
             )}
             <>
@@ -355,14 +353,9 @@ export const SidebarProjectsListItem = observer(function SidebarProjectsListItem
               <div className="flex items-center gap-1">
                 <CustomMenu
                   customButton={
-                    <IconButton
-                      ref={actionSectionRef}
-                      variant="ghost"
-                      size="sm"
-                      icon={MoreHorizontal}
-                      onClick={() => setIsMenuActive(!isMenuActive)}
-                      className="text-placeholder"
-                    />
+                    <span ref={actionSectionRef} className="grid place-items-center rounded-sm p-0.5 text-placeholder">
+                      <MoreHorizontal className="size-4" />
+                    </span>
                   }
                   className={cn(
                     "pointer-events-none flex-shrink-0 opacity-0 group-hover/project-item:pointer-events-auto group-hover/project-item:opacity-100",
@@ -375,6 +368,7 @@ export const SidebarProjectsListItem = observer(function SidebarProjectsListItem
                   ariaLabel={t("aria_labels.projects_sidebar.toggle_quick_actions_menu")}
                   useCaptureForOutsideClick
                   closeOnSelect
+                  menuButtonOnClick={() => setIsMenuActive(!isMenuActive)}
                   onMenuClose={() => setIsMenuActive(false)}
                 >
                   {/* TODO: Removed is_favorite logic due to the optimization in projects API */}

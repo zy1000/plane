@@ -13,8 +13,6 @@ import { PageIcon } from "@plane/propel/icons";
 import { cn } from "@plane/utils";
 // ui
 import { CustomMenu } from "@plane/ui";
-// components
-import { AppSidebarItem } from "@/components/sidebar/sidebar-item";
 // hooks
 import { useChatSupport } from "@/hooks/use-chat-support";
 import packageJson from "package.json";
@@ -51,13 +49,15 @@ export const HelpMenuRoot = observer(function HelpMenuRoot({ showLabel = false }
               <p className="truncate text-13 leading-5 font-medium">{t("sidebar.help")}</p>
             </div>
           ) : (
-            <AppSidebarItem
-              variant="button"
-              item={{
-                icon: <HelpCircle className="size-5" />,
-                isActive: isNeedHelpOpen,
-              }}
-            />
+            <div
+              className={cn("flex items-center justify-center gap-2 size-8 rounded-md text-tertiary", {
+                "bg-layer-transparent-selected text-secondary !text-icon-primary": isNeedHelpOpen,
+                "group-hover:text-icon-secondary group-hover:bg-layer-transparent-hover !text-icon-tertiary":
+                  !isNeedHelpOpen,
+              })}
+            >
+              <HelpCircle className="size-5" />
+            </div>
           )
         }
         menuButtonOnClick={() => !isNeedHelpOpen && setIsNeedHelpOpen(true)}
