@@ -159,3 +159,9 @@ pnpm-lock.yaml
 apps/api/类型化状态工作流_1fd7f859.plan.md
 .cursor/skills/plane-django-resource-pattern/SKILL.md
 .cursor/*
+**/AGENTS.md
+**/docs/ai-change-map.md
+**/packages/shared-state/AGENTS.md
+**/packages/ui/AGENTS.md
+AGENTS.md
+AGENTS.md
