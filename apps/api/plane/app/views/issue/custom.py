@@ -22,7 +22,6 @@ class IssueAPI(BaseViewSet):
         except Exception as e:
             return Response({'error': f'需求导入失败:{str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
         epic_dic = dict()
-        feature_dic = dict()
         label_dic = dict()
         workspace = Workspace.objects.get(slug=slug)
         epic_type = ProjectIssueType.objects.get(project_id=project_id, issue_type__name='史诗').issue_type
@@ -42,20 +41,14 @@ class IssueAPI(BaseViewSet):
                     epic_dic[epic.name] = epic
                 if data.get('Sub'):
                     # 创建特性工作项
-                    feature = Issue.objects.get_or_create(workspace=workspace, project_id=project_id, name=data['Sub'],
+                    feature = Issue.objects.get_or_create(workspace=workspace, project_id=project_id, name=data['Sub'],parent=epic,
                                                           type=feature_type)[0]
-                    feature_dic[feature.name] = feature
-                    if feature.parent != epic:
-                        feature.parent = epic
-                        feature.save()
-                    feature_dic[feature.name] = feature
 
                 # 创建用户故事
                 story, created = Issue.objects.get_or_create(workspace=workspace, project_id=project_id,
-                                                             name=data['name'],
+                                                             name=data['name'],parent=feature,
                                                              type=story_type,
-                                                             defaults=dict(description_html=data['description_html'],
-                                                                           parent=feature))
+                                                             defaults=dict(description_html=data['description_html']))
                 if not created:
                     raise IntegrityError()
 
@@ -68,6 +61,7 @@ class IssueAPI(BaseViewSet):
                     IssueLabel.objects.create(issue=story, label=label_instance, project_id=project_id,
                                               workspace=workspace)
             except IntegrityError as e:
+                print(e)
                 fail_list.append(dict(name=data['name'], error='case name already exists'))
                 continue
             except Exception as e:

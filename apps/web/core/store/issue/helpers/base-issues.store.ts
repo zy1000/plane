@@ -1383,11 +1383,31 @@ export abstract class BaseIssuesStore implements IBaseIssuesStore {
           const stateName = stateMap[groupId]?.name ?? groupId;
           const existing = mergedIssues[stateName];
           const incoming = groupedIssues[groupId];
-          mergedIssues[stateName] = Array.isArray(existing) && Array.isArray(incoming)
-            ? [...existing, ...incoming]
-            : incoming;
+
+          if (Array.isArray(incoming)) {
+            mergedIssues[stateName] = Array.isArray(existing) ? [...existing, ...incoming] : incoming;
+          } else {
+            const mergedSubGroups = (!Array.isArray(existing) && existing ? { ...existing } : {}) as TGroupedIssues;
+
+            for (const subGroupId in incoming) {
+              const currentIssueIds = incoming[subGroupId];
+              const existingIssueIds = mergedSubGroups[subGroupId];
+              mergedSubGroups[subGroupId] =
+                Array.isArray(existingIssueIds) && Array.isArray(currentIssueIds)
+                  ? [...existingIssueIds, ...currentIssueIds]
+                  : currentIssueIds;
+
+              mergedCount[getGroupKey(stateName, subGroupId)] =
+                (mergedCount[getGroupKey(stateName, subGroupId)] ?? 0) +
+                (groupedIssueCount[getGroupKey(groupId, subGroupId)] ?? 0);
+            }
+
+            mergedIssues[stateName] = mergedSubGroups;
+          }
+
           mergedCount[stateName] = (mergedCount[stateName] ?? 0) + (groupedIssueCount[groupId] ?? 0);
         }
+
         return { issueList, groupedIssues: mergedIssues, groupedIssueCount: mergedCount };
       }
     }
@@ -1484,6 +1504,7 @@ export abstract class BaseIssuesStore implements IBaseIssuesStore {
         this.updateIssueGroup(issueSubGroup, [groupId, subGroupId]);
       }
     }
+
   }
 
   /**
