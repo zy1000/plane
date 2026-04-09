@@ -308,6 +308,7 @@ export default {
   your_work: "我的工作",
   drafts: "草稿",
   projects: "项目管理",
+  timesheets: "工时管理",
   views: "视图",
   workspace: "工作区",
   archives: "归档",
@@ -707,6 +708,8 @@ export default {
     project_name: "项目名称",
     project_id: "项目ID",
     project_timezone: "项目时区",
+    project_estimated_hours: "预估工时",
+    project_estimated_hours_placeholder: "例如 100",
     created_on: "创建于",
     update_project: "更新项目",
     identifier_already_exists: "标识符已存在",
@@ -1820,6 +1823,9 @@ export default {
     general: {
       enter_project_id: "输入项目 ID",
       please_select_a_timezone: "请选择时区",
+      estimated_hours_min: "预估工时不能为负数",
+      estimated_hours_invalid: "请输入有效数字",
+      estimated_hours_half_step: "工时须为 0.5 的倍数（例如 100、100.5、101）",
       archive_project: {
         title: "归档项目",
         description:

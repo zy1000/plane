@@ -149,9 +149,9 @@ export function ProjectDetailsForm(props: IProjectDetailsForm) {
       network: formData.network,
       identifier: formData.identifier,
       description: formData.description,
-
       logo_props: formData.logo_props,
       timezone: formData.timezone,
+      estimated_hours: formData.estimated_hours,
     };
 
     // Handle cover image changes
@@ -425,6 +425,47 @@ export function ProjectDetailsForm(props: IProjectDetailsForm) {
               )}
             />
             {errors.timezone && <span className="text-11 text-danger-primary">{errors.timezone.message}</span>}
+          </div>
+          <div className="col-span-1 flex flex-col gap-1 sm:col-span-2 xl:col-span-1">
+            <h4 className="text-13">{t("common.project_estimated_hours")}</h4>
+            <Controller
+              name="estimated_hours"
+              control={control}
+              rules={{
+                min: { value: 0, message: t("project_settings.general.estimated_hours_min") },
+                validate: (v) => {
+                  if (v === null || v === undefined || v === "") return true;
+                  const n = Number(v);
+                  if (!Number.isFinite(n)) return t("project_settings.general.estimated_hours_invalid");
+                  if (Math.abs(n * 2 - Math.round(n * 2)) > 1e-9) {
+                    return t("project_settings.general.estimated_hours_half_step");
+                  }
+                  return true;
+                },
+              }}
+              render={({ field: { value, onChange, ref } }) => (
+                <Input
+                  id="estimated_hours"
+                  name="estimated_hours"
+                  type="number"
+                  ref={ref}
+                  value={value ?? ""}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    onChange(v === "" ? null : Number(v));
+                  }}
+                  min={0}
+                  step={0.5}
+                  hasError={Boolean(errors.estimated_hours)}
+                  className="rounded-md !p-3 font-medium"
+                  placeholder={t("common.project_estimated_hours_placeholder")}
+                  disabled={!isAdmin}
+                />
+              )}
+            />
+            {errors.estimated_hours && (
+              <span className="text-11 text-danger-primary">{errors.estimated_hours.message}</span>
+            )}
           </div>
         </div>
         <div className="flex items-center justify-between py-2">

@@ -3,6 +3,7 @@
 # See the LICENSE file for details.
 
 # Third party imports
+from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 
 # Module imports
@@ -22,7 +23,12 @@ from plane.db.models import (
     IssueSequence,
 )
 from plane.utils.content_validator import validate_html_content
-from ...db.models.project import ProjectAnnouncement, ProjectPmsInfo, ProjectRole
+from ...db.models.project import (
+    ProjectAnnouncement,
+    ProjectPmsInfo,
+    ProjectRole,
+    validate_estimated_hours_half_step,
+)
 
 
 class ProjectSerializer(BaseSerializer):
@@ -65,6 +71,15 @@ class ProjectSerializer(BaseSerializer):
             )
 
         return identifier
+
+    def validate_estimated_hours(self, value):
+        if value is None:
+            return value
+        try:
+            validate_estimated_hours_half_step(value)
+        except DjangoValidationError:
+            raise serializers.ValidationError("ESTIMATED_HOURS_HALF_STEP")
+        return value
 
     def validate(self, data):
         # Validate description content for security

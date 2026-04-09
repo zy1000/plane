@@ -20,7 +20,7 @@ from django.utils import timezone
 from plane.app.permissions import allow_fine_permission, PermissionKey
 from plane.app.serializers.qa import CaseAttachmentSerializer, IssueListSerializer, CaseIssueSerializer, \
     TestCaseCommentSerializer, PlanCaseRecordSerializer, CaseListSerializer, CaseLabelListSerializer, \
-    IssueUnselectSerializer, ReviewCaseRecordsSerializer
+    IssueUnselectSerializer, ReviewCaseRecordsSerializer, ProjectCaseListSerializer
 from plane.app.serializers.qa.case import CaseExecuteRecordSerializer
 from plane.app.views import BaseAPIView, BaseViewSet
 from plane.utils.import_export import parser_case_file
@@ -873,11 +873,16 @@ class CaseAPI(BaseViewSet):
         if name__icontains:
             cases = cases.filter(name__icontains=name__icontains)
 
-        cases = cases.order_by('-created_at')
+        cases = cases.select_related('module', 'repository').only(
+            'id', 'name', 'code', 'type', 'priority', 'created_at',
+            'repository_id', 'repository__name',
+            'module_id', 'module__name',
+        ).order_by('-created_at')
+
         paginator = self.pagination_class()
         paginated_queryset = paginator.paginate_queryset(cases, request)
-        serializer = CaseListSerializer(paginated_queryset, many=True)
-        return list_response(data=serializer.data, count=cases.count())
+        serializer = ProjectCaseListSerializer(paginated_queryset, many=True)
+        return list_response(data=serializer.data, count=paginator.page.paginator.count)
 
     @action(detail=False, methods=['get'], url_path='project-case-ids')
     def project_case_ids(self, request, slug):

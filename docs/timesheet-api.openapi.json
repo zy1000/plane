@@ -1,0 +1,454 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Timesheet API",
+    "version": "1.0.0",
+    "description": "工时记录相关接口"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8000",
+      "description": "本地开发环境"
+    }
+  ],
+  "tags": [
+    {
+      "name": "工时记录"
+    }
+  ],
+  "paths": {
+    "/api/workspaces/{slug}/projects/{project_id}/timesheets/": {
+      "get": {
+        "tags": ["工时记录"],
+        "summary": "查询工时列表",
+        "description": "获取指定项目下的工时记录，支持按 issue_id 或 case_id 筛选",
+        "operationId": "timesheet_list",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "description": "工作区标识",
+            "schema": { "type": "string" },
+            "example": "my-workspace"
+          },
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "description": "项目 ID",
+            "schema": { "type": "string", "format": "uuid" },
+            "example": "00000000-0000-0000-0000-000000000001"
+          },
+          {
+            "name": "issue_id",
+            "in": "query",
+            "required": false,
+            "description": "按工作项 ID 筛选",
+            "schema": { "type": "string", "format": "uuid" },
+            "example": "00000000-0000-0000-0000-000000000002"
+          },
+          {
+            "name": "test_case_id",
+            "in": "query",
+            "required": false,
+            "description": "按测试用例 ID 筛选",
+            "schema": { "type": "string", "format": "uuid" },
+            "example": "00000000-0000-0000-0000-000000000003"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/TimeSheetResponse" }
+                }
+              }
+            }
+          },
+          "401": { "description": "未登录" }
+        }
+      },
+      "post": {
+        "tags": ["工时记录"],
+        "summary": "创建工时记录",
+        "operationId": "timesheet_create",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "description": "工作区标识",
+            "schema": { "type": "string" },
+            "example": "my-workspace"
+          },
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "description": "项目 ID",
+            "schema": { "type": "string", "format": "uuid" },
+            "example": "00000000-0000-0000-0000-000000000001"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/TimeSheetCreate" },
+              "example": {
+                "member": "00000000-0000-0000-0000-000000000010",
+                "date": "2026-04-07",
+                "start_time": "09:00:00",
+                "end_time": "17:00:00",
+                "hours": "8.00",
+                "description": "完成需求开发",
+                "issue": "00000000-0000-0000-0000-000000000002",
+                "test_case": null
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "创建成功",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/TimeSheetResponse" }
+              }
+            }
+          },
+          "400": {
+            "description": "参数校验失败",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ValidationError" }
+              }
+            }
+          },
+          "401": { "description": "未登录" }
+        }
+      }
+    },
+    "/api/workspaces/{slug}/projects/{project_id}/timesheets/{id}/": {
+      "get": {
+        "tags": ["工时记录"],
+        "summary": "获取单条工时记录",
+        "operationId": "timesheet_retrieve",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" },
+            "example": "my-workspace"
+          },
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" },
+            "example": "00000000-0000-0000-0000-000000000001"
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "工时记录 ID",
+            "schema": { "type": "string", "format": "uuid" },
+            "example": "00000000-0000-0000-0000-000000000099"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/TimeSheetResponse" }
+              }
+            }
+          },
+          "404": { "description": "记录不存在" }
+        }
+      },
+      "patch": {
+        "tags": ["工时记录"],
+        "summary": "更新工时记录（部分更新）",
+        "operationId": "timesheet_partial_update",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" },
+            "example": "my-workspace"
+          },
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" },
+            "example": "00000000-0000-0000-0000-000000000001"
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" },
+            "example": "00000000-0000-0000-0000-000000000099"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/TimeSheetUpdate" },
+              "example": {
+                "hours": "6.50",
+                "description": "更新工作描述"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "更新成功",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/TimeSheetResponse" }
+              }
+            }
+          },
+          "400": { "description": "参数校验失败" },
+          "404": { "description": "记录不存在" }
+        }
+      },
+      "delete": {
+        "tags": ["工时记录"],
+        "summary": "删除工时记录",
+        "operationId": "timesheet_destroy",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" },
+            "example": "my-workspace"
+          },
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" },
+            "example": "00000000-0000-0000-0000-000000000001"
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" },
+            "example": "00000000-0000-0000-0000-000000000099"
+          }
+        ],
+        "responses": {
+          "204": { "description": "删除成功" },
+          "404": { "description": "记录不存在" }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "TimeSheetCreate": {
+        "type": "object",
+        "required": ["member", "date", "start_time", "end_time", "hours"],
+        "properties": {
+          "member": {
+            "type": "string",
+            "format": "uuid",
+            "description": "工时人员 ID"
+          },
+          "date": {
+            "type": "string",
+            "format": "date",
+            "description": "工时日期，格式 YYYY-MM-DD"
+          },
+          "start_time": {
+            "type": "string",
+            "description": "开始时间，格式 HH:MM:SS",
+            "example": "09:00:00"
+          },
+          "end_time": {
+            "type": "string",
+            "description": "结束时间，格式 HH:MM:SS，必须晚于开始时间",
+            "example": "17:00:00"
+          },
+          "hours": {
+            "type": "string",
+            "description": "花费小时数，保留两位小数，必须大于 0",
+            "example": "8.00"
+          },
+          "description": {
+            "type": "string",
+            "description": "工作描述（可选）",
+            "default": ""
+          },
+          "issue": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "挂靠的工作项 ID（与 test_case 二选一）"
+          },
+          "test_case": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "挂靠的测试用例 ID（与 issue 二选一）"
+          }
+        }
+      },
+      "TimeSheetUpdate": {
+        "type": "object",
+        "properties": {
+          "member": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "date": {
+            "type": "string",
+            "format": "date"
+          },
+          "start_time": {
+            "type": "string",
+            "example": "09:00:00"
+          },
+          "end_time": {
+            "type": "string",
+            "example": "18:00:00"
+          },
+          "hours": {
+            "type": "string",
+            "example": "9.00"
+          },
+          "description": {
+            "type": "string"
+          },
+          "issue": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "test_case": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          }
+        }
+      },
+      "TimeSheetResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "工时记录 ID（只读）"
+          },
+          "member": {
+            "type": "string",
+            "format": "uuid",
+            "description": "工时人员 ID"
+          },
+          "member_detail": {
+            "$ref": "#/components/schemas/UserLite",
+            "description": "工时人员详情（只读展开）"
+          },
+          "date": {
+            "type": "string",
+            "format": "date"
+          },
+          "start_time": {
+            "type": "string",
+            "example": "09:00:00"
+          },
+          "end_time": {
+            "type": "string",
+            "example": "17:00:00"
+          },
+          "hours": {
+            "type": "string",
+            "example": "8.00"
+          },
+          "description": {
+            "type": "string"
+          },
+          "project": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "issue": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "test_case": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "created_by": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "updated_by": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          }
+        }
+      },
+      "UserLite": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "first_name": { "type": "string" },
+          "last_name": { "type": "string" },
+          "display_name": { "type": "string" },
+          "avatar": { "type": "string", "nullable": true },
+          "avatar_url": { "type": "string", "nullable": true },
+          "is_bot": { "type": "boolean" }
+        }
+      },
+      "ValidationError": {
+        "type": "object",
+        "description": "字段校验错误，key 为字段名，value 为错误信息数组",
+        "example": {
+          "end_time": ["结束时间必须晚于开始时间。"],
+          "hours": ["花费小时数必须大于 0。"]
+        }
+      }
+    },
+    "securitySchemes": {
+      "sessionAuth": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "sessionid",
+        "description": "Session Cookie 认证"
+      }
+    }
+  },
+  "security": [
+    { "sessionAuth": [] }
+  ]
+}

@@ -69,6 +69,7 @@ export interface IProject extends IPartialProject {
   is_favorite?: boolean;
   members?: string[];
   timezone?: string;
+  estimated_hours?: number | string | null;
   next_work_item_sequence?: number;
 }
 

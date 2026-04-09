@@ -26,7 +26,7 @@ import {
   WorkItemsIcon,
   TestManagementIcon,
 } from "@plane/propel/icons";
-import { BookOpenText, Bug } from "lucide-react";
+import { BookOpenText, Bug, Clock } from "lucide-react";
 import type { EUserProjectRoles } from "@plane/types";
 // plane ui
 // components
@@ -108,6 +108,16 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
         permissionKeys: [PROJECT_ANALYTICS_VIEW_PERMISSION_KEY],
         shouldRender: true,
         sortOrder: 0.5,
+      },
+      {
+        i18n_key: "timesheets",
+        key: "timesheets",
+        name: "工时",
+        href: `/${workspaceSlug}/projects/${projectId}/timesheets`,
+        icon: Clock,
+        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
+        shouldRender: true,
+        sortOrder: 0.75,
       },
       {
         i18n_key: "sidebar.work_items",

@@ -123,7 +123,7 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
     <div className="w-full p-2">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
         <div className="flex flex-col gap-6">
-          <div className="bg-surface-1 border border-subtle rounded-lg shadow-md p-4 h-[340px] flex flex-col">
+          <div className="bg-surface-1 border border-subtle rounded-lg p-4 h-[340px] flex flex-col">
             <div className="flex-1 overflow-y-auto">
               <ProjectProperties workspaceSlug={workspaceSlug} projectId={project.id} />
             </div>
@@ -134,7 +134,7 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
             </div>
           </div>
 
-          <div className="bg-surface-1 border border-subtle rounded-lg shadow-md p-4 h-[480px] flex flex-col">
+          <div className="bg-surface-1 border border-subtle rounded-lg p-4 h-[480px] flex flex-col">
             <div className="flex items-center justify-between mb-3">
               <h4 className="text-lg font-medium text-primary">项目描述</h4>
               {isSubmitting === "submitting" && <div className="text-xs text-placeholder">保存中...</div>}
@@ -153,7 +153,7 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
         </div>
 
         <div className="flex flex-col gap-6">
-                    <div className="bg-surface-1 border border-subtle rounded-lg shadow-md p-4 min-h-[340px] flex flex-col">
+          <div className="bg-surface-1 border border-subtle rounded-lg p-4 min-h-[340px] flex flex-col">
             <div className="flex items-center justify-between mb-3">
               <h4 className="text-lg font-medium text-primary">项目公告</h4>
               <Button
@@ -245,7 +245,7 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
             </div>
           </div>
           
-          <div className="bg-surface-1 border border-subtle rounded-lg shadow-md p-4 h-[480px] flex flex-col">
+          <div className="bg-surface-1 border border-subtle rounded-lg p-4 h-[480px] flex flex-col">
             <div className="flex items-center justify-between mb-3 flex-shrink-0">
               <h4 className="text-lg font-medium text-primary">活动</h4>
             </div>

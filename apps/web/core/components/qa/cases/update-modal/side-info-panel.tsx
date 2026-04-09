@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import { formatCNDateTime } from "../util";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { CaseVersionCompareModal } from "./case-version-compare-modal";
+import { TestCaseTimesheetField } from "./test-case-timesheet-field";
 
 type SideInfoPanelProps = {
   caseData: any;
@@ -143,6 +144,20 @@ export function SideInfoPanel({
       </div>
 
       <div className="py-5">
+        <div className="text-xs text-tertiary mb-4">工时</div>
+        <div className="space-y-4">
+          <div className="flex items-center gap-3 md:gap-4">
+            <span className="text-sm text-secondary shrink-0 basis-28 md:basis-32">登记工时</span>
+            {caseData?.id ? (
+              <TestCaseTimesheetField caseId={String(caseData.id)} projectId={caseData?.project} />
+            ) : (
+              <span className="text-sm text-primary flex-1 min-w-0 truncate">-</span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="py-5">
         <div className="text-xs text-tertiary mb-4">变更</div>
         <div className="space-y-4">
           <div className="flex items-center gap-3 md:gap-4">
@@ -222,28 +237,6 @@ export function SideInfoPanel({
             <span className="text-sm text-primary flex-1 min-w-0 truncate">
               {latestExec?.created_at ? formatCNDateTime(latestExec.created_at) : "-"}
             </span>
-          </div>
-        </div>
-      </div>
-
-      <div className="py-5">
-        <div className="text-xs text-tertiary mb-4">工时</div>
-        <div className="space-y-4">
-          <div className="flex items-center gap-3 md:gap-4">
-            <span className="text-sm text-secondary shrink-0 basis-28 md:basis-32">预估工时</span>
-            <span className="text-sm text-primary flex-1 min-w-0 truncate">-</span>
-          </div>
-          <div className="flex items-center gap-3 md:gap-4">
-            <span className="text-sm text-secondary shrink-0 basis-28 md:basis-32">登记工时</span>
-            <span className="text-sm text-primary flex-1 min-w-0 truncate">-</span>
-          </div>
-          <div className="flex items-center gap-3 md:gap-4">
-            <span className="text-sm text-secondary shrink-0 basis-28 md:basis-32">剩余工时</span>
-            <span className="text-sm text-primary flex-1 min-w-0 truncate">-</span>
-          </div>
-          <div className="flex items-center gap-3 md:gap-4">
-            <span className="text-sm text-secondary shrink-0 basis-28 md:basis-32">工时进度</span>
-            <span className="text-sm text-primary flex-1 min-w-0 truncate">-</span>
           </div>
         </div>
       </div>

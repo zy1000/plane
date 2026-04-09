@@ -117,6 +117,12 @@ export const coreRoutes: RouteConfigEntry[] = [
           ),
         ]),
 
+        // Workspace Timesheets
+        layout("./(all)/[workspaceSlug]/(projects)/timesheets/layout.tsx", [
+          route(":workspaceSlug/timesheets", "./(all)/[workspaceSlug]/(projects)/timesheets/page.tsx"),
+          route(":workspaceSlug/timesheets/manage", "./(all)/[workspaceSlug]/(projects)/timesheets/manage/page.tsx"),
+        ]),
+
         // Archived Projects
         layout("./(all)/[workspaceSlug]/(projects)/projects/(detail)/archives/layout.tsx", [
           route(
@@ -509,6 +515,9 @@ export const coreRoutes: RouteConfigEntry[] = [
 
   // Analytics redirect: /:workspaceSlug/analytics → /:workspaceSlug/analytics/overview
   route(":workspaceSlug/analytics", "routes/redirects/core/analytics.tsx"),
+
+  // Timesheets: 旧路径 /timesheets/fill → /timesheets/manage
+  route(":workspaceSlug/timesheets/fill", "routes/redirects/core/timesheets-fill.tsx"),
 
   // API tokens redirect: /:workspaceSlug/settings/api-tokens
   // → /settings/profile/api-tokens

@@ -144,6 +144,7 @@ export default {
   your_work: "Your work",
   drafts: "Drafts",
   projects: "Projects",
+  timesheets: "Timesheets",
   views: "Views",
   workspace: "Workspace",
   archives: "Archives",
@@ -552,6 +553,8 @@ export default {
     project_name: "Project name",
     project_id: "Project ID",
     project_timezone: "Project Timezone",
+    project_estimated_hours: "Estimated Hours",
+    project_estimated_hours_placeholder: "e.g. 100",
     created_on: "Created on",
     update_project: "Update project",
     identifier_already_exists: "Identifier already exists",
@@ -1693,6 +1696,9 @@ export default {
     general: {
       enter_project_id: "Enter project ID",
       please_select_a_timezone: "Please select a timezone",
+      estimated_hours_min: "Estimated hours cannot be negative",
+      estimated_hours_invalid: "Enter a valid number",
+      estimated_hours_half_step: "Use 0.5 hour steps only (e.g. 100, 100.5, 101)",
       archive_project: {
         title: "Archive project",
         description:

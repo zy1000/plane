@@ -42,7 +42,7 @@ const getStatusTagClassName = (bgColor?: string, textColor?: string) =>
 const Card: React.FC<{ title: string; children: React.ReactNode; className?: string }> = (props) => {
   const { title, children, className } = props;
   return (
-    <div className={`bg-surface-1 border border-subtle rounded-lg shadow-md p-4 ${className ?? ""}`}>
+    <div className={`bg-surface-1 border border-subtle rounded-lg p-4 ${className ?? ""}`}>
       <h4 className="text-lg font-medium text-primary">{title}</h4>
       <div className="mt-3">{children}</div>
     </div>
@@ -60,7 +60,7 @@ const KpiCard: React.FC<{
   const shouldShowUnit = typeof value === "number";
   return (
     <div
-      className={`bg-surface-1 border border-subtle rounded-lg shadow-md p-3 min-h-[150px] flex flex-col ${
+      className={`bg-surface-1 border border-subtle rounded-lg p-3 min-h-[150px] flex flex-col ${
         className ?? ""
       }`}
     >
@@ -288,7 +288,7 @@ function ProjectStatisticsPage() {
             </div>
 
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-              <div className="bg-surface-1 border border-subtle rounded-lg shadow-md p-4 h-[420px] flex flex-col">
+              <div className="bg-surface-1 border border-subtle rounded-lg p-4 h-[420px] flex flex-col">
                 <div className="flex items-baseline gap-2">
                   <div className="text-lg font-medium text-primary">进行中的迭代</div>
                   <div className="text-xs text-placeholder">{`共 ${displayData?.cycles?.count ?? 0} 个进行中的迭代`}</div>
@@ -359,7 +359,7 @@ function ProjectStatisticsPage() {
                 </div>
               </div>
 
-              <div className="bg-surface-1 border border-subtle rounded-lg shadow-md p-4 h-[420px] flex flex-col">
+              <div className="bg-surface-1 border border-subtle rounded-lg p-4 h-[420px] flex flex-col">
                 <div className="flex items-baseline gap-2">
                   <div className="text-lg font-medium text-primary">进行中的发布</div>
                   <div className="text-xs text-placeholder">{`共 ${displayData?.releases?.count ?? 0} 个进行中的发布`}</div>
@@ -432,7 +432,7 @@ function ProjectStatisticsPage() {
             </div>
 
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-              <div className="bg-surface-1 border border-subtle rounded-lg shadow-md p-4 h-[420px] flex flex-col">
+              <div className="bg-surface-1 border border-subtle rounded-lg p-4 h-[420px] flex flex-col">
                 <div className="flex items-baseline gap-2">
                   <div className="text-lg font-medium text-primary">进行中的测试计划</div>
                   <div className="text-xs text-placeholder">{`共 ${displayData?.test_plans?.count ?? 0} 个进行中的测试计划`}</div>
@@ -503,7 +503,7 @@ function ProjectStatisticsPage() {
                 </div>
               </div>
 
-              <div className="bg-surface-1 border border-subtle rounded-lg shadow-md p-4 h-[420px] flex flex-col">
+              <div className="bg-surface-1 border border-subtle rounded-lg p-4 h-[420px] flex flex-col">
                 <div className="flex items-baseline gap-2">
                   <div className="text-lg font-medium text-primary">进行中的评审</div>
                   <div className="text-xs text-placeholder">{`共 ${displayData?.case_reviews?.count ?? 0} 个进行中的评审`}</div>

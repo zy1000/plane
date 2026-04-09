@@ -4,11 +4,13 @@
 
 # Python imports
 import pytz
+from decimal import Decimal
 from uuid import uuid4
 from enum import Enum
 
 # Django imports
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.db.models import Q
@@ -19,6 +21,19 @@ from plane.db.mixins import AuditModel, SoftDeletionManager
 from .base import BaseModel
 
 ROLE_CHOICES = ((20, "Admin"), (15, "Member"), (5, "Guest"))
+
+
+def validate_estimated_hours_half_step(value):
+    """预估工时必须为 0.5 小时的整数倍（如 100、100.5、101）。"""
+    if value is None:
+        return
+    d = value if isinstance(value, Decimal) else Decimal(str(value))
+    doubled = d * Decimal("2")
+    if doubled % Decimal("1") != Decimal("0"):
+        raise ValidationError(
+            "Estimated hours must be in 0.5 hour increments (e.g. 100, 100.5, 101).",
+            code="estimated_hours_half_step",
+        )
 
 
 class SoftProjectManager(SoftDeletionManager):
@@ -125,10 +140,17 @@ class Project(BaseModel):
     external_id = models.CharField(max_length=255, blank=True, null=True)
 
     is_template = models.BooleanField(default=False)
-
-    objects = SoftProjectManager()
-
-    is_template = models.BooleanField(default=False)
+    estimated_hours = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=100,
+        validators=[
+            MinValueValidator(Decimal("0")),
+            validate_estimated_hours_half_step,
+        ],
+        verbose_name="Estimated Hours",
+        help_text="Total estimated working hours for this project (default: 100h)",
+    )
 
     objects = SoftProjectManager()
 

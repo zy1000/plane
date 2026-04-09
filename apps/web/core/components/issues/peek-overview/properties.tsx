@@ -238,6 +238,12 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
           </SidebarPropertyListItem>
         )}
 
+        <IssueWorklogProperty
+          workspaceSlug={workspaceSlug}
+          projectId={projectId}
+          issueId={issueId}
+          disabled={disabled}
+        />
 
         {isEstimateEnabled && (
           <SidebarPropertyListItem icon={EstimatePropertyIcon} label={t("common.estimate")}>
@@ -339,13 +345,6 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
             </Button>
           </div>
         </div>
-
-        <IssueWorklogProperty
-          workspaceSlug={workspaceSlug}
-          projectId={projectId}
-          issueId={issueId}
-          disabled={disabled}
-        />
 
         <WorkItemAdditionalSidebarProperties
           workItemId={issue.id}

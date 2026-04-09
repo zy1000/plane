@@ -253,6 +253,13 @@ export const IssueDetailsSidebar = observer(function IssueDetailsSidebar(props: 
               </div>
             )}
 
+            <IssueWorklogProperty
+              workspaceSlug={workspaceSlug}
+              projectId={projectId}
+              issueId={issueId}
+              disabled={!isEditable}
+            />
+
             {projectId && areEstimateEnabledByProjectId(projectId) && (
               <div className="flex h-8 items-center gap-1">
                 <div className="flex w-1/3 flex-shrink-0 items-center gap-1 text-sm text-secondary">
@@ -342,13 +349,6 @@ export const IssueDetailsSidebar = observer(function IssueDetailsSidebar(props: 
                 />
               </div>
             </div>
-
-            <IssueWorklogProperty
-              workspaceSlug={workspaceSlug}
-              projectId={projectId}
-              issueId={issueId}
-              disabled={!isEditable}
-            />
 
             <WorkItemAdditionalSidebarProperties
               workItemId={issue.id}
