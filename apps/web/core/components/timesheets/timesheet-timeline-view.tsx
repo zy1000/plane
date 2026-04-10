@@ -229,6 +229,7 @@ type TDragInfo = {
 
 type TDragPreview = {
   blockId: string;
+  block: TTimesheetBlock;
   topPx: number;
   heightPx: number;
   date: string;
@@ -285,6 +286,7 @@ function useTimelineBlockDrag({
 
     const initial: TDragPreview = {
       blockId: block.id,
+      block,
       topPx: block.topPx,
       heightPx: block.heightPx,
       date,
@@ -294,7 +296,11 @@ function useTimelineBlockDrag({
     previewRef.current = initial;
     setDragPreview(initial);
 
-    document.body.style.cursor = type === "move" ? "grabbing" : "ns-resize";
+    const cursorValue = type === "move" ? "grabbing" : "ns-resize";
+    const dragCursorStyle = document.createElement("style");
+    dragCursorStyle.setAttribute("data-timeline-drag", "true");
+    dragCursorStyle.textContent = `* { cursor: ${cursorValue} !important; }`;
+    document.head.appendChild(dragCursorStyle);
     document.body.style.userSelect = "none";
 
     let lastClientX = e.clientX;
@@ -314,6 +320,7 @@ function useTimelineBlockDrag({
         const start = Math.max(0, Math.min(raw, drag.originalEndMins - MIN_DURATION_MINUTES));
         preview = {
           blockId: drag.blockId,
+          block: drag.block,
           topPx: minutesToPx(start),
           heightPx: minutesToPx(drag.originalEndMins - start),
           date: drag.originalDate,
@@ -325,6 +332,7 @@ function useTimelineBlockDrag({
         const end = Math.min(MAX_END_MINUTES, Math.max(raw, drag.originalStartMins + MIN_DURATION_MINUTES));
         preview = {
           blockId: drag.blockId,
+          block: drag.block,
           topPx: minutesToPx(drag.originalStartMins),
           heightPx: minutesToPx(end - drag.originalStartMins),
           date: drag.originalDate,
@@ -348,6 +356,7 @@ function useTimelineBlockDrag({
 
         preview = {
           blockId: drag.blockId,
+          block: drag.block,
           topPx: minutesToPx(start),
           heightPx: minutesToPx(dur),
           date: targetDate,
@@ -400,7 +409,7 @@ function useTimelineBlockDrag({
       document.removeEventListener("mouseup", onUp);
       cancelAnimationFrame(loopIdRef.current);
       cleanupRef.current = null;
-      document.body.style.cursor = "";
+      document.head.querySelector("style[data-timeline-drag]")?.remove();
       document.body.style.userSelect = "";
       dragEndTimeRef.current = Date.now();
 
@@ -408,9 +417,11 @@ function useTimelineBlockDrag({
       const preview = previewRef.current;
       dragRef.current = null;
       previewRef.current = null;
-      setDragPreview(null);
 
-      if (!drag || !preview) return;
+      if (!drag || !preview) {
+        setDragPreview(null);
+        return;
+      }
 
       const origStart = minutesToTimeStr(drag.originalStartMins);
       const origEnd = minutesToTimeStr(drag.originalEndMins);
@@ -418,10 +429,14 @@ function useTimelineBlockDrag({
         preview.startTime === origStart &&
         preview.endTime === origEnd &&
         preview.date === drag.originalDate
-      ) return;
+      ) {
+        setDragPreview(null);
+        return;
+      }
 
       if (!isDateEditable(preview.date)) {
         message.warning("目标日期已超出可填报范围，操作已取消");
+        setDragPreview(null);
         return;
       }
 
@@ -429,6 +444,7 @@ function useTimelineBlockDrag({
       const newEnd = parseTimeToMinutes(preview.endTime);
       if (hasTimeOverlap(timesheetsRef.current, preview.date, newStart, newEnd, drag.blockId)) {
         message.warning("该时间段与已有工时记录冲突，操作已取消");
+        setDragPreview(null);
         return;
       }
 
@@ -442,6 +458,8 @@ function useTimelineBlockDrag({
         });
       } catch (err: any) {
         message.error(err?.detail || err?.error || "更新工时失败");
+      } finally {
+        setDragPreview(null);
       }
     };
 
@@ -449,7 +467,7 @@ function useTimelineBlockDrag({
       document.removeEventListener("mousemove", onMove);
       document.removeEventListener("mouseup", onUp);
       cancelAnimationFrame(loopIdRef.current);
-      document.body.style.cursor = "";
+      document.head.querySelector("style[data-timeline-drag]")?.remove();
       document.body.style.userSelect = "";
     };
 
@@ -737,7 +755,7 @@ export const TimesheetTimelineView = observer(function TimesheetTimelineView({
                         "border border-subtle/90 shadow-sm",
                         "border-l-[3px] transition-[opacity] hover:bg-layer-1",
                         getBlockStyleClasses(block.blockType),
-                        isDragged && "opacity-30"
+                        isDragged && "invisible"
                       )}
                       style={{ top: CONTENT_PADDING_TOP + block.topPx, height: block.heightPx }}
                       title={`${block.kindLabel} · ${block.label}\n${timeRange}（${hoursStr}）`}
@@ -816,16 +834,47 @@ export const TimesheetTimelineView = observer(function TimesheetTimelineView({
                 })}
 
                 {/* 拖拽预览 ghost block */}
-                {dragPreview && dragPreview.date === key && (
-                  <div
-                    className="absolute left-1 right-1 rounded-md border-2 border-dashed border-accent-primary/60 bg-accent-primary/10 pointer-events-none z-20 flex items-center justify-center"
-                    style={{ top: CONTENT_PADDING_TOP + dragPreview.topPx, height: dragPreview.heightPx }}
-                  >
-                    <span className="text-xs font-medium text-accent-primary tabular-nums">
-                      {dragPreview.startTime} – {dragPreview.endTime}
-                    </span>
-                  </div>
-                )}
+                {dragPreview && dragPreview.date === key && (() => {
+                  const gb = dragPreview.block;
+                  const ghCompact = dragPreview.heightPx < 36;
+                  const ghHoursStr = formatHours(parseFloat(gb.hours));
+                  const ghTimeRange = `${dragPreview.startTime}–${dragPreview.endTime}`;
+                  const ghIssueTypesMap = projectIssueTypeMaps[String(gb.project)] ?? {};
+                  const ghShowProject = gb.blockType !== "project" && gb.projectName;
+                  return (
+                    <div
+                      className={cn(
+                        "absolute left-1 right-1 rounded-md overflow-hidden pointer-events-none z-20",
+                        "border border-subtle/90 shadow-lg",
+                        "border-l-[3px] ring-2 ring-accent-primary/30",
+                        getBlockStyleClasses(gb.blockType),
+                      )}
+                      style={{ top: CONTENT_PADDING_TOP + dragPreview.topPx, height: dragPreview.heightPx }}
+                    >
+                      <div className={cn("flex h-full min-h-0 justify-start overflow-hidden px-2 py-1", ghCompact ? "flex-col gap-0" : "flex-col gap-0.5")}>
+                        <div className="flex items-center gap-1 min-w-0">
+                          {renderBlockIcon(gb, getProjectById, ghIssueTypesMap, 3)}
+                          <p className="text-sm font-medium leading-snug text-primary truncate min-w-0">{gb.label}</p>
+                        </div>
+                        {!ghCompact && (
+                          <p className="text-xs leading-snug text-tertiary tabular-nums truncate">
+                            {ghShowProject && (
+                              <>
+                                <span className="text-secondary font-medium">{gb.projectName}</span>
+                                <span className="text-subtle"> · </span>
+                              </>
+                            )}
+                            {gb.kindLabel}
+                            <span className="text-subtle"> · </span>
+                            {ghHoursStr}
+                            <span className="text-subtle"> · </span>
+                            {ghTimeRange}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {/* 空状态提示 */}
                 {blocks.length === 0 && !isLoading && (
