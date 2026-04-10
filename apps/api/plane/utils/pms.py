@@ -536,13 +536,13 @@ def sync_info(instance: ProjectPmsInfo) -> list[dict]:
             assignee = issue.assignees.first()
             if not assignee:
                 raise ValueError("工作项缺少受理人")
-            create_user = issue.created_by.display_name
+            create_user = issue.created_by.email.split('@')[0]
             test_user = find_test_user(create_user)
             if not test_user:
                 raise ValueError(f"未找到创建人对应的 PMS 测试用户: {create_user}")
-            assign_user = find_assign_user(assignee.display_name)
+            assign_user = find_assign_user(assignee.email.split('@')[0])
             if not assign_user:
-                raise ValueError(f"未找到受理人对应的 PMS 用户: {assignee.display_name}")
+                raise ValueError(f"未找到受理人对应的 PMS 用户: {assignee.email.split('@')[0]}")
             level = level_map.get(issue.priority, "general")
             post_task(
                 title=issue.name,
