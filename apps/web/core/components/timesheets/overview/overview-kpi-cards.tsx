@@ -103,7 +103,7 @@ export function OverviewKpiCards({ kpis, mode }: Props) {
                 <Icon className={`h-4.5 w-4.5 ${card.iconColor}`} />
               </div>
               <div className="min-w-0 flex-1">
-                <div className="text-xs text-placeholder">{card.label}</div>
+                <div className="text-sm text-placeholder">{card.label}</div>
                 <div className="mt-0.5 text-xl font-semibold text-primary">{card.getValue(kpis)}</div>
               </div>
             </div>
@@ -112,7 +112,7 @@ export function OverviewKpiCards({ kpis, mode }: Props) {
                 <LinearProgressIndicator size="md" data={progressData} />
               </div>
             )}
-            <div className="mt-2 text-xs text-placeholder">{card.getSub(kpis, mode)}</div>
+            <div className="mt-2 text-sm text-placeholder">{card.getSub(kpis, mode)}</div>
           </Card>
         );
       })}

@@ -84,7 +84,7 @@ export function TimesheetOverview({ workspaceSlug, memberId }: Props) {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-lg font-semibold text-primary">工时概览</h1>
-            <p className="mt-0.5 text-xs text-placeholder">{periodLabel}</p>
+            <p className="mt-0.5 text-sm text-placeholder">{periodLabel}</p>
           </div>
           <div className="flex items-center rounded-lg border border-subtle bg-surface-1 p-0.5">
             {MODE_OPTIONS.map((opt) => {
@@ -96,7 +96,7 @@ export function TimesheetOverview({ workspaceSlug, memberId }: Props) {
                   type="button"
                   onClick={() => setMode(opt.key)}
                   className={cn(
-                    "flex cursor-pointer items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+                    "flex cursor-pointer items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
                     isActive
                       ? "bg-accent-primary/10 text-accent-primary"
                       : "text-secondary hover:text-primary hover:bg-layer-1"
@@ -130,10 +130,10 @@ export function TimesheetOverview({ workspaceSlug, memberId }: Props) {
         </div>
 
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
-          <div className="xl:col-span-7">
+          <div className="xl:col-span-7 [&>*]:h-full">
             <OverviewRecentEntries entries={recentEntries} title={`最近填报（${modeLabel}）`} />
           </div>
-          <div className="xl:col-span-5">
+          <div className="xl:col-span-5 [&>*]:h-full">
             <OverviewMissingDaysAlert alertDays={alertDays} workspaceSlug={workspaceSlug} />
           </div>
         </div>

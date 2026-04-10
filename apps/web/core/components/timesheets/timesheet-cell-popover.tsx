@@ -24,6 +24,8 @@ const TIME_OPTIONS = Array.from({ length: 48 }, (_, index) => {
   return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
 });
 
+const END_TIME_OPTIONS = [...TIME_OPTIONS, "24:00"];
+
 const DEFAULT_START_TIME = "08:30";
 
 function getDurationHours(startTime: string, endTime: string): number | null {
@@ -51,7 +53,8 @@ function parseTimeInput(input: string): number | null {
 function hoursToEndTime(startTime: string, hours: number): string {
   const [sh, sm] = startTime.split(":").map(Number);
   const totalMinutes = sh * 60 + sm + Math.round(hours * 60);
-  const eh = Math.floor(totalMinutes / 60) % 24;
+  if (totalMinutes >= 24 * 60) return "24:00";
+  const eh = Math.floor(totalMinutes / 60);
   const em = totalMinutes % 60;
   return `${String(eh).padStart(2, "0")}:${String(em).padStart(2, "0")}`;
 }
@@ -65,9 +68,11 @@ type TTimeSelectProps = {
   value: string;
   onChange: (v: string) => void;
   className?: string;
+  options?: string[];
 };
 
-function TimeSelect({ value, onChange, className }: TTimeSelectProps) {
+function TimeSelect({ value, onChange, className, options }: TTimeSelectProps) {
+  const items = options ?? TIME_OPTIONS;
   return (
     <Listbox value={value} onChange={onChange}>
       <div className={cn("relative", className)}>
@@ -85,7 +90,7 @@ function TimeSelect({ value, onChange, className }: TTimeSelectProps) {
           leaveTo="opacity-0"
         >
           <Listbox.Options className="absolute z-50 mt-1 max-h-40 w-full overflow-y-auto rounded border border-subtle bg-surface-1 p-1 shadow-raised-200 focus:outline-none">
-            {TIME_OPTIONS.map((opt) => (
+            {items.map((opt) => (
               <Listbox.Option
                 key={opt}
                 value={opt}
@@ -119,6 +124,7 @@ type TTimesheetCellPopoverProps = {
   issueId?: string;
   testCaseId?: string;
   hours: number;
+  readOnly?: boolean;
   onCreate: (data: TTimeSheetCreatePayload) => Promise<TTimeSheet | undefined>;
   onDelete: (id: string) => Promise<void>;
   children: React.ReactNode;
@@ -131,6 +137,7 @@ export function TimesheetCellPopover({
   issueId,
   testCaseId,
   hours,
+  readOnly = false,
   onCreate,
   onDelete,
   children,
@@ -308,7 +315,7 @@ export function TimesheetCellPopover({
                             {formatHours(parseFloat(t.hours))}
                           </span>
                         </div>
-                        {isOwn ? (
+                        {!readOnly && isOwn ? (
                           <button
                             type="button"
                             onClick={() => onDelete(t.id)}
@@ -340,66 +347,71 @@ export function TimesheetCellPopover({
                 </div>
               )}
 
-              {/* 新增录入 */}
-              <div className="px-3 py-2.5 space-y-2">
-                <p className="text-sm text-tertiary font-semibold flex items-center gap-1">
-                  <Plus className="h-3 w-3" />
-                  添加工时
-                </p>
-                <input
-                  type="text"
-                  placeholder="输入工时（如：1.5）"
-                  value={timeInput}
-                  onChange={(e) => handleTimeInputChange(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleSave(closePopover)}
-                  className={cn(
-                    "w-full rounded-sm border bg-transparent px-3 py-1.5 text-sm text-primary placeholder:text-placeholder",
-                    "focus:outline-none focus:ring-1 focus:ring-accent-primary",
-                    timeError ? "border-danger-strong" : "border-subtle"
-                  )}
-                />
-                <div className="flex items-center gap-1.5">
-                  <Clock className="h-3.5 w-3.5 shrink-0 text-tertiary" />
-                  <TimeSelect value={startTime} onChange={handleStartTimeChange} className="flex-1" />
-                  <span className="text-tertiary text-sm">—</span>
-                  <TimeSelect value={endTime} onChange={handleEndTimeChange} className="flex-1" />
+              {readOnly ? (
+                <div className="px-3 py-2.5">
+                  <p className="text-sm text-tertiary">此日期已超出可填报范围，仅可查看</p>
                 </div>
-                {derivedHours && derivedHours > 0 && (
-                  <p className="text-sm text-accent-primary font-semibold">{formatHours(derivedHours)}</p>
-                )}
-                {timeError && <p className="text-sm text-danger-primary">{timeError}</p>}
-                <div className="flex items-center gap-1">
-                  <FileText className="h-3.5 w-3.5 shrink-0 text-tertiary" />
+              ) : (
+                <div className="px-3 py-2.5 space-y-2">
+                  <p className="text-sm text-tertiary font-semibold flex items-center gap-1">
+                    <Plus className="h-3 w-3" />
+                    添加工时
+                  </p>
                   <input
                     type="text"
-                    placeholder="备注（可选）"
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
+                    placeholder="输入工时（如：1.5）"
+                    value={timeInput}
+                    onChange={(e) => handleTimeInputChange(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && handleSave(closePopover)}
-                    className="flex-1 bg-transparent border-none outline-none text-sm text-primary placeholder:text-placeholder"
-                  />
-                </div>
-                <div className="flex items-center justify-end gap-2 pt-0.5">
-                  <button
-                    onClick={closePopover}
-                    className="px-3 py-1 rounded text-sm text-secondary hover:text-primary transition-colors"
-                  >
-                    取消
-                  </button>
-                  <button
-                    onClick={() => handleSave(closePopover)}
-                    disabled={isSaving || !canSave}
                     className={cn(
-                      "rounded px-3 py-1 text-sm font-semibold transition-colors",
-                      canSave
-                        ? "bg-accent-primary text-on-color hover:bg-accent-primary-hover cursor-pointer"
-                        : "bg-layer-1 text-placeholder cursor-not-allowed opacity-60"
+                      "w-full rounded-sm border bg-transparent px-3 py-1.5 text-sm text-primary placeholder:text-placeholder",
+                      "focus:outline-none focus:ring-1 focus:ring-accent-primary",
+                      timeError ? "border-danger-strong" : "border-subtle"
                     )}
-                  >
-                    {isSaving ? "保存中…" : "保存"}
-                  </button>
+                  />
+                  <div className="flex items-center gap-1.5">
+                    <Clock className="h-3.5 w-3.5 shrink-0 text-tertiary" />
+                    <TimeSelect value={startTime} onChange={handleStartTimeChange} className="flex-1" />
+                    <span className="text-tertiary text-sm">—</span>
+                    <TimeSelect value={endTime} onChange={handleEndTimeChange} className="flex-1" options={END_TIME_OPTIONS} />
+                  </div>
+                  {derivedHours && derivedHours > 0 && (
+                    <p className="text-sm text-accent-primary font-semibold">{formatHours(derivedHours)}</p>
+                  )}
+                  {timeError && <p className="text-sm text-danger-primary">{timeError}</p>}
+                  <div className="flex items-center gap-1">
+                    <FileText className="h-3.5 w-3.5 shrink-0 text-tertiary" />
+                    <input
+                      type="text"
+                      placeholder="备注（可选）"
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && handleSave(closePopover)}
+                      className="flex-1 bg-transparent border-none outline-none text-sm text-primary placeholder:text-placeholder"
+                    />
+                  </div>
+                  <div className="flex items-center justify-end gap-2 pt-0.5">
+                    <button
+                      onClick={closePopover}
+                      className="px-3 py-1 rounded text-sm text-secondary hover:text-primary transition-colors"
+                    >
+                      取消
+                    </button>
+                    <button
+                      onClick={() => handleSave(closePopover)}
+                      disabled={isSaving || !canSave}
+                      className={cn(
+                        "rounded px-3 py-1 text-sm font-semibold transition-colors",
+                        canSave
+                          ? "bg-accent-primary text-on-color hover:bg-accent-primary-hover cursor-pointer"
+                          : "bg-layer-1 text-placeholder cursor-not-allowed opacity-60"
+                      )}
+                    >
+                      {isSaving ? "保存中…" : "保存"}
+                    </button>
+                  </div>
                 </div>
-              </div>
+              )}
           </div>,
           document.body
         )}

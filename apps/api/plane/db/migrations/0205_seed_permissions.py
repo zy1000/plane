@@ -66,9 +66,9 @@ issue.task.edit|编辑任务类型工作项|project|issue.task|edit|任务工作
 issue.task.delete|删除任务类型工作项|project|issue.task|delete|任务工作项|3|1
 issue.task.archive|归档任务类型工作项|project|issue.task|archive|任务工作项|4|1
 issue.task.unarchive|恢复任务类型工作项|project|issue.task|unarchive|任务工作项|5|1
-issue.comment.create|创建评论|project|issue.comment|create|工作项评论与互动|1|1
-issue.comment.edit|编辑评论|project|issue.comment|edit|工作项评论与互动|2|1
-issue.comment.delete|删除评论|project|issue.comment|delete|工作项评论与互动|3|1
+issue.comment.create|创建评论|project|issue.comment|create|工作项评论|1|1
+issue.comment.edit|编辑评论|project|issue.comment|edit|工作项评论|2|1
+issue.comment.delete|删除评论|project|issue.comment|delete|工作项评论|3|1
 issue.link.manage|新增、编辑、删除外部链接|project|issue.link|manage|工作项外部链接|2|1
 issue.relation.manage|新增、删除事项关联|project|issue.relation|manage|工作项关联|2|1
 issue.attachment.download|下载附件|project|issue.attachment|view|工作项附件|1|1

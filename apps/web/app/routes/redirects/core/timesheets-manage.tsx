@@ -5,13 +5,13 @@
  */
 
 import { redirect } from "react-router";
-import type { Route } from "./+types/timesheets-fill";
+import type { Route } from "./+types/timesheets-manage";
 
 export const clientLoader = ({ params }: Route.ClientLoaderArgs) => {
   const { workspaceSlug } = params;
   throw redirect(`/${workspaceSlug}/timesheets/`);
 };
 
-export default function TimesheetsFillRedirect() {
+export default function TimesheetsManageRedirect() {
   return null;
 }

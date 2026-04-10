@@ -2,12 +2,30 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
+import datetime
+
 from rest_framework import serializers
 
 from plane.db.models import Issue, Project, TestCase, TimeSheet
 
 from .base import BaseSerializer
 from .user import UserLiteSerializer
+
+MIDNIGHT_END_SENTINEL = datetime.time(23, 59, 0)
+
+
+class EndTimeField(serializers.TimeField):
+    """Accept '24:00' / '24:00:00' as end-of-day, stored as 23:59:00."""
+
+    def to_internal_value(self, value):
+        if isinstance(value, str) and value.strip() in ("24:00", "24:00:00"):
+            return MIDNIGHT_END_SENTINEL
+        return super().to_internal_value(value)
+
+    def to_representation(self, value):
+        if value == MIDNIGHT_END_SENTINEL:
+            return "24:00:00"
+        return super().to_representation(value)
 
 
 class IssueLiteSerializer(serializers.Serializer):
@@ -25,6 +43,7 @@ class TestCaseLiteSerializer(serializers.Serializer):
 
 class TimeSheetSerializer(BaseSerializer):
     member_detail = UserLiteSerializer(source="member", read_only=True)
+    end_time = EndTimeField()
     # project 由视图层从 URL project_id 注入，调用方通常无需手动传入
     project = serializers.PrimaryKeyRelatedField(
         queryset=Project.objects.all()

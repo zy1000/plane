@@ -53,7 +53,10 @@ export const SidebarWorkspaceMenuItem = observer(function SidebarWorkspaceMenuIt
     return null;
   }
 
-  const isActive = item.href === pathname;
+  const isActive =
+    item.key === "timesheets"
+      ? !!pathname?.startsWith(`/${workspaceSlug}/timesheets`)
+      : item.href === pathname;
 
   return (
     <Link href={item.href} onClick={() => handleLinkClick()}>

@@ -453,9 +453,12 @@ export default function TestCasesPage() {
         try {
           if (!workspaceSlug) return;
           await caseModuleService.deleteCaseModule(workspaceSlug as string, moduleId);
-          if (selectedModuleId === moduleId) setSelectedModuleId(null);
+          if (selectedModuleId === moduleId) {
+            setSelectedModuleId(null);
+          }
           await fetchModules();
-          await fetchCases(1, pageSize, filters);
+          const targetPage = selectedModuleId === moduleId ? 1 : currentPage;
+          await fetchCases(targetPage, pageSize, filters);
         } catch (e) {
           console.error("删除失败:", e);
         }
@@ -492,10 +495,11 @@ export default function TestCasesPage() {
   // 修改 fetchCases：支持 module_id 过滤
   const confirmDeleteCases = () => {
     if (selectedCaseIds.length === 0) return;
+    const deletingCount = selectedCaseIds.length;
 
     Modal.confirm({
       title: "确认删除",
-      content: `确定要删除选中的 ${selectedCaseIds.length} 个用例吗？操作不可撤销。`,
+      content: `确定要删除选中的 ${deletingCount} 个用例吗？操作不可撤销。`,
       okText: "删除",
       cancelText: "取消",
       okButtonProps: { danger: true },
@@ -506,7 +510,9 @@ export default function TestCasesPage() {
           qaCaseSetToastSuccess("删除成功");
           setSelectedCaseIds([]);
           await fetchModules();
-          await fetchCases(1, pageSize, filters);
+          const isAllOnPageDeleted = deletingCount >= cases.length;
+          const targetPage = isAllOnPageDeleted && currentPage > 1 ? currentPage - 1 : currentPage;
+          await fetchCases(targetPage, pageSize, filters);
         } catch (e) {
           console.error("批量删除失败:", e);
           qaCaseSetToastError(e, t, "删除失败");
@@ -1009,7 +1015,9 @@ export default function TestCasesPage() {
             qaCaseSetToastSuccess("删除成功");
           } catch {}
           await fetchModules();
-          await fetchCases(1, pageSize, filters);
+          const isLastItemOnPage = cases.length <= 1;
+          const targetPage = isLastItemOnPage && currentPage > 1 ? currentPage - 1 : currentPage;
+          await fetchCases(targetPage, pageSize, filters);
         } catch (e) {
           console.error("删除用例失败:", e);
           try {

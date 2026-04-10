@@ -48,7 +48,7 @@ export const OverviewProjectPieChart = observer(function OverviewProjectPieChart
           <div className="flex items-center">
             <div className="w-full space-y-3">
               {resolvedData.map((item) => (
-                <div key={item.id} className="flex items-center justify-between gap-2 text-xs">
+                <div key={item.id} className="flex items-center justify-between gap-2 text-sm">
                   <div className="flex items-center gap-2 min-w-0">
                     <div className="h-2.5 w-2.5 flex-shrink-0 rounded-xs" style={{ backgroundColor: item.color }} />
                     <span className="truncate text-primary">{item.name}</span>

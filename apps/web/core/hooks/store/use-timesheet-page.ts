@@ -166,6 +166,20 @@ function mergeTimesheetRecords(previous: TTimeSheet[], incoming: TTimeSheet[]): 
   return [...incoming, ...previous.filter((timesheet) => !incomingIds.has(timesheet.id))];
 }
 
+/** 工时填报最早允许日期：上个月1号 */
+export function getEarliestAllowedDate(): Date {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth() - 1, 1);
+}
+
+/** 判断某个日期是否允许填报工时 */
+export function isDateEditable(dateKey: string): boolean {
+  const earliest = getEarliestAllowedDate();
+  const [y, m, d] = dateKey.split("-").map(Number);
+  const date = new Date(y, m - 1, d);
+  return date >= earliest;
+}
+
 export const useTimesheetPage = ({ workspaceSlug, memberId, projectId, projectName }: TUseTimesheetPageOptions) => {
   const [timesheets, setTimesheets] = useState<TTimeSheet[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -194,6 +208,10 @@ export const useTimesheetPage = ({ workspaceSlug, memberId, projectId, projectNa
     d.setDate(d.getDate() + 6);
     return d;
   }, [weekStart]);
+
+  const isWeekFullyReadOnly = useMemo(() => {
+    return weekDays.every((d) => !isDateEditable(formatDateKey(d)));
+  }, [weekDays]);
 
   const fetchTimesheets = useCallback(async () => {
     if (!workspaceSlug) return;
@@ -270,6 +288,18 @@ export const useTimesheetPage = ({ workspaceSlug, memberId, projectId, projectNa
     }
   }, [workspaceSlug, projectId, isProjectMode, weekStart, projectName]);
 
+  const updateTimesheet = useCallback(
+    async (timesheetId: string, data: Partial<TTimeSheetCreatePayload>): Promise<TTimeSheet | undefined> => {
+      if (!workspaceSlug) return;
+      const ts = timesheetsRef.current.find((t) => t.id === timesheetId);
+      if (!ts) return;
+      const updated = await timesheetService.update(workspaceSlug, String(ts.project), timesheetId, data);
+      setTimesheets((prev) => prev.map((t) => (t.id === timesheetId ? updated : t)));
+      return updated;
+    },
+    [workspaceSlug]
+  );
+
   const goToPrevWeek = useCallback(() => {
     setWeekStart((prev) => {
       const d = new Date(prev);
@@ -288,6 +318,10 @@ export const useTimesheetPage = ({ workspaceSlug, memberId, projectId, projectNa
 
   const goToCurrentWeek = useCallback(() => {
     setWeekStart(getWeekStart(new Date()));
+  }, []);
+
+  const goToWeek = useCallback((date: Date) => {
+    setWeekStart(getWeekStart(date));
   }, []);
 
   const addRow = useCallback((row: TTimesheetRow) => {
@@ -349,11 +383,14 @@ export const useTimesheetPage = ({ workspaceSlug, memberId, projectId, projectNa
     totalWeekHours,
     fetchTimesheets,
     createTimesheet,
+    updateTimesheet,
     deleteTimesheet,
     copyPreviousWeek,
     goToPrevWeek,
     goToNextWeek,
     goToCurrentWeek,
+    goToWeek,
+    isWeekFullyReadOnly,
     addRow,
     removeRow,
     getTimesheetsForCell,

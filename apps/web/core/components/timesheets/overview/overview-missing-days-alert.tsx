@@ -23,21 +23,21 @@ export function OverviewMissingDaysAlert({ alertDays, workspaceSlug }: Props) {
   const router = useAppRouter();
 
   const handleGoToFill = () => {
-    router.push(`/${workspaceSlug}/timesheets/manage`);
+    router.push(`/${workspaceSlug}/timesheets`);
   };
 
   const missingCount = alertDays.filter((d) => d.type === "missing").length;
   const insufficientCount = alertDays.filter((d) => d.type === "insufficient").length;
 
   return (
-    <Card className="border border-subtle p-4">
-      <div className="mb-4 flex items-center gap-2">
+    <Card className="flex flex-col border border-subtle p-4">
+      <div className="mb-4 flex flex-shrink-0 items-center gap-2">
         <AlertTriangle className="h-4 w-4 text-amber-500" />
         <span className="text-sm font-medium text-primary">填报提醒</span>
       </div>
       {alertDays.length > 0 ? (
-        <div className="space-y-2">
-          <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-placeholder">
+        <div className="min-h-0 flex-1 space-y-2 overflow-y-auto vertical-scrollbar scrollbar-sm">
+          <div className="flex flex-wrap gap-x-3 gap-y-1 text-sm text-placeholder">
             {missingCount > 0 && <span>{missingCount} 天未填报</span>}
             {insufficientCount > 0 && <span>{insufficientCount} 天不足 8h</span>}
           </div>
@@ -45,7 +45,7 @@ export function OverviewMissingDaysAlert({ alertDays, workspaceSlug }: Props) {
             {alertDays.map((item) => (
               <div
                 key={item.date}
-                className={`flex items-center justify-between rounded-md px-3 py-2 text-xs ${
+                className={`flex items-center justify-between rounded-md px-3 py-2 text-sm ${
                   item.type === "missing" ? "bg-amber-500/5" : "bg-orange-500/5"
                 }`}
               >
@@ -68,7 +68,7 @@ export function OverviewMissingDaysAlert({ alertDays, workspaceSlug }: Props) {
           <button
             type="button"
             onClick={handleGoToFill}
-            className="mt-3 flex w-full cursor-pointer items-center justify-center gap-2 rounded-md bg-accent-primary/10 px-3 py-2 text-xs font-medium text-accent-primary transition-colors hover:bg-accent-primary/20"
+            className="mt-3 flex w-full cursor-pointer items-center justify-center gap-2 rounded-md bg-accent-primary/10 px-3 py-2 text-sm font-medium text-accent-primary transition-colors hover:bg-accent-primary/20"
           >
             去填报工时
             <ArrowRight className="h-3.5 w-3.5" />
@@ -82,7 +82,7 @@ export function OverviewMissingDaysAlert({ alertDays, workspaceSlug }: Props) {
             </svg>
           </div>
           <div className="text-sm font-medium text-primary">工时已全部达标</div>
-          <div className="text-xs text-placeholder">每天均已填满 8 小时</div>
+          <div className="text-sm text-placeholder">每天均已填满 8 小时</div>
         </div>
       )}
     </Card>

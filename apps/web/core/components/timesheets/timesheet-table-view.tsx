@@ -12,7 +12,7 @@ import { cn } from "@plane/utils";
 import { useProject } from "@/hooks/store/use-project";
 import { TimesheetCellPopover } from "./timesheet-cell-popover";
 import { TimesheetRowAddModal } from "./timesheet-row-add-modal";
-import { formatDateKey } from "@/hooks/store/use-timesheet-page";
+import { formatDateKey, isDateEditable } from "@/hooks/store/use-timesheet-page";
 import { ProjectIssueTypeService, type TIssueType } from "@/services/project";
 import type { useTimesheetPage } from "@/hooks/store/use-timesheet-page";
 
@@ -98,6 +98,7 @@ export const TimesheetTableView = observer(function TimesheetTableView({
     removeRow,
     totalWeekHours,
     isLoading,
+    isWeekFullyReadOnly,
   } = timesheetPage;
 
   const { getProjectById } = useProject();
@@ -156,17 +157,18 @@ export const TimesheetTableView = observer(function TimesheetTableView({
                 const { dayLabel, dateLabel } = formatDayHeader(date);
                 const isToday = key === today;
                 const isWeekend = date.getDay() === 0 || date.getDay() === 6;
+                const editable = isDateEditable(key);
                 return (
                   <th
                     key={key}
                     className={cn(
                       "px-2 py-2.5 text-center text-sm font-semibold border-r border-subtle min-w-[88px]",
-                      isToday ? "bg-accent-primary/5 text-accent-primary" : isWeekend ? "bg-layer-1 text-tertiary" : "text-tertiary"
+                      !editable ? "bg-layer-1/60 text-placeholder" : isToday ? "bg-accent-primary/5 text-accent-primary" : isWeekend ? "bg-layer-1 text-tertiary" : "text-tertiary"
                     )}
                   >
                     <div className="flex flex-col items-center gap-0.5">
-                      <span className={cn("font-semibold text-sm", isToday && "text-accent-primary")}>{dayLabel}</span>
-                      <span className={cn("text-sm", isToday ? "text-accent-primary" : "text-tertiary")}>{dateLabel}</span>
+                      <span className={cn("font-semibold text-sm", !editable ? "text-placeholder" : isToday && "text-accent-primary")}>{dayLabel}</span>
+                      <span className={cn("text-sm", !editable ? "text-placeholder" : isToday ? "text-accent-primary" : "text-tertiary")}>{dateLabel}</span>
                     </div>
                   </th>
                 );
@@ -222,7 +224,7 @@ export const TimesheetTableView = observer(function TimesheetTableView({
                           </span>
                         )}
                         {projectLabel ? (
-                          <span className="shrink-0 rounded bg-layer-1 px-1.5 py-0.5 text-[10px] font-mono font-medium text-tertiary">
+                          <span className="shrink-0 rounded bg-layer-1 px-1.5 py-0.5 text-xs font-mono font-medium text-tertiary">
                             {projectLabel}
                           </span>
                         ) : null}
@@ -252,12 +254,13 @@ export const TimesheetTableView = observer(function TimesheetTableView({
                     const cellTimesheets = getTimesheetsForCell(row, key);
                     const isToday = key === today;
                     const isWeekend = date.getDay() === 0 || date.getDay() === 6;
+                    const editable = isDateEditable(key);
                     return (
                       <td
                         key={key}
                         className={cn(
                           "px-1 py-1.5 text-center border-r border-subtle",
-                          isToday ? "bg-accent-primary/5" : isWeekend ? "bg-layer-1/50" : ""
+                          !editable ? "bg-layer-1/60" : isToday ? "bg-accent-primary/5" : isWeekend ? "bg-layer-1/50" : ""
                         )}
                       >
                         <TimesheetCellPopover
@@ -267,18 +270,21 @@ export const TimesheetTableView = observer(function TimesheetTableView({
                           issueId={row.type === "issue" ? row.issueId : undefined}
                           testCaseId={row.type === "test_case" ? row.testCaseId : undefined}
                           hours={cellHours}
+                          readOnly={!editable}
                           onCreate={(data) => createTimesheet(row.projectId, data)}
                           onDelete={deleteTimesheet}
                         >
                           <div
                             className={cn(
-                              "flex items-center justify-center h-8 w-full rounded text-sm font-semibold transition-colors cursor-pointer select-none",
-                              cellHours > 0
-                                ? "text-accent-primary bg-accent-primary/10 hover:bg-accent-primary/20"
-                                : "text-tertiary hover:bg-layer-1 hover:text-secondary"
+                              "flex items-center justify-center h-8 w-full rounded text-sm font-semibold transition-colors select-none",
+                              !editable
+                                ? cellHours > 0 ? "text-tertiary" : "text-placeholder"
+                                : cellHours > 0
+                                  ? "text-accent-primary bg-accent-primary/10 hover:bg-accent-primary/20 cursor-pointer"
+                                  : "text-tertiary hover:bg-layer-1 hover:text-secondary cursor-pointer"
                             )}
                           >
-                            {cellHours > 0 ? formatHours(cellHours) : <Plus className="h-3.5 w-3.5 opacity-40 group-hover:opacity-80" />}
+                            {cellHours > 0 ? formatHours(cellHours) : !editable ? "—" : <Plus className="h-3.5 w-3.5 opacity-40 group-hover:opacity-80" />}
                           </div>
                         </TimesheetCellPopover>
                       </td>
@@ -300,13 +306,15 @@ export const TimesheetTableView = observer(function TimesheetTableView({
           <tfoot>
             <tr className="border-b border-subtle">
               <td className={cn("sticky left-0 z-10 bg-surface-1 px-4 py-2 border-r border-subtle", TASK_COLUMN_WIDTH_CLASS)} colSpan={1}>
-                <button
-                  onClick={() => setAddModalOpen(true)}
-                  className="flex items-center gap-1.5 text-sm text-tertiary hover:text-accent-primary transition-colors group cursor-pointer"
-                >
-                  <Plus className="h-3.5 w-3.5 group-hover:text-accent-primary" />
-                  <span>添加任务</span>
-                </button>
+                {!isWeekFullyReadOnly && (
+                  <button
+                    onClick={() => setAddModalOpen(true)}
+                    className="flex items-center gap-1.5 text-sm text-tertiary hover:text-accent-primary transition-colors group cursor-pointer"
+                  >
+                    <Plus className="h-3.5 w-3.5 group-hover:text-accent-primary" />
+                    <span>添加任务</span>
+                  </button>
+                )}
               </td>
               {weekDays.map((date) => (
                 <td key={formatDateKey(date)} className="border-r border-subtle" />

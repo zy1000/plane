@@ -44,7 +44,7 @@ export const SidebarWorkspaceMenu = observer(function SidebarWorkspaceMenu() {
     {
       key: "timesheets",
       labelTranslationKey: "timesheets",
-      href: `/${workspaceSlug}/timesheets/`,
+      href: `/${workspaceSlug}/timesheets/overview/`,
       access: [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER, EUserWorkspaceRoles.GUEST],
       Icon: Clock,
     },

@@ -6,8 +6,8 @@ import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { useAppRouter } from "@/hooks/use-app-router";
 
 const TAB_ITEMS = [
-  { key: "overview", label: "概览", path: "" },
-  { key: "manage", label: "填报工时", path: "/manage" },
+  { key: "overview", label: "概览", path: "/overview" },
+  { key: "manage", label: "填报工时", path: "" },
 ];
 
 export const WorkspaceTimesheetsHeader = observer(function WorkspaceTimesheetsHeader() {
@@ -21,8 +21,8 @@ export const WorkspaceTimesheetsHeader = observer(function WorkspaceTimesheetsHe
   const pathForTab = pathname?.replace(/\/$/, "") ?? "";
 
   const activeTab = (() => {
-    if (pathForTab.endsWith("/manage")) return "manage";
-    return "overview";
+    if (pathForTab.endsWith("/overview")) return "overview";
+    return "manage";
   })();
 
   return (

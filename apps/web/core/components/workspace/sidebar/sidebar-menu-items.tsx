@@ -116,7 +116,16 @@ export const SidebarMenuItems = observer(function SidebarMenuItems() {
                 </div>
               </SidebarNavItem>
             </Link>
-            <Link href={`/${workspaceSlug}/timesheets`}>
+          </div>
+        )}
+        {projectsSidebarItem && (
+          <div className="flex flex-col gap-0.5">
+            <SidebarItem key="pinned_projects" item={projectsSidebarItem} />
+          </div>
+        )}
+        {canPerformWorkspaceMemberActions && (
+          <div className="flex flex-col gap-0.5">
+            <Link href={`/${workspaceSlug}/timesheets/overview/`}>
               <SidebarNavItem isActive={!!pathname?.includes(`/${workspaceSlug}/timesheets`)}>
                 <div className="flex items-center gap-1.5 py-[1px]">
                   <Clock className="size-4 flex-shrink-0" />
@@ -124,11 +133,6 @@ export const SidebarMenuItems = observer(function SidebarMenuItems() {
                 </div>
               </SidebarNavItem>
             </Link>
-          </div>
-        )}
-        {projectsSidebarItem && (
-          <div className="flex flex-col gap-0.5">
-            <SidebarItem key="pinned_projects" item={projectsSidebarItem} />
           </div>
         )}
         {/* Favorites Menu */}

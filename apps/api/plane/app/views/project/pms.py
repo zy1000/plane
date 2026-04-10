@@ -5,7 +5,7 @@
 from rest_framework import status
 from rest_framework.response import Response
 
-from plane.app.permissions import ROLE, allow_permission
+from plane.app.permissions import ROLE, allow_permission, allow_fine_permission, PermissionKey
 from plane.app.serializers.project import ProjectPmsInfoSerializer
 from plane.app.views import BaseAPIView
 from plane.db.models import Project
@@ -20,13 +20,12 @@ class ProjectPmsInfoAPIView(BaseAPIView):
             project__workspace__slug=slug,
         ).order_by("-id")
 
-    @allow_permission([ROLE.ADMIN])
     def get(self, request, slug: str, project_id: str) -> Response:
         queryset = self._queryset(slug, project_id)
         serializer = ProjectPmsInfoSerializer(queryset, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    @allow_permission([ROLE.ADMIN])
+    @allow_fine_permission(PermissionKey.PROJECT_SETTINGS_EDIT)
     def post(self, request, slug: str, project_id: str) -> Response:
         Project.objects.get(pk=project_id, workspace__slug=slug)
         serializer = ProjectPmsInfoSerializer(
@@ -46,7 +45,7 @@ class ProjectPmsInfoDetailAPIView(BaseAPIView):
             project__workspace__slug=slug,
         )
 
-    @allow_permission([ROLE.ADMIN])
+    @allow_fine_permission(PermissionKey.PROJECT_SETTINGS_EDIT)
     def patch(self, request, slug: str, project_id: str, pk: int) -> Response:
         instance = self._get_instance(slug, project_id, pk)
         serializer = ProjectPmsInfoSerializer(
@@ -59,7 +58,7 @@ class ProjectPmsInfoDetailAPIView(BaseAPIView):
         serializer.save()
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    @allow_permission([ROLE.ADMIN])
+    @allow_fine_permission(PermissionKey.PROJECT_SETTINGS_EDIT)
     def delete(self, request, slug: str, project_id: str, pk: int) -> Response:
         instance = self._get_instance(slug, project_id, pk)
         instance.delete()
@@ -67,7 +66,7 @@ class ProjectPmsInfoDetailAPIView(BaseAPIView):
 
 
 class PmsSyncAPIView(BaseAPIView):
-    @allow_permission([ROLE.ADMIN])
+    @allow_fine_permission(PermissionKey.PROJECT_SETTINGS_EDIT)
     def post(self, request, slug: str, project_id: str) -> Response:
         instance = (
             ProjectPmsInfo.objects.filter(

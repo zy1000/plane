@@ -12,6 +12,8 @@ from django.db.models import Q
 
 from .base import BaseModel
 
+MIDNIGHT_END_SENTINEL = datetime.time(23, 59, 0)
+
 
 class TimeSheet(BaseModel):
     """
@@ -115,8 +117,24 @@ class TimeSheet(BaseModel):
         )
         return f"{self.member} | {self.date} | {self.hours}h | project:{self.project_id}{secondary}"
 
+    @staticmethod
+    def get_earliest_allowed_date():
+        """工时填报最早允许日期：上个月1号"""
+        today = datetime.date.today()
+        if today.month == 1:
+            return datetime.date(today.year - 1, 12, 1)
+        return datetime.date(today.year, today.month - 1, 1)
+
     def clean(self):
         super().clean()
+
+        # 工时填报日期限制：不允许填报超过上一个月的工时
+        if self.date:
+            earliest = self.get_earliest_allowed_date()
+            if self.date < earliest:
+                raise ValidationError(
+                    {"date": f"不允许填报 {earliest.strftime('%Y-%m-%d')} 之前的工时，仅可填报本月和上月的工时。"}
+                )
 
         # issue 与 test_case 不能同时填写
         if self.issue_id and self.test_case_id:
@@ -133,8 +151,15 @@ class TimeSheet(BaseModel):
         # 验证花费小时数不超过开始/结束时间之差
         if self.start_time and self.end_time and self.hours is not None and self.end_time > self.start_time:
             start_dt = datetime.datetime.combine(datetime.date.today(), self.start_time)
-            end_dt = datetime.datetime.combine(datetime.date.today(), self.end_time)
-            duration_seconds = Decimal((end_dt - start_dt).seconds)
+            if self.end_time == MIDNIGHT_END_SENTINEL:
+                end_dt = datetime.datetime.combine(
+                    datetime.date.today() + datetime.timedelta(days=1),
+                    datetime.time(0, 0, 0),
+                )
+            else:
+                end_dt = datetime.datetime.combine(datetime.date.today(), self.end_time)
+            td = end_dt - start_dt
+            duration_seconds = Decimal(td.days * 86400 + td.seconds)
             max_hours = duration_seconds / Decimal("3600")
             if self.hours > max_hours:
                 raise ValidationError(

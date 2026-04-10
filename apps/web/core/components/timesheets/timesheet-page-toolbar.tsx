@@ -4,8 +4,10 @@
  * See the LICENSE file for details.
  */
 
+import { useState } from "react";
 import { observer } from "mobx-react";
-import { message } from "antd";
+import { DatePicker, message } from "antd";
+import dayjs from "dayjs";
 import { ChevronLeft, ChevronRight, LayoutList, CalendarDays, Copy } from "lucide-react";
 import { cn } from "@plane/utils";
 import { formatDateKey, getWeekStart } from "@/hooks/store/use-timesheet-page";
@@ -13,9 +15,9 @@ import type { useTimesheetPage } from "@/hooks/store/use-timesheet-page";
 
 const MONTH_LABELS = ["1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月"];
 const TOOLBAR_BUTTON_CLASS =
-  "inline-flex h-[26px] items-center justify-center rounded-md border border-subtle px-2.5 text-xs text-secondary transition-colors hover:bg-layer-1 hover:text-primary";
+  "inline-flex h-[26px] items-center justify-center rounded-md border border-subtle px-2.5 text-secondary transition-colors hover:bg-layer-1 hover:text-primary";
 const TOOLBAR_SEGMENT_BUTTON_CLASS =
-  "flex h-[26px] items-center gap-1.5 px-2.5 text-xs font-medium transition-colors";
+  "flex h-[26px] items-center gap-1.5 px-2.5 text-sm font-medium transition-colors";
 
 function formatWeekRange(weekStart: Date, weekEnd: Date): string {
   const startMonth = MONTH_LABELS[weekStart.getMonth()];
@@ -41,10 +43,14 @@ export const TimesheetPageToolbar = observer(function TimesheetPageToolbar({
     goToPrevWeek,
     goToNextWeek,
     goToCurrentWeek,
+    goToWeek,
     copyPreviousWeek,
     isCopyingPreviousWeek,
     isLoading,
+    isWeekFullyReadOnly,
   } = timesheetPage;
+
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   const handlePrevWeek = () => {
     goToPrevWeek();
@@ -100,9 +106,34 @@ export const TimesheetPageToolbar = observer(function TimesheetPageToolbar({
           >
             <ChevronLeft className="h-3.5 w-3.5" />
           </button>
-          <span className="flex h-[26px] items-center border-x border-subtle px-3 text-xs font-medium text-primary tabular-nums">
-            {formatWeekRange(weekStart, weekEnd)}
-          </span>
+          <div
+            className="relative flex h-[26px] items-center border-x border-subtle cursor-pointer hover:bg-layer-1 transition-colors"
+            onClick={() => setPickerOpen(true)}
+          >
+            <span className="px-3 text-sm font-medium text-primary tabular-nums select-none">
+              {formatWeekRange(weekStart, weekEnd)}
+            </span>
+            <DatePicker
+              open={pickerOpen}
+              onOpenChange={setPickerOpen}
+              value={dayjs(weekStart)}
+              onChange={(date) => {
+                if (date) goToWeek(date.toDate());
+                setPickerOpen(false);
+              }}
+              allowClear={false}
+              suffixIcon={null}
+              variant="borderless"
+              style={{
+                position: "absolute",
+                inset: 0,
+                width: "100%",
+                height: "100%",
+                opacity: 0,
+                pointerEvents: "none",
+              }}
+            />
+          </div>
           <button
             onClick={handleNextWeek}
             className="inline-flex h-[26px] w-[26px] items-center justify-center text-secondary transition-colors hover:bg-layer-1 hover:text-primary"
@@ -121,14 +152,14 @@ export const TimesheetPageToolbar = observer(function TimesheetPageToolbar({
         )}
         <button
           onClick={handleCopyPreviousWeek}
-          disabled={isCopyingPreviousWeek || isLoading}
+          disabled={isCopyingPreviousWeek || isLoading || isWeekFullyReadOnly}
           className={cn(
             `${TOOLBAR_BUTTON_CLASS} gap-1.5`,
-            isCopyingPreviousWeek || isLoading
+            isCopyingPreviousWeek || isLoading || isWeekFullyReadOnly
               ? "border-subtle bg-layer-1 text-placeholder cursor-not-allowed"
               : ""
           )}
-          title="将上一周的工时复制到当前周对应日期"
+          title={isWeekFullyReadOnly ? "当前周已超出可填报范围" : "将上一周的工时复制到当前周对应日期"}
         >
           <Copy className="h-3.5 w-3.5" />
           <span>{isCopyingPreviousWeek ? "复制中…" : "复制上一周"}</span>

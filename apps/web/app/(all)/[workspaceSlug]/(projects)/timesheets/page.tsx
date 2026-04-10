@@ -3,19 +3,17 @@
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 import { PageHead } from "@/components/core/page-title";
-import { TimesheetOverview } from "@/components/timesheets/overview";
-import { useUser } from "@/hooks/store/user";
+import { WorkspaceTimesheetFill } from "@/components/timesheets/workspace-timesheet-fill";
 
-function WorkspaceTimesheetsOverviewPage() {
+function WorkspaceTimesheetsManagePage() {
   const { workspaceSlug } = useParams();
-  const { data: currentUser } = useUser();
 
   return (
     <>
-      <PageHead title="工时管理 - 概览" />
-      <TimesheetOverview workspaceSlug={workspaceSlug?.toString() ?? ""} memberId={currentUser?.id} />
+      <PageHead title="工时管理 - 填报工时" />
+      <WorkspaceTimesheetFill workspaceSlug={workspaceSlug?.toString() ?? ""} />
     </>
   );
 }
 
-export default observer(WorkspaceTimesheetsOverviewPage);
+export default observer(WorkspaceTimesheetsManagePage);
