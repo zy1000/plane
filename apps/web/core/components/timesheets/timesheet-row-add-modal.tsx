@@ -33,6 +33,8 @@ const issueService = new IssueService();
 const caseService = new CaseService();
 const projectIssueTypeService = new ProjectIssueTypeService();
 
+const TEST_CASE_PAGE_SIZE = 50;
+
 
 type TCategoryType = "issue" | "test_case" | "project";
 
@@ -136,10 +138,16 @@ export const TimesheetRowAddModal = observer(function TimesheetRowAddModal({
   const [itemsError, setItemsError] = useState<string | null>(null);
   const [issueTypesCache, setIssueTypesCache] = useState<Record<string, Record<string, TIssueType>>>({});
 
+  // Pagination state for test cases
+  const [testCasePage, setTestCasePage] = useState(1);
+  const [testCaseTotal, setTestCaseTotal] = useState(0);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+
   // Selection state: Map<rowId, TTimesheetRow>
   const [selectedItems, setSelectedItems] = useState<Map<string, TTimesheetRow>>(new Map());
 
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const listScrollRef = useRef<HTMLDivElement>(null);
 
   // Filtered project IDs
   const filteredProjectIds = useMemo(() => {
@@ -219,6 +227,8 @@ export const TimesheetRowAddModal = observer(function TimesheetRowAddModal({
         } else {
           const result = await caseService.getProjectCases(workspaceSlug, {
             project_id: category.projectId,
+            page: 1,
+            page_size: TEST_CASE_PAGE_SIZE,
             ...(query ? { name__icontains: query } : {}),
           });
           const list = Array.isArray(result) ? result : result?.data ?? result?.results ?? [];
@@ -229,6 +239,9 @@ export const TimesheetRowAddModal = observer(function TimesheetRowAddModal({
               code: String(c.code ?? "").trim(),
             }))
           );
+          const total = result?.count ?? list.length;
+          setTestCasePage(1);
+          setTestCaseTotal(total);
         }
       } catch {
         if (category.type === "issue") {
@@ -243,6 +256,43 @@ export const TimesheetRowAddModal = observer(function TimesheetRowAddModal({
       }
     },
     [workspaceSlug, currentUserId, ensureIssueTypes]
+  );
+
+  const loadMoreTestCases = useCallback(async () => {
+    if (!selectedCategory || selectedCategory.type !== "test_case" || isLoadingMore) return;
+    const nextPage = testCasePage + 1;
+    if (testCasePage * TEST_CASE_PAGE_SIZE >= testCaseTotal) return;
+
+    setIsLoadingMore(true);
+    try {
+      const result = await caseService.getProjectCases(workspaceSlug, {
+        project_id: selectedCategory.projectId,
+        page: nextPage,
+        page_size: TEST_CASE_PAGE_SIZE,
+        ...(itemSearchQuery ? { name__icontains: itemSearchQuery } : {}),
+      });
+      const list = Array.isArray(result) ? result : result?.data ?? result?.results ?? [];
+      const newCases = list.map((c: any) => ({
+        id: String(c.id),
+        name: String(c.name || ""),
+        code: String(c.code ?? "").trim(),
+      }));
+      setTestCases((prev) => [...prev, ...newCases]);
+      setTestCasePage(nextPage);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  }, [selectedCategory, testCasePage, testCaseTotal, isLoadingMore, workspaceSlug, itemSearchQuery]);
+
+  const handleListScroll = useCallback(
+    (e: React.UIEvent<HTMLDivElement>) => {
+      if (selectedCategory?.type !== "test_case") return;
+      const el = e.currentTarget;
+      if (el.scrollHeight - el.scrollTop - el.clientHeight < 120) {
+        loadMoreTestCases();
+      }
+    },
+    [selectedCategory, loadMoreTestCases]
   );
 
   useEffect(() => {
@@ -263,6 +313,9 @@ export const TimesheetRowAddModal = observer(function TimesheetRowAddModal({
       setTestCases([]);
       setSelectedItems(new Map());
       setItemsError(null);
+      setTestCasePage(1);
+      setTestCaseTotal(0);
+      setIsLoadingMore(false);
       setTimeout(() => searchInputRef.current?.focus(), 100);
     }
   }, [open]);
@@ -504,7 +557,11 @@ export const TimesheetRowAddModal = observer(function TimesheetRowAddModal({
         </div>
 
         {/* Item list */}
-        <div className="flex-1 overflow-y-auto px-2 py-1 relative vertical-scrollbar scrollbar-sm">
+        <div
+          ref={listScrollRef}
+          onScroll={handleListScroll}
+          className="flex-1 overflow-y-auto px-2 py-1 relative vertical-scrollbar scrollbar-sm"
+        >
           {isLoadingItems && (
             <div className="absolute inset-0 z-10 flex items-center justify-center bg-surface-1/60 backdrop-blur-[1px]">
               <Loader2 className="h-5 w-5 animate-spin text-tertiary" />
@@ -583,6 +640,17 @@ export const TimesheetRowAddModal = observer(function TimesheetRowAddModal({
                   </button>
                 );
               })}
+              {isLoadingMore && (
+                <div className="flex items-center justify-center py-3">
+                  <Loader2 className="h-4 w-4 animate-spin text-tertiary" />
+                  <span className="ml-2 text-xs text-tertiary">加载更多…</span>
+                </div>
+              )}
+              {!isLoadingMore && testCases.length > 0 && testCasePage * TEST_CASE_PAGE_SIZE >= testCaseTotal && testCaseTotal > TEST_CASE_PAGE_SIZE && (
+                <div className="flex items-center justify-center py-2">
+                  <span className="text-xs text-tertiary">共 {testCaseTotal} 条，已全部加载</span>
+                </div>
+              )}
             </div>
           )}
         </div>
