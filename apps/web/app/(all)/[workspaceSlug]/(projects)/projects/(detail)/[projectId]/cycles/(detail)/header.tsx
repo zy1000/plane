@@ -210,11 +210,7 @@ export const CycleIssuesHeader = observer(function CycleIssuesHeader() {
                       router.push(`/${workspaceSlug}/projects/${projectId}/cycles/${value}`);
                     }}
                     title={cycleDetails?.name}
-                    icon={
-                      <Breadcrumbs.Icon>
-                        <CycleIcon className="size-4 flex-shrink-0 text-tertiary" />
-                      </Breadcrumbs.Icon>
-                    }
+                    icon={<CycleIcon className="h-4 w-4 flex-shrink-0 text-tertiary" />}
                     isLast
                   />
                 }

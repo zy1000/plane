@@ -7,20 +7,17 @@
 import { observer } from "mobx-react";
 import useSWR from "swr";
 // plane imports
-import { PROJECT_RELEASES_VIEW_PERMISSION_KEY } from "@plane/constants";
 import { cn } from "@plane/utils";
 // assets
 import emptyModule from "@/app/assets/empty-state/module.svg?url";
 // components
 import { EmptyState } from "@/components/common/empty-state";
-import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
 import { PageHead } from "@/components/core/page-title";
 import { ModuleLayoutRoot } from "@/components/issues/issue-layouts/roots/module-layout-root";
 import { ModuleAnalyticsSidebar } from "@/components/modules";
 // hooks
 import { useModule } from "@/hooks/store/use-module";
 import { useProject } from "@/hooks/store/use-project";
-import { useUserPermissions } from "@/hooks/store/user";
 import { useAppRouter } from "@/hooks/use-app-router";
 import useLocalStorage from "@/hooks/use-local-storage";
 import type { Route } from "./+types/page";
@@ -32,7 +29,6 @@ function ModuleIssuesPage({ params }: Route.ComponentProps) {
   // store hooks
   const { fetchModuleDetails, getModuleById } = useModule();
   const { getProjectById } = useProject();
-  const { allowProjectPermissionKeys, workspaceUserInfo } = useUserPermissions();
   // const { issuesFilter } = useIssues(EIssuesStoreType.MODULE);
   // local storage
   const { setValue, storedValue } = useLocalStorage("module_sidebar_collapsed", "false");
@@ -45,15 +41,6 @@ function ModuleIssuesPage({ params }: Route.ComponentProps) {
   const projectModule = getModuleById(moduleId);
   const project = getProjectById(projectId);
   const pageTitle = project?.name && projectModule?.name ? `${project?.name} - ${projectModule?.name}` : undefined;
-  const canViewReleases = allowProjectPermissionKeys(
-    [PROJECT_RELEASES_VIEW_PERMISSION_KEY],
-    workspaceSlug,
-    projectId
-  );
-
-  if (workspaceUserInfo && !canViewReleases) {
-    return <NotAuthorizedView section="general" isProjectView className="h-auto" />;
-  }
 
   const toggleSidebar = () => {
     setValue(`${!isSidebarCollapsed}`);

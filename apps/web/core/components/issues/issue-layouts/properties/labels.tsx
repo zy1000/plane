@@ -171,6 +171,7 @@ export const IssuePropertyLabels = observer(function IssuePropertyLabels(props: 
     onClose,
     disabled,
     hideDropdownArrow = false,
+    className,
     buttonClassName = "",
     placement,
     maxRender = 2,
@@ -219,6 +220,7 @@ export const IssuePropertyLabels = observer(function IssuePropertyLabels(props: 
                 projectId={projectId}
                 value={value}
                 onChange={onChange}
+                className={className}
                 buttonClassName={buttonClassName}
                 placement={placement}
                 hideDropdownArrow={hideDropdownArrow}
@@ -242,6 +244,7 @@ export const IssuePropertyLabels = observer(function IssuePropertyLabels(props: 
             value={value}
             onChange={onChange}
             hideDropdownArrow={hideDropdownArrow}
+            className={className}
             buttonClassName={buttonClassName}
             placement={placement}
             fullWidth={fullWidth}
@@ -264,6 +267,7 @@ export const IssuePropertyLabels = observer(function IssuePropertyLabels(props: 
           value={value}
           onChange={onChange}
           hideDropdownArrow={hideDropdownArrow}
+          className={className}
           buttonClassName={buttonClassName}
           placement={placement}
           fullWidth={fullWidth}

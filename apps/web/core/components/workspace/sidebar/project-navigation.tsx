@@ -13,6 +13,7 @@ import {
   EUserPermissions,
   PROJECT_ANALYTICS_VIEW_PERMISSION_KEY,
   PROJECT_ASSET_VIEW_PERMISSION_KEY,
+  PROJECT_MODULES_VIEW_PERMISSION_KEY,
   PROJECT_RELEASES_VIEW_PERMISSION_KEY,
 } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
@@ -36,7 +37,7 @@ import { useAppTheme } from "@/hooks/store/use-app-theme";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useProject } from "@/hooks/store/use-project";
 import { useUserPermissions } from "@/hooks/store/user";
-import { BarChart3, Rss, Milestone, Folder } from "lucide-react";
+import { BarChart3, Rss, Milestone, Folder, Rocket } from "lucide-react";
 
 export type TNavigationItem = {
   name: string;
@@ -166,9 +167,20 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
         href: `/${workspaceSlug}/projects/${projectId}/modules`,
         icon: ModuleIcon,
         access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
-        permissionKeys: [PROJECT_RELEASES_VIEW_PERMISSION_KEY],
+        permissionKeys: [PROJECT_MODULES_VIEW_PERMISSION_KEY],
         shouldRender: project?.module_view ?? false,
         sortOrder: 3,
+      },
+      {
+        i18n_key: "sidebar.releases",
+        key: "releases",
+        name: "Releases",
+        href: `/${workspaceSlug}/projects/${projectId}/releases`,
+        icon: Rocket,
+        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
+        permissionKeys: [PROJECT_RELEASES_VIEW_PERMISSION_KEY],
+        shouldRender: project?.module_view ?? false,
+        sortOrder: 3.5,
       },
       {
         i18n_key: "test_management",

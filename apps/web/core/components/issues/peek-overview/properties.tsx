@@ -47,6 +47,8 @@ import type { TIssueOperations } from "../issue-detail";
 import { IssueCycleSelect } from "../issue-detail/cycle-select";
 import { IssueLabel } from "../issue-detail/label";
 import { IssueModuleSelect } from "../issue-detail/module-select";
+import { IssueReleaseSelect } from "../issue-detail/release-select";
+import { Rocket } from "lucide-react";
 import { projectIssueTypesCache } from "@/services/project";
 import * as LucideIcons from "lucide-react";
 
@@ -285,6 +287,19 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
           >
             <IssueCycleSelect
               className="h-7.5 w-full grow"
+              workspaceSlug={workspaceSlug}
+              projectId={projectId}
+              issueId={issueId}
+              issueOperations={issueOperations}
+              disabled={disabled}
+            />
+          </SidebarPropertyListItem>
+        )}
+
+        {isMetaExpanded && (
+          <SidebarPropertyListItem icon={Rocket} label="发布">
+            <IssueReleaseSelect
+              className="w-full grow"
               workspaceSlug={workspaceSlug}
               projectId={projectId}
               issueId={issueId}

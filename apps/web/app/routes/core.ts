@@ -196,10 +196,6 @@ export const coreRoutes: RouteConfigEntry[] = [
           // Module Detail
           layout("./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/modules/(detail)/layout.tsx", [
             route(
-              ":workspaceSlug/projects/:projectId/modules/:moduleId/overview",
-              "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/modules/(overview)/[moduleId]/page.tsx"
-            ),
-            route(
               ":workspaceSlug/projects/:projectId/modules/:moduleId",
               "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/modules/(detail)/[moduleId]/page.tsx"
             ),
@@ -210,6 +206,26 @@ export const coreRoutes: RouteConfigEntry[] = [
             route(
               ":workspaceSlug/projects/:projectId/modules",
               "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/modules/(list)/page.tsx"
+            ),
+          ]),
+
+          // Release Detail
+          layout("./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/releases/(detail)/layout.tsx", [
+            route(
+              ":workspaceSlug/projects/:projectId/releases/:releaseId/overview",
+              "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/releases/(overview)/[releaseId]/page.tsx"
+            ),
+            route(
+              ":workspaceSlug/projects/:projectId/releases/:releaseId",
+              "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/releases/(detail)/[releaseId]/page.tsx"
+            ),
+          ]),
+
+          // Releases List
+          layout("./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/releases/(list)/layout.tsx", [
+            route(
+              ":workspaceSlug/projects/:projectId/releases",
+              "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/releases/(list)/page.tsx"
             ),
           ]),
 

@@ -106,4 +106,34 @@ export class IssueFiltersService extends APIService {
         throw error?.response?.data;
       });
   }
+
+  async fetchReleaseIssueFilters(
+    workspaceSlug: string,
+    projectId: string,
+    releaseId: string
+  ): Promise<IIssueFiltersResponse> {
+    return this.get(
+      `/api/workspaces/${workspaceSlug}/projects/${projectId}/releases/${releaseId}/user-properties/`
+    )
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async patchReleaseIssueFilters(
+    workspaceSlug: string,
+    projectId: string,
+    releaseId: string,
+    data: Partial<IIssueFiltersResponse>
+  ): Promise<any> {
+    return this.patch(
+      `/api/workspaces/${workspaceSlug}/projects/${projectId}/releases/${releaseId}/user-properties/`,
+      data
+    )
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
 }

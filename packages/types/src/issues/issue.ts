@@ -33,6 +33,7 @@ export enum EIssuesStoreType {
   PROJECT = "PROJECT",
   CYCLE = "CYCLE",
   MODULE = "MODULE",
+  RELEASE = "RELEASE",
   TEAM_VIEW = "TEAM_VIEW",
   PROJECT_VIEW = "PROJECT_VIEW",
   ARCHIVED = "ARCHIVED",
@@ -62,6 +63,7 @@ export type TBaseIssue = {
   parent_id: string | null;
   cycle_id: string | null;
   module_ids: string[] | null;
+  release_ids: string[] | null;
   type_id: string | null;
 
   created_at: string;

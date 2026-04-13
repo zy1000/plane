@@ -6,7 +6,7 @@
 
 import { CheckCircle2, CirclePlay, XCircle } from "lucide-react";
 // types
-import type { ICycle, IModule, IProjectView, IWorkspaceView } from "@plane/types";
+import type { ICycle, IModule, IProjectView, IRelease, IWorkspaceView } from "@plane/types";
 import type { TContextMenuItem } from "@plane/ui";
 // hooks
 import { useQuickActionsFactory } from "@/plane-web/components/common/quick-actions-factory";
@@ -35,10 +35,25 @@ interface UseCycleMenuItemsProps {
 interface UseModuleMenuItemsProps {
   moduleDetails: IModule | undefined;
   isEditingAllowed: boolean;
-  canArchiveRelease: boolean;
+  canArchiveModule: boolean;
   workspaceSlug: string;
   projectId: string;
   moduleId: string;
+  handleEdit: () => void;
+  handleArchive: () => void;
+  handleRestore: () => void;
+  handleDelete: () => void;
+  handleCopyLink: () => void;
+  handleOpenInNewTab: () => void;
+}
+
+interface UseReleaseMenuItemsProps {
+  releaseDetails: IRelease | undefined;
+  isEditingAllowed: boolean;
+  canArchiveRelease: boolean;
+  workspaceSlug: string;
+  projectId: string;
+  releaseId: string;
   handleEdit: () => void;
   handleArchive: () => void;
   handleRestore: () => void;
@@ -135,20 +150,51 @@ export const useCycleMenuItems = (props: UseCycleMenuItemsProps): MenuResult => 
 
 export const useModuleMenuItems = (props: UseModuleMenuItemsProps): MenuResult => {
   const factory = useQuickActionsFactory();
-  const { moduleDetails, isEditingAllowed, canArchiveRelease, ...handlers } = props;
+  const { moduleDetails, isEditingAllowed, canArchiveModule, ...handlers } = props;
 
   const isArchived = !!moduleDetails?.archived_at;
   const moduleState = moduleDetails?.status?.toLocaleLowerCase();
   const isInArchivableGroup = !!moduleState && ["completed", "cancelled"].includes(moduleState);
 
-  const archiveDisabled = !canArchiveRelease || !isInArchivableGroup;
-  const archiveDescription = !canArchiveRelease
-    ? "您没有归档/恢复发布的权限"
+  const archiveDisabled = !canArchiveModule || !isInArchivableGroup;
+  const archiveDescription = !canArchiveModule
+    ? "您没有归档模块的权限"
     : !isInArchivableGroup
       ? "Only completed or cancelled modules can be archived"
       : undefined;
 
   // Assemble final menu items - order defined here
+  const items = [
+    factory.createEditMenuItem(handlers.handleEdit, isEditingAllowed && !isArchived),
+    factory.createOpenInNewTabMenuItem(handlers.handleOpenInNewTab),
+    factory.createCopyLinkMenuItem(handlers.handleCopyLink),
+    factory.createArchiveMenuItem(handlers.handleArchive, {
+      shouldRender: isEditingAllowed && !isArchived,
+      disabled: archiveDisabled,
+      description: archiveDescription,
+    }),
+    factory.createRestoreMenuItem(handlers.handleRestore, isEditingAllowed && isArchived && canArchiveModule),
+    factory.createDeleteMenuItem(handlers.handleDelete, isEditingAllowed && !isArchived),
+  ].filter((item) => item.shouldRender !== false);
+
+  return { items, modals: null };
+};
+
+export const useReleaseMenuItems = (props: UseReleaseMenuItemsProps): MenuResult => {
+  const factory = useQuickActionsFactory();
+  const { releaseDetails, isEditingAllowed, canArchiveRelease, ...handlers } = props;
+
+  const isArchived = !!releaseDetails?.archived_at;
+  const releaseState = releaseDetails?.status?.toLocaleLowerCase();
+  const isInArchivableGroup = !!releaseState && ["completed", "cancelled"].includes(releaseState);
+
+  const archiveDisabled = !canArchiveRelease || !isInArchivableGroup;
+  const archiveDescription = !canArchiveRelease
+    ? "您没有归档发布的权限"
+    : !isInArchivableGroup
+      ? "Only completed or cancelled releases can be archived"
+      : undefined;
+
   const items = [
     factory.createEditMenuItem(handlers.handleEdit, isEditingAllowed && !isArchived),
     factory.createOpenInNewTabMenuItem(handlers.handleOpenInNewTab),

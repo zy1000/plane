@@ -6,26 +6,34 @@
 
 import { useCallback, useRef, useState } from "react";
 import { observer } from "mobx-react";
-import { useParams, usePathname } from "next/navigation";
-// icons
-import { ChartNoAxesColumn, PanelRight, SlidersHorizontal } from "lucide-react";
-// plane imports
+import { useParams } from "next/navigation";
+import { ChartNoAxesColumn, ChevronDown, PanelRight, SlidersHorizontal } from "lucide-react";
 import {
   EIssueFilterType,
   ISSUE_DISPLAY_FILTERS_BY_PAGE,
   EUserPermissions,
   EUserPermissionsLevel,
   WORK_ITEM_TRACKER_ELEMENTS,
+  PROJECT_ERROR_MESSAGES,
+  isProjectPermissionError,
 } from "@plane/constants";
-import { Button } from "@plane/propel/button";
+import { useTranslation } from "@plane/i18n";
+import { Button, getButtonStyling } from "@plane/propel/button";
+import { TOAST_TYPE, setToast } from "@plane/propel/toast";
+import { IconButton } from "@plane/propel/icon-button";
 import { ModuleIcon } from "@plane/propel/icons";
 import { Tooltip } from "@plane/propel/tooltip";
-import type { ICustomSearchSelectOption, IIssueDisplayFilterOptions, IIssueDisplayProperties } from "@plane/types";
+import type {
+  ICustomSearchSelectOption,
+  IIssueDisplayFilterOptions,
+  IIssueDisplayProperties,
+  ISearchIssueResponse,
+} from "@plane/types";
 import { EIssuesStoreType, EIssueLayoutTypes } from "@plane/types";
-import { Breadcrumbs, Header, BreadcrumbNavigationSearchDropdown } from "@plane/ui";
+import { Breadcrumbs, BreadcrumbNavigationSearchDropdown, CustomMenu, Header } from "@plane/ui";
 import { cn } from "@plane/utils";
-// components
 import { WorkItemsModal } from "@/components/analytics/work-items/modal";
+import { ExistingIssuesListModal } from "@/components/core/modals/existing-issues-list-modal";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { SwitcherLabel } from "@/components/common/switcher-label";
 import {
@@ -36,7 +44,6 @@ import {
 } from "@/components/issues/issue-layouts/filters";
 import { ModuleQuickActions } from "@/components/modules";
 import { WorkItemFiltersToggle } from "@/components/work-item-filters/filters-toggle";
-// hooks
 import { useCommandPalette } from "@/hooks/store/use-command-palette";
 import { useIssues } from "@/hooks/store/use-issues";
 import { useModule } from "@/hooks/store/use-module";
@@ -46,38 +53,28 @@ import { useAppRouter } from "@/hooks/use-app-router";
 import { useIssuesActions } from "@/hooks/use-issues-actions";
 import useLocalStorage from "@/hooks/use-local-storage";
 import { usePlatformOS } from "@/hooks/use-platform-os";
-// plane web imports
 import { CommonProjectBreadcrumbs } from "@/plane-web/components/breadcrumbs/common";
-import { IconButton } from "@plane/propel/icon-button";
 
 export const ModuleIssuesHeader = observer(function ModuleIssuesHeader() {
-  // refs
   const parentRef = useRef<HTMLDivElement>(null);
-  // states
   const [analyticsModal, setAnalyticsModal] = useState(false);
-  // router
+  const [openExistingIssueListModal, setOpenExistingIssueListModal] = useState(false);
   const router = useAppRouter();
   const { workspaceSlug, projectId, moduleId: routerModuleId } = useParams();
-  const pathname = usePathname();
-  const workspaceSlugValue = workspaceSlug?.toString();
-  const projectIdValue = projectId?.toString();
-  const moduleId = routerModuleId ? routerModuleId.toString() : undefined;
-  // hooks
+  const { t } = useTranslation();
   const { isMobile } = usePlatformOS();
-  // store hooks
+  const moduleId = routerModuleId ? routerModuleId.toString() : undefined;
   const {
     issuesFilter: { issueFilters },
-    issues: { getGroupIssueCount },
+    issues: { getGroupIssueCount, addIssuesToModule },
   } = useIssues(EIssuesStoreType.MODULE);
   const { updateFilters } = useIssuesActions(EIssuesStoreType.MODULE);
   const { projectModuleIds, getModuleById } = useModule();
   const { toggleCreateIssueModal } = useCommandPalette();
   const { allowPermissions } = useUserPermissions();
   const { currentProjectDetails, loader } = useProject();
-  // local storage
   const { setValue, storedValue } = useLocalStorage("module_sidebar_collapsed", "false");
-  // derived values
-  const isSidebarCollapsed = storedValue ? (storedValue === "true" ? true : false) : false;
+  const isSidebarCollapsed = storedValue ? storedValue === "true" : false;
   const activeLayout = issueFilters?.displayFilters?.layout;
   const moduleDetails = moduleId ? getModuleById(moduleId) : undefined;
   const canUserCreateIssue = allowPermissions(
@@ -85,29 +82,6 @@ export const ModuleIssuesHeader = observer(function ModuleIssuesHeader() {
     EUserPermissionsLevel.PROJECT
   );
   const workItemsCount = getGroupIssueCount(undefined, undefined, false);
-  const moduleOverviewPath =
-    workspaceSlugValue && projectIdValue && moduleId
-      ? `/${workspaceSlugValue}/projects/${projectIdValue}/modules/${moduleId}/overview`
-      : "";
-  const moduleReleaseScopePath =
-    workspaceSlugValue && projectIdValue && moduleId
-      ? `/${workspaceSlugValue}/projects/${projectIdValue}/modules/${moduleId}`
-      : "";
-  const isOverviewActive = /\/overview\/?$/.test(pathname ?? "");
-  const moduleTabs = [
-    {
-      key: "overview",
-      label: "概览",
-      isActive: !!isOverviewActive,
-      path: moduleOverviewPath,
-    },
-    {
-      key: "release-scope",
-      label: "发布范围",
-      isActive: !isOverviewActive,
-      path: moduleReleaseScopePath,
-    },
-  ];
 
   const toggleSidebar = () => {
     setValue(`${!isSidebarCollapsed}`);
@@ -116,7 +90,7 @@ export const ModuleIssuesHeader = observer(function ModuleIssuesHeader() {
   const handleLayoutChange = useCallback(
     (layout: EIssueLayoutTypes) => {
       if (!projectId) return;
-      updateFilters(projectId.toString(), EIssueFilterType.DISPLAY_FILTERS, { layout: layout });
+      updateFilters(projectId.toString(), EIssueFilterType.DISPLAY_FILTERS, { layout });
     },
     [projectId, updateFilters]
   );
@@ -149,6 +123,39 @@ export const ModuleIssuesHeader = observer(function ModuleIssuesHeader() {
     })
     .filter((option) => option !== undefined) as ICustomSearchSelectOption[];
 
+  const showPermissionError = () => {
+    setToast({
+      type: TOAST_TYPE.ERROR,
+      title: t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title),
+    });
+  };
+
+  const handleAddExistingIssuesToModule = async (data: ISearchIssueResponse[]) => {
+    if (!workspaceSlug || !projectId || !moduleId) return;
+
+    const issueIds = data.map((i) => i.id);
+
+    try {
+      await addIssuesToModule(workspaceSlug.toString(), projectId.toString(), moduleId, issueIds);
+
+      setToast({
+        type: TOAST_TYPE.SUCCESS,
+        title: "Success!",
+        message: "Work items added to the module successfully.",
+      });
+    } catch (error) {
+      if (isProjectPermissionError(error)) {
+        showPermissionError();
+      } else {
+        setToast({
+          type: TOAST_TYPE.ERROR,
+          title: "Error!",
+          message: "Selected work items could not be added to the module. Please try again.",
+        });
+      }
+    }
+  };
+
   return (
     <>
       <WorkItemsModal
@@ -156,6 +163,14 @@ export const ModuleIssuesHeader = observer(function ModuleIssuesHeader() {
         onClose={() => setAnalyticsModal(false)}
         moduleDetails={moduleDetails ?? undefined}
         projectDetails={currentProjectDetails}
+      />
+      <ExistingIssuesListModal
+        workspaceSlug={workspaceSlug?.toString()}
+        projectId={projectId?.toString()}
+        isOpen={openExistingIssueListModal}
+        handleClose={() => setOpenExistingIssueListModal(false)}
+        searchParams={{ module: moduleId != undefined ? moduleId.toString() : "" }}
+        handleOnSubmit={handleAddExistingIssuesToModule}
       />
       <Header>
         <Header.LeftItem>
@@ -165,57 +180,29 @@ export const ModuleIssuesHeader = observer(function ModuleIssuesHeader() {
               <Breadcrumbs.Item
                 component={
                   <BreadcrumbLink
-                    label="Releases"
+                    label={t("common.modules")}
                     href={`/${workspaceSlug}/projects/${projectId}/modules/`}
                     icon={<ModuleIcon className="h-4 w-4 text-tertiary" />}
+                  />
+                }
+              />
+              <Breadcrumbs.Item
+                component={
+                  <BreadcrumbNavigationSearchDropdown
+                    selectedItem={moduleId ?? ""}
+                    navigationItems={switcherOptions}
+                    onChange={(value: string) => {
+                      router.push(`/${workspaceSlug}/projects/${projectId}/modules/${value}`);
+                    }}
+                    title={moduleDetails?.name}
+                    icon={<ModuleIcon className="h-4 w-4 flex-shrink-0 text-tertiary" />}
                     isLast
                   />
                 }
                 isLast
               />
-              <Breadcrumbs.Item
-                component={
-                  <BreadcrumbNavigationSearchDropdown
-                    selectedItem={moduleId?.toString() ?? ""}
-                    navigationItems={switcherOptions}
-                    onChange={(value: string) => {
-                      router.push(`/${workspaceSlug}/projects/${projectId}/modules/${value}/overview/`);
-                    }}
-                    title={moduleDetails?.name}
-                    icon={<ModuleIcon className="size-3.5 flex-shrink-0 text-tertiary" />}
-                    isLast
-                  />
-                }
-              />
             </Breadcrumbs>
-            <span className="h-4 w-px flex-shrink-0 bg-[var(--border-subtle-1)]" />
-            {moduleId && (
-              <div className="flex h-full items-center gap-0.5">
-                {moduleTabs.map((tab) => (
-                  <div key={tab.key} className="relative flex h-full items-center transition-all duration-300">
-                    {tab.isActive && (
-                      <span className="pointer-events-none absolute bottom-[-4px] left-1/2 z-20 h-0.5 w-[80%] -translate-x-1/2 rounded-t-md bg-black transition-all duration-300" />
-                    )}
-                    <button
-                      type="button"
-                      className="cursor-pointer outline-none"
-                      onClick={() => tab.path && router.push(tab.path)}
-                    >
-                      <div
-                        className={cn(
-                          "relative flex items-center gap-2 rounded-md px-2 py-1.5 text-13 font-medium transition-colors z-10",
-                          tab.isActive ? "text-primary" : "text-primary hover:text-primary"
-                        )}
-                      >
-                        {tab.isActive && <div className="absolute inset-0 -z-10 rounded-md bg-[#f6f6f6]" />}
-                        <span>{tab.label}</span>
-                      </div>
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-            {!isOverviewActive && workItemsCount && workItemsCount > 0 ? (
+            {workItemsCount && workItemsCount > 0 ? (
               <Tooltip
                 isMobile={isMobile}
                 tooltipContent={`There are ${workItemsCount} ${
@@ -230,83 +217,90 @@ export const ModuleIssuesHeader = observer(function ModuleIssuesHeader() {
             ) : null}
           </div>
         </Header.LeftItem>
-        {!isOverviewActive && (
-          <Header.RightItem className="items-center">
-            <div className="hidden gap-2 md:flex">
-              <div className="hidden @4xl:flex">
-                <LayoutSelection
-                  layouts={[
-                    EIssueLayoutTypes.LIST,
-                    EIssueLayoutTypes.KANBAN,
-                    EIssueLayoutTypes.CALENDAR,
-                    EIssueLayoutTypes.SPREADSHEET,
-                    EIssueLayoutTypes.GANTT,
-                  ]}
-                  onChange={(layout) => handleLayoutChange(layout)}
-                  selectedLayout={activeLayout}
-                />
-              </div>
-              <div className="flex @4xl:hidden">
-                <MobileLayoutSelection
-                  layouts={[
-                    EIssueLayoutTypes.LIST,
-                    EIssueLayoutTypes.KANBAN,
-                    EIssueLayoutTypes.CALENDAR,
-                    EIssueLayoutTypes.SPREADSHEET,
-                    EIssueLayoutTypes.GANTT,
-                  ]}
-                  onChange={(layout) => handleLayoutChange(layout)}
-                  activeLayout={activeLayout}
-                />
-              </div>
-              {moduleId && <WorkItemFiltersToggle entityType={EIssuesStoreType.MODULE} entityId={moduleId} />}
-              <FiltersDropdown
-                title="Display"
-                placement="bottom-end"
-                miniIcon={<SlidersHorizontal className="size-3.5" />}
-              >
-                <DisplayFiltersSelection
-                  layoutDisplayFiltersOptions={
-                    activeLayout ? ISSUE_DISPLAY_FILTERS_BY_PAGE.issues.layoutOptions[activeLayout] : undefined
-                  }
-                  displayFilters={issueFilters?.displayFilters ?? {}}
-                  handleDisplayFiltersUpdate={handleDisplayFilters}
-                  displayProperties={issueFilters?.displayProperties ?? {}}
-                  handleDisplayPropertiesUpdate={handleDisplayProperties}
-                  ignoreGroupedFilters={["module"]}
-                  cycleViewDisabled={!currentProjectDetails?.cycle_view}
-                  moduleViewDisabled={!currentProjectDetails?.module_view}
-                />
-              </FiltersDropdown>
+        <Header.RightItem className="items-center">
+          <div className="hidden items-center gap-2 md:flex">
+            <div className="hidden @4xl:flex">
+              <LayoutSelection
+                layouts={[
+                  EIssueLayoutTypes.LIST,
+                  EIssueLayoutTypes.KANBAN,
+                  EIssueLayoutTypes.CALENDAR,
+                  EIssueLayoutTypes.SPREADSHEET,
+                  EIssueLayoutTypes.GANTT,
+                ]}
+                onChange={(layout) => handleLayoutChange(layout)}
+                selectedLayout={activeLayout}
+              />
             </div>
+            <div className="flex @4xl:hidden">
+              <MobileLayoutSelection
+                layouts={[
+                  EIssueLayoutTypes.LIST,
+                  EIssueLayoutTypes.KANBAN,
+                  EIssueLayoutTypes.CALENDAR,
+                  EIssueLayoutTypes.SPREADSHEET,
+                  EIssueLayoutTypes.GANTT,
+                ]}
+                onChange={(layout) => handleLayoutChange(layout)}
+                activeLayout={activeLayout}
+              />
+            </div>
+            {moduleId && <WorkItemFiltersToggle entityType={EIssuesStoreType.MODULE} entityId={moduleId} />}
+            <FiltersDropdown
+              title={t("common.display")}
+              placement="bottom-end"
+              miniIcon={<SlidersHorizontal className="size-3.5" />}
+            >
+              <DisplayFiltersSelection
+                layoutDisplayFiltersOptions={
+                  activeLayout ? ISSUE_DISPLAY_FILTERS_BY_PAGE.issues.layoutOptions[activeLayout] : undefined
+                }
+                displayFilters={issueFilters?.displayFilters ?? {}}
+                handleDisplayFiltersUpdate={handleDisplayFilters}
+                displayProperties={issueFilters?.displayProperties ?? {}}
+                handleDisplayPropertiesUpdate={handleDisplayProperties}
+                ignoreGroupedFilters={["module"]}
+                cycleViewDisabled={!currentProjectDetails?.cycle_view}
+                moduleViewDisabled={!currentProjectDetails?.module_view}
+              />
+            </FiltersDropdown>
 
-            {canUserCreateIssue ? (
+            {canUserCreateIssue && (
               <>
-                <Button
-                  className="hidden md:block"
-                  onClick={() => setAnalyticsModal(true)}
-                  variant="secondary"
-                  size="lg"
-                >
+                <Button onClick={() => setAnalyticsModal(true)} variant="secondary" size="lg">
                   <span className="hidden @4xl:flex">Analytics</span>
                   <span className="@4xl:hidden">
                     <ChartNoAxesColumn className="size-3.5" />
                   </span>
                 </Button>
-                <Button
-                  variant="primary"
-                  size="lg"
-                  className="hidden sm:flex"
-                  onClick={() => {
-                    toggleCreateIssueModal(true, EIssuesStoreType.MODULE);
-                  }}
-                  data-ph-element={WORK_ITEM_TRACKER_ELEMENTS.HEADER_ADD_BUTTON.MODULE}
+                <CustomMenu
+                  placement="bottom-end"
+                  customButton={
+                    <span
+                      className={cn(getButtonStyling("primary", "lg"), "cursor-pointer")}
+                      data-ph-element={WORK_ITEM_TRACKER_ELEMENTS.HEADER_ADD_BUTTON.MODULE}
+                    >
+                      {t("issue.add.label")}
+                      <ChevronDown className="size-4 shrink-0" strokeWidth={2} />
+                    </span>
+                  }
                 >
-                  Add work item
-                </Button>
+                  <CustomMenu.MenuItem
+                    onClick={() => {
+                      toggleCreateIssueModal(true, EIssuesStoreType.MODULE);
+                    }}
+                  >
+                    <span className="flex items-center justify-start gap-2">{t("create_work_item")}</span>
+                  </CustomMenu.MenuItem>
+                  <CustomMenu.MenuItem
+                    onClick={() => {
+                      setOpenExistingIssueListModal(true);
+                    }}
+                  >
+                    <span className="flex items-center justify-start gap-2">{t("issue.add.existing")}</span>
+                  </CustomMenu.MenuItem>
+                </CustomMenu>
               </>
-            ) : (
-              <></>
             )}
             <IconButton
               variant="tertiary"
@@ -323,11 +317,11 @@ export const ModuleIssuesHeader = observer(function ModuleIssuesHeader() {
                 moduleId={moduleId}
                 projectId={projectId.toString()}
                 workspaceSlug={workspaceSlug.toString()}
-                customClassName="flex-shrink-0 flex items-center justify-center bg-layer-1/70 rounded-sm size-[26px]"
+                customClassName="flex-shrink-0 flex items-center justify-center size-[26px] bg-layer-1/70 rounded-sm"
               />
             )}
-          </Header.RightItem>
-        )}
+          </div>
+        </Header.RightItem>
       </Header>
     </>
   );

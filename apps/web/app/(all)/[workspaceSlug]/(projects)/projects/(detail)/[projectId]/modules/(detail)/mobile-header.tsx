@@ -24,9 +24,9 @@ import { useModule } from "@/hooks/store/use-module";
 import { useProject } from "@/hooks/store/use-project";
 
 const SUPPORTED_LAYOUTS = [
-  { key: "list", i18n_title: "issue.layouts.list", icon: ListLayoutIcon },
-  { key: "kanban", i18n_title: "issue.layouts.kanban", icon: BoardLayoutIcon },
-  { key: "calendar", i18n_title: "issue.layouts.calendar", icon: CalendarLayoutIcon },
+  { key: "list", titleTranslationKey: "issue.layouts.list", icon: ListLayoutIcon },
+  { key: "kanban", titleTranslationKey: "issue.layouts.kanban", icon: BoardLayoutIcon },
+  { key: "calendar", titleTranslationKey: "issue.layouts.calendar", icon: CalendarLayoutIcon },
 ];
 
 export const ModuleIssuesMobileHeader = observer(function ModuleIssuesMobileHeader() {
@@ -48,65 +48,85 @@ export const ModuleIssuesMobileHeader = observer(function ModuleIssuesMobileHead
 
   const handleLayoutChange = useCallback(
     (layout: EIssueLayoutTypes) => {
-      if (!workspaceSlug || !projectId) return;
-      updateFilters(workspaceSlug, projectId, EIssueFilterType.DISPLAY_FILTERS, { layout: layout }, moduleId);
+      if (!workspaceSlug || !projectId || !moduleId) return;
+      updateFilters(
+        workspaceSlug.toString(),
+        projectId.toString(),
+        EIssueFilterType.DISPLAY_FILTERS,
+        { layout: layout },
+        moduleId.toString()
+      );
     },
     [workspaceSlug, projectId, moduleId, updateFilters]
   );
 
   const handleDisplayFilters = useCallback(
     (updatedDisplayFilter: Partial<IIssueDisplayFilterOptions>) => {
-      if (!workspaceSlug || !projectId) return;
-      updateFilters(workspaceSlug, projectId, EIssueFilterType.DISPLAY_FILTERS, updatedDisplayFilter, moduleId);
+      if (!workspaceSlug || !projectId || !moduleId) return;
+      updateFilters(
+        workspaceSlug.toString(),
+        projectId.toString(),
+        EIssueFilterType.DISPLAY_FILTERS,
+        updatedDisplayFilter,
+        moduleId.toString()
+      );
     },
     [workspaceSlug, projectId, moduleId, updateFilters]
   );
 
   const handleDisplayProperties = useCallback(
     (property: Partial<IIssueDisplayProperties>) => {
-      if (!workspaceSlug || !projectId) return;
-      updateFilters(workspaceSlug, projectId, EIssueFilterType.DISPLAY_PROPERTIES, property, moduleId);
+      if (!workspaceSlug || !projectId || !moduleId) return;
+      updateFilters(
+        workspaceSlug.toString(),
+        projectId.toString(),
+        EIssueFilterType.DISPLAY_PROPERTIES,
+        property,
+        moduleId.toString()
+      );
     },
     [workspaceSlug, projectId, moduleId, updateFilters]
   );
 
   return (
-    <div className="block md:hidden">
+    <>
       <WorkItemsModal
         isOpen={analyticsModal}
         onClose={() => setAnalyticsModal(false)}
         moduleDetails={moduleDetails ?? undefined}
         projectDetails={currentProjectDetails}
       />
-      <div className="flex justify-evenly border-b border-subtle bg-surface-1 py-2">
+      <div className="flex justify-evenly border-b border-subtle bg-surface-1 py-2 md:hidden">
         <CustomMenu
           maxHeight={"md"}
           className="flex flex-grow justify-center text-13 text-secondary"
           placement="bottom-start"
-          customButton={<span className="flex flex-grow justify-center text-13 text-secondary">Layout</span>}
+          customButton={
+            <span className="flex flex-grow justify-center text-13 text-secondary">{t("common.layout")}</span>
+          }
           customButtonClassName="flex flex-grow justify-center text-secondary text-13"
           closeOnSelect
         >
           {SUPPORTED_LAYOUTS.map((layout, index) => (
             <CustomMenu.MenuItem
-              key={layout.key}
+              key={ISSUE_LAYOUTS[index].key}
               onClick={() => {
                 handleLayoutChange(ISSUE_LAYOUTS[index].key);
               }}
               className="flex items-center gap-2"
             >
               <IssueLayoutIcon layout={ISSUE_LAYOUTS[index].key} className="h-3 w-3" />
-              <div className="text-tertiary">{t(layout.i18n_title)}</div>
+              <div className="text-tertiary">{t(layout.titleTranslationKey)}</div>
             </CustomMenu.MenuItem>
           ))}
         </CustomMenu>
         <div className="flex flex-grow items-center justify-center border-l border-subtle text-13 text-secondary">
           <FiltersDropdown
-            title="Display"
+            title={t("common.display")}
             placement="bottom-end"
             menuButton={
               <span className="flex items-center text-13 text-secondary">
-                Display
+                {t("common.display")}
                 <ChevronDownIcon className="ml-2 h-4 w-4 text-secondary" />
               </span>
             }
@@ -126,13 +146,13 @@ export const ModuleIssuesMobileHeader = observer(function ModuleIssuesMobileHead
           </FiltersDropdown>
         </div>
 
-        <button
+        <span
           onClick={() => setAnalyticsModal(true)}
           className="flex flex-grow justify-center border-l border-subtle text-13 text-secondary"
         >
-          Analytics
-        </button>
+          {t("common.analytics")}
+        </span>
       </div>
-    </div>
+    </>
   );
 });

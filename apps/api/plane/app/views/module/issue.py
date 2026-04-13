@@ -15,7 +15,6 @@ from django.views.decorators.gzip import gzip_page
 
 # Third party imports
 from rest_framework import status
-from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from plane.app.permissions import allow_permission, ROLE, allow_fine_permission, PermissionKey
@@ -36,7 +35,7 @@ from plane.utils.grouper import (
 )
 from plane.utils.issue_filters import issue_filters
 from plane.utils.order_queryset import order_issue_queryset
-from plane.utils.paginator import GroupedOffsetPaginator, SubGroupedOffsetPaginator, CustomPaginator
+from plane.utils.paginator import GroupedOffsetPaginator, SubGroupedOffsetPaginator
 from plane.utils.filters import ComplexFilterBackend
 from plane.utils.filters import IssueFilterSet
 from .. import BaseViewSet
@@ -207,7 +206,7 @@ class ModuleIssueViewSet(BaseViewSet):
                 on_results=lambda issues: issue_on_results(group_by=group_by, issues=issues, sub_group_by=sub_group_by),
             )
 
-    @allow_fine_permission(PermissionKey.RELEASES_ISSUE_MANAGE)
+    @allow_fine_permission(PermissionKey.MODULES_ISSUE_MANAGE)
     # create multiple issues inside a module
     def create_module_issues(self, request, slug, project_id, module_id):
         issues = request.data.get("issues", [])
@@ -246,7 +245,7 @@ class ModuleIssueViewSet(BaseViewSet):
         ]
         return Response({"message": "success"}, status=status.HTTP_201_CREATED)
 
-    @allow_fine_permission(PermissionKey.RELEASES_ISSUE_MANAGE)
+    @allow_fine_permission(PermissionKey.MODULES_ISSUE_MANAGE)
     # add multiple module inside an issue and remove multiple modules from an issue
     def create_issue_modules(self, request, slug, project_id, issue_id):
         modules = request.data.get("modules", [])
@@ -315,7 +314,7 @@ class ModuleIssueViewSet(BaseViewSet):
 
         return Response({"message": "success"}, status=status.HTTP_201_CREATED)
 
-    @allow_fine_permission(PermissionKey.RELEASES_ISSUE_MANAGE)
+    @allow_fine_permission(PermissionKey.MODULES_ISSUE_MANAGE)
     def destroy(self, request, slug, project_id, module_id, issue_id):
         module_issue = ModuleIssue.objects.filter(
             workspace__slug=slug,
@@ -335,16 +334,4 @@ class ModuleIssueViewSet(BaseViewSet):
             origin=base_host(request=request, is_app=True),
         )
         module_issue.delete()
-        CycleIssue.objects.filter(issue_id=issue_id,workspace__slug=slug,project_id=project_id).delete(soft=False)
         return Response(status=status.HTTP_204_NO_CONTENT)
-
-
-
-
-
-class ModuleIssueAPISet(BaseViewSet):
-    pagination_class = CustomPaginator
-
-    @action(detail=False, methods=['get'], url_path='issue-list')
-    def issue_list(self, request, slug):
-        module_id = request.query_params.get("module_id")

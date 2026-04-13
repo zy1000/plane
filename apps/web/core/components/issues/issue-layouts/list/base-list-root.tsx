@@ -31,6 +31,7 @@ import { ProjectIssueTypeService, type TIssueType, projectIssueTypesCache } from
 type ListStoreType =
   | EIssuesStoreType.PROJECT
   | EIssuesStoreType.MODULE
+  | EIssuesStoreType.RELEASE
   | EIssuesStoreType.CYCLE
   | EIssuesStoreType.PROJECT_VIEW
   | EIssuesStoreType.PROFILE

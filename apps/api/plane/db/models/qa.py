@@ -352,6 +352,7 @@ class TestPlan(BaseModel):
 
     cycle = models.ForeignKey("db.Cycle", null=True, blank=True, related_name="plans", on_delete=models.DO_NOTHING)
     modules = models.ManyToManyField("db.Module", blank=True, related_name="plans", db_table="plan_modules_relations")
+    releases = models.ManyToManyField("db.Release", blank=True, related_name="plans", db_table="plan_releases_relations")
     assignees = models.ManyToManyField(
         settings.AUTH_USER_MODEL,
         blank=True,

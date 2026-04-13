@@ -7,9 +7,6 @@
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 // PLane
-import { PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
-import { useTranslation } from "@plane/i18n";
-import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { GANTT_TIMELINE_TYPE } from "@plane/types";
 import type { IBlockUpdateData, IBlockUpdateDependencyData, IModule } from "@plane/types";
 // components
@@ -22,7 +19,6 @@ import { useModuleFilter } from "@/hooks/store/use-module-filter";
 import { useProject } from "@/hooks/store/use-project";
 
 export const ModulesListGanttChartView = observer(function ModulesListGanttChartView() {
-  const { t } = useTranslation();
   // router
   const { workspaceSlug, projectId } = useParams();
   // store
@@ -33,35 +29,13 @@ export const ModulesListGanttChartView = observer(function ModulesListGanttChart
   // derived values
   const filteredModuleIds = projectId ? getFilteredModuleIds(projectId.toString()) : undefined;
 
-  const showModuleUpdateError = (err: unknown) => {
-    if (isProjectPermissionError(err)) {
-      setToast({
-        type: TOAST_TYPE.ERROR,
-        title: t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title),
-        message: PROJECT_ERROR_MESSAGES.permissionError.i18n_message
-          ? t(PROJECT_ERROR_MESSAGES.permissionError.i18n_message)
-          : undefined,
-      });
-    } else {
-      setToast({
-        type: TOAST_TYPE.ERROR,
-        title: "Error!",
-        message: "Module could not be updated. Please try again.",
-      });
-    }
-  };
-
   const handleModuleUpdate = async (module: IModule, data: IBlockUpdateData) => {
     if (!workspaceSlug || !module) return;
 
     const payload: any = { ...data };
     if (data.sort_order) payload.sort_order = data.sort_order.newSortOrder;
 
-    try {
-      await updateModuleDetails(workspaceSlug.toString(), module.project_id, module.id, payload);
-    } catch (err) {
-      showModuleUpdateError(err);
-    }
+    await updateModuleDetails(workspaceSlug.toString(), module.project_id, module.id, payload);
   };
 
   const updateBlockDates = async (blockUpdates: IBlockUpdateDependencyData[]) => {
@@ -74,11 +48,7 @@ export const ModulesListGanttChartView = observer(function ModulesListGanttChart
     if (blockUpdate.start_date) payload.start_date = blockUpdate.start_date;
     if (blockUpdate.target_date) payload.target_date = blockUpdate.target_date;
 
-    try {
-      await updateModuleDetails(workspaceSlug.toString(), projectId.toString(), blockUpdate.id, payload);
-    } catch (err) {
-      showModuleUpdateError(err);
-    }
+    await updateModuleDetails(workspaceSlug.toString(), projectId.toString(), blockUpdate.id, payload);
   };
 
   const isAllowed = currentProjectDetails?.member_role === 20 || currentProjectDetails?.member_role === 15;
@@ -88,8 +58,8 @@ export const ModulesListGanttChartView = observer(function ModulesListGanttChart
   return (
     <TimeLineTypeContext.Provider value={GANTT_TIMELINE_TYPE.MODULE}>
       <GanttChartRoot
-        title="Releases"
-        loaderTitle="Releases"
+        title="Modules"
+        loaderTitle="Modules"
         blockIds={filteredModuleIds}
         sidebarToRender={(props) => <ModuleGanttSidebar {...props} />}
         blockUpdateHandler={(block, payload) => handleModuleUpdate(block, payload)}

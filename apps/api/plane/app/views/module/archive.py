@@ -541,7 +541,7 @@ class ModuleArchiveUnarchiveEndpoint(BaseAPIView):
 
             return Response(data, status=status.HTTP_200_OK)
 
-    @allow_fine_permission(PermissionKey.RELEASES_ARCHIVE)
+    @allow_fine_permission(PermissionKey.MODULES_ARCHIVE)
     def post(self, request, slug, project_id, module_id):
         module = Module.objects.get(pk=module_id, project_id=project_id, workspace__slug=slug)
         if module.status not in ["completed", "cancelled"]:
@@ -559,7 +559,7 @@ class ModuleArchiveUnarchiveEndpoint(BaseAPIView):
         ).delete()
         return Response({"archived_at": str(module.archived_at)}, status=status.HTTP_200_OK)
 
-    @allow_fine_permission(PermissionKey.RELEASES_ARCHIVE)
+    @allow_fine_permission(PermissionKey.MODULES_ARCHIVE)
     def delete(self, request, slug, project_id, module_id):
         module = Module.objects.get(pk=module_id, project_id=project_id, workspace__slug=slug)
         module.archived_at = None

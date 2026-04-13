@@ -99,6 +99,18 @@ class SubIssuesEndpoint(BaseAPIView):
                     ),
                     Value([], output_field=ArrayField(UUIDField())),
                 ),
+                release_ids=Coalesce(
+                    ArrayAgg(
+                        "issue_release__release_id",
+                        distinct=True,
+                        filter=Q(
+                            ~Q(issue_release__release_id__isnull=True)
+                            & Q(issue_release__release__archived_at__isnull=True)
+                            & Q(issue_release__deleted_at__isnull=True)
+                        ),
+                    ),
+                    Value([], output_field=ArrayField(UUIDField())),
+                ),
             )
             .annotate(state_group=F("state__group"))
             .order_by("-created_at")
@@ -132,6 +144,7 @@ class SubIssuesEndpoint(BaseAPIView):
             "parent_id",
             "cycle_id",
             "module_ids",
+            "release_ids",
             "label_ids",
             "assignee_ids",
             "sub_issues_count",

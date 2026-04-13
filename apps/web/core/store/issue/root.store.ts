@@ -40,6 +40,8 @@ import type { IIssueKanBanViewStore } from "./issue_kanban_view.store";
 import { IssueKanBanViewStore } from "./issue_kanban_view.store";
 import type { IModuleIssuesFilter, IModuleIssues } from "./module";
 import { ModuleIssuesFilter, ModuleIssues } from "./module";
+import type { IReleaseIssuesFilter, IReleaseIssues } from "./release";
+import { ReleaseIssuesFilter, ReleaseIssues } from "./release";
 import type { IProfileIssuesFilter, IProfileIssues } from "./profile";
 import { ProfileIssuesFilter, ProfileIssues } from "./profile";
 import type { IProjectIssuesFilter, IProjectIssues } from "./project";
@@ -58,6 +60,7 @@ export interface IIssueRootStore {
   projectId: string | undefined;
   cycleId: string | undefined;
   moduleId: string | undefined;
+  releaseId: string | undefined;
   viewId: string | undefined;
   globalViewId: string | undefined; // all issues view id
   userId: string | undefined; // user profile detail Id
@@ -100,6 +103,9 @@ export interface IIssueRootStore {
   moduleIssuesFilter: IModuleIssuesFilter;
   moduleIssues: IModuleIssues;
 
+  releaseIssuesFilter: IReleaseIssuesFilter;
+  releaseIssues: IReleaseIssues;
+
   teamViewIssuesFilter: ITeamViewIssuesFilter;
   teamViewIssues: ITeamViewIssues;
 
@@ -126,6 +132,7 @@ export class IssueRootStore implements IIssueRootStore {
   projectId: string | undefined = undefined;
   cycleId: string | undefined = undefined;
   moduleId: string | undefined = undefined;
+  releaseId: string | undefined = undefined;
   viewId: string | undefined = undefined;
   globalViewId: string | undefined = undefined;
   userId: string | undefined = undefined;
@@ -168,6 +175,9 @@ export class IssueRootStore implements IIssueRootStore {
   moduleIssuesFilter: IModuleIssuesFilter;
   moduleIssues: IModuleIssues;
 
+  releaseIssuesFilter: IReleaseIssuesFilter;
+  releaseIssues: IReleaseIssues;
+
   teamViewIssuesFilter: ITeamViewIssuesFilter;
   teamViewIssues: ITeamViewIssues;
 
@@ -193,6 +203,7 @@ export class IssueRootStore implements IIssueRootStore {
       projectId: observable.ref,
       cycleId: observable.ref,
       moduleId: observable.ref,
+      releaseId: observable.ref,
       viewId: observable.ref,
       userId: observable.ref,
       globalViewId: observable.ref,
@@ -217,6 +228,7 @@ export class IssueRootStore implements IIssueRootStore {
       if (this.projectId !== rootStore.router.projectId) this.projectId = rootStore.router.projectId;
       if (this.cycleId !== rootStore.router.cycleId) this.cycleId = rootStore.router.cycleId;
       if (this.moduleId !== rootStore.router.moduleId) this.moduleId = rootStore.router.moduleId;
+      if (this.releaseId !== rootStore.router.releaseId) this.releaseId = rootStore.router.releaseId;
       if (this.viewId !== rootStore.router.viewId) this.viewId = rootStore.router.viewId;
       if (this.globalViewId !== rootStore.router.globalViewId) this.globalViewId = rootStore.router.globalViewId;
       if (this.userId !== rootStore.router.userId) this.userId = rootStore.router.userId;
@@ -258,6 +270,9 @@ export class IssueRootStore implements IIssueRootStore {
 
     this.moduleIssuesFilter = new ModuleIssuesFilter(this);
     this.moduleIssues = new ModuleIssues(this, this.moduleIssuesFilter);
+
+    this.releaseIssuesFilter = new ReleaseIssuesFilter(this);
+    this.releaseIssues = new ReleaseIssues(this, this.releaseIssuesFilter);
 
     this.teamViewIssuesFilter = new TeamViewIssuesFilter(this);
     this.teamViewIssues = new TeamViewIssues(this, this.teamViewIssuesFilter);

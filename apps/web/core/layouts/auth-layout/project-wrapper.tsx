@@ -23,6 +23,7 @@ import {
   PROJECT_ESTIMATES,
   PROJECT_ALL_CYCLES,
   PROJECT_MODULES,
+  PROJECT_RELEASES,
   PROJECT_VIEWS,
   PROJECT_INTAKE_STATE,
 } from "@/constants/fetch-keys";
@@ -33,6 +34,7 @@ import { useLabel } from "@/hooks/store/use-label";
 import { useMember } from "@/hooks/store/use-member";
 import { useModule } from "@/hooks/store/use-module";
 import { useProject } from "@/hooks/store/use-project";
+import { useRelease } from "@/hooks/store/use-release";
 import { useProjectState } from "@/hooks/store/use-project-state";
 import { useProjectView } from "@/hooks/store/use-project-view";
 import { useUser, useUserPermissions } from "@/hooks/store/user";
@@ -55,6 +57,7 @@ export const ProjectAuthWrapper = observer(function ProjectAuthWrapper(props: IP
   const { joinProject } = useUserPermissions();
   const { fetchAllCycles } = useCycle();
   const { fetchModulesSlim, fetchModules } = useModule();
+  const { fetchReleases } = useRelease();
   const { initGantt } = useTimeLineChart(GANTT_TIMELINE_TYPE.MODULE);
   const { fetchViews } = useProjectView();
   const {
@@ -127,6 +130,14 @@ export const ProjectAuthWrapper = observer(function ProjectAuthWrapper(props: IP
     PROJECT_MODULES(projectId, currentProjectRole),
     async () => {
       await Promise.all([fetchModulesSlim(workspaceSlug, projectId), fetchModules(workspaceSlug, projectId)]);
+    },
+    { revalidateIfStale: false, revalidateOnFocus: false }
+  );
+  // fetching project releases
+  useSWR(
+    PROJECT_RELEASES(projectId, currentProjectRole),
+    async () => {
+      await fetchReleases(workspaceSlug, projectId);
     },
     { revalidateIfStale: false, revalidateOnFocus: false }
   );

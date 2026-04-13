@@ -82,7 +82,7 @@ export const POWER_K_SEARCH_RESULTS_GROUPS_MAP: Record<TPowerKSearchResultsKeys,
       </p>
     ),
     path: (module: IWorkspaceDefaultSearchResult) =>
-      `/${module?.workspace__slug}/projects/${module?.project_id}/modules/${module?.id}/overview`,
+      `/${module?.workspace__slug}/projects/${module?.project_id}/modules/${module?.id}`,
     title: "Modules",
   },
   page: {

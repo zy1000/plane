@@ -467,6 +467,7 @@ test_user = [
     {'id': '3010', 'name': '阮飞鹏', 'login_name': 'feipengruan', 'token': 'beb3d930-a7fb-468f-b46f-3f082dfb10f2'},
     {'id': '3013', 'name': '张智发', 'login_name': 'zhifazhang', 'token': 'a47ee987-e0a5-4fc1-918a-c625d50a12fc'},
     {'id': '3044', 'name': '朱鑫方', 'login_name': 'xinfangzhu', 'token': 'ec6b0043-94a1-46fd-972e-9b1c897f8ed2'}]
+test_login_name = [i['login_name'] for i in test_user]
 
 
 def find_test_user(name):
@@ -536,6 +537,14 @@ def sync_info(instance: ProjectPmsInfo) -> list[dict]:
             assignee = issue.assignees.first()
             if not assignee:
                 raise ValueError("工作项缺少受理人")
+
+            for assignee in issue.assignees.all():
+                if assignee.email.split('@')[0] in test_login_name:
+                    continue
+                else:
+                    break
+
+
             create_user = issue.created_by.email.split('@')[0]
             test_user = find_test_user(create_user)
             if not test_user:
@@ -572,4 +581,3 @@ def sync_info(instance: ProjectPmsInfo) -> list[dict]:
     if issue_ids_changed:
         instance.save(update_fields=["issue_ids"])
     return failed
-

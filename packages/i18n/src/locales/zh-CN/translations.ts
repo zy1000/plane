@@ -19,7 +19,8 @@ export default {
     requirements: "需求",
     defects: "缺陷",
     cycles: "迭代",
-    modules: "发布",
+    modules: "模块",
+    releases: "发布",
     intake: "收集",
     drafts: "草稿",
     favorites: "收藏",
@@ -378,7 +379,7 @@ export default {
   open_project: "打开项目",
   issues: "工作项",
   cycles: "迭代",
-  modules: "发布",
+  modules: "模块",
   pages: "笔记",
   intake: "收集",
   time_tracking: "时间跟踪",
@@ -659,8 +660,10 @@ export default {
     project: "项目",
     cycle: "迭代",
     cycles: "迭代",
-    module: "发布",
-    modules: "发布",
+    module: "模块",
+    modules: "模块",
+    release: "发布",
+    releases: "发布",
     labels: "标签",
     label: "标签",
     assignees: "负责人",
@@ -1000,9 +1003,9 @@ export default {
         failed: "无法从迭代中移除工作项。请重试。",
       },
       module: {
-        loading: "正在从发布中移除工作项",
-        success: "已成功从发布中移除工作项。",
-        failed: "无法从发布中移除工作项。请重试。",
+        loading: "正在从模块中移除工作项",
+        success: "已成功从模块中移除工作项。",
+        failed: "无法从模块中移除工作项。请重试。",
       },
       parent: {
         label: "移除父工作项",
@@ -1347,7 +1350,7 @@ export default {
     selected_projects: "已选择的项目",
     total_members: "总成员数",
     total_cycles: "总迭代数",
-    total_modules: "总发布数",
+    total_modules: "总模块数",
     pending_work_items: {
       title: "待处理工作项",
       empty_state: "同事的待处理工作项分析将显示在这里。",
@@ -1436,7 +1439,7 @@ export default {
     error: {
       permission: "您没有执行此操作的权限。",
       cycle_delete: "删除迭代失败",
-      module_delete: "删除发布失败",
+      module_delete: "删除模块失败",
       issue_delete: "删除工作项失败",
     },
     state: {
@@ -1463,7 +1466,7 @@ export default {
       general: {
         title: "没有活动项目",
         description:
-          "将每个项目视为目标导向工作的父级。项目是工作项、迭代和发布所在的地方，与您的同事一起帮助您实现目标。创建新项目或筛选已归档的项目。",
+          "将每个项目视为目标导向工作的父级。项目是工作项、迭代和模块所在的地方，与您的同事一起帮助您实现目标。创建新项目或筛选已归档的项目。",
         primary_button: {
           text: "开始您的第一个项目",
           comic: {
@@ -2197,12 +2200,68 @@ export default {
     },
   },
   project_module: {
-    add_module: "添加发布",
-    update_module: "更新发布",
-    create_module: "创建发布",
-    archive_module: "归档发布",
-    restore_module: "恢复发布",
-    delete_module: "删除发布",
+    add_module: "添加模块",
+    update_module: "更新模块",
+    create_module: "创建模块",
+    archive_module: "归档模块",
+    restore_module: "恢复模块",
+    delete_module: "删除模块",
+    empty_state: {
+      general: {
+        title: "将项目里程碑映射到模块，轻松跟踪汇总工作。",
+        description:
+          "属于逻辑层次结构父级的一组工作项形成一个模块。将其视为按项目里程碑跟踪工作的方式。它们有自己的周期和截止日期以及分析功能，帮助您了解距离里程碑的远近。",
+        primary_button: {
+          text: "构建您的第一个模块",
+          comic: {
+            title: "模块帮助按层次结构对工作进行分组。",
+            description: "购物车模块、底盘模块和仓库模块都是这种分组的好例子。",
+          },
+        },
+      },
+      no_issues: {
+        title: "模块中没有工作项",
+        description: "创建或添加您想作为此模块一部分完成的工作项",
+        primary_button: {
+          text: "创建新工作项",
+        },
+        secondary_button: {
+          text: "添加现有工作项",
+        },
+      },
+      archived: {
+        title: "尚无已归档的模块",
+        description: "为了整理您的项目，归档已完成或已取消的模块。归档后可以在这里找到它们。",
+      },
+      sidebar: {
+        in_active: "此模块尚未激活。",
+        invalid_date: "日期无效。请输入有效日期。",
+      },
+    },
+    quick_actions: {
+      archive_module: "归档模块",
+      archive_module_description: "只有已完成或已取消的\n模块可以归档。",
+      delete_module: "删除模块",
+    },
+    toast: {
+      copy: {
+        success: "模块链接已复制到剪贴板",
+      },
+      delete: {
+        success: "模块删除成功",
+        error: "删除模块失败",
+      },
+    },
+  },
+  project_release: {
+    breadcrumb_releases_link: "Releases",
+    tab_release_scope: "发布范围",
+    add_release: "添加发布",
+    update_release: "更新发布",
+    create_release: "创建发布",
+    archive_release: "归档发布",
+    restore_release: "恢复发布",
+    delete_release: "删除发布",
     empty_state: {
       general: {
         title: "将项目里程碑映射到发布，轻松跟踪汇总工作。",
@@ -2211,8 +2270,8 @@ export default {
         primary_button: {
           text: "构建您的第一个发布",
           comic: {
-            title: "发布帮助按层次结构对工作进行分组。", 
-            description: "购物车模块、底盘模块和仓库模块都是这种分组的好例子。",
+            title: "发布帮助按层次结构对工作进行分组。",
+            description: "按版本、阶段或交付物对相关工作分组，是发布规划的典型用法。",
           },
         },
       },
@@ -2228,7 +2287,7 @@ export default {
       },
       archived: {
         title: "尚无已归档的发布",
-        description: "为了整理您的项目，归档已完成或已取消的模块。归档后可以在这里找到它们。",
+        description: "为了整理您的项目，归档已完成或已取消的发布。归档后可以在这里找到它们。",
       },
       sidebar: {
         in_active: "此发布尚未激活。",
@@ -2236,9 +2295,9 @@ export default {
       },
     },
     quick_actions: {
-      archive_module: "归档发布",
-      archive_module_description: "只有已完成或已取消的\n发布可以归档。",
-      delete_module: "删除发布",
+      archive_release: "归档发布",
+      archive_release_description: "只有已完成或已取消的\n发布可以归档。",
+      delete_release: "删除发布",
     },
     toast: {
       copy: {
@@ -2532,7 +2591,7 @@ export default {
     },
     member: {
       title: "成员",
-      description: "可以在项目、迭代和发布内读取、写入、编辑和删除实体",
+      description: "可以在项目、迭代和模块内读取、写入、编辑和删除实体",
     },
     admin: {
       title: "管理员",
@@ -2639,8 +2698,12 @@ export default {
     no_cycle: "无迭代",
   },
   module: {
+    label: "{count, plural, one {模块} other {模块}}",
+    no_module: "无模块",
+  },
+  release: {
     label: "{count, plural, one {发布} other {发布}}",
-    no_module: "无发布",
+    no_release: "无发布",
   },
   description_versions: {
     last_edited_by: "最后编辑者",

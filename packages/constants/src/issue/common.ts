@@ -108,6 +108,7 @@ export type TCreateModalStoreTypes =
   | EIssuesStoreType.PROFILE
   | EIssuesStoreType.CYCLE
   | EIssuesStoreType.MODULE
+  | EIssuesStoreType.RELEASE
   | EIssuesStoreType.EPIC
   | EIssuesStoreType.TEAM_PROJECT_WORK_ITEMS;
 

@@ -222,3 +222,25 @@ class DraftIssueCycle(WorkspaceBaseModel):
 
     def __str__(self):
         return f"{self.cycle}"
+
+
+class DraftIssueRelease(WorkspaceBaseModel):
+    release = models.ForeignKey("db.Release", on_delete=models.CASCADE, related_name="draft_issue_release")
+    draft_issue = models.ForeignKey("db.DraftIssue", on_delete=models.CASCADE, related_name="draft_issue_release")
+
+    class Meta:
+        unique_together = ["draft_issue", "release", "deleted_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["draft_issue", "release"],
+                condition=models.Q(deleted_at__isnull=True),
+                name="release_draft_issue_unique_issue_release_when_deleted_at_null",
+            )
+        ]
+        verbose_name = "Draft Issue Release"
+        verbose_name_plural = "Draft Issue Releases"
+        db_table = "draft_issue_releases"
+        ordering = ("-created_at",)
+
+    def __str__(self):
+        return f"{self.release.name} {self.draft_issue.name}"

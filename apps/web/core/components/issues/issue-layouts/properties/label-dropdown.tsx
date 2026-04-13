@@ -20,7 +20,7 @@ import type { IIssueLabel } from "@plane/types";
 import { EUserProjectRoles } from "@plane/types";
 // components
 import { ComboDropDown } from "@plane/ui";
-import { sortBySelectedFirst } from "@plane/utils";
+import { cn, sortBySelectedFirst } from "@plane/utils";
 // hooks
 import { useLabel } from "@/hooks/store/use-label";
 import { useUserPermissions } from "@/hooks/store/user";
@@ -205,13 +205,16 @@ export function LabelDropdown(props: ILabelDropdownProps) {
       <button
         ref={setReferenceElement}
         type="button"
-        className={`clickable flex h-full w-full items-center justify-center gap-1 text-caption-sm-regular ${fullWidth && "hover:bg-layer-1"} ${
+        className={cn(
+          "clickable flex h-full w-full items-center gap-1 text-caption-sm-regular",
+          fullWidth && "hover:bg-layer-1",
           disabled
             ? "cursor-not-allowed text-secondary"
             : value.length <= maxRender
               ? "cursor-pointer"
-              : "cursor-pointer hover:bg-layer-1"
-        } ${buttonClassName}`}
+              : "cursor-pointer hover:bg-layer-1",
+          buttonClassName
+        )}
         onClick={handleOnClick}
         disabled={disabled}
       >
@@ -238,11 +241,18 @@ export function LabelDropdown(props: ILabelDropdownProps) {
   };
 
   return (
-    <div className={`${fullHeight ? "h-full" : "h-5"}`} onClick={preventPropagation}>
+    <div
+      className={cn(
+        "text-left",
+        fullHeight ? "h-full" : !className && "h-5",
+        className
+      )}
+      onClick={preventPropagation}
+    >
       <ComboDropDown
         as="div"
         ref={dropdownRef}
-        className={`h-full w-auto max-w-full flex-shrink-0 text-left ${className}`}
+        className="h-full w-auto max-w-full min-h-0 flex-shrink-0"
         value={value}
         onChange={onChange}
         disabled={disabled}

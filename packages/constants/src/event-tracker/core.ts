@@ -158,6 +158,7 @@ export const WORK_ITEM_TRACKER_ELEMENTS = {
     PROJECT_VIEW: "project_view_header_add_work_item_button",
     CYCLE: "cycle_header_add_work_item_button",
     MODULE: "module_header_add_work_item_button",
+    RELEASE: "release_header_add_work_item_button",
   },
   COMMAND_PALETTE_ADD_BUTTON: "command_palette_add_work_item_button",
   EMPTY_STATE_ADD_BUTTON: {

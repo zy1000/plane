@@ -8,8 +8,7 @@ import { useState } from "react";
 import { observer } from "mobx-react";
 import { MoreHorizontal } from "lucide-react";
 // plane imports
-import { EUserPermissions, EUserPermissionsLevel, PROJECT_RELEASES_ARCHIVE_PERMISSION_KEY } from "@plane/constants";
-import { useTranslation } from "@plane/i18n";
+import { EUserPermissions, EUserPermissionsLevel, PROJECT_MODULES_ARCHIVE_PERMISSION_KEY } from "@plane/constants";
 import { IconButton } from "@plane/propel/icon-button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TContextMenuItem } from "@plane/ui";
@@ -44,7 +43,6 @@ export const ModuleQuickActions = observer(function ModuleQuickActions(props: Pr
 
   const { getModuleById, restoreModule } = useModule();
 
-  const { t } = useTranslation();
   // derived values
   const moduleDetails = getModuleById(moduleId);
   // auth
@@ -54,13 +52,13 @@ export const ModuleQuickActions = observer(function ModuleQuickActions(props: Pr
     workspaceSlug,
     projectId
   );
-  const canArchiveRelease = allowProjectPermissionKeys(
-    [PROJECT_RELEASES_ARCHIVE_PERMISSION_KEY],
+  const canArchiveModule = allowProjectPermissionKeys(
+    [PROJECT_MODULES_ARCHIVE_PERMISSION_KEY],
     workspaceSlug,
     projectId
   );
 
-  const moduleLink = `${workspaceSlug}/projects/${projectId}/modules/${moduleId}/overview`;
+  const moduleLink = `${workspaceSlug}/projects/${projectId}/modules/${moduleId}`;
   const handleCopyText = () =>
     copyUrlToClipboard(moduleLink).then(() => {
       setToast({
@@ -96,7 +94,7 @@ export const ModuleQuickActions = observer(function ModuleQuickActions(props: Pr
     projectId,
     moduleId,
     isEditingAllowed,
-    canArchiveRelease,
+    canArchiveModule,
     handleEdit: () => setEditModal(true),
     handleArchive: () => setArchiveModuleModal(true),
     handleRestore: handleRestoreModule,

@@ -7,6 +7,7 @@
 // plane imports
 import { EUserPermissions, EProjectFeatureKey } from "@plane/constants";
 import { CycleIcon, IntakeIcon, ModuleIcon, PageIcon, ViewsIcon, WorkItemsIcon } from "@plane/propel/icons";
+import { Rocket } from "lucide-react";
 // components
 import type { TNavigationItem } from "@/components/workspace/sidebar/project-navigation";
 
@@ -44,12 +45,22 @@ export const getProjectFeatureNavigation = (
   {
     i18n_key: "sidebar.modules",
     key: EProjectFeatureKey.MODULES,
-    name: "Releases",
+    name: "Modules",
     href: `/${workspaceSlug}/projects/${projectId}/modules`,
     icon: ModuleIcon,
     access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
     shouldRender: project.module_view,
     sortOrder: 3,
+  },
+  {
+    i18n_key: "sidebar.releases",
+    key: "releases" as EProjectFeatureKey,
+    name: "Releases",
+    href: `/${workspaceSlug}/projects/${projectId}/releases`,
+    icon: Rocket,
+    access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
+    shouldRender: project.module_view,
+    sortOrder: 3.5,
   },
   {
     i18n_key: "sidebar.views",

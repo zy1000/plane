@@ -59,6 +59,20 @@ export class PlanService extends APIService {
       });
   }
 
+  async associateReleases(
+    workspaceSlug: string,
+    projectId: string,
+    data: { plan_id: string; release_ids: string[] }
+  ): Promise<any> {
+    return this.post(`/api/workspaces/${workspaceSlug}/test/plan/associate-releases/`, data, {
+      params: { project_id: projectId },
+    })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
   async getPlanModules(workspaceSlug: string, projectId: string, queries?: any): Promise<any[]> {
     const params = { project_id: projectId, ...(queries || {}) };
     return this.get(`/api/workspaces/${workspaceSlug}/test/plan/module/`, { params })

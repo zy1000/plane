@@ -187,6 +187,9 @@ export const PROJECT_ALL_CYCLES = (projectId: string, projectRole: EUserPermissi
 export const PROJECT_MODULES = (projectId: string, projectRole: EUserPermissions | undefined) =>
   `PROJECT_MODULES_${projectId.toString().toUpperCase()}_${projectRole}`;
 
+export const PROJECT_RELEASES = (projectId: string, projectRole: EUserPermissions | undefined) =>
+  `PROJECT_RELEASES_${projectId.toString().toUpperCase()}_${projectRole}`;
+
 export const PROJECT_VIEWS = (projectId: string, projectRole: EUserPermissions | undefined) =>
   `PROJECT_VIEWS_${projectId.toString().toUpperCase()}_${projectRole}`;
 

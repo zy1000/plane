@@ -90,6 +90,7 @@ class Cycle(ProjectBaseModel):
                             null=True)
 
     module = models.ForeignKey("Module", on_delete=models.DO_NOTHING, related_name="cycles", null=True, blank=True)
+    release = models.ForeignKey("Release", on_delete=models.DO_NOTHING, related_name="release_cycles", null=True, blank=True)
     files = models.ManyToManyField("db.File", blank=True, related_name="cycles")
 
     class Meta:

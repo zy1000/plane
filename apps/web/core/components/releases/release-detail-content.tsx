@@ -12,22 +12,22 @@ import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Dialog, Transition } from "@headlessui/react";
 import { Pagination, Popconfirm, Tag, Tooltip } from "antd";
 import { ReadonlyDate } from "@/components/readonly/date";
-import { ModuleService } from "@/services/module.service";
+import { ReleaseService } from "@/services/release.service";
 import { WorkspaceService } from "@/services/workspace.service";
 import { renderFormattedPayloadDate, findTotalDaysInRange } from "@plane/utils";
 import { EFileAssetType } from "@plane/types";
-import { useModule } from "@/hooks/store/use-module";
+import { useRelease } from "@/hooks/store/use-release";
 import { useWorkspace } from "@/hooks/store/use-workspace";
 import { useEditorAsset } from "@/hooks/store/use-editor-asset";
 import { RichTextEditor } from "@/components/editor/rich-text";
 
 type Props = {
-  moduleId: string;
+  releaseId: string;
   isArchived?: boolean;
   isOpen?: boolean;
 };
 
-type TModuleFile = {
+type TReleaseFile = {
   id: string;
   name: string;
   size: number;
@@ -116,12 +116,12 @@ const PlanPassRate: React.FC<{ passRate: Record<string, number> | null | undefin
   );
 };
 
-export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen }) => {
+export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOpen }) => {
   const { t } = useTranslation();
   const { workspaceSlug, projectId } = useParams();
   const router = useRouter();
-  const { getModuleById, fetchModuleDetails } = useModule();
-  const moduleDetails = getModuleById(moduleId);
+  const { getReleaseById, fetchReleaseDetails } = useRelease();
+  const releaseDetails = getReleaseById(releaseId);
   const { getWorkspaceBySlug } = useWorkspace();
   const workspaceId = workspaceSlug ? getWorkspaceBySlug(workspaceSlug.toString())?.id : undefined;
   const { uploadEditorAsset, duplicateEditorAsset } = useEditorAsset();
@@ -129,12 +129,12 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
 
   const todayStr = renderFormattedPayloadDate(new Date());
   const rawDays =
-    moduleDetails?.target_date && todayStr
-      ? findTotalDaysInRange(todayStr, moduleDetails.target_date, false)
+    releaseDetails?.target_date && todayStr
+      ? findTotalDaysInRange(todayStr, releaseDetails.target_date, false)
       : undefined;
   const daysLeft = typeof rawDays === "number" ? Math.max(0, rawDays) : undefined;
 
-  const status = moduleDetails?.status;
+  const status = releaseDetails?.status;
   const isBacklog = status === "backlog";
   const isProgress = status === "planned" || status === "in-progress" || status === "paused";
   const isCompleted = status === "completed";
@@ -148,7 +148,7 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
   const line1BorderStyle = isBacklog ? "border-dashed" : "border-solid";
   const line2BorderStyle = isCompleted || isCancelled ? "border-solid" : "border-dashed";
 
-  const moduleService = useMemo(() => new ModuleService(), []);
+  const releaseService = useMemo(() => new ReleaseService(), []);
   const [cycles, setCycles] = useState<any[]>([]);
   const [cyclesLoading, setCyclesLoading] = useState(false);
   const [cyclesError, setCyclesError] = useState<string | null>(null);
@@ -175,18 +175,18 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
   const [noteHtml, setNoteHtml] = useState<string>("");
   const [noteSubmitting, setNoteSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [moduleFiles, setModuleFiles] = useState<TModuleFile[]>([]);
-  const [moduleFilesLoading, setModuleFilesLoading] = useState(false);
-  const [moduleFilesError, setModuleFilesError] = useState<string | null>(null);
-  const [moduleFilesPage, setModuleFilesPage] = useState(1);
-  const [moduleFilesTotal, setModuleFilesTotal] = useState(0);
-  const [moduleFilesUploading, setModuleFilesUploading] = useState(false);
-  const [moduleFilesDeletingId, setModuleFilesDeletingId] = useState<string | null>(null);
-  const [moduleFilesDownloadingId, setModuleFilesDownloadingId] = useState<string | null>(null);
+  const [releaseFiles, setReleaseFiles] = useState<TReleaseFile[]>([]);
+  const [releaseFilesLoading, setReleaseFilesLoading] = useState(false);
+  const [releaseFilesError, setReleaseFilesError] = useState<string | null>(null);
+  const [releaseFilesPage, setReleaseFilesPage] = useState(1);
+  const [releaseFilesTotal, setReleaseFilesTotal] = useState(0);
+  const [releaseFilesUploading, setReleaseFilesUploading] = useState(false);
+  const [releaseFilesDeletingId, setReleaseFilesDeletingId] = useState<string | null>(null);
+  const [releaseFilesDownloadingId, setReleaseFilesDownloadingId] = useState<string | null>(null);
 
-  const moduleFilesPageSize = 5;
+  const releaseFilesPageSize = 5;
 
-  const showModuleFileApiError = (error: unknown, genericTitle: string, genericMessage: string) => {
+  const showReleaseFileApiError = (error: unknown, genericTitle: string, genericMessage: string) => {
     if (isProjectPermissionError(error)) {
       setToast({
         type: TOAST_TYPE.ERROR,
@@ -200,12 +200,12 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
     }
   };
 
-  const fetchModuleStatistics = async () => {
-    if (!workspaceSlug || !projectId || !moduleId) return;
+  const fetchReleaseStatistics = async () => {
+    if (!workspaceSlug || !projectId || !releaseId) return;
     try {
       setStatsLoading(true);
       setStatsError(null);
-      const data = await moduleService.getModuleStatistics(workspaceSlug.toString(), projectId.toString(), moduleId);
+      const data = await releaseService.getReleaseStatistics(workspaceSlug.toString(), projectId.toString(), releaseId);
       setStats(data ?? null);
     } catch (e: any) {
       setStatsError(e?.detail || e?.error || "获取统计信息失败");
@@ -215,11 +215,11 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
   };
 
   const fetchPlans = async () => {
-    if (!workspaceSlug || !projectId || !moduleId) return;
+    if (!workspaceSlug || !projectId || !releaseId) return;
     try {
       setPlansLoading(true);
       setPlansError(null);
-      const data = await moduleService.getModulePlans(workspaceSlug.toString(), projectId.toString(), moduleId);
+      const data = await releaseService.getReleasePlans(workspaceSlug.toString(), projectId.toString(), releaseId);
       setPlans(Array.isArray(data) ? data : []);
     } catch (e: any) {
       setPlansError(e?.detail || e?.error || "获取测试计划失败");
@@ -229,11 +229,11 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
   };
 
   const fetchCycles = async () => {
-    if (!workspaceSlug || !projectId || !moduleId) return;
+    if (!workspaceSlug || !projectId || !releaseId) return;
     try {
       setCyclesLoading(true);
       setCyclesError(null);
-      const data = await moduleService.getCycleList(workspaceSlug.toString(), projectId.toString(), moduleId);
+      const data = await releaseService.getCycleList(workspaceSlug.toString(), projectId.toString(), releaseId);
 
       setCycles(Array.isArray(data) ? data : []);
     } catch (e: any) {
@@ -243,75 +243,75 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
     }
   };
 
-  const fetchModuleFiles = async (page = moduleFilesPage) => {
-    if (!workspaceSlug || !projectId || !moduleId) return;
+  const fetchReleaseFiles = async (page = releaseFilesPage) => {
+    if (!workspaceSlug || !projectId || !releaseId) return;
     try {
-      setModuleFilesLoading(true);
-      setModuleFilesError(null);
-      const res = await moduleService.getModuleFileList(workspaceSlug.toString(), projectId.toString(), moduleId, {
+      setReleaseFilesLoading(true);
+      setReleaseFilesError(null);
+      const res = await releaseService.getReleaseFileList(workspaceSlug.toString(), projectId.toString(), releaseId, {
         page,
-        page_size: moduleFilesPageSize,
+        page_size: releaseFilesPageSize,
       });
       const list = Array.isArray(res?.data) ? res.data : [];
       const count = Number(res?.count ?? 0);
-      const totalPages = Math.max(Math.ceil(count / moduleFilesPageSize), 1);
+      const totalPages = Math.max(Math.ceil(count / releaseFilesPageSize), 1);
       const safePage = Math.min(Math.max(page, 1), totalPages);
       if (safePage !== page) {
-        await fetchModuleFiles(safePage);
+        await fetchReleaseFiles(safePage);
         return;
       }
-      setModuleFiles(list);
-      setModuleFilesTotal(count);
-      setModuleFilesPage(page);
+      setReleaseFiles(list);
+      setReleaseFilesTotal(count);
+      setReleaseFilesPage(page);
     } catch (e: unknown) {
       if (isProjectPermissionError(e)) {
-        setModuleFilesError(t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title));
+        setReleaseFilesError(t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title));
       } else {
         const err = e as { detail?: string; error?: string };
-        setModuleFilesError(err?.detail || err?.error || "获取文件列表失败");
+        setReleaseFilesError(err?.detail || err?.error || "获取文件列表失败");
       }
     } finally {
-      setModuleFilesLoading(false);
+      setReleaseFilesLoading(false);
     }
   };
 
-  const handleUploadModuleFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    if (!workspaceSlug || !projectId || !moduleId) return;
+  const handleUploadReleaseFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (!workspaceSlug || !projectId || !releaseId) return;
     const file = event.target.files?.[0];
     if (!file) return;
     try {
-      setModuleFilesUploading(true);
+      setReleaseFilesUploading(true);
       const formData = new FormData();
       formData.append("file", file);
-      formData.append("module_id", moduleId);
-      await moduleService.uploadModuleFile(workspaceSlug.toString(), projectId.toString(), formData);
+      formData.append("release_id", releaseId);
+      await releaseService.uploadReleaseFile(workspaceSlug.toString(), projectId.toString(), formData);
       setToast({ type: TOAST_TYPE.SUCCESS, title: "上传成功", message: "文件已上传" });
-      await fetchModuleFiles(1);
+      await fetchReleaseFiles(1);
     } catch (e: unknown) {
-      showModuleFileApiError(e, "上传失败", "请稍后重试");
+      showReleaseFileApiError(e, "上传失败", "请稍后重试");
     } finally {
       event.target.value = "";
-      setModuleFilesUploading(false);
+      setReleaseFilesUploading(false);
     }
   };
 
-  const handleDeleteModuleFile = async (fileId: string) => {
+  const handleDeleteReleaseFile = async (fileId: string) => {
     try {
-      setModuleFilesDeletingId(fileId);
-      await moduleService.deleteModuleFile(workspaceSlug.toString(), projectId.toString(), fileId);
+      setReleaseFilesDeletingId(fileId);
+      await releaseService.deleteReleaseFile(workspaceSlug.toString(), projectId.toString(), fileId);
       setToast({ type: TOAST_TYPE.SUCCESS, title: "删除成功", message: "文件已删除" });
-      await fetchModuleFiles(moduleFilesPage);
+      await fetchReleaseFiles(releaseFilesPage);
     } catch (e: unknown) {
-      showModuleFileApiError(e, "删除失败", "请稍后重试");
+      showReleaseFileApiError(e, "删除失败", "请稍后重试");
     } finally {
-      setModuleFilesDeletingId(null);
+      setReleaseFilesDeletingId(null);
     }
   };
 
-  const handleDownloadModuleFile = async (fileId: string, fileName: string) => {
+  const handleDownloadReleaseFile = async (fileId: string, fileName: string) => {
     try {
-      setModuleFilesDownloadingId(fileId);
-      const blob = await moduleService.downloadModuleFile(
+      setReleaseFilesDownloadingId(fileId);
+      const blob = await releaseService.downloadReleaseFile(
         workspaceSlug.toString(),
         projectId.toString(),
         fileId
@@ -325,9 +325,9 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
       document.body.removeChild(link);
       URL.revokeObjectURL(objectUrl);
     } catch (e: unknown) {
-      showModuleFileApiError(e, "下载失败", "请稍后重试");
+      showReleaseFileApiError(e, "下载失败", "请稍后重试");
     } finally {
-      setModuleFilesDownloadingId(null);
+      setReleaseFilesDownloadingId(null);
     }
   };
 
@@ -342,7 +342,7 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
     try {
       setSelectLoading(true);
       setSelectError(null);
-      const res = await moduleService.selectCycleList(workspaceSlug.toString(), projectId.toString(), {
+      const res = await releaseService.selectCycleList(workspaceSlug.toString(), projectId.toString(), {
         page,
         page_size: pageSize,
       });
@@ -360,18 +360,18 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
   };
 
   useEffect(() => {
-    if (!isOpen || !workspaceSlug || !projectId || !moduleId) return;
+    if (!isOpen || !workspaceSlug || !projectId || !releaseId) return;
 
     setAssociateOpen(false);
     setSelectedCycleIds([]);
-    setModuleFilesPage(1);
+    setReleaseFilesPage(1);
 
-    fetchModuleDetails(workspaceSlug.toString(), projectId.toString(), moduleId);
+    fetchReleaseDetails(workspaceSlug.toString(), projectId.toString(), releaseId);
     fetchCycles();
-    fetchModuleStatistics();
-    fetchModuleFiles(1);
+    fetchReleaseStatistics();
+    fetchReleaseFiles(1);
     fetchPlans();
-  }, [fetchModuleDetails, isOpen, moduleId, projectId, workspaceSlug]);
+  }, [fetchReleaseDetails, isOpen, releaseId, projectId, workspaceSlug]);
 
   const handleNoteEditorUploadFile = async (blockId: string | undefined, file: File) => {
     if (!workspaceSlug || !projectId) throw new Error("Missing context");
@@ -401,18 +401,18 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
   };
 
   const handleNoteOpen = () => {
-    setNoteHtml(moduleDetails?.note || "");
+    setNoteHtml(releaseDetails?.note || "");
     setNoteOpen(true);
   };
 
   const handleNoteSubmit = async () => {
-    if (!workspaceSlug || !projectId || !moduleId) return;
+    if (!workspaceSlug || !projectId || !releaseId) return;
     try {
       setNoteSubmitting(true);
-      await moduleService.updateNote(workspaceSlug.toString(), projectId.toString(), moduleId, noteHtml);
+      await releaseService.updateNote(workspaceSlug.toString(), projectId.toString(), releaseId, noteHtml);
       setToast({ type: TOAST_TYPE.SUCCESS, title: "更新成功", message: "发布日志已更新" });
       setNoteOpen(false);
-      await fetchModuleDetails(workspaceSlug.toString(), projectId.toString(), moduleId);
+      await fetchReleaseDetails(workspaceSlug.toString(), projectId.toString(), releaseId);
     } catch (e: any) {
       setToast({ type: TOAST_TYPE.ERROR, title: "更新失败", message: e?.detail || e?.error || "请稍后重试" });
     } finally {
@@ -423,18 +423,18 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
   const handleAssociateClose = () => {
     setAssociateOpen(false);
     setSelectedCycleIds([]);
-    fetchModuleStatistics();
+    fetchReleaseStatistics();
   };
 
   const handleAssociateConfirm = async () => {
-    if (!workspaceSlug || !projectId || !moduleId || selectedCycleIds.length === 0) {
+    if (!workspaceSlug || !projectId || !releaseId || selectedCycleIds.length === 0) {
       handleAssociateClose();
       return;
     }
     try {
-      const payloads = selectedCycleIds.map((cid) => ({ module_id: moduleId, cycle_id: cid }));
+      const payloads = selectedCycleIds.map((cid) => ({ release_id: releaseId, cycle_id: cid }));
       await Promise.all(
-        payloads.map((p) => moduleService.associateCycle(workspaceSlug.toString(), projectId.toString(), p))
+        payloads.map((p) => releaseService.associateCycle(workspaceSlug.toString(), projectId.toString(), p))
       );
       setToast({ type: TOAST_TYPE.SUCCESS, title: "关联成功", message: "已关联所选迭代" });
       handleAssociateClose();
@@ -445,15 +445,15 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
   };
 
   const handleCancelAssociation = async (cycleId: string) => {
-    if (!workspaceSlug || !projectId || !moduleId) return;
+    if (!workspaceSlug || !projectId || !releaseId) return;
     try {
-      await moduleService.cancelCycleAssociation(workspaceSlug.toString(), projectId.toString(), {
-        module_id: moduleId,
+      await releaseService.cancelCycleAssociation(workspaceSlug.toString(), projectId.toString(), {
+        release_id: releaseId,
         cycle_id: cycleId,
       });
       setToast({ type: TOAST_TYPE.SUCCESS, title: "已取消关联", message: "迭代已取消关联" });
       fetchCycles();
-      fetchModuleStatistics();
+      fetchReleaseStatistics();
     } catch (e: any) {
       setToast({ type: TOAST_TYPE.ERROR, title: "操作失败", message: e?.detail || e?.error || "请稍后重试" });
     }
@@ -481,14 +481,14 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
                 <div className="text-sm text-secondary">距离发布还有：</div>
                 <div className="text-sm text-secondary">负责人：</div>
                 <div className="text-base font-medium text-primary">
-                  {moduleDetails?.target_date ? `${daysLeft ?? 0}天` : "--"}
+                  {releaseDetails?.target_date ? `${daysLeft ?? 0}天` : "--"}
                 </div>
                 <div>
                   <div className="w-full rounded-md border border-transparent text-sm hover:border-blue-300 focus-within:border-blue-400 focus-within:ring-1 focus-within:ring-blue-300">
                     <MemberDropdown
                       multiple={false}
                       disabled={true}
-                      value={moduleDetails?.lead_id ?? null}
+                      value={releaseDetails?.lead_id ?? null}
                       placeholder="请选择维护人"
                       className="w-full text-sm"
                       buttonContainerClassName="w-full text-left"
@@ -497,7 +497,7 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
                       dropdownArrowClassName="h-3.5 w-3.5"
                       showUserDetails={true}
                       optionsClassName="z-[60]"
-                      projectId={moduleDetails?.project_id}
+                      projectId={releaseDetails?.project_id}
                       onChange={() => {}}
                     />
                   </div>
@@ -683,10 +683,10 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
             </div>
           </div>
           <div className="mt-3 flex-1 min-h-0 overflow-hidden">
-            {moduleDetails?.note ? (
+            {releaseDetails?.note ? (
               <div
                 className="prose max-w-none text-sm text-secondary"
-                dangerouslySetInnerHTML={{ __html: moduleDetails.note }}
+                dangerouslySetInnerHTML={{ __html: releaseDetails.note }}
               />
             ) : (
               <div className="text-sm text-secondary">暂无发布日志</div>
@@ -842,22 +842,22 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
                 variant="ghost"
                 className="p-0"
                 onClick={() => fileInputRef.current?.click()}
-                loading={moduleFilesUploading}
-                disabled={moduleFilesUploading}
+                loading={releaseFilesUploading}
+                disabled={releaseFilesUploading}
               >
                 <Plus className="h-3.5 w-3.5" />
               </Button>
-              <input ref={fileInputRef} type="file" className="hidden" onChange={handleUploadModuleFile} />
+              <input ref={fileInputRef} type="file" className="hidden" onChange={handleUploadReleaseFile} />
             </div>
           </div>
           <div className="mt-3 flex-1 min-h-0 overflow-y-auto vertical-scrollbar scrollbar-sm">
-            {moduleFilesLoading && (
+            {releaseFilesLoading && (
               <div className="flex items-center justify-center py-8 text-sm text-secondary">加载中...</div>
             )}
-            {moduleFilesError && (
-              <div className="bg-red-50 border border-red-200 rounded-md p-3 text-sm text-red-800">{moduleFilesError}</div>
+            {releaseFilesError && (
+              <div className="bg-red-50 border border-red-200 rounded-md p-3 text-sm text-red-800">{releaseFilesError}</div>
             )}
-            {!moduleFilesLoading && !moduleFilesError && (
+            {!releaseFilesLoading && !releaseFilesError && (
               <div className="overflow-x-auto">
                 <table className="min-w-full table-fixed">
                   <thead>
@@ -869,14 +869,14 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
                     </tr>
                   </thead>
                   <tbody>
-                    {moduleFiles.length === 0 && (
+                    {releaseFiles.length === 0 && (
                       <tr>
                         <td className="px-2 py-6 text-sm text-secondary" colSpan={4}>
                           暂无文件
                         </td>
                       </tr>
                     )}
-                    {moduleFiles.map((file) => (
+                    {releaseFiles.map((file) => (
                       <tr key={file.id} className="border-b border-subtle hover:bg-layer-1-hover">
                         <td className="px-2 py-2 truncate text-sm text-primary" title={file.name}>
                           {file.name}
@@ -890,8 +890,8 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
                             <Button
                               variant="ghost"
                               className="p-0"
-                              disabled={moduleFilesDownloadingId === file.id}
-                              onClick={() => handleDownloadModuleFile(file.id, file.name)}
+                              disabled={releaseFilesDownloadingId === file.id}
+                              onClick={() => handleDownloadReleaseFile(file.id, file.name)}
                             >
                               <Download className="h-3.5 w-3.5" />
                             </Button>
@@ -899,13 +899,13 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
                               title="确认删除该文件？"
                               okText="删除"
                               cancelText="取消"
-                              onConfirm={() => void handleDeleteModuleFile(file.id)}
+                              onConfirm={() => void handleDeleteReleaseFile(file.id)}
                             >
                               <Button
                                 variant="ghost"
                                 className="p-0"
-                                disabled={moduleFilesDeletingId === file.id}
-                                loading={moduleFilesDeletingId === file.id}
+                                disabled={releaseFilesDeletingId === file.id}
+                                loading={releaseFilesDeletingId === file.id}
                               >
                                 <Trash2 className="h-3.5 w-3.5" />
                               </Button>
@@ -920,13 +920,13 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
             )}
           </div>
           <div className="flex-shrink-0 border-t border-subtle px-2 py-2 bg-surface-1 flex items-center justify-between mt-2">
-            <div className="text-sm text-secondary">{moduleFilesTotal > 0 ? `共 ${moduleFilesTotal} 条` : ""}</div>
+            <div className="text-sm text-secondary">{releaseFilesTotal > 0 ? `共 ${releaseFilesTotal} 条` : ""}</div>
             <Pagination
               simple
-              current={moduleFilesPage}
-              pageSize={moduleFilesPageSize}
-              total={moduleFilesTotal}
-              onChange={(p) => fetchModuleFiles(p)}
+              current={releaseFilesPage}
+              pageSize={releaseFilesPageSize}
+              total={releaseFilesTotal}
+              onChange={(p) => fetchReleaseFiles(p)}
               size="small"
             />
           </div>
@@ -1101,7 +1101,7 @@ export const ModuleDetailContent: React.FC<Props> = observer(({ moduleId, isOpen
                     </div>
                     <div className="mt-3">
                       <RichTextEditor
-                        id="module-note-editor"
+                        id="release-note-editor"
                         editable
                         initialValue={noteHtml ?? ""}
                         workspaceSlug={workspaceSlug?.toString() ?? ""}

@@ -67,6 +67,7 @@ from plane.db.models import (
     IssueTypeProperty,
     ProjectUserProperty,
     ModuleIssue,
+    ReleaseIssue,
     Project,
     ProjectMember,
     UserRecentVisit, IssueType, ProjectIssueType, State,
@@ -116,7 +117,7 @@ class IssueListEndpoint(BaseAPIView):
         # Add select_related, prefetch_related if fields or expand is not None
         if self.fields or self.expand:
             issue_queryset = issue_queryset.select_related("workspace", "project", "state", "parent").prefetch_related(
-                "assignees", "labels", "issue_module__module"
+                "assignees", "labels", "issue_module__module", "issue_release__release"
             )
 
         # Add annotations
@@ -170,7 +171,7 @@ class IssueListEndpoint(BaseAPIView):
         )
 
         if self.fields or self.expand:
-            issues = IssueSerializer(queryset, many=True, fields=self.fields, expand=self.expand).data
+            issues = IssueSerializer(issue_queryset, many=True, fields=self.fields, expand=self.expand).data
         else:
             issues = issue_queryset.values(
                 "id",
@@ -187,6 +188,7 @@ class IssueListEndpoint(BaseAPIView):
                 "parent_id",
                 "cycle_id",
                 "module_ids",
+                "release_ids",
                 "label_ids",
                 "assignee_ids",
                 "sub_issues_count",
@@ -479,6 +481,7 @@ class IssueViewSet(BaseViewSet):
                     "parent_id",
                     "cycle_id",
                     "module_ids",
+                    "release_ids",
                     "label_ids",
                     "assignee_ids",
                     "sub_issues_count",
@@ -590,6 +593,19 @@ class IssueViewSet(BaseViewSet):
                     ),
                     Value([], output_field=ArrayField(UUIDField())),
                 ),
+                release_ids=Coalesce(
+                    Subquery(
+                        ReleaseIssue.objects.filter(
+                            issue_id=OuterRef("pk"),
+                            deleted_at__isnull=True,
+                            release__archived_at__isnull=True,
+                        )
+                        .values("issue_id")
+                        .annotate(arr=ArrayAgg("release_id", distinct=True))
+                        .values("arr")
+                    ),
+                    Value([], output_field=ArrayField(UUIDField())),
+                ),
             )
             .prefetch_related(
                 Prefetch(
@@ -695,6 +711,18 @@ class IssueViewSet(BaseViewSet):
                             ~Q(issue_module__module_id__isnull=True)
                             & Q(issue_module__module__archived_at__isnull=True)
                             & Q(issue_module__deleted_at__isnull=True)
+                        ),
+                    ),
+                    Value([], output_field=ArrayField(UUIDField())),
+                ),
+                release_ids=Coalesce(
+                    ArrayAgg(
+                        "issue_release__release_id",
+                        distinct=True,
+                        filter=Q(
+                            ~Q(issue_release__release_id__isnull=True)
+                            & Q(issue_release__release__archived_at__isnull=True)
+                            & Q(issue_release__deleted_at__isnull=True)
                         ),
                     ),
                     Value([], output_field=ArrayField(UUIDField())),
@@ -1193,6 +1221,7 @@ class IssuePaginatedViewSet(BaseViewSet):
             "is_draft",
             "archived_at",
             "module_ids",
+            "release_ids",
             "label_ids",
             "assignee_ids",
             "link_count",
@@ -1261,6 +1290,19 @@ class IssuePaginatedViewSet(BaseViewSet):
                 ),
                 Value([], output_field=ArrayField(UUIDField())),
             ),
+            release_ids=Coalesce(
+                Subquery(
+                    ReleaseIssue.objects.filter(
+                        issue_id=OuterRef("pk"),
+                        deleted_at__isnull=True,
+                        release__archived_at__isnull=True,
+                    )
+                    .values("issue_id")
+                    .annotate(arr=ArrayAgg("release_id", distinct=True))
+                    .values("arr")
+                ),
+                Value([], output_field=ArrayField(UUIDField())),
+            ),
         )
 
         paginated_data = paginate(
@@ -1323,6 +1365,15 @@ class IssueDetailEndpoint(BaseAPIView):
                 Prefetch(
                     "issue_module",
                     queryset=ModuleIssue.objects.all(),
+                )
+            )
+            .prefetch_related(
+                Prefetch(
+                    "issue_release",
+                    queryset=ReleaseIssue.objects.filter(
+                        deleted_at__isnull=True,
+                        release__archived_at__isnull=True,
+                    ).select_related("release"),
                 )
             )
         )
@@ -1537,7 +1588,7 @@ class IssueDetailIdentifierEndpoint(BaseAPIView):
             Issue.objects.filter(project_id=project.id)
             .filter(workspace__slug=slug)
             .select_related("workspace", "project", "state", "parent")
-            .prefetch_related("assignees", "labels", "issue_module__module")
+            .prefetch_related("assignees", "labels", "issue_module__module", "issue_release__release")
             .annotate(cycle_id=Subquery(CycleIssue.objects.filter(issue=OuterRef("id")).values("cycle_id")[:1]))
             .annotate(
                 link_count=IssueLink.objects.filter(issue=OuterRef("id"))
@@ -1590,6 +1641,18 @@ class IssueDetailIdentifierEndpoint(BaseAPIView):
                             ~Q(issue_module__module_id__isnull=True)
                             & Q(issue_module__module__archived_at__isnull=True)
                             & Q(issue_module__deleted_at__isnull=True)
+                        ),
+                    ),
+                    Value([], output_field=ArrayField(UUIDField())),
+                ),
+                release_ids=Coalesce(
+                    ArrayAgg(
+                        "issue_release__release_id",
+                        distinct=True,
+                        filter=Q(
+                            ~Q(issue_release__release_id__isnull=True)
+                            & Q(issue_release__release__archived_at__isnull=True)
+                            & Q(issue_release__deleted_at__isnull=True)
                         ),
                     ),
                     Value([], output_field=ArrayField(UUIDField())),

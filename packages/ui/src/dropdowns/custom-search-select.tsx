@@ -105,7 +105,8 @@ export function CustomSearchSelect(props: ICustomSearchSelectProps) {
                   ref={setReferenceElement}
                   type="button"
                   className={cn(
-                    "flex w-full items-center justify-between gap-1 text-11",
+                    "flex w-full items-center justify-between gap-1",
+                    !customButton && "text-11",
                     {
                       "cursor-not-allowed text-secondary": disabled,
                       "cursor-pointer hover:bg-layer-transparent-hover": !disabled,

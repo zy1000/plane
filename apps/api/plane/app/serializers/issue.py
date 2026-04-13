@@ -31,6 +31,8 @@ from plane.db.models import (
     Cycle,
     Module,
     ModuleIssue,
+    Release,
+    ReleaseIssue,
     IssueLink,
     FileAsset,
     IssueReaction,
@@ -803,6 +805,7 @@ class IssueSerializer(DynamicBaseSerializer):
     # ids
     cycle_id = serializers.PrimaryKeyRelatedField(read_only=True)
     module_ids = serializers.ListField(child=serializers.UUIDField(), required=False)
+    release_ids = serializers.ListField(child=serializers.UUIDField(), required=False)
 
     # Many to many
     label_ids = serializers.ListField(child=serializers.UUIDField(), required=False)
@@ -830,6 +833,7 @@ class IssueSerializer(DynamicBaseSerializer):
             "parent_id",
             "cycle_id",
             "module_ids",
+            "release_ids",
             "label_ids",
             "assignee_ids",
             "sub_issues_count",
@@ -866,6 +870,11 @@ class IssueListDetailSerializer(serializers.Serializer):
     def get_module_ids(self, obj):
         return [module.module_id for module in obj.issue_module.all()]
 
+    def get_release_ids(self, obj):
+        if not hasattr(obj, "issue_release"):
+            return []
+        return [rel.release_id for rel in obj.issue_release.all() if getattr(rel, "deleted_at", None) is None]
+
     def get_label_ids(self, obj):
         return [label.label_id for label in obj.label_issue.all()]
 
@@ -896,6 +905,7 @@ class IssueListDetailSerializer(serializers.Serializer):
             # Computed fields
             "cycle_id": instance.cycle_id,
             "module_ids": self.get_module_ids(instance),
+            "release_ids": self.get_release_ids(instance),
             "label_ids": self.get_label_ids(instance),
             "assignee_ids": self.get_assignee_ids(instance),
             "sub_issues_count": instance.sub_issues_count,
@@ -1144,6 +1154,11 @@ class IssueBatchUpdateSerializer(BaseSerializer):
         write_only=True,
         required=False,
     )
+    release_ids = serializers.ListField(
+        child=serializers.PrimaryKeyRelatedField(queryset=Release.objects.all()),
+        write_only=True,
+        required=False,
+    )
 
     class Meta:
         model = Issue
@@ -1157,6 +1172,7 @@ class IssueBatchUpdateSerializer(BaseSerializer):
             "label_ids",
             "cycle_id",
             "module_ids",
+            "release_ids",
         ]
 
     def update(self, instance, validated_data):
@@ -1164,6 +1180,7 @@ class IssueBatchUpdateSerializer(BaseSerializer):
         labels = validated_data.pop("label_ids", None)
         cycle = validated_data.pop("cycle_id", None)
         modules = validated_data.pop("module_ids", None)
+        releases = validated_data.pop("release_ids", None)
 
         project_id = instance.project_id
         workspace_id = instance.workspace_id
@@ -1240,6 +1257,27 @@ class IssueBatchUpdateSerializer(BaseSerializer):
                             updated_by_id=updated_by_id,
                         )
                         for module in modules
+                    ],
+                    batch_size=10,
+                    ignore_conflicts=True,
+                )
+            except IntegrityError:
+                pass
+
+        if releases is not None:
+            ReleaseIssue.objects.filter(issue=instance).delete()
+            try:
+                ReleaseIssue.objects.bulk_create(
+                    [
+                        ReleaseIssue(
+                            release=release,
+                            issue=instance,
+                            project_id=project_id,
+                            workspace_id=workspace_id,
+                            created_by_id=created_by_id,
+                            updated_by_id=updated_by_id,
+                        )
+                        for release in releases
                     ],
                     batch_size=10,
                     ignore_conflicts=True,

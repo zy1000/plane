@@ -27,6 +27,7 @@ import { handleDragDrop } from "./utils";
 export type CalendarStoreType =
   | EIssuesStoreType.PROJECT
   | EIssuesStoreType.MODULE
+  | EIssuesStoreType.RELEASE
   | EIssuesStoreType.CYCLE
   | EIssuesStoreType.PROJECT_VIEW
   | EIssuesStoreType.TEAM

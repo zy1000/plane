@@ -101,6 +101,15 @@ from .module import (
     ModuleUserPropertiesSerializer,
 )
 
+from .release import (
+    ReleaseDetailSerializer,
+    ReleaseWriteSerializer,
+    ReleaseSerializer,
+    ReleaseIssueSerializer,
+    ReleaseLinkSerializer,
+    ReleaseUserPropertiesSerializer,
+)
+
 from .api import APITokenSerializer, APITokenReadSerializer
 
 from .importer import ImporterSerializer

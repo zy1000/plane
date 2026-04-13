@@ -11,12 +11,13 @@ import {
   EUserPermissionsLevel,
   PROJECT_ANALYTICS_VIEW_PERMISSION_KEY,
   PROJECT_ASSET_VIEW_PERMISSION_KEY,
+  PROJECT_MODULES_VIEW_PERMISSION_KEY,
   PROJECT_RELEASES_VIEW_PERMISSION_KEY,
 } from "@plane/constants";
 import { CycleIcon, IntakeIcon, ModuleIcon, PageIcon, TestManagementIcon, ViewsIcon, WorkItemsIcon } from "@plane/propel/icons";
 import type { EUserProjectRoles, IPartialProject } from "@plane/types";
 import type { TNavigationItem } from "@/components/navigation/tab-navigation-root";
-import { ArchiveIcon, BarChart3, BookOpenText, Bug, Folder, Milestone, Rss } from "lucide-react";
+import { ArchiveIcon, BarChart3, BookOpenText, Bug, Folder, Milestone, Rocket, Rss } from "lucide-react";
 
 type UseNavigationItemsProps = {
   workspaceSlug: string;
@@ -105,13 +106,24 @@ export const useNavigationItems = ({
       {
         i18n_key: "sidebar.modules",
         key: "modules",
-        name: "Releases",
+        name: "Modules",
         href: `/${workspaceSlug}/projects/${projectId}/modules`,
         icon: ModuleIcon,
         access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
-        permissionKeys: [PROJECT_RELEASES_VIEW_PERMISSION_KEY],
+        permissionKeys: [PROJECT_MODULES_VIEW_PERMISSION_KEY],
         shouldRender: !!project?.module_view,
         sortOrder: 3,
+      },
+      {
+        i18n_key: "sidebar.releases",
+        key: "releases",
+        name: "Releases",
+        href: `/${workspaceSlug}/projects/${projectId}/releases`,
+        icon: Rocket,
+        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
+        permissionKeys: [PROJECT_RELEASES_VIEW_PERMISSION_KEY],
+        shouldRender: !!project?.module_view,
+        sortOrder: 3.5,
       },
       {
         i18n_key: "sidebar.milestones",

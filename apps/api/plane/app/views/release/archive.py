@@ -1,0 +1,557 @@
+from django.contrib.postgres.aggregates import ArrayAgg
+from django.contrib.postgres.fields import ArrayField
+from django.db.models import (
+    Count,
+    Exists,
+    F,
+    Func,
+    IntegerField,
+    OuterRef,
+    Prefetch,
+    Q,
+    Subquery,
+    UUIDField,
+    Value,
+    Sum,
+    FloatField,
+    Case,
+    When,
+)
+from django.db.models.functions import Coalesce, Cast, Concat
+from django.utils import timezone
+from django.db import models
+
+# Third party imports
+from rest_framework import status
+from rest_framework.response import Response
+from plane.app.permissions import ProjectEntityPermission, allow_fine_permission, PermissionKey
+from plane.app.serializers import ReleaseDetailSerializer
+from plane.db.models import Issue, Release, ReleaseLink, UserFavorite, Project
+from plane.utils.analytics_plot import burndown_plot
+from plane.utils.timezone_converter import user_timezone_converter
+
+
+# Module imports
+from .. import BaseAPIView
+
+
+class ReleaseArchiveUnarchiveEndpoint(BaseAPIView):
+    permission_classes = [ProjectEntityPermission]
+
+    def get_queryset(self):
+        favorite_subquery = UserFavorite.objects.filter(
+            user=self.request.user,
+            entity_type="release",
+            entity_identifier=OuterRef("pk"),
+            project_id=self.kwargs.get("project_id"),
+            workspace__slug=self.kwargs.get("slug"),
+        )
+        cancelled_issues = (
+            Issue.issue_objects.filter(
+                state__group="cancelled",
+                issue_release__release_id=OuterRef("pk"),
+                issue_release__deleted_at__isnull=True,
+            )
+            .values("issue_release__release_id")
+            .annotate(cnt=Count("pk"))
+            .values("cnt")
+        )
+        completed_issues = (
+            Issue.issue_objects.filter(
+                state__group="completed",
+                issue_release__release_id=OuterRef("pk"),
+                issue_release__deleted_at__isnull=True,
+            )
+            .values("issue_release__release_id")
+            .annotate(cnt=Count("pk"))
+            .values("cnt")
+        )
+        started_issues = (
+            Issue.issue_objects.filter(
+                state__group="started",
+                issue_release__release_id=OuterRef("pk"),
+                issue_release__deleted_at__isnull=True,
+            )
+            .values("issue_release__release_id")
+            .annotate(cnt=Count("pk"))
+            .values("cnt")
+        )
+        unstarted_issues = (
+            Issue.issue_objects.filter(
+                state__group="unstarted",
+                issue_release__release_id=OuterRef("pk"),
+                issue_release__deleted_at__isnull=True,
+            )
+            .values("issue_release__release_id")
+            .annotate(cnt=Count("pk"))
+            .values("cnt")
+        )
+        backlog_issues = (
+            Issue.issue_objects.filter(
+                state__group="backlog",
+                issue_release__release_id=OuterRef("pk"),
+                issue_release__deleted_at__isnull=True,
+            )
+            .values("issue_release__release_id")
+            .annotate(cnt=Count("pk"))
+            .values("cnt")
+        )
+        total_issues = (
+            Issue.issue_objects.filter(
+                issue_release__release_id=OuterRef("pk"),
+                issue_release__deleted_at__isnull=True,
+            )
+            .values("issue_release__release_id")
+            .annotate(cnt=Count("pk"))
+            .values("cnt")
+        )
+        completed_estimate_point = (
+            Issue.issue_objects.filter(
+                estimate_point__estimate__type="points",
+                state__group="completed",
+                issue_release__release_id=OuterRef("pk"),
+                issue_release__deleted_at__isnull=True,
+            )
+            .values("issue_release__release_id")
+            .annotate(completed_estimate_points=Sum(Cast("estimate_point__value", FloatField())))
+            .values("completed_estimate_points")[:1]
+        )
+
+        total_estimate_point = (
+            Issue.issue_objects.filter(
+                estimate_point__estimate__type="points",
+                issue_release__release_id=OuterRef("pk"),
+                issue_release__deleted_at__isnull=True,
+            )
+            .values("issue_release__release_id")
+            .annotate(total_estimate_points=Sum(Cast("estimate_point__value", FloatField())))
+            .values("total_estimate_points")[:1]
+        )
+        backlog_estimate_point = (
+            Issue.issue_objects.filter(
+                estimate_point__estimate__type="points",
+                state__group="backlog",
+                issue_release__release_id=OuterRef("pk"),
+                issue_release__deleted_at__isnull=True,
+            )
+            .values("issue_release__release_id")
+            .annotate(backlog_estimate_point=Sum(Cast("estimate_point__value", FloatField())))
+            .values("backlog_estimate_point")[:1]
+        )
+        unstarted_estimate_point = (
+            Issue.issue_objects.filter(
+                estimate_point__estimate__type="points",
+                state__group="unstarted",
+                issue_release__release_id=OuterRef("pk"),
+                issue_release__deleted_at__isnull=True,
+            )
+            .values("issue_release__release_id")
+            .annotate(unstarted_estimate_point=Sum(Cast("estimate_point__value", FloatField())))
+            .values("unstarted_estimate_point")[:1]
+        )
+        started_estimate_point = (
+            Issue.issue_objects.filter(
+                estimate_point__estimate__type="points",
+                state__group="started",
+                issue_release__release_id=OuterRef("pk"),
+                issue_release__deleted_at__isnull=True,
+            )
+            .values("issue_release__release_id")
+            .annotate(started_estimate_point=Sum(Cast("estimate_point__value", FloatField())))
+            .values("started_estimate_point")[:1]
+        )
+        cancelled_estimate_point = (
+            Issue.issue_objects.filter(
+                estimate_point__estimate__type="points",
+                state__group="cancelled",
+                issue_release__release_id=OuterRef("pk"),
+                issue_release__deleted_at__isnull=True,
+            )
+            .values("issue_release__release_id")
+            .annotate(cancelled_estimate_point=Sum(Cast("estimate_point__value", FloatField())))
+            .values("cancelled_estimate_point")[:1]
+        )
+        return (
+            Release.objects.filter(workspace__slug=self.kwargs.get("slug"))
+            .filter(project_id=self.kwargs.get("project_id"))
+            .filter(archived_at__isnull=False)
+            .annotate(is_favorite=Exists(favorite_subquery))
+            .select_related("workspace", "project", "lead")
+            .prefetch_related("members")
+            .prefetch_related(
+                Prefetch(
+                    "link_release",
+                    queryset=ReleaseLink.objects.select_related("release", "created_by"),
+                )
+            )
+            .annotate(
+                completed_issues=Coalesce(
+                    Subquery(completed_issues[:1]),
+                    Value(0, output_field=IntegerField()),
+                )
+            )
+            .annotate(
+                cancelled_issues=Coalesce(
+                    Subquery(cancelled_issues[:1]),
+                    Value(0, output_field=IntegerField()),
+                )
+            )
+            .annotate(started_issues=Coalesce(Subquery(started_issues[:1]), Value(0, output_field=IntegerField())))
+            .annotate(
+                unstarted_issues=Coalesce(
+                    Subquery(unstarted_issues[:1]),
+                    Value(0, output_field=IntegerField()),
+                )
+            )
+            .annotate(backlog_issues=Coalesce(Subquery(backlog_issues[:1]), Value(0, output_field=IntegerField())))
+            .annotate(total_issues=Coalesce(Subquery(total_issues[:1]), Value(0, output_field=IntegerField())))
+            .annotate(
+                backlog_estimate_points=Coalesce(
+                    Subquery(backlog_estimate_point),
+                    Value(0, output_field=FloatField()),
+                )
+            )
+            .annotate(
+                unstarted_estimate_points=Coalesce(
+                    Subquery(unstarted_estimate_point),
+                    Value(0, output_field=FloatField()),
+                )
+            )
+            .annotate(
+                started_estimate_points=Coalesce(
+                    Subquery(started_estimate_point),
+                    Value(0, output_field=FloatField()),
+                )
+            )
+            .annotate(
+                cancelled_estimate_points=Coalesce(
+                    Subquery(cancelled_estimate_point),
+                    Value(0, output_field=FloatField()),
+                )
+            )
+            .annotate(
+                completed_estimate_points=Coalesce(
+                    Subquery(completed_estimate_point),
+                    Value(0, output_field=FloatField()),
+                )
+            )
+            .annotate(
+                total_estimate_points=Coalesce(Subquery(total_estimate_point), Value(0, output_field=FloatField()))
+            )
+            .annotate(
+                member_ids=Coalesce(
+                    ArrayAgg(
+                        "members__id",
+                        distinct=True,
+                        filter=~Q(members__id__isnull=True),
+                    ),
+                    Value([], output_field=ArrayField(UUIDField())),
+                )
+            )
+            .order_by("-is_favorite", "-created_at")
+        )
+
+    def get(self, request, slug, project_id, pk=None):
+        if pk is None:
+            queryset = self.get_queryset()
+            releases = queryset.values(
+                "id",
+                "workspace_id",
+                "project_id",
+                "name",
+                "description",
+                "description_text",
+                "description_html",
+                "start_date",
+                "target_date",
+                "status",
+                "lead_id",
+                "member_ids",
+                "view_props",
+                "sort_order",
+                "external_source",
+                "external_id",
+                "total_issues",
+                "is_favorite",
+                "cancelled_issues",
+                "completed_issues",
+                "started_issues",
+                "unstarted_issues",
+                "backlog_issues",
+                "created_at",
+                "updated_at",
+                "archived_at",
+            )
+            datetime_fields = ["created_at", "updated_at"]
+            releases = user_timezone_converter(releases, datetime_fields, request.user.user_timezone)
+            return Response(releases, status=status.HTTP_200_OK)
+        else:
+            queryset = (
+                self.get_queryset()
+                .filter(pk=pk)
+                .annotate(
+                    sub_issues=Issue.issue_objects.filter(
+                        project_id=self.kwargs.get("project_id"),
+                        parent__isnull=False,
+                        issue_release__release_id=pk,
+                        issue_release__deleted_at__isnull=True,
+                    )
+                    .order_by()
+                    .annotate(count=Func(F("id"), function="Count"))
+                    .values("count")
+                )
+            )
+
+            estimate_type = Project.objects.filter(
+                workspace__slug=slug,
+                pk=project_id,
+                estimate__isnull=False,
+                estimate__type="points",
+            ).exists()
+
+            data = ReleaseDetailSerializer(queryset.first()).data
+            release_obj = queryset.first()
+
+            data["estimate_distribution"] = {}
+
+            if estimate_type:
+                assignee_distribution = (
+                    Issue.issue_objects.filter(
+                        issue_release__release_id=pk,
+                        issue_release__deleted_at__isnull=True,
+                        workspace__slug=slug,
+                        project_id=project_id,
+                    )
+                    .annotate(first_name=F("assignees__first_name"))
+                    .annotate(last_name=F("assignees__last_name"))
+                    .annotate(assignee_id=F("assignees__id"))
+                    .annotate(display_name=F("assignees__display_name"))
+                    .annotate(
+                        avatar_url=Case(
+                            When(
+                                assignees__avatar_asset__isnull=False,
+                                then=Concat(
+                                    Value("/api/assets/v2/static/"),
+                                    "assignees__avatar_asset",
+                                    Value("/"),
+                                ),
+                            ),
+                            When(
+                                assignees__avatar_asset__isnull=True,
+                                then="assignees__avatar",
+                            ),
+                            default=Value(None),
+                            output_field=models.CharField(),
+                        )
+                    )
+                    .values(
+                        "first_name",
+                        "last_name",
+                        "assignee_id",
+                        "avatar_url",
+                        "display_name",
+                    )
+                    .annotate(total_estimates=Sum(Cast("estimate_point__value", FloatField())))
+                    .annotate(
+                        completed_estimates=Sum(
+                            Cast("estimate_point__value", FloatField()),
+                            filter=Q(
+                                completed_at__isnull=False,
+                                archived_at__isnull=True,
+                                is_draft=False,
+                            ),
+                        )
+                    )
+                    .annotate(
+                        pending_estimates=Sum(
+                            Cast("estimate_point__value", FloatField()),
+                            filter=Q(
+                                completed_at__isnull=True,
+                                archived_at__isnull=True,
+                                is_draft=False,
+                            ),
+                        )
+                    )
+                    .order_by("first_name", "last_name")
+                )
+
+                label_distribution = (
+                    Issue.issue_objects.filter(
+                        issue_release__release_id=pk,
+                        workspace__slug=slug,
+                        project_id=project_id,
+                    )
+                    .annotate(label_name=F("labels__name"))
+                    .annotate(color=F("labels__color"))
+                    .annotate(label_id=F("labels__id"))
+                    .values("label_name", "color", "label_id")
+                    .annotate(total_estimates=Sum(Cast("estimate_point__value", FloatField())))
+                    .annotate(
+                        completed_estimates=Sum(
+                            Cast("estimate_point__value", FloatField()),
+                            filter=Q(
+                                completed_at__isnull=False,
+                                archived_at__isnull=True,
+                                is_draft=False,
+                            ),
+                        )
+                    )
+                    .annotate(
+                        pending_estimates=Sum(
+                            Cast("estimate_point__value", FloatField()),
+                            filter=Q(
+                                completed_at__isnull=True,
+                                archived_at__isnull=True,
+                                is_draft=False,
+                            ),
+                        )
+                    )
+                    .order_by("label_name")
+                )
+                data["estimate_distribution"]["assignees"] = assignee_distribution
+                data["estimate_distribution"]["labels"] = label_distribution
+
+                if release_obj and release_obj.start_date and release_obj.target_date:
+                    data["estimate_distribution"]["completion_chart"] = burndown_plot(
+                        queryset=release_obj,
+                        slug=slug,
+                        project_id=project_id,
+                        plot_type="points",
+                        module_id=pk,
+                    )
+
+            assignee_distribution = (
+                Issue.issue_objects.filter(
+                    issue_release__release_id=pk,
+                    issue_release__deleted_at__isnull=True,
+                    workspace__slug=slug,
+                    project_id=project_id,
+                )
+                .annotate(first_name=F("assignees__first_name"))
+                .annotate(last_name=F("assignees__last_name"))
+                .annotate(assignee_id=F("assignees__id"))
+                .annotate(display_name=F("assignees__display_name"))
+                .annotate(
+                    avatar_url=Case(
+                        When(
+                            assignees__avatar_asset__isnull=False,
+                            then=Concat(
+                                Value("/api/assets/v2/static/"),
+                                "assignees__avatar_asset",
+                                Value("/"),
+                            ),
+                        ),
+                        When(
+                            assignees__avatar_asset__isnull=True,
+                            then="assignees__avatar",
+                        ),
+                        default=Value(None),
+                        output_field=models.CharField(),
+                    )
+                )
+                .values(
+                    "first_name",
+                    "last_name",
+                    "assignee_id",
+                    "avatar_url",
+                    "display_name",
+                )
+                .annotate(total_issues=Count("id", filter=Q(archived_at__isnull=True, is_draft=False)))
+                .annotate(
+                    completed_issues=Count(
+                        "id",
+                        filter=Q(
+                            completed_at__isnull=False,
+                            archived_at__isnull=True,
+                            is_draft=False,
+                        ),
+                    )
+                )
+                .annotate(
+                    pending_issues=Count(
+                        "id",
+                        filter=Q(
+                            completed_at__isnull=True,
+                            archived_at__isnull=True,
+                            is_draft=False,
+                        ),
+                    )
+                )
+                .order_by("first_name", "last_name")
+            )
+
+            label_distribution = (
+                Issue.issue_objects.filter(
+                    issue_release__release_id=pk,
+                    issue_release__deleted_at__isnull=True,
+                    workspace__slug=slug,
+                    project_id=project_id,
+                )
+                .annotate(label_name=F("labels__name"))
+                .annotate(color=F("labels__color"))
+                .annotate(label_id=F("labels__id"))
+                .values("label_name", "color", "label_id")
+                .annotate(total_issues=Count("id", filter=Q(archived_at__isnull=True, is_draft=False)))
+                .annotate(
+                    completed_issues=Count(
+                        "id",
+                        filter=Q(
+                            completed_at__isnull=False,
+                            archived_at__isnull=True,
+                            is_draft=False,
+                        ),
+                    )
+                )
+                .annotate(
+                    pending_issues=Count(
+                        "id",
+                        filter=Q(
+                            completed_at__isnull=True,
+                            archived_at__isnull=True,
+                            is_draft=False,
+                        ),
+                    )
+                )
+                .order_by("label_name")
+            )
+
+            data["distribution"] = {
+                "assignees": assignee_distribution,
+                "labels": label_distribution,
+                "completion_chart": {},
+            }
+            if release_obj and release_obj.start_date and release_obj.target_date:
+                data["distribution"]["completion_chart"] = burndown_plot(
+                    queryset=release_obj,
+                    slug=slug,
+                    project_id=project_id,
+                    plot_type="issues",
+                    module_id=pk,
+                )
+
+            return Response(data, status=status.HTTP_200_OK)
+
+    @allow_fine_permission(PermissionKey.RELEASES_ARCHIVE)
+    def post(self, request, slug, project_id, release_id):
+        release = Release.objects.get(pk=release_id, project_id=project_id, workspace__slug=slug)
+        if release.status not in ["completed", "cancelled"]:
+            return Response(
+                {"error": "Only completed or cancelled releases can be archived"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        release.archived_at = timezone.now()
+        release.save()
+        UserFavorite.objects.filter(
+            entity_type="release",
+            entity_identifier=release_id,
+            project_id=project_id,
+            workspace__slug=slug,
+        ).delete()
+        return Response({"archived_at": str(release.archived_at)}, status=status.HTTP_200_OK)
+
+    @allow_fine_permission(PermissionKey.RELEASES_ARCHIVE)
+    def delete(self, request, slug, project_id, release_id):
+        release = Release.objects.get(pk=release_id, project_id=project_id, workspace__slug=slug)
+        release.archived_at = None
+        release.save()
+        return Response(status=status.HTTP_204_NO_CONTENT)

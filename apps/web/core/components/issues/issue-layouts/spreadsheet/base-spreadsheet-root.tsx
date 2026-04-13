@@ -25,6 +25,7 @@ import { SpreadsheetView } from "./spreadsheet-view";
 export type SpreadsheetStoreType =
   | EIssuesStoreType.PROJECT
   | EIssuesStoreType.MODULE
+  | EIssuesStoreType.RELEASE
   | EIssuesStoreType.CYCLE
   | EIssuesStoreType.PROJECT_VIEW
   | EIssuesStoreType.TEAM

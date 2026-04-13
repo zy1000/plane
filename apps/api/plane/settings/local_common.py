@@ -22,7 +22,7 @@ from dotenv import load_dotenv
 
 # apps/api/local.env（相对本文件：plane/settings -> plane -> apps/api）
 _API_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-load_dotenv(os.path.join(_API_ROOT, "local.env"))
+load_dotenv(os.path.join(_API_ROOT, ".env"))
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 

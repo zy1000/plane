@@ -14,6 +14,7 @@ import { ProjectArchivedEmptyState } from "./archived-issues";
 import { CycleEmptyState } from "./cycle";
 import { GlobalViewEmptyState } from "./global-view";
 import { ModuleEmptyState } from "./module";
+import { ReleaseEmptyState } from "./release";
 import { ProfileViewEmptyState } from "./profile-view";
 import { ProjectEpicsEmptyState } from "./project-epic";
 import { ProjectEmptyState } from "./project-issues";
@@ -35,6 +36,8 @@ export function IssueLayoutEmptyState(props: Props) {
       return <CycleEmptyState />;
     case EIssuesStoreType.MODULE:
       return <ModuleEmptyState />;
+    case EIssuesStoreType.RELEASE:
+      return <ReleaseEmptyState />;
     case EIssuesStoreType.GLOBAL:
       return <GlobalViewEmptyState />;
     case EIssuesStoreType.PROFILE:

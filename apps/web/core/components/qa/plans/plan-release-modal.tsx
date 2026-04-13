@@ -5,11 +5,11 @@ import { ModalCore, EModalPosition, EModalWidth } from "@plane/ui";
 import { Button } from "@plane/propel/button";
 import { Row, Col, Table, Tag, message } from "antd";
 import { X } from "lucide-react";
-import { ModuleService } from "@/services/module.service";
-import { CaseService } from "@/services/qa/case.service";
+import { ReleaseService } from "@/services/release.service";
+import { PlanService } from "@/services/qa/plan.service";
 import dayjs from "dayjs";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
-import type { IModule } from "@plane/types";
+import type { IRelease } from "@plane/types";
 
 type Props = {
   isOpen: boolean;
@@ -23,31 +23,31 @@ type Props = {
 const PlanReleaseModal: React.FC<Props> = (props) => {
   const { isOpen, onClose, onClosed, workspaceSlug, projectId } = props;
 
-  const moduleService = useRef(new ModuleService()).current;
-  const caseService = useRef(new CaseService()).current;
-  const [modules, setModules] = useState<IModule[]>([]);
-  const [modulesLoading, setModulesLoading] = useState(false);
-  const [modulesError, setModulesError] = useState<string | null>(null);
+  const releaseService = useRef(new ReleaseService()).current;
+  const planService = useRef(new PlanService()).current;
+  const [releases, setReleases] = useState<IRelease[]>([]);
+  const [releasesLoading, setReleasesLoading] = useState(false);
+  const [releasesError, setReleasesError] = useState<string | null>(null);
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
-  const fetchModules = async (projectId: string) => {
+  const fetchReleases = async (projectId: string) => {
     try {
-      setModulesLoading(true);
-      setModulesError(null);
-      const res = await moduleService.getModules(workspaceSlug, projectId);
-      setModules(Array.isArray(res) ? res : []);
+      setReleasesLoading(true);
+      setReleasesError(null);
+      const res = await releaseService.getReleases(workspaceSlug, projectId);
+      setReleases(Array.isArray(res) ? res : []);
     } catch {
-      setModules([]);
-      setModulesError("发布规划加载失败");
+      setReleases([]);
+      setReleasesError("发布规划加载失败");
     } finally {
-      setModulesLoading(false);
+      setReleasesLoading(false);
     }
   };
 
   useEffect(() => {
     if (!isOpen || !workspaceSlug || !projectId) return;
-    fetchModules(projectId);
+    fetchReleases(projectId);
     setSelectedRowKeys([]);
   }, [isOpen, workspaceSlug, projectId]);
 
@@ -68,9 +68,9 @@ const PlanReleaseModal: React.FC<Props> = (props) => {
 
     try {
       setSubmitting(true);
-      await caseService.associateModules(workspaceSlug, {
+      await planService.associateReleases(workspaceSlug, projectId, {
         plan_id: props.planId,
-        module_ids: selectedRowKeys as string[],
+        release_ids: selectedRowKeys as string[],
       });
       message.success("关联成功");
       handleClose();
@@ -110,20 +110,20 @@ const PlanReleaseModal: React.FC<Props> = (props) => {
         <Row wrap={false} className="h-[70vh] max-h-[70vh] overflow-hidden p-6" gutter={[16, 16]}>
           <Col flex="auto" className="h-full overflow-y-auto">
             <div className="w-full h-full">
-              {modulesLoading && (
+              {releasesLoading && (
                 <div className="flex items-center justify-center py-12 text-secondary">加载中...</div>
               )}
-              {modulesError && (
+              {releasesError && (
                 <div className="bg-red-50 border border-red-200 rounded-md p-3 text-red-800 text-sm m-6">
-                  {modulesError}
+                  {releasesError}
                 </div>
               )}
-              {!modulesLoading && !modulesError && modules.length === 0 && (
+              {!releasesLoading && !releasesError && releases.length === 0 && (
                 <div className="flex items-center justify-center py-12 text-secondary">暂无发布规划</div>
               )}
-              {!modulesLoading && !modulesError && modules.length > 0 && (
+              {!releasesLoading && !releasesError && releases.length > 0 && (
                 <Table
-                  dataSource={modules}
+                  dataSource={releases}
                   rowKey="id"
                   pagination={false}
                   rowSelection={{

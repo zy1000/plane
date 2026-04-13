@@ -19,6 +19,7 @@ export interface IRouterStore {
   projectId: string | undefined;
   cycleId: string | undefined;
   moduleId: string | undefined;
+  releaseId: string | undefined;
   viewId: string | undefined;
   globalViewId: string | undefined;
   profileViewId: TProfileViews | undefined;
@@ -46,6 +47,7 @@ export class RouterStore implements IRouterStore {
       projectId: computed,
       cycleId: computed,
       moduleId: computed,
+      releaseId: computed,
       viewId: computed,
       globalViewId: computed,
       profileViewId: computed,
@@ -98,6 +100,10 @@ export class RouterStore implements IRouterStore {
    */
   get moduleId() {
     return this.query?.moduleId?.toString();
+  }
+
+  get releaseId() {
+    return this.query?.releaseId?.toString();
   }
 
   /**

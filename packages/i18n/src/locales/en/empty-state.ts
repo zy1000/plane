@@ -72,6 +72,18 @@ export default {
       cta_primary: "Create work item",
       cta_secondary: "Add existing work item",
     },
+    releases: {
+      title: "Map your project goals to Releases and track progress easily.",
+      description:
+        "Releases group related work items together. Use them to monitor progress toward shipping, with clear deadlines and visibility into what's left to complete.",
+      cta_primary: "Create your first release",
+    },
+    release_work_items: {
+      title: "No work items in this release yet",
+      description: "Create a new work item or add existing ones to this release.",
+      cta_primary: "Create work item",
+      cta_secondary: "Add existing work item",
+    },
     views: {
       title: "Save custom views for your project",
       description:

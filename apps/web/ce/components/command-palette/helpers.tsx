@@ -82,7 +82,7 @@ export const commandGroups: TCommandGroups = {
       </h6>
     ),
     path: (module: IWorkspaceDefaultSearchResult) =>
-      `/${module?.workspace__slug}/projects/${module?.project_id}/modules/${module?.id}/overview`,
+      `/${module?.workspace__slug}/projects/${module?.project_id}/modules/${module?.id}`,
     title: "Releases",
   },
   page: {

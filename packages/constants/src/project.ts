@@ -195,6 +195,11 @@ export const PROJECT_SPRINTS_FILE_DOWNLOAD_PERMISSION_KEY = "sprints.file.downlo
 /** 项目视图列表/详情页权限，与后端 PermissionKey.VIEW_VIEW 一致 */
 export const PROJECT_VIEWS_VIEW_PERMISSION_KEY = "view.view" as const;
 
+/** 项目模块页权限常量，与后端 PermissionKey.MODULES_VIEW 一致 */
+export const PROJECT_MODULES_VIEW_PERMISSION_KEY = "modules.view" as const;
+/** 与后端 PermissionKey.MODULES_ARCHIVE 一致 */
+export const PROJECT_MODULES_ARCHIVE_PERMISSION_KEY = "modules.archive" as const;
+
 /** 项目发布页权限常量，与后端 PermissionKey.RELEASES_VIEW / RELEASES_CREATE 一致 */
 export const PROJECT_RELEASES_VIEW_PERMISSION_KEY = "releases.view" as const;
 export const PROJECT_RELEASES_CREATE_PERMISSION_KEY = "releases.create" as const;

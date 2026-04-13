@@ -16,11 +16,13 @@ from plane.db.models import (
     Module,
     Project,
     ProjectMember,
+    Release,
     State,
     WorkspaceMember,
     IssueAssignee,
     ModuleIssue,
     IssueLabel,
+    ReleaseIssue,
 )
 from typing import Optional, Dict, Tuple, Any, Union, List
 
@@ -34,12 +36,14 @@ def issue_queryset_grouper(
         "label_ids": "labels__id",
         "assignee_ids": "assignees__id",
         "module_ids": "issue_module__module_id",
+        "release_ids": "issue_release__release_id",
     }
 
     GROUP_FILTER_MAPPER: Dict[str, Q] = {
         "assignees__id": Q(issue_assignee__deleted_at__isnull=True),
         "labels__id": Q(label_issue__deleted_at__isnull=True),
         "issue_module__module_id": Q(issue_module__deleted_at__isnull=True),
+        "issue_release__release_id": Q(issue_release__deleted_at__isnull=True),
     }
 
     for group_key in [group_by, sub_group_by]:
@@ -74,10 +78,22 @@ def issue_queryset_grouper(
         .values("arr")
     )
 
+    issue_release_subquery = Subquery(
+        ReleaseIssue.objects.filter(
+            issue_id=OuterRef("pk"),
+            deleted_at__isnull=True,
+            release__archived_at__isnull=True,
+        )
+        .values("issue_id")
+        .annotate(arr=ArrayAgg("release_id", distinct=True))
+        .values("arr")
+    )
+
     annotations_map: Dict[str, Tuple[str, Q]] = {
         "assignee_ids": Coalesce(issue_assignee_subquery, Value([], output_field=ArrayField(UUIDField()))),
         "label_ids": Coalesce(issue_label_subquery, Value([], output_field=ArrayField(UUIDField()))),
         "module_ids": Coalesce(issue_module_subquery, Value([], output_field=ArrayField(UUIDField()))),
+        "release_ids": Coalesce(issue_release_subquery, Value([], output_field=ArrayField(UUIDField()))),
     }
 
     default_annotations: Dict[str, Any] = {}
@@ -99,9 +115,10 @@ def issue_on_results(
         "labels__id": "label_ids",
         "assignees__id": "assignee_ids",
         "issue_module__module_id": "module_ids",
+        "issue_release__release_id": "release_ids",
     }
 
-    original_list: List[str] = ["assignee_ids", "label_ids", "module_ids"]
+    original_list: List[str] = ["assignee_ids", "label_ids", "module_ids", "release_ids"]
 
     required_fields: List[str] = [
         "id",
@@ -174,6 +191,12 @@ def issue_group_values(
 
     if field == "issue_module__module_id":
         queryset = Module.objects.filter(workspace__slug=slug).values_list("id", flat=True)
+        if project_id:
+            return list(queryset.filter(project_id=project_id)) + ["None"]
+        return list(queryset) + ["None"]
+
+    if field == "issue_release__release_id":
+        queryset = Release.objects.filter(workspace__slug=slug).values_list("id", flat=True)
         if project_id:
             return list(queryset.filter(project_id=project_id)) + ["None"]
         return list(queryset) + ["None"]

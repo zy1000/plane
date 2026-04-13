@@ -446,6 +446,10 @@ export class IssueService extends APIService {
         assignee_ids?: string[];
         start_date?: string | null;
         target_date?: string | null;
+        label_ids?: string[];
+        cycle_id?: string | null;
+        module_ids?: string[];
+        release_ids?: string[];
       };
     }
   ): Promise<{

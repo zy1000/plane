@@ -89,11 +89,7 @@ export const PageDetailsHeader = observer(function PageDetailsHeader() {
                     router.push(`/${workspaceSlug}/projects/${projectId}/pages/${value}`);
                   }}
                   title={getPageName(page?.name)}
-                  icon={
-                    <Breadcrumbs.Icon>
-                      <SwitcherIcon logo_props={page.logo_props} LabelIcon={PageIcon} size={16} />
-                    </Breadcrumbs.Icon>
-                  }
+                  icon={<SwitcherIcon logo_props={page.logo_props} LabelIcon={PageIcon} size={16} />}
                   isLast
                 />
               }

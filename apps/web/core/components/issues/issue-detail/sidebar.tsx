@@ -44,7 +44,9 @@ import { IssueWorklogProperty } from "@/plane-web/components/issues/worklog/prop
 import { IssueCycleSelect } from "./cycle-select";
 import { IssueLabel } from "./label";
 import { IssueModuleSelect } from "./module-select";
+import { IssueReleaseSelect } from "./release-select";
 import type { TIssueOperations } from "./root";
+import { Rocket } from "lucide-react";
 import { projectIssueTypesCache } from "@/services/project";
 import * as LucideIcons from "lucide-react";
 
@@ -319,6 +321,21 @@ export const IssueDetailsSidebar = observer(function IssueDetailsSidebar(props: 
                 />
               </div>
             )}
+
+            <div className="flex min-h-8 gap-1">
+              <div className="flex w-1/3 flex-shrink-0 gap-1 pt-2 text-sm text-secondary">
+                <Rocket className="h-4 w-4 flex-shrink-0" />
+                <span>发布</span>
+              </div>
+              <IssueReleaseSelect
+                className="w-2/3 flex-grow"
+                workspaceSlug={workspaceSlug}
+                projectId={projectId}
+                issueId={issueId}
+                issueOperations={issueOperations}
+                disabled={!isEditable}
+              />
+            </div>
 
             <div className="flex h-8 items-center gap-1">
               <div className="flex w-1/3 flex-shrink-0 items-center gap-1 text-sm text-secondary">

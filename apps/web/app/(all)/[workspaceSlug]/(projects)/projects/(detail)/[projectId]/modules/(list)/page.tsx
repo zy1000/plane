@@ -8,7 +8,7 @@ import { useCallback } from "react";
 import { observer } from "mobx-react";
 import { useTheme } from "next-themes";
 // plane imports
-import { EUserPermissionsLevel, PROJECT_RELEASES_VIEW_PERMISSION_KEY } from "@plane/constants";
+import { EUserPermissionsLevel } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import type { TModuleFilters } from "@plane/types";
 import { EUserProjectRoles } from "@plane/types";
@@ -18,7 +18,6 @@ import darkModulesAsset from "@/app/assets/empty-state/disabled-feature/modules-
 import lightModulesAsset from "@/app/assets/empty-state/disabled-feature/modules-light.webp?url";
 // components
 import { PageHead } from "@/components/core/page-title";
-import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
 import { DetailedEmptyState } from "@/components/empty-state/detailed-empty-state-root";
 import { ModuleAppliedFiltersList, ModulesListView } from "@/components/modules";
 // hooks
@@ -45,10 +44,10 @@ function ProjectModulesPage({ params }: Route.ComponentProps) {
     updateFilters,
     updateDisplayFilters,
   } = useModuleFilter();
-  const { allowPermissions, allowProjectPermissionKeys, workspaceUserInfo } = useUserPermissions();
+  const { allowPermissions } = useUserPermissions();
   // derived values
   const project = getProjectById(projectId);
-  const pageTitle = project?.name ? `${project?.name} - Releases` : undefined;
+  const pageTitle = project?.name ? `${project?.name} - Modules` : undefined;
   const canPerformEmptyStateActions = allowPermissions([EUserProjectRoles.ADMIN], EUserPermissionsLevel.PROJECT);
   const resolvedPath = resolvedTheme === "light" ? lightModulesAsset : darkModulesAsset;
 
@@ -63,16 +62,6 @@ function ProjectModulesPage({ params }: Route.ComponentProps) {
     },
     [currentProjectFilters, projectId, updateFilters]
   );
-
-  const canViewReleases = allowProjectPermissionKeys(
-    [PROJECT_RELEASES_VIEW_PERMISSION_KEY],
-    workspaceSlug,
-    projectId
-  );
-
-  if (workspaceUserInfo && !canViewReleases) {
-    return <NotAuthorizedView section="general" isProjectView className="h-auto" />;
-  }
 
   // No access to
   if (currentProjectDetails?.module_view === false)

@@ -67,7 +67,6 @@ class ModuleStatus(models.TextChoices):
 class Module(ProjectBaseModel):
     name = models.CharField(max_length=255, verbose_name="Module Name")
     description = models.TextField(verbose_name="Module Description", blank=True)
-    note = models.TextField(verbose_name="Module Note", blank=True, null=True)
     description_text = models.JSONField(verbose_name="Module Description RT", blank=True, null=True)
     description_html = models.JSONField(verbose_name="Module Description HTML", blank=True, null=True)
     start_date = models.DateField(null=True)
@@ -92,7 +91,6 @@ class Module(ProjectBaseModel):
         through="ModuleMember",
         through_fields=("module", "member"),
     )
-    files = models.ManyToManyField("db.File", blank=True, related_name="modules")
     view_props = models.JSONField(default=dict)
     sort_order = models.FloatField(default=65535)
     external_source = models.CharField(max_length=255, null=True, blank=True)
@@ -127,10 +125,6 @@ class Module(ProjectBaseModel):
 
     def __str__(self):
         return f"{self.name} {self.start_date} {self.target_date}"
-
-    def get_file_path(self, filename: str = None):
-        path = f'{self.workspace.slug}/{self.project.id}/module/{self.id}/'
-        return path + filename if filename else path
 
 
 class ModuleMember(ProjectBaseModel):

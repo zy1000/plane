@@ -4,4 +4,6 @@
  * See the LICENSE file for details.
  */
 
-export const EXTENDED_GANTT_TIMELINE_TYPE = {} as const;
+export const EXTENDED_GANTT_TIMELINE_TYPE = {
+  RELEASE: "RELEASE",
+} as const;

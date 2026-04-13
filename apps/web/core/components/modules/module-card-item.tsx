@@ -8,8 +8,8 @@ import type { SyntheticEvent } from "react";
 import React, { useRef } from "react";
 import { observer } from "mobx-react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
-import { SquareUser } from "lucide-react";
+import { useParams, usePathname, useSearchParams } from "next/navigation";
+import { Info, SquareUser } from "lucide-react";
 // plane package imports
 import {
   MODULE_STATUS,
@@ -17,17 +17,14 @@ import {
   EUserPermissions,
   EUserPermissionsLevel,
   IS_FAVORITE_MENU_OPEN,
-  PROJECT_ERROR_MESSAGES,
-  isProjectPermissionError,
 } from "@plane/constants";
 import { useLocalStorage } from "@plane/hooks";
 import { WorkItemsIcon } from "@plane/propel/icons";
-import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setPromiseToast, setToast } from "@plane/propel/toast";
 import { Tooltip } from "@plane/propel/tooltip";
 import type { IModule } from "@plane/types";
 import { Card, FavoriteStar, LinearProgressIndicator } from "@plane/ui";
-import { getDate, renderFormattedPayloadDate } from "@plane/utils";
+import { getDate, renderFormattedPayloadDate, generateQueryParams } from "@plane/utils";
 // components
 import { DateRangeDropdown } from "@/components/dropdowns/date-range";
 import { ButtonAvatars } from "@/components/dropdowns/member/avatar";
@@ -37,6 +34,7 @@ import { ModuleStatusDropdown } from "@/components/modules/module-status-dropdow
 import { useMember } from "@/hooks/store/use-member";
 import { useModule } from "@/hooks/store/use-module";
 import { useUserPermissions } from "@/hooks/store/user";
+import { useAppRouter } from "@/hooks/use-app-router";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 
 type Props = {
@@ -45,10 +43,13 @@ type Props = {
 
 export const ModuleCardItem = observer(function ModuleCardItem(props: Props) {
   const { moduleId } = props;
-  const { t } = useTranslation();
   // refs
   const parentRef = useRef(null);
+  // router
+  const router = useAppRouter();
   const { workspaceSlug, projectId } = useParams();
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
   // store hooks
   const { allowPermissions } = useUserPermissions();
   const { getModuleById, addModuleToFavorites, removeModuleFromFavorites, updateModuleDetails } = useModule();
@@ -130,22 +131,24 @@ export const ModuleCardItem = observer(function ModuleCardItem(props: Props) {
         });
       })
       .catch((err) => {
-        if (isProjectPermissionError(err)) {
-          setToast({
-            type: TOAST_TYPE.ERROR,
-            title: t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title),
-            message: PROJECT_ERROR_MESSAGES.permissionError.i18n_message
-              ? t(PROJECT_ERROR_MESSAGES.permissionError.i18n_message)
-              : undefined,
-          });
-        } else {
-          setToast({
-            type: TOAST_TYPE.ERROR,
-            title: "Error!",
-            message: err?.detail ?? err?.error ?? "Module could not be updated. Please try again.",
-          });
-        }
+        setToast({
+          type: TOAST_TYPE.ERROR,
+          title: "Error!",
+          message: err?.detail ?? "Module could not be updated. Please try again.",
+        });
       });
+  };
+
+  const openModuleOverview = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.stopPropagation();
+    e.preventDefault();
+
+    const query = generateQueryParams(searchParams, ["peekModule"]);
+    if (searchParams.has("peekModule") && searchParams.get("peekModule") === moduleId) {
+      router.push(`${pathname}?${query}`);
+    } else {
+      router.push(`${pathname}?${query && `${query}&`}peekModule=${moduleId}`);
+    }
   };
 
   if (!moduleDetails) return null;
@@ -182,10 +185,7 @@ export const ModuleCardItem = observer(function ModuleCardItem(props: Props) {
 
   return (
     <div className="relative" data-prevent-progress>
-      <Link
-        ref={parentRef}
-        href={`/${workspaceSlug}/projects/${moduleDetails.project_id}/modules/${moduleDetails.id}/overview`}
-      >
+      <Link ref={parentRef} href={`/${workspaceSlug}/projects/${moduleDetails.project_id}/modules/${moduleDetails.id}`}>
         <Card>
           <div>
             <div className="flex items-center justify-between gap-2">
@@ -200,6 +200,9 @@ export const ModuleCardItem = observer(function ModuleCardItem(props: Props) {
                     handleModuleDetailsChange={handleModuleDetailsChange}
                   />
                 )}
+                <button onClick={openModuleOverview}>
+                  <Info className="h-4 w-4 text-placeholder" />
+                </button>
               </div>
             </div>
           </div>

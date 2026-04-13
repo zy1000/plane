@@ -14,6 +14,7 @@ from .draft import (
     DraftIssueLabel,
     DraftIssueModule,
     DraftIssueCycle,
+    DraftIssueRelease,
 )
 from .estimate import Estimate, EstimatePoint
 from .exporter import ExporterHistory
@@ -47,6 +48,7 @@ from .issue import (
     IssueDescriptionVersion,
 )
 from .module import Module, ModuleIssue, ModuleLink, ModuleMember, ModuleUserProperties
+from .release import Release, ReleaseIssue, ReleaseLink, ReleaseMember, ReleaseUserProperties
 from .notification import EmailNotificationLog, Notification, UserNotificationPreference
 from .page import Page, PageLabel, PageLog, ProjectPage, PageVersion
 from .permission import Permission

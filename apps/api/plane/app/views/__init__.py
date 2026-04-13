@@ -173,6 +173,17 @@ from .module.issue import ModuleIssueViewSet
 
 from .module.archive import ModuleArchiveUnarchiveEndpoint
 
+from .release.base import (
+    ReleaseViewSet,
+    ReleaseLinkViewSet,
+    ReleaseFavoriteViewSet,
+    ReleaseUserPropertiesEndpoint,
+)
+
+from .release.issue import ReleaseIssueViewSet
+
+from .release.archive import ReleaseArchiveUnarchiveEndpoint
+
 from .api import ApiTokenEndpoint, ServiceApiTokenEndpoint
 
 from .page.base import (

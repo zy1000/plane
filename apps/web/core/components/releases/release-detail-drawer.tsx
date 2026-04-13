@@ -3,33 +3,33 @@ import { observer } from "mobx-react";
 import { Drawer } from "antd";
 import { useAppRouter } from "@/hooks/use-app-router";
 import { useParams } from "next/navigation";
-import { ModuleDetailContent } from "./module-detail-content";
-import { useModule } from "@/hooks/store/use-module";
+import { ReleaseDetailContent } from "./release-detail-content";
+import { useRelease } from "@/hooks/store/use-release";
 
 type Props = {
-  moduleId: string;
+  releaseId: string;
   isOpen: boolean;
   onClose: () => void;
   isArchived?: boolean;
 };
 
-export const ModuleDetailDrawer: React.FC<Props> = observer((props) => {
-  const { moduleId, isOpen, onClose, isArchived } = props;
+export const ReleaseDetailDrawer: React.FC<Props> = observer((props) => {
+  const { releaseId, isOpen, onClose, isArchived } = props;
   const router = useAppRouter();
   const { workspaceSlug, projectId } = useParams();
-  const { fetchModuleDetails } = useModule();
+  const { fetchReleaseDetails } = useRelease();
 
   const handleFullscreen = () => {
-    if (workspaceSlug && projectId && moduleId) {
-      router.push(`/${workspaceSlug}/projects/${projectId}/module-detail/${moduleId}`);
+    if (workspaceSlug && projectId && releaseId) {
+      router.push(`/${workspaceSlug}/projects/${projectId}/releases/${releaseId}/overview`);
     }
   };
 
   useEffect(() => {
-    if (isOpen && workspaceSlug && projectId && moduleId) {
-      fetchModuleDetails(workspaceSlug.toString(), projectId.toString(), moduleId.toString());
+    if (isOpen && workspaceSlug && projectId && releaseId) {
+      fetchReleaseDetails(workspaceSlug.toString(), projectId.toString(), releaseId.toString());
     }
-  }, [isOpen, workspaceSlug, projectId, moduleId, fetchModuleDetails]);
+  }, [isOpen, workspaceSlug, projectId, releaseId, fetchReleaseDetails]);
 
   return (
     <Drawer
@@ -43,7 +43,7 @@ export const ModuleDetailDrawer: React.FC<Props> = observer((props) => {
       }}
     >
       <div className="h-full overflow-y-auto px-6 py-4">
-        <ModuleDetailContent moduleId={moduleId} isArchived={!!isArchived} isOpen={isOpen} />
+        <ReleaseDetailContent releaseId={releaseId} isArchived={!!isArchived} isOpen={isOpen} />
       </div>
     </Drawer>
   );

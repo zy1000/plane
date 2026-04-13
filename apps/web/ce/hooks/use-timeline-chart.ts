@@ -5,7 +5,7 @@
  */
 
 // types
-import type { TTimelineTypeCore } from "@plane/types";
+import type { TTimelineType } from "@plane/types";
 import { GANTT_TIMELINE_TYPE } from "@plane/types";
 // Plane-web
 
@@ -14,13 +14,16 @@ import type { ITimelineStore } from "../store/timeline";
 
 export const getTimelineStore = (
   timelineStore: ITimelineStore,
-  timelineType: TTimelineTypeCore
+  timelineType: TTimelineType
 ): IBaseTimelineStore => {
   if (timelineType === GANTT_TIMELINE_TYPE.ISSUE) {
     return timelineStore.issuesTimeLineStore as IBaseTimelineStore;
   }
   if (timelineType === GANTT_TIMELINE_TYPE.MODULE) {
     return timelineStore.modulesTimeLineStore as IBaseTimelineStore;
+  }
+  if (timelineType === GANTT_TIMELINE_TYPE.RELEASE) {
+    return timelineStore.releasesTimeLineStore as IBaseTimelineStore;
   }
   if (timelineType === GANTT_TIMELINE_TYPE.PROJECT) {
     return timelineStore.projectTimeLineStore;

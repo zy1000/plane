@@ -58,7 +58,7 @@ export function BreadcrumbNavigationSearchDropdown(props: TBreadcrumbNavigationS
       customButton={
         <>
           <Tooltip tooltipContent={title} position="bottom">
-            <button
+            <div
               onClick={(e) => {
                 if (!isLast) {
                   e.preventDefault();
@@ -67,7 +67,7 @@ export function BreadcrumbNavigationSearchDropdown(props: TBreadcrumbNavigationS
                 }
               }}
               className={cn(
-                "group flex h-full cursor-pointer items-center gap-2 rounded-sm rounded-r-none px-1.5 py-1 text-13 font-medium",
+                "flex h-full min-h-0 cursor-pointer items-center gap-2 rounded-sm rounded-r-none px-1.5 py-1 text-13 font-medium",
                 {
                   "text-primary": isLast,
                   "text-tertiary hover:bg-layer-1 hover:text-primary": !isLast,
@@ -75,17 +75,28 @@ export function BreadcrumbNavigationSearchDropdown(props: TBreadcrumbNavigationS
               )}
             >
               {shouldTruncate && (
-                <div className={cn("flex @4xl:hidden", { "text-primary": isLast, "text-tertiary": !isLast })}>...</div>
+                <div
+                  className={cn("flex items-center @4xl:hidden", {
+                    "text-primary": isLast,
+                    "text-tertiary": !isLast,
+                  })}
+                >
+                  ...
+                </div>
               )}
               <div
-                className={cn("flex gap-2", {
-                  "hidden items-center gap-2 @4xl:flex": shouldTruncate,
+                className={cn("flex items-center gap-2", {
+                  "hidden @4xl:flex": shouldTruncate,
                 })}
               >
-                {icon && <Breadcrumbs.Icon>{icon}</Breadcrumbs.Icon>}
+                {icon && (
+                  <div className="flex size-4 flex-shrink-0 items-center justify-center overflow-hidden !text-16">
+                    {icon}
+                  </div>
+                )}
                 <Breadcrumbs.Label>{title}</Breadcrumbs.Label>
               </div>
-            </button>
+            </div>
           </Tooltip>
           <Breadcrumbs.Separator
             className={cn("rounded-r-sm", {
@@ -104,7 +115,7 @@ export function BreadcrumbNavigationSearchDropdown(props: TBreadcrumbNavigationS
       disabled={navigationDisabled}
       className="h-full rounded-sm"
       customButtonClassName={cn(
-        "group flex h-full cursor-pointer items-center gap-0.5 rounded-sm outline-none hover:bg-surface-2",
+        "group flex h-full cursor-pointer items-center gap-0.5 rounded-sm text-13 font-medium outline-none hover:bg-surface-2",
         {
           "bg-surface-2": isDropdownOpen,
         }

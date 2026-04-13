@@ -14,6 +14,7 @@ import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { ModuleDropdown } from "@/components/dropdowns/module/dropdown";
 import { CycleDropdown } from "@/components/dropdowns/cycle";
 import { DateDropdown } from "@/components/dropdowns/date";
+import { ReleaseDropdown } from "@/components/dropdowns/release/dropdown";
 import { IssuePropertyLabels } from "@/components/issues/issue-layouts/properties/labels";
 // hooks
 import { useMultipleSelectStore } from "@/hooks/store/use-multiple-select-store";
@@ -27,8 +28,9 @@ type Props = {
   className?: string;
 };
 
+// h-7 与工具条内其它药丸控件统一高度（覆盖 DropdownButton 默认 h-full）
 const actionPillClassName =
-  "flex items-center gap-1.5 rounded-md border border-subtle bg-layer-1 px-2 py-1 text-xs text-primary hover:bg-layer-1-hover transition-colors whitespace-nowrap";
+  "inline-flex h-7 max-h-7 shrink-0 items-center justify-start gap-1.5 rounded-md border border-subtle bg-layer-1 px-2 text-xs text-primary hover:bg-layer-1-hover transition-colors whitespace-nowrap";
 
 export const BulkOperationsActionBar = observer(function BulkOperationsActionBar(props: Props) {
   const { className } = props;
@@ -55,6 +57,7 @@ export const BulkOperationsActionBar = observer(function BulkOperationsActionBar
   const [selectedAssigneeIds, setSelectedAssigneeIds] = useState<string[]>([]);
   const [selectedLabelIds, setSelectedLabelIds] = useState<string[]>([]);
   const [selectedModuleIds, setSelectedModuleIds] = useState<string[]>([]);
+  const [selectedReleaseIds, setSelectedReleaseIds] = useState<string[]>([]);
   const [selectedCycleId, setSelectedCycleId] = useState<string | null>(null);
   const [selectedStartDate, setSelectedStartDate] = useState<Date | null>(null);
   const [selectedDueDate, setSelectedDueDate] = useState<Date | null>(null);
@@ -71,7 +74,8 @@ export const BulkOperationsActionBar = observer(function BulkOperationsActionBar
     !!selectedDueDate ||
     selectedLabelIds.length > 0 ||
     !!selectedCycleId ||
-    selectedModuleIds.length > 0;
+    selectedModuleIds.length > 0 ||
+    selectedReleaseIds.length > 0;
 
   const canApplyUpdate = workspaceSlug && projectId && selectedCount > 0 && !isUpdating && hasChanges;
 
@@ -86,6 +90,7 @@ export const BulkOperationsActionBar = observer(function BulkOperationsActionBar
       label_ids?: string[];
       cycle_id?: string | null;
       module_ids?: string[];
+      release_ids?: string[];
     } = {};
 
     if (selectedStateId) properties.state_id = selectedStateId;
@@ -95,6 +100,7 @@ export const BulkOperationsActionBar = observer(function BulkOperationsActionBar
     if (selectedLabelIds.length > 0) properties.label_ids = selectedLabelIds;
     if (selectedCycleId) properties.cycle_id = selectedCycleId;
     if (selectedModuleIds.length > 0) properties.module_ids = selectedModuleIds;
+    if (selectedReleaseIds.length > 0) properties.release_ids = selectedReleaseIds;
 
     setIsUpdating(true);
     try {
@@ -150,6 +156,7 @@ export const BulkOperationsActionBar = observer(function BulkOperationsActionBar
       setSelectedLabelIds([]);
       setSelectedCycleId(null);
       setSelectedModuleIds([]);
+      setSelectedReleaseIds([]);
       
     } finally {
       setIsUpdating(false);
@@ -226,6 +233,7 @@ export const BulkOperationsActionBar = observer(function BulkOperationsActionBar
                 value={selectedStateId}
                 onChange={(stateId) => !hasMultipleTypes && setSelectedStateId(stateId)}
                 buttonVariant="transparent-with-text"
+                buttonContainerClassName="h-7"
                 buttonClassName={cn(actionPillClassName, hasMultipleTypes && "opacity-50 cursor-not-allowed")}
                 disabled={hasMultipleTypes}
               />
@@ -239,8 +247,8 @@ export const BulkOperationsActionBar = observer(function BulkOperationsActionBar
             multiple
             placeholder="Assignees"
             buttonVariant={selectedAssigneeIds.length > 1 ? "transparent-without-text" : "transparent-with-text"}
-            buttonClassName="text-left rounded-md border border-subtle bg-layer-1 px-2 py-1 text-xs text-primary hover:bg-layer-1-hover transition-colors whitespace-nowrap"
-            buttonContainerClassName="w-full"
+            buttonClassName="inline-flex h-7 max-h-7 shrink-0 items-center justify-start gap-1.5 text-left rounded-md border border-subtle bg-layer-1 px-2 text-xs text-primary hover:bg-layer-1-hover transition-colors whitespace-nowrap"
+            buttonContainerClassName="w-full h-7"
             optionsClassName="z-[20]"
           />
           <DateDropdown
@@ -251,7 +259,7 @@ export const BulkOperationsActionBar = observer(function BulkOperationsActionBar
             placeholder="Start date"
             buttonVariant="transparent-with-text"
             buttonClassName={actionPillClassName}
-            buttonContainerClassName="w-full"
+            buttonContainerClassName="w-full h-7"
             optionsClassName="z-[20]"
           />
           <DateDropdown
@@ -262,20 +270,20 @@ export const BulkOperationsActionBar = observer(function BulkOperationsActionBar
             placeholder="Due date"
             buttonVariant="transparent-with-text"
             buttonClassName={actionPillClassName}
-            buttonContainerClassName="w-full"
+            buttonContainerClassName="w-full h-7"
             optionsClassName="z-[20]"
           />
           <IssuePropertyLabels
             projectId={projectId ? projectId.toString() : null}
             value={selectedLabelIds}
             onChange={(data) => setSelectedLabelIds(data)}
-            className="h-full"
-            buttonClassName="h-full w-full flex items-center gap-1.5 text-xs px-2 py-0.5 hover:bg-layer-1-hover rounded-md border border-subtle bg-layer-1 text-left"
+            className="h-7"
+            buttonClassName="inline-flex h-7 max-h-7 w-full shrink-0 items-center justify-start gap-1.5 text-xs px-2 hover:bg-layer-1-hover rounded-md border border-subtle bg-layer-1 text-left"
             maxRender={1}
             placeholderText="Select labels"
             noLabelBorder
             fullWidth
-            fullHeight
+            fullHeight={false}
           />
           <CycleDropdown
             projectId={projectId ? projectId.toString() : undefined}
@@ -284,8 +292,8 @@ export const BulkOperationsActionBar = observer(function BulkOperationsActionBar
             disabled={false}
             placeholder="Select cycle"
             buttonVariant="transparent-with-text"
-            buttonContainerClassName="w-full relative flex items-center p-2"
-            buttonClassName="relative leading-4 h-4.5 bg-transparent hover:bg-transparent !px-0"
+            buttonContainerClassName="w-full h-7"
+            buttonClassName={actionPillClassName}
           />
           <ModuleDropdown
             projectId={projectId ? projectId.toString() : undefined}
@@ -294,8 +302,21 @@ export const BulkOperationsActionBar = observer(function BulkOperationsActionBar
             disabled={false}
             placeholder="Select modules"
             buttonVariant="transparent-with-text"
-            buttonContainerClassName="w-full relative flex items-center p-2"
-            buttonClassName="relative leading-4 h-4.5 bg-transparent hover:bg-transparent !px-0"
+            buttonContainerClassName="w-full h-7"
+            buttonClassName={actionPillClassName}
+            multiple
+            showCount
+            showTooltip
+          />
+          <ReleaseDropdown
+            projectId={projectId ? projectId.toString() : undefined}
+            value={selectedReleaseIds}
+            onChange={(releaseIds) => setSelectedReleaseIds(releaseIds ?? [])}
+            disabled={false}
+            placeholder="Select releases"
+            buttonVariant="transparent-with-text"
+            buttonContainerClassName="w-full h-7"
+            buttonClassName={actionPillClassName}
             multiple
             showCount
             showTooltip

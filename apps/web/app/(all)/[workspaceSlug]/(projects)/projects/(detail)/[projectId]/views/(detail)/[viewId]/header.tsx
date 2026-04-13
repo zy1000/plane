@@ -143,11 +143,7 @@ export const ProjectViewIssuesHeader = observer(function ProjectViewIssuesHeader
                   router.push(`/${workspaceSlug}/projects/${projectId}/views/${value}`);
                 }}
                 title={viewDetails?.name}
-                icon={
-                  <Breadcrumbs.Icon>
-                    <SwitcherIcon logo_props={viewDetails.logo_props} LabelIcon={ViewsIcon} size={16} />
-                  </Breadcrumbs.Icon>
-                }
+                icon={<SwitcherIcon logo_props={viewDetails.logo_props} LabelIcon={ViewsIcon} size={16} />}
                 isLast
               />
             }

@@ -129,7 +129,9 @@ type BreadcrumbLabelProps = {
 function BreadcrumbLabel(props: BreadcrumbLabelProps) {
   const { children, className } = props;
   return (
-    <div className={cn("relative line-clamp-1 block max-w-[150px] truncate overflow-hidden", className)}>
+    <div
+      className={cn("relative line-clamp-1 block max-w-[150px] truncate overflow-hidden leading-4", className)}
+    >
       {children}
     </div>
   );

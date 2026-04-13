@@ -33,6 +33,7 @@ export * from "./issues/base"; // TODO: Remove this after development and the re
 export * from "./issues/issue-identifier";
 export * from "./layout";
 export * from "./module";
+export * from "./release";
 export * from "./page";
 export * from "./payment";
 export * from "./pragmatic";

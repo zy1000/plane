@@ -5,7 +5,7 @@
  */
 
 import type { SyntheticEvent } from "react";
-import { useCallback, useMemo } from "react";
+import { useCallback, useContext, useMemo } from "react";
 import { xor } from "lodash-es";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
@@ -34,6 +34,7 @@ import { EstimateDropdown } from "@/components/dropdowns/estimate";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { ModuleDropdown } from "@/components/dropdowns/module/dropdown";
 import { PriorityDropdown } from "@/components/dropdowns/priority";
+import { ReleaseDropdown } from "@/components/dropdowns/release/dropdown";
 import { StateDropdown } from "@/components/dropdowns/state/dropdown";
 // hooks
 import { useProjectEstimates } from "@/hooks/store/estimates";
@@ -44,6 +45,8 @@ import { useProjectState } from "@/hooks/store/use-project-state";
 import { useAppRouter } from "@/hooks/use-app-router";
 import { useIssueStoreType } from "@/hooks/use-issue-layout-store";
 import { usePlatformOS } from "@/hooks/use-platform-os";
+import { StoreContext } from "@/lib/store-context";
+import { ReleaseService } from "@/services/release.service";
 // plane web components
 import { WorkItemLayoutAdditionalProperties } from "@/plane-web/components/issues/issue-layouts/additional-properties";
 // local components
@@ -78,6 +81,7 @@ export const IssueProperties = observer(function IssueProperties(props: IIssuePr
   const { areEstimateEnabledByProjectId } = useProjectEstimates();
   const { getStateById } = useProjectState();
   const { isMobile } = usePlatformOS();
+  const storeContext = useContext(StoreContext);
   const projectDetails = getProjectById(issue.project_id);
 
   // router
@@ -201,6 +205,39 @@ export const IssueProperties = observer(function IssueProperties(props: IIssuePr
       else issueOperations.removeIssueFromCycle?.();
     },
     [issue, issueOperations]
+  );
+
+  const handleRelease = useCallback(
+    async (releaseIds: string[] | null) => {
+      if (!issue || !releaseIds || !workspaceSlug || !issue.project_id || !issue.id) return;
+      const currentReleaseIds = issue.release_ids ?? [];
+
+      const updatedReleaseIds = xor(currentReleaseIds, releaseIds);
+      const releasesToAdd: string[] = [];
+      const releasesToRemove: string[] = [];
+      for (const releaseId of updatedReleaseIds)
+        if (currentReleaseIds.includes(releaseId)) releasesToRemove.push(releaseId);
+        else releasesToAdd.push(releaseId);
+
+      const newReleaseIds = currentReleaseIds.filter((id) => !releasesToRemove.includes(id)).concat(releasesToAdd);
+      storeContext?.issue.issues.updateIssue(issue.id, { release_ids: newReleaseIds });
+
+      const releaseService = new ReleaseService();
+      try {
+        await releaseService.addReleasesToIssue(workspaceSlug.toString(), issue.project_id, issue.id, {
+          releases: releasesToAdd,
+          removed_releases: releasesToRemove,
+        });
+      } catch {
+        storeContext?.issue.issues.updateIssue(issue.id, { release_ids: currentReleaseIds });
+        setToast({
+          type: TOAST_TYPE.ERROR,
+          title: t("common.error.label"),
+          message: t("entity.update.failed", { entity: t("issue.label") }),
+        });
+      }
+    },
+    [issue, workspaceSlug, t, storeContext]
   );
 
   const handleStartDate = async (date: Date | null) => {
@@ -425,6 +462,22 @@ export const IssueProperties = observer(function IssueProperties(props: IIssuePr
                 </div>
               </WithDisplayPropertiesHOC>
             )}
+
+            {/* releases */}
+            <div className="h-5" onFocus={handleEventPropagation} onClick={handleEventPropagation}>
+              <ReleaseDropdown
+                buttonContainerClassName="truncate max-w-40"
+                projectId={issue?.project_id}
+                value={issue?.release_ids ?? []}
+                onChange={handleRelease}
+                disabled={isReadOnly}
+                renderByDefault={isMobile}
+                multiple
+                buttonVariant="border-with-text"
+                showCount
+                showTooltip
+              />
+            </div>
           </>
         )}
       </>

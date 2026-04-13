@@ -78,6 +78,7 @@ export interface MenuItemFactoryProps {
   // Context-specific data
   cycleId?: string;
   moduleId?: string;
+  releaseId?: string;
   storeType?: EIssuesStoreType;
 }
 
@@ -260,6 +261,16 @@ export const useMenuItemFactory = (props: MenuItemFactoryProps) => {
     shouldRender: isEditingAllowed,
   });
 
+  const createRemoveFromReleaseMenuItem = (): TContextMenuItem => ({
+    key: "remove-from-release",
+    title: "Remove from release",
+    icon: XCircle,
+    action: () => {
+      void runRemoveFromView("Remove from release", "Could not remove work item from release. Please try again.");
+    },
+    shouldRender: isEditingAllowed,
+  });
+
   const createArchiveMenuItem = (): TContextMenuItem => ({
     key: "archive",
     title: t("common.actions.archive"),
@@ -298,6 +309,7 @@ export const useMenuItemFactory = (props: MenuItemFactoryProps) => {
     createCopyLinkMenuItem,
     createRemoveFromCycleMenuItem,
     createRemoveFromModuleMenuItem,
+    createRemoveFromReleaseMenuItem,
     createArchiveMenuItem,
     createRestoreMenuItem,
     createDeleteMenuItem,
@@ -399,6 +411,28 @@ export const useModuleIssueMenuItems = (props: MenuItemFactoryProps): TContextMe
       factory.createDeleteMenuItem(),
     ],
     [factory, props.moduleId]
+  );
+};
+
+export const useReleaseIssueMenuItems = (props: MenuItemFactoryProps): TContextMenuItem[] => {
+  const factory = useMenuItemFactory(props);
+
+  const customEditAction = () => {
+    props.setIssueToEdit(props.issue);
+    props.setCreateUpdateIssueModal(true);
+  };
+
+  return useMemo(
+    () => [
+      factory.createEditMenuItem(customEditAction),
+      factory.createCopyMenuItem(),
+      factory.createOpenInNewTabMenuItem(),
+      factory.createCopyLinkMenuItem(),
+      factory.createRemoveFromReleaseMenuItem(),
+      factory.createArchiveMenuItem(),
+      factory.createDeleteMenuItem(),
+    ],
+    [factory, props.releaseId]
   );
 };
 
