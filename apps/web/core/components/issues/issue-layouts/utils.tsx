@@ -6,6 +6,7 @@
 
 import type { CSSProperties, FC } from "react";
 import { extractInstruction } from "@atlaskit/pragmatic-drag-and-drop-hitbox/tree-item";
+import { Rocket } from "lucide-react";
 import { clone, isNil, pull, uniq, concat } from "lodash-es";
 import scrollIntoView from "smooth-scroll-into-view-if-needed";
 // plane types
@@ -117,6 +118,7 @@ export const getGroupByColumns = ({
     project: getProjectColumns,
     cycle: getCycleColumns,
     module: getModuleColumns,
+    release: getReleaseColumns,
     state: getStateColumns,
     "state_detail.group": getStateGroupColumns,
     priority: getPriorityColumns,
@@ -208,6 +210,29 @@ const getModuleColumns = (): IGroupByColumn[] | undefined => {
     payload: {},
   });
   return modules;
+};
+
+const getReleaseColumns = (): IGroupByColumn[] | undefined => {
+  const { currentProjectDetails } = store.projectRoot.project;
+  if (!currentProjectDetails?.id) return;
+  const { getProjectReleaseDetails } = store.release;
+  const releaseDetails = getProjectReleaseDetails(currentProjectDetails.id);
+  const releases: IGroupByColumn[] = [];
+  releaseDetails?.forEach((rel) => {
+    releases.push({
+      id: rel.id,
+      name: rel.name,
+      icon: <Rocket className="h-3.5 w-3.5" />,
+      payload: { release_ids: [rel.id] },
+    });
+  });
+  releases.push({
+    id: "None",
+    name: "None",
+    icon: <Rocket className="h-3.5 w-3.5" />,
+    payload: {},
+  });
+  return releases;
 };
 
 const getStateColumns = ({ projectId, issueTypeIds }: TGetColumns): IGroupByColumn[] | undefined => {

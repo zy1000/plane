@@ -25,7 +25,9 @@ import { useIssueStoreType } from "@/hooks/use-issue-layout-store";
 import { useIssuesActions } from "@/hooks/use-issues-actions";
 // services
 import { FileService } from "@/services/file.service";
+import { ReleaseService } from "@/services/release.service";
 const fileService = new FileService();
+const releaseService = new ReleaseService();
 // local imports
 import { CreateIssueToastActionItems } from "../create-issue-toast-action-items";
 import { DraftIssueLayout } from "./draft-issue-layout";
@@ -68,7 +70,7 @@ export const CreateUpdateIssueModalBase = observer(function CreateUpdateIssueMod
   const [isDuplicateModalOpen, setIsDuplicateModalOpen] = useState(false);
   // store hooks
   const { t } = useTranslation();
-  const { workspaceSlug, projectId: routerProjectId, cycleId, moduleId, workItem } = useParams();
+  const { workspaceSlug, projectId: routerProjectId, cycleId, moduleId, releaseId, workItem } = useParams();
   const { fetchCycleDetails } = useCycle();
   const { fetchModuleDetails } = useModule();
   const { issues } = useIssues(storeType);
@@ -142,6 +144,15 @@ export const CreateUpdateIssueModalBase = observer(function CreateUpdateIssueMod
     ]);
   };
 
+  const addIssueToReleases = async (issue: TIssue, releaseIds: string[]) => {
+    if (!workspaceSlug || !issue.project_id || releaseIds.length === 0) return;
+
+    await releaseService.addReleasesToIssue(workspaceSlug.toString(), issue.project_id, issue.id, {
+      releases: releaseIds,
+      removed_releases: [],
+    });
+  };
+
   const handleCreateMoreToggleChange = (value: boolean) => {
     setCreateMore(value);
   };
@@ -164,22 +175,24 @@ export const CreateUpdateIssueModalBase = observer(function CreateUpdateIssueMod
     if (!workspaceSlug || !payload.project_id) return;
 
     try {
+      const { release_ids: releaseIdsToLink, ...createPayload } = payload;
       let response: TIssue | undefined;
       // if draft issue, use draft issue store to create issue
       if (is_draft_issue) {
-        response = (await draftIssues.createIssue(workspaceSlug.toString(), payload)) as TIssue;
+        response = (await draftIssues.createIssue(workspaceSlug.toString(), createPayload)) as TIssue;
       }
       // if cycle id in payload does not match the cycleId in url
       // or if the moduleIds in Payload does not match the moduleId in url
       // use the project issue store to create issues
       else if (
         (payload.cycle_id !== cycleId && storeType === EIssuesStoreType.CYCLE) ||
-        (!payload.module_ids?.includes(moduleId?.toString()) && storeType === EIssuesStoreType.MODULE)
+        (!payload.module_ids?.includes(moduleId?.toString()) && storeType === EIssuesStoreType.MODULE) ||
+        (!payload.release_ids?.includes(releaseId?.toString()) && storeType === EIssuesStoreType.RELEASE)
       ) {
-        response = await projectIssues.createIssue(workspaceSlug.toString(), payload.project_id, payload);
+        response = await projectIssues.createIssue(workspaceSlug.toString(), payload.project_id, createPayload);
       } // else just use the existing store type's create method
       else if (createIssue) {
-        response = await createIssue(payload.project_id, payload);
+        response = await createIssue(payload.project_id, createPayload);
       }
 
       // update uploaded assets' status
@@ -212,6 +225,14 @@ export const CreateUpdateIssueModalBase = observer(function CreateUpdateIssueMod
           (!payload.module_ids.includes(moduleId?.toString()) || storeType !== EIssuesStoreType.MODULE)
         ) {
           await addIssueToModule(response, payload.module_ids);
+        }
+        if (releaseIdsToLink && releaseIdsToLink.length > 0) {
+          const urlRelease = releaseId?.toString();
+          const toLink =
+            storeType === EIssuesStoreType.RELEASE && urlRelease
+              ? releaseIdsToLink.filter((id) => id !== urlRelease)
+              : releaseIdsToLink;
+          if (toLink.length > 0) await addIssueToReleases(response, toLink);
         }
       }
 
@@ -265,7 +286,10 @@ export const CreateUpdateIssueModalBase = observer(function CreateUpdateIssueMod
 
     try {
       if (isDraft) await draftIssues.updateIssue(workspaceSlug.toString(), data.id, payload);
-      else if (updateIssue) await updateIssue(payload.project_id, data.id, payload);
+      else if (updateIssue) {
+        const { release_ids: _releaseIdsInPatch, ...patchPayload } = payload;
+        await updateIssue(payload.project_id, data.id, patchPayload);
+      }
 
       // check if we should add/remove issue to/from cycle
       if (
@@ -299,6 +323,24 @@ export const CreateUpdateIssueModalBase = observer(function CreateUpdateIssueMod
           modulesToAdd,
           modulesToRemove
         );
+      }
+
+      if (data.project_id && payload.release_ids !== undefined) {
+        const prevReleaseIds = data.release_ids ?? [];
+        const updatedReleaseIds = xor(prevReleaseIds, payload.release_ids);
+        const releasesToAdd: string[] = [];
+        const releasesToRemove: string[] = [];
+
+        for (const rid of updatedReleaseIds) {
+          if (prevReleaseIds.includes(rid)) releasesToRemove.push(rid);
+          else releasesToAdd.push(rid);
+        }
+        if (releasesToAdd.length > 0 || releasesToRemove.length > 0) {
+          await releaseService.addReleasesToIssue(workspaceSlug.toString(), data.project_id, data.id, {
+            releases: releasesToAdd,
+            removed_releases: releasesToRemove,
+          });
+        }
       }
 
       // add other property values
@@ -361,11 +403,12 @@ export const CreateUpdateIssueModalBase = observer(function CreateUpdateIssueMod
 
   const commonIssueModalProps: IssueFormProps = {
     issueTitleRef: issueTitleRef,
-    data: {
+       data: {
       ...data,
       description_html: description,
       cycle_id: data?.cycle_id ? data?.cycle_id : cycleId ? cycleId.toString() : null,
       module_ids: data?.module_ids ? data?.module_ids : moduleId ? [moduleId.toString()] : null,
+      release_ids: data?.release_ids ? data?.release_ids : releaseId ? [releaseId.toString()] : null,
     },
     onAssetUpload: handleUpdateUploadedAssetIds,
     onClose: handleClose,

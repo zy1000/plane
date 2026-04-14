@@ -37,12 +37,17 @@ export interface IssuesModalProps {
 
 export const CreateUpdateIssueModal = observer(function CreateUpdateIssueModal(props: IssuesModalProps) {
   // router params
-  const { cycleId, moduleId } = useParams();
+  const { cycleId, moduleId, releaseId } = useParams();
   // derived values
   const dataForPreload = {
     ...props.data,
     cycle_id: props.data?.cycle_id ? props.data?.cycle_id : cycleId ? cycleId.toString() : null,
     module_ids: props.data?.module_ids ? props.data?.module_ids : moduleId ? [moduleId.toString()] : null,
+    release_ids: props.data?.release_ids
+      ? props.data?.release_ids
+      : releaseId
+        ? [releaseId.toString()]
+        : null,
   };
 
   if (!props.isOpen) return null;

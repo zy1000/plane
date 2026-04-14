@@ -42,6 +42,8 @@ export const getGroupByColumns = (
       return getCycleColumns(cycle);
     case "module":
       return getModuleColumns(module);
+    case "release":
+      return undefined;
     case "state":
       return getStateColumns(projectState);
     case "priority":

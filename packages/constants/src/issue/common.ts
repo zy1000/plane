@@ -32,6 +32,7 @@ export enum EIssueGroupByToServerOptions {
   "assignees" = "assignees__id",
   "cycle" = "cycle_id",
   "module" = "issue_module__module_id",
+  "release" = "issue_release__release_id",
   "target_date" = "target_date",
   "project" = "project_id",
   "created_by" = "created_by",
@@ -47,6 +48,7 @@ export enum EIssueGroupBYServerToProperty {
   "assignees__id" = "assignee_ids",
   "cycle_id" = "cycle_id",
   "issue_module__module_id" = "module_ids",
+  "issue_release__release_id" = "release_ids",
   "target_date" = "target_date",
   "project_id" = "project_id",
   "created_by" = "created_by",
@@ -98,6 +100,7 @@ export const DRAG_ALLOWED_GROUPS: TIssueGroupByOptions[] = [
   "labels",
   "module",
   "cycle",
+  "release",
 ];
 
 export type TCreateModalStoreTypes =
@@ -123,6 +126,7 @@ export const ISSUE_GROUP_BY_OPTIONS: {
   { key: "project", titleTranslationKey: "common.project" }, // required this on my issues
   { key: "cycle", titleTranslationKey: "common.cycle" }, // required this on my issues
   { key: "module", titleTranslationKey: "common.module" }, // required this on my issues
+  { key: "release", titleTranslationKey: "issue.display.properties.release" },
   { key: "labels", titleTranslationKey: "common.labels" },
   { key: "assignees", titleTranslationKey: "common.assignees" },
   { key: "created_by", titleTranslationKey: "common.created_by" },
@@ -157,6 +161,7 @@ export const ISSUE_DISPLAY_PROPERTIES_KEYS: (keyof IIssueDisplayProperties)[] = 
   "updated_on",
   "modules",
   "cycle",
+  "release",
   "issue_type",
 ];
 
@@ -210,6 +215,7 @@ export const ISSUE_DISPLAY_PROPERTIES: {
   },
   { key: "modules", titleTranslationKey: "common.module" },
   { key: "cycle", titleTranslationKey: "common.cycle" },
+  { key: "release", titleTranslationKey: "issue.display.properties.release" },
 ];
 
 export const SPREADSHEET_PROPERTY_LIST: (keyof IIssueDisplayProperties)[] = [
@@ -219,6 +225,7 @@ export const SPREADSHEET_PROPERTY_LIST: (keyof IIssueDisplayProperties)[] = [
   "labels",
   "modules",
   "cycle",
+  "release",
   "start_date",
   "due_date",
   "estimate",
@@ -294,6 +301,14 @@ export const SPREADSHEET_PROPERTY_DETAILS: {
     descendingOrderKey: "-issue_cycle__cycle__name",
     descendingOrderTitle: "Z",
     icon: "ContrastIcon",
+  },
+  release: {
+    i18n_title: "issue.display.properties.release",
+    ascendingOrderKey: "issue_release__release__name",
+    ascendingOrderTitle: "A",
+    descendingOrderKey: "-issue_release__release__name",
+    descendingOrderTitle: "Z",
+    icon: "Rocket",
   },
   priority: {
     i18n_title: "common.priority",

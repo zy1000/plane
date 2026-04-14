@@ -464,20 +464,22 @@ export const IssueProperties = observer(function IssueProperties(props: IIssuePr
             )}
 
             {/* releases */}
-            <div className="h-5" onFocus={handleEventPropagation} onClick={handleEventPropagation}>
-              <ReleaseDropdown
-                buttonContainerClassName="truncate max-w-40"
-                projectId={issue?.project_id}
-                value={issue?.release_ids ?? []}
-                onChange={handleRelease}
-                disabled={isReadOnly}
-                renderByDefault={isMobile}
-                multiple
-                buttonVariant="border-with-text"
-                showCount
-                showTooltip
-              />
-            </div>
+            <WithDisplayPropertiesHOC displayProperties={displayProperties} displayPropertyKey="release">
+              <div className="h-5" onFocus={handleEventPropagation} onClick={handleEventPropagation}>
+                <ReleaseDropdown
+                  buttonContainerClassName="truncate max-w-40"
+                  projectId={issue?.project_id}
+                  value={issue?.release_ids ?? []}
+                  onChange={handleRelease}
+                  disabled={isReadOnly}
+                  renderByDefault={isMobile}
+                  multiple
+                  buttonVariant="border-with-text"
+                  showCount
+                  showTooltip
+                />
+              </div>
+            </WithDisplayPropertiesHOC>
           </>
         )}
       </>

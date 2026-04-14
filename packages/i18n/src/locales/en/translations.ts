@@ -874,6 +874,7 @@ export default {
         created_on: "Created on",
         sub_issue: "Sub-work item",
         work_item_count: "Work item count",
+        release: "Release",
       },
       extra: {
         show_sub_issues: "Show sub-work items",
@@ -2564,6 +2565,10 @@ export default {
   module: {
     label: "{count, plural, one {Module} other {Modules}}",
     no_module: "No module",
+  },
+  release: {
+    label: "{count, plural, one {Release} other {Releases}}",
+    no_release: "No release",
   },
   description_versions: {
     last_edited_by: "Last edited by",

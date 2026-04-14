@@ -21,6 +21,7 @@ export type TIssueGroupByOptions =
   | "assignees"
   | "cycle"
   | "module"
+  | "release"
   | "target_date"
   | "team_project"
   | null;
@@ -43,6 +44,8 @@ export type TIssueOrderByOptions =
   | "-issue_module__module__name"
   | "issue_cycle__cycle__name"
   | "-issue_cycle__cycle__name"
+  | "issue_release__release__name"
+  | "-issue_release__release__name"
   | "target_date"
   | "-target_date"
   | "estimate_point__key"
@@ -71,6 +74,7 @@ export type TIssueParams =
   | "labels"
   | "cycle"
   | "module"
+  | "release"
   | "start_date"
   | "target_date"
   | "project"
@@ -176,6 +180,7 @@ export interface IIssueDisplayProperties {
   updated_on?: boolean;
   modules?: boolean;
   cycle?: boolean;
+  release?: boolean;
   issue_type?: boolean;
 }
 

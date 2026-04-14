@@ -1032,6 +1032,7 @@ export default {
         created_on: "创建于",
         sub_issue: "子工作项",
         work_item_count: "工作项数量",
+        release: "发布",
       },
       extra: {
         show_sub_issues: "显示子工作项",

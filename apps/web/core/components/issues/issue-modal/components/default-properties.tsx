@@ -22,6 +22,7 @@ import { DateDropdown } from "@/components/dropdowns/date";
 import { EstimateDropdown } from "@/components/dropdowns/estimate";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { ModuleDropdown } from "@/components/dropdowns/module/dropdown";
+import { ReleaseDropdown } from "@/components/dropdowns/release/dropdown";
 import { PriorityDropdown } from "@/components/dropdowns/priority";
 import { StateDropdown } from "@/components/dropdowns/state/dropdown";
 import { ParentIssuesListModal } from "@/components/issues/parent-issues-list-modal";
@@ -240,6 +241,29 @@ export const IssueDefaultProperties = observer(function IssueDefaultProperties(p
                 placeholder={t("modules")}
                 buttonVariant="border-with-text"
                 tabIndex={getIndex("module_ids")}
+                multiple
+                showCount
+              />
+            </div>
+          )}
+        />
+      )}
+      {projectDetails?.module_view && workspaceSlug && (
+        <Controller
+          control={control}
+          name="release_ids"
+          render={({ field: { value, onChange } }) => (
+            <div className="h-7">
+              <ReleaseDropdown
+                projectId={projectId ?? undefined}
+                value={value ?? []}
+                onChange={(releaseIds) => {
+                  onChange(releaseIds);
+                  handleFormChange();
+                }}
+                placeholder={t("issue.display.properties.release")}
+                buttonVariant="border-with-text"
+                tabIndex={getIndex("release_ids")}
                 multiple
                 showCount
               />
