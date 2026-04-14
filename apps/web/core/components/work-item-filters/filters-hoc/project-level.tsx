@@ -23,6 +23,7 @@ import { useModule } from "@/hooks/store/use-module";
 import { useProject } from "@/hooks/store/use-project";
 import { useProjectState } from "@/hooks/store/use-project-state";
 import { useProjectView } from "@/hooks/store/use-project-view";
+import { useRelease } from "@/hooks/store/use-release";
 import { useUser, useUserPermissions } from "@/hooks/store/user";
 // local imports
 import { WorkItemFiltersHOC } from "./base";
@@ -45,6 +46,7 @@ export const ProjectLevelWorkItemFiltersHOC = observer(function ProjectLevelWork
   // hooks
   const { getProjectById } = useProject();
   const { getViewById, updateView } = useProjectView();
+  const { getProjectReleaseIds } = useRelease();
   const { data: currentUser } = useUser();
   const { allowPermissions } = useUserPermissions();
   const { getProjectCycleIds } = useCycle();
@@ -206,6 +208,7 @@ export const ProjectLevelWorkItemFiltersHOC = observer(function ProjectLevelWork
         labelIds={getProjectLabelIds(projectId)}
         memberIds={getProjectMemberIds(projectId, false) ?? undefined}
         moduleIds={getProjectModuleIds(projectId) ?? undefined}
+        releaseIds={getProjectReleaseIds(projectId) ?? undefined}
         stateIds={getProjectStateIds(projectId)}
         saveViewOptions={saveViewOptions}
         updateViewOptions={updateViewOptions}

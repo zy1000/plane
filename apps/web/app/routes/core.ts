@@ -371,6 +371,14 @@ export const coreRoutes: RouteConfigEntry[] = [
               "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/archives/modules/page.tsx"
             ),
           ]),
+
+          // Project Archives - Releases
+          layout("./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/archives/releases/layout.tsx", [
+            route(
+              ":workspaceSlug/projects/:projectId/archives/releases",
+              "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/archives/releases/page.tsx"
+            ),
+          ]),
         ]),
       ]),
 

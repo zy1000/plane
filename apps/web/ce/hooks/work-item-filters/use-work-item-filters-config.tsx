@@ -5,7 +5,7 @@
  */
 
 import { useCallback, useMemo } from "react";
-import { AtSign, Briefcase } from "lucide-react";
+import { AtSign, Briefcase, Rocket } from "lucide-react";
 // plane imports
 import { Logo } from "@plane/propel/emoji-icon-picker";
 import {
@@ -32,6 +32,7 @@ import type {
   IIssueLabel,
   IModule,
   IProject,
+  IRelease,
   TWorkItemFilterProperty,
 } from "@plane/types";
 import { Avatar } from "@plane/ui";
@@ -47,6 +48,7 @@ import {
   getModuleFilterConfig,
   getPriorityFilterConfig,
   getProjectFilterConfig,
+  getReleaseFilterConfig,
   getStartDateFilterConfig,
   getStateFilterConfig,
   getStateGroupFilterConfig,
@@ -64,6 +66,7 @@ import { useModule } from "@/hooks/store/use-module";
 import { useProject } from "@/hooks/store/use-project";
 import { useProjectState } from "@/hooks/store/use-project-state";
 import { useProjectIssueTypes } from "@/hooks/store/use-project-issue-types";
+import { useRelease } from "@/hooks/store/use-release";
 // plane web imports
 import { useFiltersOperatorConfigs } from "@/plane-web/hooks/rich-filters/use-filters-operator-configs";
 
@@ -75,6 +78,7 @@ export type TWorkItemFiltersEntityProps = {
   moduleIds?: string[];
   projectId?: string;
   projectIds?: string[];
+  releaseIds?: string[];
   stateIds?: string[];
 };
 
@@ -93,14 +97,25 @@ export type TWorkItemFiltersConfig = {
 };
 
 export const useWorkItemFiltersConfig = (props: TUseWorkItemFiltersConfigProps): TWorkItemFiltersConfig => {
-  const { allowedFilters, cycleIds, labelIds, memberIds, moduleIds, projectId, projectIds, stateIds, workspaceSlug } =
-    props;
+  const {
+    allowedFilters,
+    cycleIds,
+    labelIds,
+    memberIds,
+    moduleIds,
+    projectId,
+    projectIds,
+    releaseIds,
+    stateIds,
+    workspaceSlug,
+  } = props;
   // store hooks
   const { loader: projectLoader, getProjectById } = useProject();
   const { getCycleById } = useCycle();
   const { getLabelById } = useLabel();
   const { getModuleById } = useModule();
   const { getStateById } = useProjectState();
+  const { getReleaseById } = useRelease();
   const { getUserDetails } = useMember();
   const { issueTypes: workItemTypes } = useProjectIssueTypes(workspaceSlug, projectId);
   // derived values
@@ -146,6 +161,13 @@ export const useWorkItemFiltersConfig = (props: TUseWorkItemFiltersConfigProps):
         ? (projectIds.map((projectId) => getProjectById(projectId)).filter((project) => project) as IProject[])
         : [],
     [projectIds, getProjectById]
+  );
+  const releases: IRelease[] | undefined = useMemo(
+    () =>
+      releaseIds
+        ? (releaseIds.map((releaseId) => getReleaseById(releaseId)).filter((release) => release) as IRelease[])
+        : undefined,
+    [releaseIds, getReleaseById]
   );
   const areAllConfigsInitialized = useMemo(() => isLoaderReady(projectLoader), [projectLoader]);
 
@@ -221,6 +243,18 @@ export const useWorkItemFiltersConfig = (props: TUseWorkItemFiltersConfigProps):
         ...operatorConfigs,
       }),
     [isFilterEnabled, project?.module_view, modules, operatorConfigs]
+  );
+
+  // release filter config
+  const releaseFilterConfig = useMemo(
+    () =>
+      getReleaseFilterConfig<TWorkItemFilterProperty>("release_id")({
+        isEnabled: isFilterEnabled("release_id") && releases !== undefined,
+        filterIcon: Rocket,
+        releases: releases ?? [],
+        ...operatorConfigs,
+      }),
+    [isFilterEnabled, releases, operatorConfigs]
   );
 
   // assignee filter config
@@ -422,6 +456,7 @@ export const useWorkItemFiltersConfig = (props: TUseWorkItemFiltersConfigProps):
       labelFilterConfig,
       cycleFilterConfig,
       moduleFilterConfig,
+      releaseFilterConfig,
       issueTypeFilterConfig,
       startDateFilterConfig,
       targetDateFilterConfig,
@@ -437,6 +472,7 @@ export const useWorkItemFiltersConfig = (props: TUseWorkItemFiltersConfigProps):
       label_id: labelFilterConfig,
       cycle_id: cycleFilterConfig,
       module_id: moduleFilterConfig,
+      release_id: releaseFilterConfig,
       assignee_id: assigneeFilterConfig,
       mention_id: mentionFilterConfig,
       created_by_id: createdByFilterConfig,

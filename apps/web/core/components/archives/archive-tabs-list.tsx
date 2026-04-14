@@ -30,6 +30,11 @@ const ARCHIVES_TAB_LIST: {
   },
   {
     key: "modules",
+    label: "Modules",
+    shouldRender: (projectDetails) => projectDetails.module_view,
+  },
+  {
+    key: "releases",
     label: "Releases",
     shouldRender: (projectDetails) => projectDetails.module_view,
   },

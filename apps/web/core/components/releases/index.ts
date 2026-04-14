@@ -5,6 +5,8 @@
  */
 
 export * from "./analytics-sidebar/issue-progress";
+export * from "./archived-releases/header";
+export * from "./archived-releases/root";
 export * from "./archive-release-modal";
 export * from "./create-update-release-modal";
 export * from "./delete-release-modal";

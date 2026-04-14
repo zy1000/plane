@@ -10,6 +10,7 @@ export * from "./label";
 export * from "./module";
 export * from "./priority";
 export * from "./project";
+export * from "./release";
 export * from "./state";
 export * from "./user";
 export * from "./issue-type";

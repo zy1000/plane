@@ -424,29 +424,30 @@ class ProjectViewSet(BaseViewSet):
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+    @allow_fine_permission(PermissionKey.PROJECT_SETTINGS_EDIT)
     def partial_update(self, request, slug, pk=None):
         # try:
-        is_workspace_admin = WorkspaceMember.objects.filter(
-            member=request.user,
-            workspace__slug=slug,
-            is_active=True,
-            role=ROLE.ADMIN.value,
-        ).exists()
-
-        is_project_admin = ProjectMember.objects.filter(
-            member=request.user,
-            workspace__slug=slug,
-            project_id=pk,
-            role=ROLE.ADMIN.value,
-            is_active=True,
-        ).exists()
+        # is_workspace_admin = WorkspaceMember.objects.filter(
+        #     member=request.user,
+        #     workspace__slug=slug,
+        #     is_active=True,
+        #     role=ROLE.ADMIN.value,
+        # ).exists()
+        #
+        # is_project_admin = ProjectMember.objects.filter(
+        #     member=request.user,
+        #     workspace__slug=slug,
+        #     project_id=pk,
+        #     role=ROLE.ADMIN.value,
+        #     is_active=True,
+        # ).exists()
 
         # Return error for if the user is neither workspace admin nor project admin
-        if not is_project_admin and not is_workspace_admin:
-            return Response(
-                {"error": "You don't have the required permissions."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
+        # if not is_project_admin and not is_workspace_admin:
+        #     return Response(
+        #         {"error": "You don't have the required permissions."},
+        #         status=status.HTTP_403_FORBIDDEN,
+        #     )
 
         workspace = Workspace.objects.get(slug=slug)
 
