@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { observer } from "mobx-react";
 import { Modal, Pagination } from "antd";
-import { BookOpen, Expand, FolderKanban, History, Megaphone, Plus, Trash2, Users } from "lucide-react";
+import { BookOpen, Expand, FolderKanban, History, Megaphone, Pencil, Plus, Trash2, Users } from "lucide-react";
 import { PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import type { IProject, TNameDescriptionLoader } from "@plane/types";
@@ -46,6 +46,7 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [activeAnnouncement, setActiveAnnouncement] = useState<TProjectAnnouncement | null>(null);
   const [isDescriptionModalOpen, setIsDescriptionModalOpen] = useState(false);
+  const [isDescriptionEditing, setIsDescriptionEditing] = useState(false);
   const [isActivityModalOpen, setIsActivityModalOpen] = useState(false);
   const { getUserDetails } = useMember();
 
@@ -153,11 +154,23 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
                   <span className="text-sm font-medium text-primary">项目背景</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  {isSubmitting === "submitting" && <span className="text-xs text-placeholder">保存中...</span>}
                   <button
                     type="button"
                     className="cursor-pointer rounded-md p-1 text-placeholder transition-colors hover:bg-surface-2 hover:text-primary"
-                    onClick={() => setIsDescriptionModalOpen(true)}
+                    onClick={() => {
+                      setIsDescriptionEditing(true);
+                      setIsDescriptionModalOpen(true);
+                    }}
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    className="cursor-pointer rounded-md p-1 text-placeholder transition-colors hover:bg-surface-2 hover:text-primary"
+                    onClick={() => {
+                      setIsDescriptionEditing(false);
+                      setIsDescriptionModalOpen(true);
+                    }}
                   >
                     <Expand className="h-3.5 w-3.5" />
                   </button>
@@ -168,6 +181,7 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
                   workspaceSlug={workspaceSlug}
                   projectId={project.id}
                   initialValue={project?.description_html}
+                  disabled
                   setIsSubmitting={setIsSubmitting}
                   swrProjectDescription={project?.description_html}
                   containerClassName="h-full vertical-scrollbar scrollbar-sm overflow-y-auto"
@@ -326,6 +340,8 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
           setIsDetailModalOpen(false);
           setActiveAnnouncement(null);
         }}
+        workspaceSlug={workspaceSlug}
+        projectId={project.id}
         announcement={activeAnnouncement}
       />
 
@@ -335,6 +351,7 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
         workspaceSlug={workspaceSlug}
         projectId={project.id}
         initialValue={project?.description_html}
+        initialEditing={isDescriptionEditing}
       />
 
       {/* 项目活动 Modal */}

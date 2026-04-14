@@ -1,8 +1,7 @@
 import { type FC, useEffect, useMemo, useState } from "react";
 import { observer } from "mobx-react";
-import { Check, ChevronDown } from "lucide-react";
 import type { IProjectRole } from "@plane/types";
-import { Avatar, Loader, MultiSelectDropdown } from "@plane/ui";
+import { Avatar, Loader, Tooltip } from "@plane/ui";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
 import { getFileURL } from "@plane/utils";
 import { useMember } from "@/hooks/store/use-member";
@@ -21,8 +20,6 @@ interface IMemberStat {
   work_item_count: number;
   defect_count: number;
 }
-
-const NOOP = () => {};
 
 export const OverviewMemberStats: FC<Props> = observer(({ workspaceSlug, projectId }) => {
   const [members, setMembers] = useState<IMemberStat[]>([]);
@@ -54,12 +51,13 @@ export const OverviewMemberStats: FC<Props> = observer(({ workspaceSlug, project
     () =>
       members.map((member) => {
         const details = getFilteredProjectMemberDetails(member.member_id, projectId);
-        return {
-          ...member,
-          customRoleIds: details?.custom_role_ids ?? [],
-        };
+        const roleNames =
+          details?.custom_role_ids
+            ?.map((rid) => roles.find((r) => r.id === rid)?.name)
+            .filter((n): n is string => Boolean(n)) ?? [];
+        return { ...member, roleNames };
       }),
-    [members, getFilteredProjectMemberDetails, projectId]
+    [members, getFilteredProjectMemberDetails, projectId, roles]
   );
 
   if (loading) {
@@ -82,10 +80,10 @@ export const OverviewMemberStats: FC<Props> = observer(({ workspaceSlug, project
     <Table>
       <TableHeader className="border-b border-subtle border-t-0 bg-transparent">
         <TableRow>
-          <TableHead className="h-8 text-left text-xs font-medium text-placeholder">成员</TableHead>
-          <TableHead className="h-8 w-32 text-left text-xs font-medium text-placeholder">角色</TableHead>
-          <TableHead className="h-8 w-20 text-center text-xs font-medium text-placeholder">工作项</TableHead>
-          <TableHead className="h-8 w-20 text-center text-xs font-medium text-placeholder">缺陷</TableHead>
+          <TableHead className="h-8 w-1/4 text-left text-xs font-medium text-placeholder">成员</TableHead>
+          <TableHead className="h-8 text-left text-xs font-medium text-placeholder">角色</TableHead>
+          <TableHead className="h-8 w-16 text-center text-xs font-medium text-placeholder">工作项</TableHead>
+          <TableHead className="h-8 w-16 text-center text-xs font-medium text-placeholder">缺陷</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -104,7 +102,7 @@ export const OverviewMemberStats: FC<Props> = observer(({ workspaceSlug, project
               </div>
             </TableCell>
             <TableCell className="text-13 text-secondary">
-              <ReadonlyRoleDropdown selectedRoleIds={m.customRoleIds} roles={roles} />
+              <RoleTags roleNames={m.roleNames} />
             </TableCell>
             <TableCell className="text-center text-sm font-medium text-primary">{m.work_item_count}</TableCell>
             <TableCell className="text-center text-sm font-medium text-red-500">{m.defect_count}</TableCell>
@@ -115,59 +113,23 @@ export const OverviewMemberStats: FC<Props> = observer(({ workspaceSlug, project
   );
 });
 
-type ReadonlyRoleDropdownProps = {
-  selectedRoleIds: string[];
-  roles: IProjectRole[];
-};
+const RoleTags: FC<{ roleNames: string[] }> = ({ roleNames }) => {
+  if (roleNames.length === 0) return <span className="text-xs text-placeholder">-</span>;
 
-const ReadonlyRoleDropdown: FC<ReadonlyRoleDropdownProps> = ({ selectedRoleIds, roles }) => {
-  const options = useMemo(
-    () => roles.map((role) => ({ value: role.id, data: role })),
-    [roles]
-  );
-
-  const buttonLabel = useMemo(() => {
-    if (selectedRoleIds.length === 0) return <span className="text-placeholder">-</span>;
-    const selectedNames = roles
-      .filter((r) => selectedRoleIds.includes(r.id))
-      .map((r) => r.name);
-    if (selectedNames.length === 0) return <span className="text-placeholder">-</span>;
-    if (selectedNames.length === 1) return <span>{selectedNames[0]}</span>;
-    return (
-      <span>
-        {selectedNames[0]} +{selectedNames.length - 1}
-      </span>
-    );
-  }, [selectedRoleIds, roles]);
+  const fullText = roleNames.join("、");
 
   return (
-    <MultiSelectDropdown
-      value={selectedRoleIds}
-      onChange={NOOP}
-      options={options}
-      disableSorting
-      keyExtractor={(option) => option.data.id}
-      queryArray={["name"]}
-      inputPlaceholder="搜索角色..."
-      buttonContent={() => (
-        <div className="flex w-full items-center justify-between gap-1 rounded border border-strong px-3 py-2 text-13 cursor-pointer !px-0 !justify-start hover:bg-surface-1 border-none">
-          {buttonLabel}
-          <ChevronDown className="size-3 flex-shrink-0 text-secondary" />
-        </div>
-      )}
-      buttonClassName="flex w-full items-center justify-between gap-1 rounded border border-strong px-3 py-2 text-13 cursor-pointer"
-      containerClassName="w-32 rounded-md p-0"
-      optionsContainerClassName="w-52"
-      renderItem={({ value, selected }) => {
-        const role = roles.find((r) => r.id === value);
-        if (!role) return null;
-        return (
-          <div className="flex w-full items-center justify-between gap-2 truncate text-13">
-            <span className="truncate">{role.name}</span>
-            {selected && <Check className="size-3 flex-shrink-0" />}
-          </div>
-        );
-      }}
-    />
+    <Tooltip tooltipContent={fullText} position="top">
+      <div className="flex max-w-[260px] items-center gap-1 overflow-hidden">
+        {roleNames.map((name) => (
+          <span
+            key={name}
+            className="inline-flex shrink-0 items-center truncate rounded-sm bg-surface-2 px-1.5 py-0.5 text-xs text-secondary"
+          >
+            {name}
+          </span>
+        ))}
+      </div>
+    </Tooltip>
   );
 };
