@@ -391,12 +391,8 @@ class ProjectRolePermissionBindingSerializer(serializers.Serializer):
             scope="project",
         )
         existing_keys = set(queryset.values_list("key", flat=True))
-        invalid_keys = [key for key in normalized_keys if key not in existing_keys]
 
-        if invalid_keys:
-            raise serializers.ValidationError(f"无效的项目权限 key：{', '.join(invalid_keys)}")
-
-        return normalized_keys
+        return [key for key in normalized_keys if key in existing_keys]
 
     def save(self, **kwargs):
         role = self.context["role"]
