@@ -173,7 +173,7 @@ const ProjectActivityListPage = observer((props: ProjectActivityListPageProps) =
                             href={`/${activityItem.workspace_detail?.slug}/profile/${actorDetail.id}`}
                             className="inline"
                           >
-                            <span className="text-gray font-medium">
+                            <span className="text-[#1677ff] font-medium">
                               {actorDisplayName}
                             </span>
                           </Link>

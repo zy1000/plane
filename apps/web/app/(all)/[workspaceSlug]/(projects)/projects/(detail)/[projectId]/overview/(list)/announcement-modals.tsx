@@ -88,8 +88,8 @@ export const CreateAnnouncementModal = ({
       isOpen={isOpen}
       handleClose={handleClose}
       position={EModalPosition.CENTER}
-      width={EModalWidth.VIXL}
-      className="h-[80vh] max-h-[80vh]"
+      width={EModalWidth.VIIXL}
+      className="h-[88vh] max-h-[88vh]"
     >
       <div className="p-5 h-full flex flex-col gap-5">
         <div className="text-base font-medium">新增公告</div>
@@ -148,8 +148,8 @@ export const AnnouncementDetailModal = ({
       isOpen={isOpen}
       handleClose={onClose}
       position={EModalPosition.CENTER}
-      width={EModalWidth.VIXL}
-      className="h-[80vh] max-h-[80vh]"
+      width={EModalWidth.VIIXL}
+      className="h-[88vh] max-h-[88vh]"
     >
       <div className="p-5 h-full flex flex-col gap-5">
         <div className="text-base font-medium">公告详情</div>

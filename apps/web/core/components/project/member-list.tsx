@@ -24,10 +24,14 @@ import { SendProjectInvitationModal } from "./send-project-invitation-modal";
 type TProjectMemberListProps = {
   projectId: string;
   workspaceSlug: string;
+  /** 覆盖默认「成员」标题（如概览页使用「项目成员」） */
+  sectionHeading?: string;
+  /** 是否显示标题行，默认 true；概览页由外部卡片提供固定标题时传 false */
+  showHeading?: boolean;
 };
 
 export const ProjectMemberList = observer(function ProjectMemberList(props: TProjectMemberListProps) {
-  const { projectId, workspaceSlug } = props;
+  const { projectId, workspaceSlug, sectionHeading, showHeading = true } = props;
   // states
   const [inviteModal, setInviteModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -82,8 +86,10 @@ export const ProjectMemberList = observer(function ProjectMemberList(props: TPro
         workspaceSlug={workspaceSlug}
       />
       <div className="flex items-center justify-between gap-4 overflow-x-hidden border-b border-subtle py-2">
-        <div className="text-14 font-semibold">{t("common.members")}</div>
-        <div className="flex items-center gap-2">
+        {showHeading && (
+          <div className="text-14 font-semibold">{sectionHeading ?? t("common.members")}</div>
+        )}
+        <div className="ml-auto flex items-center gap-2">
           <div className="flex items-center justify-start gap-1.5 rounded-md border border-subtle bg-surface-1 px-2 py-1">
             <SearchIcon className="h-3.5 w-3.5" />
             <input

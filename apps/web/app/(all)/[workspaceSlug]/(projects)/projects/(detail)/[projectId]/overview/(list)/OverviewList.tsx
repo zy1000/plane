@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { observer } from "mobx-react";
 import { Modal, Pagination } from "antd";
-import { Plus, Trash2 } from "lucide-react";
+import { BookOpen, Expand, FolderKanban, History, Megaphone, Plus, Trash2, Users } from "lucide-react";
 import { PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import type { IProject, TNameDescriptionLoader } from "@plane/types";
@@ -11,8 +11,6 @@ import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { getDate, renderFormattedDate } from "@plane/utils";
 import { ProjectDescriptionInput } from "@/components/project/project-description-input";
 import { ProjectActivity } from "@/components/project/project-activity";
-import { ProjectProperties } from "@/components/project/project-properties";
-import { WorkItemStats } from "@/components/project/work-item-stats";
 import { useMember } from "@/hooks/store/use-member";
 import { ProjectAnnouncementService } from "@/services/project";
 import {
@@ -20,8 +18,14 @@ import {
   CreateAnnouncementModal,
   type TProjectAnnouncement,
 } from "./announcement-modals";
+import { OverviewDescriptionModal } from "./overview-description-modal";
+import { ProjectOverviewKpiCards } from "./overview-kpi-cards";
+import { OverviewProgressCard } from "./overview-progress-card";
+import { OverviewMemberStats } from "./overview-member-stats";
 
 const announcementService = new ProjectAnnouncementService();
+
+const sectionCard = "rounded-lg border border-subtle bg-surface-1";
 
 type TPageView = {
   children: React.ReactNode;
@@ -41,6 +45,8 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [activeAnnouncement, setActiveAnnouncement] = useState<TProjectAnnouncement | null>(null);
+  const [isDescriptionModalOpen, setIsDescriptionModalOpen] = useState(false);
+  const [isActivityModalOpen, setIsActivityModalOpen] = useState(false);
   const { getUserDetails } = useMember();
 
   const fetchAnnouncements = useCallback(async () => {
@@ -53,7 +59,7 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
       });
       setAnnouncements(response?.data ?? []);
       setTotalCount(response?.count ?? 0);
-    } catch (error) {
+    } catch {
       setToast({
         type: TOAST_TYPE.ERROR,
         title: "加载失败",
@@ -120,148 +126,190 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
   };
 
   return (
-    <div className="w-full p-2">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-        <div className="flex flex-col gap-6">
-          <div className="bg-surface-1 border border-subtle rounded-lg p-4 h-[340px] flex flex-col">
-            <div className="flex-1 overflow-y-auto">
-              <ProjectProperties workspaceSlug={workspaceSlug} projectId={project.id} />
-            </div>
-            <div className="mt-4 pt-4 border-t border-subtle flex-shrink-0">
-              <div className="overflow-x-auto">
-                <WorkItemStats workspaceSlug={workspaceSlug} projectId={project.id} />
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-surface-1 border border-subtle rounded-lg p-4 h-[480px] flex flex-col">
-            <div className="flex items-center justify-between mb-3">
-              <h4 className="text-lg font-medium text-primary">项目描述</h4>
-              {isSubmitting === "submitting" && <div className="text-xs text-placeholder">保存中...</div>}
-            </div>
-            <div className="flex-1 min-h-0">
-              <ProjectDescriptionInput
-                workspaceSlug={workspaceSlug}
-                projectId={project.id}
-                initialValue={project?.description_html}
-                setIsSubmitting={setIsSubmitting}
-                swrProjectDescription={project?.description_html}
-                containerClassName="h-full vertical-scrollbar scrollbar-sm overflow-y-auto"
-              />
-            </div>
+    <div className="h-full w-full overflow-y-auto vertical-scrollbar scrollbar-sm">
+      <div className="flex flex-col gap-5 px-6 py-4">
+        {/* Header */}
+        <div>
+          <h1 className="text-lg font-normal text-primary">项目概览</h1>
+          <div className="mt-1 flex items-center gap-1.5 text-sm text-placeholder">
+            <FolderKanban className="h-3.5 w-3.5 shrink-0" />
+            <p>{project.name} · {project.identifier}</p>
           </div>
         </div>
 
-        <div className="flex flex-col gap-6">
-          <div className="bg-surface-1 border border-subtle rounded-lg p-4 min-h-[340px] flex flex-col">
-            <div className="flex items-center justify-between mb-3">
-              <h4 className="text-lg font-medium text-primary">项目公告</h4>
-              <Button
-                variant="secondary"
-                size="lg"
-                onClick={() => setIsCreateModalOpen(true)}
-              >
-                <Plus className="size-4 shrink-0" />
-                新增公告
-              </Button>
+        {/* KPI Cards */}
+        <ProjectOverviewKpiCards workspaceSlug={workspaceSlug} project={project} />
+
+        {/* Progress */}
+        <OverviewProgressCard workspaceSlug={workspaceSlug} projectId={project.id} />
+
+        {/* Description + Announcements */}
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+          <div>
+            <div className={`${sectionCard} flex h-[380px] flex-col p-4`}>
+              <div className="mb-3 flex flex-shrink-0 items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <BookOpen className="h-3.5 w-3.5 text-placeholder" />
+                  <span className="text-sm font-medium text-primary">项目背景</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {isSubmitting === "submitting" && <span className="text-xs text-placeholder">保存中...</span>}
+                  <button
+                    type="button"
+                    className="cursor-pointer rounded-md p-1 text-placeholder transition-colors hover:bg-surface-2 hover:text-primary"
+                    onClick={() => setIsDescriptionModalOpen(true)}
+                  >
+                    <Expand className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+              <div className="min-h-0 flex-1 overflow-hidden">
+                <ProjectDescriptionInput
+                  workspaceSlug={workspaceSlug}
+                  projectId={project.id}
+                  initialValue={project?.description_html}
+                  setIsSubmitting={setIsSubmitting}
+                  swrProjectDescription={project?.description_html}
+                  containerClassName="h-full vertical-scrollbar scrollbar-sm overflow-y-auto"
+                />
+              </div>
             </div>
-            <div className="flex-1 min-h-0">
-              <Table>
-                <TableHeader className="bg-transparent border-b border-subtle border-t-0 py-2">
-                  <TableRow>
-                    <TableHead className="w-2/5 h-9 text-left font-medium text-primary">标题</TableHead>
-                    <TableHead className="w-1/5 h-9 text-left font-medium text-primary">创建人</TableHead>
-                    <TableHead className="w-1/4 h-9 text-left font-medium text-primary">创建时间</TableHead>
-                    <TableHead className="w-16 h-9 text-left font-medium text-primary">操作</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {isLoadingAnnouncements ? (
+          </div>
+          <div>
+            <div className={`${sectionCard} flex h-[380px] flex-col`}>
+              <div className="flex flex-shrink-0 items-center justify-between px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <Megaphone className="h-3.5 w-3.5 text-placeholder" />
+                  <span className="text-sm font-medium text-primary">项目公告</span>
+                </div>
+                <Button variant="secondary" onClick={() => setIsCreateModalOpen(true)}>
+                  <Plus className="size-3.5 shrink-0" />
+                  新增公告
+                </Button>
+              </div>
+
+              <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-3 vertical-scrollbar scrollbar-sm">
+                <Table>
+                  <TableHeader className="border-b border-subtle border-t-0 bg-transparent">
                     <TableRow>
-                      <TableCell colSpan={4}>
-                        <div className="h-20 grid place-items-center text-sm text-secondary">加载中...</div>
-                      </TableCell>
+                      <TableHead className="h-8 w-2/5 text-left text-xs font-medium text-placeholder">公告</TableHead>
+                      <TableHead className="h-8 w-1/5 text-left text-xs font-medium text-placeholder">创建人</TableHead>
+                      <TableHead className="h-8 w-1/4 text-left text-xs font-medium text-placeholder">创建时间</TableHead>
+                      <TableHead className="h-8 w-12 text-left text-xs font-medium text-placeholder">操作</TableHead>
                     </TableRow>
-                  ) : announcements.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={4}>
-                        <div className="h-20 grid place-items-center text-sm text-secondary">暂无公告</div>
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    announcements.map((item) => (
-                      <TableRow key={item.id} className="hover:bg-[#f7f7f7]">
-                        <TableCell
-                          className="max-w-[320px] truncate cursor-pointer text-primary"
-                          title={item.name}
-                          onClick={() => {
-                            setActiveAnnouncement(item);
-                            setIsDetailModalOpen(true);
-                          }}
-                        >
-                          {item.name}
-                        </TableCell>
-                        <TableCell>{creatorLabel(item.created_by)}</TableCell>
-                        <TableCell>
-                          {item.created_at ? renderFormattedDate(getDate(item.created_at), "yyyy-MM-dd") : "-"}
-                        </TableCell>
-                        <TableCell className="text-left">
-                          <Button
-                            size="sm"
-                            className="p-1 rounded-md border-none !bg-transparent shadow-none hover:!bg-transparent"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              confirmDeleteAnnouncement(item.id);
-                            }}
-                          >
-                            <Trash2 className="h-4 w-4 text-secondary" />
-                          </Button>
+                  </TableHeader>
+                  <TableBody>
+                    {isLoadingAnnouncements ? (
+                      <TableRow>
+                        <TableCell colSpan={4}>
+                          <div className="grid h-14 place-items-center text-sm text-placeholder">加载中...</div>
                         </TableCell>
                       </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-            <div className="flex-shrink-0 border-t border-subtle px-4 py-3 bg-surface-1 flex items-center justify-between">
-              <div className="flex items-center gap-4 text-sm">
-                <span className="text-secondary">
-                  {totalCount > 0
-                    ? `第 ${(page - 1) * pageSize + 1}-${Math.min(page * pageSize, totalCount)} 条，共 ${totalCount} 条`
-                    : ""}
-                </span>
+                    ) : announcements.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={4}>
+                          <div className="grid h-14 place-items-center text-sm text-placeholder">暂无公告</div>
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      announcements.map((item) => (
+                        <TableRow key={item.id} className="transition-colors hover:bg-layer-1">
+                          <TableCell
+                            className="max-w-[200px] cursor-pointer truncate text-sm text-primary"
+                            title={item.name}
+                            onClick={() => {
+                              setActiveAnnouncement(item);
+                              setIsDetailModalOpen(true);
+                            }}
+                          >
+                            {item.name}
+                          </TableCell>
+                          <TableCell className="text-sm">{creatorLabel(item.created_by)}</TableCell>
+                          <TableCell className="text-sm">
+                            {item.created_at ? renderFormattedDate(getDate(item.created_at), "yyyy-MM-dd") : "-"}
+                          </TableCell>
+                          <TableCell className="text-left">
+                            <button
+                              type="button"
+                              className="cursor-pointer rounded-md p-1 text-placeholder transition-colors hover:bg-surface-2 hover:text-red-500"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                confirmDeleteAnnouncement(item.id);
+                              }}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
               </div>
-              <Pagination
-                simple
-                current={page}
-                pageSize={pageSize}
-                total={totalCount}
-                showQuickJumper
-                onChange={(p) => {
-                  setPage(p);
-                }}
-                size="small"
-              />
+
+              {totalCount > pageSize && (
+                <div className="flex flex-shrink-0 items-center justify-between border-t border-subtle px-4 py-2">
+                  <span className="text-xs text-placeholder">
+                    第 {(page - 1) * pageSize + 1}-{Math.min(page * pageSize, totalCount)} 条，共 {totalCount} 条
+                  </span>
+                  <Pagination
+                    simple
+                    current={page}
+                    pageSize={pageSize}
+                    total={totalCount}
+                    showQuickJumper
+                    onChange={(p) => setPage(p)}
+                    size="small"
+                  />
+                </div>
+              )}
             </div>
           </div>
-          
-          <div className="bg-surface-1 border border-subtle rounded-lg p-4 h-[480px] flex flex-col">
-            <div className="flex items-center justify-between mb-3 flex-shrink-0">
-              <h4 className="text-lg font-medium text-primary">活动</h4>
-            </div>
-            <div className="flex-1 min-h-0 overflow-hidden">
-              <ProjectActivity
-                workspaceSlug={workspaceSlug}
-                projectId={project.id}
-                showHeading={false}
-                containerClassName="h-full overflow-y-auto vertical-scrollbar scrollbar-sm"
-              />
+        </div>
+
+        {/* Project members + Project activity */}
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+          <div>
+            <div className={`${sectionCard} flex h-[380px] flex-col p-4`}>
+              <div className="mb-3 flex flex-shrink-0 items-center gap-2">
+                <Users className="h-3.5 w-3.5 text-placeholder" />
+                <span className="text-sm font-medium text-primary">项目成员</span>
+              </div>
+              <div className="min-h-0 flex-1 overflow-hidden">
+                <div className="h-full overflow-y-auto vertical-scrollbar scrollbar-sm">
+                  <OverviewMemberStats workspaceSlug={workspaceSlug} projectId={project.id} />
+                </div>
+              </div>
             </div>
           </div>
-
-
+          <div>
+            <div className={`${sectionCard} flex h-[380px] flex-col p-4`}>
+              <div className="mb-3 flex flex-shrink-0 items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <History className="h-3.5 w-3.5 text-placeholder" />
+                  <span className="text-sm font-medium text-primary">项目活动</span>
+                </div>
+                <button
+                  type="button"
+                  className="cursor-pointer rounded-md p-1 text-placeholder transition-colors hover:bg-surface-2 hover:text-primary"
+                  onClick={() => setIsActivityModalOpen(true)}
+                >
+                  <Expand className="h-3.5 w-3.5" />
+                </button>
+              </div>
+              <div className="min-h-0 flex-1 overflow-hidden">
+                <ProjectActivity
+                  workspaceSlug={workspaceSlug}
+                  projectId={project.id}
+                  showHeading={false}
+                  containerClassName="h-full overflow-y-auto vertical-scrollbar scrollbar-sm"
+                />
+              </div>
+            </div>
+          </div>
         </div>
       </div>
+
       <CreateAnnouncementModal
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
@@ -280,6 +328,39 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
         }}
         announcement={activeAnnouncement}
       />
+
+      <OverviewDescriptionModal
+        isOpen={isDescriptionModalOpen}
+        onClose={() => setIsDescriptionModalOpen(false)}
+        workspaceSlug={workspaceSlug}
+        projectId={project.id}
+        initialValue={project?.description_html}
+      />
+
+      {/* 项目活动 Modal */}
+      <Modal
+        title={
+          <div className="flex items-center gap-2">
+            <History className="h-4 w-4 text-placeholder" />
+            <span>项目活动</span>
+          </div>
+        }
+        open={isActivityModalOpen}
+        onCancel={() => setIsActivityModalOpen(false)}
+        footer={null}
+        width={960}
+        styles={{ body: { height: 640, padding: 0 } }}
+        destroyOnClose
+      >
+        <div className="h-full overflow-y-auto vertical-scrollbar scrollbar-sm">
+          <ProjectActivity
+            workspaceSlug={workspaceSlug}
+            projectId={project.id}
+            showHeading={false}
+            containerClassName="h-full"
+          />
+        </div>
+      </Modal>
     </div>
   );
 });

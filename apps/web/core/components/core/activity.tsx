@@ -68,7 +68,7 @@ export function IssueLink({ activity }: { activity: IIssueActivity }) {
           href={workItemLink}
           target={activity.issue === null ? "_self" : "_blank"}
           rel={activity.issue === null ? "" : "noopener noreferrer"}
-          className="inline items-center gap-1 font-medium text-primary hover:underline"
+          className="inline items-center gap-1 font-medium text-[#1677ff]"
         >
           <span className="whitespace-nowrap">{`${activity.project_detail.identifier}-${activity.issue_detail.sequence_id}`}</span>{" "}
           <span className="font-regular break-all">{activity.issue_detail?.name}</span>
@@ -93,7 +93,7 @@ function UserLink({ activity }: { activity: IIssueActivity }) {
       }`}
       target="_blank"
       rel="noopener noreferrer"
-      className="inline-flex items-center font-medium text-primary hover:underline"
+      className="inline-flex items-center font-medium text-[#1677ff]"
     >
       {activity.new_value && activity.new_value !== "" ? activity.new_value : activity.old_value}
     </a>
@@ -370,7 +370,7 @@ const activityDetails: {
               href={`${activity.new_value}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 font-medium text-primary hover:underline"
+              className="inline-flex items-center gap-1 font-medium text-[#1677ff]"
             >
               link
             </a>
@@ -390,7 +390,7 @@ const activityDetails: {
               href={`${activity.old_value}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 font-medium text-primary hover:underline"
+              className="inline-flex items-center gap-1 font-medium text-[#1677ff]"
             >
               link
             </a>
@@ -410,7 +410,7 @@ const activityDetails: {
               href={`${activity.old_value}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 font-medium text-primary hover:underline"
+              className="inline-flex items-center gap-1 font-medium text-[#1677ff]"
             >
               link
             </a>
@@ -438,7 +438,7 @@ const activityDetails: {
               href={`/${workspaceSlug}/projects/${activity.project}/cycles/${activity.new_identifier}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline items-center gap-1 font-medium text-primary hover:underline"
+              className="inline items-center gap-1 font-medium text-[#1677ff]"
             >
               <span className="break-all">{activity.new_value}</span>
             </a>
@@ -452,7 +452,7 @@ const activityDetails: {
               href={`/${workspaceSlug}/projects/${activity.project}/cycles/${activity.new_identifier}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline items-center gap-1 font-medium text-primary hover:underline"
+              className="inline items-center gap-1 font-medium text-[#1677ff]"
             >
               <span className="break-all">{activity.new_value}</span>
             </a>
@@ -466,7 +466,7 @@ const activityDetails: {
               href={`/${workspaceSlug}/projects/${activity.project}/cycles/${activity.old_identifier}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline items-center gap-1 font-medium text-primary hover:underline"
+              className="inline items-center gap-1 font-medium text-[#1677ff]"
             >
               <span className="break-all">{activity.old_value}</span>
             </a>
@@ -485,7 +485,7 @@ const activityDetails: {
               href={`/${workspaceSlug}/projects/${activity.project}/modules/${activity.new_identifier}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline items-center gap-1 font-medium text-primary hover:underline"
+              className="inline items-center gap-1 font-medium text-[#1677ff]"
             >
               <span className="break-all">{activity.new_value}</span>
             </a>
@@ -499,7 +499,7 @@ const activityDetails: {
               href={`/${workspaceSlug}/projects/${activity.project}/modules/${activity.new_identifier}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline items-center gap-1 font-medium text-primary hover:underline"
+              className="inline items-center gap-1 font-medium text-[#1677ff]"
             >
               <span className="break-all">{activity.new_value}</span>
             </a>
@@ -513,7 +513,7 @@ const activityDetails: {
               href={`/${workspaceSlug}/projects/${activity.project}/modules/${activity.old_identifier}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline items-center gap-1 font-medium text-primary hover:underline"
+              className="inline items-center gap-1 font-medium text-[#1677ff]"
             >
               <span className="break-all">{activity.old_value}</span>
             </a>

@@ -41,6 +41,8 @@ const Command = Extension.create<SlashCommandOptions>({
           props.command({ editor, range });
         },
         allow({ editor }: { editor: Editor }) {
+          if (!editor.isFocused) return false;
+
           const { selection } = editor.state;
           const parentNode = selection.$from.node(selection.$from.depth);
           const blockType = parentNode.type.name;

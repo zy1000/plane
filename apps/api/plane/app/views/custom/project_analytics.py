@@ -1,6 +1,6 @@
 from rest_framework.response import Response
 from rest_framework import status
-from typing import Dict, Any
+from typing import Dict, Any, List
 from django.db.models import QuerySet, Q, Count
 from django.http import HttpRequest
 from django.db.models.functions import TruncMonth
@@ -15,6 +15,9 @@ from plane.db.models import (
     Module,
     CycleIssue,
     ModuleIssue,
+    TimeSheet,
+    IssueType,
+    ProjectMember,
 )
 from django.db import models
 from django.db.models import F, Case, When, Value
@@ -23,6 +26,8 @@ from plane.utils.build_chart import build_analytics_chart
 from plane.utils.date_utils import (
     get_analytics_filters,
 )
+
+DEFECT_TYPE_NAMES = {"缺陷", "Bug", "bug", "Defect", "defect"}
 
 
 class ProjectAdvanceAnalyticsBaseView(BaseAPIView):
@@ -77,6 +82,12 @@ class CustomProjectAdvanceAnalyticsEndpoint(ProjectAdvanceAnalyticsBaseView):
                 **self.filters["base_filters"], project_id=project_id
             )
 
+        total_hours = (
+            TimeSheet.objects.filter(project_id=project_id)
+            .aggregate(total=models.Sum("hours"))["total"]
+            or 0
+        )
+
         return {
             "total_work_items": self.get_filtered_counts(base_queryset),
             "started_work_items": self.get_filtered_counts(
@@ -94,21 +105,52 @@ class CustomProjectAdvanceAnalyticsEndpoint(ProjectAdvanceAnalyticsBaseView):
             "cancelled_work_items": self.get_filtered_counts(
                 base_queryset.filter(state__group="cancelled")
             ),
+            "total_timesheet_hours": float(total_hours),
         }
+
+    def get_member_stats(self, project_id: str) -> List[Dict[str, Any]]:
+        defect_type_ids = set(
+            IssueType.objects.filter(name__in=DEFECT_TYPE_NAMES)
+            .values_list("id", flat=True)
+        )
+        members = ProjectMember.objects.filter(
+            project_id=project_id,
+            is_active=True,
+        ).select_related("member")
+
+        result = []
+        for pm in members:
+            user = pm.member
+            if hasattr(user, "avatar_asset") and user.avatar_asset:
+                avatar_url = f"/api/assets/v2/static/{user.avatar_asset_id}/"
+            else:
+                avatar_url = user.avatar or ""
+            assigned = Issue.issue_objects.filter(
+                project_id=project_id,
+                assignees=user,
+            )
+            defect_count = assigned.filter(type_id__in=defect_type_ids).count()
+            work_item_count = assigned.exclude(type_id__in=defect_type_ids).count()
+            result.append({
+                "member_id": str(user.id),
+                "display_name": user.display_name or user.email or str(user.id),
+                "avatar_url": avatar_url,
+                "work_item_count": work_item_count,
+                "defect_count": defect_count,
+            })
+        return result
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
     def get(self, request: HttpRequest, slug: str, project_id: str) -> Response:
         self.initialize_workspace(slug, type="analytics")
 
-        # Optionally accept cycle_id or module_id as query params
         cycle_id = request.GET.get("cycle_id", None)
         module_id = request.GET.get("module_id", None)
-        return Response(
-            self.get_work_items_stats(
-                cycle_id=cycle_id, module_id=module_id, project_id=project_id
-            ),
-            status=status.HTTP_200_OK,
+        stats = self.get_work_items_stats(
+            cycle_id=cycle_id, module_id=module_id, project_id=project_id
         )
+        stats["member_stats"] = self.get_member_stats(project_id)
+        return Response(stats, status=status.HTTP_200_OK)
 
 
 class ProjectAdvanceAnalyticsStatsEndpoint(ProjectAdvanceAnalyticsBaseView):
