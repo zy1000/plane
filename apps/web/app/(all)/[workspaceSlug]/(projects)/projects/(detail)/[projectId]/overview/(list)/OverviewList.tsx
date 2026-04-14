@@ -88,6 +88,17 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
     [getUserDetails]
   );
 
+  const projectDescriptionEditMeta = useMemo(() => {
+    if (!project.updated_at) return null;
+    const timeLabel =
+      renderFormattedDate(getDate(project.updated_at), "yyyy-MM-dd") ?? String(project.updated_at);
+    const userId = project.updated_by ?? project.created_by;
+    if (!userId) return timeLabel;
+    const details = getUserDetails(userId);
+    const name = details?.display_name || details?.email || userId;
+    return `${name} · ${timeLabel}`;
+  }, [project.updated_at, project.updated_by, project.created_by, getUserDetails]);
+
   const handleDeleteAnnouncement = async (id: string) => {
     if (!workspaceSlug || !project?.id) return;
     try {
@@ -187,6 +198,11 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
                   containerClassName="h-full vertical-scrollbar scrollbar-sm overflow-y-auto"
                 />
               </div>
+              {projectDescriptionEditMeta !== null && (
+                <div className="mt-2 flex shrink-0 justify-end">
+                  <span className="text-xs text-placeholder">{projectDescriptionEditMeta}</span>
+                </div>
+              )}
             </div>
           </div>
           <div>

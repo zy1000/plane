@@ -129,64 +129,48 @@ const ProjectActivityListPage = observer((props: ProjectActivityListPageProps) =
         if ("field" in activityItem && activityItem.field !== "updated_by")
           return (
             <li key={activityItem.id}>
-              <div className="relative pb-1">
-                <div className="relative flex items-start space-x-2">
-                  <>
-                    <div>
-                      <div className="relative px-1.5 mt-4">
-                        <div className="mt-1.5">
-                          <div className="flex h-5 w-5 items-center justify-center">
-                            {activityItem.field ? (
-                              activityItem.new_value === "restore" ? (
-                                <History className="h-4 w-4 text-primary" />
-                              ) : (
-                                <ActivityIcon activity={activityItem} />
-                              )
-                            ) : actorDetail?.avatar_url &&
-                              actorDetail.avatar_url !== "" ? (
-                              <img
-                                src={getFileURL(actorDetail.avatar_url)}
-                                alt={actorDisplayName}
-                                height={20}
-                                width={20}
-                                className="h-full w-full rounded-full object-cover"
-                              />
-                            ) : (
-                              <div className="grid h-5 w-5 place-items-center rounded-full border-2 border-white bg-gray-700 text-xs capitalize text-white">
-                                {actorDisplayName?.[0]}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
+              <div className="relative flex items-center gap-3 py-2 text-caption-sm-regular">
+                <div className="absolute top-0 bottom-0 left-[13px] w-px bg-layer-3" aria-hidden />
+                <div className="z-[4] flex h-7 w-7 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border border-subtle bg-layer-2 text-secondary shadow-raised-100">
+                  {activityItem.field ? (
+                    activityItem.new_value === "restore" ? (
+                      <History className="h-3.5 w-3.5" />
+                    ) : (
+                      <ActivityIcon activity={activityItem} />
+                    )
+                  ) : actorDetail?.avatar_url && actorDetail.avatar_url !== "" ? (
+                    <img
+                      src={getFileURL(actorDetail.avatar_url)}
+                      alt={actorDisplayName}
+                      height={20}
+                      width={20}
+                      className="h-full w-full rounded-full object-cover"
+                    />
+                  ) : (
+                    <div className="grid h-full w-full place-items-center text-xs capitalize">
+                      {actorDisplayName?.[0]}
                     </div>
-                    <div className="min-w-0 flex-1 border-b border-subtle-1 py-4">
-                      <div className="break-words text-[0.7875rem] text-primary">
-                        {activityItem.field === "archived_at" && activityItem.new_value !== "restore" ? (
-                          <span className="text-gray font-medium">Plane</span>
-                        ) : isSystemActivity ? (
-                          <span className="text-gray font-medium">Plane</span>
-                        ) : actorDetail.is_bot ? (
-                          <span className="text-gray font-medium">{actorDetail.first_name} Bot</span>
-                        ) : (
-                          <Link
-                            href={`/${activityItem.workspace_detail?.slug}/profile/${actorDetail.id}`}
-                            className="inline"
-                          >
-                            <span className="text-[#1677ff] font-medium">
-                              {actorDisplayName}
-                            </span>
-                          </Link>
-                        )}{" "}
-                        <div className="inline gap-1">
-                          {message}{" "}
-                          <span className="flex-shrink-0 whitespace-nowrap">
-                            {calculateTimeAgo(activityItem.created_at)}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </>
+                  )}
+                </div>
+                <div className="w-full truncate text-secondary">
+                  {activityItem.field === "archived_at" && activityItem.new_value !== "restore" ? (
+                    <span className="font-medium text-secondary">Plane</span>
+                  ) : isSystemActivity ? (
+                    <span className="font-medium text-secondary">Plane</span>
+                  ) : actorDetail.is_bot ? (
+                    <span className="font-medium text-secondary">{actorDetail.first_name} Bot</span>
+                  ) : (
+                    <Link
+                      href={`/${activityItem.workspace_detail?.slug}/profile/${actorDetail.id}`}
+                      className="inline"
+                    >
+                      <span className="font-medium text-[#1677ff]">{actorDisplayName}</span>
+                    </Link>
+                  )}
+                  <span> {message} </span>
+                  <span className="whitespace-nowrap text-tertiary">
+                    {calculateTimeAgo(activityItem.created_at)}
+                  </span>
                 </div>
               </div>
             </li>

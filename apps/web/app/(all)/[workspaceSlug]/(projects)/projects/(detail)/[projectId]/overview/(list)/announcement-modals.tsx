@@ -132,7 +132,7 @@ export const CreateAnnouncementModal = ({
                     project_id: projectId,
                   })
                 }
-                containerClassName="h-full"
+                containerClassName="h-full pl-10"
                 uploadFile={async (blockId, file) => {
                   const { asset_id } = await uploadEditorAsset({
                     blockId,
