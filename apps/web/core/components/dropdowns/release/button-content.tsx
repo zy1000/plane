@@ -43,7 +43,7 @@ export function ReleaseButtonContent(props: ReleaseButtonContentProps) {
           <div className="relative flex max-w-full items-center gap-1">
             {!hideIcon && <Rocket className="h-3 w-3 flex-shrink-0" />}
             {(value.length > 0 || !!placeholder) && (
-              <div className="max-w-40 truncate">
+              <div className="min-w-0 flex-1 max-w-40 truncate text-left">
                 {value.length > 0
                   ? value.length === 1
                     ? `${getReleaseById(value[0])?.name || "release"}`

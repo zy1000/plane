@@ -1,6 +1,7 @@
 import { useContext, useState } from "react";
 import { xor } from "lodash-es";
 import { observer } from "mobx-react";
+import { useTranslation } from "@plane/i18n";
 import { cn } from "@plane/utils";
 import { ReleaseDropdown } from "@/components/dropdowns/release/dropdown";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
@@ -21,6 +22,7 @@ type TIssueReleaseSelect = {
 
 export const IssueReleaseSelect = observer(function IssueReleaseSelect(props: TIssueReleaseSelect) {
   const { className = "", workspaceSlug, projectId, issueId, disabled = false } = props;
+  const { t } = useTranslation();
   const [isUpdating, setIsUpdating] = useState(false);
   const context = useContext(StoreContext);
   const {
@@ -70,7 +72,7 @@ export const IssueReleaseSelect = observer(function IssueReleaseSelect(props: TI
         projectId={projectId}
         value={issue?.release_ids ?? []}
         onChange={handleIssueReleaseChange}
-        placeholder="无发布"
+        placeholder={t("release.select_release")}
         disabled={disableSelect}
         className="group h-full w-full"
         buttonContainerClassName="w-full text-left rounded-sm"

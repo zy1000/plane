@@ -212,7 +212,7 @@ export const ProjectDropdownBase = observer(function ProjectDropdownBase(props: 
           >
             {!hideIcon && getProjectIcon(value)}
             {BUTTON_VARIANTS_WITH_TEXT.includes(buttonVariant) && (
-              <span className="max-w-40 truncate">{getDisplayName(value, placeholder)}</span>
+              <span className="min-w-0 flex-1 max-w-40 truncate text-left">{getDisplayName(value, placeholder)}</span>
             )}
             {dropdownArrow && (
               <ChevronDownIcon className={cn("h-2.5 w-2.5 flex-shrink-0", dropdownArrowClassName)} aria-hidden="true" />

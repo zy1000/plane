@@ -72,17 +72,19 @@ export const ReleaseOptions = observer(function ReleaseOptions(props: Props) {
     };
   });
 
-  if (!multiple)
+  if (!multiple) {
+    const noReleaseLabel = t("release.no_release");
     options?.unshift({
       value: null,
-      query: "无发布",
+      query: noReleaseLabel,
       content: (
         <div className="flex items-center gap-2">
           <Rocket className="h-3 w-3 flex-shrink-0" />
-          <span className="flex-grow truncate">无发布</span>
+          <span className="flex-grow truncate">{noReleaseLabel}</span>
         </div>
       ),
     });
+  }
 
   const filteredOptions = sortBySelectedFirst(
     query === "" ? options : options?.filter((o) => o.query.toLowerCase().includes(query.toLowerCase())),

@@ -2569,6 +2569,7 @@ export default {
   release: {
     label: "{count, plural, one {Release} other {Releases}}",
     no_release: "No release",
+    select_release: "Select release",
   },
   description_versions: {
     last_edited_by: "Last edited by",

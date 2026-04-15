@@ -2705,6 +2705,7 @@ export default {
   release: {
     label: "{count, plural, one {发布} other {发布}}",
     no_release: "无发布",
+    select_release: "Select release",
   },
   description_versions: {
     last_edited_by: "最后编辑者",
