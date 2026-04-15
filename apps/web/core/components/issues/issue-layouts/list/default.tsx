@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { combine } from "@atlaskit/pragmatic-drag-and-drop/combine";
 import { autoScrollForElements } from "@atlaskit/pragmatic-drag-and-drop-auto-scroll/element";
 import { observer } from "mobx-react";
@@ -32,6 +32,7 @@ import { useBulkOperationStatus } from "@/plane-web/hooks/use-bulk-operation-sta
 // utils
 import type { GroupDropLocation } from "../utils";
 import { getGroupByColumns, isWorkspaceLevel, isSubGrouped } from "../utils";
+import { GroupSidebar } from "./group-sidebar";
 import { ListGroup } from "./list-group";
 import type { TRenderQuickActions } from "./list-view-types";
 
@@ -85,6 +86,7 @@ export const List = observer(function List(props: IList) {
   const isBulkOperationsEnabled = useBulkOperationStatus();
 
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
 
   const groups = getGroupByColumns({
     groupBy: group_by as GroupByColumnTypes,
@@ -93,6 +95,22 @@ export const List = observer(function List(props: IList) {
     isEpic: isEpic,
     issueTypeIds: typedPageIssueTypeIds,
   });
+
+  const is_list = group_by === null;
+  const isGrouped = !is_list && !!groups && groups.length > 0;
+
+  const handleSelectGroup = useCallback((groupId: string) => {
+    setSelectedGroupId(groupId);
+  }, []);
+
+  // Auto-select the first visible group when groups change or selectedGroupId is invalid
+  useEffect(() => {
+    if (!isGrouped || !groups) return;
+    const currentValid = selectedGroupId && groups.some((g) => g.id === selectedGroupId);
+    if (!currentValid) {
+      setSelectedGroupId(groups[0]?.id ?? null);
+    }
+  }, [isGrouped, groups, selectedGroupId]);
 
   // Enable Auto Scroll for Main Kanban
   useEffect(() => {
@@ -111,8 +129,6 @@ export const List = observer(function List(props: IList) {
 
   const getGroupIndex = (groupId: string | undefined) => groups.findIndex(({ id }) => id === groupId);
 
-  const is_list = group_by === null ? true : false;
-
   const groupIds = groups.map((g) => g.id);
   const orderedGroups: Record<string, string[]> = {};
   groupIds.forEach((gID) => {
@@ -128,6 +144,79 @@ export const List = observer(function List(props: IList) {
   } else {
     entities = orderedGroups;
   }
+
+  const activeGroup = isGrouped && selectedGroupId ? groups.find((g) => g.id === selectedGroupId) : null;
+
+  // In sidebar mode, ensure the active group is never collapsed
+  const sidebarCollapsedGroups: TIssueKanbanFilters = isGrouped && selectedGroupId
+    ? {
+        ...collapsedGroups,
+        group_by: (collapsedGroups?.group_by ?? []).filter((id) => id !== selectedGroupId),
+      }
+    : collapsedGroups;
+
+  if (isGrouped) {
+    return (
+      <div className="relative flex size-full">
+        <GroupSidebar
+          groups={groups}
+          groupedIssueIds={groupedIssueIds}
+          selectedGroupId={selectedGroupId ?? ""}
+          onSelectGroup={handleSelectGroup}
+          showEmptyGroup={showEmptyGroup}
+        />
+        <div className="relative flex min-w-0 flex-1 flex-col">
+          <MultipleSelectGroup
+            containerRef={containerRef}
+            entities={entities}
+            disabled={isEpic}
+          >
+            {(helpers) => (
+              <>
+                <div
+                  ref={containerRef}
+                  className="vertical-scrollbar relative scrollbar-lg size-full overflow-auto bg-surface-1"
+                >
+                  {activeGroup && (
+                    <ListGroup
+                      key={activeGroup.id}
+                      groupIssueIds={groupedIssueIds?.[activeGroup.id]}
+                      issuesMap={issuesMap}
+                      group_by={group_by}
+                      group={activeGroup}
+                      updateIssue={updateIssue}
+                      quickActions={quickActions}
+                      orderBy={orderBy}
+                      getGroupIndex={getGroupIndex}
+                      handleOnDrop={handleOnDrop}
+                      displayProperties={displayProperties}
+                      showEmptyGroup={showEmptyGroup}
+                      canEditProperties={canEditProperties}
+                      disableIssueCreation={disableIssueCreation}
+                      hideColumnHeaderAddButton={hideColumnHeaderAddButton}
+                      addIssuesToView={addIssuesToView}
+                      isCompletedCycle={isCompletedCycle}
+                      loadMoreIssues={loadMoreIssues}
+                      containerRef={containerRef}
+                      selectionHelpers={helpers}
+                      handleCollapsedGroups={handleCollapsedGroups}
+                      collapsedGroups={sidebarCollapsedGroups}
+                      isEpic={isEpic}
+                      projectIssueTypesMap={props.projectIssueTypesMap}
+                      hideGroupHeader
+                    />
+                  )}
+                </div>
+
+                <IssueBulkOperationsRoot selectionHelpers={helpers} />
+              </>
+            )}
+          </MultipleSelectGroup>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="relative flex size-full flex-col">
       {groups && (

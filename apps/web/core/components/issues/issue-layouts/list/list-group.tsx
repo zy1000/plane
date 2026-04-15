@@ -70,6 +70,7 @@ interface Props {
   collapsedGroups: TIssueKanbanFilters;
   isEpic?: boolean;
   projectIssueTypesMap?: Record<string, TIssueType>;
+  hideGroupHeader?: boolean;
 }
 
 export const ListGroup = observer(function ListGroup(props: Props) {
@@ -96,6 +97,7 @@ export const ListGroup = observer(function ListGroup(props: Props) {
     handleCollapsedGroups,
     collapsedGroups,
     isEpic = false,
+    hideGroupHeader = false,
   } = props;
 
   const [isDraggingOverColumn, setIsDraggingOverColumn] = useState(false);
@@ -228,29 +230,31 @@ export const ListGroup = observer(function ListGroup(props: Props) {
         "border-danger-subtle": isDraggingOverColumn && isDropDisabled,
       })}
     >
-      <Row
-        className={cn("w-full flex-shrink-0 border-b border-subtle bg-layer-1 py-1 pr-3 hover:bg-layer-1-hover", {
-          "sticky top-0 z-[2]": isExpanded && groupIssueCount > 0,
-        })}
-      >
-        <HeaderGroupByCard
-          groupID={group.id}
-          groupBy={group_by}
-          icon={group.icon}
-          title={group.name}
-          count={groupIssueCount}
-          issuePayload={group.payload}
-          canEditProperties={canEditProperties}
-          disableIssueCreation={
-            disableIssueCreation || isGroupByCreatedBy || isCompletedCycle || isWorkflowIssueCreationDisabled
-          }
-          hideHeaderAddButton={hideColumnHeaderAddButton}
-          addIssuesToView={addIssuesToView}
-          selectionHelpers={selectionHelpers}
-          handleCollapsedGroups={handleCollapsedGroups}
-          isEpic={isEpic}
-        />
-      </Row>
+      {!hideGroupHeader && (
+        <Row
+          className={cn("w-full flex-shrink-0 border-b border-subtle bg-layer-1 py-1 pr-3 hover:bg-layer-1-hover", {
+            "sticky top-0 z-[2]": isExpanded && groupIssueCount > 0,
+          })}
+        >
+          <HeaderGroupByCard
+            groupID={group.id}
+            groupBy={group_by}
+            icon={group.icon}
+            title={group.name}
+            count={groupIssueCount}
+            issuePayload={group.payload}
+            canEditProperties={canEditProperties}
+            disableIssueCreation={
+              disableIssueCreation || isGroupByCreatedBy || isCompletedCycle || isWorkflowIssueCreationDisabled
+            }
+            hideHeaderAddButton={hideColumnHeaderAddButton}
+            addIssuesToView={addIssuesToView}
+            selectionHelpers={selectionHelpers}
+            handleCollapsedGroups={handleCollapsedGroups}
+            isEpic={isEpic}
+          />
+        </Row>
+      )}
       {shouldExpand && (
         <div className="relative">
           <GroupDragOverlay

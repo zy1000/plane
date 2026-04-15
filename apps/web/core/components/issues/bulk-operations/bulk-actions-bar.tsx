@@ -278,7 +278,7 @@ export const BulkOperationsActionBar = observer(function BulkOperationsActionBar
             value={selectedLabelIds}
             onChange={(data) => setSelectedLabelIds(data)}
             className="h-7"
-            buttonClassName="inline-flex h-7 max-h-7 w-full shrink-0 items-center justify-start gap-1.5 text-xs px-2 hover:bg-layer-1-hover rounded-md border border-subtle bg-layer-1 text-left"
+            buttonClassName={actionPillClassName}
             maxRender={1}
             placeholderText="Select labels"
             noLabelBorder

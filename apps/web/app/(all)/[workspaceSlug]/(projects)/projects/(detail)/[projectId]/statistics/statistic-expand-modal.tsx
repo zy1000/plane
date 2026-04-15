@@ -20,7 +20,7 @@ import { ProjectStatisticService, type TProjectStatisticResponse } from "@/servi
 
 const projectStatisticService = new ProjectStatisticService();
 
-const MODAL_PAGE_SIZE = 15;
+const MODAL_PAGE_SIZE = 20;
 
 export type StatisticSectionType = "cycle" | "release" | "plan" | "review";
 

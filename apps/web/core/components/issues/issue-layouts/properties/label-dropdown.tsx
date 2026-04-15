@@ -206,7 +206,7 @@ export function LabelDropdown(props: ILabelDropdownProps) {
         ref={setReferenceElement}
         type="button"
         className={cn(
-          "clickable flex h-full w-full items-center gap-1 text-caption-sm-regular",
+          "clickable flex h-full w-full items-center gap-1",
           fullWidth && "hover:bg-layer-1",
           disabled
             ? "cursor-not-allowed text-secondary"

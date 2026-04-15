@@ -321,11 +321,12 @@ function ProjectStatisticsPage() {
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
             <div className={`${sectionCard} flex h-[360px] flex-col`}>
               <div className="flex flex-shrink-0 items-center justify-between px-4 py-3">
-                <div className="flex items-center gap-2">
-                  <Repeat className="h-3.5 w-3.5 text-placeholder" />
+                <div className="flex min-w-0 flex-1 items-center gap-2">
+                  <Repeat className="h-3.5 w-3.5 flex-shrink-0 text-placeholder" />
                   <span className="text-sm font-medium text-primary">进行中的迭代</span>
+                  <span className="shrink-0 text-xs text-placeholder">共 {displayData?.cycles?.count ?? 0} 个</span>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-shrink-0 items-center gap-2">
                   <button
                     type="button"
                     className="grid h-6 w-6 place-items-center rounded transition-colors hover:bg-surface-2"
@@ -333,7 +334,6 @@ function ProjectStatisticsPage() {
                   >
                     <Maximize2 className="h-3.5 w-3.5 text-placeholder" />
                   </button>
-                  <span className="text-xs text-placeholder">共 {displayData?.cycles?.count ?? 0} 个</span>
                 </div>
               </div>
               <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-3 vertical-scrollbar scrollbar-sm">
@@ -419,11 +419,12 @@ function ProjectStatisticsPage() {
 
             <div className={`${sectionCard} flex h-[360px] flex-col`}>
               <div className="flex flex-shrink-0 items-center justify-between px-4 py-3">
-                <div className="flex items-center gap-2">
-                  <Package className="h-3.5 w-3.5 text-placeholder" />
+                <div className="flex min-w-0 flex-1 items-center gap-2">
+                  <Package className="h-3.5 w-3.5 flex-shrink-0 text-placeholder" />
                   <span className="text-sm font-medium text-primary">进行中的发布</span>
+                  <span className="shrink-0 text-xs text-placeholder">共 {displayData?.releases?.count ?? 0} 个</span>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-shrink-0 items-center gap-2">
                   <button
                     type="button"
                     className="grid h-6 w-6 place-items-center rounded transition-colors hover:bg-surface-2"
@@ -431,7 +432,6 @@ function ProjectStatisticsPage() {
                   >
                     <Maximize2 className="h-3.5 w-3.5 text-placeholder" />
                   </button>
-                  <span className="text-xs text-placeholder">共 {displayData?.releases?.count ?? 0} 个</span>
                 </div>
               </div>
               <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-3 vertical-scrollbar scrollbar-sm">
@@ -513,11 +513,12 @@ function ProjectStatisticsPage() {
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
             <div className={`${sectionCard} flex h-[360px] flex-col`}>
               <div className="flex flex-shrink-0 items-center justify-between px-4 py-3">
-                <div className="flex items-center gap-2">
-                  <ClipboardList className="h-3.5 w-3.5 text-placeholder" />
+                <div className="flex min-w-0 flex-1 items-center gap-2">
+                  <ClipboardList className="h-3.5 w-3.5 flex-shrink-0 text-placeholder" />
                   <span className="text-sm font-medium text-primary">进行中的测试计划</span>
+                  <span className="shrink-0 text-xs text-placeholder">共 {displayData?.test_plans?.count ?? 0} 个</span>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-shrink-0 items-center gap-2">
                   <button
                     type="button"
                     className="grid h-6 w-6 place-items-center rounded transition-colors hover:bg-surface-2"
@@ -525,7 +526,6 @@ function ProjectStatisticsPage() {
                   >
                     <Maximize2 className="h-3.5 w-3.5 text-placeholder" />
                   </button>
-                  <span className="text-xs text-placeholder">共 {displayData?.test_plans?.count ?? 0} 个</span>
                 </div>
               </div>
               <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-3 vertical-scrollbar scrollbar-sm">
@@ -604,11 +604,12 @@ function ProjectStatisticsPage() {
 
             <div className={`${sectionCard} flex h-[360px] flex-col`}>
               <div className="flex flex-shrink-0 items-center justify-between px-4 py-3">
-                <div className="flex items-center gap-2">
-                  <FileSearch className="h-3.5 w-3.5 text-placeholder" />
+                <div className="flex min-w-0 flex-1 items-center gap-2">
+                  <FileSearch className="h-3.5 w-3.5 flex-shrink-0 text-placeholder" />
                   <span className="text-sm font-medium text-primary">进行中的评审</span>
+                  <span className="shrink-0 text-xs text-placeholder">共 {displayData?.case_reviews?.count ?? 0} 个</span>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-shrink-0 items-center gap-2">
                   <button
                     type="button"
                     className="grid h-6 w-6 place-items-center rounded transition-colors hover:bg-surface-2"
@@ -616,7 +617,6 @@ function ProjectStatisticsPage() {
                   >
                     <Maximize2 className="h-3.5 w-3.5 text-placeholder" />
                   </button>
-                  <span className="text-xs text-placeholder">共 {displayData?.case_reviews?.count ?? 0} 个</span>
                 </div>
               </div>
               <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-3 vertical-scrollbar scrollbar-sm">
