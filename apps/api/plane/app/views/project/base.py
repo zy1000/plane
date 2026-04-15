@@ -916,6 +916,7 @@ class ProjectAPI(BaseViewSet):
                 project__project_projectmember__is_active=True,
             )
             .filter(status__in=[Cycle.Status.NOT_STARTED, Cycle.Status.IN_PROGRESS, Cycle.Status.DELAYED])
+            .select_related('owned_by')
             .annotate(
                 work_item_count=Count(
                     'issue_cycle__issue__id',
@@ -944,6 +945,10 @@ class ProjectAPI(BaseViewSet):
                 'end_date': cycle.end_date.isoformat() if cycle.end_date else None,
                 'status': cycle.status,
                 'work_item_count': getattr(cycle, 'work_item_count', 0) or 0,
+                'owner': {
+                    'id': str(cycle.owned_by.id),
+                    'display_name': cycle.owned_by.display_name,
+                } if cycle.owned_by else None,
             }
             for cycle in (paginated_cycles or [])
         ]
@@ -967,6 +972,7 @@ class ProjectAPI(BaseViewSet):
                 archived_at__isnull=True,
                 status__in=['planned', 'in-progress']
             )
+            .select_related('lead')
             .annotate(
                 work_item_count=Count(
                     'issue_release__issue__id',
@@ -989,6 +995,10 @@ class ProjectAPI(BaseViewSet):
                 'end_date': release.target_date.isoformat() if release.target_date else None,
                 'status': release.status,
                 'work_item_count': getattr(release, 'work_item_count', 0) or 0,
+                'owner': {
+                    'id': str(release.lead.id),
+                    'display_name': release.lead.display_name,
+                } if release.lead else None,
             }
             for release in releases_queryset[release_offset:release_limit]
         ]
@@ -1011,21 +1021,26 @@ class ProjectAPI(BaseViewSet):
                 deleted_at__isnull=True,
                 state=TestPlan.State.PROGRESS,
             )
+            .prefetch_related('assignees')
             .annotate(case_count=Count('cases', distinct=True))
             .order_by('begin_time', 'name')
         )
 
-        test_plan_data = [
-            {
+        test_plan_data = []
+        for plan in test_plan_queryset[plan_offset:plan_limit]:
+            first_assignee = plan.assignees.first()
+            test_plan_data.append({
                 'id': str(plan.id),
                 'name': plan.name,
                 'start_date': plan.begin_time.isoformat() if plan.begin_time else None,
                 'end_date': plan.end_time.isoformat() if plan.end_time else None,
                 'status': plan.state,
                 'case_count': getattr(plan, 'case_count', 0) or 0,
-            }
-            for plan in test_plan_queryset[plan_offset:plan_limit]
-        ]
+                'owner': {
+                    'id': str(first_assignee.id),
+                    'display_name': first_assignee.display_name,
+                } if first_assignee else None,
+            })
 
         review_page_param = request.query_params.get('review_page')
         try:
@@ -1045,21 +1060,26 @@ class ProjectAPI(BaseViewSet):
                 deleted_at__isnull=True,
                 state=CaseReview.State.PROGRESS,
             )
+            .prefetch_related('assignees')
             .annotate(case_count=Count('cases', distinct=True))
             .order_by('started_at', 'name')
         )
 
-        case_review_data = [
-            {
+        case_review_data = []
+        for review in case_review_queryset[review_offset:review_limit]:
+            first_assignee = review.assignees.first()
+            case_review_data.append({
                 'id': str(review.id),
                 'name': review.name,
                 'start_date': review.started_at.isoformat() if review.started_at else None,
                 'end_date': review.ended_at.isoformat() if review.ended_at else None,
                 'status': review.state,
                 'case_count': getattr(review, 'case_count', 0) or 0,
-            }
-            for review in case_review_queryset[review_offset:review_limit]
-        ]
+                'owner': {
+                    'id': str(first_assignee.id),
+                    'display_name': first_assignee.display_name,
+                } if first_assignee else None,
+            })
 
         return Response(
             {

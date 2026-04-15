@@ -172,6 +172,9 @@ export enum EProjectFeatureKey {
   OVERVIEW = "overview",
 }
 
+/** 邀请项目成员，与后端 PermissionKey.PROJECT_MEMBER_INVITE 一致 */
+export const PROJECT_MEMBER_INVITE_PERMISSION_KEY = "project.member.invite" as const;
+
 /** 项目文件/资产页权限常量，与后端 PermissionKey.PROJECT_ASSET_* 一致 */
 export const PROJECT_ASSET_VIEW_PERMISSION_KEY = "project.asset.view" as const;
 export const PROJECT_ASSET_UPLOAD_PERMISSION_KEY = "project.asset.upload" as const;

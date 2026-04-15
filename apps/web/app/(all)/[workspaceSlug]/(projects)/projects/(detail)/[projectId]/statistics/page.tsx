@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Pagination } from "antd";
+import { Dropdown, Pagination } from "antd";
 import { useParams, useRouter } from "next/navigation";
 import useSWR from "swr";
 import { observer } from "mobx-react";
@@ -11,6 +11,8 @@ import {
   ClipboardList,
   FileSearch,
   FileText,
+  ExternalLink,
+  MoreHorizontal,
   Maximize2,
   Package,
   Repeat,
@@ -25,6 +27,7 @@ import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { getDate, renderFormattedDate } from "@plane/utils";
 import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
 import { PageHead } from "@/components/core/page-title";
+import { useProject } from "@/hooks/store/use-project";
 import { useUserPermissions } from "@/hooks/store/user";
 import { ProjectStatisticService, type TProjectStatisticResponse } from "@/services/project";
 import { StatisticExpandModal, type StatisticSectionType } from "./statistic-expand-modal";
@@ -96,6 +99,7 @@ function ProjectStatisticsPage() {
   const { t } = useTranslation();
   const router = useRouter();
   const { workspaceSlug, projectId } = useParams();
+  const { getProjectById } = useProject();
   const { workspaceUserInfo, allowProjectPermissionKeys } = useUserPermissions();
   const [cyclePage, setCyclePage] = useState(1);
   const [releasePage, setReleasePage] = useState(1);
@@ -125,6 +129,7 @@ function ProjectStatisticsPage() {
 
   const effectiveWorkspaceSlug = workspaceSlug?.toString();
   const effectiveProjectId = projectId?.toString();
+  const project = getProjectById(effectiveProjectId);
 
   const canViewStatistics = allowProjectPermissionKeys(
     [PROJECT_ANALYTICS_VIEW_PERMISSION_KEY],
@@ -262,8 +267,13 @@ function ProjectStatisticsPage() {
       <div className="h-full w-full overflow-y-auto vertical-scrollbar scrollbar-sm">
         <div className="flex flex-col gap-5 px-6 py-4">
           {/* Header */}
-          <div>
-            <h1 className="text-lg font-normal text-primary">项目统计</h1>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+            <h1 className="shrink-0 text-lg font-normal text-primary">项目统计</h1>
+            {project ? (
+              <p className="min-w-0 truncate text-sm text-placeholder">
+                {project.name} · {project.identifier}
+              </p>
+            ) : null}
           </div>
 
           {/* KPI Cards */}
@@ -295,7 +305,7 @@ function ProjectStatisticsPage() {
             <div className={kpiCardBase}>
               <div className="flex items-center gap-2.5">
                 <div className={kpiIconShell}>
-                  <Bug className="h-5 w-5 text-[#8e0119]" />
+                  <Bug className="h-5 w-5 text-primary" />
                 </div>
                 <div className="min-w-0 flex-1 space-y-1.5">
                   <div className={kpiLabelClass}>全部缺陷</div>
@@ -326,7 +336,7 @@ function ProjectStatisticsPage() {
                   <span className="text-sm font-medium text-primary">进行中的迭代</span>
                   <span className="shrink-0 text-xs text-placeholder">共 {displayData?.cycles?.count ?? 0} 个</span>
                 </div>
-                <div className="flex flex-shrink-0 items-center gap-2">
+                <div className="flex flex-shrink-0 items-center gap-1">
                   <button
                     type="button"
                     className="grid h-6 w-6 place-items-center rounded transition-colors hover:bg-surface-2"
@@ -334,39 +344,63 @@ function ProjectStatisticsPage() {
                   >
                     <Maximize2 className="h-3.5 w-3.5 text-placeholder" />
                   </button>
+                  <Dropdown
+                    menu={{
+                      className: "text-13",
+                      items: [
+                        {
+                          key: "view-more",
+                          label: "查看更多迭代",
+                          icon: <ExternalLink className="h-3.5 w-3.5" />,
+                        },
+                      ],
+                      onClick: ({ key }) => {
+                        if (key === "view-more") {
+                          router.push(`/${effectiveWorkspaceSlug}/projects/${effectiveProjectId}/cycles`);
+                        }
+                      },
+                    }}
+                    trigger={["click"]}
+                  >
+                    <button
+                      type="button"
+                      className="grid h-6 w-6 place-items-center rounded transition-colors hover:bg-surface-2"
+                    >
+                      <MoreHorizontal className="h-3.5 w-3.5 text-placeholder" />
+                    </button>
+                  </Dropdown>
                 </div>
               </div>
               <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-3 vertical-scrollbar scrollbar-sm">
                 <Table>
                   <TableHeader className="border-b border-subtle border-t-0 bg-transparent">
                     <TableRow>
-                      <TableHead className="h-8 w-1/3 text-left text-xs font-medium text-placeholder">名称</TableHead>
-                      <TableHead className="h-8 w-1/3 text-left text-xs font-medium text-placeholder">日期</TableHead>
-                      <TableHead className="h-8 w-1/6 text-left text-xs font-medium text-placeholder">状态</TableHead>
-                      <TableHead className="h-8 w-1/6 text-left text-xs font-medium text-placeholder">工作项</TableHead>
+                      <TableHead className="h-8 w-[28%] text-left text-xs font-medium text-placeholder">迭代</TableHead>
+                      <TableHead className="h-8 w-[24%] text-left text-xs font-medium text-placeholder">日期</TableHead>
+                      <TableHead className="h-8 w-[14%] text-left text-xs font-medium text-placeholder">状态</TableHead>
+                      <TableHead className="h-8 w-[14%] text-left text-xs font-medium text-placeholder">工作项</TableHead>
+                      <TableHead className="h-8 w-[20%] pl-6 text-left text-xs font-medium text-placeholder">负责人</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {!displayData ? (
                       <TableRow>
-                        <TableCell colSpan={4}>
+                        <TableCell colSpan={5}>
                           <div className="grid h-14 place-items-center text-sm text-placeholder">加载中...</div>
                         </TableCell>
                       </TableRow>
                     ) : (displayData?.cycles?.data?.length ?? 0) === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={4}>
+                        <TableCell colSpan={5}>
                           <div className="grid h-14 place-items-center text-sm text-placeholder">暂无进行中的迭代</div>
                         </TableCell>
                       </TableRow>
                     ) : (
                       (displayData?.cycles?.data ?? []).map((cycle) => {
-                        const isCycleDelayedRow = normalizeCycleStatusValue(cycle.status) === "delayed";
-                        const cyclePrimaryText = isCycleDelayedRow ? "text-danger-primary" : "text-primary";
                         return (
                           <TableRow key={cycle.id} className="transition-colors hover:bg-layer-1">
                             <TableCell
-                              className={`max-w-[200px] truncate text-sm ${cyclePrimaryText}`}
+                              className="max-w-[200px] truncate text-sm text-primary"
                               title={cycle.name}
                             >
                               <button
@@ -377,7 +411,7 @@ function ProjectStatisticsPage() {
                                 {cycle.name}
                               </button>
                             </TableCell>
-                            <TableCell className={`text-sm ${cyclePrimaryText}`}>
+                            <TableCell className="text-sm text-primary">
                               {formatStatisticTableDateRange(cycle.start_date, cycle.end_date)}
                             </TableCell>
                             <TableCell className="pl-0 -ml-1 text-left">
@@ -392,8 +426,11 @@ function ProjectStatisticsPage() {
                                 );
                               })()}
                             </TableCell>
-                            <TableCell className={`text-sm ${cyclePrimaryText}`}>
+                            <TableCell className="text-sm text-primary">
                               {cycle.work_item_count ?? 0}
+                            </TableCell>
+                            <TableCell className="max-w-[120px] truncate pl-6 text-sm text-primary" title={cycle.owner?.display_name ?? "-"}>
+                              {cycle.owner?.display_name ?? "-"}
                             </TableCell>
                           </TableRow>
                         );
@@ -424,7 +461,7 @@ function ProjectStatisticsPage() {
                   <span className="text-sm font-medium text-primary">进行中的发布</span>
                   <span className="shrink-0 text-xs text-placeholder">共 {displayData?.releases?.count ?? 0} 个</span>
                 </div>
-                <div className="flex flex-shrink-0 items-center gap-2">
+                <div className="flex flex-shrink-0 items-center gap-1">
                   <button
                     type="button"
                     className="grid h-6 w-6 place-items-center rounded transition-colors hover:bg-surface-2"
@@ -432,28 +469,54 @@ function ProjectStatisticsPage() {
                   >
                     <Maximize2 className="h-3.5 w-3.5 text-placeholder" />
                   </button>
+                  <Dropdown
+                    menu={{
+                      className: "text-13",
+                      items: [
+                        {
+                          key: "view-more",
+                          label: "查看更多发布",
+                          icon: <ExternalLink className="h-3.5 w-3.5" />,
+                        },
+                      ],
+                      onClick: ({ key }) => {
+                        if (key === "view-more") {
+                          router.push(`/${effectiveWorkspaceSlug}/projects/${effectiveProjectId}/releases`);
+                        }
+                      },
+                    }}
+                    trigger={["click"]}
+                  >
+                    <button
+                      type="button"
+                      className="grid h-6 w-6 place-items-center rounded transition-colors hover:bg-surface-2"
+                    >
+                      <MoreHorizontal className="h-3.5 w-3.5 text-placeholder" />
+                    </button>
+                  </Dropdown>
                 </div>
               </div>
               <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-3 vertical-scrollbar scrollbar-sm">
                 <Table>
                   <TableHeader className="border-b border-subtle border-t-0 bg-transparent">
                     <TableRow>
-                      <TableHead className="h-8 w-1/3 text-left text-xs font-medium text-placeholder">名称</TableHead>
-                      <TableHead className="h-8 w-1/3 text-left text-xs font-medium text-placeholder">日期</TableHead>
-                      <TableHead className="h-8 w-1/6 text-left text-xs font-medium text-placeholder">状态</TableHead>
-                      <TableHead className="h-8 w-1/6 text-left text-xs font-medium text-placeholder">工作项</TableHead>
+                      <TableHead className="h-8 w-[28%] text-left text-xs font-medium text-placeholder">发布</TableHead>
+                      <TableHead className="h-8 w-[24%] text-left text-xs font-medium text-placeholder">日期</TableHead>
+                      <TableHead className="h-8 w-[14%] text-left text-xs font-medium text-placeholder">状态</TableHead>
+                      <TableHead className="h-8 w-[14%] text-left text-xs font-medium text-placeholder">工作项</TableHead>
+                      <TableHead className="h-8 w-[20%] pl-6 text-left text-xs font-medium text-placeholder">负责人</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {!displayData ? (
                       <TableRow>
-                        <TableCell colSpan={4}>
+                        <TableCell colSpan={5}>
                           <div className="grid h-14 place-items-center text-sm text-placeholder">加载中...</div>
                         </TableCell>
                       </TableRow>
                     ) : (displayData?.releases?.data?.length ?? 0) === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={4}>
+                        <TableCell colSpan={5}>
                           <div className="grid h-14 place-items-center text-sm text-placeholder">
                             暂无进行中的发布
                           </div>
@@ -487,6 +550,9 @@ function ProjectStatisticsPage() {
                             })()}
                           </TableCell>
                           <TableCell className="text-sm">{release.work_item_count ?? 0}</TableCell>
+                          <TableCell className="max-w-[120px] truncate pl-6 text-sm text-primary" title={release.owner?.display_name ?? "-"}>
+                            {release.owner?.display_name ?? "-"}
+                          </TableCell>
                         </TableRow>
                       ))
                     )}
@@ -518,7 +584,7 @@ function ProjectStatisticsPage() {
                   <span className="text-sm font-medium text-primary">进行中的测试计划</span>
                   <span className="shrink-0 text-xs text-placeholder">共 {displayData?.test_plans?.count ?? 0} 个</span>
                 </div>
-                <div className="flex flex-shrink-0 items-center gap-2">
+                <div className="flex flex-shrink-0 items-center gap-1">
                   <button
                     type="button"
                     className="grid h-6 w-6 place-items-center rounded transition-colors hover:bg-surface-2"
@@ -526,28 +592,54 @@ function ProjectStatisticsPage() {
                   >
                     <Maximize2 className="h-3.5 w-3.5 text-placeholder" />
                   </button>
+                  <Dropdown
+                    menu={{
+                      className: "text-13",
+                      items: [
+                        {
+                          key: "view-more",
+                          label: "查看更多测试计划",
+                          icon: <ExternalLink className="h-3.5 w-3.5" />,
+                        },
+                      ],
+                      onClick: ({ key }) => {
+                        if (key === "view-more") {
+                          router.push(`/${effectiveWorkspaceSlug}/projects/${effectiveProjectId}/testhub/plans`);
+                        }
+                      },
+                    }}
+                    trigger={["click"]}
+                  >
+                    <button
+                      type="button"
+                      className="grid h-6 w-6 place-items-center rounded transition-colors hover:bg-surface-2"
+                    >
+                      <MoreHorizontal className="h-3.5 w-3.5 text-placeholder" />
+                    </button>
+                  </Dropdown>
                 </div>
               </div>
               <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-3 vertical-scrollbar scrollbar-sm">
                 <Table>
                   <TableHeader className="border-b border-subtle border-t-0 bg-transparent">
                     <TableRow>
-                      <TableHead className="h-8 w-1/3 text-left text-xs font-medium text-placeholder">名称</TableHead>
-                      <TableHead className="h-8 w-1/3 text-left text-xs font-medium text-placeholder">日期</TableHead>
-                      <TableHead className="h-8 w-1/6 text-left text-xs font-medium text-placeholder">状态</TableHead>
-                      <TableHead className="h-8 w-1/6 text-left text-xs font-medium text-placeholder">用例</TableHead>
+                      <TableHead className="h-8 w-[28%] text-left text-xs font-medium text-placeholder">测试计划</TableHead>
+                      <TableHead className="h-8 w-[24%] text-left text-xs font-medium text-placeholder">日期</TableHead>
+                      <TableHead className="h-8 w-[14%] text-left text-xs font-medium text-placeholder">状态</TableHead>
+                      <TableHead className="h-8 w-[14%] text-left text-xs font-medium text-placeholder">用例</TableHead>
+                      <TableHead className="h-8 w-[20%] pl-6 text-left text-xs font-medium text-placeholder">负责人</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {!displayData ? (
                       <TableRow>
-                        <TableCell colSpan={4}>
+                        <TableCell colSpan={5}>
                           <div className="grid h-14 place-items-center text-sm text-placeholder">加载中...</div>
                         </TableCell>
                       </TableRow>
                     ) : (displayData?.test_plans?.data?.length ?? 0) === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={4}>
+                        <TableCell colSpan={5}>
                           <div className="grid h-14 place-items-center text-sm text-placeholder">
                             暂无进行中的测试计划
                           </div>
@@ -581,6 +673,9 @@ function ProjectStatisticsPage() {
                             })()}
                           </TableCell>
                           <TableCell className="text-sm">{plan.case_count ?? 0}</TableCell>
+                          <TableCell className="max-w-[120px] truncate pl-6 text-sm text-primary" title={plan.owner?.display_name ?? "-"}>
+                            {plan.owner?.display_name ?? "-"}
+                          </TableCell>
                         </TableRow>
                       ))
                     )}
@@ -609,7 +704,7 @@ function ProjectStatisticsPage() {
                   <span className="text-sm font-medium text-primary">进行中的评审</span>
                   <span className="shrink-0 text-xs text-placeholder">共 {displayData?.case_reviews?.count ?? 0} 个</span>
                 </div>
-                <div className="flex flex-shrink-0 items-center gap-2">
+                <div className="flex flex-shrink-0 items-center gap-1">
                   <button
                     type="button"
                     className="grid h-6 w-6 place-items-center rounded transition-colors hover:bg-surface-2"
@@ -617,28 +712,54 @@ function ProjectStatisticsPage() {
                   >
                     <Maximize2 className="h-3.5 w-3.5 text-placeholder" />
                   </button>
+                  <Dropdown
+                    menu={{
+                      className: "text-13",
+                      items: [
+                        {
+                          key: "view-more",
+                          label: "查看更多评审",
+                          icon: <ExternalLink className="h-3.5 w-3.5" />,
+                        },
+                      ],
+                      onClick: ({ key }) => {
+                        if (key === "view-more") {
+                          router.push(`/${effectiveWorkspaceSlug}/projects/${effectiveProjectId}/testhub/reviews`);
+                        }
+                      },
+                    }}
+                    trigger={["click"]}
+                  >
+                    <button
+                      type="button"
+                      className="grid h-6 w-6 place-items-center rounded transition-colors hover:bg-surface-2"
+                    >
+                      <MoreHorizontal className="h-3.5 w-3.5 text-placeholder" />
+                    </button>
+                  </Dropdown>
                 </div>
               </div>
               <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-3 vertical-scrollbar scrollbar-sm">
                 <Table>
                   <TableHeader className="border-b border-subtle border-t-0 bg-transparent">
                     <TableRow>
-                      <TableHead className="h-8 w-1/3 text-left text-xs font-medium text-placeholder">名称</TableHead>
-                      <TableHead className="h-8 w-1/3 text-left text-xs font-medium text-placeholder">日期</TableHead>
-                      <TableHead className="h-8 w-1/6 text-left text-xs font-medium text-placeholder">状态</TableHead>
-                      <TableHead className="h-8 w-1/6 text-left text-xs font-medium text-placeholder">类型</TableHead>
+                      <TableHead className="h-8 w-[28%] text-left text-xs font-medium text-placeholder">评审</TableHead>
+                      <TableHead className="h-8 w-[24%] text-left text-xs font-medium text-placeholder">日期</TableHead>
+                      <TableHead className="h-8 w-[14%] text-left text-xs font-medium text-placeholder">状态</TableHead>
+                      <TableHead className="h-8 w-[14%] text-left text-xs font-medium text-placeholder">类型</TableHead>
+                      <TableHead className="h-8 w-[20%] pl-6 text-left text-xs font-medium text-placeholder">负责人</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {!displayData ? (
                       <TableRow>
-                        <TableCell colSpan={4}>
+                        <TableCell colSpan={5}>
                           <div className="grid h-14 place-items-center text-sm text-placeholder">加载中...</div>
                         </TableCell>
                       </TableRow>
                     ) : (displayData?.case_reviews?.data?.length ?? 0) === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={4}>
+                        <TableCell colSpan={5}>
                           <div className="grid h-14 place-items-center text-sm text-placeholder">
                             暂无进行中的用例评审
                           </div>
@@ -672,6 +793,9 @@ function ProjectStatisticsPage() {
                             })()}
                           </TableCell>
                           <TableCell className="text-sm">用例评审</TableCell>
+                          <TableCell className="max-w-[120px] truncate pl-6 text-sm text-primary" title={review.owner?.display_name ?? "-"}>
+                            {review.owner?.display_name ?? "-"}
+                          </TableCell>
                         </TableRow>
                       ))
                     )}

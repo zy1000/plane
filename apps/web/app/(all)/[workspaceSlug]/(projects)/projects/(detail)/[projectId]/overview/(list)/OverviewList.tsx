@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { observer } from "mobx-react";
+import { CloseOutlined } from "@ant-design/icons";
 import { Modal, Pagination } from "antd";
-import { BookOpen, Expand, FolderKanban, History, Megaphone, Pencil, Plus, Trash2, Users } from "lucide-react";
+import { BookOpen, History, Maximize2, Megaphone, Pencil, Plus, Trash2, Users } from "lucide-react";
 import { PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import type { IProject, TNameDescriptionLoader } from "@plane/types";
-import { Button } from "@plane/propel/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { getDate, renderFormattedDate } from "@plane/utils";
@@ -48,6 +48,8 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
   const [isDescriptionModalOpen, setIsDescriptionModalOpen] = useState(false);
   const [isDescriptionEditing, setIsDescriptionEditing] = useState(false);
   const [isActivityModalOpen, setIsActivityModalOpen] = useState(false);
+  const [isAnnouncementsFullscreenOpen, setIsAnnouncementsFullscreenOpen] = useState(false);
+  const [isMembersFullscreenOpen, setIsMembersFullscreenOpen] = useState(false);
   const { getUserDetails } = useMember();
 
   const fetchAnnouncements = useCallback(async () => {
@@ -137,16 +139,128 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
     });
   };
 
+  const announcementsListBody = (
+    <>
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-3 vertical-scrollbar scrollbar-sm">
+        <Table>
+          <TableHeader className="border-b border-subtle border-t-0 bg-transparent">
+            <TableRow>
+              <TableHead className="h-8 w-2/5 text-left text-xs font-medium text-placeholder">公告</TableHead>
+              <TableHead className="h-8 w-1/5 text-left text-xs font-medium text-placeholder">创建人</TableHead>
+              <TableHead className="h-8 w-1/4 text-left text-xs font-medium text-placeholder">创建时间</TableHead>
+              <TableHead className="h-8 w-12 text-left text-xs font-medium text-placeholder">操作</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {isLoadingAnnouncements ? (
+              <TableRow>
+                <TableCell colSpan={4}>
+                  <div className="grid h-14 place-items-center text-sm text-placeholder">加载中...</div>
+                </TableCell>
+              </TableRow>
+            ) : announcements.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={4}>
+                  <div className="grid h-14 place-items-center text-sm text-placeholder">暂无公告</div>
+                </TableCell>
+              </TableRow>
+            ) : (
+              announcements.map((item) => (
+                <TableRow key={item.id} className="transition-colors hover:bg-layer-1">
+                  <TableCell
+                    className="max-w-[200px] cursor-pointer truncate text-sm text-primary"
+                    title={item.name}
+                    onClick={() => {
+                      setActiveAnnouncement(item);
+                      setIsDetailModalOpen(true);
+                    }}
+                  >
+                    {item.name}
+                  </TableCell>
+                  <TableCell className="text-sm">{creatorLabel(item.created_by)}</TableCell>
+                  <TableCell className="text-sm">
+                    {item.created_at ? renderFormattedDate(getDate(item.created_at), "yyyy-MM-dd") : "-"}
+                  </TableCell>
+                  <TableCell className="text-left">
+                    <button
+                      type="button"
+                      className="cursor-pointer rounded-md p-1 text-placeholder transition-colors hover:bg-surface-2 hover:text-red-500"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        confirmDeleteAnnouncement(item.id);
+                      }}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </div>
+
+      {totalCount > pageSize && (
+        <div className="flex flex-shrink-0 items-center justify-between border-t border-subtle px-4 py-2">
+          <span className="text-xs text-placeholder">
+            第 {(page - 1) * pageSize + 1}-{Math.min(page * pageSize, totalCount)} 条，共 {totalCount} 条
+          </span>
+          <Pagination
+            simple
+            current={page}
+            pageSize={pageSize}
+            total={totalCount}
+            showQuickJumper
+            onChange={(p) => setPage(p)}
+            size="small"
+          />
+        </div>
+      )}
+    </>
+  );
+
+  const fullscreenModalClassName =
+    "[&_.ant-modal-close]:!right-5 [&_.ant-modal-close]:!top-4 [&_.ant-modal-close]:inline-flex [&_.ant-modal-close]:!h-auto [&_.ant-modal-close]:!w-auto [&_.ant-modal-close]:items-center [&_.ant-modal-close]:justify-center [&_.ant-modal-close]:rounded-md [&_.ant-modal-close]:px-2 [&_.ant-modal-close]:py-1.5 [&_.ant-modal-close]:transition-colors [&_.ant-modal-close]:hover:!bg-surface-2 [&_.ant-modal-close]:hover:!text-primary [&_.ant-modal-close]:group [&_.ant-modal-close-x]:!h-auto [&_.ant-modal-close-x]:!w-auto";
+
+  const fullscreenModalContentStyles = {
+    height: "100vh" as const,
+    maxHeight: "100vh" as const,
+    borderRadius: 0,
+    boxShadow: "none",
+    display: "flex" as const,
+    flexDirection: "column" as const,
+    padding: 0,
+    margin: 0,
+  };
+
+  const fullscreenModalHeaderStyles = {
+    flexShrink: 0,
+    margin: 0,
+    borderRadius: 0,
+    padding: "16px 20px",
+    minHeight: 64,
+    display: "flex" as const,
+    alignItems: "center" as const,
+  };
+
+  const fullscreenModalBodyStyles = {
+    flex: 1,
+    minHeight: 0,
+    padding: 0,
+    overflow: "hidden" as const,
+    display: "flex" as const,
+    flexDirection: "column" as const,
+  };
+
   return (
     <div className="h-full w-full overflow-y-auto vertical-scrollbar scrollbar-sm">
       <div className="flex flex-col gap-5 px-6 py-4">
         {/* Header */}
-        <div>
-          <h1 className="text-lg font-normal text-primary">项目概览</h1>
-          <div className="mt-1 flex items-center gap-1.5 text-sm text-placeholder">
-            <FolderKanban className="h-3.5 w-3.5 shrink-0" />
-            <p>{project.name} · {project.identifier}</p>
-          </div>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+          <h1 className="shrink-0 text-lg font-normal text-primary">项目概览</h1>
+          <p className="min-w-0 truncate text-sm text-placeholder">
+            {project.name} · {project.identifier}
+          </p>
         </div>
 
         {/* KPI Cards */}
@@ -183,7 +297,7 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
                       setIsDescriptionModalOpen(true);
                     }}
                   >
-                    <Expand className="h-3.5 w-3.5" />
+                    <Maximize2 className="h-3.5 w-3.5" />
                   </button>
                 </div>
               </div>
@@ -212,87 +326,27 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
                   <Megaphone className="h-3.5 w-3.5 text-placeholder" />
                   <span className="text-sm font-medium text-primary">项目公告</span>
                 </div>
-                <Button variant="secondary" onClick={() => setIsCreateModalOpen(true)}>
-                  <Plus className="size-3.5 shrink-0" />
-                  新增公告
-                </Button>
-              </div>
-
-              <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-3 vertical-scrollbar scrollbar-sm">
-                <Table>
-                  <TableHeader className="border-b border-subtle border-t-0 bg-transparent">
-                    <TableRow>
-                      <TableHead className="h-8 w-2/5 text-left text-xs font-medium text-placeholder">公告</TableHead>
-                      <TableHead className="h-8 w-1/5 text-left text-xs font-medium text-placeholder">创建人</TableHead>
-                      <TableHead className="h-8 w-1/4 text-left text-xs font-medium text-placeholder">创建时间</TableHead>
-                      <TableHead className="h-8 w-12 text-left text-xs font-medium text-placeholder">操作</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {isLoadingAnnouncements ? (
-                      <TableRow>
-                        <TableCell colSpan={4}>
-                          <div className="grid h-14 place-items-center text-sm text-placeholder">加载中...</div>
-                        </TableCell>
-                      </TableRow>
-                    ) : announcements.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={4}>
-                          <div className="grid h-14 place-items-center text-sm text-placeholder">暂无公告</div>
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      announcements.map((item) => (
-                        <TableRow key={item.id} className="transition-colors hover:bg-layer-1">
-                          <TableCell
-                            className="max-w-[200px] cursor-pointer truncate text-sm text-primary"
-                            title={item.name}
-                            onClick={() => {
-                              setActiveAnnouncement(item);
-                              setIsDetailModalOpen(true);
-                            }}
-                          >
-                            {item.name}
-                          </TableCell>
-                          <TableCell className="text-sm">{creatorLabel(item.created_by)}</TableCell>
-                          <TableCell className="text-sm">
-                            {item.created_at ? renderFormattedDate(getDate(item.created_at), "yyyy-MM-dd") : "-"}
-                          </TableCell>
-                          <TableCell className="text-left">
-                            <button
-                              type="button"
-                              className="cursor-pointer rounded-md p-1 text-placeholder transition-colors hover:bg-surface-2 hover:text-red-500"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                confirmDeleteAnnouncement(item.id);
-                              }}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-
-              {totalCount > pageSize && (
-                <div className="flex flex-shrink-0 items-center justify-between border-t border-subtle px-4 py-2">
-                  <span className="text-xs text-placeholder">
-                    第 {(page - 1) * pageSize + 1}-{Math.min(page * pageSize, totalCount)} 条，共 {totalCount} 条
-                  </span>
-                  <Pagination
-                    simple
-                    current={page}
-                    pageSize={pageSize}
-                    total={totalCount}
-                    showQuickJumper
-                    onChange={(p) => setPage(p)}
-                    size="small"
-                  />
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    className="cursor-pointer rounded-md p-1 text-placeholder transition-colors hover:bg-surface-2 hover:text-primary"
+                    aria-label="新增公告"
+                    title="新增公告"
+                    onClick={() => setIsCreateModalOpen(true)}
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    className="cursor-pointer rounded-md p-1 text-placeholder transition-colors hover:bg-surface-2 hover:text-primary"
+                    onClick={() => setIsAnnouncementsFullscreenOpen(true)}
+                  >
+                    <Maximize2 className="h-3.5 w-3.5" />
+                  </button>
                 </div>
-              )}
+              </div>
+
+              {announcementsListBody}
             </div>
           </div>
         </div>
@@ -301,9 +355,18 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
           <div>
             <div className={`${sectionCard} flex h-[380px] flex-col p-4`}>
-              <div className="mb-3 flex flex-shrink-0 items-center gap-2">
-                <Users className="h-3.5 w-3.5 text-placeholder" />
-                <span className="text-sm font-medium text-primary">项目成员</span>
+              <div className="mb-3 flex flex-shrink-0 items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Users className="h-3.5 w-3.5 text-placeholder" />
+                  <span className="text-sm font-medium text-primary">项目成员</span>
+                </div>
+                <button
+                  type="button"
+                  className="cursor-pointer rounded-md p-1 text-placeholder transition-colors hover:bg-surface-2 hover:text-primary"
+                  onClick={() => setIsMembersFullscreenOpen(true)}
+                >
+                  <Maximize2 className="h-3.5 w-3.5" />
+                </button>
               </div>
               <div className="min-h-0 flex-1 overflow-hidden">
                 <div className="h-full overflow-y-auto vertical-scrollbar scrollbar-sm">
@@ -324,7 +387,7 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
                   className="cursor-pointer rounded-md p-1 text-placeholder transition-colors hover:bg-surface-2 hover:text-primary"
                   onClick={() => setIsActivityModalOpen(true)}
                 >
-                  <Expand className="h-3.5 w-3.5" />
+                  <Maximize2 className="h-3.5 w-3.5" />
                 </button>
               </div>
               <div className="min-h-0 flex-1 overflow-hidden">
@@ -370,28 +433,130 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
         initialEditing={isDescriptionEditing}
       />
 
-      {/* 项目活动 Modal */}
+      {/* 项目活动 Modal（全屏） */}
       <Modal
         title={
-          <div className="flex items-center gap-2">
-            <History className="h-4 w-4 text-placeholder" />
-            <span>项目活动</span>
+          <div className="flex min-h-11 items-center gap-2 pr-2">
+            <History className="h-4 w-4 shrink-0 text-placeholder" />
+            <span className="text-base font-medium text-primary">项目活动</span>
           </div>
         }
         open={isActivityModalOpen}
         onCancel={() => setIsActivityModalOpen(false)}
+        closable
+        closeIcon={
+          <span className="inline-flex items-center gap-2 text-sm font-normal text-primary transition-colors">
+            <CloseOutlined className="text-base text-inherit" />
+            <span>退出全屏</span>
+          </span>
+        }
         footer={null}
-        width={960}
-        styles={{ body: { height: 640, padding: 0 } }}
+        centered={false}
+        width="100%"
+        style={{ top: 0, padding: 0, margin: 0, maxWidth: "100vw" }}
+        className={fullscreenModalClassName}
+        classNames={{ wrapper: "!p-0", header: "!mb-0 border-b border-subtle" }}
+        styles={{
+          content: fullscreenModalContentStyles,
+          header: fullscreenModalHeaderStyles,
+          body: fullscreenModalBodyStyles,
+        }}
         destroyOnClose
+        getContainer={() => document.body}
       >
-        <div className="h-full overflow-y-auto vertical-scrollbar scrollbar-sm">
-          <ProjectActivity
-            workspaceSlug={workspaceSlug}
-            projectId={project.id}
-            showHeading={false}
-            containerClassName="h-full"
-          />
+        <div className="flex h-full min-h-0 flex-1 flex-col bg-surface-1">
+          <div className="min-h-0 flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm px-4 pb-3">
+            <ProjectActivity
+              workspaceSlug={workspaceSlug}
+              projectId={project.id}
+              showHeading={false}
+              containerClassName="min-h-0"
+            />
+          </div>
+        </div>
+      </Modal>
+
+      {/* 项目公告全屏 — zIndex 低于 ModalCore(z-30) 以免遮挡公告详情弹窗 */}
+      <Modal
+        title={
+          <div className="flex w-full min-w-0 items-center justify-between gap-4 pr-24">
+            <div className="flex min-w-0 items-center gap-2">
+              <Megaphone className="h-4 w-4 shrink-0 text-placeholder" />
+              <span className="text-base font-medium text-primary">项目公告</span>
+            </div>
+            <button
+              type="button"
+              className="shrink-0 cursor-pointer rounded-md p-1 text-placeholder transition-colors hover:bg-surface-2 hover:text-primary"
+              aria-label="新增公告"
+              title="新增公告"
+              onClick={() => setIsCreateModalOpen(true)}
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        }
+        open={isAnnouncementsFullscreenOpen}
+        onCancel={() => setIsAnnouncementsFullscreenOpen(false)}
+        closable
+        closeIcon={
+          <span className="inline-flex items-center gap-2 text-sm font-normal text-primary transition-colors">
+            <CloseOutlined className="text-base text-inherit" />
+            <span>退出全屏</span>
+          </span>
+        }
+        footer={null}
+        centered={false}
+        zIndex={29}
+        width="100%"
+        style={{ top: 0, padding: 0, margin: 0, maxWidth: "100vw" }}
+        className={fullscreenModalClassName}
+        classNames={{ wrapper: "!p-0", header: "!mb-0 border-b border-subtle" }}
+        styles={{
+          content: fullscreenModalContentStyles,
+          header: fullscreenModalHeaderStyles,
+          body: fullscreenModalBodyStyles,
+        }}
+        destroyOnClose
+        getContainer={() => document.body}
+      >
+        <div className="flex h-full min-h-0 flex-1 flex-col bg-surface-1">{announcementsListBody}</div>
+      </Modal>
+
+      {/* 项目成员全屏 */}
+      <Modal
+        title={
+          <div className="flex min-h-11 items-center gap-2 pr-2">
+            <Users className="h-4 w-4 shrink-0 text-placeholder" />
+            <span className="text-base font-medium text-primary">项目成员</span>
+          </div>
+        }
+        open={isMembersFullscreenOpen}
+        onCancel={() => setIsMembersFullscreenOpen(false)}
+        closable
+        closeIcon={
+          <span className="inline-flex items-center gap-2 text-sm font-normal text-primary transition-colors">
+            <CloseOutlined className="text-base text-inherit" />
+            <span>退出全屏</span>
+          </span>
+        }
+        footer={null}
+        centered={false}
+        width="100%"
+        style={{ top: 0, padding: 0, margin: 0, maxWidth: "100vw" }}
+        className={fullscreenModalClassName}
+        classNames={{ wrapper: "!p-0", header: "!mb-0 border-b border-subtle" }}
+        styles={{
+          content: fullscreenModalContentStyles,
+          header: fullscreenModalHeaderStyles,
+          body: fullscreenModalBodyStyles,
+        }}
+        destroyOnClose
+        getContainer={() => document.body}
+      >
+        <div className="flex h-full min-h-0 flex-1 flex-col bg-surface-1">
+          <div className="min-h-0 flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm px-4 pb-3">
+            <OverviewMemberStats workspaceSlug={workspaceSlug} projectId={project.id} />
+          </div>
         </div>
       </Modal>
     </div>

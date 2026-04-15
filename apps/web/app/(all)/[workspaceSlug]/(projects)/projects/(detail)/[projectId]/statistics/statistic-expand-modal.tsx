@@ -96,10 +96,11 @@ const SECTION_CONFIG: Record<
     pageParamKey: "page",
     dataKey: "cycles",
     columns: [
-      { key: "name", label: "名称", width: "w-2/5" },
-      { key: "date", label: "日期", width: "w-1/4" },
-      { key: "status", label: "状态", width: "w-1/6" },
-      { key: "count", label: "工作项", width: "w-1/6" },
+      { key: "name", label: "迭代", width: "w-[28%]" },
+      { key: "date", label: "日期", width: "w-[22%]" },
+      { key: "status", label: "状态", width: "w-[14%]" },
+      { key: "count", label: "工作项", width: "w-[14%]" },
+      { key: "owner", label: "负责人", width: "w-[22%]" },
     ],
   },
   release: {
@@ -108,10 +109,11 @@ const SECTION_CONFIG: Record<
     pageParamKey: "release_page",
     dataKey: "releases",
     columns: [
-      { key: "name", label: "名称", width: "w-2/5" },
-      { key: "date", label: "日期", width: "w-1/4" },
-      { key: "status", label: "状态", width: "w-1/6" },
-      { key: "count", label: "工作项", width: "w-1/6" },
+      { key: "name", label: "发布", width: "w-[28%]" },
+      { key: "date", label: "日期", width: "w-[22%]" },
+      { key: "status", label: "状态", width: "w-[14%]" },
+      { key: "count", label: "工作项", width: "w-[14%]" },
+      { key: "owner", label: "负责人", width: "w-[22%]" },
     ],
   },
   plan: {
@@ -120,10 +122,11 @@ const SECTION_CONFIG: Record<
     pageParamKey: "plan_page",
     dataKey: "test_plans",
     columns: [
-      { key: "name", label: "名称", width: "w-2/5" },
-      { key: "date", label: "日期", width: "w-1/4" },
-      { key: "status", label: "状态", width: "w-1/6" },
-      { key: "count", label: "用例", width: "w-1/6" },
+      { key: "name", label: "测试计划", width: "w-[28%]" },
+      { key: "date", label: "日期", width: "w-[22%]" },
+      { key: "status", label: "状态", width: "w-[14%]" },
+      { key: "count", label: "用例", width: "w-[14%]" },
+      { key: "owner", label: "负责人", width: "w-[22%]" },
     ],
   },
   review: {
@@ -132,10 +135,11 @@ const SECTION_CONFIG: Record<
     pageParamKey: "review_page",
     dataKey: "case_reviews",
     columns: [
-      { key: "name", label: "名称", width: "w-2/5" },
-      { key: "date", label: "日期", width: "w-1/4" },
-      { key: "status", label: "状态", width: "w-1/6" },
-      { key: "type", label: "类型", width: "w-1/6" },
+      { key: "name", label: "评审", width: "w-[28%]" },
+      { key: "date", label: "日期", width: "w-[22%]" },
+      { key: "status", label: "状态", width: "w-[14%]" },
+      { key: "type", label: "类型", width: "w-[14%]" },
+      { key: "owner", label: "负责人", width: "w-[22%]" },
     ],
   },
 };
@@ -252,8 +256,8 @@ export function StatisticExpandModal({ isOpen, onClose, section, workspaceSlug, 
       footer={null}
       closable
       closeIcon={
-        <span className="inline-flex items-center gap-2 text-sm text-placeholder transition-colors group-hover:text-primary">
-          <CloseOutlined className="text-base" />
+        <span className="inline-flex items-center gap-2 text-sm font-normal text-primary transition-colors">
+          <CloseOutlined className="text-base text-inherit" />
           <span>退出全屏</span>
         </span>
       }
@@ -302,7 +306,7 @@ export function StatisticExpandModal({ isOpen, onClose, section, workspaceSlug, 
                 {config.columns.map((col) => (
                   <TableHead
                     key={col.key}
-                    className={`h-8 ${col.width} text-left text-xs font-medium text-placeholder`}
+                    className={`h-8 ${col.width} text-left text-xs font-medium text-placeholder${col.key === "owner" ? " pl-6" : ""}`}
                   >
                     {col.label}
                   </TableHead>
@@ -312,24 +316,22 @@ export function StatisticExpandModal({ isOpen, onClose, section, workspaceSlug, 
             <TableBody>
               {isLoading && !items.length ? (
                 <TableRow>
-                  <TableCell colSpan={4}>
+                  <TableCell colSpan={config.columns.length}>
                     <div className="grid h-14 place-items-center text-sm text-placeholder">加载中...</div>
                   </TableCell>
                 </TableRow>
               ) : items.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={4}>
+                  <TableCell colSpan={config.columns.length}>
                     <div className="grid h-14 place-items-center text-sm text-placeholder">暂无数据</div>
                   </TableCell>
                 </TableRow>
               ) : (
                 items.map((item: any) => {
-                  const isCycleDelayed = section === "cycle" && normalizeCycleStatusValue(item.status) === "delayed";
-                  const textClass = isCycleDelayed ? "text-danger-primary" : "text-primary";
                   return (
                     <TableRow key={item.id} className="transition-colors hover:bg-layer-1">
                       <TableCell
-                        className={`max-w-[280px] truncate text-sm ${textClass}`}
+                        className="max-w-[280px] truncate text-sm text-primary"
                         title={item.name}
                       >
                         <button
@@ -340,12 +342,15 @@ export function StatisticExpandModal({ isOpen, onClose, section, workspaceSlug, 
                           {item.name}
                         </button>
                       </TableCell>
-                      <TableCell className={`text-sm ${textClass}`}>
+                      <TableCell className="text-sm text-primary">
                         {formatStatisticTableDateRange(item.start_date, item.end_date)}
                       </TableCell>
                       <TableCell className="pl-0 -ml-1 text-left">{renderStatusCell(item)}</TableCell>
-                      <TableCell className={`text-sm ${textClass}`}>
+                      <TableCell className="text-sm text-primary">
                         {renderLastColumn(item)}
+                      </TableCell>
+                      <TableCell className="max-w-[140px] truncate pl-6 text-sm text-primary" title={item.owner?.display_name ?? "-"}>
+                        {item.owner?.display_name ?? "-"}
                       </TableCell>
                     </TableRow>
                   );

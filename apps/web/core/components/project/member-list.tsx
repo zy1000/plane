@@ -7,7 +7,7 @@
 import { useState } from "react";
 import { observer } from "mobx-react";
 // plane imports
-import { EUserPermissions, EUserPermissionsLevel, MEMBER_TRACKER_ELEMENTS } from "@plane/constants";
+import { MEMBER_TRACKER_ELEMENTS, PROJECT_MEMBER_INVITE_PERMISSION_KEY } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { SearchIcon } from "@plane/propel/icons";
@@ -38,7 +38,7 @@ export const ProjectMemberList = observer(function ProjectMemberList(props: TPro
   const {
     project: { projectMemberIds, getFilteredProjectMemberDetails, filters },
   } = useMember();
-  const { allowPermissions } = useUserPermissions();
+  const { allowProjectPermissionKeys } = useUserPermissions();
 
   const { t } = useTranslation();
 
@@ -57,7 +57,11 @@ export const ProjectMemberList = observer(function ProjectMemberList(props: TPro
     projectId ? getFilteredProjectMemberDetails(memberId, projectId.toString()) : null
   );
 
-  const isAdmin = allowPermissions([EUserPermissions.ADMIN], EUserPermissionsLevel.PROJECT);
+  const canInviteProjectMembers = allowProjectPermissionKeys(
+    [PROJECT_MEMBER_INVITE_PERMISSION_KEY],
+    workspaceSlug,
+    projectId
+  );
 
   // Handler for role filter updates
   const handleRoleFilterUpdate = (role: string) => {
@@ -105,7 +109,7 @@ export const ProjectMemberList = observer(function ProjectMemberList(props: TPro
             handleUpdate={handleRoleFilterUpdate}
             memberType="project"
           />
-          {isAdmin && (
+          {canInviteProjectMembers && (
             <Button
               variant="primary"
               onClick={() => {

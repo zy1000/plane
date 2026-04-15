@@ -1,6 +1,11 @@
 import { API_BASE_URL } from "@plane/constants";
 import { APIService } from "@/services/api.service";
 
+export type TStatisticOwner = {
+  id: string;
+  display_name: string;
+};
+
 export type TProjectStatisticCycle = {
   id: string;
   name: string;
@@ -8,6 +13,7 @@ export type TProjectStatisticCycle = {
   end_date: string | null;
   status: "CURRENT";
   work_item_count: number;
+  owner: TStatisticOwner | null;
 };
 
 export type TProjectStatisticRelease = {
@@ -17,6 +23,7 @@ export type TProjectStatisticRelease = {
   end_date: string | null;
   status: string;
   work_item_count: number;
+  owner: TStatisticOwner | null;
 };
 
 export type TProjectStatisticTestPlan = {
@@ -26,6 +33,7 @@ export type TProjectStatisticTestPlan = {
   end_date: string | null;
   status: string;
   case_count: number;
+  owner: TStatisticOwner | null;
 };
 
 export type TProjectStatisticCaseReview = {
@@ -35,6 +43,7 @@ export type TProjectStatisticCaseReview = {
   end_date: string | null;
   status: string;
   case_count: number;
+  owner: TStatisticOwner | null;
 };
 
 export type TProjectStatisticResponse = {
