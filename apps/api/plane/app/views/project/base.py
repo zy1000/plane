@@ -46,6 +46,8 @@ from plane.db.models import (
     IssueActivity,
     Issue,
     Module,
+    Release,
+    ReleaseIssue,
     TestPlan,
     CaseReview,
     TestCaseRepository,
@@ -770,6 +772,16 @@ class ProjectAPI(BaseViewSet):
         if start_date > end_date:
             return Response({'error': 'start_date must be <= end_date'}, status=status.HTTP_400_BAD_REQUEST)
 
+        statistic_table_page_size = 6
+        page_size_param = request.query_params.get('page_size')
+        if page_size_param:
+            try:
+                custom_page_size = int(page_size_param)
+                if 1 <= custom_page_size <= 50:
+                    statistic_table_page_size = custom_page_size
+            except (ValueError, TypeError):
+                pass
+
         defect_type_names = ['缺陷', 'Bug', 'bug']
 
         base_issue_qs = Issue.objects.filter(
@@ -920,8 +932,8 @@ class ProjectAPI(BaseViewSet):
         )
 
         cycles_paginator = CustomPaginator()
-        cycles_paginator.page_size = 5
-        cycles_paginator.max_page_size = 5
+        cycles_paginator.page_size = statistic_table_page_size
+        cycles_paginator.max_page_size = statistic_table_page_size
         paginated_cycles = cycles_paginator.paginate_queryset(cycles_queryset, request)
 
         cycles_data = [
@@ -944,12 +956,12 @@ class ProjectAPI(BaseViewSet):
         except ValueError:
             return Response({'error': 'invalid release_page'}, status=status.HTTP_400_BAD_REQUEST)
 
-        release_page_size = 5
+        release_page_size = statistic_table_page_size
         release_offset = (release_page - 1) * release_page_size
         release_limit = release_offset + release_page_size
 
         releases_queryset = (
-            Module.objects.filter(
+            Release.objects.filter(
                 project_id=project_id,
                 deleted_at__isnull=True,
                 archived_at__isnull=True,
@@ -957,13 +969,13 @@ class ProjectAPI(BaseViewSet):
             )
             .annotate(
                 work_item_count=Count(
-                    'issue_module__issue__id',
+                    'issue_release__issue__id',
                     distinct=True,
                     filter=Q(
-                        issue_module__issue__archived_at__isnull=True,
-                        issue_module__issue__is_draft=False,
-                        issue_module__deleted_at__isnull=True,
-                        issue_module__issue__deleted_at__isnull=True,
+                        issue_release__issue__archived_at__isnull=True,
+                        issue_release__issue__is_draft=False,
+                        issue_release__deleted_at__isnull=True,
+                        issue_release__issue__deleted_at__isnull=True,
                     ),
                 )
             )
@@ -971,14 +983,14 @@ class ProjectAPI(BaseViewSet):
         )
         releases_data = [
             {
-                'id': str(module.id),
-                'name': module.name,
-                'start_date': module.start_date.isoformat() if module.start_date else None,
-                'end_date': module.target_date.isoformat() if module.target_date else None,
-                'status': module.status,
-                'work_item_count': getattr(module, 'work_item_count', 0) or 0,
+                'id': str(release.id),
+                'name': release.name,
+                'start_date': release.start_date.isoformat() if release.start_date else None,
+                'end_date': release.target_date.isoformat() if release.target_date else None,
+                'status': release.status,
+                'work_item_count': getattr(release, 'work_item_count', 0) or 0,
             }
-            for module in releases_queryset[release_offset:release_limit]
+            for release in releases_queryset[release_offset:release_limit]
         ]
 
         plan_page_param = request.query_params.get('plan_page')
@@ -989,7 +1001,7 @@ class ProjectAPI(BaseViewSet):
         except ValueError:
             return Response({'error': 'invalid plan_page'}, status=status.HTTP_400_BAD_REQUEST)
 
-        plan_page_size = 5
+        plan_page_size = statistic_table_page_size
         plan_offset = (plan_page - 1) * plan_page_size
         plan_limit = plan_offset + plan_page_size
 
@@ -1023,7 +1035,7 @@ class ProjectAPI(BaseViewSet):
         except ValueError:
             return Response({'error': 'invalid review_page'}, status=status.HTTP_400_BAD_REQUEST)
 
-        review_page_size = 5
+        review_page_size = statistic_table_page_size
         review_offset = (review_page - 1) * review_page_size
         review_limit = review_offset + review_page_size
 

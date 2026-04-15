@@ -98,6 +98,7 @@ export class ProjectStatisticService extends APIService {
       release_page?: number;
       plan_page?: number;
       review_page?: number;
+      page_size?: number;
       start_date?: string;
       end_date?: string;
     }

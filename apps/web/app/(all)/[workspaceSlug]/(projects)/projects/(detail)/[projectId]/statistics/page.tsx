@@ -2,16 +2,16 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Pagination } from "antd";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import useSWR from "swr";
 import { observer } from "mobx-react";
 import {
   BarChart3,
   Bug,
-  ClipboardCheck,
   ClipboardList,
   FileSearch,
   FileText,
+  Maximize2,
   Package,
   Repeat,
   TrendingUp,
@@ -27,8 +27,12 @@ import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view
 import { PageHead } from "@/components/core/page-title";
 import { useUserPermissions } from "@/hooks/store/user";
 import { ProjectStatisticService, type TProjectStatisticResponse } from "@/services/project";
+import { StatisticExpandModal, type StatisticSectionType } from "./statistic-expand-modal";
 
 const projectStatisticService = new ProjectStatisticService();
+
+/** 与后端 `get_statistic` 中各列表分页条数一致 */
+const STATISTIC_TABLE_PAGE_SIZE = 7;
 
 const sectionCard = "rounded-lg border border-subtle bg-surface-1";
 const kpiCardBase =
@@ -48,24 +52,56 @@ const LEGACY_STATUS_CLASS_MAP: Record<string, string> = {
   "text-green-600": "text-success-primary",
 };
 
-const getStatusTagClassName = (bgColor?: string, textColor?: string) =>
+/** 统计页表格内状态：无背景，仅语义色文字 */
+const getStatisticStatusTagClassName = (textColor?: string) =>
   [
     "inline-flex items-center rounded-md px-2 py-0.5 text-xs",
-    bgColor ? (LEGACY_STATUS_CLASS_MAP[bgColor] ?? bgColor) : "",
     textColor ? (LEGACY_STATUS_CLASS_MAP[textColor] ?? textColor) : "",
   ]
     .filter(Boolean)
     .join(" ");
 
+const CYCLE_STATUS_NORMALIZE_MAP: Record<string, string> = {
+  未开始: "not_started",
+  进行中: "in_progress",
+  已延期: "delayed",
+  已完成: "completed",
+  已取消: "cancelled",
+  current: "in_progress",
+  upcoming: "not_started",
+  draft: "not_started",
+};
+
+function normalizeCycleStatusValue(status?: string): string {
+  return status ? (CYCLE_STATUS_NORMALIZE_MAP[status] ?? status.toLowerCase()) : "not_started";
+}
+
+/** 表格内日期列：同年只写一次年份（起始完整 yyyy-MM-dd，结束仅 MM-dd） */
+function formatStatisticTableDateRange(
+  startDate: string | null | undefined,
+  endDate: string | null | undefined
+): string {
+  const start = startDate ? getDate(startDate) : null;
+  const end = endDate ? getDate(endDate) : null;
+  const fullStart = start ? renderFormattedDate(start, "yyyy-MM-dd") : "-";
+  const fullEnd = end ? renderFormattedDate(end, "yyyy-MM-dd") : "-";
+  if (start && end && start.getFullYear() === end.getFullYear()) {
+    return `${fullStart} ~ ${renderFormattedDate(end, "MM-dd")}`;
+  }
+  return `${fullStart} ~ ${fullEnd}`;
+}
+
 function ProjectStatisticsPage() {
   const pageTitle = "统计";
   const { t } = useTranslation();
+  const router = useRouter();
   const { workspaceSlug, projectId } = useParams();
   const { workspaceUserInfo, allowProjectPermissionKeys } = useUserPermissions();
   const [cyclePage, setCyclePage] = useState(1);
   const [releasePage, setReleasePage] = useState(1);
   const [planPage, setPlanPage] = useState(1);
   const [reviewPage, setReviewPage] = useState(1);
+  const [expandModalSection, setExpandModalSection] = useState<StatisticSectionType | null>(null);
 
   const changeTriggerRef = useRef<Set<string>>(new Set(["init"]));
   const [displayData, setDisplayData] = useState<TProjectStatisticResponse | undefined>(undefined);
@@ -95,10 +131,6 @@ function ProjectStatisticsPage() {
     effectiveWorkspaceSlug,
     effectiveProjectId
   );
-
-  if (workspaceUserInfo && effectiveWorkspaceSlug && effectiveProjectId && !canViewStatistics) {
-    return <NotAuthorizedView section="general" isProjectView className="h-auto" />;
-  }
 
   const { data } = useSWR<TProjectStatisticResponse>(
     effectiveWorkspaceSlug && effectiveProjectId
@@ -170,32 +202,20 @@ function ProjectStatisticsPage() {
   }, [displayData]);
 
   const getCycleStatusDetails = (status?: string) => {
-    const normalizedStatusMap: Record<string, string> = {
-      未开始: "not_started",
-      进行中: "in_progress",
-      已延期: "delayed",
-      已完成: "completed",
-      已取消: "cancelled",
-      current: "in_progress",
-      upcoming: "not_started",
-      draft: "not_started",
-    };
-    const normalizedStatus = status ? (normalizedStatusMap[status] ?? status.toLowerCase()) : "not_started";
+    const normalizedStatus = normalizeCycleStatusValue(status);
     const statusDetails =
       CYCLE_STATUS.find((item) => item.value === normalizedStatus) ?? CYCLE_STATUS[CYCLE_STATUS.length - 1];
 
     if (normalizedStatus === "in_progress") {
       return {
         ...statusDetails,
-        bgColor: "bg-indigo-50",
-        textColor: "text-blue-500",
+        textColor: "text-[#F59E0B]",
       };
     }
 
     if (normalizedStatus === "not_started") {
       return {
         ...statusDetails,
-        bgColor: "bg-layer-1",
         textColor: "text-secondary",
       };
     }
@@ -210,8 +230,7 @@ function ProjectStatisticsPage() {
     if (normalizedStatus === "in-progress") {
       return {
         ...statusDetails,
-        bgColor: "bg-indigo-50",
-        textColor: "text-blue-500",
+        textColor: "text-[#F59E0B]",
       };
     }
 
@@ -220,18 +239,22 @@ function ProjectStatisticsPage() {
 
   const getQaStatusDetails = (status?: string) => {
     if (status === "进行中") {
-      return { bgColor: "bg-indigo-50", textColor: "text-blue-500" };
+      return { textColor: "text-[#F59E0B]" };
     }
     if (status === "已完成") {
-      return { bgColor: "bg-green-50", textColor: "text-green-600" };
+      return { textColor: "text-green-600" };
     }
     if (status === "未开始") {
-      return { bgColor: "bg-layer-1", textColor: "text-secondary" };
+      return { textColor: "text-secondary" };
     }
-    return { bgColor: "bg-layer-1", textColor: "text-secondary" };
+    return { textColor: "text-secondary" };
   };
 
   const counts = displayData?.counts;
+
+  if (workspaceUserInfo && effectiveWorkspaceSlug && effectiveProjectId && !canViewStatistics) {
+    return <NotAuthorizedView section="general" isProjectView className="h-auto" />;
+  }
 
   return (
     <>
@@ -244,11 +267,11 @@ function ProjectStatisticsPage() {
           </div>
 
           {/* KPI Cards */}
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
             <div className={kpiCardBase}>
               <div className="flex items-center gap-2.5">
                 <div className={kpiIconShell}>
-                  <FileText className="h-5 w-5 text-placeholder" />
+                  <FileText className="h-5 w-5 text-[#3f76ff]" />
                 </div>
                 <div className="min-w-0 flex-1 space-y-1.5">
                   <div className={kpiLabelClass}>全部需求</div>
@@ -260,10 +283,10 @@ function ProjectStatisticsPage() {
             <div className={kpiCardBase}>
               <div className="flex items-center gap-2.5">
                 <div className={kpiIconShell}>
-                  <FileText className="h-5 w-5 text-[#006399]" />
+                  <FileText className="h-5 w-5 text-[#F59E0B]" />
                 </div>
                 <div className="min-w-0 flex-1 space-y-1.5">
-                  <div className={kpiLabelClass}>进行中的需求</div>
+                  <div className={kpiLabelClass}>未完成的需求</div>
                   <div className={kpiValueClass}>{!counts ? "-" : `${counts.in_progress_requirements ?? 0} 个`}</div>
                 </div>
               </div>
@@ -272,7 +295,7 @@ function ProjectStatisticsPage() {
             <div className={kpiCardBase}>
               <div className="flex items-center gap-2.5">
                 <div className={kpiIconShell}>
-                  <Bug className="h-5 w-5 text-placeholder" />
+                  <Bug className="h-5 w-5 text-[#8e0119]" />
                 </div>
                 <div className="min-w-0 flex-1 space-y-1.5">
                   <div className={kpiLabelClass}>全部缺陷</div>
@@ -284,7 +307,7 @@ function ProjectStatisticsPage() {
             <div className={kpiCardBase}>
               <div className="flex items-center gap-2.5">
                 <div className={kpiIconShell}>
-                  <Bug className="h-5 w-5 text-red-500" />
+                  <Bug className="h-5 w-5 text-danger-primary" />
                 </div>
                 <div className="min-w-0 flex-1 space-y-1.5">
                   <div className={kpiLabelClass}>待处理的缺陷</div>
@@ -292,29 +315,26 @@ function ProjectStatisticsPage() {
                 </div>
               </div>
             </div>
-
-            <div className={kpiCardBase}>
-              <div className="flex items-center gap-2.5">
-                <div className={kpiIconShell}>
-                  <ClipboardCheck className="h-5 w-5 text-violet-500" />
-                </div>
-                <div className="min-w-0 flex-1 space-y-1.5">
-                  <div className={kpiLabelClass}>全部用例</div>
-                  <div className={kpiValueClass}>{!counts ? "-" : `${counts.total_cases ?? 0} 个`}</div>
-                </div>
-              </div>
-            </div>
           </div>
 
           {/* Cycles + Releases */}
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-            <div className={`${sectionCard} flex h-[380px] flex-col`}>
+            <div className={`${sectionCard} flex h-[360px] flex-col`}>
               <div className="flex flex-shrink-0 items-center justify-between px-4 py-3">
                 <div className="flex items-center gap-2">
                   <Repeat className="h-3.5 w-3.5 text-placeholder" />
                   <span className="text-sm font-medium text-primary">进行中的迭代</span>
                 </div>
-                <span className="text-xs text-placeholder">共 {displayData?.cycles?.count ?? 0} 个</span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    className="grid h-6 w-6 place-items-center rounded transition-colors hover:bg-surface-2"
+                    onClick={() => setExpandModalSection("cycle")}
+                  >
+                    <Maximize2 className="h-3.5 w-3.5 text-placeholder" />
+                  </button>
+                  <span className="text-xs text-placeholder">共 {displayData?.cycles?.count ?? 0} 个</span>
+                </div>
               </div>
               <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-3 vertical-scrollbar scrollbar-sm">
                 <Table>
@@ -340,44 +360,55 @@ function ProjectStatisticsPage() {
                         </TableCell>
                       </TableRow>
                     ) : (
-                      (displayData?.cycles?.data ?? []).map((cycle) => (
-                        <TableRow key={cycle.id} className="transition-colors hover:bg-layer-1">
-                          <TableCell className="max-w-[200px] truncate text-sm text-primary" title={cycle.name}>
-                            {cycle.name}
-                          </TableCell>
-                          <TableCell className="text-sm text-primary">
-                            {(cycle.start_date
-                              ? renderFormattedDate(getDate(cycle.start_date), "yyyy-MM-dd")
-                              : "-") +
-                              " ~ " +
-                              (cycle.end_date ? renderFormattedDate(getDate(cycle.end_date), "yyyy-MM-dd") : "-")}
-                          </TableCell>
-                          <TableCell>
-                            {(() => {
-                              const statusDetails = getCycleStatusDetails(cycle.status);
-                              return (
-                                <span
-                                  className={getStatusTagClassName(statusDetails.bgColor, statusDetails.textColor)}
-                                >
-                                  {t(statusDetails.i18n_title)}
-                                </span>
-                              );
-                            })()}
-                          </TableCell>
-                          <TableCell className="text-sm">{cycle.work_item_count ?? 0}</TableCell>
-                        </TableRow>
-                      ))
+                      (displayData?.cycles?.data ?? []).map((cycle) => {
+                        const isCycleDelayedRow = normalizeCycleStatusValue(cycle.status) === "delayed";
+                        const cyclePrimaryText = isCycleDelayedRow ? "text-danger-primary" : "text-primary";
+                        return (
+                          <TableRow key={cycle.id} className="transition-colors hover:bg-layer-1">
+                            <TableCell
+                              className={`max-w-[200px] truncate text-sm ${cyclePrimaryText}`}
+                              title={cycle.name}
+                            >
+                              <button
+                                type="button"
+                                className="truncate hover:underline text-left"
+                                onClick={() => router.push(`/${effectiveWorkspaceSlug}/projects/${effectiveProjectId}/cycles/${cycle.id}`)}
+                              >
+                                {cycle.name}
+                              </button>
+                            </TableCell>
+                            <TableCell className={`text-sm ${cyclePrimaryText}`}>
+                              {formatStatisticTableDateRange(cycle.start_date, cycle.end_date)}
+                            </TableCell>
+                            <TableCell className="pl-0 -ml-1 text-left">
+                              {(() => {
+                                const statusDetails = getCycleStatusDetails(cycle.status);
+                                return (
+                                  <span
+                                    className={getStatisticStatusTagClassName(statusDetails.textColor)}
+                                  >
+                                    {t(statusDetails.i18n_title)}
+                                  </span>
+                                );
+                              })()}
+                            </TableCell>
+                            <TableCell className={`text-sm ${cyclePrimaryText}`}>
+                              {cycle.work_item_count ?? 0}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })
                     )}
                   </TableBody>
                 </Table>
               </div>
-              {(displayData?.cycles?.count ?? 0) > 5 && (
+              {(displayData?.cycles?.count ?? 0) > STATISTIC_TABLE_PAGE_SIZE && (
                 <div className="flex flex-shrink-0 items-center justify-between border-t border-subtle px-4 py-2">
                   <span className="text-xs text-placeholder">共 {displayData?.cycles?.count ?? 0} 条</span>
                   <Pagination
                     simple
                     current={cyclePage}
-                    pageSize={5}
+                    pageSize={STATISTIC_TABLE_PAGE_SIZE}
                     total={displayData?.cycles?.count ?? 0}
                     onChange={handleCyclePageChange}
                     size="small"
@@ -386,13 +417,22 @@ function ProjectStatisticsPage() {
               )}
             </div>
 
-            <div className={`${sectionCard} flex h-[380px] flex-col`}>
+            <div className={`${sectionCard} flex h-[360px] flex-col`}>
               <div className="flex flex-shrink-0 items-center justify-between px-4 py-3">
                 <div className="flex items-center gap-2">
                   <Package className="h-3.5 w-3.5 text-placeholder" />
                   <span className="text-sm font-medium text-primary">进行中的发布</span>
                 </div>
-                <span className="text-xs text-placeholder">共 {displayData?.releases?.count ?? 0} 个</span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    className="grid h-6 w-6 place-items-center rounded transition-colors hover:bg-surface-2"
+                    onClick={() => setExpandModalSection("release")}
+                  >
+                    <Maximize2 className="h-3.5 w-3.5 text-placeholder" />
+                  </button>
+                  <span className="text-xs text-placeholder">共 {displayData?.releases?.count ?? 0} 个</span>
+                </div>
               </div>
               <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-3 vertical-scrollbar scrollbar-sm">
                 <Table>
@@ -423,23 +463,23 @@ function ProjectStatisticsPage() {
                       (displayData?.releases?.data ?? []).map((release) => (
                         <TableRow key={release.id} className="transition-colors hover:bg-layer-1">
                           <TableCell className="max-w-[200px] truncate text-sm text-primary" title={release.name}>
-                            {release.name}
+                            <button
+                              type="button"
+                              className="truncate hover:underline text-left"
+                              onClick={() => router.push(`/${effectiveWorkspaceSlug}/projects/${effectiveProjectId}/releases/${release.id}`)}
+                            >
+                              {release.name}
+                            </button>
                           </TableCell>
                           <TableCell className="text-sm text-primary">
-                            {(release.start_date
-                              ? renderFormattedDate(getDate(release.start_date), "yyyy-MM-dd")
-                              : "-") +
-                              " ~ " +
-                              (release.end_date
-                                ? renderFormattedDate(getDate(release.end_date), "yyyy-MM-dd")
-                                : "-")}
+                            {formatStatisticTableDateRange(release.start_date, release.end_date)}
                           </TableCell>
-                          <TableCell>
+                          <TableCell className="pl-0 -ml-1 text-left">
                             {(() => {
                               const statusDetails = getModuleStatusDetails(release.status);
                               return (
                                 <span
-                                  className={getStatusTagClassName(statusDetails.bgColor, statusDetails.textColor)}
+                                  className={getStatisticStatusTagClassName(statusDetails.textColor)}
                                 >
                                   {t(statusDetails.i18n_label)}
                                 </span>
@@ -453,13 +493,13 @@ function ProjectStatisticsPage() {
                   </TableBody>
                 </Table>
               </div>
-              {(displayData?.releases?.count ?? 0) > 5 && (
+              {(displayData?.releases?.count ?? 0) > STATISTIC_TABLE_PAGE_SIZE && (
                 <div className="flex flex-shrink-0 items-center justify-between border-t border-subtle px-4 py-2">
                   <span className="text-xs text-placeholder">共 {displayData?.releases?.count ?? 0} 条</span>
                   <Pagination
                     simple
                     current={releasePage}
-                    pageSize={5}
+                    pageSize={STATISTIC_TABLE_PAGE_SIZE}
                     total={displayData?.releases?.count ?? 0}
                     onChange={handleReleasePageChange}
                     size="small"
@@ -471,13 +511,22 @@ function ProjectStatisticsPage() {
 
           {/* Test Plans + Reviews */}
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-            <div className={`${sectionCard} flex h-[380px] flex-col`}>
+            <div className={`${sectionCard} flex h-[360px] flex-col`}>
               <div className="flex flex-shrink-0 items-center justify-between px-4 py-3">
                 <div className="flex items-center gap-2">
                   <ClipboardList className="h-3.5 w-3.5 text-placeholder" />
                   <span className="text-sm font-medium text-primary">进行中的测试计划</span>
                 </div>
-                <span className="text-xs text-placeholder">共 {displayData?.test_plans?.count ?? 0} 个</span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    className="grid h-6 w-6 place-items-center rounded transition-colors hover:bg-surface-2"
+                    onClick={() => setExpandModalSection("plan")}
+                  >
+                    <Maximize2 className="h-3.5 w-3.5 text-placeholder" />
+                  </button>
+                  <span className="text-xs text-placeholder">共 {displayData?.test_plans?.count ?? 0} 个</span>
+                </div>
               </div>
               <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-3 vertical-scrollbar scrollbar-sm">
                 <Table>
@@ -508,21 +557,23 @@ function ProjectStatisticsPage() {
                       (displayData?.test_plans?.data ?? []).map((plan) => (
                         <TableRow key={plan.id} className="transition-colors hover:bg-layer-1">
                           <TableCell className="max-w-[200px] truncate text-sm text-primary" title={plan.name}>
-                            {plan.name}
+                            <button
+                              type="button"
+                              className="truncate hover:underline text-left"
+                              onClick={() => router.push(`/${effectiveWorkspaceSlug}/projects/${effectiveProjectId}/testhub/plan-cases?planId=${plan.id}`)}
+                            >
+                              {plan.name}
+                            </button>
                           </TableCell>
                           <TableCell className="text-sm text-primary">
-                            {(plan.start_date
-                              ? renderFormattedDate(getDate(plan.start_date), "yyyy-MM-dd")
-                              : "-") +
-                              " ~ " +
-                              (plan.end_date ? renderFormattedDate(getDate(plan.end_date), "yyyy-MM-dd") : "-")}
+                            {formatStatisticTableDateRange(plan.start_date, plan.end_date)}
                           </TableCell>
-                          <TableCell>
+                          <TableCell className="pl-0 -ml-1 text-left">
                             {(() => {
                               const statusDetails = getQaStatusDetails(plan.status);
                               return (
                                 <span
-                                  className={getStatusTagClassName(statusDetails.bgColor, statusDetails.textColor)}
+                                  className={getStatisticStatusTagClassName(statusDetails.textColor)}
                                 >
                                   {plan.status ?? "-"}
                                 </span>
@@ -536,13 +587,13 @@ function ProjectStatisticsPage() {
                   </TableBody>
                 </Table>
               </div>
-              {(displayData?.test_plans?.count ?? 0) > 5 && (
+              {(displayData?.test_plans?.count ?? 0) > STATISTIC_TABLE_PAGE_SIZE && (
                 <div className="flex flex-shrink-0 items-center justify-between border-t border-subtle px-4 py-2">
                   <span className="text-xs text-placeholder">共 {displayData?.test_plans?.count ?? 0} 条</span>
                   <Pagination
                     simple
                     current={planPage}
-                    pageSize={5}
+                    pageSize={STATISTIC_TABLE_PAGE_SIZE}
                     total={displayData?.test_plans?.count ?? 0}
                     onChange={handlePlanPageChange}
                     size="small"
@@ -551,13 +602,22 @@ function ProjectStatisticsPage() {
               )}
             </div>
 
-            <div className={`${sectionCard} flex h-[380px] flex-col`}>
+            <div className={`${sectionCard} flex h-[360px] flex-col`}>
               <div className="flex flex-shrink-0 items-center justify-between px-4 py-3">
                 <div className="flex items-center gap-2">
                   <FileSearch className="h-3.5 w-3.5 text-placeholder" />
                   <span className="text-sm font-medium text-primary">进行中的评审</span>
                 </div>
-                <span className="text-xs text-placeholder">共 {displayData?.case_reviews?.count ?? 0} 个</span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    className="grid h-6 w-6 place-items-center rounded transition-colors hover:bg-surface-2"
+                    onClick={() => setExpandModalSection("review")}
+                  >
+                    <Maximize2 className="h-3.5 w-3.5 text-placeholder" />
+                  </button>
+                  <span className="text-xs text-placeholder">共 {displayData?.case_reviews?.count ?? 0} 个</span>
+                </div>
               </div>
               <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-3 vertical-scrollbar scrollbar-sm">
                 <Table>
@@ -588,23 +648,23 @@ function ProjectStatisticsPage() {
                       (displayData?.case_reviews?.data ?? []).map((review) => (
                         <TableRow key={review.id} className="transition-colors hover:bg-layer-1">
                           <TableCell className="max-w-[200px] truncate text-sm text-primary" title={review.name}>
-                            {review.name}
+                            <button
+                              type="button"
+                              className="truncate hover:underline text-left"
+                              onClick={() => router.push(`/${effectiveWorkspaceSlug}/projects/${effectiveProjectId}/testhub/caseManagementReviewDetail?review_id=${review.id}`)}
+                            >
+                              {review.name}
+                            </button>
                           </TableCell>
                           <TableCell className="text-sm text-primary">
-                            {(review.start_date
-                              ? renderFormattedDate(getDate(review.start_date), "yyyy-MM-dd")
-                              : "-") +
-                              " ~ " +
-                              (review.end_date
-                                ? renderFormattedDate(getDate(review.end_date), "yyyy-MM-dd")
-                                : "-")}
+                            {formatStatisticTableDateRange(review.start_date, review.end_date)}
                           </TableCell>
-                          <TableCell>
+                          <TableCell className="pl-0 -ml-1 text-left">
                             {(() => {
                               const statusDetails = getQaStatusDetails(review.status);
                               return (
                                 <span
-                                  className={getStatusTagClassName(statusDetails.bgColor, statusDetails.textColor)}
+                                  className={getStatisticStatusTagClassName(statusDetails.textColor)}
                                 >
                                   {review.status ?? "-"}
                                 </span>
@@ -618,13 +678,13 @@ function ProjectStatisticsPage() {
                   </TableBody>
                 </Table>
               </div>
-              {(displayData?.case_reviews?.count ?? 0) > 5 && (
+              {(displayData?.case_reviews?.count ?? 0) > STATISTIC_TABLE_PAGE_SIZE && (
                 <div className="flex flex-shrink-0 items-center justify-between border-t border-subtle px-4 py-2">
                   <span className="text-xs text-placeholder">共 {displayData?.case_reviews?.count ?? 0} 条</span>
                   <Pagination
                     simple
                     current={reviewPage}
-                    pageSize={5}
+                    pageSize={STATISTIC_TABLE_PAGE_SIZE}
                     total={displayData?.case_reviews?.count ?? 0}
                     onChange={handleReviewPageChange}
                     size="small"
@@ -781,6 +841,15 @@ function ProjectStatisticsPage() {
           </div>
         </div>
       </div>
+      {expandModalSection && effectiveWorkspaceSlug && effectiveProjectId && (
+        <StatisticExpandModal
+          isOpen={!!expandModalSection}
+          onClose={() => setExpandModalSection(null)}
+          section={expandModalSection}
+          workspaceSlug={effectiveWorkspaceSlug}
+          projectId={effectiveProjectId}
+        />
+      )}
     </>
   );
 }
