@@ -24,9 +24,10 @@ import { WorkspaceService } from "@/services/workspace.service";
 import { EFileAssetType, type TIssue, type TPartialProject } from "@plane/types";
 import { Logo } from "@plane/propel/emoji-icon-picker";
 import { IssueService } from "@/services/issue/issue.service";
-import { projectIssueTypesCache, ProjectIssueTypeService, ProjectService, type TIssueType } from "@/services/project";
+import { ProjectService } from "@/services/project";
 import { getEnums } from "@/app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/util";
 import { WorkItemSelectModal } from "./work-item-select-modal";
+import { WorkItemTypeIcon } from "@/components/issues/work-item-type-icon";
 
 // 内联 AutoResizeTextarea
 const AutoResizeTextarea = ({
@@ -578,16 +579,8 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
   };
   // 新增：服务实例与状态
   const projectService = useMemo(() => new ProjectService(), []);
-  const issueTypeService = useMemo(() => new ProjectIssueTypeService(), []);
   const [projects, setProjects] = useState<TPartialProject[]>([]);
   const [projectsMap, setProjectsMap] = useState<Record<string, TPartialProject>>({});
-  // key 为 projectId，value 为该项目的类型映射
-  const [projectIssueTypesMaps, setProjectIssueTypesMaps] = useState<Record<string, Record<string, TIssueType>>>({});
-  const projectIdsKey = useMemo(() => {
-    const ids = Array.from(new Set(selectedIssues.map((i) => String(i.project_id)))).filter(Boolean);
-    ids.sort();
-    return ids.join(",");
-  }, [selectedIssues]);
 
   // 从弹窗确认回调中接收选中项
   const handleWorkItemConfirm = (selected: TIssue[]) => {
@@ -622,25 +615,6 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
     } catch {}
   };
 
-  useEffect(() => {
-    if (isWorkItemModalOpen) return;
-    if (!projectIdsKey) return;
-    const uniqueProjectIds = projectIdsKey.split(",").filter(Boolean);
-    Promise.all(
-      uniqueProjectIds.map((pid) =>
-        issueTypeService
-          .fetchProjectIssueTypes(workspaceSlug, pid)
-          .then(() => ({ pid, map: projectIssueTypesCache.get(pid) || {} }))
-          .catch(() => ({ pid, map: {} }))
-      )
-    ).then((results) => {
-      const combined: Record<string, Record<string, TIssueType>> = {};
-      results.forEach(({ pid, map }) => {
-        combined[pid] = map || {};
-      });
-      setProjectIssueTypesMaps((prev) => ({ ...prev, ...combined }));
-    });
-  }, [isWorkItemModalOpen, workspaceSlug, projectIdsKey, issueTypeService]);
   // 新增：附件选择与管理
   const [attachmentFiles, setAttachmentFiles] = useState<File[]>([]);
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
@@ -870,56 +844,11 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
     setProjectsMap(map);
   }, [projects]);
 
-  // 渲染类型图标（复用选择弹窗的逻辑）
+  // 渲染类型图标（优先使用后端返回的 type_name）
   const renderIssueTypeIcon = (record: TIssue) => {
-    const pid = String(record?.project_id ?? "");
-    const typeId = (record as any)?.type_id as string | undefined;
-    const map = projectIssueTypesMaps?.[pid];
-    if (typeId && map && map[typeId]?.logo_props?.icon) {
-      const { name, color, background_color } = map[typeId].logo_props!.icon!;
-      const IconComp = (LucideIcons as any)[name] as React.FC<any> | undefined;
-      return (
-        <span
-          className="inline-flex items-center justify-center rounded-sm"
-          style={{
-            backgroundColor: background_color || "transparent",
-            color: color || "currentColor",
-            width: "16px",
-            height: "16px",
-          }}
-          aria-label={`Issue type: ${map[typeId].name}`}
-        >
-          {IconComp ? (
-            <IconComp className="h-3.5 w-3.5" strokeWidth={2} />
-          ) : (
-            <LucideIcons.Layers className="h-3.5 w-3.5" />
-          )}
-        </span>
-      );
-    }
-    return <LucideIcons.Layers className="h-3.5 w-3.5" />;
+    const typeName = (record as any)?.type_name || (record as any)?.type?.name || "";
+    return <WorkItemTypeIcon typeName={typeName} />;
   };
-
-  // 当选中工作项变化时，根据涉及的项目拉取类型映射，用于“类型”列展示
-  useEffect(() => {
-    const uniqueProjectIds = Array.from(new Set(selectedIssues.map((i) => String(i.project_id)))).filter(Boolean);
-    if (uniqueProjectIds.length === 0) return;
-
-    Promise.all(
-      uniqueProjectIds.map((pid) =>
-        issueTypeService
-          .fetchProjectIssueTypes(workspaceSlug, pid)
-          .then(() => ({ pid, map: projectIssueTypesCache.get(pid) || {} }))
-          .catch(() => ({ pid, map: {} }))
-      )
-    ).then((results) => {
-      const combined: Record<string, Record<string, TIssueType>> = {};
-      results.forEach(({ pid, map }) => {
-        combined[pid] = map || {};
-      });
-      setProjectIssueTypesMaps((prev) => ({ ...prev, ...combined }));
-    });
-  }, [workspaceSlug, selectedIssues, issueTypeService]);
 
   // 新增：工作项表格列，补全“类型”并新增“项目”
   const workItemColumns = useMemo(
@@ -953,10 +882,7 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
         key: "type_id",
         dataIndex: "type_id",
         render: (_: any, record: TIssue) => {
-          const pid = String(record?.project_id ?? "");
-          const typeId = (record as any)?.type_id as string | undefined;
-          const map = projectIssueTypesMaps?.[pid];
-          const typeName = typeId && map ? map[typeId]?.name : undefined;
+          const typeName = (record as any)?.type_name || (record as any)?.type?.name;
           return (
             <div className="flex items-center gap-2">
               {renderIssueTypeIcon(record)}
@@ -989,7 +915,7 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
         ),
       },
     ],
-    [projectsMap, projectIssueTypesMaps]
+    [projectsMap]
   );
 
   const resetForm = () => {

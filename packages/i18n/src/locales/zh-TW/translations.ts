@@ -1037,6 +1037,8 @@ export default {
         spreadsheet: "試算表版面配置",
         gantt: "甘特圖版面配置",
       },
+      group_sidebar_heading: "{dimension}分組",
+      group_sidebar_heading_fallback: "分組",
     },
     states: {
       active: "使用中",

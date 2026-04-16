@@ -28,6 +28,7 @@ export type TTimeSheet = {
     name: string;
     sequence_id: number;
     type_id: string | null;
+    type_name?: string | null;
   } | null;
   test_case: string | null;
   test_case_detail: {

@@ -4,29 +4,48 @@
  * See the LICENSE file for details.
  */
 
-import { Fragment, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { observer } from "mobx-react";
 import { ChevronLeft, ChevronRight, CircleDashed } from "lucide-react";
-import type { IGroupByColumn, TGroupedIssues } from "@plane/types";
+import { ISSUE_GROUP_BY_OPTIONS } from "@plane/constants";
+import { useTranslation } from "@plane/i18n";
+import type { IGroupByColumn, TGroupedIssues, TIssueGroupByOptions } from "@plane/types";
 import { Tooltip } from "@plane/ui";
 import { cn } from "@plane/utils";
 import { useIssuesStore } from "@/hooks/use-issue-layout-store";
 
+/** 与「分组方式」筛选中的选项一致，用于侧栏标题「{维度}分组」 */
+const getGroupByDimensionTranslationKey = (groupBy: TIssueGroupByOptions | null): string | undefined => {
+  if (groupBy == null) return undefined;
+  const fromList = ISSUE_GROUP_BY_OPTIONS.find((o) => o.key === groupBy)?.titleTranslationKey;
+  if (fromList) return fromList;
+  if (groupBy === "target_date") return "common.order_by.due_date";
+  return undefined;
+};
+
 interface GroupSidebarProps {
   groups: IGroupByColumn[];
   groupedIssueIds: TGroupedIssues;
+  groupBy: TIssueGroupByOptions | null;
   selectedGroupId: string;
   onSelectGroup: (groupId: string) => void;
   showEmptyGroup?: boolean;
 }
 
 export const GroupSidebar = observer(function GroupSidebar(props: GroupSidebarProps) {
-  const { groups, selectedGroupId, onSelectGroup, showEmptyGroup } = props;
+  const { groups, groupBy, selectedGroupId, onSelectGroup, showEmptyGroup } = props;
   const {
     issues: { getGroupIssueCount },
   } = useIssuesStore();
+  const { t } = useTranslation();
 
   const [isCollapsed, setIsCollapsed] = useState(false);
+
+  const sidebarHeading = useMemo(() => {
+    const dimensionKey = getGroupByDimensionTranslationKey(groupBy);
+    if (!dimensionKey) return t("issue.layouts.group_sidebar_heading_fallback");
+    return t("issue.layouts.group_sidebar_heading", { dimension: t(dimensionKey) });
+  }, [groupBy, t]);
 
   return (
     <div
@@ -37,8 +56,8 @@ export const GroupSidebar = observer(function GroupSidebar(props: GroupSidebarPr
     >
       <div className="flex h-9 min-h-9 flex-shrink-0 items-center border-b border-subtle px-1.5">
         {!isCollapsed && (
-          <span className="min-w-0 flex-1 truncate px-1 text-xs font-medium uppercase tracking-wider text-tertiary">
-            分组
+          <span className="min-w-0 flex-1 truncate px-1 text-xs font-medium tracking-wider text-tertiary">
+            {sidebarHeading}
           </span>
         )}
         <button

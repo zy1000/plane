@@ -116,7 +116,7 @@ class IssueListEndpoint(BaseAPIView):
 
         # Add select_related, prefetch_related if fields or expand is not None
         if self.fields or self.expand:
-            issue_queryset = issue_queryset.select_related("workspace", "project", "state", "parent").prefetch_related(
+            issue_queryset = issue_queryset.select_related("workspace", "project", "state", "parent", "type").prefetch_related(
                 "assignees", "labels", "issue_module__module", "issue_release__release"
             )
 
@@ -173,7 +173,7 @@ class IssueListEndpoint(BaseAPIView):
         if self.fields or self.expand:
             issues = IssueSerializer(issue_queryset, many=True, fields=self.fields, expand=self.expand).data
         else:
-            issues = issue_queryset.values(
+            issues = issue_queryset.annotate(type_name=F("type__name")).values(
                 "id",
                 "name",
                 "state_id",
@@ -201,6 +201,8 @@ class IssueListEndpoint(BaseAPIView):
                 "is_draft",
                 "archived_at",
                 "deleted_at",
+                "type_id",
+                "type_name",
             )
             datetime_fields = ["created_at", "updated_at"]
             issues = user_timezone_converter(issues, datetime_fields, request.user.user_timezone)

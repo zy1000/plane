@@ -55,7 +55,6 @@ export interface IList {
   handleCollapsedGroups: (value: string) => void;
   collapsedGroups: TIssueKanbanFilters;
   isEpic?: boolean;
-  projectIssueTypesMap?: Record<string, any>;
 }
 
 export const List = observer(function List(props: IList) {
@@ -161,6 +160,7 @@ export const List = observer(function List(props: IList) {
         <GroupSidebar
           groups={groups}
           groupedIssueIds={groupedIssueIds}
+          groupBy={group_by}
           selectedGroupId={selectedGroupId ?? ""}
           onSelectGroup={handleSelectGroup}
           showEmptyGroup={showEmptyGroup}
@@ -202,7 +202,6 @@ export const List = observer(function List(props: IList) {
                       handleCollapsedGroups={handleCollapsedGroups}
                       collapsedGroups={sidebarCollapsedGroups}
                       isEpic={isEpic}
-                      projectIssueTypesMap={props.projectIssueTypesMap}
                       hideGroupHeader
                     />
                   )}
@@ -256,7 +255,6 @@ export const List = observer(function List(props: IList) {
                     handleCollapsedGroups={handleCollapsedGroups}
                     collapsedGroups={collapsedGroups}
                     isEpic={isEpic}
-                    projectIssueTypesMap={props.projectIssueTypesMap}
                   />
                 ))}
               </div>

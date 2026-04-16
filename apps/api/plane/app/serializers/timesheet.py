@@ -33,6 +33,7 @@ class IssueLiteSerializer(serializers.Serializer):
     name = serializers.CharField(read_only=True)
     sequence_id = serializers.IntegerField(read_only=True)
     type_id = serializers.UUIDField(read_only=True, allow_null=True)
+    type_name = serializers.CharField(read_only=True, source="type.name", allow_null=True)
 
 
 class TestCaseLiteSerializer(serializers.Serializer):

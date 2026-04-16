@@ -20,6 +20,7 @@ export type TTimesheetRow = {
   issueName?: string;
   issueSequenceId?: number;
   issueTypeId?: string | null;
+  issueTypeName?: string | null;
   testCaseId?: string;
   testCaseName?: string;
   displayName: string;
@@ -96,6 +97,7 @@ function buildRowsFromTimesheets(sheets: TTimeSheet[], projectName?: string): TT
           issueName: detail?.name ?? "",
           issueSequenceId: detail?.sequence_id ?? 0,
           issueTypeId: detail?.type_id ?? null,
+          issueTypeName: detail?.type_name ?? null,
           displayName: detail ? `#${detail.sequence_id} ${detail.name}` : `#${t.issue}`,
         });
       }

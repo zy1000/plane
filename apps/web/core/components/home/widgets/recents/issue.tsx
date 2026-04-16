@@ -14,6 +14,7 @@ import { EIssueServiceType } from "@plane/types";
 import { calculateTimeAgo, generateWorkItemLink } from "@plane/utils";
 // components
 import { ListItem } from "@/components/core/list";
+import { WorkItemTypeIcon } from "@/components/issues/work-item-type-icon";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 // helpers
 // hooks
@@ -73,14 +74,19 @@ export const RecentIssue = observer(function RecentIssue(props: BlockProps) {
       prependTitleElement={
         <div className="flex flex-shrink-0 items-center gap-2">
           {issueDetails.type ? (
-            <IssueIdentifier
-              size="lg"
-              issueTypeId={issueDetails?.type}
-              projectId={issueDetails?.project_id || ""}
-              projectIdentifier={issueDetails?.project_identifier || ""}
-              issueSequenceId={issueDetails?.sequence_id || ""}
-              variant="tertiary"
-            />
+            <div className="flex items-center gap-2">
+              <div className="grid size-8 flex-shrink-0 place-items-center rounded-sm bg-layer-2">
+                <WorkItemTypeIcon typeName={issueDetails.type_name} size={16} className="flex-shrink-0" />
+              </div>
+              <IssueIdentifier
+                size="lg"
+                issueTypeId={issueDetails?.type}
+                projectId={issueDetails?.project_id || ""}
+                projectIdentifier={issueDetails?.project_identifier || ""}
+                issueSequenceId={issueDetails?.sequence_id || ""}
+                variant="tertiary"
+              />
+            </div>
           ) : (
             <div className="flex items-center justify-center gap-2">
               <div className="grid size-8 flex-shrink-0 place-items-center rounded-sm bg-layer-2">

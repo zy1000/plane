@@ -895,6 +895,8 @@ export default {
         spreadsheet: "Table Layout",
         gantt: "Timeline Layout",
       },
+      group_sidebar_heading: "{dimension} groups",
+      group_sidebar_heading_fallback: "Groups",
     },
     states: {
       active: "Active",

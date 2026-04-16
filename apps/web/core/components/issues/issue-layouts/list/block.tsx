@@ -37,8 +37,7 @@ import { IssueStats } from "@/plane-web/components/issues/issue-layouts/issue-st
 import { WithDisplayPropertiesHOC } from "../properties/with-display-properties-HOC";
 import { calculateIdentifierWidth } from "../utils";
 import type { TRenderQuickActions } from "./list-view-types";
-import { projectIssueTypesCache, type TIssueType } from "@/services/project";
-import * as LucideIcons from "lucide-react";
+import { WorkItemTypeIcon } from "@/components/issues/work-item-type-icon";
 
 interface IssueBlockProps {
   issueId: string;
@@ -57,7 +56,6 @@ interface IssueBlockProps {
   setIsCurrentBlockDragging: React.Dispatch<React.SetStateAction<boolean>>;
   canDrag: boolean;
   isEpic?: boolean;
-  projectIssueTypesMap?: Record<string, TIssueType>;
 }
 
 export const IssueBlock = observer(function IssueBlock(props: IssueBlockProps) {
@@ -111,7 +109,6 @@ export const IssueBlock = observer(function IssueBlock(props: IssueBlockProps) {
 
   // derived values
   const issue = issuesMap[issueId];
-  const projectIssueTypesMap = props.projectIssueTypesMap || projectIssueTypesCache.get(issue?.project_id ?? "");
   const subIssuesCount = issue?.sub_issues_count ?? 0;
   const canEditIssueProperties = canEditProperties(issue?.project_id ?? undefined);
   const isDraggingAllowed = canDrag && canEditIssueProperties;
@@ -269,31 +266,7 @@ export const IssueBlock = observer(function IssueBlock(props: IssueBlockProps) {
 
               {displayProperties && (displayProperties.key || displayProperties.issue_type) && (
                 <div className="flex-shrink-0  flex items-center gap-1" style={{ minWidth: `${keyMinWidth}px` }}>
-                  {projectIssueTypesMap &&
-                    issue?.type_id &&
-                    projectIssueTypesMap[issue.type_id]?.logo_props?.icon &&
-                    (() => {
-                      const { name, color, background_color } = projectIssueTypesMap[issue.type_id].logo_props!.icon!;
-                      const IconComp = (LucideIcons as any)[name] as React.FC<any> | undefined;
-                      return (
-                        <span
-                          className="inline-flex items-center justify-center rounded-sm"
-                          style={{
-                            backgroundColor: background_color || "transparent",
-                            color: color || "currentColor",
-                            width: "16px",
-                            height: "16px",
-                          }}
-                          aria-label={`Issue type: ${projectIssueTypesMap[issue.type_id].name}`}
-                        >
-                          {IconComp ? (
-                            <IconComp className="h-3.5 w-3.5" strokeWidth={2} />
-                          ) : (
-                            <span className="h-3.5 w-3.5" />
-                          )}
-                        </span>
-                      );
-                    })()}
+                  <WorkItemTypeIcon typeName={issue.type_name} />
                   {issue.project_id && (
                     <IssueIdentifier
                       issueId={issueId}

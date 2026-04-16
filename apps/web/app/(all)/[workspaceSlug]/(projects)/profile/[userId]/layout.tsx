@@ -48,6 +48,8 @@ function UseProfileLayout({ params }: Route.ComponentProps) {
     userService.getUserProfileProjectsSegregation(workspaceSlug, userId)
   );
   // derived values
+  const profileBasePath = `/${workspaceSlug}/profile/${userId}`;
+  const isSummaryTab = pathname === `${profileBasePath}/` || pathname === profileBasePath;
   const isAuthorizedPath =
     pathname.includes("assigned") || pathname.includes("created") || pathname.includes("subscribed") || pathname.includes("overdue");
   const isIssuesTab =
@@ -60,7 +62,13 @@ function UseProfileLayout({ params }: Route.ComponentProps) {
     <>
       {/* Passing the type prop from the current route value as we need the header as top most component.
             TODO: We are depending on the route path to handle the mobile header type. If the path changes, this logic will break. */}
-      <div className="flex h-full w-full flex-col overflow-hidden md:flex-row">
+      <div
+        className={
+          isSummaryTab
+            ? "flex h-full w-full flex-col overflow-hidden md:flex-row"
+            : "flex h-full w-full flex-col overflow-hidden"
+        }
+      >
         <div className="flex h-full w-full flex-col overflow-hidden">
           <AppHeader
             header={
@@ -68,6 +76,7 @@ function UseProfileLayout({ params }: Route.ComponentProps) {
                 type={currentTab?.i18n_label}
                 userProjectsData={userProjectsData}
                 showProfileIssuesFilter={isIssuesTab}
+                showProfileSidebarToggle={isSummaryTab}
               />
             }
             mobileHeader={isIssuesTab && <ProfileIssuesMobileHeader />}
@@ -86,11 +95,11 @@ function UseProfileLayout({ params }: Route.ComponentProps) {
                   </div>
                 )}
               </div>
-              {!isSmallerScreen && <ProfileSidebar userProjectsData={userProjectsData} />}
+              {isSummaryTab && !isSmallerScreen && <ProfileSidebar userProjectsData={userProjectsData} />}
             </div>
           </ContentWrapper>
         </div>
-        {isSmallerScreen && <ProfileSidebar userProjectsData={userProjectsData} />}
+        {isSummaryTab && isSmallerScreen && <ProfileSidebar userProjectsData={userProjectsData} />}
       </div>
     </>
   );

@@ -436,6 +436,8 @@ class WorkspaceUserLinkSerializer(BaseSerializer):
 class IssueRecentVisitSerializer(serializers.ModelSerializer):
     project_identifier = serializers.SerializerMethodField()
     assignees = serializers.SerializerMethodField()
+    type_name = serializers.CharField(read_only=True, source="type.name", allow_null=True)
+    is_epic = serializers.SerializerMethodField()
 
     class Meta:
         model = Issue
@@ -446,6 +448,8 @@ class IssueRecentVisitSerializer(serializers.ModelSerializer):
             "priority",
             "assignees",
             "type",
+            "type_name",
+            "is_epic",
             "sequence_id",
             "project_id",
             "project_identifier",
@@ -457,6 +461,9 @@ class IssueRecentVisitSerializer(serializers.ModelSerializer):
 
     def get_assignees(self, obj):
         return list(obj.assignees.filter(issue_assignee__deleted_at__isnull=True).values_list("id", flat=True))
+
+    def get_is_epic(self, obj):
+        return bool(obj.type and obj.type.is_epic)
 
 
 class ProjectRecentVisitSerializer(serializers.ModelSerializer):
@@ -523,7 +530,10 @@ class WorkspaceRecentVisitSerializer(BaseSerializer):
 
         if entity_model and entity_serializer:
             try:
-                entity = entity_model.objects.get(pk=entity_identifier)
+                if entity_model is Issue:
+                    entity = entity_model.objects.select_related("type").get(pk=entity_identifier)
+                else:
+                    entity = entity_model.objects.get(pk=entity_identifier)
 
                 return entity_serializer(entity).data
             except entity_model.DoesNotExist:

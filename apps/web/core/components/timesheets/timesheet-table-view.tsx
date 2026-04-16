@@ -4,21 +4,19 @@
  * See the LICENSE file for details.
  */
 
-import { useEffect, useRef, useState, type ComponentType } from "react";
+import { useState } from "react";
 import { observer } from "mobx-react";
-import * as LucideIcons from "lucide-react";
 import { ClipboardCheck, FolderOpen, Layers, Plus, Trash2 } from "lucide-react";
 import { cn } from "@plane/utils";
 import { useProject } from "@/hooks/store/use-project";
 import { TimesheetCellPopover } from "./timesheet-cell-popover";
 import { TimesheetRowAddModal } from "./timesheet-row-add-modal";
 import { formatDateKey, isDateEditable } from "@/hooks/store/use-timesheet-page";
-import { ProjectIssueTypeService, type TIssueType } from "@/services/project";
 import type { useTimesheetPage } from "@/hooks/store/use-timesheet-page";
+import { WorkItemTypeIcon } from "@/components/issues/work-item-type-icon";
 
 const WEEK_DAY_LABELS = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
 const TASK_COLUMN_WIDTH_CLASS = "w-[320px] min-w-[320px] max-w-[320px]";
-const projectIssueTypeService = new ProjectIssueTypeService();
 
 function formatHours(hours: number): string {
   if (hours === 0) return "—";
@@ -33,40 +31,6 @@ function formatDayHeader(date: Date): { dayLabel: string; dateLabel: string } {
   const day = WEEK_DAY_LABELS[date.getDay() === 0 ? 6 : date.getDay() - 1];
   const dateLabel = formatDateKey(date).replace(/-/g, "/");
   return { dayLabel: day, dateLabel };
-}
-
-function renderIssueTypeIcon(issueTypeId: string | null | undefined, issueTypesMap: Record<string, TIssueType>) {
-  const issueType = issueTypeId ? issueTypesMap[issueTypeId] : undefined;
-  const logoIcon = issueType?.logo_props?.icon;
-
-  if (!logoIcon) {
-    return (
-      <span
-        className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-layer-1 text-tertiary"
-        aria-label="工作项"
-        title="工作项"
-      >
-        <Layers className="h-3.5 w-3.5" />
-      </span>
-    );
-  }
-
-  const { name, color, background_color } = logoIcon;
-  const IconComp = (LucideIcons as any)[name] as ComponentType<{ className?: string; strokeWidth?: number }> | undefined;
-
-  return (
-    <span
-      className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md"
-      style={{
-        backgroundColor: background_color || "transparent",
-        color: color || "currentColor",
-      }}
-      aria-label={`工作项: ${issueType!.name}`}
-      title={issueType!.name}
-    >
-      {IconComp ? <IconComp className="h-3.5 w-3.5" strokeWidth={2} /> : <Layers className="h-3.5 w-3.5" />}
-    </span>
-  );
 }
 
 function getRowKindMeta(rowType: "project" | "issue" | "test_case") {
@@ -103,29 +67,8 @@ export const TimesheetTableView = observer(function TimesheetTableView({
 
   const { getProjectById } = useProject();
   const [addModalOpen, setAddModalOpen] = useState(false);
-  const [projectIssueTypeMaps, setProjectIssueTypeMaps] = useState<Record<string, Record<string, TIssueType>>>({});
-  const loadedProjectIds = useRef(new Set<string>());
 
   const today = formatDateKey(new Date());
-
-  useEffect(() => {
-    if (!workspaceSlug) return;
-    const projectIds = new Set(rows.map((r) => r.projectId).filter(Boolean));
-    for (const pid of projectIds) {
-      if (loadedProjectIds.current.has(pid)) continue;
-      loadedProjectIds.current.add(pid);
-      projectIssueTypeService
-        .fetchProjectIssueTypes(workspaceSlug, pid)
-        .then((types) => {
-          const map: Record<string, TIssueType> = {};
-          for (const type of types) {
-            if (type?.id) map[type.id] = type;
-          }
-          setProjectIssueTypeMaps((prev) => ({ ...prev, [pid]: map }));
-        })
-        .catch(() => {});
-    }
-  }, [workspaceSlug, rows]);
 
   const getRowProjectLabel = (projectId: string): string => {
     const project = getProjectById(projectId);
@@ -198,7 +141,6 @@ export const TimesheetTableView = observer(function TimesheetTableView({
               const rowKind = getRowKindMeta(row.type);
               const projectLabel = getRowProjectLabel(row.projectId);
               const displayName = getRowDisplayName(row);
-              const issueTypesMap = projectIssueTypeMaps[row.projectId] ?? {};
 
               return (
                 <tr key={row.id} className="group border-b border-subtle hover:bg-layer-1/40 transition-colors">
@@ -212,7 +154,11 @@ export const TimesheetTableView = observer(function TimesheetTableView({
                     <div className="flex items-center justify-between gap-2 min-w-0">
                       <div className="flex items-center gap-2 min-w-0">
                         {row.type === "issue" ? (
-                          renderIssueTypeIcon(row.issueTypeId, issueTypesMap)
+                          <WorkItemTypeIcon
+                            typeName={row.issueTypeName}
+                            className="h-5 w-5 rounded-md"
+                            title={row.issueTypeName ?? "工作项"}
+                          />
                         ) : (
                           <span
                             className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md"

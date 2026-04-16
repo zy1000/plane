@@ -44,7 +44,7 @@ export function ProfileStats({ userProfile }: Props) {
     },
     {
       icon: OverdueDatePropertyIcon,
-      route: "assigned",
+      route: "overdue",
       i18n_title: "profile.stats.overdue",
       value: userProfile?.overdue_issues ?? "...",
     },

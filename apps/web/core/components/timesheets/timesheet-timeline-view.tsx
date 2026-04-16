@@ -4,21 +4,18 @@
  * See the LICENSE file for details.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { observer } from "mobx-react";
 import { message, Modal } from "antd";
-import * as LucideIcons from "lucide-react";
 import { ClipboardCheck, FolderOpen, Layers, Plus, Trash2 } from "lucide-react";
 import { Logo } from "@plane/propel/emoji-icon-picker";
 import { cn } from "@plane/utils";
 import { useProject } from "@/hooks/store/use-project";
-import { ProjectIssueTypeService, type TIssueType } from "@/services/project";
 import type { TTimeSheet, TTimeSheetCreatePayload } from "@/services/issue/timesheet.service";
 import { formatDateKey, isDateEditable, type TTimesheetRow } from "@/hooks/store/use-timesheet-page";
 import type { useTimesheetPage } from "@/hooks/store/use-timesheet-page";
 import { TimesheetRowAddModal } from "./timesheet-row-add-modal";
-
-const projectIssueTypeService = new ProjectIssueTypeService();
+import { WorkItemTypeIcon } from "@/components/issues/work-item-type-icon";
 
 const WEEK_DAY_LABELS = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
 
@@ -141,45 +138,22 @@ function buildBlocks(
   });
 }
 
-function renderIssueTypeIcon(issueTypeId: string | null | undefined, issueTypesMap: Record<string, TIssueType>, size = 3) {
-  const issueType = issueTypeId ? issueTypesMap[issueTypeId] : undefined;
-  const logoIcon = issueType?.logo_props?.icon;
-
+function renderIssueTypeIcon(typeName: string | null | undefined, size = 3) {
   const sizeClass = size === 3 ? "h-3 w-3" : "h-3.5 w-3.5";
   const wrapClass = size === 3 ? "h-4 w-4" : "h-5 w-5";
-
-  if (!logoIcon) {
-    return (
-      <span className={`inline-flex ${wrapClass} shrink-0 items-center justify-center rounded bg-layer-1 text-tertiary`}>
-        <Layers className={sizeClass} />
-      </span>
-    );
-  }
-
-  const { name, color, background_color } = logoIcon;
-  const IconComp = (LucideIcons as any)[name] as ComponentType<{ className?: string; strokeWidth?: number }> | undefined;
-
-  return (
-    <span
-      className={`inline-flex ${wrapClass} shrink-0 items-center justify-center rounded`}
-      style={{ backgroundColor: background_color || "transparent", color: color || "currentColor" }}
-    >
-      {IconComp ? <IconComp className={sizeClass} strokeWidth={2} /> : <Layers className={sizeClass} />}
-    </span>
-  );
+  return <WorkItemTypeIcon typeName={typeName} className={wrapClass} iconClassName={sizeClass} />;
 }
 
 function renderBlockIcon(
   block: TTimesheetBlock,
   getProjectById: (id: string) => any,
-  issueTypesMap: Record<string, TIssueType>,
   size = 3
 ) {
   const sizeClass = size === 3 ? "h-3 w-3" : "h-3.5 w-3.5";
   const wrapClass = size === 3 ? "h-4 w-4" : "h-5 w-5";
 
   if (block.blockType === "issue") {
-    return renderIssueTypeIcon(block.issue_detail?.type_id, issueTypesMap, size);
+    return renderIssueTypeIcon(block.issue_detail?.type_name, size);
   }
 
   if (block.blockType === "test_case") {
@@ -496,28 +470,6 @@ export const TimesheetTimelineView = observer(function TimesheetTimelineView({
 
   const today = formatDateKey(new Date());
 
-  const [projectIssueTypeMaps, setProjectIssueTypeMaps] = useState<Record<string, Record<string, TIssueType>>>({});
-  const loadedProjectIds = useRef(new Set<string>());
-
-  useEffect(() => {
-    if (!workspaceSlug) return;
-    const projectIds = new Set(timesheets.map((t) => String(t.project)).filter(Boolean));
-    for (const pid of projectIds) {
-      if (loadedProjectIds.current.has(pid)) continue;
-      loadedProjectIds.current.add(pid);
-      projectIssueTypeService
-        .fetchProjectIssueTypes(workspaceSlug, pid)
-        .then((types) => {
-          const map: Record<string, TIssueType> = {};
-          for (const type of types) {
-            if (type?.id) map[type.id] = type;
-          }
-          setProjectIssueTypeMaps((prev) => ({ ...prev, [pid]: map }));
-        })
-        .catch(() => {});
-    }
-  }, [workspaceSlug, timesheets]);
-
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   const { dragPreview, startDrag, dayColumnRefs, dragEndTimeRef } = useTimelineBlockDrag({
@@ -745,7 +697,6 @@ export const TimesheetTimelineView = observer(function TimesheetTimelineView({
                   const hoursStr = formatHours(parseFloat(block.hours));
                   const compact = block.heightPx < 36;
                   const timeRange = `${block.start_time.slice(0, 5)}–${block.end_time.slice(0, 5)}`;
-                  const issueTypesMap = projectIssueTypeMaps[String(block.project)] ?? {};
                   const showProjectName = block.blockType !== "project" && block.projectName;
                   return (
                     <div
@@ -799,7 +750,7 @@ export const TimesheetTimelineView = observer(function TimesheetTimelineView({
                         )}
                       >
                         <div className="flex items-center gap-1 min-w-0">
-                          {renderBlockIcon(block, getProjectById, issueTypesMap, compact ? 3 : 3)}
+                          {renderBlockIcon(block, getProjectById, compact ? 3 : 3)}
                           <p className="text-sm font-medium leading-snug text-primary truncate min-w-0">{block.label}</p>
                         </div>
                         {!compact && (

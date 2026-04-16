@@ -37,6 +37,7 @@ class ViewIssueListSerializer(serializers.Serializer):
             "parent_id": instance.parent_id,
             "cycle_id": instance.cycle_id,
             "type_id": instance.type_id,
+            "type_name": instance.type.name if instance.type else None,
             "sub_issues_count": instance.sub_issues_count,
             "created_at": instance.created_at,
             "updated_at": instance.updated_at,

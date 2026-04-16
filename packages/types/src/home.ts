@@ -38,6 +38,7 @@ export type TIssueEntityData = {
   priority: TIssuePriorities;
   assignees: string[];
   type: string | null;
+  type_name?: string | null;
   sequence_id: number;
   project_id: string;
   project_identifier: string;

@@ -4,9 +4,8 @@
  * See the LICENSE file for details.
  */
 
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Dialog, Transition } from "@headlessui/react";
-import * as LucideIcons from "lucide-react";
 import {
   ChevronRight,
   ClipboardCheck,
@@ -26,12 +25,11 @@ import { useProject } from "@/hooks/store/use-project";
 import { useUser } from "@/hooks/store/user";
 import { IssueService } from "@/services/issue/issue.service";
 import { CaseService } from "@/services/qa/case.service";
-import { ProjectIssueTypeService, type TIssueType } from "@/services/project";
 import type { TTimesheetRow } from "@/hooks/store/use-timesheet-page";
+import { WorkItemTypeIcon } from "@/components/issues/work-item-type-icon";
 
 const issueService = new IssueService();
 const caseService = new CaseService();
-const projectIssueTypeService = new ProjectIssueTypeService();
 
 const TEST_CASE_PAGE_SIZE = 50;
 
@@ -48,7 +46,7 @@ type TIssueItem = {
   name: string;
   sequence_id: number;
   type_id: string | null;
-  type?: TIssueType | null;
+  type_name?: string | null;
 };
 
 type TTestCaseItem = {
@@ -64,32 +62,8 @@ type TTimesheetRowAddModalProps = {
   onClose: () => void;
 };
 
-function renderIssueTypeIcon(issue: TIssueItem, issueTypesMap: Record<string, TIssueType>) {
-  const typeId = (issue.type?.id as string | undefined) ?? issue.type_id ?? undefined;
-
-  const logoProps = issue.type?.logo_props?.icon ?? (typeId ? issueTypesMap[typeId]?.logo_props?.icon : undefined);
-
-  if (logoProps) {
-    const { name, color, background_color } = logoProps;
-    const IconComp = (LucideIcons as any)[name] as
-      | ComponentType<{ className?: string; strokeWidth?: number }>
-      | undefined;
-    return (
-      <span
-        className="inline-flex shrink-0 items-center justify-center rounded-sm"
-        style={{
-          backgroundColor: background_color || "transparent",
-          color: color || "currentColor",
-          width: "16px",
-          height: "16px",
-        }}
-      >
-        {IconComp ? <IconComp className="h-3.5 w-3.5" strokeWidth={2} /> : <Layers className="h-3.5 w-3.5" />}
-      </span>
-    );
-  }
-
-  return <Layers className="h-3.5 w-3.5 shrink-0 text-tertiary" aria-hidden />;
+function renderIssueTypeIcon(issue: TIssueItem) {
+  return <WorkItemTypeIcon typeName={issue.type_name} />;
 }
 
 function parseIssueItems(raw: any): TIssueItem[] {
@@ -99,7 +73,7 @@ function parseIssueItems(raw: any): TIssueItem[] {
     name: String(i.name || ""),
     sequence_id: Number(i.sequence_id || 0),
     type_id: i.type_id != null && i.type_id !== "" ? String(i.type_id) : null,
-    type: i.type ?? undefined,
+    type_name: i.type_name ?? i.type?.name ?? null,
   }));
 }
 
@@ -136,7 +110,6 @@ export const TimesheetRowAddModal = observer(function TimesheetRowAddModal({
   const [testCases, setTestCases] = useState<TTestCaseItem[]>([]);
   const [isLoadingItems, setIsLoadingItems] = useState(false);
   const [itemsError, setItemsError] = useState<string | null>(null);
-  const [issueTypesCache, setIssueTypesCache] = useState<Record<string, Record<string, TIssueType>>>({});
 
   // Pagination state for test cases
   const [testCasePage, setTestCasePage] = useState(1);
@@ -169,25 +142,6 @@ export const TimesheetRowAddModal = observer(function TimesheetRowAddModal({
     [filteredProjectIds, favoriteSet]
   );
 
-  const ensureIssueTypes = useCallback(
-    (projectId: string) => {
-      if (issueTypesCache[projectId] || !workspaceSlug) return;
-      projectIssueTypeService
-        .fetchProjectIssueTypes(workspaceSlug, projectId)
-        .then((types) => {
-          const map: Record<string, TIssueType> = {};
-          for (const t of types) {
-            if (t?.id) map[t.id] = t;
-          }
-          setIssueTypesCache((prev) => ({ ...prev, [projectId]: map }));
-        })
-        .catch(() => {
-          setIssueTypesCache((prev) => ({ ...prev, [projectId]: {} }));
-        });
-    },
-    [workspaceSlug, issueTypesCache]
-  );
-
   const fetchItems = useCallback(
     async (category: TSelectedCategory, query: string) => {
       if (!workspaceSlug || !category || category.type === "project") return;
@@ -196,8 +150,6 @@ export const TimesheetRowAddModal = observer(function TimesheetRowAddModal({
 
       try {
         if (category.type === "issue") {
-          ensureIssueTypes(category.projectId);
-
           const baseParams: Record<string, any> = {
             ...(query ? { name: query } : {}),
           };
@@ -255,7 +207,7 @@ export const TimesheetRowAddModal = observer(function TimesheetRowAddModal({
         setIsLoadingItems(false);
       }
     },
-    [workspaceSlug, currentUserId, ensureIssueTypes]
+    [workspaceSlug, currentUserId]
   );
 
   const loadMoreTestCases = useCallback(async () => {
@@ -582,7 +534,6 @@ export const TimesheetRowAddModal = observer(function TimesheetRowAddModal({
                   const rowId = `issue-${issue.id}`;
                   const isSelected = selectedItems.has(rowId);
                   const row = makeIssueRow(issue, selectedCategory.projectId);
-                  const typesMap = issueTypesCache[selectedCategory.projectId] ?? {};
                   return (
                     <button
                       key={issue.id}
@@ -599,7 +550,7 @@ export const TimesheetRowAddModal = observer(function TimesheetRowAddModal({
                       ) : (
                         <Square className="h-4 w-4 shrink-0 text-tertiary" />
                       )}
-                      {renderIssueTypeIcon(issue, typesMap)}
+                      {renderIssueTypeIcon(issue)}
                       <span className="text-tertiary text-sm tabular-nums shrink-0">
                         #{issue.sequence_id}
                       </span>

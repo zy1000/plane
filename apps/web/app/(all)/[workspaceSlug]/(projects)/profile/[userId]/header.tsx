@@ -4,35 +4,35 @@
  * See the LICENSE file for details.
  */
 
-// ui
-import type { FC } from "react";
 import { observer } from "mobx-react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, usePathname, useRouter } from "next/navigation";
 import { PanelRight } from "lucide-react";
 import { PROFILE_VIEWER_TAB, PROFILE_ADMINS_TAB, EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { YourWorkIcon, ChevronDownIcon } from "@plane/propel/icons";
 import type { IUserProfileProjectSegregation } from "@plane/types";
 import { Breadcrumbs, Header, CustomMenu } from "@plane/ui";
-import { cn } from "@plane/utils";
+import { Button } from "@plane/propel/button";
 // components
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { ProfileIssuesFilter } from "@/components/profile/profile-issues-filter";
 // hooks
 import { useAppTheme } from "@/hooks/store/use-app-theme";
 import { useUser, useUserPermissions } from "@/hooks/store/user";
-import { Button } from "@plane/propel/button";
 
 type TUserProfileHeader = {
   userProjectsData: IUserProfileProjectSegregation | undefined;
   type?: string | undefined;
   showProfileIssuesFilter?: boolean;
+  /** 摘要页显示侧栏时，移动端展示展开/收起按钮 */
+  showProfileSidebarToggle?: boolean;
 };
 
 export const UserProfileHeader = observer(function UserProfileHeader(props: TUserProfileHeader) {
-  const { userProjectsData, type = undefined, showProfileIssuesFilter } = props;
+  const { userProjectsData, type = undefined, showProfileIssuesFilter, showProfileSidebarToggle } = props;
   // router
   const { workspaceSlug, userId } = useParams();
+  const pathname = usePathname();
   const router = useRouter();
   // store hooks
   const { toggleProfileSidebar, profileSidebarCollapsed } = useAppTheme();
@@ -54,6 +54,11 @@ export const UserProfileHeader = observer(function UserProfileHeader(props: TUse
   const isCurrentUser = currentUser?.id === userId;
 
   const breadcrumbLabel = isCurrentUser ? t("profile.page_label") : `${userName} ${t("profile.work")}`;
+
+  const profileBasePath = `/${workspaceSlug}/profile/${userId}`;
+  const isSummaryPath = pathname === `${profileBasePath}/` || pathname === profileBasePath;
+  const showSidebarToggle =
+    showProfileSidebarToggle !== undefined ? showProfileSidebarToggle : isSummaryPath;
 
   return (
     <Header>
@@ -97,18 +102,20 @@ export const UserProfileHeader = observer(function UserProfileHeader(props: TUse
               </CustomMenu.MenuItem>
             ))}
           </CustomMenu>
-          <div className="shrink-0 md:hidden">
-            <Button
-              variant="ghost"
-              size="lg"
-              onClick={() => {
-                toggleProfileSidebar();
-              }}
-              appendIcon={
-                <PanelRight className={!profileSidebarCollapsed ? "text-accent-primary" : "text-secondary"} />
-              }
-            ></Button>
-          </div>
+          {showSidebarToggle && (
+            <div className="shrink-0 md:hidden">
+              <Button
+                variant="ghost"
+                size="lg"
+                onClick={() => {
+                  toggleProfileSidebar();
+                }}
+                appendIcon={
+                  <PanelRight className={!profileSidebarCollapsed ? "text-accent-primary" : "text-secondary"} />
+                }
+              ></Button>
+            </div>
+          )}
         </div>
       </Header.RightItem>
     </Header>

@@ -3,15 +3,14 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Modal, Button, Checkbox, Spin, Empty, Tag, message, Input, Table, Space, Pagination } from "antd";
 import type { TPartialProject, TIssue, TIssuesResponse } from "@plane/types";
 import { IssueService } from "@/services/issue/issue.service";
-import { ProjectIssueTypeService, projectIssueTypesCache, type TIssueType } from "@/services/project";
 import { CaseService } from "@/services/qa/case.service";
-import * as LucideIcons from "lucide-react";
 // 新增：复用状态下拉组件，保持与工作项详情侧栏一致的风格
 import { StateDropdown } from "@/components/dropdowns/state/dropdown";
 import { SearchOutlined } from "@ant-design/icons";
 import type { TableProps, InputRef, TableColumnType } from "antd";
 import { useProjectState } from "@/hooks/store/use-project-state";
 import { useParams } from "next/navigation";
+import { WorkItemTypeIcon } from "@/components/issues/work-item-type-icon";
 
 type Props = {
   isOpen: boolean;
@@ -127,84 +126,15 @@ export const WorkItemSelectModal: React.FC<Props> = ({
 
   const [projectSearch, setProjectSearch] = useState<string>("");
 
-  const issueTypeService = useMemo(() => new ProjectIssueTypeService(), []);
-  const [projectIssueTypesMap, setProjectIssueTypesMap] = useState<Record<string, TIssueType> | undefined>(undefined);
-
-  useEffect(() => {
-    if (!isOpen || !currentProjectId) {
-      setProjectIssueTypesMap(undefined);
-      return;
-    }
-    issueTypeService
-      .fetchProjectIssueTypes(workspaceSlug, currentProjectId)
-      .then(() => {
-        // 使用缓存的映射
-        setProjectIssueTypesMap(projectIssueTypesCache.get(currentProjectId));
-      })
-      .catch(() => {
-        setProjectIssueTypesMap(undefined);
-      });
-  }, [isOpen, workspaceSlug, currentProjectId, issueTypeService]);
-
   const displayIssues = useMemo(
     () => issues,
     [issues]
   );
 
-  // 渲染类型图标（参考 issue-detail.tsx 逻辑）
+  // 渲染类型图标（优先使用后端返回的 type_name）
   const renderIssueTypeIcon = (record: TIssue) => {
-    // 兼容 record.type 为对象的情况
-    const typeObj = (record as any)?.type;
-    const typeId = typeObj?.id || (record as any)?.type_id;
-
-    if (typeObj && typeObj.logo_props?.icon) {
-      const { name, color, background_color } = typeObj.logo_props.icon;
-      const IconComp = (LucideIcons as any)[name] as React.FC<any> | undefined;
-      return (
-        <span
-          className="inline-flex items-center justify-center rounded-sm"
-          style={{
-            backgroundColor: background_color || "transparent",
-            color: color || "currentColor",
-            width: "16px",
-            height: "16px",
-          }}
-          aria-label={`Issue type: ${typeObj.name}`}
-        >
-          {IconComp ? (
-            <IconComp className="h-3.5 w-3.5" strokeWidth={2} />
-          ) : (
-            <LucideIcons.Layers className="h-3.5 w-3.5" />
-          )}
-        </span>
-      );
-    }
-
-    const map = projectIssueTypesMap;
-    if (typeId && map && map[typeId]?.logo_props?.icon) {
-      const { name, color, background_color } = map[typeId].logo_props!.icon!;
-      const IconComp = (LucideIcons as any)[name] as React.FC<any> | undefined;
-      return (
-        <span
-          className="inline-flex items-center justify-center rounded-sm"
-          style={{
-            backgroundColor: background_color || "transparent",
-            color: color || "currentColor",
-            width: "16px",
-            height: "16px",
-          }}
-          aria-label={`Issue type: ${map[typeId].name}`}
-        >
-          {IconComp ? (
-            <IconComp className="h-3.5 w-3.5" strokeWidth={2} />
-          ) : (
-            <LucideIcons.Layers className="h-3.5 w-3.5" />
-          )}
-        </span>
-      );
-    }
-    // 映射为空或无图标配置时的兜底
-    return <LucideIcons.Layers className="h-3.5 w-3.5" />;
+    const typeName = (record as any)?.type_name || (record as any)?.type?.name || "";
+    return <WorkItemTypeIcon typeName={typeName} />;
   };
   // 新增：Table 列定义（展示名称与状态）
   const columns = useMemo(
@@ -224,17 +154,10 @@ export const WorkItemSelectModal: React.FC<Props> = ({
 
       // 构建类型过滤器选项
       const typeMap = new Map<string, string>();
-      // 先加载所有项目类型（如果存在映射）
-      if (projectIssueTypesMap) {
-        Object.values(projectIssueTypesMap).forEach((t) => {
-          if (t.id) typeMap.set(t.id, t.name);
-        });
-      }
-      // 补充当前列表中可能存在的类型（兼容跨项目或无映射情况）
       baseList.forEach((i: any) => {
-        const id = i.type?.id || i.type_id;
-        if (id) {
-          const name = i.type?.name || projectIssueTypesMap?.[id]?.name || id;
+        const id = i.type_id || i.type?.id;
+        const name = i.type_name || i.type?.name;
+        if (id && name) {
           typeMap.set(id, name);
         }
       });
@@ -290,20 +213,7 @@ export const WorkItemSelectModal: React.FC<Props> = ({
           key: "type_id",
           dataIndex: "type_id",
           render: (_: any, record: TIssue) => {
-            // 优先使用 record.type 对象
-            const typeObj = (record as any)?.type;
-            if (typeObj) {
-              return (
-                <div className="flex items-center gap-2">
-                  {renderIssueTypeIcon(record)}
-                  <span className="truncate">{typeObj.name ?? "-"}</span>
-                </div>
-              );
-            }
-            // 回退到 type_id + map
-            const typeId = record?.type_id || undefined;
-            const map = projectIssueTypesMap;
-            const typeName = typeId && map ? map[typeId]?.name : undefined;
+            const typeName = (record as any)?.type_name || (record as any)?.type?.name;
             return (
               <div className="flex items-center gap-2">
                 {renderIssueTypeIcon(record)}
@@ -324,7 +234,7 @@ export const WorkItemSelectModal: React.FC<Props> = ({
       ];
     },
     // 依赖中加入 getStateById，确保状态名称变化时列配置更新
-    [displayIssues, filters, projectIssueTypesMap, workspaceSlug, issueService, getStateById]
+    [displayIssues, filters, workspaceSlug, issueService, getStateById]
   );
 
   // 表格 onChange：同步 filters（受控）

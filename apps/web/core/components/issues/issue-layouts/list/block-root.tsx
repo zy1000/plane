@@ -48,7 +48,6 @@ type Props = {
   isLastChild?: boolean;
   shouldRenderByDefault?: boolean;
   isEpic?: boolean;
-  projectIssueTypesMap?: Record<string, any>;
 };
 
 export const IssueBlockRoot = observer(function IssueBlockRoot(props: Props) {
@@ -70,7 +69,6 @@ export const IssueBlockRoot = observer(function IssueBlockRoot(props: Props) {
     selectionHelpers,
     shouldRenderByDefault,
     isEpic = false,
-    projectIssueTypesMap,
   } = props;
   // states
   const [isExpanded, setExpanded] = useState<boolean>(false);
@@ -179,7 +177,6 @@ export const IssueBlockRoot = observer(function IssueBlockRoot(props: Props) {
           isCurrentBlockDragging={isParentIssueBeingDragged || isCurrentBlockDragging}
           setIsCurrentBlockDragging={setIsCurrentBlockDragging}
           isEpic={isEpic}
-          projectIssueTypesMap={projectIssueTypesMap}
         />
       </RenderIfVisible>
 

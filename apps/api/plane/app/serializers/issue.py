@@ -815,6 +815,7 @@ class IssueSerializer(DynamicBaseSerializer):
     sub_issues_count = serializers.IntegerField(read_only=True)
     attachment_count = serializers.IntegerField(read_only=True)
     link_count = serializers.IntegerField(read_only=True)
+    type_name = serializers.CharField(read_only=True, source="type.name", allow_null=True)
 
     class Meta:
         model = Issue
@@ -845,7 +846,8 @@ class IssueSerializer(DynamicBaseSerializer):
             "link_count",
             "is_draft",
             "archived_at",
-            'type_id'
+            "type_id",
+            "type_name",
         ]
         read_only_fields = fields
 
@@ -904,6 +906,8 @@ class IssueListDetailSerializer(serializers.Serializer):
             "archived_at": instance.archived_at,
             # Computed fields
             "cycle_id": instance.cycle_id,
+            "type_id": instance.type_id,
+            "type_name": instance.type.name if instance.type else None,
             "module_ids": self.get_module_ids(instance),
             "release_ids": self.get_release_ids(instance),
             "label_ids": self.get_label_ids(instance),
