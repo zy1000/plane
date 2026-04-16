@@ -101,7 +101,7 @@ export const useNavigationItems = ({
         icon: CycleIcon,
         access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
         shouldRender: !!project?.cycle_view,
-        sortOrder: 2,
+        sortOrder: 3,
       },
       {
         i18n_key: "sidebar.modules",
@@ -112,7 +112,7 @@ export const useNavigationItems = ({
         access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
         permissionKeys: [PROJECT_MODULES_VIEW_PERMISSION_KEY],
         shouldRender: !!project?.module_view,
-        sortOrder: 3,
+        sortOrder: 2,
       },
       {
         i18n_key: "sidebar.releases",

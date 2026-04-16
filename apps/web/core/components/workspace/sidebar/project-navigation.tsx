@@ -158,7 +158,7 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
         icon: CycleIcon,
         access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
         shouldRender: project?.cycle_view ?? false,
-        sortOrder: 2,
+        sortOrder: 3,
       },
       {
         i18n_key: "sidebar.modules",
@@ -169,7 +169,7 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
         access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
         permissionKeys: [PROJECT_MODULES_VIEW_PERMISSION_KEY],
         shouldRender: project?.module_view ?? false,
-        sortOrder: 3,
+        sortOrder: 2,
       },
       {
         i18n_key: "sidebar.releases",
