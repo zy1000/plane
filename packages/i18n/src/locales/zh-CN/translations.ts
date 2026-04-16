@@ -1053,8 +1053,6 @@ export default {
         spreadsheet: "表格布局",
         gantt: "时间线布局",
       },
-      group_sidebar_heading: "{dimension}分组",
-      group_sidebar_heading_fallback: "分组",
     },
     states: {
       active: "活动",

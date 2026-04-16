@@ -33,6 +33,7 @@ import { usePlatformOS } from "@/hooks/use-platform-os";
 // plane web components
 import { IssueIdentifier } from "@/plane-web/components/issues/issue-details/issue-identifier";
 import { IssueStats } from "@/plane-web/components/issues/issue-layouts/issue-stats";
+import { projectIssueTypesCache } from "@/services/project";
 // types
 import { WithDisplayPropertiesHOC } from "../properties/with-display-properties-HOC";
 import { calculateIdentifierWidth } from "../utils";
@@ -109,6 +110,10 @@ export const IssueBlock = observer(function IssueBlock(props: IssueBlockProps) {
 
   // derived values
   const issue = issuesMap[issueId];
+  const issueTypeLogoIcon =
+    issue?.project_id && issue?.type_id
+      ? projectIssueTypesCache.get(issue.project_id)?.[issue.type_id]?.logo_props?.icon
+      : undefined;
   const subIssuesCount = issue?.sub_issues_count ?? 0;
   const canEditIssueProperties = canEditProperties(issue?.project_id ?? undefined);
   const isDraggingAllowed = canDrag && canEditIssueProperties;
@@ -266,7 +271,7 @@ export const IssueBlock = observer(function IssueBlock(props: IssueBlockProps) {
 
               {displayProperties && (displayProperties.key || displayProperties.issue_type) && (
                 <div className="flex-shrink-0  flex items-center gap-1" style={{ minWidth: `${keyMinWidth}px` }}>
-                  <WorkItemTypeIcon typeName={issue.type_name} />
+                  <WorkItemTypeIcon typeName={issue.type_name} fallbackIcon={issueTypeLogoIcon} />
                   {issue.project_id && (
                     <IssueIdentifier
                       issueId={issueId}

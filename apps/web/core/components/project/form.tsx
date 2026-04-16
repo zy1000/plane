@@ -418,7 +418,6 @@ export function ProjectDetailsForm(props: IProjectDetailsForm) {
                       onChange(value);
                     }}
                     error={Boolean(errors.timezone)}
-                    buttonClassName="border-none"
                     disabled={!isAdmin}
                   />
                 </>
@@ -457,7 +456,7 @@ export function ProjectDetailsForm(props: IProjectDetailsForm) {
                   min={0}
                   step={0.5}
                   hasError={Boolean(errors.estimated_hours)}
-                  className="rounded-md !p-3 font-medium"
+                  className="font-medium"
                   placeholder={t("common.project_estimated_hours_placeholder")}
                   disabled={!isAdmin}
                 />

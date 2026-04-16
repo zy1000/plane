@@ -1,10 +1,12 @@
 from rest_framework.response import Response
 from rest_framework import status
 from typing import Dict, Any, List
-from django.db.models import QuerySet, Q, Count
+import hashlib
+from django.db.models import Q, Count, QuerySet
 from django.http import HttpRequest
 from django.db.models.functions import TruncMonth
 from django.utils import timezone
+from django.core.cache import cache
 from datetime import timedelta
 from plane.app.views.base import BaseAPIView
 from plane.app.permissions import ROLE, allow_permission
@@ -16,7 +18,6 @@ from plane.db.models import (
     CycleIssue,
     ModuleIssue,
     TimeSheet,
-    IssueType,
     ProjectMember,
 )
 from django.db import models
@@ -43,23 +44,6 @@ class ProjectAdvanceAnalyticsBaseView(BaseAPIView):
 
 
 class CustomProjectAdvanceAnalyticsEndpoint(ProjectAdvanceAnalyticsBaseView):
-    def get_filtered_counts(self, queryset: QuerySet) -> Dict[str, int]:
-        def get_filtered_count() -> int:
-            if self.filters["analytics_date_range"]:
-                return queryset.filter(
-                    created_at__gte=self.filters["analytics_date_range"]["current"][
-                        "gte"
-                    ],
-                    created_at__lte=self.filters["analytics_date_range"]["current"][
-                        "lte"
-                    ],
-                ).count()
-            return queryset.count()
-
-        return {
-            "count": get_filtered_count(),
-        }
-
     def get_work_items_stats(
             self, project_id, cycle_id=None, module_id=None
     ) -> Dict[str, Dict[str, int]]:
@@ -88,35 +72,56 @@ class CustomProjectAdvanceAnalyticsEndpoint(ProjectAdvanceAnalyticsBaseView):
             or 0
         )
 
+        if self.filters["analytics_date_range"]:
+            base_queryset = base_queryset.filter(
+                created_at__gte=self.filters["analytics_date_range"]["current"]["gte"],
+                created_at__lte=self.filters["analytics_date_range"]["current"]["lte"],
+            )
+
+        work_item_counts = base_queryset.aggregate(
+            total_work_items=Count("id"),
+            started_work_items=Count("id", filter=Q(state__group="started")),
+            backlog_work_items=Count("id", filter=Q(state__group="backlog")),
+            un_started_work_items=Count("id", filter=Q(state__group="unstarted")),
+            completed_work_items=Count("id", filter=Q(state__group="completed")),
+            cancelled_work_items=Count("id", filter=Q(state__group="cancelled")),
+        )
+
         return {
-            "total_work_items": self.get_filtered_counts(base_queryset),
-            "started_work_items": self.get_filtered_counts(
-                base_queryset.filter(state__group="started")
-            ),
-            "backlog_work_items": self.get_filtered_counts(
-                base_queryset.filter(state__group="backlog")
-            ),
-            "un_started_work_items": self.get_filtered_counts(
-                base_queryset.filter(state__group="unstarted")
-            ),
-            "completed_work_items": self.get_filtered_counts(
-                base_queryset.filter(state__group="completed")
-            ),
-            "cancelled_work_items": self.get_filtered_counts(
-                base_queryset.filter(state__group="cancelled")
-            ),
+            "total_work_items": {"count": work_item_counts["total_work_items"] or 0},
+            "started_work_items": {"count": work_item_counts["started_work_items"] or 0},
+            "backlog_work_items": {"count": work_item_counts["backlog_work_items"] or 0},
+            "un_started_work_items": {"count": work_item_counts["un_started_work_items"] or 0},
+            "completed_work_items": {"count": work_item_counts["completed_work_items"] or 0},
+            "cancelled_work_items": {"count": work_item_counts["cancelled_work_items"] or 0},
             "total_timesheet_hours": float(total_hours),
         }
 
     def get_member_stats(self, project_id: str) -> List[Dict[str, Any]]:
-        defect_type_ids = set(
-            IssueType.objects.filter(name__in=DEFECT_TYPE_NAMES)
-            .values_list("id", flat=True)
-        )
         members = ProjectMember.objects.filter(
             project_id=project_id,
             is_active=True,
         ).select_related("member")
+
+        issue_counts_by_member = {
+            row["assignees__id"]: {
+                "total_count": row["total_count"] or 0,
+                "defect_count": row["defect_count"] or 0,
+            }
+            for row in Issue.issue_objects.filter(
+                project_id=project_id,
+                assignees__isnull=False,
+            )
+            .values("assignees__id")
+            .annotate(
+                total_count=Count("id", distinct=True),
+                defect_count=Count(
+                    "id",
+                    filter=Q(type__name__in=DEFECT_TYPE_NAMES),
+                    distinct=True,
+                ),
+            )
+        }
 
         result = []
         for pm in members:
@@ -125,12 +130,10 @@ class CustomProjectAdvanceAnalyticsEndpoint(ProjectAdvanceAnalyticsBaseView):
                 avatar_url = f"/api/assets/v2/static/{user.avatar_asset_id}/"
             else:
                 avatar_url = user.avatar or ""
-            assigned = Issue.issue_objects.filter(
-                project_id=project_id,
-                assignees=user,
-            )
-            defect_count = assigned.filter(type_id__in=defect_type_ids).count()
-            work_item_count = assigned.exclude(type_id__in=defect_type_ids).count()
+            member_counts = issue_counts_by_member.get(user.id, {})
+            defect_count = member_counts.get("defect_count", 0)
+            total_count = member_counts.get("total_count", 0)
+            work_item_count = max(total_count - defect_count, 0)
             result.append({
                 "member_id": str(user.id),
                 "display_name": user.display_name or user.email or str(user.id),
@@ -143,6 +146,16 @@ class CustomProjectAdvanceAnalyticsEndpoint(ProjectAdvanceAnalyticsBaseView):
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
     def get(self, request: HttpRequest, slug: str, project_id: str) -> Response:
         self.initialize_workspace(slug, type="analytics")
+        query_signature = "&".join(
+            f"{key}={value}" for key, value in sorted(request.GET.items())
+        )
+        cache_payload = (
+            f"{slug}:{project_id}:{request.user.id}:{query_signature}"
+        )
+        cache_key = f"project_analytics_v2:{hashlib.md5(cache_payload.encode()).hexdigest()}"
+        cached_stats = cache.get(cache_key)
+        if cached_stats is not None:
+            return Response(cached_stats, status=status.HTTP_200_OK)
 
         cycle_id = request.GET.get("cycle_id", None)
         module_id = request.GET.get("module_id", None)
@@ -150,6 +163,7 @@ class CustomProjectAdvanceAnalyticsEndpoint(ProjectAdvanceAnalyticsBaseView):
             cycle_id=cycle_id, module_id=module_id, project_id=project_id
         )
         stats["member_stats"] = self.get_member_stats(project_id)
+        cache.set(cache_key, stats, timeout=60)
         return Response(stats, status=status.HTTP_200_OK)
 
 

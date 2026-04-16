@@ -34,6 +34,7 @@ import type { TSelectionHelper } from "@/hooks/use-multiple-select";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 // plane web components
 import { IssueIdentifier } from "@/plane-web/components/issues/issue-details/issue-identifier";
+import { projectIssueTypesCache } from "@/services/project";
 // local components
 import type { TRenderQuickActions } from "../list/list-view-types";
 import { isIssueNew } from "../utils";
@@ -228,6 +229,11 @@ const IssueRowDetails = observer(function IssueRowDetails(props: IssueRowDetails
   );
   if (!issueDetail) return null;
 
+  const issueTypeLogoIcon =
+    issueDetail.project_id && issueDetail.type_id
+      ? projectIssueTypesCache.get(issueDetail.project_id)?.[issueDetail.type_id]?.logo_props?.icon
+      : undefined;
+
   const handleToggleExpand = async (e: MouseEvent<HTMLButtonElement>) => {
     e.stopPropagation();
     e.preventDefault();
@@ -358,7 +364,7 @@ const IssueRowDetails = observer(function IssueRowDetails(props: IssueRowDetails
 
               {(displayProperties?.key || displayProperties?.issue_type) && (
                 <div className="relative flex h-full cursor-pointer items-center gap-2 flex-shrink-0">
-                  <WorkItemTypeIcon typeName={issueDetail.type_name} />
+                  <WorkItemTypeIcon typeName={issueDetail.type_name} fallbackIcon={issueTypeLogoIcon} />
                   <p className="flex font-medium leading-7" style={{ minWidth: `${keyMinWidth}px` }}>
                     {issueDetail.project_id && (
                       <IssueIdentifier

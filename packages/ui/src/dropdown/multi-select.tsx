@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { Combobox } from "@headlessui/react";
+import { Combobox, Portal } from "@headlessui/react";
 import { sortBy } from "lodash-es";
 import type { FC } from "react";
 import React, { useMemo, useRef, useState } from "react";
@@ -58,13 +58,21 @@ export function MultiSelectDropdown(props: IMultiSelectDropdown) {
 
   // popper-js init
   const { styles, attributes } = usePopper(referenceElement, popperElement, {
-    strategy: "fixed",
+    strategy: "absolute",
     placement: placement ?? "bottom-start",
     modifiers: [
       {
         name: "preventOverflow",
         options: {
           padding: 12,
+        },
+      },
+      {
+        // Chrome 121 can misplace fixed poppers when computeStyles uses adaptive/gpu transforms.
+        name: "computeStyles",
+        options: {
+          adaptive: false,
+          gpuAcceleration: false,
         },
       },
     ],
@@ -142,33 +150,36 @@ export function MultiSelectDropdown(props: IMultiSelectDropdown) {
       />
 
       {isOpen && (
-        <Combobox.Options className="fixed z-10" static>
-          <div
-            className={cn(
-              "my-1 w-48 rounded-sm border-[0.5px] border-strong bg-surface-1 px-2 py-2.5 text-11 shadow-raised-200 focus:outline-none",
-              optionsContainerClassName
-            )}
-            ref={setPopperElement}
-            style={styles.popper}
-            {...attributes.popper}
-          >
-            <DropdownOptions
-              isOpen={isOpen}
-              query={query}
-              setQuery={setQuery}
-              inputIcon={inputIcon}
-              inputPlaceholder={inputPlaceholder}
-              inputClassName={inputClassName}
-              inputContainerClassName={inputContainerClassName}
-              disableSearch={disableSearch}
-              keyExtractor={keyExtractor}
-              options={sortedOptions}
-              value={value}
-              renderItem={renderItem}
-              loader={loader}
-            />
-          </div>
-        </Combobox.Options>
+        <Portal>
+          <Combobox.Options className="z-10" static>
+            <div
+              data-prevent-outside-click
+              className={cn(
+                "my-1 w-48 rounded-sm border-[0.5px] border-strong bg-surface-1 px-2 py-2.5 text-11 shadow-raised-200 focus:outline-none",
+                optionsContainerClassName
+              )}
+              ref={setPopperElement}
+              style={styles.popper}
+              {...attributes.popper}
+            >
+              <DropdownOptions
+                isOpen={isOpen}
+                query={query}
+                setQuery={setQuery}
+                inputIcon={inputIcon}
+                inputPlaceholder={inputPlaceholder}
+                inputClassName={inputClassName}
+                inputContainerClassName={inputContainerClassName}
+                disableSearch={disableSearch}
+                keyExtractor={keyExtractor}
+                options={sortedOptions}
+                value={value}
+                renderItem={renderItem}
+                loader={loader}
+              />
+            </div>
+          </Combobox.Options>
+        </Portal>
       )}
     </Combobox>
   );

@@ -10,7 +10,7 @@ from rest_framework.response import Response
 from rest_framework import status
 
 from enum import Enum
-from typing import Optional
+from typing import Iterable, Optional
 
 from .keys import PermissionKey
 
@@ -168,7 +168,11 @@ def has_project_issue_permission(
         project_id: str,
         action: str,
         issue_type_name: Optional[str] = None,
+        issue_assignee_ids: Optional[Iterable] = None,
 ) -> bool:
+    # edit: assignees may update the issue when issue_assignee_ids is provided; None skips this bypass.
+    if action == "edit" and issue_assignee_ids is not None and user.pk in issue_assignee_ids:
+        return True
     required_permission = get_issue_permission_key(action=action, issue_type_name=issue_type_name)
     user_keys = _get_user_project_permission_keys(user, workspace_slug, project_id)
     return required_permission in user_keys

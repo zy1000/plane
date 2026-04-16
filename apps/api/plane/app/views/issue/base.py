@@ -670,7 +670,6 @@ class IssueViewSet(BaseViewSet):
         serializer = IssueDetailSerializer(issue, expand=self.expand)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    @allow_permission(allowed_roles=[ROLE.ADMIN, ROLE.MEMBER], creator=True, model=Issue)
     def partial_update(self, request, slug, project_id, pk=None):
         redis_client = redis_instance()
         lock_id = f"{project_id}-{pk}"
@@ -744,7 +743,8 @@ class IssueViewSet(BaseViewSet):
                 project_id=str(project_id),
                 action="edit",
                 issue_type_name=issue.type.name,
-        ) and request.user.pk not in issue.assignee_ids:
+                issue_assignee_ids=issue.assignee_ids,
+        ):
             redis_client.delete(lock_id)
             return Response(
                 {"error": "您没有所需的项目权限。"},

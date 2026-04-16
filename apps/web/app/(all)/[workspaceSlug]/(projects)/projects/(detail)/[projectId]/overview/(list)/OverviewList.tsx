@@ -12,12 +12,14 @@ import { getDate, renderFormattedDate } from "@plane/utils";
 import { ProjectDescriptionInput } from "@/components/project/project-description-input";
 import { ProjectActivity } from "@/components/project/project-activity";
 import { useMember } from "@/hooks/store/use-member";
+import { useProject } from "@/hooks/store/use-project";
 import { ProjectAnnouncementService } from "@/services/project";
 import {
   AnnouncementDetailModal,
   CreateAnnouncementModal,
   type TProjectAnnouncement,
 } from "./announcement-modals";
+import type { IProjectOverviewAnalytics } from "./overview-analytics.types";
 import { OverviewDescriptionModal } from "./overview-description-modal";
 import { ProjectOverviewKpiCards } from "./overview-kpi-cards";
 import { OverviewProgressCard } from "./overview-progress-card";
@@ -50,10 +52,13 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
   const [isActivityModalOpen, setIsActivityModalOpen] = useState(false);
   const [isAnnouncementsFullscreenOpen, setIsAnnouncementsFullscreenOpen] = useState(false);
   const [isMembersFullscreenOpen, setIsMembersFullscreenOpen] = useState(false);
+  const [analyticsData, setAnalyticsData] = useState<IProjectOverviewAnalytics | null>(null);
+  const [isLoadingAnalytics, setIsLoadingAnalytics] = useState(true);
   const {
     getUserDetails,
     project: { getProjectMemberIds },
   } = useMember();
+  const { fetchProjectAnalyze } = useProject();
 
   const projectMemberIds = getProjectMemberIds(project.id, true);
 
@@ -81,6 +86,23 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
   useEffect(() => {
     fetchAnnouncements();
   }, [fetchAnnouncements]);
+
+  useEffect(() => {
+    if (!workspaceSlug || !project?.id) return;
+
+    setIsLoadingAnalytics(true);
+    fetchProjectAnalyze(workspaceSlug, project.id)
+      .then((response: IProjectOverviewAnalytics) => {
+        setAnalyticsData(response);
+      })
+      .catch((error) => {
+        console.error(error);
+        setAnalyticsData(null);
+      })
+      .finally(() => {
+        setIsLoadingAnalytics(false);
+      });
+  }, [workspaceSlug, project?.id, fetchProjectAnalyze]);
 
   const creatorLabel = useMemo(
     () =>
@@ -269,10 +291,10 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
         </div>
 
         {/* KPI Cards */}
-        <ProjectOverviewKpiCards workspaceSlug={workspaceSlug} project={project} />
+        <ProjectOverviewKpiCards workspaceSlug={workspaceSlug} project={project} analyticsData={analyticsData} />
 
         {/* Progress */}
-        <OverviewProgressCard workspaceSlug={workspaceSlug} projectId={project.id} />
+        <OverviewProgressCard analyticsData={analyticsData} loading={isLoadingAnalytics} />
 
         {/* Description + Announcements */}
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
@@ -378,7 +400,12 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
               </div>
               <div className="min-h-0 flex-1 overflow-hidden">
                 <div className="h-full overflow-y-auto vertical-scrollbar scrollbar-sm">
-                  <OverviewMemberStats workspaceSlug={workspaceSlug} projectId={project.id} />
+                  <OverviewMemberStats
+                    workspaceSlug={workspaceSlug}
+                    projectId={project.id}
+                    analyticsData={analyticsData}
+                    isAnalyticsLoading={isLoadingAnalytics}
+                  />
                 </div>
               </div>
             </div>
@@ -563,7 +590,12 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
       >
         <div className="flex h-full min-h-0 flex-1 flex-col bg-surface-1">
           <div className="min-h-0 flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm px-4 pb-3">
-            <OverviewMemberStats workspaceSlug={workspaceSlug} projectId={project.id} />
+            <OverviewMemberStats
+              workspaceSlug={workspaceSlug}
+              projectId={project.id}
+              analyticsData={analyticsData}
+              isAnalyticsLoading={isLoadingAnalytics}
+            />
           </div>
         </div>
       </Modal>

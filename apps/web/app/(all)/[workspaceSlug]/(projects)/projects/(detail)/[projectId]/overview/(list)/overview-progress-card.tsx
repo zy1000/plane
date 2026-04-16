@@ -1,24 +1,22 @@
-import { type FC, useEffect, useState } from "react";
+import { type FC } from "react";
 import { observer } from "mobx-react";
 import { BarChart3 } from "lucide-react";
 import { Loader } from "@plane/ui";
-import { useProject } from "@/hooks/store/use-project";
+import type { IProjectOverviewAnalytics } from "./overview-analytics.types";
 
 type Props = {
-  workspaceSlug: string;
-  projectId: string;
+  analyticsData: IProjectOverviewAnalytics | null;
+  loading: boolean;
 };
 
-interface IWorkItemData {
-  total_work_items: { count: number };
-  started_work_items: { count: number };
-  backlog_work_items: { count: number };
-  un_started_work_items: { count: number };
-  completed_work_items: { count: number };
-  cancelled_work_items: { count: number };
-}
+type TOverviewProgressKey =
+  | "backlog_work_items"
+  | "un_started_work_items"
+  | "started_work_items"
+  | "completed_work_items"
+  | "cancelled_work_items";
 
-const CATEGORIES: { label: string; key: keyof Omit<IWorkItemData, "total_work_items">; color: string }[] = [
+const CATEGORIES: { label: string; key: TOverviewProgressKey; color: string }[] = [
   { label: "Backlog", key: "backlog_work_items", color: "#a3a3a3" },
   { label: "Unstarted", key: "un_started_work_items", color: "#80caff" },
   { label: "Started", key: "started_work_items", color: "#f59e0b" },
@@ -26,21 +24,7 @@ const CATEGORIES: { label: string; key: keyof Omit<IWorkItemData, "total_work_it
   { label: "Cancelled", key: "cancelled_work_items", color: "#ef4444" },
 ];
 
-export const OverviewProgressCard: FC<Props> = observer(({ workspaceSlug, projectId }) => {
-  const [data, setData] = useState<IWorkItemData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const { fetchProjectAnalyze } = useProject();
-
-  useEffect(() => {
-    if (workspaceSlug && projectId) {
-      setLoading(true);
-      fetchProjectAnalyze(workspaceSlug, projectId)
-        .then(setData)
-        .catch(console.error)
-        .finally(() => setLoading(false));
-    }
-  }, [workspaceSlug, projectId, fetchProjectAnalyze]);
-
+export const OverviewProgressCard: FC<Props> = observer(({ analyticsData, loading }) => {
   if (loading) {
     return (
       <div className="rounded-lg border border-subtle bg-surface-1 p-4">
@@ -56,7 +40,7 @@ export const OverviewProgressCard: FC<Props> = observer(({ workspaceSlug, projec
     );
   }
 
-  if (!data || data.total_work_items.count === 0) {
+  if (!analyticsData || analyticsData.total_work_items.count === 0) {
     return (
       <div className="rounded-lg border border-subtle bg-surface-1 p-4">
         <div className="mb-3 flex items-center gap-2">
@@ -68,11 +52,11 @@ export const OverviewProgressCard: FC<Props> = observer(({ workspaceSlug, projec
     );
   }
 
-  const total = data.total_work_items.count;
+  const total = analyticsData.total_work_items.count;
   const stats = CATEGORIES.map((cat) => ({
     ...cat,
-    count: data[cat.key].count,
-    percentage: (data[cat.key].count / total) * 100,
+    count: analyticsData[cat.key].count,
+    percentage: (analyticsData[cat.key].count / total) * 100,
   }));
 
   return (
