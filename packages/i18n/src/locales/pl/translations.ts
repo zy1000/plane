@@ -1777,6 +1777,7 @@ export default {
       created: "Utworzone elementy",
       assigned: "Przypisane elementy",
       subscribed: "Subskrybowane elementy",
+      overdue: "Work items overdue",
       state_distribution: {
         title: "Elementy według stanu",
         empty: "Twórz elementy, aby móc analizować stany.",
@@ -1804,6 +1805,7 @@ export default {
       assigned: "Przypisane",
       created: "Utworzone",
       subscribed: "Subskrybowane",
+      overdue: "Overdue",
       activity: "Aktywność",
     },
     empty_state: {
@@ -1822,6 +1824,10 @@ export default {
       subscribed: {
         title: "Brak subskrybowanych elementów pracy",
         description: "Subskrybuj interesujące Cię elementy pracy, a pojawią się tutaj.",
+      },
+      overdue: {
+        title: "No overdue work items",
+        description: "Work items assigned to you that are past their due date will appear here.",
       },
     },
   },

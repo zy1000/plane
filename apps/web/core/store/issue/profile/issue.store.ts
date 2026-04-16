@@ -88,7 +88,7 @@ export class ProfileIssues extends BaseIssuesStore implements IProfileIssues {
   }
 
   get viewFlags() {
-    if (this.currentView === "subscribed")
+    if (this.currentView === "subscribed" || this.currentView === "overdue")
       return {
         enableQuickAdd: false,
         enableIssueCreation: false,
@@ -149,6 +149,17 @@ export class ProfileIssues extends BaseIssuesStore implements IProfileIssues {
       if (this.currentView === "assigned") params = { ...params, assignees: userId };
       else if (this.currentView === "created") params = { ...params, created_by: userId };
       else if (this.currentView === "subscribed") params = { ...params, subscriber: userId };
+      else if (this.currentView === "overdue") {
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yesterdayStr = yesterday.toISOString().split("T")[0];
+        params = {
+          ...params,
+          assignees: userId,
+          target_date: `${yesterdayStr};before`,
+          state_group: "backlog,unstarted,started",
+        };
+      }
 
       // call the fetch issues API with the params
       const response = await this.userService.getUserProfileIssues(workspaceSlug, userId, params, {
@@ -200,6 +211,17 @@ export class ProfileIssues extends BaseIssuesStore implements IProfileIssues {
       if (this.currentView === "assigned") params = { ...params, assignees: userId };
       else if (this.currentView === "created") params = { ...params, created_by: userId };
       else if (this.currentView === "subscribed") params = { ...params, subscriber: userId };
+      else if (this.currentView === "overdue") {
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yesterdayStr = yesterday.toISOString().split("T")[0];
+        params = {
+          ...params,
+          assignees: userId,
+          target_date: `${yesterdayStr};before`,
+          state_group: "backlog,unstarted,started",
+        };
+      }
 
       // call the fetch issues API with the params for next page in issues
       const response = await this.userService.getUserProfileIssues(workspaceSlug, userId, params);

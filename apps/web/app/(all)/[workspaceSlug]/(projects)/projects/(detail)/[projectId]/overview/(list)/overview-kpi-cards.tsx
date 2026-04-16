@@ -18,6 +18,8 @@ const cardBase =
 const cardContentBase = "min-w-0 flex-1 space-y-1.5";
 const cardLabelClass = "text-sm font-medium text-primary";
 const cardValueClass = "text-sm font-normal text-primary";
+const cardValueNumberClass = "text-18 font-semibold text-primary";
+const cardValueUnitClass = "text-sm font-normal text-primary";
 const kpiIconShell = "grid h-11 w-11 flex-shrink-0 place-items-center rounded-sm bg-surface-2";
 
 export const ProjectOverviewKpiCards: FC<Props> = observer(({ workspaceSlug, project, disabled = false }) => {
@@ -95,8 +97,15 @@ export const ProjectOverviewKpiCards: FC<Props> = observer(({ workspaceSlug, pro
           </div>
           <div className={cardContentBase}>
             <div className={cardLabelClass}>工时总计</div>
-            <div className={cardValueClass}>
-              {totalHours !== null ? `${totalHours}h` : "-"}
+            <div className="flex items-baseline gap-1">
+              {totalHours !== null ? (
+                <>
+                  <span className={cardValueNumberClass}>{totalHours}</span>
+                  <span className={cardValueUnitClass}>h</span>
+                </>
+              ) : (
+                <span className={cardValueNumberClass}>-</span>
+              )}
             </div>
           </div>
         </div>

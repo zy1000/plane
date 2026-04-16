@@ -50,7 +50,12 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
   const [isActivityModalOpen, setIsActivityModalOpen] = useState(false);
   const [isAnnouncementsFullscreenOpen, setIsAnnouncementsFullscreenOpen] = useState(false);
   const [isMembersFullscreenOpen, setIsMembersFullscreenOpen] = useState(false);
-  const { getUserDetails } = useMember();
+  const {
+    getUserDetails,
+    project: { getProjectMemberIds },
+  } = useMember();
+
+  const projectMemberIds = getProjectMemberIds(project.id, true);
 
   const fetchAnnouncements = useCallback(async () => {
     if (!workspaceSlug || !project?.id) return;
@@ -272,11 +277,16 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
         {/* Description + Announcements */}
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
           <div>
-            <div className={`${sectionCard} flex h-[380px] flex-col p-4`}>
+            <div className={`${sectionCard} flex h-[380px] flex-col px-4 pt-4 pb-2`}>
               <div className="mb-3 flex flex-shrink-0 items-center justify-between">
                 <div className="flex items-center gap-2">
                   <BookOpen className="h-3.5 w-3.5 text-placeholder" />
                   <span className="text-sm font-medium text-primary">项目背景</span>
+                  {projectDescriptionEditMeta !== null && (
+                    <span className="text-xs text-placeholder">
+                      {projectDescriptionEditMeta}
+                    </span>
+                  )}
                 </div>
                 <div className="flex items-center gap-2">
                   <button
@@ -309,14 +319,9 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
                   disabled
                   setIsSubmitting={setIsSubmitting}
                   swrProjectDescription={project?.description_html}
-                  containerClassName="h-full vertical-scrollbar scrollbar-sm overflow-y-auto"
+                  containerClassName="h-full vertical-scrollbar scrollbar-sm overflow-y-auto pb-0"
                 />
               </div>
-              {projectDescriptionEditMeta !== null && (
-                <div className="mt-2 flex shrink-0 justify-end">
-                  <span className="text-xs text-placeholder">{projectDescriptionEditMeta}</span>
-                </div>
-              )}
             </div>
           </div>
           <div>
@@ -359,6 +364,9 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
                 <div className="flex items-center gap-2">
                   <Users className="h-3.5 w-3.5 text-placeholder" />
                   <span className="text-sm font-medium text-primary">项目成员</span>
+                  {projectMemberIds !== null && (
+                    <span className="shrink-0 text-xs text-placeholder">共 {projectMemberIds.length} 人</span>
+                  )}
                 </div>
                 <button
                   type="button"

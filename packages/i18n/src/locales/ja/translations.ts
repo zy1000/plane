@@ -1777,6 +1777,7 @@ export default {
       created: "作成した作業項目",
       assigned: "割り当てられた作業項目",
       subscribed: "購読中の作業項目",
+      overdue: "期限超過の作業項目",
       state_distribution: {
         title: "状態別作業項目",
         empty: "より良い分析のために、作業項目を作成してグラフで状態別に表示します。",
@@ -1804,6 +1805,7 @@ export default {
       assigned: "割り当て済み",
       created: "作成済み",
       subscribed: "購読中",
+      overdue: "期限超過",
       activity: "アクティビティ",
     },
     empty_state: {
@@ -1823,6 +1825,10 @@ export default {
       subscribed: {
         title: "作業項目がまだありません",
         description: "興味のある作業項目を購読して、ここですべてを追跡できます。",
+      },
+      overdue: {
+        title: "期限超過の作業項目はありません",
+        description: "割り当てられた作業項目で期限を過ぎたものがここに表示されます。",
       },
     },
   },

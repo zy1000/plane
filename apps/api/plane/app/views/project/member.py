@@ -68,22 +68,6 @@ class ProjectMemberViewSet(BaseViewSet):
         # Create a dictionary of the member_id and their roles
         member_roles = {member.get("member_id"): member.get("role") for member in members}
 
-        # check the workspace role of the new user
-        for member in member_roles:
-            workspace_member_role = WorkspaceMember.objects.get(
-                workspace__slug=slug, member=member, is_active=True
-            ).role
-            if workspace_member_role in [20] and member_roles.get(member) in [5, 15]:
-                return Response(
-                    {"error": "You cannot add a user with role lower than the workspace role"},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-            if workspace_member_role in [5] and member_roles.get(member) in [15, 20]:
-                return Response(
-                    {"error": "You cannot add a user with role higher than the workspace role"},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
 
         # Update roles in the members array based on the member_roles dictionary and set is_active to True
         for project_member in ProjectMember.objects.filter(

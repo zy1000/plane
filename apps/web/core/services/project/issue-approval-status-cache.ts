@@ -36,7 +36,7 @@ function processBatch() {
 
   const groups = new Map<string, PendingEntry[]>();
   for (const entry of batch) {
-    const groupKey = `${entry.workspaceSlug}:${entry.projectId}`;
+    const groupKey = entry.workspaceSlug;
     let group = groups.get(groupKey);
     if (!group) {
       group = [];
@@ -46,11 +46,11 @@ function processBatch() {
   }
 
   for (const [, entries] of groups) {
-    const { workspaceSlug, projectId } = entries[0];
+    const { workspaceSlug } = entries[0];
     const issueIds = [...new Set(entries.map((e) => e.issueId))];
 
     workflowService
-      .fetchBatchIssuePendingRecords(workspaceSlug, projectId, issueIds)
+      .fetchWorkspaceBatchIssuePendingRecords(workspaceSlug, issueIds)
       .then((result) => {
         for (const entry of entries) {
           const records = result[entry.issueId] ?? [];

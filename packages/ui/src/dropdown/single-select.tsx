@@ -58,6 +58,7 @@ export function Dropdown(props: ISingleSelectDropdown) {
 
   // popper-js init
   const { styles, attributes } = usePopper(referenceElement, popperElement, {
+    strategy: "fixed",
     placement: placement ?? "bottom-start",
     modifiers: [
       {

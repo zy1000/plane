@@ -157,6 +157,7 @@ export interface IUserProfileData {
   assigned_issues: number;
   completed_issues: number;
   created_issues: number;
+  overdue_issues: number;
   pending_issues: number;
   priority_distribution: IUserPriorityDistribution[];
   state_distribution: IUserStateDistribution[];
@@ -189,7 +190,7 @@ export interface IUserEmailNotificationSettings {
   issue_completed: boolean;
 }
 
-export type TProfileViews = "assigned" | "created" | "subscribed";
+export type TProfileViews = "assigned" | "created" | "subscribed" | "overdue";
 
 export type TPublicMember = {
   id: string;

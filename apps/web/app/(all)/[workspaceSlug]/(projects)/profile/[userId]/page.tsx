@@ -13,8 +13,6 @@ import { ContentWrapper } from "@plane/ui";
 // components
 import { PageHead } from "@/components/core/page-title";
 import { ProfileActivity } from "@/components/profile/overview/activity";
-import { ProfilePriorityDistribution } from "@/components/profile/overview/priority-distribution";
-import { ProfileStateDistribution } from "@/components/profile/overview/state-distribution";
 import { ProfileStats } from "@/components/profile/overview/stats";
 import { ProfileWorkload } from "@/components/profile/overview/workload";
 // constants
@@ -45,10 +43,6 @@ export default function ProfileOverviewPage({ params }: Route.ComponentProps) {
       <ContentWrapper className="space-y-7">
         <ProfileStats userProfile={userProfile} />
         <ProfileWorkload stateDistribution={stateDistribution} />
-        <div className="grid grid-cols-1 items-stretch gap-5 xl:grid-cols-2">
-          <ProfilePriorityDistribution userProfile={userProfile} />
-          <ProfileStateDistribution stateDistribution={stateDistribution} userProfile={userProfile} />
-        </div>
         <ProfileActivity />
       </ContentWrapper>
     </>

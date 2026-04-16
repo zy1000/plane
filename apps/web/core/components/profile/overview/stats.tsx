@@ -9,7 +9,7 @@ import { useParams } from "next/navigation";
 
 // ui
 import { useTranslation } from "@plane/i18n";
-import { UserCirclePropertyIcon, CreateIcon, LayerStackIcon } from "@plane/propel/icons";
+import { UserCirclePropertyIcon, CreateIcon, LayerStackIcon, OverdueDatePropertyIcon } from "@plane/propel/icons";
 import type { IUserProfileData } from "@plane/types";
 import { Loader, Card, ECardSpacing, ECardDirection } from "@plane/ui";
 // types
@@ -42,15 +42,21 @@ export function ProfileStats({ userProfile }: Props) {
       i18n_title: "profile.stats.subscribed",
       value: userProfile?.subscribed_issues ?? "...",
     },
+    {
+      icon: OverdueDatePropertyIcon,
+      route: "assigned",
+      i18n_title: "profile.stats.overdue",
+      value: userProfile?.overdue_issues ?? "...",
+    },
   ];
 
   return (
     <div className="space-y-2">
       <h3 className="text-16 font-medium">{t("profile.stats.overview")}</h3>
       {userProfile ? (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
           {overviewCards.map((card) => (
-            <Link key={card.route} href={`/${workspaceSlug}/profile/${userId}/${card.route}`}>
+            <Link key={card.i18n_title} href={`/${workspaceSlug}/profile/${userId}/${card.route}`}>
               <Card direction={ECardDirection.ROW} spacing={ECardSpacing.SM} className="h-full">
                 <div className="grid h-11 w-11 place-items-center rounded-sm bg-surface-2">
                   <card.icon className="h-5 w-5" />
@@ -64,7 +70,8 @@ export function ProfileStats({ userProfile }: Props) {
           ))}
         </div>
       ) : (
-        <Loader className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <Loader className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <Loader.Item height="80px" />
           <Loader.Item height="80px" />
           <Loader.Item height="80px" />
           <Loader.Item height="80px" />

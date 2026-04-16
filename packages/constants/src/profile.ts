@@ -36,6 +36,12 @@ export const PROFILE_ADMINS_TAB = [
     selected: "/subscribed/",
   },
   {
+    key: "overdue",
+    route: "overdue",
+    i18n_label: "profile.tabs.overdue",
+    selected: "/overdue/",
+  },
+  {
     key: "activity",
     route: "activity",
     i18n_label: "profile.tabs.activity",

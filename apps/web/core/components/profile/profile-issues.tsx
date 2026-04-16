@@ -22,7 +22,7 @@ import { useIssues } from "@/hooks/store/use-issues";
 import { IssuesStoreContext } from "@/hooks/use-issue-layout-store";
 
 type Props = {
-  type: "assigned" | "subscribed" | "created";
+  type: "assigned" | "subscribed" | "created" | "overdue";
 };
 
 export const ProfileIssuesPage = observer(function ProfileIssuesPage(props: Props) {

@@ -42,7 +42,21 @@ const kpiCardBase =
   "rounded-lg border border-subtle bg-surface-1 px-4 py-5 transition-all duration-200 hover:border-primary/20 hover:shadow-sm";
 const kpiIconShell = "grid h-11 w-11 flex-shrink-0 place-items-center rounded-sm bg-surface-2";
 const kpiLabelClass = "text-sm font-medium text-primary";
-const kpiValueClass = "text-sm font-normal text-primary";
+const kpiValueNumberClass = "text-18 font-semibold text-primary";
+const kpiValueUnitClass = "text-sm font-normal text-primary";
+
+function StatisticKpiCountValue(props: { loaded: boolean; value: number }) {
+  const { loaded, value } = props;
+  if (!loaded) {
+    return <span className={kpiValueNumberClass}>-</span>;
+  }
+  return (
+    <div className="flex items-baseline gap-1">
+      <span className={kpiValueNumberClass}>{value}</span>
+      <span className={kpiValueUnitClass}>个</span>
+    </div>
+  );
+}
 
 const LEGACY_STATUS_CLASS_MAP: Record<string, string> = {
   "bg-indigo-50": "bg-accent-subtle",
@@ -285,7 +299,7 @@ function ProjectStatisticsPage() {
                 </div>
                 <div className="min-w-0 flex-1 space-y-1.5">
                   <div className={kpiLabelClass}>全部需求</div>
-                  <div className={kpiValueClass}>{!counts ? "-" : `${counts.total_requirements ?? 0} 个`}</div>
+                  <StatisticKpiCountValue loaded={!!counts} value={counts?.total_requirements ?? 0} />
                 </div>
               </div>
             </div>
@@ -297,7 +311,7 @@ function ProjectStatisticsPage() {
                 </div>
                 <div className="min-w-0 flex-1 space-y-1.5">
                   <div className={kpiLabelClass}>未完成的需求</div>
-                  <div className={kpiValueClass}>{!counts ? "-" : `${counts.in_progress_requirements ?? 0} 个`}</div>
+                  <StatisticKpiCountValue loaded={!!counts} value={counts?.in_progress_requirements ?? 0} />
                 </div>
               </div>
             </div>
@@ -309,7 +323,7 @@ function ProjectStatisticsPage() {
                 </div>
                 <div className="min-w-0 flex-1 space-y-1.5">
                   <div className={kpiLabelClass}>全部缺陷</div>
-                  <div className={kpiValueClass}>{!counts ? "-" : `${counts.total_defects ?? 0} 个`}</div>
+                  <StatisticKpiCountValue loaded={!!counts} value={counts?.total_defects ?? 0} />
                 </div>
               </div>
             </div>
@@ -321,7 +335,7 @@ function ProjectStatisticsPage() {
                 </div>
                 <div className="min-w-0 flex-1 space-y-1.5">
                   <div className={kpiLabelClass}>待处理的缺陷</div>
-                  <div className={kpiValueClass}>{!counts ? "-" : `${counts.pending_defects ?? 0} 个`}</div>
+                  <StatisticKpiCountValue loaded={!!counts} value={counts?.pending_defects ?? 0} />
                 </div>
               </div>
             </div>

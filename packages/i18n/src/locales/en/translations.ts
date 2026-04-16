@@ -1643,6 +1643,7 @@ export default {
       created: "Work items created",
       assigned: "Work items assigned",
       subscribed: "Work items subscribed",
+      overdue: "Work items overdue",
       state_distribution: {
         title: "Work items by state",
         empty: "Create work items to view the them by states in the graph for better analysis.",
@@ -1671,6 +1672,7 @@ export default {
       assigned: "Assigned",
       created: "Created",
       subscribed: "Subscribed",
+      overdue: "Overdue",
       activity: "Activity",
     },
     empty_state: {
@@ -1690,6 +1692,10 @@ export default {
       subscribed: {
         title: "No work items yet",
         description: "Subscribe to work items you are interested in, track all of them here.",
+      },
+      overdue: {
+        title: "No overdue work items",
+        description: "Work items assigned to you that are past their due date will appear here.",
       },
     },
   },

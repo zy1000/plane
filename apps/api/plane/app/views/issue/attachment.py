@@ -96,14 +96,8 @@ class IssueAttachmentV2Endpoint(BaseAPIView):
     @allow_fine_permission(PermissionKey.ISSUE_ATTACHMENT_UPLOAD)
     def post(self, request, slug, project_id, issue_id):
         name = request.data.get("name")
-        type = request.data.get("type", False)
+        type = request.data.get("type") or "application/octet-stream"
         size = int(request.data.get("size", settings.FILE_SIZE_LIMIT))
-
-        if not type or type not in settings.ATTACHMENT_MIME_TYPES:
-            return Response(
-                {"error": "Invalid file type.", "status": False},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
 
         # Get the workspace
         workspace = Workspace.objects.get(slug=slug)

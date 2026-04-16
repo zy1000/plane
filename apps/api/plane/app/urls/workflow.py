@@ -7,6 +7,7 @@ from plane.app.views.workflow.base import (
     TransitionRecordActionAPIView,
     WorkflowAPIView,
     WorkflowTransitionAPIView,
+    WorkspaceBatchIssueTransitionRecordsAPIView,
 )
 
 urlpatterns = [
@@ -39,5 +40,10 @@ urlpatterns = [
         "workspaces/<str:slug>/projects/<uuid:project_id>/transition-records/<uuid:record_id>/action/",
         TransitionRecordActionAPIView.as_view(),
         name="transition-record-action",
+    ),
+    path(
+        "workspaces/<str:slug>/batch-transition-records/",
+        WorkspaceBatchIssueTransitionRecordsAPIView.as_view(),
+        name="workspace-batch-issue-transition-records",
     ),
 ]

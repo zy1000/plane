@@ -1775,6 +1775,7 @@ export default {
       created: "已创建的工作项",
       assigned: "已分配的工作项",
       subscribed: "已订阅的工作项",
+      overdue: "已延期的工作项",
       state_distribution: {
         title: "按状态分类的工作项",
         empty: "创建工作项以在图表中查看按状态分类的工作项，以便更好地分析。",
@@ -1802,6 +1803,7 @@ export default {
       assigned: "已分配",
       created: "已创建",
       subscribed: "已订阅",
+      overdue: "已延期",
       activity: "活动",
     },
     empty_state: {
@@ -1820,6 +1822,10 @@ export default {
       subscribed: {
         title: "尚无工作项",
         description: "订阅您感兴趣的工作项，在这里跟踪所有这些工作项。",
+      },
+      overdue: {
+        title: "没有延期的工作项",
+        description: "分配给您且已超过截止日期的工作项将显示在这里。",
       },
     },
   },

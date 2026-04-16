@@ -1818,6 +1818,7 @@ export default {
       created: "Створені одиниці",
       assigned: "Призначені одиниці",
       subscribed: "Підписані одиниці",
+      overdue: "Прострочені одиниці",
       state_distribution: {
         title: "Одиниці за станом",
         empty: "Створіть одиниці, щоб переглянути статистику станів.",
@@ -1847,6 +1848,7 @@ export default {
       assigned: "Призначено",
       created: "Створено",
       subscribed: "Підписано",
+      overdue: "Overdue",
       activity: "Активність",
     },
     empty_state: {
@@ -1865,6 +1867,10 @@ export default {
       subscribed: {
         title: "Немає підписаних робочих одиниць",
         description: "Підпишіться на потрібні одиниці, й вони з’являться тут.",
+      },
+      overdue: {
+        title: "No overdue work items",
+        description: "Work items assigned to you that are past their due date will appear here.",
       },
     },
   },

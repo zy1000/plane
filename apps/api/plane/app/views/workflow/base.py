@@ -281,6 +281,39 @@ class BatchIssueTransitionRecordsAPIView(BaseAPIView):
         return Response(result)
 
 
+class WorkspaceBatchIssueTransitionRecordsAPIView(BaseAPIView):
+    """
+    POST /workspaces/<slug>/batch-transition-records/
+    工作区级批量查询多个 issue 的 pending 审批记录（跨项目），返回以 issue_id 为 key 的字典。
+    Body: { "issue_ids": ["uuid1", "uuid2", ...] }
+    """
+
+    def post(self, request, slug):
+        issue_ids = request.data.get("issue_ids", [])
+        if not issue_ids:
+            return Response({})
+
+        records = (
+            IssueTransitionRecord.objects.filter(
+                issue_id__in=issue_ids,
+                issue__workspace__slug=slug,
+                issue__deleted_at__isnull=True,
+                status=TransitionRecordStatus.PENDING,
+            )
+            .select_related("issue", "from_state", "to_state", "transition")
+            .prefetch_related("approval_records__approver")
+        )
+        serializer = IssueTransitionRecordListSerializer(records, many=True)
+
+        result: dict[str, list] = {str(iid): [] for iid in issue_ids}
+        for item in serializer.data:
+            iid = str(item["issue_id"])
+            if iid in result:
+                result[iid].append(item)
+
+        return Response(result)
+
+
 class TransitionRecordActionAPIView(BaseAPIView):
     """
     GET  /workspaces/<slug>/projects/<project_id>/transition-records/<record_id>/action/ - 获取单条审批记录

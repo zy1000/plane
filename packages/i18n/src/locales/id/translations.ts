@@ -1787,6 +1787,7 @@ export default {
       created: "Item kerja yang dibuat",
       assigned: "Item kerja yang ditugaskan",
       subscribed: "Item kerja yang disubscribe",
+      overdue: "Work items overdue",
       state_distribution: {
         title: "Item kerja berdasarkan status",
         empty: "Buat item kerja untuk melihatnya berdasarkan status dalam grafik untuk analisis yang lebih baik.",
@@ -1814,6 +1815,7 @@ export default {
       assigned: "Ditugaskan",
       created: "Dibuat",
       subscribed: "Disubscribe",
+      overdue: "Overdue",
       activity: "Aktivitas",
     },
     empty_state: {
@@ -1833,6 +1835,10 @@ export default {
       subscribed: {
         title: "Belum ada item kerja",
         description: "Langganan item kerja yang Anda minati, lacak semuanya di sini.",
+      },
+      overdue: {
+        title: "No overdue work items",
+        description: "Work items assigned to you that are past their due date will appear here.",
       },
     },
   },

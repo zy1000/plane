@@ -5,11 +5,12 @@
  */
 
 import type { FC, MutableRefObject } from "react";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { combine } from "@atlaskit/pragmatic-drag-and-drop/combine";
 import { dropTargetForElements } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
 import { attachInstruction, extractInstruction } from "@atlaskit/pragmatic-drag-and-drop-hitbox/tree-item";
 import { observer } from "mobx-react";
+import { useParams } from "next/navigation";
 // plane helpers
 import { useOutsideClickDetector } from "@plane/hooks";
 // types
@@ -21,6 +22,7 @@ import RenderIfVisible from "@/components/core/render-if-visible-HOC";
 import { ListLoaderItemRow } from "@/components/ui/loader/layouts/list-layout-loader";
 // hooks
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
+import { useProjectState } from "@/hooks/store/use-project-state";
 import type { TSelectionHelper } from "@/hooks/use-multiple-select";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 // types
@@ -78,8 +80,10 @@ export const IssueBlockRoot = observer(function IssueBlockRoot(props: Props) {
   const issueBlockRef = useRef<HTMLDivElement | null>(null);
   // hooks
   const { isMobile } = usePlatformOS();
+  const { profileViewId } = useParams();
   // store hooks
   const { subIssues: subIssuesStore } = useIssueDetail(isEpic ? EIssueServiceType.EPICS : EIssueServiceType.ISSUES);
+  const { stateMap } = useProjectState();
 
   const isSubIssue = nestingLevel !== 0;
 
@@ -131,7 +135,20 @@ export const IssueBlockRoot = observer(function IssueBlockRoot(props: Props) {
 
   if (!issueId || !issuesMap[issueId]?.created_at) return null;
 
-  const subIssues = subIssuesStore.subIssuesByIssueId(issueId);
+  const allSubIssues = subIssuesStore.subIssuesByIssueId(issueId);
+
+  const subIssues = useMemo(() => {
+    if (profileViewId !== "overdue" || !allSubIssues) return allSubIssues;
+    const todayStr = new Date().toISOString().split("T")[0];
+    return allSubIssues.filter((id) => {
+      const issue = issuesMap[id];
+      if (!issue) return false;
+      const group = stateMap?.[issue.state_id]?.group ?? issue.state__group;
+      if (group === "completed" || group === "cancelled") return false;
+      if (!issue.target_date || issue.target_date >= todayStr) return false;
+      return true;
+    });
+  }, [profileViewId, allSubIssues, issuesMap, stateMap]);
 
   return (
     <div className="relative" ref={issueBlockRef} id={getIssueBlockId(issueId, groupId)}>

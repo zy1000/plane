@@ -1787,6 +1787,7 @@ export default {
       created: "Mục công việc đã tạo",
       assigned: "Mục công việc đã giao",
       subscribed: "Mục công việc đã đăng ký",
+      overdue: "Work items overdue",
       state_distribution: {
         title: "Mục công việc theo trạng thái",
         empty: "Tạo mục công việc để xem phân loại theo trạng thái trong biểu đồ để phân tích tốt hơn.",
@@ -1814,6 +1815,7 @@ export default {
       assigned: "Đã giao",
       created: "Đã tạo",
       subscribed: "Đã đăng ký",
+      overdue: "Overdue",
       activity: "Hoạt động",
     },
     empty_state: {
@@ -1833,6 +1835,10 @@ export default {
       subscribed: {
         title: "Chưa có mục công việc",
         description: "Đăng ký mục công việc bạn quan tâm, theo dõi tất cả chúng tại đây.",
+      },
+      overdue: {
+        title: "No overdue work items",
+        description: "Work items assigned to you that are past their due date will appear here.",
       },
     },
   },

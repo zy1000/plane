@@ -1815,6 +1815,7 @@ export default {
       created: "Созданные рабочие элементы",
       assigned: "Назначенные рабочие элементы",
       subscribed: "Отслеживаемые рабочие элементы",
+      overdue: "Work items overdue",
       state_distribution: {
         title: "Рабочие элементы по статусам",
         empty: "Создавайте рабочие элементы для анализа по статусам",
@@ -1843,6 +1844,7 @@ export default {
       assigned: "Назначенные",
       created: "Созданные",
       subscribed: "Отслеживаемые",
+      overdue: "Overdue",
       activity: "Активность",
     },
     empty_state: {
@@ -1862,6 +1864,10 @@ export default {
       subscribed: {
         title: "Нет отслеживаемых рабочих элементов",
         description: "Подпишитесь на интересующие рабочие элементы.",
+      },
+      overdue: {
+        title: "No overdue work items",
+        description: "Work items assigned to you that are past their due date will appear here.",
       },
     },
   },

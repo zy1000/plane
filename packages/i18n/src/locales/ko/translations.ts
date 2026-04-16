@@ -1770,6 +1770,7 @@ export default {
       created: "생성된 작업 항목",
       assigned: "할당된 작업 항목",
       subscribed: "구독된 작업 항목",
+      overdue: "Work items overdue",
       state_distribution: {
         title: "상태별 작업 항목",
         empty: "작업 항목을 생성하여 상태별 그래프에서 분석을 확인하세요.",
@@ -1797,6 +1798,7 @@ export default {
       assigned: "할당됨",
       created: "생성됨",
       subscribed: "구독됨",
+      overdue: "Overdue",
       activity: "활동",
     },
     empty_state: {
@@ -1816,6 +1818,10 @@ export default {
       subscribed: {
         title: "작업 항목 없음",
         description: "관심 있는 작업 항목을 구독하고 여기에서 모두 추적하세요.",
+      },
+      overdue: {
+        title: "No overdue work items",
+        description: "Work items assigned to you that are past their due date will appear here.",
       },
     },
   },

@@ -1792,6 +1792,7 @@ export default {
       created: "Activități create",
       assigned: "Activități atribuite",
       subscribed: "Activități urmărite",
+      overdue: "Work items overdue",
       state_distribution: {
         title: "Activități după stare",
         empty: "Creează activități pentru a le vedea distribuite pe stări în grafic, pentru o analiză mai bună.",
@@ -1819,6 +1820,7 @@ export default {
       assigned: "Atribuite",
       created: "Create",
       subscribed: "Urmărite",
+      overdue: "Overdue",
       activity: "Activitate",
     },
     empty_state: {
@@ -1838,6 +1840,10 @@ export default {
       subscribed: {
         title: "Nicio activitate urmărită",
         description: "Abonează-te la activitățile care te interesează și urmărește-le pe toate aici.",
+      },
+      overdue: {
+        title: "No overdue work items",
+        description: "Work items assigned to you that are past their due date will appear here.",
       },
     },
   },

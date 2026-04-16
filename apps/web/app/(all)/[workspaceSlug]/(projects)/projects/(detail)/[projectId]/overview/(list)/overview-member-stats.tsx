@@ -1,4 +1,5 @@
 import { type FC, useEffect, useMemo, useState } from "react";
+import { uniq } from "lodash-es";
 import { observer } from "mobx-react";
 import type { IProjectRole } from "@plane/types";
 import { Avatar, Loader, Tooltip } from "@plane/ui";
@@ -51,10 +52,9 @@ export const OverviewMemberStats: FC<Props> = observer(({ workspaceSlug, project
     () =>
       members.map((member) => {
         const details = getFilteredProjectMemberDetails(member.member_id, projectId);
-        const roleNames =
-          details?.custom_role_ids
-            ?.map((rid) => roles.find((r) => r.id === rid)?.name)
-            .filter((n): n is string => Boolean(n)) ?? [];
+        const roleNames = uniq(details?.custom_role_ids ?? [])
+          .map((rid) => roles.find((r) => r.id === rid)?.name)
+          .filter((n): n is string => Boolean(n));
         return { ...member, roleNames };
       }),
     [members, getFilteredProjectMemberDetails, projectId, roles]
@@ -121,9 +121,9 @@ const RoleTags: FC<{ roleNames: string[] }> = ({ roleNames }) => {
   return (
     <Tooltip tooltipContent={fullText} position="top">
       <div className="flex max-w-[260px] items-center gap-1 overflow-hidden">
-        {roleNames.map((name) => (
+        {roleNames.map((name, index) => (
           <span
-            key={name}
+            key={`${name}-${index}`}
             className="inline-flex shrink-0 items-center truncate rounded-sm bg-surface-2 px-1.5 py-0.5 text-xs text-secondary"
           >
             {name}

@@ -1776,6 +1776,7 @@ export default {
       created: "Vytvorené položky",
       assigned: "Priradené položky",
       subscribed: "Odobierané položky",
+      overdue: "Work items overdue",
       state_distribution: {
         title: "Položky podľa stavu",
         empty: "Vytvárajte položky pre analýzu stavov.",
@@ -1803,6 +1804,7 @@ export default {
       assigned: "Priradené",
       created: "Vytvorené",
       subscribed: "Odobierané",
+      overdue: "Overdue",
       activity: "Aktivita",
     },
     empty_state: {
@@ -1821,6 +1823,10 @@ export default {
       subscribed: {
         title: "Žiadne odoberané pracovné položky",
         description: "Odobierajte pracovné položky, ktoré vás zaujímajú, a sledujte ich tu.",
+      },
+      overdue: {
+        title: "No overdue work items",
+        description: "Work items assigned to you that are past their due date will appear here.",
       },
     },
   },

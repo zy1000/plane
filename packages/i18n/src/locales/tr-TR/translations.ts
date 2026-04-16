@@ -1786,6 +1786,7 @@ export default {
       created: "Oluşturulan iş öğeleri",
       assigned: "Atanan iş öğeleri",
       subscribed: "Abone olunan iş öğeleri",
+      overdue: "Work items overdue",
       state_distribution: {
         title: "Duruma göre iş öğeleri",
         empty: "Daha iyi analiz için durumlarına göre iş öğelerini görmek üzere iş öğesi oluşturun.",
@@ -1813,6 +1814,7 @@ export default {
       assigned: "Atanan",
       created: "Oluşturulan",
       subscribed: "Abone olunan",
+      overdue: "Overdue",
       activity: "Aktivite",
     },
     empty_state: {
@@ -1832,6 +1834,10 @@ export default {
       subscribed: {
         title: "Henüz iş öğesi yok",
         description: "İlgilendiğiniz iş öğelerine abone olun, hepsini buradan takip edin.",
+      },
+      overdue: {
+        title: "No overdue work items",
+        description: "Work items assigned to you that are past their due date will appear here.",
       },
     },
   },

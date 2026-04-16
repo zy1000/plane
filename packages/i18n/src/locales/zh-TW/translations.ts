@@ -1757,6 +1757,7 @@ export default {
       created: "已建立的工作事項",
       assigned: "已指派的工作事項",
       subscribed: "已訂閱的工作事項",
+      overdue: "已逾期的工作事項",
       state_distribution: {
         title: "依狀態分類的工作事項",
         empty: "建立工作事項以在圖表中檢視依狀態分類的工作事項，以便進行更好的分析。",
@@ -1784,6 +1785,7 @@ export default {
       assigned: "已指派",
       created: "已建立",
       subscribed: "已訂閱",
+      overdue: "已逾期",
       activity: "活動",
     },
     empty_state: {
@@ -1802,6 +1804,10 @@ export default {
       subscribed: {
         title: "尚無工作事項",
         description: "訂閱您感興趣的工作事項，在這裡追蹤它們。",
+      },
+      overdue: {
+        title: "沒有逾期的工作事項",
+        description: "分配給您且已超過截止日期的工作事項將顯示在這裡。",
       },
     },
   },

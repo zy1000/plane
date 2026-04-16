@@ -492,6 +492,20 @@ class WorkspaceUserProfileStatsEndpoint(BaseAPIView):
             .count()
         )
 
+        overdue_issues_count = (
+            Issue.issue_objects.filter(
+                ~Q(state__group__in=["completed", "cancelled"]),
+                (Q(assignees__in=[user_id]) & Q(issue_assignee__deleted_at__isnull=True)),
+                workspace__slug=slug,
+                project__project_projectmember__member=request.user,
+                project__project_projectmember__is_active=True,
+                target_date__lt=timezone.now().date(),
+                target_date__isnull=False,
+            )
+            .filter(**filters)
+            .count()
+        )
+
         upcoming_cycles = CycleIssue.objects.filter(
             workspace__slug=slug,
             cycle__start_date__gt=timezone.now(),
@@ -514,6 +528,7 @@ class WorkspaceUserProfileStatsEndpoint(BaseAPIView):
                 "completed_issues": completed_issues_count,
                 "pending_issues": pending_issues_count,
                 "subscribed_issues": subscribed_issues_count,
+                "overdue_issues": overdue_issues_count,
                 "present_cycles": present_cycle,
                 "upcoming_cycles": upcoming_cycles,
             }
