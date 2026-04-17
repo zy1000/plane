@@ -29,23 +29,14 @@ class CaseDetailSerializer(ModelSerializer):
     review = serializers.SerializerMethodField()
 
     def get_review(self, obj):
+        if hasattr(obj, '_review_result'):
+            return obj._review_result if obj._review_result is not None else CaseReviewThrough.Result.NOT_START
         return obj.review
 
     class Meta:
         model = TestCase
         fields = '__all__'
 
-
-class TestPlanDetailSerializer(ModelSerializer):
-    """
-    Serializer for creating a TestPlan.
-    """
-    assignees = UserLiteSerializer(many=True, read_only=True)
-    cases = CaseDetailSerializer(many=True, read_only=True)
-
-    class Meta:
-        model = TestPlan
-        fields = ['id', 'name', 'begin_time', 'end_time', 'repository', 'assignees', 'cases', 'state', 'state_display']
 
 
 class TestCaseRepositorySerializer(ModelSerializer):

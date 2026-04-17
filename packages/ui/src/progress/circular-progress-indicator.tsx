@@ -21,7 +21,8 @@ export function CircularProgressIndicator(props: ICircularProgressIndicator) {
   const radius = (size - strokeWidth) / 2;
   const viewBox = `0 0 ${sqSize} ${sqSize}`;
   const dashArray = radius * Math.PI * 2;
-  const dashOffset = dashArray - (dashArray * percentage) / 100;
+  const clampedPercentage = Math.min(Math.max(percentage, 0), 100);
+  const dashOffset = dashArray - (dashArray * clampedPercentage) / 100;
   return (
     <div className="relative">
       <svg width={size} height={size} viewBox={viewBox} fill="none">
@@ -68,6 +69,7 @@ export function CircularProgressIndicator(props: ICircularProgressIndicator) {
           strokeWidth={`${strokeWidth}px`}
           transform={`rotate(-90 ${size / 2} ${size / 2})`}
           style={{
+            stroke: strokeColor === "stroke-success" ? "#00a63e" : undefined,
             strokeDasharray: dashArray,
             strokeDashoffset: dashOffset,
           }}

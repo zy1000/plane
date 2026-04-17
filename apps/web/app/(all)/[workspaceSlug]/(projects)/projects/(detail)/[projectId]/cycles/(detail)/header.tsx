@@ -6,7 +6,7 @@
 
 import { useCallback, useRef, useState } from "react";
 import { observer } from "mobx-react";
-import { useParams } from "next/navigation";
+import { useParams, usePathname } from "next/navigation";
 // icons
 import { ChartNoAxesColumn, ChevronDown, PanelRight, SlidersHorizontal } from "lucide-react";
 // plane imports
@@ -69,6 +69,7 @@ export const CycleIssuesHeader = observer(function CycleIssuesHeader() {
   // router
   const router = useAppRouter();
   const { workspaceSlug, projectId, cycleId } = useParams();
+  const pathname = usePathname();
   // i18n
   const { t } = useTranslation();
   // store hooks
@@ -137,6 +138,24 @@ export const CycleIssuesHeader = observer(function CycleIssuesHeader() {
     .filter((option) => option !== undefined) as ICustomSearchSelectOption[];
 
   const workItemsCount = getGroupIssueCount(undefined, undefined, false);
+  const cycleOverviewPath =
+    workspaceSlug && projectId && cycleId ? `/${workspaceSlug}/projects/${projectId}/cycles/${cycleId}/overview` : "";
+  const cycleScopePath = workspaceSlug && projectId && cycleId ? `/${workspaceSlug}/projects/${projectId}/cycles/${cycleId}` : "";
+  const isOverviewActive = /\/overview\/?$/.test(pathname ?? "");
+  const cycleTabs = [
+    {
+      key: "overview",
+      label: t("sidebar.overview"),
+      isActive: !!isOverviewActive,
+      path: cycleOverviewPath,
+    },
+    {
+      key: "release-scope",
+      label: t("project_release.tab_release_scope"),
+      isActive: !isOverviewActive,
+      path: cycleScopePath,
+    },
+  ];
 
   const showPermissionError = () => {
     setToast({
@@ -207,7 +226,11 @@ export const CycleIssuesHeader = observer(function CycleIssuesHeader() {
                     selectedItem={cycleId}
                     navigationItems={switcherOptions}
                     onChange={(value: string) => {
-                      router.push(`/${workspaceSlug}/projects/${projectId}/cycles/${value}`);
+                      router.push(
+                        isOverviewActive
+                          ? `/${workspaceSlug}/projects/${projectId}/cycles/${value}/overview`
+                          : `/${workspaceSlug}/projects/${projectId}/cycles/${value}`
+                      );
                     }}
                     title={cycleDetails?.name}
                     icon={<CycleIcon className="h-4 w-4 flex-shrink-0 text-tertiary" />}
@@ -217,7 +240,32 @@ export const CycleIssuesHeader = observer(function CycleIssuesHeader() {
                 isLast
               />
             </Breadcrumbs>
-            {workItemsCount && workItemsCount > 0 ? (
+            <span className="h-4 w-px flex-shrink-0 bg-[var(--border-subtle-1)]" />
+            <div className="flex h-full items-center gap-0.5">
+              {cycleTabs.map((tab) => (
+                <div key={tab.key} className="relative flex h-full items-center transition-all duration-300">
+                  {tab.isActive && (
+                    <span className="pointer-events-none absolute bottom-[-4px] left-1/2 z-20 h-0.5 w-[80%] -translate-x-1/2 rounded-t-md bg-black transition-all duration-300" />
+                  )}
+                  <button
+                    type="button"
+                    className="cursor-pointer outline-none"
+                    onClick={() => tab.path && router.push(tab.path)}
+                  >
+                    <div
+                      className={cn(
+                        "relative z-10 flex items-center gap-2 rounded-md px-2 py-1.5 text-13 font-medium transition-colors",
+                        tab.isActive ? "text-primary" : "text-primary hover:text-primary"
+                      )}
+                    >
+                      {tab.isActive && <div className="absolute inset-0 -z-10 rounded-md bg-[#f6f6f6]" />}
+                      <span>{tab.label}</span>
+                    </div>
+                  </button>
+                </div>
+              ))}
+            </div>
+            {!isOverviewActive && workItemsCount && workItemsCount > 0 ? (
               <Tooltip
                 isMobile={isMobile}
                 tooltipContent={`There are ${workItemsCount} ${
@@ -232,113 +280,115 @@ export const CycleIssuesHeader = observer(function CycleIssuesHeader() {
             ) : null}
           </div>
         </Header.LeftItem>
-        <Header.RightItem className="items-center">
-          <div className="hidden items-center gap-2 md:flex">
-            <div className="hidden @4xl:flex">
-              <LayoutSelection
-                layouts={[
-                  EIssueLayoutTypes.LIST,
-                  EIssueLayoutTypes.KANBAN,
-                  EIssueLayoutTypes.CALENDAR,
-                  EIssueLayoutTypes.SPREADSHEET,
-                  EIssueLayoutTypes.GANTT,
-                ]}
-                onChange={(layout) => handleLayoutChange(layout)}
-                selectedLayout={activeLayout}
-              />
-            </div>
-            <div className="flex @4xl:hidden">
-              <MobileLayoutSelection
-                layouts={[
-                  EIssueLayoutTypes.LIST,
-                  EIssueLayoutTypes.KANBAN,
-                  EIssueLayoutTypes.CALENDAR,
-                  EIssueLayoutTypes.SPREADSHEET,
-                  EIssueLayoutTypes.GANTT,
-                ]}
-                onChange={(layout) => handleLayoutChange(layout)}
-                activeLayout={activeLayout}
-              />
-            </div>
-            <WorkItemFiltersToggle entityType={EIssuesStoreType.CYCLE} entityId={cycleId} />
-            <FiltersDropdown
-              title={t("common.display")}
-              placement="bottom-end"
-              miniIcon={<SlidersHorizontal className="size-3.5" />}
-            >
-              <DisplayFiltersSelection
-                layoutDisplayFiltersOptions={
-                  activeLayout ? ISSUE_DISPLAY_FILTERS_BY_PAGE.issues.layoutOptions[activeLayout] : undefined
-                }
-                displayFilters={issueFilters?.displayFilters ?? {}}
-                handleDisplayFiltersUpdate={handleDisplayFilters}
-                displayProperties={issueFilters?.displayProperties ?? {}}
-                handleDisplayPropertiesUpdate={handleDisplayProperties}
-                ignoreGroupedFilters={["cycle"]}
-                cycleViewDisabled={!currentProjectDetails?.cycle_view}
-                moduleViewDisabled={!currentProjectDetails?.module_view}
-              />
-            </FiltersDropdown>
+        {!isOverviewActive && (
+          <Header.RightItem className="items-center">
+            <div className="hidden items-center gap-2 md:flex">
+              <div className="hidden @4xl:flex">
+                <LayoutSelection
+                  layouts={[
+                    EIssueLayoutTypes.LIST,
+                    EIssueLayoutTypes.KANBAN,
+                    EIssueLayoutTypes.CALENDAR,
+                    EIssueLayoutTypes.SPREADSHEET,
+                    EIssueLayoutTypes.GANTT,
+                  ]}
+                  onChange={(layout) => handleLayoutChange(layout)}
+                  selectedLayout={activeLayout}
+                />
+              </div>
+              <div className="flex @4xl:hidden">
+                <MobileLayoutSelection
+                  layouts={[
+                    EIssueLayoutTypes.LIST,
+                    EIssueLayoutTypes.KANBAN,
+                    EIssueLayoutTypes.CALENDAR,
+                    EIssueLayoutTypes.SPREADSHEET,
+                    EIssueLayoutTypes.GANTT,
+                  ]}
+                  onChange={(layout) => handleLayoutChange(layout)}
+                  activeLayout={activeLayout}
+                />
+              </div>
+              <WorkItemFiltersToggle entityType={EIssuesStoreType.CYCLE} entityId={cycleId} />
+              <FiltersDropdown
+                title={t("common.display")}
+                placement="bottom-end"
+                miniIcon={<SlidersHorizontal className="size-3.5" />}
+              >
+                <DisplayFiltersSelection
+                  layoutDisplayFiltersOptions={
+                    activeLayout ? ISSUE_DISPLAY_FILTERS_BY_PAGE.issues.layoutOptions[activeLayout] : undefined
+                  }
+                  displayFilters={issueFilters?.displayFilters ?? {}}
+                  handleDisplayFiltersUpdate={handleDisplayFilters}
+                  displayProperties={issueFilters?.displayProperties ?? {}}
+                  handleDisplayPropertiesUpdate={handleDisplayProperties}
+                  ignoreGroupedFilters={["cycle"]}
+                  cycleViewDisabled={!currentProjectDetails?.cycle_view}
+                  moduleViewDisabled={!currentProjectDetails?.module_view}
+                />
+              </FiltersDropdown>
 
-            {canUserCreateIssue && (
-              <>
-                <Button onClick={() => setAnalyticsModal(true)} variant="secondary" size="lg">
-                  <span className="hidden @4xl:flex">Analytics</span>
-                  <span className="@4xl:hidden">
-                    <ChartNoAxesColumn className="size-3.5" />
-                  </span>
-                </Button>
-                {!isCompletedCycle && (
-                  <CustomMenu
-                    placement="bottom-end"
-                    customButton={
-                      <span
-                        className={cn(getButtonStyling("primary", "lg"), "cursor-pointer")}
-                        data-ph-element={WORK_ITEM_TRACKER_ELEMENTS.HEADER_ADD_BUTTON.CYCLE}
+              {canUserCreateIssue && (
+                <>
+                  <Button onClick={() => setAnalyticsModal(true)} variant="secondary" size="lg">
+                    <span className="hidden @4xl:flex">Analytics</span>
+                    <span className="@4xl:hidden">
+                      <ChartNoAxesColumn className="size-3.5" />
+                    </span>
+                  </Button>
+                  {!isCompletedCycle && (
+                    <CustomMenu
+                      placement="bottom-end"
+                      customButton={
+                        <span
+                          className={cn(getButtonStyling("primary", "lg"), "cursor-pointer")}
+                          data-ph-element={WORK_ITEM_TRACKER_ELEMENTS.HEADER_ADD_BUTTON.CYCLE}
+                        >
+                          {t("issue.add.label")}
+                          <ChevronDown className="size-4 shrink-0" strokeWidth={2} />
+                        </span>
+                      }
+                    >
+                      <CustomMenu.MenuItem
+                        onClick={() => {
+                          if (!canManageSprintIssues) return showPermissionError();
+                          toggleCreateIssueModal(true, EIssuesStoreType.CYCLE);
+                        }}
                       >
-                        {t("issue.add.label")}
-                        <ChevronDown className="size-4 shrink-0" strokeWidth={2} />
-                      </span>
-                    }
-                  >
-                    <CustomMenu.MenuItem
-                      onClick={() => {
-                        if (!canManageSprintIssues) return showPermissionError();
-                        toggleCreateIssueModal(true, EIssuesStoreType.CYCLE);
-                      }}
-                    >
-                      <span className="flex items-center justify-start gap-2">{t("create_work_item")}</span>
-                    </CustomMenu.MenuItem>
-                    <CustomMenu.MenuItem
-                      onClick={() => {
-                        if (!canManageSprintIssues) return showPermissionError();
-                        setOpenExistingIssueListModal(true);
-                      }}
-                    >
-                      <span className="flex items-center justify-start gap-2">{t("issue.add.existing")}</span>
-                    </CustomMenu.MenuItem>
-                  </CustomMenu>
-                )}
-              </>
-            )}
-            <IconButton
-              variant="tertiary"
-              size="lg"
-              icon={PanelRight}
-              onClick={toggleSidebar}
-              className={cn({
-                "bg-accent-subtle text-accent-primary": !isSidebarCollapsed,
-              })}
-            />
-            <CycleQuickActions
-              parentRef={parentRef}
-              cycleId={cycleId}
-              projectId={projectId}
-              workspaceSlug={workspaceSlug}
-              customClassName="flex-shrink-0 flex items-center justify-center size-[26px] bg-layer-1/70 rounded-sm"
-            />
-          </div>
-        </Header.RightItem>
+                        <span className="flex items-center justify-start gap-2">{t("create_work_item")}</span>
+                      </CustomMenu.MenuItem>
+                      <CustomMenu.MenuItem
+                        onClick={() => {
+                          if (!canManageSprintIssues) return showPermissionError();
+                          setOpenExistingIssueListModal(true);
+                        }}
+                      >
+                        <span className="flex items-center justify-start gap-2">{t("issue.add.existing")}</span>
+                      </CustomMenu.MenuItem>
+                    </CustomMenu>
+                  )}
+                </>
+              )}
+              <IconButton
+                variant="tertiary"
+                size="lg"
+                icon={PanelRight}
+                onClick={toggleSidebar}
+                className={cn({
+                  "bg-accent-subtle text-accent-primary": !isSidebarCollapsed,
+                })}
+              />
+              <CycleQuickActions
+                parentRef={parentRef}
+                cycleId={cycleId}
+                projectId={projectId}
+                workspaceSlug={workspaceSlug}
+                customClassName="flex-shrink-0 flex items-center justify-center size-[26px] bg-layer-1/70 rounded-sm"
+              />
+            </div>
+          </Header.RightItem>
+        )}
       </Header>
     </>
   );

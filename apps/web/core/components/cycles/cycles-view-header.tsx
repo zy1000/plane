@@ -6,7 +6,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { observer } from "mobx-react";
-import { ListFilter } from "lucide-react";
+import { ListFilter, SlidersHorizontal } from "lucide-react";
 // plane imports
 import { useOutsideClickDetector } from "@plane/hooks";
 import { IconButton } from "@plane/propel/icon-button";
@@ -19,10 +19,14 @@ import { FiltersDropdown } from "@/components/issues/issue-layouts/filters";
 // hooks
 import { useCycleFilter } from "@/hooks/store/use-cycle-filter";
 // local imports
-import { CycleFiltersSelection } from "./dropdowns";
+import { CycleDisplayFiltersSelection, CycleFiltersSelection } from "./dropdowns";
 
 type Props = {
   projectId: string;
+};
+
+type TCycleListDisplayFilters = {
+  group_by?: "state" | "owned_by" | "release" | "none";
 };
 
 export const CyclesViewHeader = observer(function CyclesViewHeader(props: Props) {
@@ -30,7 +34,8 @@ export const CyclesViewHeader = observer(function CyclesViewHeader(props: Props)
   // refs
   const inputRef = useRef<HTMLInputElement>(null);
   // hooks
-  const { currentProjectFilters, searchQuery, updateFilters, updateSearchQuery } = useCycleFilter();
+  const { currentProjectDisplayFilters, currentProjectFilters, searchQuery, updateDisplayFilters, updateFilters, updateSearchQuery } =
+    useCycleFilter();
   const { t } = useTranslation();
   // states
   const [isSearchOpen, setIsSearchOpen] = useState(searchQuery !== "" ? true : false);
@@ -70,6 +75,14 @@ export const CyclesViewHeader = observer(function CyclesViewHeader(props: Props)
   };
 
   const isFiltersApplied = calculateTotalFilters(currentProjectFilters ?? {}) !== 0;
+
+  const handleDisplayFiltersUpdate = useCallback(
+    (displayFilters: Partial<TCycleListDisplayFilters>) => {
+      if (!projectId) return;
+      updateDisplayFilters(projectId, displayFilters as Parameters<typeof updateDisplayFilters>[1]);
+    },
+    [projectId, updateDisplayFilters]
+  );
 
   useEffect(() => {
     if (searchQuery.trim() !== "") setIsSearchOpen(true);
@@ -127,6 +140,16 @@ export const CyclesViewHeader = observer(function CyclesViewHeader(props: Props)
         isFiltersApplied={isFiltersApplied}
       >
         <CycleFiltersSelection filters={currentProjectFilters ?? {}} handleFiltersUpdate={handleFilters} />
+      </FiltersDropdown>
+      <FiltersDropdown
+        title={t("common.display")}
+        placement="bottom-end"
+        miniIcon={<SlidersHorizontal className="size-3.5" />}
+      >
+        <CycleDisplayFiltersSelection
+          displayFilters={currentProjectDisplayFilters ?? {}}
+          handleDisplayFiltersUpdate={handleDisplayFiltersUpdate}
+        />
       </FiltersDropdown>
     </div>
   );

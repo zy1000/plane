@@ -8,17 +8,19 @@ from yaml import serialize
 from collections import defaultdict
 
 from django.db import connection, transaction
-from django.db.models import Case, CharField, Count, F, Func, IntegerField, Prefetch, Q, Value, When
+from django.db.models import Case, CharField, Count, F, Func, IntegerField, OuterRef, Prefetch, Q, Subquery, Value, When
 from django.db.models.functions import Cast
 from django.shortcuts import get_object_or_404
-from plane.app.serializers.qa import TestPlanDetailSerializer, CaseModuleCreateUpdateSerializer, \
+from plane.app.serializers.qa import TestPlanDetailSerializer, TestPlanListSerializer, CaseModuleCreateUpdateSerializer, \
     CaseModuleListSerializer, CaseLabelListSerializer, CaseLabelCreateSerializer, CaseCreateUpdateSerializer, \
-    CaseListSerializer, CaseAttachmentSerializer, ReviewCaseRecordsSerializer, PlanListSerializer
+    CaseListSerializer, CaseAttachmentSerializer, ReviewCaseRecordsSerializer, PlanListSerializer, \
+    build_plan_stats_map
 from plane.app.serializers.qa.plan import PlanModuleCreateUpdateSerializer, PlanModuleListSerializer, \
     PlanCaseListSerializer, PlanCaseCardSerializer, PlanCaseRecordSerializer
 from plane.app.views.qa.filters import TestPlanFilter
 from plane.db.models import TestPlan, TestCaseRepository, TestCase, CaseModule, CaseLabel, FileAsset, Workspace, \
-    PlanModule, PlanCase, PlanCaseRecord, Issue, Cycle, CycleIssue, WorkspaceMember, ModuleIssue, ReleaseIssue
+    PlanModule, PlanCase, PlanCaseRecord, Issue, Cycle, CycleIssue, WorkspaceMember, ModuleIssue, ReleaseIssue, \
+    CaseReviewRecord, CaseReviewThrough
 from plane.utils.paginator import CustomPaginator
 from plane.utils.response import list_response
 from plane.app.views import BaseAPIView, BaseViewSet
@@ -153,7 +155,7 @@ class PlanAPIView(BaseAPIView):
     filterset_class = TestPlanFilter
 
     def get_queryset(self):
-        return TestPlan.objects.all().prefetch_related('cases')
+        return TestPlan.objects.all().prefetch_related('assignees')
 
     @allow_fine_permission(PermissionKey.QA_PLAN_CREATE)
     def post(self, request, slug, project_id):
@@ -167,9 +169,16 @@ class PlanAPIView(BaseAPIView):
     def get(self, request, slug, project_id):
         planes = self.filter_queryset(self.get_queryset()).distinct()
         paginator = self.pagination_class()
-        paginated_queryset = paginator.paginate_queryset(planes, request)
-        serializer = TestPlanDetailSerializer(instance=paginated_queryset, many=True)
-        return list_response(data=serializer.data, count=planes.count())
+        page_plans = list(paginator.paginate_queryset(planes, request) or [])
+        plan_stats = build_plan_stats_map([plan.id for plan in page_plans])
+        serializer = TestPlanListSerializer(
+            instance=page_plans,
+            many=True,
+            context={"plan_stats": plan_stats},
+        )
+        paginator_count = getattr(getattr(paginator, "page", None), "paginator", None)
+        count = getattr(paginator_count, "count", None)
+        return list_response(data=serializer.data, count=count if count is not None else planes.count())
 
     @allow_fine_permission(PermissionKey.QA_PLAN_EDIT)
     def put(self, request, slug, project_id):
@@ -249,13 +258,15 @@ class PlanCaseAPIView(BaseAPIView):
 
 class PlanModuleAPIView(BaseAPIView):
     model = PlanModule
-    queryset = PlanModule.objects.all()
     serializer_class = PlanModuleListSerializer
     filterset_fields = {
         'name': ['exact', 'icontains', 'in'],
         'project_id': ['exact', 'in'],
         'id': ['exact']
     }
+
+    def get_queryset(self):
+        return PlanModule.objects.all()
 
     def post(self, request, slug):
         serializer = PlanModuleCreateUpdateSerializer(data=request.data)
@@ -265,7 +276,7 @@ class PlanModuleAPIView(BaseAPIView):
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     def get(self, request, slug):
-        query = self.filter_queryset(self.queryset.filter(parent=None)).order_by('created_at')
+        query = self.filter_queryset(self.get_queryset().filter(parent=None)).order_by('created_at')
         serializer = self.serializer_class(instance=query, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -399,7 +410,8 @@ class PlanView(BaseViewSet):
 
             plan_case = PlanCase.objects.get(plan_id=plan_id, case_id=case_id)
             if query.exists() and request.user.id not in plan_executor:
-                return Response(status=status.HTTP_403_FORBIDDEN, data={'msg': f'你没有权限执行"{plan_case.case.name}"'})
+                return Response(status=status.HTTP_403_FORBIDDEN,
+                                data={'msg': f'你没有权限执行"{plan_case.case.name}"'})
 
             # 创建执行记录
             pcr = PlanCaseRecord.objects.create(result=result, reason=reason,
@@ -475,7 +487,8 @@ class PlanView(BaseViewSet):
             frontier = [str(module_id)]
             while frontier:
                 children = list(
-                    CaseModule.objects.filter(parent_id__in=frontier, deleted_at__isnull=True).values_list("id", flat=True)
+                    CaseModule.objects.filter(parent_id__in=frontier, deleted_at__isnull=True).values_list("id",
+                                                                                                           flat=True)
                 )
                 new_children = [str(c) for c in children if str(c) not in expanded]
                 if not new_children:
@@ -624,7 +637,7 @@ class PlanView(BaseViewSet):
 
         return Response(status=status.HTTP_200_OK)
 
-    @transaction.atomic 
+    @transaction.atomic
     @action(detail=False, methods=['post'], url_path='add-cases')
     @allow_fine_permission(PermissionKey.QA_PLAN_EDIT)
     def add_cases(self, request, slug):

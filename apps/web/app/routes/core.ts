@@ -180,6 +180,10 @@ export const coreRoutes: RouteConfigEntry[] = [
           // Cycle Detail
           layout("./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/cycles/(detail)/layout.tsx", [
             route(
+              ":workspaceSlug/projects/:projectId/cycles/:cycleId/overview",
+              "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/cycles/(overview)/[cycleId]/page.tsx"
+            ),
+            route(
               ":workspaceSlug/projects/:projectId/cycles/:cycleId",
               "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/cycles/(detail)/[cycleId]/page.tsx"
             ),

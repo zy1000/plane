@@ -104,6 +104,7 @@ export interface ICycle extends TProgressSnapshot {
   updated_by?: string;
   archived_at: string | null;
   assignee_ids?: string[];
+  release_id?: string | null;
   view_props: {
     filters: IIssueFilterOptions;
   };

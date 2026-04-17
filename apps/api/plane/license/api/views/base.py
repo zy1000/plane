@@ -99,9 +99,9 @@ class BaseAPIView(TimezoneMixin, APIView, BasePaginator):
             response = super().dispatch(request, *args, **kwargs)
 
             if settings.DEBUG:
-                from django.db import connection
+                from plane.utils.query_debug import print_query_stats
 
-                print(f"{request.method} - {request.get_full_path()} of Queries: {len(connection.queries)}")
+                print_query_stats(request)
             return response
 
         except Exception as exc:

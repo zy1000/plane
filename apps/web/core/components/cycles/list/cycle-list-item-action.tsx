@@ -11,14 +11,14 @@ import { useParams, usePathname, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { Eye, ArrowRight, CalendarDays } from "lucide-react";
 // plane imports
-import { EUserPermissions, EUserPermissionsLevel, IS_FAVORITE_MENU_OPEN } from "@plane/constants";
+import { CYCLE_STATUS, EUserPermissions, EUserPermissionsLevel, IS_FAVORITE_MENU_OPEN } from "@plane/constants";
 import { useLocalStorage } from "@plane/hooks";
 import { useTranslation } from "@plane/i18n";
 import { TransferIcon, WorkItemsIcon, MembersPropertyIcon } from "@plane/propel/icons";
-import { setPromiseToast } from "@plane/propel/toast";
+import { TOAST_TYPE, setToast, setPromiseToast } from "@plane/propel/toast";
 import { Tooltip } from "@plane/propel/tooltip";
 import type { ICycle } from "@plane/types";
-import { Avatar, AvatarGroup, FavoriteStar } from "@plane/ui";
+import { Avatar, AvatarGroup, CustomSelect, FavoriteStar } from "@plane/ui";
 import { getDate, getFileURL, generateQueryParams } from "@plane/utils";
 // components
 import { DateRangeDropdown } from "@/components/dropdowns/date-range";
@@ -26,6 +26,7 @@ import { ButtonAvatars } from "@/components/dropdowns/member/avatar";
 import { MergedDateDisplay } from "@/components/dropdowns/merged-date";
 // hooks
 import { useCycle } from "@/hooks/store/use-cycle";
+import { useCycleFilter } from "@/hooks/store/use-cycle-filter";
 import { useMember } from "@/hooks/store/use-member";
 import { useUserPermissions } from "@/hooks/store/user";
 import { useAppRouter } from "@/hooks/use-app-router";
@@ -57,17 +58,19 @@ export const CycleListItemAction = observer(function CycleListItemAction(props: 
   const { projectId: routerProjectId } = useParams();
   //states
   const [transferIssuesModal, setTransferIssuesModal] = useState(false);
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   // hooks
   const { isMobile } = usePlatformOS();
   const { t } = useTranslation();
   const { isProjectTimeZoneDifferent, getProjectUTCOffset, renderFormattedDateInUserTimezone } =
     useTimeZoneConverter(projectId);
+  const { currentProjectDisplayFilters } = useCycleFilter();
   // router
   const router = useAppRouter();
   const searchParams = useSearchParams();
   const pathname = usePathname();
   // store hooks
-  const { addCycleToFavorites, removeCycleFromFavorites } = useCycle();
+  const { addCycleToFavorites, removeCycleFromFavorites, updateCycleDetails } = useCycle();
   const { allowPermissions } = useUserPermissions();
 
   // local storage
@@ -85,6 +88,20 @@ export const CycleListItemAction = observer(function CycleListItemAction(props: 
 
   // derived values
   const cycleStatus = cycleDetails.status ?? "not_started";
+  const cycleStatusDetails = CYCLE_STATUS.find((status) => status.value === cycleStatus);
+  const showStatusInGroupedView =
+    currentProjectDisplayFilters?.group_by === "owned_by" ||
+    currentProjectDisplayFilters?.group_by === "state" ||
+    currentProjectDisplayFilters?.group_by === "release" ||
+    currentProjectDisplayFilters?.group_by === "none";
+  const statusOptionsByCurrentStatus: Record<NonNullable<ICycle["status"]>, NonNullable<ICycle["status"]>[]> = {
+    not_started: ["in_progress", "completed", "cancelled"],
+    in_progress: ["completed", "cancelled"],
+    delayed: ["in_progress", "completed", "cancelled"],
+    completed: ["cancelled"],
+    cancelled: ["completed"],
+  };
+  const statusOptions = statusOptionsByCurrentStatus[cycleStatus as NonNullable<ICycle["status"]>] ?? [];
 
   const showIssueCount = useMemo(() => cycleStatus !== "completed" && cycleStatus !== "cancelled", [cycleStatus]);
 
@@ -102,6 +119,7 @@ export const CycleListItemAction = observer(function CycleListItemAction(props: 
     workspaceSlug,
     projectId
   );
+  const canChangeStatus = isEditingAllowed && !cycleDetails.archived_at && statusOptions.length > 0;
 
   // handlers
   const handleAddToFavorites = (e: MouseEvent<HTMLButtonElement>) => {
@@ -191,6 +209,60 @@ export const CycleListItemAction = observer(function CycleListItemAction(props: 
           <WorkItemsIcon className="h-4 w-4 text-tertiary" />
           <span className="text-11 text-tertiary">{cycleDetails.total_issues}</span>
         </div>
+      )}
+      {showStatusInGroupedView && cycleStatusDetails && (
+        canChangeStatus ? (
+          <CustomSelect
+            customButton={
+              <span
+                className="flex h-6 min-w-20 cursor-pointer items-center justify-center truncate rounded-sm px-2.5 text-center text-11 font-medium whitespace-nowrap"
+                style={{
+                  color: cycleStatusDetails.color,
+                  backgroundColor: `${cycleStatusDetails.color}20`,
+                }}
+              >
+                {t(cycleStatusDetails.i18n_title)}
+              </span>
+            }
+            value={cycleStatus}
+            onChange={(nextStatus: string) => {
+              void (async () => {
+                if (!nextStatus || nextStatus === cycleStatus || isUpdatingStatus) return;
+                setIsUpdatingStatus(true);
+                try {
+                  const didSucceed = await updateCycleDetails(workspaceSlug, projectId, cycleId, { status: nextStatus as ICycle["status"] })
+                    .then(() => true)
+                    .catch(() => false);
+                  setToast({
+                    type: didSucceed ? TOAST_TYPE.SUCCESS : TOAST_TYPE.ERROR,
+                    title: didSucceed
+                      ? t("project_cycles.action.update.success.title")
+                      : t("project_cycles.action.update.failed.title"),
+                    message: didSucceed
+                      ? t("project_cycles.action.update.success.description")
+                      : t("something_went_wrong_please_try_again"),
+                  });
+                } finally {
+                  setIsUpdatingStatus(false);
+                }
+              })();
+            }}
+            disabled={isUpdatingStatus}
+          >
+            {CYCLE_STATUS.filter((status) => statusOptions.includes(status.value)).map((status) => (
+              <CustomSelect.Option key={status.value} value={status.value}>
+                <div className="flex items-center gap-2">
+                  <span className="h-2 w-2 flex-shrink-0 rounded-full" style={{ backgroundColor: status.color }} />
+                  {t(status.i18n_title)}
+                </div>
+              </CustomSelect.Option>
+            ))}
+          </CustomSelect>
+        ) : (
+          <div className={`rounded-sm px-1.5 py-1 text-11 ${cycleStatusDetails.bgColor} ${cycleStatusDetails.textColor}`}>
+            {t(cycleStatusDetails.i18n_title)}
+          </div>
+        )
       )}
       <CycleAdditionalActions cycleId={cycleId} projectId={projectId} />
       {showTransferIssues && (

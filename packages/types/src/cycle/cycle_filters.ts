@@ -11,6 +11,7 @@ export type TCycleLayoutOptions = "list" | "board" | "gantt";
 export type TCycleDisplayFilters = {
   active_tab?: TCycleTabOptions;
   layout?: TCycleLayoutOptions;
+  group_by?: "state" | "owned_by" | "release" | "none";
 };
 
 export type TCycleFilters = {

@@ -6,7 +6,7 @@
 
 import { useCallback, useState } from "react";
 import { observer } from "mobx-react";
-import { useParams } from "next/navigation";
+import { useParams, usePathname } from "next/navigation";
 // plane imports
 import { EIssueFilterType, ISSUE_LAYOUTS, ISSUE_DISPLAY_FILTERS_BY_PAGE } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
@@ -32,6 +32,7 @@ const SUPPORTED_LAYOUTS = [
 export const CycleIssuesMobileHeader = observer(function CycleIssuesMobileHeader() {
   // router
   const { workspaceSlug, projectId, cycleId } = useParams();
+  const pathname = usePathname();
   // states
   const [analyticsModal, setAnalyticsModal] = useState(false);
   // plane hooks
@@ -45,6 +46,7 @@ export const CycleIssuesMobileHeader = observer(function CycleIssuesMobileHeader
   // derived values
   const activeLayout = issueFilters?.displayFilters?.layout;
   const cycleDetails = cycleId ? getCycleById(cycleId.toString()) : undefined;
+  const isOverviewActive = /\/overview\/?$/.test(pathname ?? "");
 
   const handleLayoutChange = useCallback(
     (layout: EIssueLayoutTypes) => {
@@ -87,6 +89,8 @@ export const CycleIssuesMobileHeader = observer(function CycleIssuesMobileHeader
     },
     [workspaceSlug, projectId, cycleId, updateFilters]
   );
+
+  if (isOverviewActive) return null;
 
   return (
     <>

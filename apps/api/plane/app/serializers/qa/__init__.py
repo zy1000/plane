@@ -114,7 +114,7 @@ class TestPlanDetailSerializer(ModelSerializer):
         return obj.plan_cases.count()
 
     def get_pass_rate(self, obj: TestPlan):
-        queryset = PlanCase.objects.filter(plan=obj).values('result').annotate(count=Count('result'))
+        queryset = obj.plan_cases.all().values("result").annotate(count=Count("result"))
         statis = {label: 0 for label in PlanCase.Result.values}
         for annotate_result in queryset:
             statis[annotate_result['result']] = annotate_result['count']
@@ -139,6 +139,68 @@ class TestPlanDetailSerializer(ModelSerializer):
     class Meta:
         model = TestPlan
         fields = '__all__'
+
+
+def build_plan_stats_map(plan_ids):
+    """一次聚合拿到列表页所有 plan 的用例统计，避免 N+1。"""
+    empty_pass_rate = {label: 0 for label in PlanCase.Result.values}
+    stats = {
+        plan_id: {"case_count": 0, "success_count": 0, "pass_rate": dict(empty_pass_rate)}
+        for plan_id in plan_ids
+    }
+    if not plan_ids:
+        return stats
+
+    rows = (
+        PlanCase.objects.filter(plan_id__in=plan_ids)
+        .values("plan_id", "result")
+        .annotate(count=Count("id"))
+    )
+    for row in rows:
+        entry = stats[row["plan_id"]]
+        entry["case_count"] += row["count"]
+        if row["result"] in entry["pass_rate"]:
+            entry["pass_rate"][row["result"]] = row["count"]
+        if row["result"] == PlanCase.Result.SUCCESS:
+            entry["success_count"] += row["count"]
+    return stats
+
+
+class TestPlanListSerializer(ModelSerializer):
+    """测试计划列表专用序列化器，避免返回大体量 cases 字段。
+
+    统计字段依赖 `context['plan_stats']`，需由调用方提前批量聚合好。
+    """
+
+    case_count = serializers.SerializerMethodField()
+    pass_rate = serializers.SerializerMethodField()
+    result = serializers.SerializerMethodField()
+    repository_name = serializers.SlugRelatedField(source='repository', read_only=True, slug_field='name')
+
+    def _stats(self, obj: TestPlan):
+        plan_stats = self.context.get('plan_stats') or {}
+        return plan_stats.get(obj.id) or {
+            "case_count": 0,
+            "success_count": 0,
+            "pass_rate": {label: 0 for label in PlanCase.Result.values},
+        }
+
+    def get_case_count(self, obj: TestPlan):
+        return self._stats(obj)["case_count"]
+
+    def get_pass_rate(self, obj: TestPlan):
+        return dict(self._stats(obj)["pass_rate"])
+
+    def get_result(self, obj: TestPlan):
+        stats = self._stats(obj)
+        total = stats["case_count"]
+        if not total:
+            return '-'
+        return '通过' if (stats["success_count"] / total) * 100 >= obj.threshold else '不通过'
+
+    class Meta:
+        model = TestPlan
+        exclude = ['cases']
 
 
 class TestCaseRepositorySerializer(ModelSerializer):

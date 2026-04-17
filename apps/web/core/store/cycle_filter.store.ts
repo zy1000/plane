@@ -129,6 +129,12 @@ export class CycleFilterStore implements ICycleFilterStore {
       this.displayFilters[projectId] = {
         active_tab: displayFilters?.active_tab || "active",
         layout: displayFilters?.layout || "list",
+        group_by:
+          displayFilters?.group_by === "owned_by" ||
+          displayFilters?.group_by === "release" ||
+          displayFilters?.group_by === "none"
+            ? displayFilters.group_by
+            : "state",
       };
       this.filters[projectId] = this.filters[projectId] ?? {
         default: {},
