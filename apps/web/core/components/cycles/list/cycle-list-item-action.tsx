@@ -89,11 +89,20 @@ export const CycleListItemAction = observer(function CycleListItemAction(props: 
   // derived values
   const cycleStatus = cycleDetails.status ?? "not_started";
   const cycleStatusDetails = CYCLE_STATUS.find((status) => status.value === cycleStatus);
+  const displayProperties = currentProjectDisplayFilters?.display_properties ?? {};
+  const showStatusProperty = displayProperties.status !== false;
+  const showIssueCountProperty = displayProperties.issue_count !== false;
+  const showStartDateProperty = displayProperties.start_date !== false;
+  const showEndDateProperty = displayProperties.end_date !== false;
+  const showDateRange = showStartDateProperty || showEndDateProperty;
+  const showCreatedByProperty = displayProperties.created_by !== false;
+  const showMembersProperty = displayProperties.members !== false;
   const showStatusInGroupedView =
-    currentProjectDisplayFilters?.group_by === "owned_by" ||
-    currentProjectDisplayFilters?.group_by === "state" ||
-    currentProjectDisplayFilters?.group_by === "release" ||
-    currentProjectDisplayFilters?.group_by === "none";
+    showStatusProperty &&
+    (currentProjectDisplayFilters?.group_by === "owned_by" ||
+      currentProjectDisplayFilters?.group_by === "state" ||
+      currentProjectDisplayFilters?.group_by === "release" ||
+      currentProjectDisplayFilters?.group_by === "none");
   const statusOptionsByCurrentStatus: Record<NonNullable<ICycle["status"]>, NonNullable<ICycle["status"]>[]> = {
     not_started: ["in_progress", "completed", "cancelled"],
     in_progress: ["completed", "cancelled"],
@@ -103,7 +112,10 @@ export const CycleListItemAction = observer(function CycleListItemAction(props: 
   };
   const statusOptions = statusOptionsByCurrentStatus[cycleStatus as NonNullable<ICycle["status"]>] ?? [];
 
-  const showIssueCount = useMemo(() => cycleStatus !== "completed" && cycleStatus !== "cancelled", [cycleStatus]);
+  const showIssueCount = useMemo(
+    () => showIssueCountProperty && cycleStatus !== "completed" && cycleStatus !== "cancelled",
+    [cycleStatus, showIssueCountProperty]
+  );
 
   const transferableIssuesCount = cycleDetails
     ? cycleDetails.total_issues - (cycleDetails.cancelled_issues + cycleDetails.completed_issues)
@@ -204,12 +216,6 @@ export const CycleListItemAction = observer(function CycleListItemAction(props: 
         <Eye className="my-auto h-4 w-4 text-accent-secondary" />
         <span>{t("project_cycles.more_details")}</span>
       </button>
-      {showIssueCount && (
-        <div className="flex items-center gap-1">
-          <WorkItemsIcon className="h-4 w-4 text-tertiary" />
-          <span className="text-11 text-tertiary">{cycleDetails.total_issues}</span>
-        </div>
-      )}
       {showStatusInGroupedView && cycleStatusDetails && (
         canChangeStatus ? (
           <CustomSelect
@@ -264,6 +270,12 @@ export const CycleListItemAction = observer(function CycleListItemAction(props: 
           </div>
         )
       )}
+      {showIssueCount && (
+        <div className="flex items-center gap-1">
+          <WorkItemsIcon className="h-4 w-4 text-tertiary" />
+          <span className="text-11 text-tertiary">{cycleDetails.total_issues}</span>
+        </div>
+      )}
       <CycleAdditionalActions cycleId={cycleId} projectId={projectId} />
       {showTransferIssues && (
         <div
@@ -279,34 +291,39 @@ export const CycleListItemAction = observer(function CycleListItemAction(props: 
       {isActive ? (
         <>
           <div className="flex gap-2">
-            {/* Duration */}
-            <Tooltip
-              tooltipContent={
-                <span className="flex gap-1">
-                  {renderFormattedDateInUserTimezone(cycleDetails.start_date ?? "")}
-                  <ArrowRight className="my-auto h-3 w-3 flex-shrink-0" />
-                  {renderFormattedDateInUserTimezone(cycleDetails.end_date ?? "")}
-                </span>
-              }
-              disabled={!isProjectTimeZoneDifferent()}
-              tooltipHeading={t("project_cycles.in_your_timezone")}
-            >
-              <div className="flex items-center gap-1 text-11 font-medium text-tertiary">
-                <CalendarDays className="my-auto h-3 w-3 flex-shrink-0" />
-                <MergedDateDisplay startDate={cycleDetails.start_date} endDate={cycleDetails.end_date} />
-              </div>
-            </Tooltip>
-            {projectUTCOffset && (
+            {showDateRange && (
+              <Tooltip
+                tooltipContent={
+                  <span className="flex gap-1">
+                    {renderFormattedDateInUserTimezone(cycleDetails.start_date ?? "")}
+                    <ArrowRight className="my-auto h-3 w-3 flex-shrink-0" />
+                    {renderFormattedDateInUserTimezone(cycleDetails.end_date ?? "")}
+                  </span>
+                }
+                disabled={!isProjectTimeZoneDifferent()}
+                tooltipHeading={t("project_cycles.in_your_timezone")}
+              >
+                <div className="flex items-center gap-1 text-11 font-medium text-tertiary">
+                  <CalendarDays className="my-auto h-3 w-3 flex-shrink-0" />
+                  <MergedDateDisplay
+                    startDate={showStartDateProperty ? cycleDetails.start_date : null}
+                    endDate={showEndDateProperty ? cycleDetails.end_date : null}
+                  />
+                </div>
+              </Tooltip>
+            )}
+            {showDateRange && projectUTCOffset && (
               <span className="cursor-default rounded-md bg-layer-1 px-2 py-1 text-11 text-tertiary">
                 {projectUTCOffset}
               </span>
             )}
-            {/* created by */}
-            {createdByDetails && <ButtonAvatars showTooltip={false} userIds={createdByDetails?.id} />}
+            {showCreatedByProperty && createdByDetails && (
+              <ButtonAvatars showTooltip={false} userIds={createdByDetails?.id} />
+            )}
           </div>
         </>
       ) : (
-        cycleDetails.start_date && (
+        showDateRange && cycleDetails.start_date && (
           <>
             <DateRangeDropdown
               buttonVariant={"transparent-with-text"}
@@ -314,8 +331,8 @@ export const CycleListItemAction = observer(function CycleListItemAction(props: 
               buttonClassName="p-0"
               minDate={new Date()}
               value={{
-                from: getDate(cycleDetails.start_date),
-                to: getDate(cycleDetails.end_date),
+                from: showStartDateProperty ? getDate(cycleDetails.start_date) : undefined,
+                to: showEndDateProperty ? getDate(cycleDetails.end_date) : undefined,
               }}
               placeholder={{
                 from: t("project_cycles.start_date"),
@@ -341,9 +358,10 @@ export const CycleListItemAction = observer(function CycleListItemAction(props: 
           </>
         )
       )}
-      {/* created by */}
-      {createdByDetails && !isActive && <ButtonAvatars showTooltip={false} userIds={createdByDetails?.id} />}
-      {!isActive && (
+      {showCreatedByProperty && createdByDetails && !isActive && (
+        <ButtonAvatars showTooltip={false} userIds={createdByDetails?.id} />
+      )}
+      {showMembersProperty && !isActive && (
         <Tooltip tooltipContent={`${cycleDetails.assignee_ids?.length} Members`} isMobile={isMobile}>
           <div className="flex w-min cursor-default items-center justify-center">
             {cycleDetails.assignee_ids && cycleDetails.assignee_ids?.length > 0 ? (

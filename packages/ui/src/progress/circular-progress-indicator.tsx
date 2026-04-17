@@ -6,70 +6,63 @@
 
 import React from "react";
 
+/** Default progress stroke color (emerald, matches common “completion ring” UI). */
+const DEFAULT_PROGRESS_STROKE = "#10B981";
+/** Light gray track, concentric with progress ring. */
+const TRACK_STROKE = "#E5E7EB";
+
 interface ICircularProgressIndicator {
   size: number;
   percentage: number;
   strokeWidth?: number;
+  /** Background ring width; defaults to thinner than `strokeWidth`. */
+  trackStrokeWidth?: number;
   strokeColor?: string;
   children?: React.ReactNode;
 }
 
 export function CircularProgressIndicator(props: ICircularProgressIndicator) {
-  const { size = 40, percentage = 25, strokeWidth = 6, strokeColor = "stroke-success", children } = props;
+  const {
+    size = 40,
+    percentage = 25,
+    strokeWidth = 6,
+    trackStrokeWidth: trackStrokeWidthProp,
+    strokeColor = "stroke-success",
+    children,
+  } = props;
+
+  const progressStroke = strokeWidth;
+  const trackStroke =
+    trackStrokeWidthProp ??
+    Math.max(1.75, Math.min(progressStroke - 0.75, progressStroke * 0.62));
 
   const sqSize = size;
-  const radius = (size - strokeWidth) / 2;
+  const radius = (size - progressStroke) / 2;
   const viewBox = `0 0 ${sqSize} ${sqSize}`;
   const dashArray = radius * Math.PI * 2;
   const clampedPercentage = Math.min(Math.max(percentage, 0), 100);
   const dashOffset = dashArray - (dashArray * clampedPercentage) / 100;
+
   return (
-    <div className="relative">
-      <svg width={size} height={size} viewBox={viewBox} fill="none">
+    <div className="relative inline-flex shrink-0">
+      <svg width={size} height={size} viewBox={viewBox} fill="none" className="block">
         <circle
-          className="fill-none stroke-(--border-color-strong)"
+          className="fill-none"
           cx={size / 2}
           cy={size / 2}
           r={radius}
-          strokeWidth={`${strokeWidth}px`}
-          style={{ filter: "url(#filter0_bi_377_19141)" }}
+          stroke={TRACK_STROKE}
+          strokeWidth={`${trackStroke}px`}
         />
-        {/* <defs>
-          <filter
-            id="filter0_bi_377_19141"
-            x="-3.57544"
-            y="-3.57422"
-            width="45.2227"
-            height="45.2227"
-            filterUnits="userSpaceOnUse"
-            colorInterpolationFilters="sRGB"
-          >
-            <feFlood floodOpacity="0" result="BackgroundImageFix" />
-            <feGaussianBlur in="BackgroundImageFix" stdDeviation="2" />
-            <feComposite in2="SourceAlpha" operator="in" result="effect1_backgroundBlur_377_19141" />
-            <feBlend mode="normal" in="SourceGraphic" in2="effect1_backgroundBlur_377_19141" result="shape" />
-            <feColorMatrix
-              in="SourceAlpha"
-              type="matrix"
-              values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0"
-              result="hardAlpha"
-            />
-            <feOffset dx="1" dy="1" />
-            <feGaussianBlur stdDeviation="2" />
-            <feComposite in2="hardAlpha" operator="arithmetic" k2="-1" k3="1" />
-            <feColorMatrix type="matrix" values="0 0 0 0 0.63125 0 0 0 0 0.6625 0 0 0 0 0.75 0 0 0 0.35 0" />
-            <feBlend mode="normal" in2="shape" result="effect2_innerShadow_377_19141" />
-          </filter>
-        </defs> */}
         <circle
           className={`fill-none ${strokeColor}`}
           cx={size / 2}
           cy={size / 2}
           r={radius}
-          strokeWidth={`${strokeWidth}px`}
+          strokeWidth={`${progressStroke}px`}
           transform={`rotate(-90 ${size / 2} ${size / 2})`}
           style={{
-            stroke: strokeColor === "stroke-success" ? "#00a63e" : undefined,
+            ...(strokeColor === "stroke-success" ? { stroke: DEFAULT_PROGRESS_STROKE } : {}),
             strokeDasharray: dashArray,
             strokeDashoffset: dashOffset,
           }}
@@ -77,16 +70,7 @@ export function CircularProgressIndicator(props: ICircularProgressIndicator) {
           strokeLinejoin="round"
         />
       </svg>
-      <div
-        className="absolute"
-        style={{
-          top: "50%",
-          left: "50%",
-          transform: "translate(-50%, -50%)",
-        }}
-      >
-        {children}
-      </div>
+      <div className="pointer-events-none absolute inset-0 flex items-center justify-center">{children}</div>
     </div>
   );
 }

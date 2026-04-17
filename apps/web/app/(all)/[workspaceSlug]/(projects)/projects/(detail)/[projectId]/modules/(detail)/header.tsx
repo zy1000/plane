@@ -268,7 +268,7 @@ export const ModuleIssuesHeader = observer(function ModuleIssuesHeader() {
             {canUserCreateIssue && (
               <>
                 <Button onClick={() => setAnalyticsModal(true)} variant="secondary" size="lg">
-                  <span className="hidden @4xl:flex">Analytics</span>
+                  <span className="hidden @4xl:flex">{t("common.analytics")}</span>
                   <span className="@4xl:hidden">
                     <ChartNoAxesColumn className="size-3.5" />
                   </span>

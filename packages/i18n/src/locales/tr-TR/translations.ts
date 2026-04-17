@@ -1344,6 +1344,12 @@ export default {
       },
     },
   },
+  work_items_analytics_modal: {
+    title: "Analytics for {project}",
+    title_with_cycle: "Analytics for {project} in {cycle}",
+    title_with_module: "Analytics for {project} in {module}",
+    title_with_cycle_and_module: "Analytics for {project} in {cycle} in {module}",
+  },
   workspace_analytics: {
     label: "Analitik",
     page_label: "{workspace} - Analitik",
@@ -2020,6 +2026,7 @@ export default {
   project_cycles: {
     add_cycle: "Döngü ekle",
     more_details: "Daha fazla detay",
+    tab_iteration_scope: "Yineleme kapsamı",
     cycle: "Döngü",
     update_cycle: "Döngüyü güncelle",
     create_cycle: "Döngü oluştur",

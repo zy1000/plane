@@ -1347,6 +1347,12 @@ export default {
       },
     },
   },
+  work_items_analytics_modal: {
+    title: "Analytics for {project}",
+    title_with_cycle: "Analytics for {project} in {cycle}",
+    title_with_module: "Analytics for {project} in {module}",
+    title_with_cycle_and_module: "Analytics for {project} in {cycle} in {module}",
+  },
   workspace_analytics: {
     label: "Phân tích",
     page_label: "{workspace} - Phân tích",
@@ -2045,6 +2051,7 @@ export default {
   project_cycles: {
     add_cycle: "Thêm chu kỳ",
     more_details: "Thêm chi tiết",
+    tab_iteration_scope: "Phạm vi lặp",
     cycle: "Chu kỳ",
     update_cycle: "Cập nhật chu kỳ",
     create_cycle: "Tạo chu kỳ",

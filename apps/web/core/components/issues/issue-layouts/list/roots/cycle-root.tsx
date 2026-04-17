@@ -32,10 +32,7 @@ export const CycleListLayout = observer(function CycleListLayout() {
     EUserPermissionsLevel.PROJECT
   );
 
-  const canEditIssueProperties = useCallback(
-    () => !isCompletedCycle && isEditingAllowed,
-    [isCompletedCycle, isEditingAllowed]
-  );
+  const canEditIssueProperties = useCallback(() => isEditingAllowed, [isEditingAllowed]);
 
   const addIssuesToView = useCallback(
     (issueIds: string[]) => {

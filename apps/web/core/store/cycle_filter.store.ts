@@ -135,6 +135,16 @@ export class CycleFilterStore implements ICycleFilterStore {
           displayFilters?.group_by === "none"
             ? displayFilters.group_by
             : "state",
+        order_by: displayFilters?.order_by ?? "manual",
+        display_properties: {
+          status: true,
+          issue_count: true,
+          start_date: true,
+          end_date: true,
+          created_by: true,
+          members: true,
+          ...(displayFilters?.display_properties ?? {}),
+        },
       };
       this.filters[projectId] = this.filters[projectId] ?? {
         default: {},
@@ -151,7 +161,16 @@ export class CycleFilterStore implements ICycleFilterStore {
   updateDisplayFilters = (projectId: string, displayFilters: TCycleDisplayFilters) => {
     runInAction(() => {
       Object.keys(displayFilters).forEach((key) => {
-        set(this.displayFilters, [projectId, key], displayFilters[key as keyof TCycleDisplayFilters]);
+        const typedKey = key as keyof TCycleDisplayFilters;
+        if (typedKey === "display_properties" && displayFilters.display_properties) {
+          const current = this.displayFilters[projectId]?.display_properties ?? {};
+          set(this.displayFilters, [projectId, typedKey], {
+            ...current,
+            ...displayFilters.display_properties,
+          });
+        } else {
+          set(this.displayFilters, [projectId, typedKey], displayFilters[typedKey]);
+        }
       });
     });
   };

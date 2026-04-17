@@ -7,7 +7,7 @@
 import { startOfToday, format } from "date-fns";
 import { isEmpty, orderBy, sortBy, uniqBy } from "lodash-es";
 // plane imports
-import type { ICycle, TCycleFilters, TProgressSnapshot } from "@plane/types";
+import type { ICycle, TCycleFilters, TCycleOrderByOptions, TProgressSnapshot } from "@plane/types";
 // local imports
 import { findTotalDaysInRange, generateDateArray, getDate } from "./datetime";
 import { satisfiesDateFilter } from "./filter";
@@ -18,7 +18,11 @@ import { satisfiesDateFilter } from "./filter";
  * @param {boolean} sortByManual - Whether to sort by manual order
  * @returns {ICycle[]} Ordered array of cycles
  */
-export const orderCycles = (cycles: ICycle[], sortByManual: boolean): ICycle[] => {
+export const orderCycles = (
+  cycles: ICycle[],
+  sortByManual: boolean,
+  orderByOption?: TCycleOrderByOptions
+): ICycle[] => {
   if (cycles.length === 0) return [];
 
   const STATUS_ORDER: {
@@ -32,12 +36,47 @@ export const orderCycles = (cycles: ICycle[], sortByManual: boolean): ICycle[] =
   };
 
   let filteredCycles = [...cycles];
-  if (sortByManual) filteredCycles = sortBy(filteredCycles, [(c) => c.sort_order]);
-  else
+
+  // Explicit order_by takes precedence over legacy sortByManual flag
+  if (orderByOption && orderByOption !== "manual") {
+    const isDesc = orderByOption.startsWith("-");
+    const key = isDesc ? orderByOption.slice(1) : orderByOption;
+    const direction: "asc" | "desc" = isDesc ? "desc" : "asc";
+
+    const iteratee = (c: ICycle): string | number => {
+      switch (key) {
+        case "name":
+          return c.name?.toLowerCase() ?? "";
+        case "progress": {
+          const total = c.total_issues ?? 0;
+          const completed = c.completed_issues ?? 0;
+          return total > 0 ? completed / total : 0;
+        }
+        case "issues":
+          return c.total_issues ?? 0;
+        case "start_date":
+          return c.start_date ? new Date(c.start_date).getTime() : Number.POSITIVE_INFINITY;
+        case "end_date":
+          return c.end_date ? new Date(c.end_date).getTime() : Number.POSITIVE_INFINITY;
+        case "created_at":
+          return c.created_at ? new Date(c.created_at).getTime() : 0;
+        default:
+          return c.name?.toLowerCase() ?? "";
+      }
+    };
+
+    filteredCycles = orderBy(filteredCycles, [iteratee], [direction]);
+    return filteredCycles;
+  }
+
+  if (sortByManual || orderByOption === "manual") {
+    filteredCycles = sortBy(filteredCycles, [(c) => c.sort_order]);
+  } else {
     filteredCycles = sortBy(filteredCycles, [
       (c) => STATUS_ORDER[c.status ?? ""] ?? 999,
       (c) => (c.status === "not_started" ? c.start_date : c.name.toLowerCase()),
     ]);
+  }
 
   return filteredCycles;
 };

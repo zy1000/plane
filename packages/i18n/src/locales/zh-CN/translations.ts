@@ -1342,6 +1342,12 @@ export default {
       },
     },
   },
+  work_items_analytics_modal: {
+    title: "{project} 的分析",
+    title_with_cycle: "{project}（迭代 {cycle}）的分析",
+    title_with_module: "{project}（模块 {module}）的分析",
+    title_with_cycle_and_module: "{project}（迭代 {cycle} · 模块 {module}）的分析",
+  },
   workspace_analytics: {
     label: "分析",
     page_label: "{workspace} - 分析",
@@ -2055,6 +2061,7 @@ export default {
   project_cycles: {
     add_cycle: "添加迭代",
     more_details: "更多详情",
+    tab_iteration_scope: "迭代范围",
     cycle: "迭代",
     update_cycle: "更新迭代",
     create_cycle: "创建迭代",
@@ -2703,6 +2710,26 @@ export default {
   cycle: {
     label: "{count, plural, one {迭代} other {迭代}}",
     no_cycle: "无迭代",
+    order_by: {
+      manual: "手动",
+      name: "名称",
+      progress: "进度",
+      issues: "工作项数量",
+      start_date: "开始日期",
+      end_date: "结束日期",
+      last_created: "最近创建",
+    },
+    display: {
+      properties: {
+        label: "显示属性",
+        status: "状态",
+        issue_count: "工作项数量",
+        start_date: "开始日期",
+        end_date: "结束日期",
+        created_by: "创建人",
+        members: "成员",
+      },
+    },
   },
   module: {
     label: "{count, plural, one {模块} other {模块}}",

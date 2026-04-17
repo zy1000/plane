@@ -1326,6 +1326,12 @@ export default {
       },
     },
   },
+  work_items_analytics_modal: {
+    title: "{project} 的分析",
+    title_with_cycle: "{project}（迭代 {cycle}）的分析",
+    title_with_module: "{project}（模組 {module}）的分析",
+    title_with_cycle_and_module: "{project}（迭代 {cycle} · 模組 {module}）的分析",
+  },
   workspace_analytics: {
     label: "分析",
     page_label: "{workspace} - 分析",
@@ -2012,6 +2018,7 @@ export default {
   project_cycles: {
     add_cycle: "新增週期",
     more_details: "更多詳細資訊",
+    tab_iteration_scope: "迭代範圍",
     cycle: "週期",
     update_cycle: "更新週期",
     create_cycle: "建立週期",

@@ -29,10 +29,7 @@ export const CycleSpreadsheetLayout = observer(function CycleSpreadsheetLayout()
     EUserPermissionsLevel.PROJECT
   );
 
-  const canEditIssueProperties = useCallback(
-    () => !isCompletedCycle && isEditingAllowed,
-    [isCompletedCycle, isEditingAllowed]
-  );
+  const canEditIssueProperties = useCallback(() => isEditingAllowed, [isEditingAllowed]);
 
   if (!cycleId) return null;
 

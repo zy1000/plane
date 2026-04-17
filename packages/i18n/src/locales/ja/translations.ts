@@ -1339,6 +1339,12 @@ export default {
       },
     },
   },
+  work_items_analytics_modal: {
+    title: "Analytics for {project}",
+    title_with_cycle: "Analytics for {project} in {cycle}",
+    title_with_module: "Analytics for {project} in {module}",
+    title_with_cycle_and_module: "Analytics for {project} in {cycle} in {module}",
+  },
   workspace_analytics: {
     label: "アナリティクス",
     page_label: "{workspace} - アナリティクス",
@@ -2034,6 +2040,7 @@ export default {
   project_cycles: {
     add_cycle: "サイクルを追加",
     more_details: "詳細情報",
+    tab_iteration_scope: "イテレーション範囲",
     cycle: "サイクル",
     update_cycle: "サイクルを更新",
     create_cycle: "サイクルを作成",

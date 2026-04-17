@@ -14,7 +14,7 @@ import { Tooltip } from "@plane/ui";
 import { cn } from "@plane/utils";
 import { useIssuesStore } from "@/hooks/use-issue-layout-store";
 
-/** 与「分组方式」筛选中的选项一致，用于侧栏标题「分组方式: {维度}」 */
+/** 与「分组方式」筛选中的选项一致，用于侧栏标题「分组方式 : {维度}」 */
 const getGroupByDimensionTranslationKey = (groupBy: TIssueGroupByOptions | null): string | undefined => {
   if (groupBy == null) return undefined;
   const fromList = ISSUE_GROUP_BY_OPTIONS.find((o) => o.key === groupBy)?.titleTranslationKey;
@@ -45,7 +45,7 @@ export const GroupSidebar = observer(function GroupSidebar(props: GroupSidebarPr
     const dimensionKey = getGroupByDimensionTranslationKey(groupBy);
     const groupByLabel = t("common.group_by");
     if (!dimensionKey) return groupByLabel;
-    return `${groupByLabel}: ${t(dimensionKey)}`;
+    return `${groupByLabel} : ${t(dimensionKey)}`;
   }, [groupBy, t]);
 
   return (

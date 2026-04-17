@@ -1,24 +1,47 @@
 "use client";
 import React, { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { observer } from "mobx-react";
-import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
-import { Plus, Unlink, Pencil, Download, Trash2 } from "lucide-react";
+import {
+  Plus,
+  Unlink,
+  Pencil,
+  Download,
+  Trash2,
+  CalendarDays,
+  ArrowRight,
+  SquareUser,
+  CheckCircle2,
+  PlayCircle,
+  Circle,
+  XCircle,
+  Layers,
+  Timer,
+} from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
+import { Tab } from "@headlessui/react";
 import { Button } from "@plane/propel/button";
-import { BarChart } from "@plane/propel/charts/bar-chart";
-import { PROJECT_ERROR_MESSAGES, STATE_GROUPS, isProjectPermissionError } from "@plane/constants";
+import { PieChart } from "@plane/propel/charts/pie-chart";
+import {
+  MODULE_STATUS,
+  PROJECT_ERROR_MESSAGES,
+  isProjectPermissionError,
+} from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
+import { CheckIcon, MembersPropertyIcon, WorkItemsIcon } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Dialog, Transition } from "@headlessui/react";
 import { Pagination, Popconfirm, Tag, Tooltip } from "antd";
+import { Avatar, AvatarGroup, CircularProgressIndicator, Loader } from "@plane/ui";
 import { ReadonlyDate } from "@/components/readonly/date";
 import { ReleaseService } from "@/services/release.service";
 import { WorkspaceService } from "@/services/workspace.service";
-import { renderFormattedPayloadDate, findTotalDaysInRange } from "@plane/utils";
+import { cn, getDate, getFileURL, renderFormattedPayloadDate, findTotalDaysInRange } from "@plane/utils";
 import { EFileAssetType } from "@plane/types";
+import { useMember } from "@/hooks/store/use-member";
 import { useRelease } from "@/hooks/store/use-release";
 import { useWorkspace } from "@/hooks/store/use-workspace";
 import { useEditorAsset } from "@/hooks/store/use-editor-asset";
+import useLocalStorage from "@/hooks/use-local-storage";
 import { RichTextEditor } from "@/components/editor/rich-text";
 
 type Props = {
@@ -34,6 +57,64 @@ type TReleaseFile = {
   created_at: string;
 };
 
+
+const sectionCard = "rounded-lg border border-subtle bg-surface-1";
+const kpiCardBase =
+  "rounded-lg border border-subtle bg-surface-1 px-4 py-5 transition-all duration-200 hover:border-primary/20 hover:shadow-sm";
+const kpiIconShell = "grid h-11 w-11 flex-shrink-0 place-items-center rounded-sm bg-surface-2";
+const kpiLabelClass = "text-sm font-medium text-primary";
+const kpiValueNumberClass = "text-18 font-semibold text-primary";
+const kpiValueUnitClass = "text-sm font-normal text-primary";
+
+type KpiCardProps = {
+  icon: React.ReactNode;
+  label: string;
+  value: number;
+  iconColor?: string;
+};
+
+function KpiCard({ icon, label, value, iconColor }: KpiCardProps) {
+  return (
+    <div className={kpiCardBase}>
+      <div className="flex items-center gap-2.5">
+        <div className={kpiIconShell}>
+          <span className={iconColor}>{icon}</span>
+        </div>
+        <div className="min-w-0 flex-1 space-y-1.5">
+          <div className={kpiLabelClass}>{label}</div>
+          <div className="flex items-baseline gap-1">
+            <span className={kpiValueNumberClass}>{value}</span>
+            <span className={kpiValueUnitClass}>个</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const OVERVIEW_TABS = [
+  { key: "stat-test-plans", label: "测试计划" },
+  { key: "stat-cycles", label: "关联迭代" },
+  { key: "stat-files", label: "文件" },
+];
+
+const formatDateLabel = (d: Date | null | undefined) => {
+  if (!d) return "-";
+  return d.toLocaleDateString("zh-CN", { month: "short", day: "numeric", year: "numeric" });
+};
+
+const TYPE_PIE_COLORS = [
+  "#3f76ff",
+  "#f59e0b",
+  "#16a34a",
+  "#ef4444",
+  "#8b5cf6",
+  "#06b6d4",
+  "#ec4899",
+  "#14b8a6",
+  "#f97316",
+  "#64748b",
+];
 
 const PASS_RATE_KEYS = ["成功", "失败", "阻塞", "无效", "未执行"] as const;
 const PASS_RATE_COLORS: Record<string, string> = {
@@ -124,8 +205,13 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
   const releaseDetails = getReleaseById(releaseId);
   const { getWorkspaceBySlug } = useWorkspace();
   const workspaceId = workspaceSlug ? getWorkspaceBySlug(workspaceSlug.toString())?.id : undefined;
+  const { getUserDetails } = useMember();
   const { uploadEditorAsset, duplicateEditorAsset } = useEditorAsset();
   const workspaceService = useMemo(() => new WorkspaceService(), []);
+  const { storedValue: currentTab, setValue: setCurrentTab } = useLocalStorage(
+    `release-overview-tab-${releaseId}`,
+    "stat-test-plans"
+  );
 
   const todayStr = renderFormattedPayloadDate(new Date());
   const rawDays =
@@ -135,18 +221,11 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
   const daysLeft = typeof rawDays === "number" ? Math.max(0, rawDays) : undefined;
 
   const status = releaseDetails?.status;
-  const isBacklog = status === "backlog";
-  const isProgress = status === "planned" || status === "in-progress" || status === "paused";
-  const isCompleted = status === "completed";
-  const isCancelled = status === "cancelled";
-  const progressLabelClass =
-    isProgress || isCompleted || isCancelled
-      ? "text-warning-primary bg-warning-subtle"
-      : "text-secondary bg-layer-1";
-  const line1BorderClass = isBacklog ? "border-subtle" : "border-warning-strong";
-  const line2BorderClass = isCompleted ? "border-success-strong" : isCancelled ? "border-danger-strong" : "border-subtle";
-  const line1BorderStyle = isBacklog ? "border-dashed" : "border-solid";
-  const line2BorderStyle = isCompleted || isCancelled ? "border-solid" : "border-dashed";
+  const statusInfo = MODULE_STATUS.find((s) => s.value === status);
+
+  const releaseLead = releaseDetails?.lead_id ? getUserDetails(releaseDetails.lead_id) : undefined;
+  const releaseStartDate = getDate(releaseDetails?.start_date);
+  const releaseTargetDate = getDate(releaseDetails?.target_date);
 
   const releaseService = useMemo(() => new ReleaseService(), []);
   const [cycles, setCycles] = useState<any[]>([]);
@@ -460,479 +539,514 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
   };
 
   const typeDistribution = Array.isArray(stats?.type_distribution) ? stats.type_distribution : [];
-  const showTypeDistributionTooltip = typeDistribution.some((t: any) => {
-    const total =
-      Number(t?.backlog ?? 0) +
-      Number(t?.unstarted ?? 0) +
-      Number(t?.started ?? 0) +
-      Number(t?.completed ?? 0) +
-      Number(t?.cancelled ?? 0);
-    return total > 0;
-  });
+
+  const typePieData = useMemo(() => {
+    return (typeDistribution as any[])
+      .map((t: any, idx: number) => {
+        const count =
+          Number(t?.backlog ?? 0) +
+          Number(t?.unstarted ?? 0) +
+          Number(t?.started ?? 0) +
+          Number(t?.completed ?? 0) +
+          Number(t?.cancelled ?? 0);
+        const typeId = t?.["type__id"] ?? `type-${idx}`;
+        return {
+          id: String(typeId),
+          key: String(typeId),
+          name: t?.["type__name"] ?? "未命名",
+          value: count,
+          count,
+          color: TYPE_PIE_COLORS[idx % TYPE_PIE_COLORS.length],
+          typeId: t?.["type__id"] ?? null,
+        };
+      })
+      .filter((item) => item.value > 0);
+  }, [typeDistribution]);
+
+  const typePieTotal = typePieData.reduce((sum, item) => sum + item.value, 0);
+
+  const totalIssues = Number(stats?.total_issues ?? 0);
+  const backlogIssues = Number(stats?.state_distribution?.backlog ?? 0);
+  const inProgressIssues = Number(
+    (stats?.state_distribution?.unstarted ?? 0) + (stats?.state_distribution?.started ?? 0)
+  );
+  const completedIssues = Number(stats?.state_distribution?.completed ?? 0);
+  const cancelledIssues = Number(stats?.state_distribution?.cancelled ?? 0);
+  const progress = totalIssues > 0 ? Math.floor((completedIssues / totalIssues) * 100) : 0;
+
+  const normalizedOverviewTab = OVERVIEW_TABS.some((t) => t.key === currentTab)
+    ? (currentTab as string)
+    : "stat-test-plans";
+  const overviewTabIndex = OVERVIEW_TABS.findIndex((tab) => tab.key === normalizedOverviewTab);
+
+  if (!releaseDetails) {
+    return (
+      <div className="h-full w-full overflow-y-auto vertical-scrollbar scrollbar-sm">
+        <div className="flex flex-col gap-5 px-6 py-4">
+          <Loader className="max-w-xl">
+            <Loader.Item height="16px" />
+            <Loader.Item height="16px" />
+            <Loader.Item height="16px" />
+          </Loader>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="h-full overflow-y-auto vertical-scrollbar scrollbar-sm">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-canvas">
-        <div className="md:col-span-2 bg-surface-1 border border-subtle shadow-md p-4">
-          <div className="text-sm font-medium text-secondary mb-3">基本信息</div>
-          <div className="flex flex-col md:flex-row md:items-stretch md:justify-between gap-3">
-            <div className="md:w-1/3">
-              <div className="grid grid-cols-2 gap-2">
-                <div className="text-sm text-secondary">距离发布还有：</div>
-                <div className="text-sm text-secondary">负责人：</div>
-                <div className="text-base font-medium text-primary">
-                  {releaseDetails?.target_date ? `${daysLeft ?? 0}天` : "--"}
-                </div>
-                <div>
-                  <div className="w-full rounded-md border border-transparent text-sm hover:border-blue-300 focus-within:border-blue-400 focus-within:ring-1 focus-within:ring-blue-300">
-                    <MemberDropdown
-                      multiple={false}
-                      disabled={true}
-                      value={releaseDetails?.lead_id ?? null}
-                      placeholder="请选择维护人"
-                      className="w-full text-sm"
-                      buttonContainerClassName="w-full text-left"
-                      buttonVariant="transparent-with-text"
-                      buttonClassName="text-sm"
-                      dropdownArrowClassName="h-3.5 w-3.5"
-                      showUserDetails={true}
-                      optionsClassName="z-[60]"
-                      projectId={releaseDetails?.project_id}
-                      onChange={() => {}}
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div className="hidden md:flex items-center flex-shrink-0">
-              <div className="h-12 border-l border-subtle"></div>
-            </div>
-
-            <div className="md:w-2/3 flex md:items-center">
-              <div className="flex items-center gap-2 md:gap-3 w-full">
-                <div
-                  className={`px-3 py-1 rounded-full text-xs font-medium ${isBacklog ? "text-primary bg-layer-1-active" : "text-secondary bg-layer-1"}`}
-                >
-                  未开始
-                </div>
-                <div className={`flex-1 h-0 border-t-2 ${line1BorderStyle} ${line1BorderClass}`}></div>
-                <div className={`px-3 py-1 rounded-full text-xs font-medium ${progressLabelClass}`}>进行中</div>
-                <div className={`flex-1 h-0 border-t-2 ${line2BorderStyle} ${line2BorderClass}`}></div>
-                <div
-                  className={`px-3 py-1 rounded-full text-xs font-medium ${isCompleted ? "text-success-primary bg-success-subtle" : isCancelled ? "text-danger-primary bg-danger-subtle" : "text-secondary bg-layer-1"}`}
-                >
-                  {isCancelled ? "已取消" : "已完成"}
-                </div>
-              </div>
+    <div className="h-full w-full overflow-y-auto vertical-scrollbar scrollbar-sm">
+      <div className="flex flex-col gap-5 px-6 py-4">
+        {/* Header: release name + meta */}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <div className="flex items-center gap-3">
+            <CircularProgressIndicator size={48} percentage={progress} strokeWidth={4}>
+              {progress === 100 ? (
+                <CheckIcon className="h-4 w-4 stroke-2 text-primary" />
+              ) : (
+                <span className="text-16 font-medium tabular-nums leading-none text-primary">{`${progress}%`}</span>
+              )}
+            </CircularProgressIndicator>
+            <div className="min-w-0">
+              <h1 className="shrink-0 text-lg font-normal text-primary">{releaseDetails.name || "概览"}</h1>
             </div>
           </div>
-        </div>
 
-        <div className="h-[430px] bg-surface-1 border border-subtle shadow-md flex flex-col">
-          <div className="p-4 ">
-            <div className="text-base font-semibold text-primary">发布进度</div>
-          </div>
-          <div className="px-4 pb-4">
-            {statsLoading ? (
-              <div className="flex items-center justify-center py-8 text-sm text-secondary">加载中...</div>
-            ) : statsError ? (
-              <div className="bg-red-50 border border-red-200 rounded-md p-3 text-sm text-red-800">{statsError}</div>
-            ) : (
-              <>
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-3">
-                  {[
-                    {
-                      label: "全部",
-                      value: Number(stats?.total_issues ?? 0),
-                      color: "text-primary",
-                    },
-                    {
-                      label: "未开始",
-                      value: Number(stats?.state_distribution?.backlog ?? 0),
-                      color: "text-primary",
-                    },
-                    {
-                      label: "进行中",
-                      value: Number(
-                        (stats?.state_distribution?.unstarted ?? 0) + (stats?.state_distribution?.started ?? 0)
-                      ),
-                      color: "text-warning-primary",
-                    },
-                    {
-                      label: "已完成",
-                      value: Number(stats?.state_distribution?.completed ?? 0),
-                      color: "text-success-primary",
-                    },
-                    {
-                      label: "已取消",
-                      value: Number(stats?.state_distribution?.cancelled ?? 0),
-                      color: "text-danger-primary",
-                    },
-                  ].map((item) => (
-                    <div key={item.label} className="rounded-md border border-subtle p-2">
-                      <div className="text-xs text-secondary">{item.label}</div>
-                      <div className={`mt-1 text-xl font-semibold ${item.color}`}>{item.value}</div>
-                    </div>
-                  ))}
-                </div>
-                <div className="h-[300px]">
-                  <BarChart
-                    className="h-full w-full"
-                    data={(stats?.type_distribution ?? []).map((t: any) => ({
-                      name: t?.["type__name"] ?? "",
-                      notStarted: Number(t?.backlog ?? 0),
-                      inProgress: Number((t?.unstarted ?? 0) + (t?.started ?? 0)),
-                      completed: Number(t?.completed ?? 0),
-                      cancelled: Number(t?.cancelled ?? 0),
-                      typeId: t?.["type__id"] ?? null,
-                    }))}
-                    bars={[
-                      {
-                        key: "notStarted",
-                        label: "未开始",
-                        stackId: "group-a",
-                        fill: STATE_GROUPS.backlog.color,
-                        textClassName: "",
-                        showPercentage: false,
-                        showTopBorderRadius: (_key, payload: any) =>
-                          Number(payload?.inProgress ?? 0) +
-                            Number(payload?.completed ?? 0) +
-                            Number(payload?.cancelled ?? 0) ===
-                          0,
-                        showBottomBorderRadius: () => true,
-                        strokeColor: "#ffffff",
-                        strokeWidth: 1,
-                      },
-                      {
-                        key: "inProgress",
-                        label: "进行中",
-                        stackId: "group-a",
-                        fill: STATE_GROUPS.started.color,
-                        textClassName: "",
-                        showPercentage: false,
-                        showTopBorderRadius: (_key, payload: any) =>
-                          Number(payload?.completed ?? 0) + Number(payload?.cancelled ?? 0) === 0,
-                        showBottomBorderRadius: () => false,
-                        strokeColor: "#ffffff",
-                        strokeWidth: 1,
-                      },
-                      {
-                        key: "completed",
-                        label: "已完成",
-                        stackId: "group-a",
-                        fill: STATE_GROUPS.completed.color,
-                        textClassName: "",
-                        showPercentage: false,
-                        showTopBorderRadius: (_key, payload: any) => Number(payload?.cancelled ?? 0) === 0,
-                        showBottomBorderRadius: () => false,
-                        strokeColor: "#ffffff",
-                        strokeWidth: 1,
-                      },
-                      {
-                        key: "cancelled",
-                        label: "已取消",
-                        stackId: "group-a",
-                        fill: STATE_GROUPS.cancelled.color,
-                        textClassName: "",
-                        showPercentage: false,
-                        showTopBorderRadius: () => true,
-                        showBottomBorderRadius: () => false,
-                        strokeColor: "#ffffff",
-                        strokeWidth: 1,
-                      },
-                    ]}
-                    xAxis={{
-                      key: "name",
-                    }}
-                    yAxis={{
-                      key: "count",
-                    }}
-                    margin={{ left: -20, bottom: 16 }}
-                    legend={{
-                      align: "left",
-                      verticalAlign: "bottom",
-                      layout: "horizontal",
-                      wrapperStyles: {
-                        justifyContent: "start",
-                        alignContent: "start",
-                        paddingLeft: "20px",
-                        paddingTop: "8px",
-                        paddingBottom: "12px",
-                      },
-                    }}
-                    barSize={18}
-                    showTooltip={showTypeDistributionTooltip}
-                    onBarClick={({ barKey, payload, label }) => {
-                      const typeId = payload?.typeId;
-                      if (!workspaceSlug || !projectId || !typeId) return;
-                      router.push(`/${workspaceSlug}/projects/${projectId}/issues?type_id=${typeId}`);
-                    }}
-                  />
-                </div>
-              </>
+          <div className="flex flex-wrap items-center gap-3">
+            {statusInfo && (
+              <span
+                className="inline-flex items-center rounded-md px-2.5 py-1 text-xs font-medium"
+                style={{ color: statusInfo.color, backgroundColor: `${statusInfo.color}20` }}
+              >
+                {t(statusInfo.i18n_label)}
+              </span>
+            )}
+            {releaseStartDate && releaseTargetDate && (
+              <span className="inline-flex items-center gap-1.5 text-sm text-placeholder">
+                <CalendarDays className="h-3.5 w-3.5 text-placeholder" />
+                {formatDateLabel(releaseStartDate)}
+                <ArrowRight className="h-3 w-3 text-placeholder" />
+                {formatDateLabel(releaseTargetDate)}
+              </span>
+            )}
+            {typeof daysLeft === "number" && (
+              <span className="inline-flex items-center gap-1.5 text-sm text-placeholder">
+                <Timer className="h-3.5 w-3.5 text-placeholder" />
+                距离发布还有 <span className="font-medium tabular-nums text-primary">{daysLeft}</span> 天
+              </span>
+            )}
+            {releaseLead && (
+              <span className="inline-flex items-center gap-1.5 text-sm text-placeholder">
+                <SquareUser className="h-3.5 w-3.5 text-placeholder" />
+                <Avatar size="sm" name={releaseLead.display_name} src={getFileURL(releaseLead.avatar_url ?? "")} />
+                <span>{releaseLead.display_name}</span>
+              </span>
+            )}
+            {releaseDetails.member_ids && releaseDetails.member_ids.length > 0 && (
+              <span className="inline-flex items-center gap-1.5 text-sm text-placeholder">
+                <MembersPropertyIcon className="h-3.5 w-3.5 text-placeholder" />
+                <AvatarGroup showTooltip>
+                  {releaseDetails.member_ids.map((id) => {
+                    const m = getUserDetails(id);
+                    return <Avatar key={id} name={m?.display_name ?? ""} src={getFileURL(m?.avatar_url ?? "")} />;
+                  })}
+                </AvatarGroup>
+                <span>{releaseDetails.member_ids.length} {t("members")}</span>
+              </span>
             )}
           </div>
         </div>
-        <div className="h-[430px] relative bg-surface-1 border border-subtle shadow-md p-4 group flex flex-col overflow-hidden">
-          <div className="flex items-center justify-between">
-            <div className="text-base font-semibold text-primary">发布日志</div>
-            <div className="flex">
-              <Button variant="ghost" className="p-0 opacity-0 group-hover:opacity-100" onClick={handleNoteOpen}>
+
+        {releaseDetails.description && (
+          <p className="line-clamp-2 text-sm leading-relaxed text-secondary">{releaseDetails.description}</p>
+        )}
+
+        {/* KPI Cards */}
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
+          <KpiCard
+            icon={<Layers className="h-5 w-5" />}
+            label={t("work_items")}
+            value={totalIssues}
+            iconColor="text-[#3f76ff]"
+          />
+          <KpiCard
+            icon={<Circle className="h-5 w-5" />}
+            label="未开始"
+            value={backlogIssues}
+            iconColor="text-[#64748b]"
+          />
+          <KpiCard
+            icon={<PlayCircle className="h-5 w-5" />}
+            label="进行中"
+            value={inProgressIssues}
+            iconColor="text-[#F59E0B]"
+          />
+          <KpiCard
+            icon={<CheckCircle2 className="h-5 w-5" />}
+            label="已完成"
+            value={completedIssues}
+            iconColor="text-success-primary"
+          />
+          <KpiCard
+            icon={<XCircle className="h-5 w-5" />}
+            label="已取消"
+            value={cancelledIssues}
+            iconColor="text-danger-primary"
+          />
+        </div>
+
+        {/* Release log + Activity (moved above chart row) */}
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+          <div className={`${sectionCard} group relative flex h-[280px] flex-col overflow-hidden p-4`}>
+            <div className="flex items-center justify-between">
+              <div className="text-sm font-medium text-primary">发布日志</div>
+              <Button
+                variant="link-neutral"
+                className="p-0 opacity-0 transition-opacity group-hover:opacity-100"
+                onClick={handleNoteOpen}
+              >
                 <Pencil className="h-3.5 w-3.5" />
               </Button>
             </div>
-          </div>
-          <div className="mt-3 flex-1 min-h-0 overflow-hidden">
-            {releaseDetails?.note ? (
-              <div
-                className="prose max-w-none text-sm text-secondary"
-                dangerouslySetInnerHTML={{ __html: releaseDetails.note }}
-              />
-            ) : (
-              <div className="text-sm text-secondary">暂无发布日志</div>
-            )}
-          </div>
-        </div>
-        <div className="relative bg-surface-1 border border-subtle shadow-md p-4 group">
-          <div className="flex items-center justify-between">
-            <div className="text-base font-semibold text-primary">关联迭代</div>
-            <div className="flex">
-              <Button
-                variant="ghost"
-                className="p-0"
-                onClick={() => {
-                  setAssociateOpen(true);
-                  fetchSelectable(1, selectPageSize);
-                }}
-              >
-                <Plus className="h-3.5 w-3.5" />
-              </Button>
+            <div className="mt-3 min-h-0 flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm">
+              {releaseDetails.note ? (
+                <div
+                  className="prose max-w-none text-sm text-secondary"
+                  dangerouslySetInnerHTML={{ __html: releaseDetails.note }}
+                />
+              ) : (
+                <div className="grid h-full place-items-center text-sm text-placeholder">暂无发布日志</div>
+              )}
             </div>
           </div>
-          <div className="mt-3 max-h-[220px] overflow-y-auto vertical-scrollbar scrollbar-sm">
-            {cyclesLoading && (
-              <div className="flex items-center justify-center py-8 text-sm text-secondary">加载中...</div>
-            )}
-            {cyclesError && (
-              <div className="bg-red-50 border border-red-200 rounded-md p-3 text-sm text-red-800">{cyclesError}</div>
-            )}
-            {!cyclesLoading && !cyclesError && (
-              <div className="overflow-x-auto">
-                <table className="min-w-full table-fixed">
-                  <thead>
-                    <tr className="text-left text-xs text-secondary border-b border-subtle">
-                      <th className="w-2/5 px-2 py-2">名称</th>
-                      <th className="w-1/5 px-2 py-2">开始时间</th>
-                      <th className="w-1/5 px-2 py-2">结束时间</th>
-                      <th className="w-1/5 px-2 py-2"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {cycles.length === 0 && (
-                      <tr>
-                        <td className="px-2 py-6 text-sm text-secondary" colSpan={4}>
-                          暂无关联迭代
-                        </td>
-                      </tr>
-                    )}
-                    {cycles.map((c) => (
-                      <tr
-                        key={c.id}
-                        className="border-b border-subtle hover:bg-layer-1-hover"
-                        onMouseEnter={() => setHoverRowId(c.id)}
-                        onMouseLeave={() => setHoverRowId((prev) => (prev === c.id ? null : prev))}
-                      >
-                        <td className="px-2 py-2">
-                          <div className="flex items-center gap-2">
-                            <span className="truncate text-sm text-primary">{c.name}</span>
-                          </div>
-                        </td>
-                        <td className="px-2 py-2">
-                          <ReadonlyDate value={c.start_date} formatToken="yyyy-MM-dd" hideIcon={true} />
-                        </td>
-                        <td className="px-2 py-2">
-                          <ReadonlyDate value={c.end_date} formatToken="yyyy-MM-dd" hideIcon={true} />
-                        </td>
-                        <td className="px-2 py-2 text-right">
-                          <Button variant="ghost" className="p-0" onClick={() => handleCancelAssociation(c.id)}>
-                            <Unlink className="h-3.5 w-3.5" />
-                          </Button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+
+          <div className={`${sectionCard} flex h-[280px] flex-col p-4`}>
+            <div className="text-sm font-medium text-primary">发布动态</div>
+            <div className="mt-3 grid min-h-0 flex-1 place-items-center text-sm text-placeholder">
+              {t("no_data_yet")}
+            </div>
           </div>
         </div>
-        <div className="h-[300px] relative bg-surface-1 border border-subtle shadow-md p-4 group flex flex-col overflow-hidden">
-          <div className="text-base font-semibold text-primary">测试计划</div>
-          <div className="mt-3 flex-1 min-h-0 overflow-y-auto vertical-scrollbar scrollbar-sm">
-            {plansLoading && (
-              <div className="flex items-center justify-center py-8 text-sm text-secondary">加载中...</div>
-            )}
-            {plansError && (
-              <div className="bg-red-50 border border-red-200 rounded-md p-3 text-sm text-red-800">{plansError}</div>
-            )}
-            {!plansLoading && !plansError && (
-              <div className="overflow-x-auto">
-                <table className="min-w-full table-fixed">
-                  <thead>
-                    <tr className="text-left text-xs text-secondary border-b border-subtle">
-                      <th className="w-[34%] px-2 py-2">名称</th>
-                      <th className="w-[14%] px-2 py-2">状态</th>
-                      <th className="w-[18%] px-2 py-2">通过率</th>
-                      <th className="w-[17%] px-2 py-2">开始时间</th>
-                      <th className="w-[17%] px-2 py-2">结束时间</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {plans.length === 0 && (
-                      <tr>
-                        <td className="px-2 py-6 text-sm text-secondary" colSpan={5}>
-                          暂无关联测试计划
-                        </td>
-                      </tr>
+
+        {/* Tabs + Work item type pie chart */}
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+          {/* Left: Tabs (测试计划 / 关联迭代 / 文件) */}
+          <div className={`${sectionCard} flex flex-col p-4`}>
+            <Tab.Group
+              selectedIndex={overviewTabIndex >= 0 ? overviewTabIndex : 0}
+              onChange={(index) => {
+                const nextTab = OVERVIEW_TABS[index]?.key;
+                if (nextTab) setCurrentTab(nextTab);
+              }}
+            >
+              <Tab.List
+                as="div"
+                className="flex w-full items-center justify-between gap-2 rounded-md bg-layer-2 p-1 text-11"
+              >
+                {OVERVIEW_TABS.map((tab) => (
+                  <Tab
+                    className={cn(
+                      "w-full cursor-pointer rounded-sm p-1 text-primary transition-all outline-none focus:outline-none",
+                      tab.key === normalizedOverviewTab
+                        ? "bg-layer-transparent-active text-secondary"
+                        : "text-placeholder hover:text-secondary"
                     )}
-                    {plans.map((p) => {
+                    key={tab.key}
+                  >
+                    {tab.label}
+                  </Tab>
+                ))}
+              </Tab.List>
+              <Tab.Panels className="min-h-0 flex-1 py-3 text-secondary">
+                {/* 测试计划 */}
+                <Tab.Panel key="stat-test-plans" className="flex h-full min-h-0 flex-col">
+                  {plansLoading ? (
+                    <div className="flex items-center justify-center py-8 text-sm text-secondary">加载中...</div>
+                  ) : plansError ? (
+                    <p className="text-sm text-danger-primary">{plansError}</p>
+                  ) : plans.length === 0 ? (
+                    <div className="grid h-32 place-items-center text-sm text-placeholder">暂无关联测试计划</div>
+                  ) : (
+                    <div className="min-h-0 flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm">
+                      <table className="min-w-full table-fixed">
+                        <thead>
+                          <tr className="border-b border-subtle text-left text-xs text-secondary">
+                            <th className="w-[34%] px-2 py-2">名称</th>
+                            <th className="w-[14%] px-2 py-2">状态</th>
+                            <th className="w-[18%] px-2 py-2">通过率</th>
+                            <th className="w-[17%] px-2 py-2">开始时间</th>
+                            <th className="w-[17%] px-2 py-2">结束时间</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {plans.map((p) => (
+                            <tr
+                              key={p.id}
+                              className="cursor-pointer border-b border-subtle hover:bg-layer-1"
+                              onClick={() => {
+                                router.push(
+                                  `/${workspaceSlug}/projects/${projectId}/testhub/plan-cases?planId=${p.id}`
+                                );
+                              }}
+                            >
+                              <td className="truncate px-2 py-2 text-sm text-primary" title={p.name ?? "-"}>
+                                {p.name ?? "-"}
+                              </td>
+                              <td className="px-2 py-2">
+                                <div className="flex items-center">{renderPlanStateTag(p.state)}</div>
+                              </td>
+                              <td className="px-2 py-2">
+                                <PlanPassRate passRate={p.pass_rate} />
+                              </td>
+                              <td className="px-2 py-2 text-sm text-primary">{p.begin_time || "-"}</td>
+                              <td className="px-2 py-2 text-sm text-primary">{p.end_time || "-"}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </Tab.Panel>
+
+                {/* 关联迭代 */}
+                <Tab.Panel key="stat-cycles" className="flex h-full min-h-0 flex-col">
+                  <div className="flex items-center justify-between pb-2">
+                    <span className="text-xs font-medium text-secondary">迭代</span>
+                    <Button
+                      variant="link-neutral"
+                      className="p-0"
+                      onClick={() => {
+                        setAssociateOpen(true);
+                        fetchSelectable(1, selectPageSize);
+                      }}
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                  {cyclesLoading ? (
+                    <div className="flex items-center justify-center py-8 text-sm text-secondary">加载中...</div>
+                  ) : cyclesError ? (
+                    <p className="text-sm text-danger-primary">{cyclesError}</p>
+                  ) : cycles.length === 0 ? (
+                    <div className="grid h-32 place-items-center text-sm text-placeholder">暂无关联迭代</div>
+                  ) : (
+                    <div className="min-h-0 flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm">
+                      <table className="min-w-full table-fixed">
+                        <thead>
+                          <tr className="border-b border-subtle text-left text-xs text-secondary">
+                            <th className="w-2/5 px-2 py-2">名称</th>
+                            <th className="w-1/4 px-2 py-2">开始时间</th>
+                            <th className="w-1/4 px-2 py-2">结束时间</th>
+                            <th className="w-12 px-2 py-2" />
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {cycles.map((c) => (
+                            <tr
+                              key={c.id}
+                              className="border-b border-subtle hover:bg-layer-1"
+                              onMouseEnter={() => setHoverRowId(c.id)}
+                              onMouseLeave={() => setHoverRowId((prev) => (prev === c.id ? null : prev))}
+                            >
+                              <td className="truncate px-2 py-2 text-sm text-primary" title={c.name}>
+                                {c.name}
+                              </td>
+                              <td className="px-2 py-2 text-sm text-primary">
+                                <ReadonlyDate value={c.start_date} formatToken="yyyy-MM-dd" hideIcon={true} />
+                              </td>
+                              <td className="px-2 py-2 text-sm text-primary">
+                                <ReadonlyDate value={c.end_date} formatToken="yyyy-MM-dd" hideIcon={true} />
+                              </td>
+                              <td className="px-2 py-2 text-right">
+                                <Button
+                                  variant="link-neutral"
+                                  className="p-0"
+                                  onClick={() => handleCancelAssociation(c.id)}
+                                >
+                                  <Unlink className="h-3.5 w-3.5" />
+                                </Button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </Tab.Panel>
+
+                {/* 文件 */}
+                <Tab.Panel key="stat-files" className="flex h-full min-h-0 flex-col">
+                  <div className="flex items-center justify-between pb-2">
+                    <span className="text-xs font-medium text-secondary">文件</span>
+                    <Button
+                      variant="link-neutral"
+                      className="p-0"
+                      onClick={() => fileInputRef.current?.click()}
+                      loading={releaseFilesUploading}
+                      disabled={releaseFilesUploading}
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                    </Button>
+                    <input ref={fileInputRef} type="file" className="hidden" onChange={handleUploadReleaseFile} />
+                  </div>
+
+                  {releaseFilesLoading ? (
+                    <div className="flex items-center justify-center py-8 text-sm text-secondary">加载中...</div>
+                  ) : releaseFilesError ? (
+                    <p className="text-sm text-danger-primary">{releaseFilesError}</p>
+                  ) : releaseFiles.length === 0 ? (
+                    <div className="grid h-32 place-items-center text-sm text-placeholder">暂无文件</div>
+                  ) : (
+                    <div className="flex h-full min-h-0 flex-1 flex-col">
+                      <div className="min-h-0 flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm">
+                        <div className="overflow-x-auto">
+                          <table className="min-w-full table-fixed">
+                            <thead>
+                              <tr className="border-b border-subtle text-left text-xs text-secondary">
+                                <th className="w-2/5 px-2 py-2">文件名</th>
+                                <th className="w-1/5 px-2 py-2">大小</th>
+                                <th className="w-1/5 px-2 py-2">上传时间</th>
+                                <th className="w-1/5 px-2 py-2 text-left">操作</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {releaseFiles.map((file) => (
+                                <tr key={file.id} className="border-b border-subtle hover:bg-layer-1">
+                                  <td className="truncate px-2 py-2 text-sm text-primary" title={file.name}>
+                                    <div className="flex items-center gap-2">
+                                      <WorkItemsIcon className="h-4 w-4 flex-shrink-0 text-placeholder" />
+                                      <span className="truncate">{file.name}</span>
+                                    </div>
+                                  </td>
+                                  <td className="px-2 py-2 text-sm text-primary">{formatFileSize(Number(file.size ?? 0))}</td>
+                                  <td className="px-2 py-2 text-sm text-primary">
+                                    <ReadonlyDate value={file.created_at} formatToken="yyyy-MM-dd" hideIcon={true} />
+                                  </td>
+                                  <td className="px-2 py-2">
+                                    <div className="flex items-center justify-end gap-2">
+                                      <Button
+                                        variant="link-neutral"
+                                        className="p-0"
+                                        disabled={releaseFilesDownloadingId === file.id}
+                                        onClick={() => handleDownloadReleaseFile(file.id, file.name)}
+                                      >
+                                        <Download className="h-3.5 w-3.5" />
+                                      </Button>
+                                      <Popconfirm
+                                        title="确认删除该文件？"
+                                        okText="删除"
+                                        cancelText="取消"
+                                        onConfirm={() => void handleDeleteReleaseFile(file.id)}
+                                      >
+                                        <Button
+                                          variant="link-danger"
+                                          className="p-0"
+                                          disabled={releaseFilesDeletingId === file.id}
+                                          loading={releaseFilesDeletingId === file.id}
+                                        >
+                                          <Trash2 className="h-3.5 w-3.5" />
+                                        </Button>
+                                      </Popconfirm>
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                      <div className="mt-2 flex flex-shrink-0 items-center justify-between border-t border-subtle bg-surface-1 px-2 py-2">
+                        <div className="text-sm text-secondary">
+                          {releaseFilesTotal > 0 ? `共 ${releaseFilesTotal} 条` : ""}
+                        </div>
+                        <Pagination
+                          simple
+                          current={releaseFilesPage}
+                          pageSize={releaseFilesPageSize}
+                          total={releaseFilesTotal}
+                          onChange={(p) => fetchReleaseFiles(p)}
+                          size="small"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </Tab.Panel>
+              </Tab.Panels>
+            </Tab.Group>
+          </div>
+
+          {/* Right: Work-item type pie chart */}
+          <div className={`${sectionCard} flex flex-col p-4`}>
+            <div className="mb-2 text-sm font-medium text-primary">工作项类型</div>
+            {statsLoading ? (
+              <div className="grid h-[220px] place-items-center rounded-md bg-surface-2 text-sm text-placeholder">
+                加载中...
+              </div>
+            ) : statsError ? (
+              <div className="grid h-[220px] place-items-center rounded-md bg-surface-2 text-sm text-danger-primary">
+                {statsError}
+              </div>
+            ) : typePieData.length === 0 ? (
+              <div className="grid h-[220px] place-items-center rounded-md bg-surface-2 text-sm text-placeholder">
+                {t("no_data_yet")}
+              </div>
+            ) : (
+              <div className="grid h-[220px] w-full grid-cols-1 items-center gap-x-4 md:grid-cols-2">
+                <div className="relative mx-auto h-[200px] w-[200px]">
+                  <PieChart
+                    className="size-full"
+                    dataKey="value"
+                    margin={{ top: 0, right: 0, bottom: 0, left: 0 }}
+                    data={typePieData}
+                    cells={typePieData.map((item) => ({ key: item.key, fill: item.color }))}
+                    showTooltip
+                    tooltipLabel={(payload: any) => payload?.name ?? ""}
+                    paddingAngle={3}
+                    cornerRadius={4}
+                    innerRadius="62%"
+                    outerRadius="88%"
+                    showLabel={false}
+                    centerLabel={{
+                      text: typePieTotal,
+                      fill: "var(--text-color-primary)",
+                      className: "text-16 font-semibold",
+                    }}
+                  />
+                </div>
+                <div className="flex items-center">
+                  <div className="w-full space-y-3">
+                    {typePieData.map((item) => {
+                      const percent = typePieTotal > 0 ? Math.round((item.value / typePieTotal) * 100) : 0;
                       return (
-                        <tr
-                          key={p.id}
-                          className="border-b border-subtle hover:bg-layer-1-hover cursor-pointer"
+                        <button
+                          key={item.key}
+                          type="button"
+                          className="flex w-full items-center justify-between gap-2 text-left text-xs transition-colors hover:text-primary"
                           onClick={() => {
+                            if (!workspaceSlug || !projectId || !item.typeId) return;
                             router.push(
-                              `/${workspaceSlug}/projects/${projectId}/testhub/plan-cases?planId=${p.id}`
+                              `/${workspaceSlug}/projects/${projectId}/issues?type_id=${item.typeId}`
                             );
                           }}
                         >
-                          <td className="px-2 py-2">
-                            <span className="truncate text-sm text-primary">{p.name}</span>
-                          </td>
-                          <td className="px-2 py-2">
-                            <div className="flex items-center">{renderPlanStateTag(p.state)}</div>
-                          </td>
-                          <td className="px-2 py-2">
-                            <PlanPassRate passRate={p.pass_rate} />
-                          </td>
-                          <td className="px-2 py-2">
-                            <span className="text-sm text-primary">
-                              {p.begin_time || "-"}
-                            </span>
-                          </td>
-                          <td className="px-2 py-2">
-                            <span className="text-sm text-primary">
-                              {p.end_time || "-"}
-                            </span>
-                          </td>
-                        </tr>
+                          <div className="flex min-w-0 items-center gap-2">
+                            <span
+                              className="h-2.5 w-2.5 flex-shrink-0 rounded-xs"
+                              style={{ backgroundColor: item.color }}
+                            />
+                            <span className="truncate text-secondary">{item.name}</span>
+                          </div>
+                          <div className="flex items-center gap-2 text-xs tabular-nums text-primary">
+                            <span>{item.value}</span>
+                            <span className="text-placeholder">{percent}%</span>
+                          </div>
+                        </button>
                       );
                     })}
-                  </tbody>
-                </table>
+                  </div>
+                </div>
               </div>
             )}
           </div>
-        </div>
-        <div className="h-[360px] relative bg-surface-1 border border-subtle shadow-md p-4 group flex flex-col">
-          <div className="flex items-center justify-between">
-            <div className="text-base font-semibold text-primary">文件</div>
-            <div className="flex">
-              <Button
-                variant="ghost"
-                className="p-0"
-                onClick={() => fileInputRef.current?.click()}
-                loading={releaseFilesUploading}
-                disabled={releaseFilesUploading}
-              >
-                <Plus className="h-3.5 w-3.5" />
-              </Button>
-              <input ref={fileInputRef} type="file" className="hidden" onChange={handleUploadReleaseFile} />
-            </div>
-          </div>
-          <div className="mt-3 flex-1 min-h-0 overflow-y-auto vertical-scrollbar scrollbar-sm">
-            {releaseFilesLoading && (
-              <div className="flex items-center justify-center py-8 text-sm text-secondary">加载中...</div>
-            )}
-            {releaseFilesError && (
-              <div className="bg-red-50 border border-red-200 rounded-md p-3 text-sm text-red-800">{releaseFilesError}</div>
-            )}
-            {!releaseFilesLoading && !releaseFilesError && (
-              <div className="overflow-x-auto">
-                <table className="min-w-full table-fixed">
-                  <thead>
-                    <tr className="text-left text-xs text-secondary border-b border-subtle">
-                      <th className="w-2/5 px-2 py-2">文件名</th>
-                      <th className="w-1/5 px-2 py-2">大小</th>
-                      <th className="w-1/5 px-2 py-2">上传时间</th>
-                      <th className="w-1/5 px-5 py-2  text-right">操作</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {releaseFiles.length === 0 && (
-                      <tr>
-                        <td className="px-2 py-6 text-sm text-secondary" colSpan={4}>
-                          暂无文件
-                        </td>
-                      </tr>
-                    )}
-                    {releaseFiles.map((file) => (
-                      <tr key={file.id} className="border-b border-subtle hover:bg-layer-1-hover">
-                        <td className="px-2 py-2 truncate text-sm text-primary" title={file.name}>
-                          {file.name}
-                        </td>
-                        <td className="px-2 py-2 text-sm text-primary">{formatFileSize(Number(file.size ?? 0))}</td>
-                        <td className="px-2 py-2 text-sm text-primary">
-                          <ReadonlyDate value={file.created_at} formatToken="yyyy-MM-dd" hideIcon={true} />
-                        </td>
-                        <td className="px-2 py-2">
-                          <div className="flex items-center justify-end gap-2">
-                            <Button
-                              variant="ghost"
-                              className="p-0"
-                              disabled={releaseFilesDownloadingId === file.id}
-                              onClick={() => handleDownloadReleaseFile(file.id, file.name)}
-                            >
-                              <Download className="h-3.5 w-3.5" />
-                            </Button>
-                            <Popconfirm
-                              title="确认删除该文件？"
-                              okText="删除"
-                              cancelText="取消"
-                              onConfirm={() => void handleDeleteReleaseFile(file.id)}
-                            >
-                              <Button
-                                variant="ghost"
-                                className="p-0"
-                                disabled={releaseFilesDeletingId === file.id}
-                                loading={releaseFilesDeletingId === file.id}
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </Button>
-                            </Popconfirm>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-          <div className="flex-shrink-0 border-t border-subtle px-2 py-2 bg-surface-1 flex items-center justify-between mt-2">
-            <div className="text-sm text-secondary">{releaseFilesTotal > 0 ? `共 ${releaseFilesTotal} 条` : ""}</div>
-            <Pagination
-              simple
-              current={releaseFilesPage}
-              pageSize={releaseFilesPageSize}
-              total={releaseFilesTotal}
-              onChange={(p) => fetchReleaseFiles(p)}
-              size="small"
-            />
-          </div>
-        </div>
-        <div className="h-[360px] relative bg-surface-1 border border-subtle shadow-md p-4 group">
-          <div className="text-base font-semibold text-primary">发布动态</div>
         </div>
       </div>
       <Transition.Root show={associateOpen} as={Fragment}>

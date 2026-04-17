@@ -326,6 +326,7 @@ export class CycleStore implements ICycleStore {
    */
   getFilteredCycleIds = computedFn((projectId: string, sortByManual: boolean) => {
     const filters = this.rootStore.cycleFilter.getFiltersByProjectId(projectId);
+    const displayFilters = this.rootStore.cycleFilter.getDisplayFiltersByProjectId(projectId);
     const searchQuery = this.rootStore.cycleFilter.searchQuery;
     if (!this.fetchedMap[projectId]) return null;
     let cycles = Object.values(this.cycleMap ?? {}).filter(
@@ -335,7 +336,7 @@ export class CycleStore implements ICycleStore {
         c.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
         shouldFilterCycle(c, filters ?? {})
     );
-    cycles = orderCycles(cycles, sortByManual);
+    cycles = orderCycles(cycles, sortByManual, displayFilters?.order_by);
     const cycleIds = cycles.map((c) => c.id);
     return cycleIds;
   });

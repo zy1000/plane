@@ -151,7 +151,7 @@ export const CycleIssuesHeader = observer(function CycleIssuesHeader() {
     },
     {
       key: "release-scope",
-      label: t("project_release.tab_release_scope"),
+      label: t("project_cycles.tab_iteration_scope"),
       isActive: !isOverviewActive,
       path: cycleScopePath,
     },
@@ -332,7 +332,7 @@ export const CycleIssuesHeader = observer(function CycleIssuesHeader() {
               {canUserCreateIssue && (
                 <>
                   <Button onClick={() => setAnalyticsModal(true)} variant="secondary" size="lg">
-                    <span className="hidden @4xl:flex">Analytics</span>
+                    <span className="hidden @4xl:flex">{t("common.analytics")}</span>
                     <span className="@4xl:hidden">
                       <ChartNoAxesColumn className="size-3.5" />
                     </span>

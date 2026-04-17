@@ -141,7 +141,7 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const { storedValue: currentTab, setValue: setCurrentTab } = useLocalStorage(
     `cycle-overview-tab-${cycleId}`,
-    "stat-assignees"
+    "stat-test-plans"
   );
 
   useCyclesDetails({ workspaceSlug, projectId, cycleId });
@@ -244,10 +244,10 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
   };
 
   const normalizedOverviewTab =
-    currentTab === "stat-states" ? "stat-assignees" : currentTab ?? "stat-assignees";
+    currentTab === "stat-states" ? "stat-assignees" : currentTab ?? "stat-test-plans";
   const activeOverviewTabKey = OVERVIEW_TABS.some((t) => t.key === normalizedOverviewTab)
     ? normalizedOverviewTab
-    : "stat-assignees";
+    : "stat-test-plans";
   const overviewTabIndex = OVERVIEW_TABS.findIndex((tab) => tab.key === activeOverviewTabKey);
 
   const fetchFiles = async (page = 1) => {
@@ -355,11 +355,11 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
         {/* Header: cycle name + meta */}
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           <div className="flex items-center gap-3">
-            <CircularProgressIndicator size={36} percentage={progress} strokeWidth={3}>
+            <CircularProgressIndicator size={48} percentage={progress} strokeWidth={4}>
               {progress === 100 ? (
-                <CheckIcon className="h-3.5 w-3.5 stroke-2" />
+                <CheckIcon className="h-4 w-4 stroke-2 text-primary" />
               ) : (
-                <span className="text-[10px] font-semibold text-primary">{`${progress}%`}</span>
+                <span className="text-16 font-medium tabular-nums leading-none text-primary">{`${progress}%`}</span>
               )}
             </CircularProgressIndicator>
             <div className="min-w-0">
@@ -466,9 +466,15 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
             )}
           </div>
 
-          {/* Right: Stats tabs (负责人 / 文件) */}
+          {/* Right: Stats tabs (测试计划 / 负责人 / 文件) */}
           <div className={`${sectionCard} flex flex-col p-4`}>
-            <Tab.Group defaultIndex={overviewTabIndex >= 0 ? overviewTabIndex : 0}>
+            <Tab.Group
+              selectedIndex={overviewTabIndex >= 0 ? overviewTabIndex : 0}
+              onChange={(index) => {
+                const nextTab = OVERVIEW_TABS[index]?.key;
+                if (nextTab) setCurrentTab(nextTab);
+              }}
+            >
               <Tab.List
                 as="div"
                 className="flex w-full items-center justify-between gap-2 rounded-md bg-layer-2 p-1 text-11"
@@ -482,7 +488,6 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
                         : "text-placeholder hover:text-secondary"
                     )}
                     key={tab.key}
-                    onClick={() => setCurrentTab(tab.key)}
                   >
                     {tab.label ?? t(tab.i18n_title!)}
                   </Tab>

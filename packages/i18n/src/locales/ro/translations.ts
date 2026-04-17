@@ -1347,6 +1347,12 @@ export default {
       },
     },
   },
+  work_items_analytics_modal: {
+    title: "Analytics for {project}",
+    title_with_cycle: "Analytics for {project} in {cycle}",
+    title_with_module: "Analytics for {project} in {module}",
+    title_with_cycle_and_module: "Analytics for {project} in {cycle} in {module}",
+  },
   workspace_analytics: {
     label: "Statistici",
     page_label: "{workspace} - Statistici",
@@ -2052,6 +2058,7 @@ export default {
   project_cycles: {
     add_cycle: "Adaugă ciclu",
     more_details: "Mai multe detalii",
+    tab_iteration_scope: "Domeniul iterației",
     cycle: "Ciclu",
     update_cycle: "Actualizează ciclul",
     create_cycle: "Creează ciclu",

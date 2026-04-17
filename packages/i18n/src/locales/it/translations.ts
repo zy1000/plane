@@ -1347,6 +1347,12 @@ export default {
       },
     },
   },
+  work_items_analytics_modal: {
+    title: "Analytics for {project}",
+    title_with_cycle: "Analytics for {project} in {cycle}",
+    title_with_module: "Analytics for {project} in {module}",
+    title_with_cycle_and_module: "Analytics for {project} in {cycle} in {module}",
+  },
   workspace_analytics: {
     label: "Analisi",
     page_label: "{workspace} - Analisi",
@@ -2052,6 +2058,7 @@ export default {
   project_cycles: {
     add_cycle: "Aggiungi ciclo",
     more_details: "Altri dettagli",
+    tab_iteration_scope: "Ambito iterazione",
     cycle: "Ciclo",
     update_cycle: "Aggiorna ciclo",
     create_cycle: "Crea ciclo",

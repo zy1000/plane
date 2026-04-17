@@ -8,10 +8,37 @@ export type TCycleTabOptions = "active" | "all";
 
 export type TCycleLayoutOptions = "list" | "board" | "gantt";
 
+export type TCycleOrderByOptions =
+  | "manual"
+  | "name"
+  | "-name"
+  | "progress"
+  | "-progress"
+  | "issues"
+  | "-issues"
+  | "start_date"
+  | "-start_date"
+  | "end_date"
+  | "-end_date"
+  | "created_at"
+  | "-created_at";
+
+export type TCycleDisplayPropertyKey =
+  | "status"
+  | "issue_count"
+  | "start_date"
+  | "end_date"
+  | "created_by"
+  | "members";
+
+export type TCycleDisplayProperties = Partial<Record<TCycleDisplayPropertyKey, boolean>>;
+
 export type TCycleDisplayFilters = {
   active_tab?: TCycleTabOptions;
   layout?: TCycleLayoutOptions;
   group_by?: "state" | "owned_by" | "release" | "none";
+  order_by?: TCycleOrderByOptions;
+  display_properties?: TCycleDisplayProperties;
 };
 
 export type TCycleFilters = {

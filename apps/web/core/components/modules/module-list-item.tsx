@@ -76,7 +76,7 @@ export const ModuleListItem = observer(function ModuleListItem(props: Props) {
       itemLink={`/${workspaceSlug?.toString()}/projects/${moduleDetails.project_id}/modules/${moduleDetails.id}`}
       onItemClick={handleItemClick}
       prependTitleElement={
-        <CircularProgressIndicator size={30} percentage={progress} strokeWidth={3}>
+        <CircularProgressIndicator size={32} percentage={progress} strokeWidth={4}>
           {completedModuleCheck ? (
             progress === 100 ? (
               <CheckIcon className="h-3 w-3 stroke-[2] text-accent-primary" />
@@ -86,7 +86,7 @@ export const ModuleListItem = observer(function ModuleListItem(props: Props) {
           ) : progress === 100 ? (
             <CheckIcon className="h-3 w-3 stroke-[2] text-accent-primary" />
           ) : (
-            <span className="text-9 text-tertiary">{`${progress}%`}</span>
+            <span className="text-10 font-medium tabular-nums leading-none text-primary">{`${progress}%`}</span>
           )}
         </CircularProgressIndicator>
       }

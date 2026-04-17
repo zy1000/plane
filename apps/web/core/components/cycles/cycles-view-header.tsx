@@ -12,7 +12,7 @@ import { useOutsideClickDetector } from "@plane/hooks";
 import { IconButton } from "@plane/propel/icon-button";
 import { useTranslation } from "@plane/i18n";
 import { SearchIcon, CloseIcon } from "@plane/propel/icons";
-import type { TCycleFilters } from "@plane/types";
+import type { TCycleDisplayProperties, TCycleFilters, TCycleOrderByOptions } from "@plane/types";
 import { cn, calculateTotalFilters } from "@plane/utils";
 // components
 import { FiltersDropdown } from "@/components/issues/issue-layouts/filters";
@@ -27,6 +27,8 @@ type Props = {
 
 type TCycleListDisplayFilters = {
   group_by?: "state" | "owned_by" | "release" | "none";
+  order_by?: TCycleOrderByOptions;
+  display_properties?: TCycleDisplayProperties;
 };
 
 export const CyclesViewHeader = observer(function CyclesViewHeader(props: Props) {

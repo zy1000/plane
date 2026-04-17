@@ -4,23 +4,20 @@
  * See the LICENSE file for details.
  */
 
-import React, { useState } from "react";
-import { isEmpty } from "lodash-es";
+import React from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 import useSWR from "swr";
 // plane constants
 import { ISSUE_DISPLAY_FILTERS_BY_PAGE, PROJECT_VIEW_TRACKER_ELEMENTS } from "@plane/constants";
 import { EIssuesStoreType, EIssueLayoutTypes } from "@plane/types";
-// components
-import { TransferIssues } from "@/components/cycles/transfer-issues";
-import { TransferIssuesModal } from "@/components/cycles/transfer-issues-modal";
 // hooks
 import { ProjectLevelWorkItemFiltersHOC } from "@/components/work-item-filters/filters-hoc/project-level";
 import { WorkItemFiltersRow } from "@/components/work-item-filters/filters-row";
 import { useCycle } from "@/hooks/store/use-cycle";
 import { useIssues } from "@/hooks/store/use-issues";
 import { IssuesStoreContext } from "@/hooks/use-issue-layout-store";
+
 // local imports
 import { IssuePeekOverview } from "../../peek-overview";
 import { CycleCalendarLayout } from "../calendar/roots/cycle-root";
@@ -58,8 +55,6 @@ export const CycleLayoutRoot = observer(function CycleLayoutRoot() {
   // store hooks
   const { issuesFilter } = useIssues(EIssuesStoreType.CYCLE);
   const { getCycleById } = useCycle();
-  // state
-  const [transferIssuesModal, setTransferIssuesModal] = useState(false);
   // derived values
   const workItemFilters = cycleId ? issuesFilter?.getIssueFilters(cycleId) : undefined;
   const activeLayout = workItemFilters?.displayFilters?.layout;
@@ -77,11 +72,6 @@ export const CycleLayoutRoot = observer(function CycleLayoutRoot() {
   const cycleDetails = cycleId ? getCycleById(cycleId) : undefined;
   const cycleStatus = cycleDetails?.status ?? "not_started";
   const isCompletedCycle = cycleStatus === "completed";
-  const isProgressSnapshotEmpty = isEmpty(cycleDetails?.progress_snapshot);
-  const transferableIssuesCount = cycleDetails
-    ? cycleDetails.backlog_issues + cycleDetails.unstarted_issues + cycleDetails.started_issues
-    : 0;
-  const canTransferIssues = isProgressSnapshotEmpty && transferableIssuesCount > 0;
 
   if (!workspaceSlug || !projectId || !cycleId || !workItemFilters) return <></>;
   return (
@@ -98,19 +88,7 @@ export const CycleLayoutRoot = observer(function CycleLayoutRoot() {
       >
         {({ filter: cycleWorkItemsFilter }) => (
           <>
-            <TransferIssuesModal
-              handleClose={() => setTransferIssuesModal(false)}
-              cycleId={cycleId}
-              isOpen={transferIssuesModal}
-            />
             <div className="relative flex h-full w-full flex-col overflow-hidden">
-              {cycleStatus === "completed" && (
-                <TransferIssues
-                  handleClick={() => setTransferIssuesModal(true)}
-                  canTransferIssues={canTransferIssues}
-                  disabled={!isEmpty(cycleDetails?.progress_snapshot)}
-                />
-              )}
               {cycleWorkItemsFilter && (
                 <WorkItemFiltersRow
                   filter={cycleWorkItemsFilter}

@@ -66,7 +66,7 @@ export const ReleaseListItem = observer(function ReleaseListItem(props: Props) {
       itemLink={`/${workspaceSlug?.toString()}/projects/${releaseDetails.project_id}/releases/${releaseDetails.id}/overview`}
       onItemClick={handleItemClick}
       prependTitleElement={
-        <CircularProgressIndicator size={30} percentage={progress} strokeWidth={3}>
+        <CircularProgressIndicator size={32} percentage={progress} strokeWidth={4}>
           {completedCheck ? (
             progress === 100 ? (
               <CheckIcon className="h-3 w-3 stroke-[2] text-accent-primary" />
@@ -76,7 +76,7 @@ export const ReleaseListItem = observer(function ReleaseListItem(props: Props) {
           ) : progress === 100 ? (
             <CheckIcon className="h-3 w-3 stroke-[2] text-accent-primary" />
           ) : (
-            <span className="text-9 text-tertiary">{`${progress}%`}</span>
+            <span className="text-10 font-medium tabular-nums leading-none text-primary">{`${progress}%`}</span>
           )}
         </CircularProgressIndicator>
       }

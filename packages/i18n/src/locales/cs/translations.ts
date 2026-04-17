@@ -1340,6 +1340,12 @@ export default {
       },
     },
   },
+  work_items_analytics_modal: {
+    title: "Analytics for {project}",
+    title_with_cycle: "Analytics for {project} in {cycle}",
+    title_with_module: "Analytics for {project} in {module}",
+    title_with_cycle_and_module: "Analytics for {project} in {cycle} in {module}",
+  },
   workspace_analytics: {
     label: "Analytika",
     page_label: "{workspace} - Analytika",
@@ -2030,6 +2036,7 @@ export default {
   project_cycles: {
     add_cycle: "Přidat cyklus",
     more_details: "Více detailů",
+    tab_iteration_scope: "Rozsah iterace",
     cycle: "Cyklus",
     update_cycle: "Aktualizovat cyklus",
     create_cycle: "Vytvořit cyklus",

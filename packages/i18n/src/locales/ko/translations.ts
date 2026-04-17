@@ -1332,6 +1332,12 @@ export default {
       },
     },
   },
+  work_items_analytics_modal: {
+    title: "Analytics for {project}",
+    title_with_cycle: "Analytics for {project} in {cycle}",
+    title_with_module: "Analytics for {project} in {module}",
+    title_with_cycle_and_module: "Analytics for {project} in {cycle} in {module}",
+  },
   workspace_analytics: {
     label: "분석",
     page_label: "{workspace} - 분석",
@@ -2027,6 +2033,7 @@ export default {
   project_cycles: {
     add_cycle: "주기 추가",
     more_details: "자세히 보기",
+    tab_iteration_scope: "반복 범위",
     cycle: "주기",
     update_cycle: "주기 업데이트",
     create_cycle: "주기 생성",

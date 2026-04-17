@@ -42,7 +42,7 @@ export const CycleGroupSidebar = observer(function CycleGroupSidebar(props: Prop
     <div className="flex h-full w-[240px] flex-shrink-0 flex-col border-r border-subtle bg-surface-1">
       <div className="flex h-9 min-h-9 items-center border-b border-subtle px-2.5">
         <span className="min-w-0 truncate text-xs font-medium tracking-wider text-tertiary">
-          {t("common.group_by")}: {groupByLabel}
+          {t("common.group_by")} : {groupByLabel}
         </span>
       </div>
       <div className="vertical-scrollbar scrollbar-sm flex-1 overflow-y-auto p-1.5">

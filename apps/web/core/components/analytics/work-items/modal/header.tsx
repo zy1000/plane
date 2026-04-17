@@ -7,6 +7,7 @@
 import { observer } from "mobx-react";
 // plane package imports
 import { Expand, Shrink } from "lucide-react";
+import { useTranslation } from "@plane/i18n";
 import { CloseIcon } from "@plane/propel/icons";
 import type { ICycle, IModule } from "@plane/types";
 // icons
@@ -22,12 +23,24 @@ type Props = {
 
 export const WorkItemsModalHeader = observer(function WorkItemsModalHeader(props: Props) {
   const { fullScreen, handleClose, setFullScreen, title, cycle, module } = props;
+  const { t } = useTranslation();
+
+  const heading =
+    cycle && module
+      ? t("work_items_analytics_modal.title_with_cycle_and_module", {
+          project: title,
+          cycle: cycle.name,
+          module: module.name,
+        })
+      : cycle
+        ? t("work_items_analytics_modal.title_with_cycle", { project: title, cycle: cycle.name })
+        : module
+          ? t("work_items_analytics_modal.title_with_module", { project: title, module: module.name })
+          : t("work_items_analytics_modal.title", { project: title });
 
   return (
     <div className="flex items-center justify-between gap-4 bg-surface-1 px-5 py-4 text-13">
-      <h3 className="break-words">
-        Analytics for {title} {cycle && `in ${cycle.name}`} {module && `in ${module.name}`}
-      </h3>
+      <h3 className="break-words">{heading}</h3>
       <div className="flex items-center gap-2">
         <button
           type="button"

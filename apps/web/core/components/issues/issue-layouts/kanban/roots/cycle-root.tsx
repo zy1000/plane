@@ -33,10 +33,7 @@ export const CycleKanBanLayout = observer(function CycleKanBanLayout() {
     EUserPermissionsLevel.PROJECT
   );
 
-  const canEditIssueProperties = useCallback(
-    () => !isCompletedCycle && isEditingAllowed,
-    [isCompletedCycle, isEditingAllowed]
-  );
+  const canEditIssueProperties = useCallback(() => isEditingAllowed, [isEditingAllowed]);
 
   const addIssuesToView = useCallback(
     (issueIds: string[]) => {
