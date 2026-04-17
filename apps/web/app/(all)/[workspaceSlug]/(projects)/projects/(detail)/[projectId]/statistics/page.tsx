@@ -2,10 +2,12 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Dropdown, Pagination } from "antd";
+import { Tab } from "@headlessui/react";
 import { useParams, useRouter } from "next/navigation";
 import useSWR from "swr";
 import { observer } from "mobx-react";
 import {
+  AlertTriangle,
   BarChart3,
   Bug,
   ClipboardList,
@@ -24,7 +26,8 @@ import { AreaChart } from "@plane/propel/charts/area-chart";
 import { BarChart } from "@plane/propel/charts/bar-chart";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import { getDate, renderFormattedDate } from "@plane/utils";
+import { Avatar } from "@plane/ui";
+import { cn, getDate, getFileURL, renderFormattedDate } from "@plane/utils";
 import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
 import { PageHead } from "@/components/core/page-title";
 import { useProject } from "@/hooks/store/use-project";
@@ -108,6 +111,115 @@ function formatStatisticTableDateRange(
   return `${fullStart} ~ ${fullEnd}`;
 }
 
+type ProgressListTabKey = "cycle" | "release" | "plan" | "review";
+
+type ProgressListTabConfig = {
+  key: ProgressListTabKey;
+  label: string;
+  icon: typeof Repeat;
+  dataKey: "cycles" | "releases" | "test_plans" | "case_reviews";
+  expandSection: StatisticSectionType;
+  viewMoreLabel: string;
+  viewMoreRoute: string;
+};
+
+const PROGRESS_LIST_TABS: ProgressListTabConfig[] = [
+  {
+    key: "cycle",
+    label: "迭代",
+    icon: Repeat,
+    dataKey: "cycles",
+    expandSection: "cycle",
+    viewMoreLabel: "查看更多迭代",
+    viewMoreRoute: "cycles",
+  },
+  {
+    key: "release",
+    label: "发布",
+    icon: Package,
+    dataKey: "releases",
+    expandSection: "release",
+    viewMoreLabel: "查看更多发布",
+    viewMoreRoute: "releases",
+  },
+  {
+    key: "plan",
+    label: "测试计划",
+    icon: ClipboardList,
+    dataKey: "test_plans",
+    expandSection: "plan",
+    viewMoreLabel: "查看更多测试计划",
+    viewMoreRoute: "testhub/plans",
+  },
+  {
+    key: "review",
+    label: "评审",
+    icon: FileSearch,
+    dataKey: "case_reviews",
+    expandSection: "review",
+    viewMoreLabel: "查看更多评审",
+    viewMoreRoute: "testhub/reviews",
+  },
+];
+
+type TOverdueByAssignee = TProjectStatisticResponse["overdue_by_assignee"];
+
+function OverdueByAssigneeCard({ data }: { data: TOverdueByAssignee | undefined }) {
+  const rows = data?.data ?? [];
+  const total = data?.total ?? 0;
+  const loaded = !!data;
+  const sortedRows = useMemo(() => [...rows].sort((a, b) => b.count - a.count), [rows]);
+
+  return (
+    <div className={`${sectionCard} flex h-[420px] min-h-0 flex-col overflow-hidden p-4`}>
+      <div className="mb-3 flex flex-shrink-0 items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <AlertTriangle className="h-3.5 w-3.5 text-danger-primary" />
+          <span className="text-sm font-medium text-primary">人员延期工作项</span>
+          <span className="shrink-0 text-xs text-placeholder">共 {total} 条</span>
+        </div>
+        <span className="truncate text-xs text-placeholder">截止时间早于今天且未完成</span>
+      </div>
+      {!loaded ? (
+        <div className="grid min-h-0 flex-1 place-items-center text-sm text-placeholder">加载中...</div>
+      ) : rows.length === 0 ? (
+        <div className="grid min-h-0 flex-1 place-items-center text-sm text-placeholder">
+          暂无延期工作项
+        </div>
+      ) : (
+        <div className="relative min-h-0 flex-1">
+          <div className="absolute inset-0 overflow-y-auto pr-1 vertical-scrollbar scrollbar-sm">
+            <div className="flex flex-col gap-y-1">
+              {sortedRows.map((row) => (
+                <div
+                  key={row.assignee_id ?? "unassigned"}
+                  className="flex flex-shrink-0 items-center gap-3 rounded-md px-2 py-2 transition-colors hover:bg-layer-1"
+                >
+                  <Avatar
+                    size="sm"
+                    name={row.display_name}
+                    src={row.avatar_url ? getFileURL(row.avatar_url) : ""}
+                  />
+                  <span
+                    className="min-w-0 flex-1 truncate text-sm text-primary"
+                    title={row.display_name}
+                  >
+                    {row.display_name}
+                  </span>
+                  <div className="flex shrink-0 items-baseline gap-1 tabular-nums">
+                    <span className="text-sm font-medium text-danger-primary">{row.count}</span>
+                    <span className="text-xs text-placeholder">项</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ProjectStatisticsPage() {
   const pageTitle = "统计";
   const { t } = useTranslation();
@@ -120,6 +232,8 @@ function ProjectStatisticsPage() {
   const [planPage, setPlanPage] = useState(1);
   const [reviewPage, setReviewPage] = useState(1);
   const [expandModalSection, setExpandModalSection] = useState<StatisticSectionType | null>(null);
+  const [activeListTabIndex, setActiveListTabIndex] = useState(0);
+  const activeTab = PROGRESS_LIST_TABS[activeListTabIndex] ?? PROGRESS_LIST_TABS[0];
 
   const changeTriggerRef = useRef<Set<string>>(new Set(["init"]));
   const [displayData, setDisplayData] = useState<TProjectStatisticResponse | undefined>(undefined);
@@ -341,494 +455,459 @@ function ProjectStatisticsPage() {
             </div>
           </div>
 
-          {/* Cycles + Releases */}
+          {/* 人员延期工作项（左）+ Progress Lists Tab（右） */}
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-            <div className={`${sectionCard} flex h-[360px] flex-col`}>
-              <div className="flex flex-shrink-0 items-center justify-between px-4 py-3">
-                <div className="flex min-w-0 flex-1 items-center gap-2">
-                  <Repeat className="h-3.5 w-3.5 flex-shrink-0 text-placeholder" />
-                  <span className="text-sm font-medium text-primary">进行中的迭代</span>
-                  <span className="shrink-0 text-xs text-placeholder">共 {displayData?.cycles?.count ?? 0} 个</span>
-                </div>
-                <div className="flex flex-shrink-0 items-center gap-1">
-                  <button
-                    type="button"
-                    className="grid h-6 w-6 place-items-center rounded transition-colors hover:bg-surface-2"
-                    onClick={() => setExpandModalSection("cycle")}
+            <OverdueByAssigneeCard data={displayData?.overdue_by_assignee} />
+            <div className={`${sectionCard} flex h-[420px] flex-col`}>
+              <Tab.Group
+                selectedIndex={activeListTabIndex}
+                onChange={(index) => setActiveListTabIndex(index)}
+              >
+                <div className="flex flex-shrink-0 items-center gap-2 px-4 py-3">
+                  <Tab.List
+                    as="div"
+                    className="flex min-w-0 flex-1 items-center justify-between gap-1 rounded-md bg-layer-2 p-1 text-11"
                   >
-                    <Maximize2 className="h-3.5 w-3.5 text-placeholder" />
-                  </button>
-                  <Dropdown
-                    menu={{
-                      className: "text-13",
-                      items: [
-                        {
-                          key: "view-more",
-                          label: "查看更多迭代",
-                          icon: <ExternalLink className="h-3.5 w-3.5" />,
-                        },
-                      ],
-                      onClick: ({ key }) => {
-                        if (key === "view-more") {
-                          router.push(`/${effectiveWorkspaceSlug}/projects/${effectiveProjectId}/cycles`);
-                        }
-                      },
-                    }}
-                    trigger={["click"]}
-                  >
+                    {PROGRESS_LIST_TABS.map((tab) => {
+                      const Icon = tab.icon;
+                      return (
+                        <Tab
+                          key={tab.key}
+                          className={({ selected }) =>
+                            cn(
+                              "w-full cursor-pointer rounded-sm p-1 text-primary transition-all outline-none focus:outline-none",
+                              "flex items-center justify-center gap-1.5",
+                              selected
+                                ? "bg-layer-transparent-active text-secondary"
+                                : "text-placeholder hover:text-secondary"
+                            )
+                          }
+                        >
+                          <Icon className="h-3.5 w-3.5 flex-shrink-0" />
+                          <span className="truncate">{tab.label}</span>
+                          <span className="shrink-0 text-placeholder">
+                            {displayData?.[tab.dataKey]?.count ?? 0}
+                          </span>
+                        </Tab>
+                      );
+                    })}
+                  </Tab.List>
+                  <div className="flex flex-shrink-0 items-center gap-1">
                     <button
                       type="button"
                       className="grid h-6 w-6 place-items-center rounded transition-colors hover:bg-surface-2"
+                      onClick={() => setExpandModalSection(activeTab.expandSection)}
                     >
-                      <MoreHorizontal className="h-3.5 w-3.5 text-placeholder" />
+                      <Maximize2 className="h-3.5 w-3.5 text-placeholder" />
                     </button>
-                  </Dropdown>
+                    <Dropdown
+                      menu={{
+                        className: "text-13",
+                        items: [
+                          {
+                            key: "view-more",
+                            label: activeTab.viewMoreLabel,
+                            icon: <ExternalLink className="h-3.5 w-3.5" />,
+                          },
+                        ],
+                        onClick: ({ key }) => {
+                          if (key === "view-more") {
+                            router.push(
+                              `/${effectiveWorkspaceSlug}/projects/${effectiveProjectId}/${activeTab.viewMoreRoute}`
+                            );
+                          }
+                        },
+                      }}
+                      trigger={["click"]}
+                    >
+                      <button
+                        type="button"
+                        className="grid h-6 w-6 place-items-center rounded transition-colors hover:bg-surface-2"
+                      >
+                        <MoreHorizontal className="h-3.5 w-3.5 text-placeholder" />
+                      </button>
+                    </Dropdown>
+                  </div>
                 </div>
-              </div>
-              <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-3 vertical-scrollbar scrollbar-sm">
-                <Table>
-                  <TableHeader className="border-b border-subtle border-t-0 bg-transparent">
-                    <TableRow>
-                      <TableHead className="h-8 w-[28%] text-left text-xs font-medium text-placeholder">迭代</TableHead>
-                      <TableHead className="h-8 w-[24%] text-left text-xs font-medium text-placeholder">日期</TableHead>
-                      <TableHead className="h-8 w-[14%] text-left text-xs font-medium text-placeholder">状态</TableHead>
-                      <TableHead className="h-8 w-[14%] text-left text-xs font-medium text-placeholder">工作项</TableHead>
-                      <TableHead className="h-8 w-[20%] pl-6 text-left text-xs font-medium text-placeholder">负责人</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {!displayData ? (
-                      <TableRow>
-                        <TableCell colSpan={5}>
-                          <div className="grid h-14 place-items-center text-sm text-placeholder">加载中...</div>
-                        </TableCell>
-                      </TableRow>
-                    ) : (displayData?.cycles?.data?.length ?? 0) === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={5}>
-                          <div className="grid h-14 place-items-center text-sm text-placeholder">暂无进行中的迭代</div>
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      (displayData?.cycles?.data ?? []).map((cycle) => {
-                        return (
-                          <TableRow key={cycle.id} className="transition-colors hover:bg-layer-1">
-                            <TableCell
-                              className="max-w-[200px] truncate text-sm text-primary"
-                              title={cycle.name}
-                            >
-                              <button
-                                type="button"
-                                className="truncate hover:underline text-left"
-                                onClick={() => router.push(`/${effectiveWorkspaceSlug}/projects/${effectiveProjectId}/cycles/${cycle.id}`)}
-                              >
-                                {cycle.name}
-                              </button>
-                            </TableCell>
-                            <TableCell className="text-sm text-primary">
-                              {formatStatisticTableDateRange(cycle.start_date, cycle.end_date)}
-                            </TableCell>
-                            <TableCell className="pl-0 -ml-1 text-left">
-                              {(() => {
-                                const statusDetails = getCycleStatusDetails(cycle.status);
-                                return (
-                                  <span
-                                    className={getStatisticStatusTagClassName(statusDetails.textColor)}
-                                  >
-                                    {t(statusDetails.i18n_title)}
-                                  </span>
-                                );
-                              })()}
-                            </TableCell>
-                            <TableCell className="text-sm text-primary">
-                              {cycle.work_item_count ?? 0}
-                            </TableCell>
-                            <TableCell className="max-w-[120px] truncate pl-6 text-sm text-primary" title={cycle.owner?.display_name ?? "-"}>
-                              {cycle.owner?.display_name ?? "-"}
-                            </TableCell>
+                <Tab.Panels className="flex min-h-0 flex-1 flex-col">
+                  {/* 迭代 */}
+                  <Tab.Panel className="flex min-h-0 flex-1 flex-col">
+                    <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-3 vertical-scrollbar scrollbar-sm">
+                      <Table>
+                        <TableHeader className="border-b border-subtle border-t-0 bg-transparent">
+                          <TableRow>
+                            <TableHead className="h-8 w-[28%] text-left text-xs font-medium text-placeholder">迭代</TableHead>
+                            <TableHead className="h-8 w-[24%] text-left text-xs font-medium text-placeholder">日期</TableHead>
+                            <TableHead className="h-8 w-[14%] text-left text-xs font-medium text-placeholder">状态</TableHead>
+                            <TableHead className="h-8 w-[14%] text-left text-xs font-medium text-placeholder">工作项</TableHead>
+                            <TableHead className="h-8 w-[20%] pl-6 text-left text-xs font-medium text-placeholder">负责人</TableHead>
                           </TableRow>
-                        );
-                      })
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-              {(displayData?.cycles?.count ?? 0) > STATISTIC_TABLE_PAGE_SIZE && (
-                <div className="flex flex-shrink-0 items-center justify-between border-t border-subtle px-4 py-2">
-                  <span className="text-xs text-placeholder">共 {displayData?.cycles?.count ?? 0} 条</span>
-                  <Pagination
-                    simple
-                    current={cyclePage}
-                    pageSize={STATISTIC_TABLE_PAGE_SIZE}
-                    total={displayData?.cycles?.count ?? 0}
-                    onChange={handleCyclePageChange}
-                    size="small"
-                  />
-                </div>
-              )}
-            </div>
-
-            <div className={`${sectionCard} flex h-[360px] flex-col`}>
-              <div className="flex flex-shrink-0 items-center justify-between px-4 py-3">
-                <div className="flex min-w-0 flex-1 items-center gap-2">
-                  <Package className="h-3.5 w-3.5 flex-shrink-0 text-placeholder" />
-                  <span className="text-sm font-medium text-primary">进行中的发布</span>
-                  <span className="shrink-0 text-xs text-placeholder">共 {displayData?.releases?.count ?? 0} 个</span>
-                </div>
-                <div className="flex flex-shrink-0 items-center gap-1">
-                  <button
-                    type="button"
-                    className="grid h-6 w-6 place-items-center rounded transition-colors hover:bg-surface-2"
-                    onClick={() => setExpandModalSection("release")}
-                  >
-                    <Maximize2 className="h-3.5 w-3.5 text-placeholder" />
-                  </button>
-                  <Dropdown
-                    menu={{
-                      className: "text-13",
-                      items: [
-                        {
-                          key: "view-more",
-                          label: "查看更多发布",
-                          icon: <ExternalLink className="h-3.5 w-3.5" />,
-                        },
-                      ],
-                      onClick: ({ key }) => {
-                        if (key === "view-more") {
-                          router.push(`/${effectiveWorkspaceSlug}/projects/${effectiveProjectId}/releases`);
-                        }
-                      },
-                    }}
-                    trigger={["click"]}
-                  >
-                    <button
-                      type="button"
-                      className="grid h-6 w-6 place-items-center rounded transition-colors hover:bg-surface-2"
-                    >
-                      <MoreHorizontal className="h-3.5 w-3.5 text-placeholder" />
-                    </button>
-                  </Dropdown>
-                </div>
-              </div>
-              <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-3 vertical-scrollbar scrollbar-sm">
-                <Table>
-                  <TableHeader className="border-b border-subtle border-t-0 bg-transparent">
-                    <TableRow>
-                      <TableHead className="h-8 w-[28%] text-left text-xs font-medium text-placeholder">发布</TableHead>
-                      <TableHead className="h-8 w-[24%] text-left text-xs font-medium text-placeholder">日期</TableHead>
-                      <TableHead className="h-8 w-[14%] text-left text-xs font-medium text-placeholder">状态</TableHead>
-                      <TableHead className="h-8 w-[14%] text-left text-xs font-medium text-placeholder">工作项</TableHead>
-                      <TableHead className="h-8 w-[20%] pl-6 text-left text-xs font-medium text-placeholder">负责人</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {!displayData ? (
-                      <TableRow>
-                        <TableCell colSpan={5}>
-                          <div className="grid h-14 place-items-center text-sm text-placeholder">加载中...</div>
-                        </TableCell>
-                      </TableRow>
-                    ) : (displayData?.releases?.data?.length ?? 0) === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={5}>
-                          <div className="grid h-14 place-items-center text-sm text-placeholder">
-                            暂无进行中的发布
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      (displayData?.releases?.data ?? []).map((release) => (
-                        <TableRow key={release.id} className="transition-colors hover:bg-layer-1">
-                          <TableCell className="max-w-[200px] truncate text-sm text-primary" title={release.name}>
-                            <button
-                              type="button"
-                              className="truncate hover:underline text-left"
-                              onClick={() => router.push(`/${effectiveWorkspaceSlug}/projects/${effectiveProjectId}/releases/${release.id}`)}
-                            >
-                              {release.name}
-                            </button>
-                          </TableCell>
-                          <TableCell className="text-sm text-primary">
-                            {formatStatisticTableDateRange(release.start_date, release.end_date)}
-                          </TableCell>
-                          <TableCell className="pl-0 -ml-1 text-left">
-                            {(() => {
-                              const statusDetails = getModuleStatusDetails(release.status);
-                              return (
-                                <span
-                                  className={getStatisticStatusTagClassName(statusDetails.textColor)}
+                        </TableHeader>
+                        <TableBody>
+                          {!displayData ? (
+                            <TableRow>
+                              <TableCell colSpan={5}>
+                                <div className="grid h-14 place-items-center text-sm text-placeholder">加载中...</div>
+                              </TableCell>
+                            </TableRow>
+                          ) : (displayData?.cycles?.data?.length ?? 0) === 0 ? (
+                            <TableRow>
+                              <TableCell colSpan={5}>
+                                <div className="grid h-14 place-items-center text-sm text-placeholder">暂无进行中的迭代</div>
+                              </TableCell>
+                            </TableRow>
+                          ) : (
+                            (displayData?.cycles?.data ?? []).map((cycle) => (
+                              <TableRow key={cycle.id} className="transition-colors hover:bg-layer-1">
+                                <TableCell
+                                  className="max-w-[200px] truncate text-sm text-primary"
+                                  title={cycle.name}
                                 >
-                                  {t(statusDetails.i18n_label)}
-                                </span>
-                              );
-                            })()}
-                          </TableCell>
-                          <TableCell className="text-sm">{release.work_item_count ?? 0}</TableCell>
-                          <TableCell className="max-w-[120px] truncate pl-6 text-sm text-primary" title={release.owner?.display_name ?? "-"}>
-                            {release.owner?.display_name ?? "-"}
-                          </TableCell>
-                        </TableRow>
-                      ))
+                                  <button
+                                    type="button"
+                                    className="truncate hover:underline text-left"
+                                    onClick={() => router.push(`/${effectiveWorkspaceSlug}/projects/${effectiveProjectId}/cycles/${cycle.id}`)}
+                                  >
+                                    {cycle.name}
+                                  </button>
+                                </TableCell>
+                                <TableCell className="text-sm text-primary">
+                                  {formatStatisticTableDateRange(cycle.start_date, cycle.end_date)}
+                                </TableCell>
+                                <TableCell className="pl-0 -ml-1 text-left">
+                                  {(() => {
+                                    const statusDetails = getCycleStatusDetails(cycle.status);
+                                    return (
+                                      <span
+                                        className={getStatisticStatusTagClassName(statusDetails.textColor)}
+                                      >
+                                        {t(statusDetails.i18n_title)}
+                                      </span>
+                                    );
+                                  })()}
+                                </TableCell>
+                                <TableCell className="text-sm text-primary">
+                                  {cycle.work_item_count ?? 0}
+                                </TableCell>
+                                <TableCell className="max-w-[120px] truncate pl-6 text-sm text-primary" title={cycle.owner?.display_name ?? "-"}>
+                                  {cycle.owner?.display_name ?? "-"}
+                                </TableCell>
+                              </TableRow>
+                            ))
+                          )}
+                        </TableBody>
+                      </Table>
+                    </div>
+                    {(displayData?.cycles?.count ?? 0) > STATISTIC_TABLE_PAGE_SIZE && (
+                      <div className="flex flex-shrink-0 items-center justify-between border-t border-subtle px-4 py-2">
+                        <span className="text-xs text-placeholder">共 {displayData?.cycles?.count ?? 0} 条</span>
+                        <Pagination
+                          simple
+                          current={cyclePage}
+                          pageSize={STATISTIC_TABLE_PAGE_SIZE}
+                          total={displayData?.cycles?.count ?? 0}
+                          onChange={handleCyclePageChange}
+                          size="small"
+                        />
+                      </div>
                     )}
-                  </TableBody>
-                </Table>
-              </div>
-              {(displayData?.releases?.count ?? 0) > STATISTIC_TABLE_PAGE_SIZE && (
-                <div className="flex flex-shrink-0 items-center justify-between border-t border-subtle px-4 py-2">
-                  <span className="text-xs text-placeholder">共 {displayData?.releases?.count ?? 0} 条</span>
-                  <Pagination
-                    simple
-                    current={releasePage}
-                    pageSize={STATISTIC_TABLE_PAGE_SIZE}
-                    total={displayData?.releases?.count ?? 0}
-                    onChange={handleReleasePageChange}
-                    size="small"
-                  />
-                </div>
-              )}
+                  </Tab.Panel>
+
+                  {/* 发布 */}
+                  <Tab.Panel className="flex min-h-0 flex-1 flex-col">
+                    <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-3 vertical-scrollbar scrollbar-sm">
+                      <Table>
+                        <TableHeader className="border-b border-subtle border-t-0 bg-transparent">
+                          <TableRow>
+                            <TableHead className="h-8 w-[28%] text-left text-xs font-medium text-placeholder">发布</TableHead>
+                            <TableHead className="h-8 w-[24%] text-left text-xs font-medium text-placeholder">日期</TableHead>
+                            <TableHead className="h-8 w-[14%] text-left text-xs font-medium text-placeholder">状态</TableHead>
+                            <TableHead className="h-8 w-[14%] text-left text-xs font-medium text-placeholder">工作项</TableHead>
+                            <TableHead className="h-8 w-[20%] pl-6 text-left text-xs font-medium text-placeholder">负责人</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {!displayData ? (
+                            <TableRow>
+                              <TableCell colSpan={5}>
+                                <div className="grid h-14 place-items-center text-sm text-placeholder">加载中...</div>
+                              </TableCell>
+                            </TableRow>
+                          ) : (displayData?.releases?.data?.length ?? 0) === 0 ? (
+                            <TableRow>
+                              <TableCell colSpan={5}>
+                                <div className="grid h-14 place-items-center text-sm text-placeholder">
+                                  暂无进行中的发布
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ) : (
+                            (displayData?.releases?.data ?? []).map((release) => (
+                              <TableRow key={release.id} className="transition-colors hover:bg-layer-1">
+                                <TableCell className="max-w-[200px] truncate text-sm text-primary" title={release.name}>
+                                  <button
+                                    type="button"
+                                    className="truncate hover:underline text-left"
+                                    onClick={() => router.push(`/${effectiveWorkspaceSlug}/projects/${effectiveProjectId}/releases/${release.id}`)}
+                                  >
+                                    {release.name}
+                                  </button>
+                                </TableCell>
+                                <TableCell className="text-sm text-primary">
+                                  {formatStatisticTableDateRange(release.start_date, release.end_date)}
+                                </TableCell>
+                                <TableCell className="pl-0 -ml-1 text-left">
+                                  {(() => {
+                                    const statusDetails = getModuleStatusDetails(release.status);
+                                    return (
+                                      <span
+                                        className={getStatisticStatusTagClassName(statusDetails.textColor)}
+                                      >
+                                        {t(statusDetails.i18n_label)}
+                                      </span>
+                                    );
+                                  })()}
+                                </TableCell>
+                                <TableCell className="text-sm">{release.work_item_count ?? 0}</TableCell>
+                                <TableCell className="max-w-[120px] truncate pl-6 text-sm text-primary" title={release.owner?.display_name ?? "-"}>
+                                  {release.owner?.display_name ?? "-"}
+                                </TableCell>
+                              </TableRow>
+                            ))
+                          )}
+                        </TableBody>
+                      </Table>
+                    </div>
+                    {(displayData?.releases?.count ?? 0) > STATISTIC_TABLE_PAGE_SIZE && (
+                      <div className="flex flex-shrink-0 items-center justify-between border-t border-subtle px-4 py-2">
+                        <span className="text-xs text-placeholder">共 {displayData?.releases?.count ?? 0} 条</span>
+                        <Pagination
+                          simple
+                          current={releasePage}
+                          pageSize={STATISTIC_TABLE_PAGE_SIZE}
+                          total={displayData?.releases?.count ?? 0}
+                          onChange={handleReleasePageChange}
+                          size="small"
+                        />
+                      </div>
+                    )}
+                  </Tab.Panel>
+
+                  {/* 测试计划 */}
+                  <Tab.Panel className="flex min-h-0 flex-1 flex-col">
+                    <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-3 vertical-scrollbar scrollbar-sm">
+                      <Table>
+                        <TableHeader className="border-b border-subtle border-t-0 bg-transparent">
+                          <TableRow>
+                            <TableHead className="h-8 w-[28%] text-left text-xs font-medium text-placeholder">测试计划</TableHead>
+                            <TableHead className="h-8 w-[24%] text-left text-xs font-medium text-placeholder">日期</TableHead>
+                            <TableHead className="h-8 w-[14%] text-left text-xs font-medium text-placeholder">状态</TableHead>
+                            <TableHead className="h-8 w-[14%] text-left text-xs font-medium text-placeholder">用例</TableHead>
+                            <TableHead className="h-8 w-[20%] pl-6 text-left text-xs font-medium text-placeholder">负责人</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {!displayData ? (
+                            <TableRow>
+                              <TableCell colSpan={5}>
+                                <div className="grid h-14 place-items-center text-sm text-placeholder">加载中...</div>
+                              </TableCell>
+                            </TableRow>
+                          ) : (displayData?.test_plans?.data?.length ?? 0) === 0 ? (
+                            <TableRow>
+                              <TableCell colSpan={5}>
+                                <div className="grid h-14 place-items-center text-sm text-placeholder">
+                                  暂无进行中的测试计划
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ) : (
+                            (displayData?.test_plans?.data ?? []).map((plan) => (
+                              <TableRow key={plan.id} className="transition-colors hover:bg-layer-1">
+                                <TableCell className="max-w-[200px] truncate text-sm text-primary" title={plan.name}>
+                                  <button
+                                    type="button"
+                                    className="truncate hover:underline text-left"
+                                    onClick={() => router.push(`/${effectiveWorkspaceSlug}/projects/${effectiveProjectId}/testhub/plan-cases?planId=${plan.id}`)}
+                                  >
+                                    {plan.name}
+                                  </button>
+                                </TableCell>
+                                <TableCell className="text-sm text-primary">
+                                  {formatStatisticTableDateRange(plan.start_date, plan.end_date)}
+                                </TableCell>
+                                <TableCell className="pl-0 -ml-1 text-left">
+                                  {(() => {
+                                    const statusDetails = getQaStatusDetails(plan.status);
+                                    return (
+                                      <span
+                                        className={getStatisticStatusTagClassName(statusDetails.textColor)}
+                                      >
+                                        {plan.status ?? "-"}
+                                      </span>
+                                    );
+                                  })()}
+                                </TableCell>
+                                <TableCell className="text-sm">{plan.case_count ?? 0}</TableCell>
+                                <TableCell className="max-w-[120px] truncate pl-6 text-sm text-primary" title={plan.owner?.display_name ?? "-"}>
+                                  {plan.owner?.display_name ?? "-"}
+                                </TableCell>
+                              </TableRow>
+                            ))
+                          )}
+                        </TableBody>
+                      </Table>
+                    </div>
+                    {(displayData?.test_plans?.count ?? 0) > STATISTIC_TABLE_PAGE_SIZE && (
+                      <div className="flex flex-shrink-0 items-center justify-between border-t border-subtle px-4 py-2">
+                        <span className="text-xs text-placeholder">共 {displayData?.test_plans?.count ?? 0} 条</span>
+                        <Pagination
+                          simple
+                          current={planPage}
+                          pageSize={STATISTIC_TABLE_PAGE_SIZE}
+                          total={displayData?.test_plans?.count ?? 0}
+                          onChange={handlePlanPageChange}
+                          size="small"
+                        />
+                      </div>
+                    )}
+                  </Tab.Panel>
+
+                  {/* 评审 */}
+                  <Tab.Panel className="flex min-h-0 flex-1 flex-col">
+                    <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-3 vertical-scrollbar scrollbar-sm">
+                      <Table>
+                        <TableHeader className="border-b border-subtle border-t-0 bg-transparent">
+                          <TableRow>
+                            <TableHead className="h-8 w-[28%] text-left text-xs font-medium text-placeholder">评审</TableHead>
+                            <TableHead className="h-8 w-[24%] text-left text-xs font-medium text-placeholder">日期</TableHead>
+                            <TableHead className="h-8 w-[14%] text-left text-xs font-medium text-placeholder">状态</TableHead>
+                            <TableHead className="h-8 w-[14%] text-left text-xs font-medium text-placeholder">类型</TableHead>
+                            <TableHead className="h-8 w-[20%] pl-6 text-left text-xs font-medium text-placeholder">负责人</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {!displayData ? (
+                            <TableRow>
+                              <TableCell colSpan={5}>
+                                <div className="grid h-14 place-items-center text-sm text-placeholder">加载中...</div>
+                              </TableCell>
+                            </TableRow>
+                          ) : (displayData?.case_reviews?.data?.length ?? 0) === 0 ? (
+                            <TableRow>
+                              <TableCell colSpan={5}>
+                                <div className="grid h-14 place-items-center text-sm text-placeholder">
+                                  暂无进行中的用例评审
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ) : (
+                            (displayData?.case_reviews?.data ?? []).map((review) => (
+                              <TableRow key={review.id} className="transition-colors hover:bg-layer-1">
+                                <TableCell className="max-w-[200px] truncate text-sm text-primary" title={review.name}>
+                                  <button
+                                    type="button"
+                                    className="truncate hover:underline text-left"
+                                    onClick={() => router.push(`/${effectiveWorkspaceSlug}/projects/${effectiveProjectId}/testhub/caseManagementReviewDetail?review_id=${review.id}`)}
+                                  >
+                                    {review.name}
+                                  </button>
+                                </TableCell>
+                                <TableCell className="text-sm text-primary">
+                                  {formatStatisticTableDateRange(review.start_date, review.end_date)}
+                                </TableCell>
+                                <TableCell className="pl-0 -ml-1 text-left">
+                                  {(() => {
+                                    const statusDetails = getQaStatusDetails(review.status);
+                                    return (
+                                      <span
+                                        className={getStatisticStatusTagClassName(statusDetails.textColor)}
+                                      >
+                                        {review.status ?? "-"}
+                                      </span>
+                                    );
+                                  })()}
+                                </TableCell>
+                                <TableCell className="text-sm">用例评审</TableCell>
+                                <TableCell className="max-w-[120px] truncate pl-6 text-sm text-primary" title={review.owner?.display_name ?? "-"}>
+                                  {review.owner?.display_name ?? "-"}
+                                </TableCell>
+                              </TableRow>
+                            ))
+                          )}
+                        </TableBody>
+                      </Table>
+                    </div>
+                    {(displayData?.case_reviews?.count ?? 0) > STATISTIC_TABLE_PAGE_SIZE && (
+                      <div className="flex flex-shrink-0 items-center justify-between border-t border-subtle px-4 py-2">
+                        <span className="text-xs text-placeholder">共 {displayData?.case_reviews?.count ?? 0} 条</span>
+                        <Pagination
+                          simple
+                          current={reviewPage}
+                          pageSize={STATISTIC_TABLE_PAGE_SIZE}
+                          total={displayData?.case_reviews?.count ?? 0}
+                          onChange={handleReviewPageChange}
+                          size="small"
+                        />
+                      </div>
+                    )}
+                  </Tab.Panel>
+                </Tab.Panels>
+              </Tab.Group>
             </div>
           </div>
 
-          {/* Test Plans + Reviews */}
-          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-            <div className={`${sectionCard} flex h-[360px] flex-col`}>
-              <div className="flex flex-shrink-0 items-center justify-between px-4 py-3">
-                <div className="flex min-w-0 flex-1 items-center gap-2">
-                  <ClipboardList className="h-3.5 w-3.5 flex-shrink-0 text-placeholder" />
-                  <span className="text-sm font-medium text-primary">进行中的测试计划</span>
-                  <span className="shrink-0 text-xs text-placeholder">共 {displayData?.test_plans?.count ?? 0} 个</span>
-                </div>
-                <div className="flex flex-shrink-0 items-center gap-1">
-                  <button
-                    type="button"
-                    className="grid h-6 w-6 place-items-center rounded transition-colors hover:bg-surface-2"
-                    onClick={() => setExpandModalSection("plan")}
-                  >
-                    <Maximize2 className="h-3.5 w-3.5 text-placeholder" />
-                  </button>
-                  <Dropdown
-                    menu={{
-                      className: "text-13",
-                      items: [
-                        {
-                          key: "view-more",
-                          label: "查看更多测试计划",
-                          icon: <ExternalLink className="h-3.5 w-3.5" />,
-                        },
-                      ],
-                      onClick: ({ key }) => {
-                        if (key === "view-more") {
-                          router.push(`/${effectiveWorkspaceSlug}/projects/${effectiveProjectId}/testhub/plans`);
-                        }
-                      },
-                    }}
-                    trigger={["click"]}
-                  >
-                    <button
-                      type="button"
-                      className="grid h-6 w-6 place-items-center rounded transition-colors hover:bg-surface-2"
-                    >
-                      <MoreHorizontal className="h-3.5 w-3.5 text-placeholder" />
-                    </button>
-                  </Dropdown>
-                </div>
-              </div>
-              <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-3 vertical-scrollbar scrollbar-sm">
-                <Table>
-                  <TableHeader className="border-b border-subtle border-t-0 bg-transparent">
-                    <TableRow>
-                      <TableHead className="h-8 w-[28%] text-left text-xs font-medium text-placeholder">测试计划</TableHead>
-                      <TableHead className="h-8 w-[24%] text-left text-xs font-medium text-placeholder">日期</TableHead>
-                      <TableHead className="h-8 w-[14%] text-left text-xs font-medium text-placeholder">状态</TableHead>
-                      <TableHead className="h-8 w-[14%] text-left text-xs font-medium text-placeholder">用例</TableHead>
-                      <TableHead className="h-8 w-[20%] pl-6 text-left text-xs font-medium text-placeholder">负责人</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {!displayData ? (
-                      <TableRow>
-                        <TableCell colSpan={5}>
-                          <div className="grid h-14 place-items-center text-sm text-placeholder">加载中...</div>
-                        </TableCell>
-                      </TableRow>
-                    ) : (displayData?.test_plans?.data?.length ?? 0) === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={5}>
-                          <div className="grid h-14 place-items-center text-sm text-placeholder">
-                            暂无进行中的测试计划
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      (displayData?.test_plans?.data ?? []).map((plan) => (
-                        <TableRow key={plan.id} className="transition-colors hover:bg-layer-1">
-                          <TableCell className="max-w-[200px] truncate text-sm text-primary" title={plan.name}>
-                            <button
-                              type="button"
-                              className="truncate hover:underline text-left"
-                              onClick={() => router.push(`/${effectiveWorkspaceSlug}/projects/${effectiveProjectId}/testhub/plan-cases?planId=${plan.id}`)}
-                            >
-                              {plan.name}
-                            </button>
-                          </TableCell>
-                          <TableCell className="text-sm text-primary">
-                            {formatStatisticTableDateRange(plan.start_date, plan.end_date)}
-                          </TableCell>
-                          <TableCell className="pl-0 -ml-1 text-left">
-                            {(() => {
-                              const statusDetails = getQaStatusDetails(plan.status);
-                              return (
-                                <span
-                                  className={getStatisticStatusTagClassName(statusDetails.textColor)}
-                                >
-                                  {plan.status ?? "-"}
-                                </span>
-                              );
-                            })()}
-                          </TableCell>
-                          <TableCell className="text-sm">{plan.case_count ?? 0}</TableCell>
-                          <TableCell className="max-w-[120px] truncate pl-6 text-sm text-primary" title={plan.owner?.display_name ?? "-"}>
-                            {plan.owner?.display_name ?? "-"}
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-              {(displayData?.test_plans?.count ?? 0) > STATISTIC_TABLE_PAGE_SIZE && (
-                <div className="flex flex-shrink-0 items-center justify-between border-t border-subtle px-4 py-2">
-                  <span className="text-xs text-placeholder">共 {displayData?.test_plans?.count ?? 0} 条</span>
-                  <Pagination
-                    simple
-                    current={planPage}
-                    pageSize={STATISTIC_TABLE_PAGE_SIZE}
-                    total={displayData?.test_plans?.count ?? 0}
-                    onChange={handlePlanPageChange}
-                    size="small"
-                  />
-                </div>
-              )}
+          {/* Work Item Stats（独占整行） */}
+          <div className={`${sectionCard} flex h-[420px] flex-col p-4`}>
+            <div className="mb-3 flex items-center gap-2">
+              <BarChart3 className="h-3.5 w-3.5 text-placeholder" />
+              <span className="text-sm font-medium text-primary">工作项统计</span>
             </div>
-
-            <div className={`${sectionCard} flex h-[360px] flex-col`}>
-              <div className="flex flex-shrink-0 items-center justify-between px-4 py-3">
-                <div className="flex min-w-0 flex-1 items-center gap-2">
-                  <FileSearch className="h-3.5 w-3.5 flex-shrink-0 text-placeholder" />
-                  <span className="text-sm font-medium text-primary">进行中的评审</span>
-                  <span className="shrink-0 text-xs text-placeholder">共 {displayData?.case_reviews?.count ?? 0} 个</span>
-                </div>
-                <div className="flex flex-shrink-0 items-center gap-1">
-                  <button
-                    type="button"
-                    className="grid h-6 w-6 place-items-center rounded transition-colors hover:bg-surface-2"
-                    onClick={() => setExpandModalSection("review")}
-                  >
-                    <Maximize2 className="h-3.5 w-3.5 text-placeholder" />
-                  </button>
-                  <Dropdown
-                    menu={{
-                      className: "text-13",
-                      items: [
-                        {
-                          key: "view-more",
-                          label: "查看更多评审",
-                          icon: <ExternalLink className="h-3.5 w-3.5" />,
-                        },
-                      ],
-                      onClick: ({ key }) => {
-                        if (key === "view-more") {
-                          router.push(`/${effectiveWorkspaceSlug}/projects/${effectiveProjectId}/testhub/reviews`);
-                        }
-                      },
-                    }}
-                    trigger={["click"]}
-                  >
-                    <button
-                      type="button"
-                      className="grid h-6 w-6 place-items-center rounded transition-colors hover:bg-surface-2"
-                    >
-                      <MoreHorizontal className="h-3.5 w-3.5 text-placeholder" />
-                    </button>
-                  </Dropdown>
-                </div>
-              </div>
-              <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-3 vertical-scrollbar scrollbar-sm">
-                <Table>
-                  <TableHeader className="border-b border-subtle border-t-0 bg-transparent">
-                    <TableRow>
-                      <TableHead className="h-8 w-[28%] text-left text-xs font-medium text-placeholder">评审</TableHead>
-                      <TableHead className="h-8 w-[24%] text-left text-xs font-medium text-placeholder">日期</TableHead>
-                      <TableHead className="h-8 w-[14%] text-left text-xs font-medium text-placeholder">状态</TableHead>
-                      <TableHead className="h-8 w-[14%] text-left text-xs font-medium text-placeholder">类型</TableHead>
-                      <TableHead className="h-8 w-[20%] pl-6 text-left text-xs font-medium text-placeholder">负责人</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {!displayData ? (
-                      <TableRow>
-                        <TableCell colSpan={5}>
-                          <div className="grid h-14 place-items-center text-sm text-placeholder">加载中...</div>
-                        </TableCell>
-                      </TableRow>
-                    ) : (displayData?.case_reviews?.data?.length ?? 0) === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={5}>
-                          <div className="grid h-14 place-items-center text-sm text-placeholder">
-                            暂无进行中的用例评审
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      (displayData?.case_reviews?.data ?? []).map((review) => (
-                        <TableRow key={review.id} className="transition-colors hover:bg-layer-1">
-                          <TableCell className="max-w-[200px] truncate text-sm text-primary" title={review.name}>
-                            <button
-                              type="button"
-                              className="truncate hover:underline text-left"
-                              onClick={() => router.push(`/${effectiveWorkspaceSlug}/projects/${effectiveProjectId}/testhub/caseManagementReviewDetail?review_id=${review.id}`)}
-                            >
-                              {review.name}
-                            </button>
-                          </TableCell>
-                          <TableCell className="text-sm text-primary">
-                            {formatStatisticTableDateRange(review.start_date, review.end_date)}
-                          </TableCell>
-                          <TableCell className="pl-0 -ml-1 text-left">
-                            {(() => {
-                              const statusDetails = getQaStatusDetails(review.status);
-                              return (
-                                <span
-                                  className={getStatisticStatusTagClassName(statusDetails.textColor)}
-                                >
-                                  {review.status ?? "-"}
-                                </span>
-                              );
-                            })()}
-                          </TableCell>
-                          <TableCell className="text-sm">用例评审</TableCell>
-                          <TableCell className="max-w-[120px] truncate pl-6 text-sm text-primary" title={review.owner?.display_name ?? "-"}>
-                            {review.owner?.display_name ?? "-"}
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-              {(displayData?.case_reviews?.count ?? 0) > STATISTIC_TABLE_PAGE_SIZE && (
-                <div className="flex flex-shrink-0 items-center justify-between border-t border-subtle px-4 py-2">
-                  <span className="text-xs text-placeholder">共 {displayData?.case_reviews?.count ?? 0} 条</span>
-                  <Pagination
-                    simple
-                    current={reviewPage}
-                    pageSize={STATISTIC_TABLE_PAGE_SIZE}
-                    total={displayData?.case_reviews?.count ?? 0}
-                    onChange={handleReviewPageChange}
-                    size="small"
-                  />
-                </div>
-              )}
+            <div className="min-h-0 flex-1">
+              <BarChart
+                className="h-full w-full"
+                margin={{ top: 20, right: 30, bottom: 5, left: 0 }}
+                data={workItemBarData}
+                bars={[
+                  {
+                    key: "unstarted",
+                    label: "未开始",
+                    stackId: "work-items",
+                    fill: "#a3a3a3",
+                    showPercentage: false,
+                    textClassName: "",
+                  },
+                  {
+                    key: "started",
+                    label: "进行中",
+                    stackId: "work-items",
+                    fill: "#3f76ff",
+                    showPercentage: false,
+                    textClassName: "",
+                  },
+                  {
+                    key: "completed",
+                    label: "已完成",
+                    stackId: "work-items",
+                    fill: "#16a34a",
+                    showPercentage: false,
+                    textClassName: "",
+                  },
+                ]}
+                xAxis={{ key: "name", label: "类型" }}
+                yAxis={{ key: "count", label: "数量", offset: -60, dx: -24 }}
+                legend={{
+                  align: "left",
+                  verticalAlign: "bottom",
+                  layout: "horizontal",
+                  wrapperStyles: {
+                    justifyContent: "start",
+                    alignContent: "start",
+                    paddingLeft: "40px",
+                    paddingTop: "10px",
+                  },
+                }}
+              />
             </div>
           </div>
 
@@ -924,59 +1003,6 @@ function ProjectStatisticsPage() {
             </div>
           </div>
 
-          {/* Work Item Stats */}
-          <div className={`${sectionCard} flex flex-col p-4`} style={{ minHeight: "420px" }}>
-            <div className="mb-3 flex items-center gap-2">
-              <BarChart3 className="h-3.5 w-3.5 text-placeholder" />
-              <span className="text-sm font-medium text-primary">工作项统计</span>
-            </div>
-            <div className="min-h-0 flex-1">
-              <BarChart
-                className="h-[340px] w-full"
-                margin={{ top: 20, right: 30, bottom: 5, left: 0 }}
-                data={workItemBarData}
-                bars={[
-                  {
-                    key: "unstarted",
-                    label: "未开始",
-                    stackId: "work-items",
-                    fill: "#a3a3a3",
-                    showPercentage: false,
-                    textClassName: "",
-                  },
-                  {
-                    key: "started",
-                    label: "进行中",
-                    stackId: "work-items",
-                    fill: "#3f76ff",
-                    showPercentage: false,
-                    textClassName: "",
-                  },
-                  {
-                    key: "completed",
-                    label: "已完成",
-                    stackId: "work-items",
-                    fill: "#16a34a",
-                    showPercentage: false,
-                    textClassName: "",
-                  },
-                ]}
-                xAxis={{ key: "name", label: "类型" }}
-                yAxis={{ key: "count", label: "数量", offset: -60, dx: -24 }}
-                legend={{
-                  align: "left",
-                  verticalAlign: "bottom",
-                  layout: "horizontal",
-                  wrapperStyles: {
-                    justifyContent: "start",
-                    alignContent: "start",
-                    paddingLeft: "40px",
-                    paddingTop: "10px",
-                  },
-                }}
-              />
-            </div>
-          </div>
         </div>
       </div>
       {expandModalSection && effectiveWorkspaceSlug && effectiveProjectId && (

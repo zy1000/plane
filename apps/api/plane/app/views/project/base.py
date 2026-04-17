@@ -52,6 +52,7 @@ from plane.db.models import (
     CaseReview,
     TestCaseRepository,
     TestCase,
+    User,
 )
 from plane.db.models.intake import IntakeIssueStatus
 from plane.utils.host import base_host
@@ -901,6 +902,56 @@ class ProjectAPI(BaseViewSet):
 
         work_item_stats = sorted(work_item_stats_map.values(), key=lambda x: x['total'], reverse=True)
 
+        overdue_issue_qs = (
+            base_issue_qs.filter(target_date__isnull=False, target_date__lt=today)
+            .exclude(state__group__in=['completed', 'cancelled'])
+        )
+        overdue_rows = list(
+            overdue_issue_qs.filter(assignees__isnull=False)
+            .values('assignees__id')
+            .annotate(count=Count('id', distinct=True))
+            .order_by('-count')
+        )
+        overdue_user_ids = [row['assignees__id'] for row in overdue_rows if row.get('assignees__id')]
+        overdue_users = {
+            str(user.id): user
+            for user in User.objects.filter(id__in=overdue_user_ids).only(
+                'id', 'display_name', 'first_name', 'last_name', 'avatar', 'avatar_asset_id'
+            )
+        }
+        overdue_by_assignee = []
+        for row in overdue_rows:
+            assignee_id = row.get('assignees__id')
+            if not assignee_id:
+                continue
+            user = overdue_users.get(str(assignee_id))
+            if not user:
+                continue
+            display_name = (
+                user.display_name
+                or f"{user.first_name or ''} {user.last_name or ''}".strip()
+                or '-'
+            )
+            overdue_by_assignee.append(
+                {
+                    'assignee_id': str(user.id),
+                    'display_name': display_name,
+                    'avatar_url': user.avatar_url or '',
+                    'count': row.get('count') or 0,
+                }
+            )
+        overdue_unassigned_count = overdue_issue_qs.filter(assignees__isnull=True).count()
+        if overdue_unassigned_count > 0:
+            overdue_by_assignee.append(
+                {
+                    'assignee_id': None,
+                    'display_name': '未指定负责人',
+                    'avatar_url': '',
+                    'count': overdue_unassigned_count,
+                }
+            )
+        overdue_total = sum(item['count'] for item in overdue_by_assignee)
+
         project = Project.objects.filter(workspace__slug=slug, id=project_id).first()
         project_timezone = (project.timezone if project and project.timezone else 'UTC')
         local_tz = pytz.timezone(project_timezone)
@@ -1109,6 +1160,10 @@ class ProjectAPI(BaseViewSet):
                 'requirement_daily_status': requirement_daily_status,
                 'defect_daily_created': defect_daily_created,
                 'work_item_stats': work_item_stats,
+                'overdue_by_assignee': {
+                    'total': overdue_total,
+                    'data': overdue_by_assignee,
+                },
                 'range': {'start_date': start_date.isoformat(), 'end_date': end_date.isoformat()},
             },
             status=status.HTTP_200_OK,

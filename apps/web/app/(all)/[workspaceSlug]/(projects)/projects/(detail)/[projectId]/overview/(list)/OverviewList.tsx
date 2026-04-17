@@ -22,7 +22,6 @@ import {
 import type { IProjectOverviewAnalytics } from "./overview-analytics.types";
 import { OverviewDescriptionModal } from "./overview-description-modal";
 import { ProjectOverviewKpiCards } from "./overview-kpi-cards";
-import { OverviewProgressCard } from "./overview-progress-card";
 import { OverviewMemberStats } from "./overview-member-stats";
 
 const announcementService = new ProjectAnnouncementService();
@@ -292,9 +291,6 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
 
         {/* KPI Cards */}
         <ProjectOverviewKpiCards workspaceSlug={workspaceSlug} project={project} analyticsData={analyticsData} />
-
-        {/* Progress */}
-        <OverviewProgressCard analyticsData={analyticsData} loading={isLoadingAnalytics} />
 
         {/* Description + Announcements */}
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">

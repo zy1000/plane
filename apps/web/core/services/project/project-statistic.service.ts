@@ -88,6 +88,15 @@ export type TProjectStatisticResponse = {
     completed: number;
     total: number;
   }>;
+  overdue_by_assignee: {
+    total: number;
+    data: Array<{
+      assignee_id: string | null;
+      display_name: string;
+      avatar_url: string;
+      count: number;
+    }>;
+  };
   range: {
     start_date: string;
     end_date: string;
