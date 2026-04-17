@@ -6,16 +6,19 @@
 
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
 import { observer } from "mobx-react";
 import { useParams, useSearchParams } from "next/navigation";
 import { EUserPermissionsLevel, MODULE_TRACKER_ELEMENTS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { EmptyStateDetailed } from "@plane/propel/empty-state";
+import type { TReleaseGroupByOption } from "@plane/types";
 import { EUserProjectRoles } from "@plane/types";
 import { ContentWrapper, Row, ERowVariant } from "@plane/ui";
 import { ListLayout } from "@/components/core/list";
 import { ReleasesListGanttChartView } from "@/components/releases/gantt-chart/releases-list-layout";
 import { ReleaseCardItem } from "@/components/releases/release-card-item";
+import { ReleaseGroupSidebar } from "@/components/releases/list/release-group-sidebar";
 import { ReleaseListItem } from "@/components/releases/release-list-item";
 import { ReleasePeekOverview } from "@/components/releases/release-peek-overview";
 import { CycleModuleBoardLayoutLoader } from "@/components/ui/loader/cycle-module-board-loader";
@@ -24,6 +27,7 @@ import { GanttLayoutLoader } from "@/components/ui/loader/layouts/gantt-layout-l
 import { useCommandPalette } from "@/hooks/store/use-command-palette";
 import { useRelease } from "@/hooks/store/use-release";
 import { useReleaseFilter } from "@/hooks/store/use-release-filter";
+import { useReleaseGroups } from "@/hooks/store/use-release-groups";
 import { useUserPermissions } from "@/hooks/store/user";
 
 export const ReleasesListView = observer(function ReleasesListView() {
@@ -42,6 +46,22 @@ export const ReleasesListView = observer(function ReleasesListView() {
     [EUserProjectRoles.ADMIN, EUserProjectRoles.MEMBER],
     EUserPermissionsLevel.PROJECT
   );
+
+  const rawGroupBy = displayFilters?.group_by;
+  const groupBy: TReleaseGroupByOption =
+    rawGroupBy === "status" || rawGroupBy === "lead" || rawGroupBy === "none" ? rawGroupBy : "status";
+
+  const releaseIdsForGrouping = useMemo(() => filteredReleaseIds ?? [], [filteredReleaseIds]);
+  const { groups: groupsForSidebar, releaseIdsByGroup } = useReleaseGroups(releaseIdsForGrouping, groupBy);
+
+  const [selectedGroupId, setSelectedGroupId] = useState<string>("");
+
+  useEffect(() => {
+    const currentIsValid = selectedGroupId && groupsForSidebar.some((group) => group.id === selectedGroupId);
+    if (!currentIsValid) {
+      setSelectedGroupId(groupsForSidebar[0]?.id ?? "");
+    }
+  }, [groupBy, groupsForSidebar, selectedGroupId]);
 
   if (loader || !projectReleaseIds || !filteredReleaseIds)
     return (
@@ -81,38 +101,67 @@ export const ReleasesListView = observer(function ReleasesListView() {
       />
     );
 
+  const isListLayout = displayFilters?.layout === "list";
+  const useGroupedListLayout = isListLayout && groupBy !== "none";
+  const visibleReleaseIds = useGroupedListLayout
+    ? selectedGroupId
+      ? releaseIdsByGroup[selectedGroupId] ?? []
+      : []
+    : filteredReleaseIds;
+
   return (
-    <ContentWrapper variant={ERowVariant.HUGGING}>
-      <div className="flex size-full justify-between">
-        {displayFilters?.layout === "list" && (
-          <ListLayout>
-            {filteredReleaseIds.map((releaseId) => (
-              <ReleaseListItem key={releaseId} releaseId={releaseId} />
-            ))}
-          </ListLayout>
-        )}
-        {displayFilters?.layout === "board" && (
-          <Row
-            className={`grid size-full grid-cols-1 gap-6 overflow-y-auto py-page-y ${
-              peekRelease
-                ? "3xl:grid-cols-3 lg:grid-cols-1 xl:grid-cols-2"
-                : "3xl:grid-cols-4 lg:grid-cols-2 xl:grid-cols-3"
-            } vertical-scrollbar scrollbar-lg auto-rows-max transition-all`}
-          >
-            {filteredReleaseIds.map((releaseId) => (
-              <ReleaseCardItem key={releaseId} releaseId={releaseId} />
-            ))}
-          </Row>
-        )}
-        {displayFilters?.layout === "gantt" && (
-          <div className="size-full overflow-hidden">
-            <ReleasesListGanttChartView />
+    <ContentWrapper variant={ERowVariant.HUGGING} className={useGroupedListLayout ? "flex-row" : undefined}>
+      {useGroupedListLayout ? (
+        <div className="relative flex size-full overflow-hidden bg-surface-2">
+          <ReleaseGroupSidebar
+            groups={groupsForSidebar}
+            groupBy={groupBy}
+            selectedGroupId={selectedGroupId}
+            onSelectGroup={setSelectedGroupId}
+          />
+          <div className="vertical-scrollbar scrollbar-lg h-full min-w-0 flex-1 overflow-y-auto bg-surface-1">
+            <ListLayout>
+              {visibleReleaseIds.map((releaseId) => (
+                <ReleaseListItem key={releaseId} releaseId={releaseId} />
+              ))}
+            </ListLayout>
           </div>
-        )}
-        <div className="flex-shrink-0">
-          <ReleasePeekOverview projectId={projectId?.toString() ?? ""} workspaceSlug={workspaceSlug?.toString() ?? ""} />
         </div>
-      </div>
+      ) : (
+        <div className="flex size-full justify-between">
+          {displayFilters?.layout === "list" && (
+            <ListLayout>
+              {filteredReleaseIds.map((releaseId) => (
+                <ReleaseListItem key={releaseId} releaseId={releaseId} />
+              ))}
+            </ListLayout>
+          )}
+          {displayFilters?.layout === "board" && (
+            <Row
+              className={`grid size-full grid-cols-1 gap-6 overflow-y-auto py-page-y ${
+                peekRelease
+                  ? "3xl:grid-cols-3 lg:grid-cols-1 xl:grid-cols-2"
+                  : "3xl:grid-cols-4 lg:grid-cols-2 xl:grid-cols-3"
+              } vertical-scrollbar scrollbar-lg auto-rows-max transition-all`}
+            >
+              {filteredReleaseIds.map((releaseId) => (
+                <ReleaseCardItem key={releaseId} releaseId={releaseId} />
+              ))}
+            </Row>
+          )}
+          {displayFilters?.layout === "gantt" && (
+            <div className="size-full overflow-hidden">
+              <ReleasesListGanttChartView />
+            </div>
+          )}
+          <div className="flex-shrink-0">
+            <ReleasePeekOverview projectId={projectId?.toString() ?? ""} workspaceSlug={workspaceSlug?.toString() ?? ""} />
+          </div>
+        </div>
+      )}
+      {useGroupedListLayout && (
+        <ReleasePeekOverview projectId={projectId?.toString() ?? ""} workspaceSlug={workspaceSlug?.toString() ?? ""} />
+      )}
     </ContentWrapper>
   );
 });

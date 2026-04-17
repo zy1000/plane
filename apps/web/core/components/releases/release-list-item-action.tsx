@@ -29,6 +29,7 @@ import { ReleaseQuickActions } from "@/components/releases/release-quick-actions
 import { ReleaseStatusDropdown } from "@/components/releases/release-status-dropdown";
 import { useMember } from "@/hooks/store/use-member";
 import { useRelease } from "@/hooks/store/use-release";
+import { useReleaseFilter } from "@/hooks/store/use-release-filter";
 import { useUserPermissions } from "@/hooks/store/user";
 
 type Props = {
@@ -43,7 +44,15 @@ export const ReleaseListItemAction = observer(function ReleaseListItemAction(pro
   const { allowPermissions } = useUserPermissions();
   const { addReleaseToFavorites, removeReleaseFromFavorites, updateReleaseDetails } = useRelease();
   const { getUserDetails } = useMember();
+  const { currentProjectDisplayFilters } = useReleaseFilter();
   const { t } = useTranslation();
+
+  const displayProperties = currentProjectDisplayFilters?.display_properties ?? {};
+  const showStatusProperty = displayProperties.status !== false;
+  const showStartDateProperty = displayProperties.start_date !== false;
+  const showEndDateProperty = displayProperties.end_date !== false;
+  const showDateRange = showStartDateProperty || showEndDateProperty;
+  const showMembersProperty = displayProperties.members !== false;
   const { setValue: toggleFavoriteMenu, storedValue } = useLocalStorage<boolean>(IS_FAVORITE_MENU_OPEN, false);
 
   const releaseStatus = MODULE_STATUS.find((status) => status.value === releaseDetails.status);
@@ -130,30 +139,32 @@ export const ReleaseListItemAction = observer(function ReleaseListItemAction(pro
 
   return (
     <>
-      <DateRangeDropdown
-        buttonContainerClassName={`h-6 w-full flex ${isDisabled ? "cursor-not-allowed" : "cursor-pointer"} items-center gap-1.5 text-tertiary border-[0.5px] border-strong rounded-sm text-11`}
-        buttonVariant="transparent-with-text"
-        className="h-7"
-        value={{
-          from: getDate(releaseDetails.start_date),
-          to: getDate(releaseDetails.target_date),
-        }}
-        onSelect={(val) => {
-          handleReleaseDetailsChange({
-            start_date: val?.from ? renderFormattedPayloadDate(val.from) : null,
-            target_date: val?.to ? renderFormattedPayloadDate(val.to) : null,
-          });
-        }}
-        mergeDates
-        placeholder={{
-          from: t("start_date"),
-          to: t("end_date"),
-        }}
-        disabled={isDisabled}
-        hideIcon={{ from: renderIcon ?? true, to: renderIcon }}
-      />
+      {showDateRange && (
+        <DateRangeDropdown
+          buttonContainerClassName={`h-6 w-full flex ${isDisabled ? "cursor-not-allowed" : "cursor-pointer"} items-center gap-1.5 text-tertiary border-[0.5px] border-strong rounded-sm text-11`}
+          buttonVariant="transparent-with-text"
+          className="h-7"
+          value={{
+            from: getDate(releaseDetails.start_date),
+            to: getDate(releaseDetails.target_date),
+          }}
+          onSelect={(val) => {
+            handleReleaseDetailsChange({
+              start_date: val?.from ? renderFormattedPayloadDate(val.from) : null,
+              target_date: val?.to ? renderFormattedPayloadDate(val.to) : null,
+            });
+          }}
+          mergeDates
+          placeholder={{
+            from: t("start_date"),
+            to: t("end_date"),
+          }}
+          disabled={isDisabled}
+          hideIcon={{ from: renderIcon ?? true, to: renderIcon }}
+        />
+      )}
 
-      {releaseStatus && (
+      {showStatusProperty && releaseStatus && (
         <ReleaseStatusDropdown
           isDisabled={isDisabled}
           releaseDetails={releaseDetails}
@@ -161,15 +172,16 @@ export const ReleaseListItemAction = observer(function ReleaseListItemAction(pro
         />
       )}
 
-      {leadDetails ? (
-        <span className="cursor-default">
-          <ButtonAvatars showTooltip={false} userIds={leadDetails?.id} />
-        </span>
-      ) : (
-        <Tooltip tooltipContent="No lead">
-          <SquareUser className="h-4 w-4 text-tertiary" />
-        </Tooltip>
-      )}
+      {showMembersProperty &&
+        (leadDetails ? (
+          <span className="cursor-default">
+            <ButtonAvatars showTooltip={false} userIds={leadDetails?.id} />
+          </span>
+        ) : (
+          <Tooltip tooltipContent="No lead">
+            <SquareUser className="h-4 w-4 text-tertiary" />
+          </Tooltip>
+        ))}
 
       {isEditingAllowed && !releaseDetails.archived_at && (
         <FavoriteStar

@@ -986,7 +986,7 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
                 {statsError}
               </div>
             ) : typePieData.length === 0 ? (
-              <div className="grid h-[220px] place-items-center rounded-md bg-surface-2 text-sm text-placeholder">
+              <div className="grid h-[220px] place-items-center text-sm text-placeholder shadow-none">
                 {t("no_data_yet")}
               </div>
             ) : (

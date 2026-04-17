@@ -8,17 +8,18 @@ import type { FC } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
-import { ListFilter } from "lucide-react";
+import { ListFilter, SlidersHorizontal } from "lucide-react";
 import { MODULE_VIEW_LAYOUTS } from "@plane/constants";
 import { useOutsideClickDetector } from "@plane/hooks";
 import { useTranslation } from "@plane/i18n";
 import { SearchIcon, CloseIcon } from "@plane/propel/icons";
 import { Tooltip } from "@plane/propel/tooltip";
-import type { TModuleFilters } from "@plane/types";
+import type { TModuleFilters, TReleaseDisplayFilters } from "@plane/types";
 import { cn, calculateTotalFilters } from "@plane/utils";
 import { FiltersDropdown } from "@/components/issues/issue-layouts/filters";
 import { ModuleFiltersSelection, ModuleOrderByDropdown } from "@/components/modules/dropdowns";
 import { ModuleLayoutIcon } from "@/components/modules/module-layout-icon";
+import { ReleaseDisplayFiltersSelection } from "@/components/releases/dropdowns";
 import { useMember } from "@/hooks/store/use-member";
 import { useReleaseFilter } from "@/hooks/store/use-release-filter";
 import { usePlatformOS } from "@/hooks/use-platform-os";
@@ -60,6 +61,14 @@ export const ReleaseViewHeader: FC = observer(function ReleaseViewHeader() {
       updateFilters(projectId.toString(), { [key]: newValues });
     },
     [filters, projectId, updateFilters]
+  );
+
+  const handleDisplayFiltersUpdate = useCallback(
+    (val: Partial<TReleaseDisplayFilters>) => {
+      if (!projectId) return;
+      updateDisplayFilters(projectId.toString(), val);
+    },
+    [projectId, updateDisplayFilters]
   );
 
   const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -138,19 +147,26 @@ export const ReleaseViewHeader: FC = observer(function ReleaseViewHeader() {
       />
       <FiltersDropdown
         icon={<ListFilter className="h-3 w-3" />}
-        title="Filters"
+        title={t("common.filters")}
         placement="bottom-end"
         isFiltersApplied={isFiltersApplied}
       >
         <ModuleFiltersSelection
           displayFilters={displayFilters ?? {}}
           filters={filters ?? {}}
-          handleDisplayFiltersUpdate={(val) => {
-            if (!projectId) return;
-            updateDisplayFilters(projectId.toString(), val);
-          }}
+          handleDisplayFiltersUpdate={handleDisplayFiltersUpdate}
           handleFiltersUpdate={handleFilters}
           memberIds={workspaceMemberIds ?? undefined}
+        />
+      </FiltersDropdown>
+      <FiltersDropdown
+        title={t("common.display")}
+        placement="bottom-end"
+        miniIcon={<SlidersHorizontal className="size-3.5" />}
+      >
+        <ReleaseDisplayFiltersSelection
+          displayFilters={displayFilters ?? {}}
+          handleDisplayFiltersUpdate={handleDisplayFiltersUpdate}
         />
       </FiltersDropdown>
       <div className="hidden items-center gap-1 rounded-sm bg-layer-3 p-1 md:flex">

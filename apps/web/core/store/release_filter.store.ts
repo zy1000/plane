@@ -7,7 +7,12 @@
 import { set } from "lodash-es";
 import { action, computed, observable, makeObservable, runInAction, reaction } from "mobx";
 import { computedFn } from "mobx-utils";
-import type { TModuleDisplayFilters, TModuleFilters, TModuleFiltersByState } from "@plane/types";
+import type {
+  TModuleDisplayFilters,
+  TModuleFilters,
+  TModuleFiltersByState,
+  TReleaseDisplayFilters,
+} from "@plane/types";
 import { storage } from "@/lib/local-storage";
 import type { CoreRootStore } from "./root.store";
 
@@ -15,25 +20,34 @@ const RELEASE_DISPLAY_FILTERS_KEY = "release_display_filters";
 const RELEASE_FILTERS_KEY = "release_filters";
 
 export interface IReleaseFilterStore {
-  displayFilters: Record<string, TModuleDisplayFilters>;
+  displayFilters: Record<string, TReleaseDisplayFilters>;
   filters: Record<string, TModuleFiltersByState>;
   searchQuery: string;
   archivedModulesSearchQuery: string;
-  currentProjectDisplayFilters: TModuleDisplayFilters | undefined;
+  currentProjectDisplayFilters: TReleaseDisplayFilters | undefined;
   currentProjectFilters: TModuleFilters | undefined;
   currentProjectArchivedFilters: TModuleFilters | undefined;
-  getDisplayFiltersByProjectId: (projectId: string) => TModuleDisplayFilters | undefined;
+  getDisplayFiltersByProjectId: (projectId: string) => TReleaseDisplayFilters | undefined;
   getFiltersByProjectId: (projectId: string) => TModuleFilters | undefined;
   getArchivedFiltersByProjectId: (projectId: string) => TModuleFilters | undefined;
-  updateDisplayFilters: (projectId: string, displayFilters: TModuleDisplayFilters) => void;
+  updateDisplayFilters: (projectId: string, displayFilters: TReleaseDisplayFilters) => void;
   updateFilters: (projectId: string, filters: TModuleFilters, state?: keyof TModuleFiltersByState) => void;
   updateSearchQuery: (query: string) => void;
   updateArchivedModulesSearchQuery: (query: string) => void;
   clearAllFilters: (projectId: string, state?: keyof TModuleFiltersByState) => void;
 }
 
+const DEFAULT_RELEASE_DISPLAY_PROPERTIES = {
+  status: true,
+  issue_count: true,
+  start_date: true,
+  end_date: true,
+  created_by: true,
+  members: true,
+};
+
 export class ReleaseFilterStore implements IReleaseFilterStore {
-  displayFilters: Record<string, TModuleDisplayFilters> = {};
+  displayFilters: Record<string, TReleaseDisplayFilters> = {};
   filters: Record<string, TModuleFiltersByState> = {};
   searchQuery: string = "";
   archivedModulesSearchQuery: string = "";
@@ -135,6 +149,11 @@ export class ReleaseFilterStore implements IReleaseFilterStore {
         favorites: displayFilters?.favorites || false,
         layout: displayFilters?.layout || "list",
         order_by: displayFilters?.order_by || "name",
+        group_by: displayFilters?.group_by || "status",
+        display_properties: {
+          ...DEFAULT_RELEASE_DISPLAY_PROPERTIES,
+          ...(displayFilters?.display_properties ?? {}),
+        },
       };
       this.filters[projectId] = this.filters[projectId] ?? {
         default: {},
@@ -145,10 +164,19 @@ export class ReleaseFilterStore implements IReleaseFilterStore {
     this.saveFiltersToLocalStorage();
   };
 
-  updateDisplayFilters = (projectId: string, displayFilters: TModuleDisplayFilters) => {
+  updateDisplayFilters = (projectId: string, displayFilters: TReleaseDisplayFilters) => {
     runInAction(() => {
       Object.keys(displayFilters).forEach((key) => {
-        set(this.displayFilters, [projectId, key], displayFilters[key as keyof TModuleDisplayFilters]);
+        const filterKey = key as keyof TReleaseDisplayFilters;
+        if (filterKey === "display_properties") {
+          const prevDisplayProperties = this.displayFilters[projectId]?.display_properties ?? {};
+          set(this.displayFilters, [projectId, filterKey], {
+            ...prevDisplayProperties,
+            ...(displayFilters.display_properties ?? {}),
+          });
+        } else {
+          set(this.displayFilters, [projectId, filterKey], displayFilters[filterKey]);
+        }
       });
     });
     this.saveDisplayFiltersToLocalStorage();
