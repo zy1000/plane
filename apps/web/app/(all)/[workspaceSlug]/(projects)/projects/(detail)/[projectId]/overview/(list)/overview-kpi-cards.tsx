@@ -1,6 +1,6 @@
-import { type FC, useMemo } from "react";
+import { type FC } from "react";
 import { observer } from "mobx-react";
-import { CalendarClock, Timer, UserCircle2 } from "lucide-react";
+import { CalendarClock, Award, UserCircle2 } from "lucide-react";
 import { DoubleCircleIcon } from "@plane/propel/icons";
 import type { IProject, TProject } from "@plane/types";
 import { getDate, renderFormattedDate } from "@plane/utils";
@@ -20,17 +20,11 @@ const cardBase =
 const cardContentBase = "min-w-0 flex-1 space-y-1.5";
 const cardLabelClass = "text-sm font-medium text-primary";
 const cardValueClass = "text-sm font-normal text-primary";
-const cardValueNumberClass = "text-18 font-semibold text-primary";
-const cardValueUnitClass = "text-sm font-normal text-primary";
 const kpiIconShell = "grid h-11 w-11 flex-shrink-0 place-items-center rounded-sm bg-surface-2";
 
 export const ProjectOverviewKpiCards: FC<Props> = observer(
-  ({ workspaceSlug, project, analyticsData, disabled = false }) => {
+  ({ workspaceSlug, project, analyticsData: _analyticsData, disabled = false }) => {
     const { updateProject } = useProject();
-    const totalHours = useMemo(() => {
-      const hours = analyticsData?.total_timesheet_hours;
-      return typeof hours === "number" ? Math.round(hours * 100) / 100 : null;
-    }, [analyticsData?.total_timesheet_hours]);
 
     const handleUpdate = async (data: Partial<TProject>) => {
       if (!disabled) await updateProject(workspaceSlug, project.id, data);
@@ -86,20 +80,11 @@ export const ProjectOverviewKpiCards: FC<Props> = observer(
         <div className={cardBase}>
           <div className="flex items-center gap-2.5">
             <div className={kpiIconShell}>
-              <Timer className="h-5 w-5 text-amber-500" />
+              <Award className="h-5 w-5 text-amber-500" />
             </div>
             <div className={cardContentBase}>
-              <div className={cardLabelClass}>工时总计</div>
-              <div className="flex items-baseline gap-1">
-                {totalHours !== null ? (
-                  <>
-                    <span className={cardValueNumberClass}>{totalHours}</span>
-                    <span className={cardValueUnitClass}>h</span>
-                  </>
-                ) : (
-                  <span className={cardValueNumberClass}>-</span>
-                )}
-              </div>
+              <div className={cardLabelClass}>项目等级</div>
+              <div className={cardValueClass}>-</div>
             </div>
           </div>
         </div>

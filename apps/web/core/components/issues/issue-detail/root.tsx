@@ -24,7 +24,11 @@ import { useUserPermissions } from "@/hooks/store/user";
 import { useAppRouter } from "@/hooks/use-app-router";
 // local components
 import { IssuePeekOverview } from "../peek-overview";
-import { isWorkflowApprovalInitiated, type TIssueWorkflowUpdateError } from "../workflow-error-utils";
+import {
+  extractIssueUpdateErrorMessage,
+  isWorkflowApprovalInitiated,
+  type TIssueWorkflowUpdateError,
+} from "../workflow-error-utils";
 import { IssueMainContent } from "./main-content";
 import { IssueDetailsSidebar } from "./sidebar";
 
@@ -98,7 +102,7 @@ export const IssueDetailRoot = observer(function IssueDetailRoot(props: TIssueDe
         } catch (error) {
           console.log("Error in updating issue:", error);
           const errorData = error as TIssueWorkflowUpdateError;
-          const errorMessage = errorData?.error;
+          const errorMessage = extractIssueUpdateErrorMessage(errorData);
           const approvalInitiated = isWorkflowApprovalInitiated(errorData);
           setToast({
             title: approvalInitiated ? "已发起审批流程" : t("common.error.label"),

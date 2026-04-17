@@ -53,6 +53,7 @@ export type TProjectStatisticResponse = {
     pending_defects: number;
     total_defects: number;
     total_cases: number;
+    total_timesheet_hours: number;
   };
   cycles: {
     count: number;

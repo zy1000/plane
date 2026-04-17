@@ -10,7 +10,7 @@ import pytz
 
 # Django imports
 from django.core.serializers.json import DjangoJSONEncoder
-from django.db.models import Count, Exists, F, IntegerField, OuterRef, Prefetch, Q, Subquery, Value
+from django.db.models import Count, Exists, F, IntegerField, OuterRef, Prefetch, Q, Subquery, Sum, Value
 from django.db.models.functions import Coalesce, TruncDate
 from django.utils import timezone
 from rest_framework.decorators import action
@@ -52,6 +52,7 @@ from plane.db.models import (
     CaseReview,
     TestCaseRepository,
     TestCase,
+    TimeSheet,
     User,
 )
 from plane.db.models.intake import IntakeIssueStatus
@@ -817,6 +818,12 @@ class ProjectAPI(BaseViewSet):
             else 0
         )
 
+        total_timesheet_hours = float(
+            TimeSheet.objects.filter(project_id=project_id).aggregate(
+                total=Sum('hours')
+            )['total'] or 0
+        )
+
         req_created_before = requirement_qs.filter(created_at__date__lt=start_date).count()
         req_completed_before = requirement_qs.filter(completed_at__isnull=False,
                                                      completed_at__date__lt=start_date).count()
@@ -1140,6 +1147,7 @@ class ProjectAPI(BaseViewSet):
                     'pending_defects': pending_defects,
                     'total_defects': total_defects,
                     'total_cases': total_cases,
+                    'total_timesheet_hours': total_timesheet_hours,
                 },
                 'cycles': {
                     'count': cycles_queryset.count(),

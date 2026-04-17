@@ -51,7 +51,11 @@ import { ReleaseService } from "@/services/release.service";
 import { WorkItemLayoutAdditionalProperties } from "@/plane-web/components/issues/issue-layouts/additional-properties";
 // local components
 import { IssuePropertyLabels } from "./labels";
-import { isWorkflowApprovalInitiated, type TIssueWorkflowUpdateError } from "../../workflow-error-utils";
+import {
+  extractIssueUpdateErrorMessage,
+  isWorkflowApprovalInitiated,
+  type TIssueWorkflowUpdateError,
+} from "../../workflow-error-utils";
 import { WithDisplayPropertiesHOC } from "./with-display-properties-HOC";
 
 export interface IIssueProperties {
@@ -156,7 +160,7 @@ export const IssueProperties = observer(function IssueProperties(props: IIssuePr
       await updateIssue(issue.project_id, issue.id, { state_id: stateId });
     } catch (error) {
       const errorData = error as TIssueWorkflowUpdateError;
-      const errorMessage = errorData?.error;
+      const errorMessage = extractIssueUpdateErrorMessage(errorData);
       const approvalInitiated = isWorkflowApprovalInitiated(errorData);
       setToast({
         type: approvalInitiated ? TOAST_TYPE.INFO : TOAST_TYPE.ERROR,
@@ -179,7 +183,17 @@ export const IssueProperties = observer(function IssueProperties(props: IIssuePr
   };
 
   const handleAssignee = async (ids: string[]) => {
-    if (updateIssue) await updateIssue(issue.project_id, issue.id, { assignee_ids: ids });
+    if (!updateIssue) return;
+    try {
+      await updateIssue(issue.project_id, issue.id, { assignee_ids: ids });
+    } catch (error) {
+      const errorMessage = extractIssueUpdateErrorMessage(error as TIssueWorkflowUpdateError);
+      setToast({
+        type: TOAST_TYPE.ERROR,
+        title: t("common.error.label"),
+        message: errorMessage ?? t("entity.update.failed", { entity: t("issue.label") }),
+      });
+    }
   };
 
   const handleModule = useCallback(

@@ -167,13 +167,30 @@ class IssueCreateSerializer(BaseSerializer):
                 raise serializers.ValidationError({"description_binary": "Invalid binary data"})
 
         # Validate assignees are from project
-        if attrs.get("assignee_ids", []):
-            attrs["assignee_ids"] = ProjectMember.objects.filter(
-                project_id=self.context["project_id"],
-                role__gte=15,
-                is_active=True,
-                member_id__in=attrs["assignee_ids"],
-            ).values_list("member_id", flat=True)
+        if "assignee_ids" in attrs:
+            if attrs["assignee_ids"]:
+                attrs["assignee_ids"] = list(
+                    ProjectMember.objects.filter(
+                        project_id=self.context["project_id"],
+                        role__gte=15,
+                        is_active=True,
+                        member_id__in=attrs["assignee_ids"],
+                    ).values_list("member_id", flat=True)
+                )
+            else:
+                attrs["assignee_ids"] = []
+
+            # 更新场景：若原工作项已存在负责人，不允许将负责人清空
+            if (
+                self.instance is not None
+                and not attrs["assignee_ids"]
+                and IssueAssignee.objects.filter(
+                    issue=self.instance, deleted_at__isnull=True
+                ).exists()
+            ):
+                raise serializers.ValidationError(
+                    {"assignee_ids": "工作项负责人不能为空"}
+                )
 
         # Validate labels are from project
         if attrs.get("label_ids"):
@@ -1178,6 +1195,21 @@ class IssueBatchUpdateSerializer(BaseSerializer):
             "module_ids",
             "release_ids",
         ]
+
+    def validate(self, attrs):
+        # 更新场景：若原工作项已存在负责人，不允许将负责人清空
+        if (
+            "assignee_ids" in attrs
+            and not attrs["assignee_ids"]
+            and self.instance is not None
+            and IssueAssignee.objects.filter(
+                issue=self.instance, deleted_at__isnull=True
+            ).exists()
+        ):
+            raise serializers.ValidationError(
+                {"assignee_ids": "工作项负责人不能为空"}
+            )
+        return attrs
 
     def update(self, instance, validated_data):
         assignees = validated_data.pop("assignee_ids", None)

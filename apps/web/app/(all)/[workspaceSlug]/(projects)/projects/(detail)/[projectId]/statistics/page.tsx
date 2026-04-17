@@ -18,6 +18,7 @@ import {
   Maximize2,
   Package,
   Repeat,
+  Timer,
   TrendingUp,
 } from "lucide-react";
 import { CYCLE_STATUS, MODULE_STATUS, PROJECT_ANALYTICS_VIEW_PERMISSION_KEY } from "@plane/constants";
@@ -48,15 +49,15 @@ const kpiLabelClass = "text-sm font-medium text-primary";
 const kpiValueNumberClass = "text-18 font-semibold text-primary";
 const kpiValueUnitClass = "text-sm font-normal text-primary";
 
-function StatisticKpiCountValue(props: { loaded: boolean; value: number }) {
-  const { loaded, value } = props;
+function StatisticKpiCountValue(props: { loaded: boolean; value: number; unit?: string }) {
+  const { loaded, value, unit = "个" } = props;
   if (!loaded) {
     return <span className={kpiValueNumberClass}>-</span>;
   }
   return (
     <div className="flex items-baseline gap-1">
       <span className={kpiValueNumberClass}>{value}</span>
-      <span className={kpiValueUnitClass}>个</span>
+      <span className={kpiValueUnitClass}>{unit}</span>
     </div>
   );
 }
@@ -175,7 +176,7 @@ function OverdueByAssigneeCard({ data }: { data: TOverdueByAssignee | undefined 
       <div className="mb-3 flex flex-shrink-0 items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <AlertTriangle className="h-3.5 w-3.5 text-danger-primary" />
-          <span className="text-sm font-medium text-primary">人员延期工作项</span>
+          <span className="text-sm font-medium text-primary">延期工作项负责人</span>
           <span className="shrink-0 text-xs text-placeholder">共 {total} 条</span>
         </div>
         <span className="truncate text-xs text-placeholder">截止时间早于今天且未完成</span>
@@ -405,7 +406,23 @@ function ProjectStatisticsPage() {
           </div>
 
           {/* KPI Cards */}
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+            <div className={kpiCardBase}>
+              <div className="flex items-center gap-2.5">
+                <div className={kpiIconShell}>
+                  <Timer className="h-5 w-5 text-amber-500" />
+                </div>
+                <div className="min-w-0 flex-1 space-y-1.5">
+                  <div className={kpiLabelClass}>工时总计</div>
+                  <StatisticKpiCountValue
+                    loaded={!!counts}
+                    value={Math.round((counts?.total_timesheet_hours ?? 0) * 100) / 100}
+                    unit="h"
+                  />
+                </div>
+              </div>
+            </div>
+
             <div className={kpiCardBase}>
               <div className="flex items-center gap-2.5">
                 <div className={kpiIconShell}>
@@ -455,7 +472,7 @@ function ProjectStatisticsPage() {
             </div>
           </div>
 
-          {/* 人员延期工作项（左）+ Progress Lists Tab（右） */}
+          {/* 延期工作项负责人（左）+ Progress Lists Tab（右） */}
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
             <OverdueByAssigneeCard data={displayData?.overdue_by_assignee} />
             <div className={`${sectionCard} flex h-[420px] flex-col`}>

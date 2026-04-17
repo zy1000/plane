@@ -22,7 +22,11 @@ import { useIssueStoreType } from "@/hooks/use-issue-layout-store";
 import { useWorkItemProperties } from "@/plane-web/hooks/use-issue-properties";
 // local imports
 import type { TIssueOperations } from "../issue-detail";
-import { isWorkflowApprovalInitiated, type TIssueWorkflowUpdateError } from "../workflow-error-utils";
+import {
+  extractIssueUpdateErrorMessage,
+  isWorkflowApprovalInitiated,
+  type TIssueWorkflowUpdateError,
+} from "../workflow-error-utils";
 import { IssueView } from "./view";
 
 export const IssuePeekOverview = observer(function IssuePeekOverview(props: IWorkItemPeekOverview) {
@@ -86,7 +90,7 @@ export const IssuePeekOverview = observer(function IssuePeekOverview(props: IWor
             })
             .catch((error) => {
               const errorData = error as TIssueWorkflowUpdateError;
-              const errorMessage = errorData?.error;
+              const errorMessage = extractIssueUpdateErrorMessage(errorData);
               const approvalInitiated = isWorkflowApprovalInitiated(errorData);
               setToast({
                 title: approvalInitiated ? "已发起审批流程" : t("toast.error"),
