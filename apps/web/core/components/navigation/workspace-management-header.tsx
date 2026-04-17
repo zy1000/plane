@@ -54,7 +54,7 @@ export const WorkspaceManagementNavigation = observer(function WorkspaceManageme
                     {tabs.map((tab) => (
                       <div key={tab.key} className="relative flex h-full items-center">
                         {tab.isActive && (
-                          <span className="absolute bottom-0 left-1/2 h-0.5 w-[80%] -translate-x-1/2 rounded-t-md bg-(--text-color-icon-primary)" />
+                          <span className="absolute -bottom-px left-1/2 h-0.5 w-[80%] -translate-x-1/2 rounded-t-md bg-(--text-color-icon-primary)" />
                         )}
                         <Link href={tab.href}>
                           <TabNavigationItem isActive={tab.isActive}>
