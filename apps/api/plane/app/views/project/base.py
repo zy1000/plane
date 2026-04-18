@@ -779,7 +779,7 @@ class ProjectAPI(BaseViewSet):
         if page_size_param:
             try:
                 custom_page_size = int(page_size_param)
-                if 1 <= custom_page_size <= 50:
+                if 1 <= custom_page_size <= 1000:
                     statistic_table_page_size = custom_page_size
             except (ValueError, TypeError):
                 pass

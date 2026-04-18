@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Dropdown, Pagination } from "antd";
+import { useMemo, useState } from "react";
+import { Dropdown } from "antd";
 import { Tab } from "@headlessui/react";
 import { useParams, useRouter } from "next/navigation";
 import useSWR from "swr";
@@ -35,8 +35,8 @@ import { StatisticExpandModal, type StatisticSectionType } from "./statistic-exp
 
 const projectStatisticService = new ProjectStatisticService();
 
-/** 与后端 `get_statistic` 中各列表分页条数一致 */
-const STATISTIC_TABLE_PAGE_SIZE = 7;
+/** 统计页四个 Tab 一次性加载的最大条数（与后端上限保持一致） */
+const STATISTIC_TABLE_PAGE_SIZE = 1000;
 
 const sectionCard = "rounded-lg border border-subtle bg-surface-1";
 const kpiCardBase =
@@ -167,33 +167,9 @@ function ProjectStatisticsPage() {
   const { workspaceSlug, projectId } = useParams();
   const { getProjectById } = useProject();
   const { workspaceUserInfo, allowProjectPermissionKeys } = useUserPermissions();
-  const [cyclePage, setCyclePage] = useState(1);
-  const [releasePage, setReleasePage] = useState(1);
-  const [planPage, setPlanPage] = useState(1);
-  const [reviewPage, setReviewPage] = useState(1);
   const [expandModalSection, setExpandModalSection] = useState<StatisticSectionType | null>(null);
   const [activeListTabIndex, setActiveListTabIndex] = useState(0);
   const activeTab = PROGRESS_LIST_TABS[activeListTabIndex] ?? PROGRESS_LIST_TABS[0];
-
-  const changeTriggerRef = useRef<Set<string>>(new Set(["init"]));
-  const [displayData, setDisplayData] = useState<TProjectStatisticResponse | undefined>(undefined);
-
-  const handleCyclePageChange = (p: number) => {
-    changeTriggerRef.current.add("cycle");
-    setCyclePage(p);
-  };
-  const handleReleasePageChange = (p: number) => {
-    changeTriggerRef.current.add("release");
-    setReleasePage(p);
-  };
-  const handlePlanPageChange = (p: number) => {
-    changeTriggerRef.current.add("plan");
-    setPlanPage(p);
-  };
-  const handleReviewPageChange = (p: number) => {
-    changeTriggerRef.current.add("review");
-    setReviewPage(p);
-  };
 
   const effectiveWorkspaceSlug = workspaceSlug?.toString();
   const effectiveProjectId = projectId?.toString();
@@ -205,16 +181,13 @@ function ProjectStatisticsPage() {
     effectiveProjectId
   );
 
-  const { data } = useSWR<TProjectStatisticResponse>(
+  const { data: displayData } = useSWR<TProjectStatisticResponse>(
     effectiveWorkspaceSlug && effectiveProjectId
-      ? `project-statistic-${effectiveWorkspaceSlug}-${effectiveProjectId}-${cyclePage}-${releasePage}-${planPage}-${reviewPage}`
+      ? `project-statistic-${effectiveWorkspaceSlug}-${effectiveProjectId}`
       : null,
     () =>
       projectStatisticService.getStatistic(effectiveWorkspaceSlug!, effectiveProjectId!, {
-        page: cyclePage,
-        release_page: releasePage,
-        plan_page: planPage,
-        review_page: reviewPage,
+        page_size: STATISTIC_TABLE_PAGE_SIZE,
       }),
     {
       keepPreviousData: true,
@@ -227,21 +200,6 @@ function ProjectStatisticsPage() {
       },
     }
   );
-
-  useEffect(() => {
-    if (data === undefined) return;
-    const triggers = changeTriggerRef.current;
-    setDisplayData((prev) => {
-      if (!prev || triggers.has("init")) return data;
-      const updated = { ...prev };
-      if (triggers.has("cycle")) updated.cycles = data.cycles;
-      if (triggers.has("release")) updated.releases = data.releases;
-      if (triggers.has("plan")) updated.test_plans = data.test_plans;
-      if (triggers.has("review")) updated.case_reviews = data.case_reviews;
-      return updated;
-    });
-    changeTriggerRef.current = new Set();
-  }, [data]);
 
   const workItemBarData = useMemo(() => {
     const rows = displayData?.work_item_stats ?? [];
@@ -484,8 +442,8 @@ function ProjectStatisticsPage() {
                   {/* 迭代 */}
                   <Tab.Panel className="flex min-h-0 flex-1 flex-col">
                     <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-3 vertical-scrollbar scrollbar-sm">
-                      <Table>
-                        <TableHeader className="border-b border-subtle border-t-0 bg-transparent">
+                      <Table wrapperClassName="overflow-visible">
+                        <TableHeader className="sticky top-0 z-10 border-b border-subtle border-t-0 bg-surface-1">
                           <TableRow>
                             <TableHead className="h-8 w-[28%] text-left text-xs font-medium text-placeholder">迭代</TableHead>
                             <TableHead className="h-8 w-[24%] text-left text-xs font-medium text-placeholder">日期</TableHead>
@@ -549,26 +507,13 @@ function ProjectStatisticsPage() {
                         </TableBody>
                       </Table>
                     </div>
-                    {(displayData?.cycles?.count ?? 0) > STATISTIC_TABLE_PAGE_SIZE && (
-                      <div className="flex flex-shrink-0 items-center justify-between border-t border-subtle px-4 py-2">
-                        <span className="text-xs text-placeholder">共 {displayData?.cycles?.count ?? 0} 条</span>
-                        <Pagination
-                          simple
-                          current={cyclePage}
-                          pageSize={STATISTIC_TABLE_PAGE_SIZE}
-                          total={displayData?.cycles?.count ?? 0}
-                          onChange={handleCyclePageChange}
-                          size="small"
-                        />
-                      </div>
-                    )}
                   </Tab.Panel>
 
                   {/* 发布 */}
                   <Tab.Panel className="flex min-h-0 flex-1 flex-col">
                     <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-3 vertical-scrollbar scrollbar-sm">
-                      <Table>
-                        <TableHeader className="border-b border-subtle border-t-0 bg-transparent">
+                      <Table wrapperClassName="overflow-visible">
+                        <TableHeader className="sticky top-0 z-10 border-b border-subtle border-t-0 bg-surface-1">
                           <TableRow>
                             <TableHead className="h-8 w-[28%] text-left text-xs font-medium text-placeholder">发布</TableHead>
                             <TableHead className="h-8 w-[24%] text-left text-xs font-medium text-placeholder">日期</TableHead>
@@ -629,26 +574,13 @@ function ProjectStatisticsPage() {
                         </TableBody>
                       </Table>
                     </div>
-                    {(displayData?.releases?.count ?? 0) > STATISTIC_TABLE_PAGE_SIZE && (
-                      <div className="flex flex-shrink-0 items-center justify-between border-t border-subtle px-4 py-2">
-                        <span className="text-xs text-placeholder">共 {displayData?.releases?.count ?? 0} 条</span>
-                        <Pagination
-                          simple
-                          current={releasePage}
-                          pageSize={STATISTIC_TABLE_PAGE_SIZE}
-                          total={displayData?.releases?.count ?? 0}
-                          onChange={handleReleasePageChange}
-                          size="small"
-                        />
-                      </div>
-                    )}
                   </Tab.Panel>
 
                   {/* 测试计划 */}
                   <Tab.Panel className="flex min-h-0 flex-1 flex-col">
                     <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-3 vertical-scrollbar scrollbar-sm">
-                      <Table>
-                        <TableHeader className="border-b border-subtle border-t-0 bg-transparent">
+                      <Table wrapperClassName="overflow-visible">
+                        <TableHeader className="sticky top-0 z-10 border-b border-subtle border-t-0 bg-surface-1">
                           <TableRow>
                             <TableHead className="h-8 w-[28%] text-left text-xs font-medium text-placeholder">测试计划</TableHead>
                             <TableHead className="h-8 w-[24%] text-left text-xs font-medium text-placeholder">日期</TableHead>
@@ -709,26 +641,13 @@ function ProjectStatisticsPage() {
                         </TableBody>
                       </Table>
                     </div>
-                    {(displayData?.test_plans?.count ?? 0) > STATISTIC_TABLE_PAGE_SIZE && (
-                      <div className="flex flex-shrink-0 items-center justify-between border-t border-subtle px-4 py-2">
-                        <span className="text-xs text-placeholder">共 {displayData?.test_plans?.count ?? 0} 条</span>
-                        <Pagination
-                          simple
-                          current={planPage}
-                          pageSize={STATISTIC_TABLE_PAGE_SIZE}
-                          total={displayData?.test_plans?.count ?? 0}
-                          onChange={handlePlanPageChange}
-                          size="small"
-                        />
-                      </div>
-                    )}
                   </Tab.Panel>
 
                   {/* 评审 */}
                   <Tab.Panel className="flex min-h-0 flex-1 flex-col">
                     <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-3 vertical-scrollbar scrollbar-sm">
-                      <Table>
-                        <TableHeader className="border-b border-subtle border-t-0 bg-transparent">
+                      <Table wrapperClassName="overflow-visible">
+                        <TableHeader className="sticky top-0 z-10 border-b border-subtle border-t-0 bg-surface-1">
                           <TableRow>
                             <TableHead className="h-8 w-[28%] text-left text-xs font-medium text-placeholder">评审</TableHead>
                             <TableHead className="h-8 w-[24%] text-left text-xs font-medium text-placeholder">日期</TableHead>
@@ -789,19 +708,6 @@ function ProjectStatisticsPage() {
                         </TableBody>
                       </Table>
                     </div>
-                    {(displayData?.case_reviews?.count ?? 0) > STATISTIC_TABLE_PAGE_SIZE && (
-                      <div className="flex flex-shrink-0 items-center justify-between border-t border-subtle px-4 py-2">
-                        <span className="text-xs text-placeholder">共 {displayData?.case_reviews?.count ?? 0} 条</span>
-                        <Pagination
-                          simple
-                          current={reviewPage}
-                          pageSize={STATISTIC_TABLE_PAGE_SIZE}
-                          total={displayData?.case_reviews?.count ?? 0}
-                          onChange={handleReviewPageChange}
-                          size="small"
-                        />
-                      </div>
-                    )}
                   </Tab.Panel>
                 </Tab.Panels>
               </Tab.Group>

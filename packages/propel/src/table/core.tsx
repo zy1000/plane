@@ -8,12 +8,17 @@ import * as React from "react";
 
 import { cn } from "../utils/classname";
 
+type TableProps = React.ComponentPropsWithoutRef<"table"> & {
+  /** 外层滚动容器的 className，用于自定义高度或覆盖滚动行为 */
+  wrapperClassName?: string;
+};
+
 const Table = React.forwardRef(function Table(
-  { className, ...props }: React.ComponentPropsWithoutRef<"table">,
+  { className, wrapperClassName, ...props }: TableProps,
   ref: React.ForwardedRef<React.ComponentRef<"table">>
 ) {
   return (
-    <div className="relative w-full overflow-auto">
+    <div className={cn("relative w-full overflow-auto", wrapperClassName)}>
       <table ref={ref} className={cn("w-full caption-bottom text-13", className)} {...props} />
     </div>
   );
