@@ -9,7 +9,7 @@ from plane.app.views import (
     ReleaseUserPropertiesEndpoint,
     ReleaseArchiveUnarchiveEndpoint,
 )
-from plane.app.views.release.base import ReleaseAPI
+from plane.app.views.release.base import ReleaseAPI, ReleaseOverdueByAssigneeEndpoint
 from plane.app.views.release.file import ReleaseFileAPI
 
 router = SimpleRouter()
@@ -92,6 +92,11 @@ urlpatterns = [
         "workspaces/<str:slug>/projects/<uuid:project_id>/user-favorite-releases/<uuid:release_id>/",
         ReleaseFavoriteViewSet.as_view({"delete": "destroy"}),
         name="user-favorite-release",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/releases/<uuid:release_id>/overdue-by-assignee/",
+        ReleaseOverdueByAssigneeEndpoint.as_view(),
+        name="project-release-overdue-by-assignee",
     ),
     path(
         "workspaces/<str:slug>/projects/<uuid:project_id>/releases/<uuid:release_id>/user-properties/",

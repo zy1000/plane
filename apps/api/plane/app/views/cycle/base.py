@@ -48,9 +48,11 @@ from plane.db.models import (
     UserFavorite,
     CycleUserProperties,
     Issue,
+    IssueAssignee,
     Label,
     User,
     Project,
+    ProjectMember,
     UserRecentVisit,
     TestPlan,
 )
@@ -1119,6 +1121,102 @@ class CycleAnalyticsEndpoint(BaseAPIView):
                 "assignees": assignee_distribution,
                 "labels": label_distribution,
                 "completion_chart": completion_chart,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class CycleOverdueByAssigneeEndpoint(BaseAPIView):
+    """
+    返回指定迭代中延期工作项（截止时间早于今天且未完成/未取消）按负责人聚合的结果。
+
+    响应结构与项目统计中的 overdue_by_assignee 保持一致，便于前端复用 UI。
+    """
+
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    def get(self, request, slug, project_id, cycle_id):
+        if not ProjectMember.objects.filter(
+            workspace__slug=slug,
+            project_id=project_id,
+            member_id=request.user.id,
+            is_active=True,
+        ).exists():
+            return Response({"error": "forbidden"}, status=status.HTTP_403_FORBIDDEN)
+
+        today = timezone.now().date()
+
+        overdue_issue_qs = (
+            Issue.issue_objects.filter(
+                workspace__slug=slug,
+                project_id=project_id,
+                issue_cycle__cycle_id=cycle_id,
+                issue_cycle__deleted_at__isnull=True,
+                target_date__isnull=False,
+                target_date__lt=today,
+            )
+            .exclude(state__group__in=["completed", "cancelled"])
+        )
+
+        overdue_rows = list(
+            overdue_issue_qs.filter(
+                assignees__isnull=False,
+                issue_assignee__deleted_at__isnull=True,
+            )
+            .values("assignees__id")
+            .annotate(count=Count("id", distinct=True))
+            .order_by("-count")
+        )
+        overdue_user_ids = [row["assignees__id"] for row in overdue_rows if row.get("assignees__id")]
+        overdue_users = {
+            str(user.id): user
+            for user in User.objects.filter(id__in=overdue_user_ids).only(
+                "id", "display_name", "first_name", "last_name", "avatar", "avatar_asset_id"
+            )
+        }
+
+        overdue_by_assignee = []
+        for row in overdue_rows:
+            assignee_id = row.get("assignees__id")
+            if not assignee_id:
+                continue
+            user = overdue_users.get(str(assignee_id))
+            if not user:
+                continue
+            display_name = (
+                user.display_name
+                or f"{user.first_name or ''} {user.last_name or ''}".strip()
+                or "-"
+            )
+            overdue_by_assignee.append(
+                {
+                    "assignee_id": str(user.id),
+                    "display_name": display_name,
+                    "avatar_url": user.avatar_url or "",
+                    "count": row.get("count") or 0,
+                }
+            )
+
+        active_assignee_exists = IssueAssignee.objects.filter(
+            issue_id=OuterRef("pk"),
+            deleted_at__isnull=True,
+        )
+        overdue_unassigned_count = overdue_issue_qs.filter(~Exists(active_assignee_exists)).count()
+        if overdue_unassigned_count > 0:
+            overdue_by_assignee.append(
+                {
+                    "assignee_id": None,
+                    "display_name": "未指定负责人",
+                    "avatar_url": "",
+                    "count": overdue_unassigned_count,
+                }
+            )
+
+        overdue_total = sum(item["count"] for item in overdue_by_assignee)
+
+        return Response(
+            {
+                "total": overdue_total,
+                "data": overdue_by_assignee,
             },
             status=status.HTTP_200_OK,
         )

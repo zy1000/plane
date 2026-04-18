@@ -824,6 +824,41 @@ class ProjectAPI(BaseViewSet):
             )['total'] or 0
         )
 
+        member_timesheet_rows = list(
+            TimeSheet.objects.filter(project_id=project_id)
+            .values('member_id')
+            .annotate(hours=Sum('hours'))
+            .order_by('-hours')
+        )
+        member_ids = [row['member_id'] for row in member_timesheet_rows if row.get('member_id')]
+        timesheet_users = {
+            str(user.id): user
+            for user in User.objects.filter(id__in=member_ids).only(
+                'id', 'display_name', 'first_name', 'last_name', 'avatar', 'avatar_asset_id'
+            )
+        }
+        member_timesheet_hours = []
+        for row in member_timesheet_rows:
+            member_id = row.get('member_id')
+            if not member_id:
+                continue
+            user = timesheet_users.get(str(member_id))
+            if not user:
+                continue
+            display_name = (
+                user.display_name
+                or f"{user.first_name or ''} {user.last_name or ''}".strip()
+                or '-'
+            )
+            member_timesheet_hours.append(
+                {
+                    'member_id': str(user.id),
+                    'display_name': display_name,
+                    'avatar_url': user.avatar_url or '',
+                    'hours': float(row.get('hours') or 0),
+                }
+            )
+
         req_created_before = requirement_qs.filter(created_at__date__lt=start_date).count()
         req_completed_before = requirement_qs.filter(completed_at__isnull=False,
                                                      completed_at__date__lt=start_date).count()
@@ -1172,6 +1207,7 @@ class ProjectAPI(BaseViewSet):
                     'total': overdue_total,
                     'data': overdue_by_assignee,
                 },
+                'member_timesheet_hours': member_timesheet_hours,
                 'range': {'start_date': start_date.isoformat(), 'end_date': end_date.isoformat()},
             },
             status=status.HTTP_200_OK,

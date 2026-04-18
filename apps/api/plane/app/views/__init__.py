@@ -105,6 +105,7 @@ from .cycle.base import (
     CycleUserPropertiesEndpoint,
     CycleAnalyticsEndpoint,
     CycleProgressEndpoint,
+    CycleOverdueByAssigneeEndpoint,
 )
 from .cycle.issue import CycleIssueViewSet
 from .cycle.archive import CycleArchiveUnarchiveEndpoint

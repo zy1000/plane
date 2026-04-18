@@ -7,7 +7,6 @@ import { useParams, useRouter } from "next/navigation";
 import useSWR from "swr";
 import { observer } from "mobx-react";
 import {
-  AlertTriangle,
   BarChart3,
   Bug,
   ClipboardList,
@@ -19,17 +18,15 @@ import {
   Package,
   Repeat,
   Timer,
-  TrendingUp,
 } from "lucide-react";
 import { CYCLE_STATUS, MODULE_STATUS, PROJECT_ANALYTICS_VIEW_PERMISSION_KEY } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
-import { AreaChart } from "@plane/propel/charts/area-chart";
 import { BarChart } from "@plane/propel/charts/bar-chart";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import { Avatar } from "@plane/ui";
-import { cn, getDate, getFileURL, renderFormattedDate } from "@plane/utils";
+import { cn, getDate, renderFormattedDate } from "@plane/utils";
 import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
+import { OverdueByAssigneeCard } from "@/components/common/overdue-by-assignee-card";
 import { PageHead } from "@/components/core/page-title";
 import { useProject } from "@/hooks/store/use-project";
 import { useUserPermissions } from "@/hooks/store/user";
@@ -163,64 +160,6 @@ const PROGRESS_LIST_TABS: ProgressListTabConfig[] = [
   },
 ];
 
-type TOverdueByAssignee = TProjectStatisticResponse["overdue_by_assignee"];
-
-function OverdueByAssigneeCard({ data }: { data: TOverdueByAssignee | undefined }) {
-  const rows = data?.data ?? [];
-  const total = data?.total ?? 0;
-  const loaded = !!data;
-  const sortedRows = useMemo(() => [...rows].sort((a, b) => b.count - a.count), [rows]);
-
-  return (
-    <div className={`${sectionCard} flex h-[420px] min-h-0 flex-col overflow-hidden p-4`}>
-      <div className="mb-3 flex flex-shrink-0 items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <AlertTriangle className="h-3.5 w-3.5 text-danger-primary" />
-          <span className="text-sm font-medium text-primary">延期工作项负责人</span>
-          <span className="shrink-0 text-xs text-placeholder">共 {total} 条</span>
-        </div>
-        <span className="truncate text-xs text-placeholder">截止时间早于今天且未完成</span>
-      </div>
-      {!loaded ? (
-        <div className="grid min-h-0 flex-1 place-items-center text-sm text-placeholder">加载中...</div>
-      ) : rows.length === 0 ? (
-        <div className="grid min-h-0 flex-1 place-items-center text-sm text-placeholder">
-          暂无延期工作项
-        </div>
-      ) : (
-        <div className="relative min-h-0 flex-1">
-          <div className="absolute inset-0 overflow-y-auto pr-1 vertical-scrollbar scrollbar-sm">
-            <div className="flex flex-col gap-y-1">
-              {sortedRows.map((row) => (
-                <div
-                  key={row.assignee_id ?? "unassigned"}
-                  className="flex flex-shrink-0 items-center gap-3 rounded-md px-2 py-2 transition-colors hover:bg-layer-1"
-                >
-                  <Avatar
-                    size="sm"
-                    name={row.display_name}
-                    src={row.avatar_url ? getFileURL(row.avatar_url) : ""}
-                  />
-                  <span
-                    className="min-w-0 flex-1 truncate text-sm text-primary"
-                    title={row.display_name}
-                  >
-                    {row.display_name}
-                  </span>
-                  <div className="flex shrink-0 items-baseline gap-1 tabular-nums">
-                    <span className="text-sm font-medium text-danger-primary">{row.count}</span>
-                    <span className="text-xs text-placeholder">项</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 function ProjectStatisticsPage() {
   const pageTitle = "统计";
   const { t } = useTranslation();
@@ -304,25 +243,6 @@ function ProjectStatisticsPage() {
     changeTriggerRef.current = new Set();
   }, [data]);
 
-  const requirementTrendData = useMemo(() => {
-    const rows = displayData?.requirement_daily_status ?? [];
-    return rows.map((row) => ({
-      key: row.date,
-      name: renderFormattedDate(getDate(row.date), "yyyy-MM-dd") ?? row.date,
-      completed: row.completed,
-      incomplete: row.incomplete,
-    }));
-  }, [displayData]);
-
-  const defectTrendData = useMemo(() => {
-    const rows = displayData?.defect_daily_created ?? [];
-    return rows.map((row) => ({
-      key: row.date,
-      name: renderFormattedDate(getDate(row.date), "yyyy-MM-dd") ?? row.date,
-      created: row.created,
-    }));
-  }, [displayData]);
-
   const workItemBarData = useMemo(() => {
     const rows = displayData?.work_item_stats ?? [];
     return rows.map((row) => ({
@@ -334,6 +254,20 @@ function ProjectStatisticsPage() {
       total: row.total,
     }));
   }, [displayData]);
+
+  /** 工时统计：展示工时排名前 N 的成员，避免柱体过密 */
+  const MEMBER_TIMESHEET_MAX_BARS = 15;
+  const memberTimesheetSourceRows = displayData?.member_timesheet_hours;
+  const memberTimesheetBarData = useMemo(() => {
+    const rows = memberTimesheetSourceRows ?? [];
+    return rows.slice(0, MEMBER_TIMESHEET_MAX_BARS).map((row) => ({
+      key: row.member_id,
+      name: row.display_name,
+      hours: Math.round((row.hours ?? 0) * 100) / 100,
+    }));
+  }, [memberTimesheetSourceRows]);
+  const memberTimesheetTotalMembers = memberTimesheetSourceRows?.length ?? 0;
+  const memberTimesheetHasMore = memberTimesheetTotalMembers > MEMBER_TIMESHEET_MAX_BARS;
 
   const getCycleStatusDetails = (status?: string) => {
     const normalizedStatus = normalizeCycleStatusValue(status);
@@ -928,82 +862,53 @@ function ProjectStatisticsPage() {
             </div>
           </div>
 
-          {/* Trend Charts */}
-          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-            <div className={`${sectionCard} flex h-[420px] flex-col p-4`}>
-              <div className="mb-3 flex items-center gap-2">
-                <TrendingUp className="h-3.5 w-3.5 text-placeholder" />
-                <span className="text-sm font-medium text-primary">需求每日状态趋势</span>
+          {/* 工时统计：按项目成员汇总已登记工时 */}
+          <div className={`${sectionCard} flex h-[420px] flex-col p-4`}>
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Timer className="h-3.5 w-3.5 text-amber-500" />
+                <span className="text-sm font-medium text-primary">工时统计</span>
+                <span className="shrink-0 text-xs text-placeholder">
+                  共 {memberTimesheetTotalMembers} 位成员
+                </span>
               </div>
-              <div className="min-h-0 flex-1">
-                <AreaChart
-                  className="h-full w-full"
-                  data={requirementTrendData}
-                  areas={[
-                    {
-                      key: "completed",
-                      label: "已完成",
-                      fill: "#19803833",
-                      fillOpacity: 1,
-                      stackId: "已完成",
-                      showDot: false,
-                      smoothCurves: true,
-                      strokeColor: "#198038",
-                      strokeOpacity: 1,
-                    },
-                    {
-                      key: "incomplete",
-                      label: "未完成",
-                      fill: "#F59E0B33",
-                      fillOpacity: 1,
-                      stackId: "未完成",
-                      showDot: false,
-                      smoothCurves: true,
-                      strokeColor: "#F59E0B",
-                      strokeOpacity: 1,
-                    },
-                  ]}
-                  xAxis={{ key: "name", label: "日期" }}
-                  yAxis={{ key: "count", label: "数量", offset: -60, dx: -24 }}
-                  legend={{
-                    align: "left",
-                    verticalAlign: "bottom",
-                    layout: "horizontal",
-                    wrapperStyles: {
-                      justifyContent: "start",
-                      alignContent: "start",
-                      paddingLeft: "40px",
-                      paddingTop: "10px",
-                    },
-                  }}
-                />
+              <div className="flex items-baseline gap-1 text-xs text-placeholder">
+                <span>累计工时</span>
+                <span className="text-sm font-medium text-amber-500 tabular-nums">
+                  {Math.round((counts?.total_timesheet_hours ?? 0) * 100) / 100}
+                </span>
+                <span>h</span>
+                {memberTimesheetHasMore && (
+                  <span className="ml-2 truncate">
+                    · 仅显示前 {MEMBER_TIMESHEET_MAX_BARS} 名
+                  </span>
+                )}
               </div>
             </div>
-
-            <div className={`${sectionCard} flex h-[420px] flex-col p-4`}>
-              <div className="mb-3 flex items-center gap-2">
-                <TrendingUp className="h-3.5 w-3.5 text-placeholder" />
-                <span className="text-sm font-medium text-primary">缺陷每日新增趋势</span>
-              </div>
-              <div className="min-h-0 flex-1">
-                <AreaChart
+            <div className="min-h-0 flex-1">
+              {!displayData ? (
+                <div className="grid h-full place-items-center text-sm text-placeholder">加载中...</div>
+              ) : memberTimesheetBarData.length === 0 ? (
+                <div className="grid h-full place-items-center text-sm text-placeholder">
+                  暂无工时记录
+                </div>
+              ) : (
+                <BarChart
                   className="h-full w-full"
-                  data={defectTrendData}
-                  areas={[
+                  margin={{ top: 20, right: 30, bottom: 5, left: 0 }}
+                  data={memberTimesheetBarData}
+                  barSize={32}
+                  bars={[
                     {
-                      key: "created",
-                      label: "新增缺陷",
-                      fill: "#8e011933",
-                      fillOpacity: 1,
-                      stackId: "defect",
-                      showDot: false,
-                      smoothCurves: true,
-                      strokeColor: "#8e0119",
-                      strokeOpacity: 1,
+                      key: "hours",
+                      label: "工时（小时）",
+                      fill: "#F59E0B",
+                      showPercentage: false,
+                      textClassName: "",
                     },
                   ]}
-                  xAxis={{ key: "name", label: "日期" }}
-                  yAxis={{ key: "count", label: "数量", offset: -60, dx: -24 }}
+                  xAxis={{ key: "name", label: "成员" }}
+                  yAxis={{ key: "hours", label: "工时（h）", offset: -60, dx: -24 }}
                   legend={{
                     align: "left",
                     verticalAlign: "bottom",
@@ -1016,7 +921,7 @@ function ProjectStatisticsPage() {
                     },
                   }}
                 />
-              </div>
+              )}
             </div>
           </div>
 

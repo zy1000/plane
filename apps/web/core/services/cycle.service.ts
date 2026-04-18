@@ -266,4 +266,30 @@ export class CycleService extends APIService {
         throw error?.response?.data;
       });
   }
+
+  async getCycleOverdueByAssignee(
+    workspaceSlug: string,
+    projectId: string,
+    cycleId: string
+  ): Promise<TCycleOverdueByAssigneeResponse> {
+    return this.get(
+      `/api/workspaces/${workspaceSlug}/projects/${projectId}/cycles/${cycleId}/overdue-by-assignee/`
+    )
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
 }
+
+export type TCycleOverdueAssigneeRow = {
+  assignee_id: string | null;
+  display_name: string;
+  avatar_url: string;
+  count: number;
+};
+
+export type TCycleOverdueByAssigneeResponse = {
+  total: number;
+  data: TCycleOverdueAssigneeRow[];
+};

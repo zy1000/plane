@@ -1,5 +1,6 @@
 import { API_BASE_URL } from "@plane/constants";
 import type { IRelease, ILinkDetails, ReleaseLink, TIssuesResponse } from "@plane/types";
+import type { TCycleOverdueByAssigneeResponse } from "@/services/cycle.service";
 import { APIService } from "@/services/api.service";
 
 export class ReleaseService extends APIService {
@@ -314,6 +315,20 @@ export class ReleaseService extends APIService {
     return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/release/statistics/`, {
       params: { release_id: releaseId },
     })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async getReleaseOverdueByAssignee(
+    workspaceSlug: string,
+    projectId: string,
+    releaseId: string
+  ): Promise<TCycleOverdueByAssigneeResponse> {
+    return this.get(
+      `/api/workspaces/${workspaceSlug}/projects/${projectId}/releases/${releaseId}/overdue-by-assignee/`
+    )
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;

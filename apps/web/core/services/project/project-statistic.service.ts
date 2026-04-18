@@ -98,6 +98,12 @@ export type TProjectStatisticResponse = {
       count: number;
     }>;
   };
+  member_timesheet_hours: Array<{
+    member_id: string;
+    display_name: string;
+    avatar_url: string;
+    hours: number;
+  }>;
   range: {
     start_date: string;
     end_date: string;

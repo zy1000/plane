@@ -11,6 +11,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { isEmpty } from "lodash-es";
 import { observer } from "mobx-react";
 import { useSearchParams } from "next/navigation";
+import useSWR from "swr";
 import { Tab } from "@headlessui/react";
 import {
   CalendarDays,
@@ -25,21 +26,30 @@ import {
   Plus,
   Download,
   Trash2,
+  FileText,
+  Maximize2,
+  AlertTriangle,
+  ClipboardList,
+  Pencil,
 } from "lucide-react";
 import { Pagination, Popconfirm } from "antd";
-import { CYCLE_STATUS } from "@plane/constants";
+import { CYCLE_STATUS, EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { CheckIcon, MembersPropertyIcon, WorkItemsIcon } from "@plane/propel/icons";
 import type { ICycle, TCyclePlotType, TProgressSnapshot, TCycleDistribution, TCycleEstimateDistribution } from "@plane/types";
 import { EIssuesStoreType } from "@plane/types";
 import { Loader, Avatar, AvatarGroup, Button, CircularProgressIndicator } from "@plane/ui";
 import { cn, getFileURL, calculateCycleProgress, getDate, toFilterArray } from "@plane/utils";
+import { OverdueByAssigneeCard } from "@/components/common/overdue-by-assignee-card";
+import { CycleDescriptionFullscreenModal } from "@/components/cycles/cycle-description-fullscreen-modal";
+import { CycleOverviewFullscreenModal } from "@/components/cycles/cycle-overview-fullscreen-modal";
 import useCyclesDetails from "@/components/cycles/active-cycle/use-cycles-details";
 import type { TAssigneeData } from "@/components/core/sidebar/progress-stats/assignee";
 import { AssigneeStatComponent } from "@/components/core/sidebar/progress-stats/assignee";
 import { createFilterUpdateHandler } from "@/components/core/sidebar/progress-stats/shared";
 import { useCycle } from "@/hooks/store/use-cycle";
 import { useMember } from "@/hooks/store/use-member";
+import { useUserPermissions } from "@/hooks/store/user";
 import { useWorkItemFilters } from "@/hooks/store/work-item-filters/use-work-item-filters";
 import useLocalStorage from "@/hooks/use-local-storage";
 import { SidebarChartRoot } from "@/plane-web/components/cycles";
@@ -50,6 +60,8 @@ type Props = {
   projectId: string;
   cycleId: string;
 };
+
+type TOverviewExpandPanel = null | "overdue" | "stats";
 
 type TCycleFile = {
   id: string;
@@ -129,6 +141,7 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
   const { getPlotTypeByCycleId, getEstimateTypeByCycleId, getCycleById } = useCycle();
   const { getUserDetails } = useMember();
   const { getFilter, updateFilterValueFromSidebar } = useWorkItemFilters();
+  const { allowPermissions } = useUserPermissions();
   const [files, setFiles] = useState<TCycleFile[]>([]);
   const [filesLoading, setFilesLoading] = useState(false);
   const [filesUploading, setFilesUploading] = useState(false);
@@ -139,12 +152,23 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
   const [filesError, setFilesError] = useState<string | null>(null);
   const filesPageSize = 5;
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [expandPanel, setExpandPanel] = useState<TOverviewExpandPanel>(null);
+  const [cycleDescriptionModalOpen, setCycleDescriptionModalOpen] = useState(false);
+  const [cycleDescriptionModalInitialEdit, setCycleDescriptionModalInitialEdit] = useState(false);
   const { storedValue: currentTab, setValue: setCurrentTab } = useLocalStorage(
     `cycle-overview-tab-${cycleId}`,
     "stat-test-plans"
   );
 
   useCyclesDetails({ workspaceSlug, projectId, cycleId });
+
+  /** 当前迭代内延期工作项按负责人聚合（截止时间早于今天且未完成/未取消） */
+  const { data: cycleOverdueByAssignee } = useSWR(
+    workspaceSlug && projectId && cycleId
+      ? `cycle-overdue-by-assignee-${workspaceSlug}-${projectId}-${cycleId}`
+      : null,
+    () => cycleService.getCycleOverdueByAssignee(workspaceSlug, projectId, cycleId)
+  );
 
   const cycleFilter = getFilter(EIssuesStoreType.CYCLE, cycleId);
   const selectedAssignees = cycleFilter?.findFirstConditionByPropertyAndOperator("assignee_id", "in");
@@ -214,6 +238,9 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
   const handleAssigneeFiltersUpdate = createFilterUpdateHandler("assignee_id", selectedAssigneeIds, handleFiltersUpdate);
 
   const isEditable = Boolean(!peekCycle) && cycleFilter !== undefined;
+  const canEditCycleDescription =
+    Boolean(!peekCycle) &&
+    allowPermissions([EUserPermissions.ADMIN, EUserPermissions.MEMBER], EUserPermissionsLevel.PROJECT);
 
   const formatDate = (d: Date | null | undefined) => {
     if (!d) return "-";
@@ -349,6 +376,20 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
     );
   }
 
+  const statsExpandTitle =
+    activeOverviewTabKey === "stat-test-plans"
+      ? "测试计划"
+      : activeOverviewTabKey === "stat-assignees"
+        ? t("common.assignees")
+        : "文件";
+
+  const StatsExpandIcon =
+    activeOverviewTabKey === "stat-test-plans"
+      ? ClipboardList
+      : activeOverviewTabKey === "stat-assignees"
+        ? MembersPropertyIcon
+        : WorkItemsIcon;
+
   return (
     <div className="h-full w-full overflow-y-auto vertical-scrollbar scrollbar-sm">
       <div className="flex flex-col gap-5 px-6 py-4">
@@ -406,10 +447,6 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
           </div>
         </div>
 
-        {cycleDetails.description && (
-          <p className="line-clamp-2 text-sm leading-relaxed text-secondary">{cycleDetails.description}</p>
-        )}
-
         {/* KPI Cards */}
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
           <KpiCard
@@ -450,6 +487,71 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
           />
         </div>
 
+        {/* 迭代描述 + 延期负责人：置于 KPI 行下方，一行两个 card */}
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+          <div className={`${sectionCard} flex h-[420px] min-h-0 flex-col overflow-hidden p-4`}>
+            <div className="mb-3 flex flex-shrink-0 items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <FileText className="h-3.5 w-3.5 text-placeholder" />
+                <span className="text-sm font-medium text-primary">迭代描述</span>
+              </div>
+              <div className="flex min-w-0 shrink-0 items-center gap-1">
+                {canEditCycleDescription ? (
+                  <button
+                    type="button"
+                    className="cursor-pointer rounded-md p-1 text-placeholder transition-colors hover:bg-surface-2 hover:text-primary"
+                    onClick={() => {
+                      setCycleDescriptionModalInitialEdit(true);
+                      setCycleDescriptionModalOpen(true);
+                    }}
+                    aria-label="编辑迭代描述"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  className="grid h-6 w-6 shrink-0 place-items-center rounded transition-colors hover:bg-surface-2"
+                  onClick={() => {
+                    setCycleDescriptionModalInitialEdit(false);
+                    setCycleDescriptionModalOpen(true);
+                  }}
+                  aria-label="放大"
+                >
+                  <Maximize2 className="h-3.5 w-3.5 text-placeholder" />
+                </button>
+              </div>
+            </div>
+            {cycleDetails.description ? (
+              <div className="relative min-h-0 flex-1">
+                <div className="absolute inset-0 overflow-y-auto pr-1 vertical-scrollbar scrollbar-sm">
+                  <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-secondary">
+                    {cycleDetails.description}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="grid min-h-0 flex-1 place-items-center text-sm text-placeholder">暂无迭代描述</div>
+            )}
+          </div>
+
+          <OverdueByAssigneeCard
+            data={cycleOverdueByAssignee}
+            title="延期工作项负责人"
+            subtitle=""
+            headerExtra={
+              <button
+                type="button"
+                className="grid h-6 w-6 shrink-0 place-items-center rounded transition-colors hover:bg-surface-2"
+                onClick={() => setExpandPanel("overdue")}
+                aria-label="放大"
+              >
+                <Maximize2 className="h-3.5 w-3.5 text-placeholder" />
+              </button>
+            }
+          />
+        </div>
+
         {/* Chart + Stats side by side */}
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
           {/* Left: Burndown chart */}
@@ -460,7 +562,7 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
             {cycleStartDate && cycleEndDate && isCycleDateValid ? (
               <SidebarChartRoot workspaceSlug={workspaceSlug} projectId={projectId} cycleId={cycleId} />
             ) : (
-              <div className="grid h-[320px] place-items-center rounded-md bg-surface-2 text-sm text-placeholder">
+              <div className="grid h-[320px] place-items-center text-sm text-placeholder">
                 {t("no_data_yet")}
               </div>
             )}
@@ -475,24 +577,34 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
                 if (nextTab) setCurrentTab(nextTab);
               }}
             >
-              <Tab.List
-                as="div"
-                className="flex w-full items-center justify-between gap-2 rounded-md bg-layer-2 p-1 text-11"
-              >
-                {OVERVIEW_TABS.map((tab) => (
-                  <Tab
-                    className={cn(
-                      "w-full cursor-pointer rounded-sm p-1 text-primary transition-all outline-none focus:outline-none",
-                      tab.key === activeOverviewTabKey
-                        ? "bg-layer-transparent-active text-secondary"
-                        : "text-placeholder hover:text-secondary"
-                    )}
-                    key={tab.key}
-                  >
-                    {tab.label ?? t(tab.i18n_title!)}
-                  </Tab>
-                ))}
-              </Tab.List>
+              <div className="flex w-full flex-shrink-0 items-center gap-1">
+                <Tab.List
+                  as="div"
+                  className="flex min-w-0 flex-1 items-center justify-between gap-2 rounded-md bg-layer-2 p-1 text-11"
+                >
+                  {OVERVIEW_TABS.map((tab) => (
+                    <Tab
+                      className={cn(
+                        "w-full cursor-pointer rounded-sm p-1 text-primary transition-all outline-none focus:outline-none",
+                        tab.key === activeOverviewTabKey
+                          ? "bg-layer-transparent-active text-secondary"
+                          : "text-placeholder hover:text-secondary"
+                      )}
+                      key={tab.key}
+                    >
+                      {tab.label ?? t(tab.i18n_title!)}
+                    </Tab>
+                  ))}
+                </Tab.List>
+                <button
+                  type="button"
+                  className="grid h-6 w-6 shrink-0 place-items-center rounded transition-colors hover:bg-surface-2"
+                  onClick={() => setExpandPanel("stats")}
+                  aria-label="放大"
+                >
+                  <Maximize2 className="h-3.5 w-3.5 text-placeholder" />
+                </button>
+              </div>
               <Tab.Panels className="min-h-0 flex-1 py-3 text-secondary">
                 <Tab.Panel key="stat-test-plans" className="flex h-full min-h-0 flex-col">
                   {cyclePlans.length === 0 ? (
@@ -645,6 +757,182 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
           </div>
         </div>
       </div>
+
+      <CycleDescriptionFullscreenModal
+        isOpen={cycleDescriptionModalOpen}
+        onClose={() => {
+          setCycleDescriptionModalOpen(false);
+          setCycleDescriptionModalInitialEdit(false);
+        }}
+        workspaceSlug={workspaceSlug}
+        projectId={projectId}
+        cycleId={cycleId}
+        description={cycleDetails.description}
+        canEdit={canEditCycleDescription}
+        initialEditing={cycleDescriptionModalInitialEdit}
+      />
+
+      <CycleOverviewFullscreenModal
+        isOpen={expandPanel === "overdue"}
+        onClose={() => setExpandPanel(null)}
+        title="延期工作项负责人"
+        badgeText={cycleOverdueByAssignee != null ? `共 ${cycleOverdueByAssignee.total} 条` : undefined}
+        icon={AlertTriangle}
+      >
+        <div className="flex min-h-0 flex-1 flex-col bg-surface-1">
+          <div className="min-h-0 flex-1 overflow-hidden px-4 pb-3">
+            <OverdueByAssigneeCard hideHeader data={cycleOverdueByAssignee} className="h-full min-h-[50vh]" />
+          </div>
+        </div>
+      </CycleOverviewFullscreenModal>
+
+      <CycleOverviewFullscreenModal
+        isOpen={expandPanel === "stats"}
+        onClose={() => setExpandPanel(null)}
+        title={statsExpandTitle}
+        icon={StatsExpandIcon}
+      >
+        <div className="flex min-h-0 flex-1 flex-col bg-surface-1">
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-3 vertical-scrollbar scrollbar-sm">
+            {activeOverviewTabKey === "stat-test-plans" ? (
+              cyclePlans.length === 0 ? (
+                <div className="grid h-32 place-items-center text-sm text-placeholder">暂无关联测试计划</div>
+              ) : (
+                <table className="min-w-full table-fixed">
+                  <thead>
+                    <tr className="border-b border-subtle text-left text-xs text-secondary">
+                      <th className="w-[34%] px-2 py-2">名称</th>
+                      <th className="w-[14%] px-2 py-2">状态</th>
+                      <th className="w-[14%] px-2 py-2">通过率</th>
+                      <th className="w-[19%] px-2 py-2">开始时间</th>
+                      <th className="w-[19%] px-2 py-2">结束时间</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {cyclePlans.map((plan: any) => (
+                      <tr key={plan.id ?? plan.name} className="border-b border-subtle hover:bg-layer-1">
+                        <td className="truncate px-2 py-2 text-sm text-primary" title={plan.name ?? "-"}>
+                          {plan.name ?? "-"}
+                        </td>
+                        <td className={`px-2 py-2 text-sm ${getPlanStatusClassName(plan.state)}`}>
+                          {plan.state ?? "-"}
+                        </td>
+                        <td className="px-2 py-2 text-sm text-primary">{getPassRate(plan.pass_rate)}</td>
+                        <td className="px-2 py-2 text-sm text-primary">
+                          {formatPlanDate(plan.start_date ?? plan.start_at ?? null)}
+                        </td>
+                        <td className="px-2 py-2 text-sm text-primary">
+                          {formatPlanDate(plan.end_date ?? plan.end_at ?? null)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )
+            ) : activeOverviewTabKey === "stat-assignees" ? (
+              chartDistributionData ? (
+                <AssigneeStatComponent
+                  distribution={distributionAssigneeData}
+                  handleAssigneeFiltersUpdate={handleAssigneeFiltersUpdate}
+                  isEditable={isEditable}
+                  selectedAssigneeIds={selectedAssigneeIds}
+                />
+              ) : (
+                <div className="grid h-32 place-items-center text-sm text-placeholder">{t("no_data_yet")}</div>
+              )
+            ) : filesLoading ? (
+              <div className="flex items-center justify-center py-8 text-sm text-secondary">加载中...</div>
+            ) : filesError ? (
+              <p className="text-sm text-danger-primary">{filesError}</p>
+            ) : files.length === 0 ? (
+              <div className="grid h-32 place-items-center text-sm text-placeholder">暂无文件</div>
+            ) : (
+              <div className="flex min-h-0 flex-1 flex-col">
+                <div className="flex items-center justify-between pb-2">
+                  <span className="text-xs font-medium text-secondary">文件</span>
+                  <Button
+                    variant="link-neutral"
+                    className="p-0"
+                    onClick={() => fileInputRef.current?.click()}
+                    loading={filesUploading}
+                    disabled={filesUploading}
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+                <div className="min-h-0 flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm">
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full table-fixed">
+                      <thead>
+                        <tr className="border-b border-subtle text-left text-xs text-secondary">
+                          <th className="w-2/5 px-2 py-2">文件名</th>
+                          <th className="w-1/5 px-2 py-2">大小</th>
+                          <th className="w-2/5 px-2 py-2">上传时间</th>
+                          <th className="w-1/5 px-2 py-2 text-left">操作</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {files.map((file) => (
+                          <tr key={file.id} className="border-b border-subtle hover:bg-layer-1">
+                            <td className="truncate px-2 py-2 text-sm text-primary" title={file.name}>
+                              <div className="flex items-center gap-2">
+                                <WorkItemsIcon className="h-4 w-4 flex-shrink-0 text-placeholder" />
+                                <span className="truncate">{file.name}</span>
+                              </div>
+                            </td>
+                            <td className="px-2 py-2 text-sm text-primary">{formatFileSize(file.size)}</td>
+                            <td className="px-2 py-2 text-sm text-primary">
+                              {file.created_at ? new Date(file.created_at).toLocaleDateString() : "-"}
+                            </td>
+                            <td className="px-2 py-2">
+                              <div className="flex items-center justify-end gap-2">
+                                <Button
+                                  variant="link-neutral"
+                                  className="p-0"
+                                  disabled={filesDownloadingId === file.id}
+                                  onClick={() => handleDownloadCycleFile(file.id, file.name)}
+                                >
+                                  <Download className="h-3.5 w-3.5" />
+                                </Button>
+                                <Popconfirm
+                                  title="确认删除该文件？"
+                                  okText="删除"
+                                  cancelText="取消"
+                                  onConfirm={() => void handleDeleteCycleFile(file.id)}
+                                >
+                                  <Button
+                                    variant="link-danger"
+                                    className="p-0"
+                                    disabled={filesDeletingId === file.id}
+                                    loading={filesDeletingId === file.id}
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </Button>
+                                </Popconfirm>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+                <div className="mt-2 flex flex-shrink-0 items-center justify-between border-t border-subtle bg-surface-1 px-2 py-2">
+                  <div className="text-sm text-secondary">{filesTotal > 0 ? `共 ${filesTotal} 条` : ""}</div>
+                  <Pagination
+                    simple
+                    current={filesPage}
+                    pageSize={filesPageSize}
+                    total={filesTotal}
+                    onChange={(p) => fetchFiles(p)}
+                    size="small"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </CycleOverviewFullscreenModal>
     </div>
   );
 });

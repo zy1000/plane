@@ -107,7 +107,7 @@ export const CycleListItemAction = observer(function CycleListItemAction(props: 
     not_started: ["in_progress", "completed", "cancelled"],
     in_progress: ["completed", "cancelled"],
     delayed: ["in_progress", "completed", "cancelled"],
-    completed: ["cancelled"],
+    completed: ["in_progress", "cancelled"],
     cancelled: ["completed"],
   };
   const statusOptions = statusOptionsByCurrentStatus[cycleStatus as NonNullable<ICycle["status"]>] ?? [];

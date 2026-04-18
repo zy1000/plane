@@ -18,9 +18,9 @@ import {
   Timer,
 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
+import useSWR from "swr";
 import { Tab } from "@headlessui/react";
 import { Button } from "@plane/propel/button";
-import { PieChart } from "@plane/propel/charts/pie-chart";
 import {
   MODULE_STATUS,
   PROJECT_ERROR_MESSAGES,
@@ -43,6 +43,7 @@ import { useWorkspace } from "@/hooks/store/use-workspace";
 import { useEditorAsset } from "@/hooks/store/use-editor-asset";
 import useLocalStorage from "@/hooks/use-local-storage";
 import { RichTextEditor } from "@/components/editor/rich-text";
+import { OverdueByAssigneeCard } from "@/components/common/overdue-by-assignee-card";
 
 type Props = {
   releaseId: string;
@@ -102,19 +103,6 @@ const formatDateLabel = (d: Date | null | undefined) => {
   if (!d) return "-";
   return d.toLocaleDateString("zh-CN", { month: "short", day: "numeric", year: "numeric" });
 };
-
-const TYPE_PIE_COLORS = [
-  "#3f76ff",
-  "#f59e0b",
-  "#16a34a",
-  "#ef4444",
-  "#8b5cf6",
-  "#06b6d4",
-  "#ec4899",
-  "#14b8a6",
-  "#f97316",
-  "#64748b",
-];
 
 const PASS_RATE_KEYS = ["成功", "失败", "阻塞", "无效", "未执行"] as const;
 const PASS_RATE_COLORS: Record<string, string> = {
@@ -264,6 +252,20 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
   const [releaseFilesDownloadingId, setReleaseFilesDownloadingId] = useState<string | null>(null);
 
   const releaseFilesPageSize = 5;
+
+  const releaseOverdueSwrKey =
+    workspaceSlug && projectId && releaseId
+      ? `release-overdue-by-assignee-${workspaceSlug}-${projectId}-${releaseId}`
+      : null;
+  const { data: releaseOverdueByAssignee, mutate: mutateReleaseOverdueByAssignee } = useSWR(
+    releaseOverdueSwrKey,
+    () =>
+      releaseService.getReleaseOverdueByAssignee(
+        workspaceSlug!.toString(),
+        projectId!.toString(),
+        releaseId
+      )
+  );
 
   const showReleaseFileApiError = (error: unknown, genericTitle: string, genericMessage: string) => {
     if (isProjectPermissionError(error)) {
@@ -502,7 +504,8 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
   const handleAssociateClose = () => {
     setAssociateOpen(false);
     setSelectedCycleIds([]);
-    fetchReleaseStatistics();
+    void fetchReleaseStatistics();
+    void mutateReleaseOverdueByAssignee();
   };
 
   const handleAssociateConfirm = async () => {
@@ -532,38 +535,12 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
       });
       setToast({ type: TOAST_TYPE.SUCCESS, title: "已取消关联", message: "迭代已取消关联" });
       fetchCycles();
-      fetchReleaseStatistics();
+      void fetchReleaseStatistics();
+      void mutateReleaseOverdueByAssignee();
     } catch (e: any) {
       setToast({ type: TOAST_TYPE.ERROR, title: "操作失败", message: e?.detail || e?.error || "请稍后重试" });
     }
   };
-
-  const typeDistribution = Array.isArray(stats?.type_distribution) ? stats.type_distribution : [];
-
-  const typePieData = useMemo(() => {
-    return (typeDistribution as any[])
-      .map((t: any, idx: number) => {
-        const count =
-          Number(t?.backlog ?? 0) +
-          Number(t?.unstarted ?? 0) +
-          Number(t?.started ?? 0) +
-          Number(t?.completed ?? 0) +
-          Number(t?.cancelled ?? 0);
-        const typeId = t?.["type__id"] ?? `type-${idx}`;
-        return {
-          id: String(typeId),
-          key: String(typeId),
-          name: t?.["type__name"] ?? "未命名",
-          value: count,
-          count,
-          color: TYPE_PIE_COLORS[idx % TYPE_PIE_COLORS.length],
-          typeId: t?.["type__id"] ?? null,
-        };
-      })
-      .filter((item) => item.value > 0);
-  }, [typeDistribution]);
-
-  const typePieTotal = typePieData.reduce((sum, item) => sum + item.value, 0);
 
   const totalIssues = Number(stats?.total_issues ?? 0);
   const backlogIssues = Number(stats?.state_distribution?.backlog ?? 0);
@@ -974,79 +951,12 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
             </Tab.Group>
           </div>
 
-          {/* Right: Work-item type pie chart */}
-          <div className={`${sectionCard} flex flex-col p-4`}>
-            <div className="mb-2 text-sm font-medium text-primary">工作项类型</div>
-            {statsLoading ? (
-              <div className="grid h-[220px] place-items-center rounded-md bg-surface-2 text-sm text-placeholder">
-                加载中...
-              </div>
-            ) : statsError ? (
-              <div className="grid h-[220px] place-items-center rounded-md bg-surface-2 text-sm text-danger-primary">
-                {statsError}
-              </div>
-            ) : typePieData.length === 0 ? (
-              <div className="grid h-[220px] place-items-center text-sm text-placeholder shadow-none">
-                {t("no_data_yet")}
-              </div>
-            ) : (
-              <div className="grid h-[220px] w-full grid-cols-1 items-center gap-x-4 md:grid-cols-2">
-                <div className="relative mx-auto h-[200px] w-[200px]">
-                  <PieChart
-                    className="size-full"
-                    dataKey="value"
-                    margin={{ top: 0, right: 0, bottom: 0, left: 0 }}
-                    data={typePieData}
-                    cells={typePieData.map((item) => ({ key: item.key, fill: item.color }))}
-                    showTooltip
-                    tooltipLabel={(payload: any) => payload?.name ?? ""}
-                    paddingAngle={3}
-                    cornerRadius={4}
-                    innerRadius="62%"
-                    outerRadius="88%"
-                    showLabel={false}
-                    centerLabel={{
-                      text: typePieTotal,
-                      fill: "var(--text-color-primary)",
-                      className: "text-16 font-semibold",
-                    }}
-                  />
-                </div>
-                <div className="flex items-center">
-                  <div className="w-full space-y-3">
-                    {typePieData.map((item) => {
-                      const percent = typePieTotal > 0 ? Math.round((item.value / typePieTotal) * 100) : 0;
-                      return (
-                        <button
-                          key={item.key}
-                          type="button"
-                          className="flex w-full items-center justify-between gap-2 text-left text-xs transition-colors hover:text-primary"
-                          onClick={() => {
-                            if (!workspaceSlug || !projectId || !item.typeId) return;
-                            router.push(
-                              `/${workspaceSlug}/projects/${projectId}/issues?type_id=${item.typeId}`
-                            );
-                          }}
-                        >
-                          <div className="flex min-w-0 items-center gap-2">
-                            <span
-                              className="h-2.5 w-2.5 flex-shrink-0 rounded-xs"
-                              style={{ backgroundColor: item.color }}
-                            />
-                            <span className="truncate text-secondary">{item.name}</span>
-                          </div>
-                          <div className="flex items-center gap-2 text-xs tabular-nums text-primary">
-                            <span>{item.value}</span>
-                            <span className="text-placeholder">{percent}%</span>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
+          {/* Right: 延期工作项负责人（与迭代概览一致） */}
+          <OverdueByAssigneeCard
+            data={releaseOverdueByAssignee}
+            title="延期工作项负责人"
+            subtitle=""
+          />
         </div>
       </div>
       <Transition.Root show={associateOpen} as={Fragment}>
