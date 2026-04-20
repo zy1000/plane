@@ -9,14 +9,16 @@ import type { UseFormSetValue } from "react-hook-form";
 import { Controller, useFormContext } from "react-hook-form";
 import { InfoIcon } from "@plane/propel/icons";
 // plane imports
-import { ETabIndices } from "@plane/constants";
+import { ETabIndices, PROJECT_GRADE_OPTIONS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 // ui
 import { Tooltip } from "@plane/propel/tooltip";
-import { Input, TextArea } from "@plane/ui";
+import { CustomSelect, Input, TextArea } from "@plane/ui";
 import { cn, projectIdentifierSanitizer, getTabIndex } from "@plane/utils";
 // plane utils
 // helpers
+// components
+import { ProjectGradeBadge } from "@/components/project/common/project-grade-badge";
 // plane-web types
 import type { TProject } from "@/plane-web/types/projects";
 
@@ -59,7 +61,7 @@ function ProjectCommonAttributes(props: Props) {
   };
   return (
     <div className="grid grid-cols-1 gap-x-2 gap-y-3 md:grid-cols-4">
-      <div className="md:col-span-3">
+      <div className="md:col-span-2">
         <Controller
           control={control}
           name="name"
@@ -86,7 +88,46 @@ function ProjectCommonAttributes(props: Props) {
         />
         <span className="text-11 text-danger-primary">{errors?.name?.message}</span>
       </div>
-      <div className="relative">
+      <div className="md:col-span-1">
+        <Controller
+          control={control}
+          name="grade"
+          render={({ field: { value, onChange } }) => {
+            const selected = value ?? null;
+            return (
+              <CustomSelect
+                value={selected ?? ""}
+                onChange={(val: string) => {
+                  onChange(val === "" ? null : val);
+                  handleFormOnChange?.();
+                }}
+                label={
+                  selected ? (
+                    <span className="flex items-center gap-1.5">
+                      <ProjectGradeBadge grade={selected} />
+                    </span>
+                  ) : (
+                    <span className="text-placeholder text-13">{t("select_project_grade")}</span>
+                  )
+                }
+                buttonClassName="!border-subtle-1 !shadow-none w-full rounded-md border-[0.5px] px-3 py-2 text-left font-normal focus:outline-none focus:border-blue-400"
+                input
+                tabIndex={getIndex("grade")}
+              >
+                <CustomSelect.Option value="">
+                  <span className="text-13 text-secondary">{t("common.none")}</span>
+                </CustomSelect.Option>
+                {PROJECT_GRADE_OPTIONS.map((opt) => (
+                  <CustomSelect.Option key={opt} value={opt}>
+                    <ProjectGradeBadge grade={opt} />
+                  </CustomSelect.Option>
+                ))}
+              </CustomSelect>
+            );
+          }}
+        />
+      </div>
+      <div className="relative md:col-span-1">
         <Controller
           control={control}
           name="identifier"

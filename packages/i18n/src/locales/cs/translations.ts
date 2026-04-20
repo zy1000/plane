@@ -342,6 +342,8 @@ export default {
   name_is_required: "Název je povinný",
   title_should_be_less_than_255_characters: "Název by měl být kratší než 255 znaků",
   project_name: "Název projektu",
+  project_grade: "Grade",
+  select_project_grade: "Select grade",
   project_id_must_be_at_least_1_character: "ID projektu musí mít alespoň 1 znak",
   project_id_must_be_at_most_5_characters: "ID projektu může mít maximálně 5 znaků",
   project_id: "ID projektu",

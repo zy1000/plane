@@ -343,6 +343,8 @@ export default {
   name_is_required: "Numele este obligatoriu",
   title_should_be_less_than_255_characters: "Titlul trebuie să conțină mai puțin de 255 de caractere",
   project_name: "Numele proiectului",
+  project_grade: "Grade",
+  select_project_grade: "Select grade",
   project_id_must_be_at_least_1_character: "ID-ul proiectului trebuie să conțină cel puțin 1 caracter",
   project_id_must_be_at_most_5_characters: "ID-ul proiectului trebuie să conțină cel mult 5 caractere",
   project_id: "ID-ul Proiectului",

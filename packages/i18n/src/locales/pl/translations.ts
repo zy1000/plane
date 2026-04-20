@@ -340,6 +340,8 @@ export default {
   name_is_required: "Nazwa jest wymagana",
   title_should_be_less_than_255_characters: "Nazwa musi mieć mniej niż 255 znaków",
   project_name: "Nazwa projektu",
+  project_grade: "Grade",
+  select_project_grade: "Select grade",
   project_id_must_be_at_least_1_character: "ID projektu musi mieć co najmniej 1 znak",
   project_id_must_be_at_most_5_characters: "ID projektu może mieć maksymalnie 5 znaków",
   project_id: "ID projektu",

@@ -16,6 +16,9 @@ export enum EUserProjectRoles {
   GUEST = 5,
 }
 
+/** 项目等级（与后端 Project.grade 一致） */
+export type TProjectGrade = "P+" | "P" | "A" | "B" | "C";
+
 export interface IPartialProject {
   id: string;
   name: string;
@@ -51,6 +54,8 @@ export interface IPartialProject {
   updated_by?: string;
   intake_count?: number;
   description_html?: string | null;
+  /** 项目等级（列表/详情接口可能返回） */
+  grade?: TProjectGrade | null;
 }
 
 export interface IProject extends IPartialProject {

@@ -332,6 +332,8 @@ export default {
   name_is_required: "名稱為必填",
   title_should_be_less_than_255_characters: "標題不應超過 255 個字元",
   project_name: "專案名稱",
+  project_grade: "等級",
+  select_project_grade: "選擇等級",
   project_id_must_be_at_least_1_character: "專案 ID 至少必須有 1 個字元",
   project_id_must_be_at_most_5_characters: "專案 ID 最多只能有 5 個字元",
   project_id: "專案 ID",

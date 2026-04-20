@@ -348,6 +348,8 @@ export default {
   name_is_required: "Назва є обов’язковою",
   title_should_be_less_than_255_characters: "Назва має бути коротшою за 255 символів",
   project_name: "Назва проєкту",
+  project_grade: "Grade",
+  select_project_grade: "Select grade",
   project_id_must_be_at_least_1_character: "Ідентифікатор проєкту має містити принаймні 1 символ",
   project_id_must_be_at_most_5_characters: "Ідентифікатор проєкту може містити максимум 5 символів",
   project_id: "ID проєкту",

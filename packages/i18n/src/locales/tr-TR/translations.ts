@@ -342,6 +342,8 @@ export default {
   name_is_required: "Ad gereklidir",
   title_should_be_less_than_255_characters: "Başlık 255 karakterden az olmalı",
   project_name: "Proje Adı",
+  project_grade: "Grade",
+  select_project_grade: "Select grade",
   project_id_must_be_at_least_1_character: "Proje ID en az 1 karakter olmalı",
   project_id_must_be_at_most_5_characters: "Proje ID en fazla 5 karakter olmalı",
   project_id: "Proje ID",

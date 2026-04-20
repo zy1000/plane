@@ -340,6 +340,8 @@ export default {
   name_is_required: "名前は必須です",
   title_should_be_less_than_255_characters: "タイトルは255文字未満である必要があります",
   project_name: "プロジェクト名",
+  project_grade: "Grade",
+  select_project_grade: "Select grade",
   project_id_must_be_at_least_1_character: "プロジェクトIDは最低1文字必要です",
   project_id_must_be_at_most_5_characters: "プロジェクトIDは最大5文字までです",
   project_id: "プロジェクトID",

@@ -115,6 +115,7 @@ class ProjectLiteSerializer(BaseSerializer):
             "cover_image_url",
             "logo_props",
             "description",
+            "grade",
         ]
         read_only_fields = fields
 

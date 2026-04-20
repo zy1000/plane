@@ -63,6 +63,9 @@ export const CreateProjectForm = observer(function CreateProjectForm(props: TCre
   const onSubmit = async (formData: Partial<TProject>) => {
     // Upper case identifier
     formData.identifier = formData.identifier?.toUpperCase();
+    if (formData.grade == null) {
+      delete formData.grade;
+    }
     const coverImage = formData.cover_image_url;
     let uploadedAssetUrl: string | null = null;
 
