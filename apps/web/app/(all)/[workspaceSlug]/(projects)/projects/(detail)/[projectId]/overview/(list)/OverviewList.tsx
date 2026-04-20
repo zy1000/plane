@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { observer } from "mobx-react";
 import { CloseOutlined } from "@ant-design/icons";
 import { Modal, Pagination } from "antd";
-import { BookOpen, History, Maximize2, Megaphone, Pencil, Plus, Trash2, Users } from "lucide-react";
+import { BookOpen, History, Maximize2, Megaphone, Plus, Trash2, Users } from "lucide-react";
 import { PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import type { IProject, TNameDescriptionLoader } from "@plane/types";
@@ -47,7 +47,6 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [activeAnnouncement, setActiveAnnouncement] = useState<TProjectAnnouncement | null>(null);
   const [isDescriptionModalOpen, setIsDescriptionModalOpen] = useState(false);
-  const [isDescriptionEditing, setIsDescriptionEditing] = useState(false);
   const [isActivityModalOpen, setIsActivityModalOpen] = useState(false);
   const [isAnnouncementsFullscreenOpen, setIsAnnouncementsFullscreenOpen] = useState(false);
   const [isMembersFullscreenOpen, setIsMembersFullscreenOpen] = useState(false);
@@ -310,20 +309,9 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
                   <button
                     type="button"
                     className="cursor-pointer rounded-md p-1 text-placeholder transition-colors hover:bg-surface-2 hover:text-primary"
-                    onClick={() => {
-                      setIsDescriptionEditing(true);
-                      setIsDescriptionModalOpen(true);
-                    }}
-                  >
-                    <Pencil className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    className="cursor-pointer rounded-md p-1 text-placeholder transition-colors hover:bg-surface-2 hover:text-primary"
-                    onClick={() => {
-                      setIsDescriptionEditing(false);
-                      setIsDescriptionModalOpen(true);
-                    }}
+                    aria-label="全屏查看项目背景"
+                    title="全屏查看"
+                    onClick={() => setIsDescriptionModalOpen(true)}
                   >
                     <Maximize2 className="h-3.5 w-3.5" />
                   </button>
@@ -461,7 +449,6 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
         workspaceSlug={workspaceSlug}
         projectId={project.id}
         initialValue={project?.description_html}
-        initialEditing={isDescriptionEditing}
       />
 
       {/* 项目活动 Modal（全屏） */}

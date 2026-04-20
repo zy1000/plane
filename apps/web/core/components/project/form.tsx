@@ -17,7 +17,7 @@ import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Tooltip } from "@plane/propel/tooltip";
 import { EFileAssetType } from "@plane/types";
 import type { IProject, IWorkspace } from "@plane/types";
-import { CustomSelect, Input, TextArea } from "@plane/ui";
+import { CustomSelect, Input } from "@plane/ui";
 import { renderFormattedDate } from "@plane/utils";
 import { CoverImage } from "@/components/common/cover-image";
 import { ImagePickerPopover } from "@/components/core/image-picker-popover";
@@ -31,6 +31,7 @@ import { usePlatformOS } from "@/hooks/use-platform-os";
 import { ProjectService } from "@/services/project";
 // local imports
 import { ProjectNetworkIcon } from "./project-network-icon";
+import { ProjectDescriptionFormEditor } from "./project-description-form-editor";
 
 export interface IProjectDetailsForm {
   project: IProject;
@@ -148,7 +149,7 @@ export function ProjectDetailsForm(props: IProjectDetailsForm) {
       name: formData.name,
       network: formData.network,
       identifier: formData.identifier,
-      description: formData.description,
+      description_html: formData.description_html ?? "<p></p>",
       logo_props: formData.logo_props,
       timezone: formData.timezone,
       estimated_hours: formData.estimated_hours,
@@ -295,20 +296,18 @@ export function ProjectDetailsForm(props: IProjectDetailsForm) {
           <span className="text-11 text-danger-primary">{errors?.name?.message}</span>
         </div>
         <div className="flex flex-col gap-1">
-          <h4 className="text-13">{t("description")}</h4>
+          <h4 className="text-13">项目背景</h4>
           <Controller
-            name="description"
+            name="description_html"
             control={control}
             render={({ field: { value, onChange } }) => (
-              <TextArea
-                id="description"
-                name="description"
+              <ProjectDescriptionFormEditor
+                workspaceSlug={workspaceSlug}
+                projectId={projectId}
                 value={value}
-                placeholder={t("project_description_placeholder")}
                 onChange={onChange}
-                className="min-h-[102px] text-13 font-medium"
-                hasError={Boolean(errors?.description)}
                 disabled={!isAdmin}
+                placeholder={t("project_description_placeholder")}
               />
             )}
           />
