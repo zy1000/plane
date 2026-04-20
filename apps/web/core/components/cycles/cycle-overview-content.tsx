@@ -30,9 +30,12 @@ import {
   Maximize2,
   AlertTriangle,
   ClipboardList,
+  LineChart,
   Pencil,
+  Unlink,
 } from "lucide-react";
-import { Pagination, Popconfirm } from "antd";
+import { Modal, Popconfirm } from "antd";
+import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { CYCLE_STATUS, EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { CheckIcon, MembersPropertyIcon, WorkItemsIcon } from "@plane/propel/icons";
@@ -113,10 +116,10 @@ function KpiCard({ icon, label, value, iconColor }: KpiCardProps) {
 }
 
 const OVERVIEW_TABS = [
-  { key: "stat-test-plans", label: "测试计划" },
-  { key: "stat-assignees", i18n_title: "common.assignees" },
-  { key: "stat-files", label: "文件" },
-];
+  { key: "stat-test-plans", label: "测试计划", Icon: ClipboardList },
+  { key: "stat-assignees", i18n_title: "common.assignees", Icon: MembersPropertyIcon },
+  { key: "stat-files", label: "附件", Icon: FileText },
+] as const;
 
 const validateCycleSnapshot = (cycleDetails: ICycle | null): ICycle | null => {
   if (!cycleDetails || cycleDetails === null) return cycleDetails;
@@ -138,23 +141,31 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
   const searchParams = useSearchParams();
   const peekCycle = searchParams.get("peekCycle") || undefined;
   const cycleService = useMemo(() => new CycleService(), []);
-  const { getPlotTypeByCycleId, getEstimateTypeByCycleId, getCycleById } = useCycle();
+  const { getPlotTypeByCycleId, getEstimateTypeByCycleId, getCycleById, fetchCycleDetails } = useCycle();
   const { getUserDetails } = useMember();
   const { getFilter, updateFilterValueFromSidebar } = useWorkItemFilters();
   const { allowPermissions } = useUserPermissions();
   const [files, setFiles] = useState<TCycleFile[]>([]);
   const [filesLoading, setFilesLoading] = useState(false);
   const [filesUploading, setFilesUploading] = useState(false);
-  const [filesPage, setFilesPage] = useState(1);
   const [filesTotal, setFilesTotal] = useState(0);
   const [filesDownloadingId, setFilesDownloadingId] = useState<string | null>(null);
   const [filesDeletingId, setFilesDeletingId] = useState<string | null>(null);
   const [filesError, setFilesError] = useState<string | null>(null);
-  const filesPageSize = 5;
+  /** 与后端 CustomPaginator.max_page_size 一致；单次请求上限，多页循环拉取直至全部 */
+  const CYCLE_FILES_FETCH_PAGE_SIZE = 100;
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [expandPanel, setExpandPanel] = useState<TOverviewExpandPanel>(null);
   const [cycleDescriptionModalOpen, setCycleDescriptionModalOpen] = useState(false);
   const [cycleDescriptionModalInitialEdit, setCycleDescriptionModalInitialEdit] = useState(false);
+
+  const [planAssociateOpen, setPlanAssociateOpen] = useState(false);
+  const [selectablePlans, setSelectablePlans] = useState<any[]>([]);
+  const [selectablePlansLoading, setSelectablePlansLoading] = useState(false);
+  const [selectablePlansError, setSelectablePlansError] = useState<string | null>(null);
+  const [selectedPlanIds, setSelectedPlanIds] = useState<string[]>([]);
+  const [associatingPlans, setAssociatingPlans] = useState(false);
+  const [cancelingPlanId, setCancelingPlanId] = useState<string | null>(null);
   const { storedValue: currentTab, setValue: setCurrentTab } = useLocalStorage(
     `cycle-overview-tab-${cycleId}`,
     "stat-test-plans"
@@ -168,6 +179,14 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
       ? `cycle-overdue-by-assignee-${workspaceSlug}-${projectId}-${cycleId}`
       : null,
     () => cycleService.getCycleOverdueByAssignee(workspaceSlug, projectId, cycleId)
+  );
+
+  /** 当前迭代已关联的测试计划（独立拉取，便于关联/取消关联后即时刷新） */
+  const { data: cyclePlansResp, mutate: mutateCyclePlans } = useSWR(
+    workspaceSlug && projectId && cycleId
+      ? `cycle-plans-${workspaceSlug}-${projectId}-${cycleId}`
+      : null,
+    () => cycleService.getCyclePlans(workspaceSlug, projectId, cycleId)
   );
 
   const cycleFilter = getFilter(EIssuesStoreType.CYCLE, cycleId);
@@ -224,11 +243,12 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
         }));
 
   const cyclePlans = useMemo(() => {
+    if (cyclePlansResp && Array.isArray(cyclePlansResp.data)) return cyclePlansResp.data;
     const plans = cycleDetails?.plans;
     if (Array.isArray(plans)) return plans;
-    if (plans && Array.isArray(plans.data)) return plans.data;
+    if (plans && Array.isArray((plans as any).data)) return (plans as any).data;
     return [];
-  }, [cycleDetails?.plans]);
+  }, [cyclePlansResp, cycleDetails?.plans]);
 
   const handleFiltersUpdate = updateFilterValueFromSidebar.bind(
     updateFilterValueFromSidebar,
@@ -277,27 +297,42 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
     : "stat-test-plans";
   const overviewTabIndex = OVERVIEW_TABS.findIndex((tab) => tab.key === activeOverviewTabKey);
 
-  const fetchFiles = async (page = 1) => {
+  const overviewTabCounts: Record<(typeof OVERVIEW_TABS)[number]["key"], number> = {
+    "stat-test-plans": cyclePlans.length,
+    "stat-assignees": chartDistributionData ? distributionAssigneeData.length : 0,
+    "stat-files": filesTotal,
+  };
+
+  const fetchFiles = async () => {
     if (!workspaceSlug || !projectId || !cycleId) return;
     try {
       setFilesLoading(true);
       setFilesError(null);
-      const response = await cycleService.getCycleFileList(workspaceSlug, projectId, cycleId, {
-        page,
-        page_size: filesPageSize,
-      });
-      const list = Array.isArray(response?.data) ? response.data : [];
-      const count = Number(response?.count ?? 0);
-      setFiles(
-        list.map((file: any) => ({
-          id: file.id,
-          name: file.name,
-          size: Number(file.size ?? 0),
-          created_at: file.created_at,
-        }))
-      );
-      setFilesTotal(count);
-      setFilesPage(page);
+      const aggregated: TCycleFile[] = [];
+      let total = 0;
+      let page = 1;
+      for (;;) {
+        const response = await cycleService.getCycleFileList(workspaceSlug, projectId, cycleId, {
+          page,
+          page_size: CYCLE_FILES_FETCH_PAGE_SIZE,
+        });
+        const list = Array.isArray(response?.data) ? response.data : [];
+        total = Number(response?.count ?? total);
+        for (const file of list as any[]) {
+          aggregated.push({
+            id: file.id,
+            name: file.name,
+            size: Number(file.size ?? 0),
+            created_at: file.created_at,
+          });
+        }
+        if (list.length === 0 || list.length < CYCLE_FILES_FETCH_PAGE_SIZE || aggregated.length >= total) {
+          break;
+        }
+        page += 1;
+      }
+      setFiles(aggregated);
+      setFilesTotal(total);
     } catch (error: any) {
       setFilesError(error?.error || error?.detail || "获取迭代文件失败");
     } finally {
@@ -306,7 +341,7 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
   };
 
   useEffect(() => {
-    fetchFiles(1);
+    void fetchFiles();
   }, [cycleId, cycleService, projectId, workspaceSlug]);
 
   const handleUploadCycleFile = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -319,7 +354,7 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
       formData.append("file", selectedFile);
       formData.append("cycle_id", cycleId);
       await cycleService.uploadCycleFile(workspaceSlug, projectId, formData);
-      await fetchFiles(1);
+      await fetchFiles();
       setFilesError(null);
     } catch (error: any) {
       setFilesError(error?.error || error?.detail || "上传文件失败");
@@ -354,11 +389,80 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
     try {
       setFilesDeletingId(fileId);
       await cycleService.deleteCycleFile(workspaceSlug, projectId, fileId);
-      await fetchFiles(filesPage);
+      await fetchFiles();
     } catch (error: any) {
       setFilesError(error?.error || error?.detail || "删除文件失败");
     } finally {
       setFilesDeletingId(null);
+    }
+  };
+
+  const refreshCycleDetails = () => {
+    if (!workspaceSlug || !projectId || !cycleId) return;
+    void mutateCyclePlans();
+    void fetchCycleDetails(workspaceSlug, projectId, cycleId);
+  };
+
+  const openPlanAssociateModal = async () => {
+    if (!workspaceSlug || !projectId || !cycleId) return;
+    setPlanAssociateOpen(true);
+    setSelectedPlanIds([]);
+    setSelectablePlansLoading(true);
+    setSelectablePlansError(null);
+    try {
+      const res = await cycleService.getCycleSelectablePlans(workspaceSlug, projectId, cycleId);
+      setSelectablePlans(Array.isArray(res?.data) ? res.data : []);
+    } catch (error: any) {
+      setSelectablePlansError(error?.error || error?.detail || "获取可选测试计划失败");
+      setSelectablePlans([]);
+    } finally {
+      setSelectablePlansLoading(false);
+    }
+  };
+
+  const handleConfirmAssociatePlans = async () => {
+    if (!workspaceSlug || !projectId || !cycleId || selectedPlanIds.length === 0) return;
+    try {
+      setAssociatingPlans(true);
+      await cycleService.associateCyclePlans(workspaceSlug, projectId, cycleId, selectedPlanIds);
+      setToast({
+        type: TOAST_TYPE.SUCCESS,
+        title: "关联成功",
+        message: `已关联 ${selectedPlanIds.length} 个测试计划`,
+      });
+      setPlanAssociateOpen(false);
+      setSelectedPlanIds([]);
+      refreshCycleDetails();
+    } catch (error: any) {
+      setToast({
+        type: TOAST_TYPE.ERROR,
+        title: "关联失败",
+        message: error?.error || error?.detail || "请稍后重试",
+      });
+    } finally {
+      setAssociatingPlans(false);
+    }
+  };
+
+  const handleCancelPlanAssociation = async (planId: string) => {
+    if (!workspaceSlug || !projectId || !cycleId) return;
+    try {
+      setCancelingPlanId(planId);
+      await cycleService.cancelCyclePlanAssociation(workspaceSlug, projectId, cycleId, [planId]);
+      setToast({
+        type: TOAST_TYPE.SUCCESS,
+        title: "已取消关联",
+        message: "测试计划已取消关联",
+      });
+      refreshCycleDetails();
+    } catch (error: any) {
+      setToast({
+        type: TOAST_TYPE.ERROR,
+        title: "操作失败",
+        message: error?.error || error?.detail || "请稍后重试",
+      });
+    } finally {
+      setCancelingPlanId(null);
     }
   };
 
@@ -381,14 +485,14 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
       ? "测试计划"
       : activeOverviewTabKey === "stat-assignees"
         ? t("common.assignees")
-        : "文件";
+        : "附件";
 
   const StatsExpandIcon =
     activeOverviewTabKey === "stat-test-plans"
       ? ClipboardList
       : activeOverviewTabKey === "stat-assignees"
         ? MembersPropertyIcon
-        : WorkItemsIcon;
+        : FileText;
 
   return (
     <div className="h-full w-full overflow-y-auto vertical-scrollbar scrollbar-sm">
@@ -556,8 +660,9 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
           {/* Left: Burndown chart */}
           <div className={`${sectionCard} flex flex-col p-4`}>
-            <div className="mb-2 text-sm font-medium text-primary">
-              {t("project_cycles.active_cycle.progress")}
+            <div className="mb-2 flex items-center gap-2">
+              <LineChart className="h-3.5 w-3.5 shrink-0 text-placeholder" aria-hidden />
+              <span className="text-sm font-medium text-primary">{t("project_cycles.active_cycle.progress")}</span>
             </div>
             {cycleStartDate && cycleEndDate && isCycleDateValid ? (
               <SidebarChartRoot workspaceSlug={workspaceSlug} projectId={projectId} cycleId={cycleId} />
@@ -568,7 +673,7 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
             )}
           </div>
 
-          {/* Right: Stats tabs (测试计划 / 负责人 / 文件) */}
+          {/* Right: Stats tabs (测试计划 / 负责人 / 附件) */}
           <div className={`${sectionCard} flex flex-col p-4`}>
             <Tab.Group
               selectedIndex={overviewTabIndex >= 0 ? overviewTabIndex : 0}
@@ -580,21 +685,29 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
               <div className="flex w-full flex-shrink-0 items-center gap-1">
                 <Tab.List
                   as="div"
-                  className="flex min-w-0 flex-1 items-center justify-between gap-2 rounded-md bg-layer-2 p-1 text-11"
+                  className="flex min-w-0 flex-1 items-center justify-between gap-2 rounded-md bg-layer-2 p-1 text-sm font-medium"
                 >
-                  {OVERVIEW_TABS.map((tab) => (
-                    <Tab
-                      className={cn(
-                        "w-full cursor-pointer rounded-sm p-1 text-primary transition-all outline-none focus:outline-none",
-                        tab.key === activeOverviewTabKey
-                          ? "bg-layer-transparent-active text-secondary"
-                          : "text-placeholder hover:text-secondary"
-                      )}
-                      key={tab.key}
-                    >
-                      {tab.label ?? t(tab.i18n_title!)}
-                    </Tab>
-                  ))}
+                  {OVERVIEW_TABS.map((tab) => {
+                    const TabIcon = tab.Icon;
+                    return (
+                      <Tab
+                        key={tab.key}
+                        className={({ selected }) =>
+                          cn(
+                            "w-full cursor-pointer rounded-sm p-1 text-primary transition-all outline-none focus:outline-none",
+                            "flex items-center justify-center gap-1.5",
+                            selected
+                              ? "bg-layer-transparent-active text-secondary"
+                              : "text-placeholder hover:text-secondary"
+                          )
+                        }
+                      >
+                        <TabIcon className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                        <span className="min-w-0 truncate">{tab.label ?? t(tab.i18n_title)}</span>
+                        <span className="shrink-0 text-placeholder">{overviewTabCounts[tab.key]}</span>
+                      </Tab>
+                    );
+                  })}
                 </Tab.List>
                 <button
                   type="button"
@@ -607,19 +720,30 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
               </div>
               <Tab.Panels className="min-h-0 flex-1 py-3 text-secondary">
                 <Tab.Panel key="stat-test-plans" className="flex h-full min-h-0 flex-col">
+                  <div className="flex items-center justify-end pb-2">
+                    <Button
+                      variant="link-neutral"
+                      className="p-0"
+                      onClick={openPlanAssociateModal}
+                      aria-label="关联测试计划"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
                   {cyclePlans.length === 0 ? (
                     <div className="grid h-32 place-items-center text-sm text-placeholder">暂无关联测试计划</div>
                   ) : (
                     <div className="flex h-full min-h-0 flex-col">
-                      <div className="min-h-0 flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm">
+                      <div className="min-h-0 max-h-[min(360px,50vh)] flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm">
                         <table className="min-w-full table-fixed">
                           <thead>
                             <tr className="border-b border-subtle text-left text-xs text-secondary">
-                              <th className="w-[34%] px-2 py-2">名称</th>
-                              <th className="w-[14%] px-2 py-2">状态</th>
-                              <th className="w-[14%] px-2 py-2">通过率</th>
-                              <th className="w-[19%] px-2 py-2">开始时间</th>
-                              <th className="w-[19%] px-2 py-2">结束时间</th>
+                              <th className="w-[30%] px-2 py-2">名称</th>
+                              <th className="w-[12%] px-2 py-2">状态</th>
+                              <th className="w-[12%] px-2 py-2">通过率</th>
+                              <th className="w-[17%] px-2 py-2">开始时间</th>
+                              <th className="w-[17%] px-2 py-2">结束时间</th>
+                              <th className="w-[12%] px-2 py-2 text-left">操作</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -637,6 +761,24 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
                                 </td>
                                 <td className="px-2 py-2 text-sm text-primary">
                                   {formatPlanDate(plan.end_date ?? plan.end_at ?? null)}
+                                </td>
+                                <td className="px-2 py-2 text-left">
+                                  <Popconfirm
+                                    title="确定取消该测试计划的关联吗？"
+                                    okText="取消关联"
+                                    cancelText="取消"
+                                    onConfirm={() => void handleCancelPlanAssociation(plan.id)}
+                                  >
+                                    <Button
+                                      variant="link-neutral"
+                                      className="p-0"
+                                      loading={cancelingPlanId === plan.id}
+                                      disabled={cancelingPlanId === plan.id}
+                                      aria-label="取消关联"
+                                    >
+                                      <Unlink className="h-3.5 w-3.5" />
+                                    </Button>
+                                  </Popconfirm>
                                 </td>
                               </tr>
                             ))}
@@ -659,8 +801,7 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
                   )}
                 </Tab.Panel>
                 <Tab.Panel key="stat-files" className="flex h-full min-h-0 flex-col">
-                  <div className="flex items-center justify-between pb-2">
-                    <span className="text-xs font-medium text-secondary">文件</span>
+                  <div className="flex items-center justify-end pb-2">
                     <Button
                       variant="link-neutral"
                       className="p-0"
@@ -678,15 +819,15 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
                   ) : filesError ? (
                     <p className="text-sm text-danger-primary">{filesError}</p>
                   ) : files.length === 0 ? (
-                    <div className="grid h-32 place-items-center text-sm text-placeholder">暂无文件</div>
+                    <div className="grid h-32 place-items-center text-sm text-placeholder">暂无附件</div>
                   ) : (
-                    <div className="flex h-full min-h-0 flex-1 flex-col">
-                      <div className="min-h-0 flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm">
+                    <div className="flex min-h-0 flex-1 flex-col">
+                      <div className="min-h-0 max-h-[min(360px,50vh)] flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm">
                         <div className="overflow-x-auto">
                           <table className="min-w-full table-fixed">
                             <thead>
                               <tr className="border-b border-subtle text-left text-xs text-secondary">
-                                <th className="w-2/5 px-2 py-2">文件名</th>
+                                <th className="w-2/5 px-2 py-2">附件名</th>
                                 <th className="w-1/5 px-2 py-2">大小</th>
                                 <th className="w-2/5 px-2 py-2">上传时间</th>
                                 <th className="w-1/5 px-2 py-2 text-left">操作</th>
@@ -716,7 +857,7 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
                                         <Download className="h-3.5 w-3.5" />
                                       </Button>
                                       <Popconfirm
-                                        title="确认删除该文件？"
+                                        title="确认删除该附件？"
                                         okText="删除"
                                         cancelText="取消"
                                         onConfirm={() => void handleDeleteCycleFile(file.id)}
@@ -737,17 +878,6 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
                             </tbody>
                           </table>
                         </div>
-                      </div>
-                      <div className="mt-2 flex flex-shrink-0 items-center justify-between border-t border-subtle bg-surface-1 px-2 py-2">
-                        <div className="text-sm text-secondary">{filesTotal > 0 ? `共 ${filesTotal} 条` : ""}</div>
-                        <Pagination
-                          simple
-                          current={filesPage}
-                          pageSize={filesPageSize}
-                          total={filesTotal}
-                          onChange={(p) => fetchFiles(p)}
-                          size="small"
-                        />
                       </div>
                     </div>
                   )}
@@ -795,40 +925,71 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
         <div className="flex min-h-0 flex-1 flex-col bg-surface-1">
           <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-3 vertical-scrollbar scrollbar-sm">
             {activeOverviewTabKey === "stat-test-plans" ? (
-              cyclePlans.length === 0 ? (
-                <div className="grid h-32 place-items-center text-sm text-placeholder">暂无关联测试计划</div>
-              ) : (
-                <table className="min-w-full table-fixed">
-                  <thead>
-                    <tr className="border-b border-subtle text-left text-xs text-secondary">
-                      <th className="w-[34%] px-2 py-2">名称</th>
-                      <th className="w-[14%] px-2 py-2">状态</th>
-                      <th className="w-[14%] px-2 py-2">通过率</th>
-                      <th className="w-[19%] px-2 py-2">开始时间</th>
-                      <th className="w-[19%] px-2 py-2">结束时间</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {cyclePlans.map((plan: any) => (
-                      <tr key={plan.id ?? plan.name} className="border-b border-subtle hover:bg-layer-1">
-                        <td className="truncate px-2 py-2 text-sm text-primary" title={plan.name ?? "-"}>
-                          {plan.name ?? "-"}
-                        </td>
-                        <td className={`px-2 py-2 text-sm ${getPlanStatusClassName(plan.state)}`}>
-                          {plan.state ?? "-"}
-                        </td>
-                        <td className="px-2 py-2 text-sm text-primary">{getPassRate(plan.pass_rate)}</td>
-                        <td className="px-2 py-2 text-sm text-primary">
-                          {formatPlanDate(plan.start_date ?? plan.start_at ?? null)}
-                        </td>
-                        <td className="px-2 py-2 text-sm text-primary">
-                          {formatPlanDate(plan.end_date ?? plan.end_at ?? null)}
-                        </td>
+              <div className="flex flex-col">
+                <div className="flex items-center justify-end pb-2">
+                  <Button
+                    variant="link-neutral"
+                    className="p-0"
+                    onClick={openPlanAssociateModal}
+                    aria-label="关联测试计划"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+                {cyclePlans.length === 0 ? (
+                  <div className="grid h-32 place-items-center text-sm text-placeholder">暂无关联测试计划</div>
+                ) : (
+                  <table className="min-w-full table-fixed">
+                    <thead>
+                      <tr className="border-b border-subtle text-left text-xs text-secondary">
+                        <th className="w-[30%] px-2 py-2">名称</th>
+                        <th className="w-[12%] px-2 py-2">状态</th>
+                        <th className="w-[12%] px-2 py-2">通过率</th>
+                        <th className="w-[17%] px-2 py-2">开始时间</th>
+                        <th className="w-[17%] px-2 py-2">结束时间</th>
+                        <th className="w-[12%] px-2 py-2 text-left">操作</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )
+                    </thead>
+                    <tbody>
+                      {cyclePlans.map((plan: any) => (
+                        <tr key={plan.id ?? plan.name} className="border-b border-subtle hover:bg-layer-1">
+                          <td className="truncate px-2 py-2 text-sm text-primary" title={plan.name ?? "-"}>
+                            {plan.name ?? "-"}
+                          </td>
+                          <td className={`px-2 py-2 text-sm ${getPlanStatusClassName(plan.state)}`}>
+                            {plan.state ?? "-"}
+                          </td>
+                          <td className="px-2 py-2 text-sm text-primary">{getPassRate(plan.pass_rate)}</td>
+                          <td className="px-2 py-2 text-sm text-primary">
+                            {formatPlanDate(plan.start_date ?? plan.start_at ?? null)}
+                          </td>
+                          <td className="px-2 py-2 text-sm text-primary">
+                            {formatPlanDate(plan.end_date ?? plan.end_at ?? null)}
+                          </td>
+                          <td className="px-2 py-2 text-left">
+                            <Popconfirm
+                              title="确定取消该测试计划的关联吗？"
+                              okText="取消关联"
+                              cancelText="取消"
+                              onConfirm={() => void handleCancelPlanAssociation(plan.id)}
+                            >
+                              <Button
+                                variant="link-neutral"
+                                className="p-0"
+                                loading={cancelingPlanId === plan.id}
+                                disabled={cancelingPlanId === plan.id}
+                                aria-label="取消关联"
+                              >
+                                <Unlink className="h-3.5 w-3.5" />
+                              </Button>
+                            </Popconfirm>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
             ) : activeOverviewTabKey === "stat-assignees" ? (
               chartDistributionData ? (
                 <AssigneeStatComponent
@@ -845,11 +1006,10 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
             ) : filesError ? (
               <p className="text-sm text-danger-primary">{filesError}</p>
             ) : files.length === 0 ? (
-              <div className="grid h-32 place-items-center text-sm text-placeholder">暂无文件</div>
+              <div className="grid h-32 place-items-center text-sm text-placeholder">暂无附件</div>
             ) : (
               <div className="flex min-h-0 flex-1 flex-col">
-                <div className="flex items-center justify-between pb-2">
-                  <span className="text-xs font-medium text-secondary">文件</span>
+                <div className="flex items-center justify-end pb-2">
                   <Button
                     variant="link-neutral"
                     className="p-0"
@@ -865,7 +1025,7 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
                     <table className="min-w-full table-fixed">
                       <thead>
                         <tr className="border-b border-subtle text-left text-xs text-secondary">
-                          <th className="w-2/5 px-2 py-2">文件名</th>
+                          <th className="w-2/5 px-2 py-2">附件名</th>
                           <th className="w-1/5 px-2 py-2">大小</th>
                           <th className="w-2/5 px-2 py-2">上传时间</th>
                           <th className="w-1/5 px-2 py-2 text-left">操作</th>
@@ -895,7 +1055,7 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
                                   <Download className="h-3.5 w-3.5" />
                                 </Button>
                                 <Popconfirm
-                                  title="确认删除该文件？"
+                                  title="确认删除该附件？"
                                   okText="删除"
                                   cancelText="取消"
                                   onConfirm={() => void handleDeleteCycleFile(file.id)}
@@ -917,22 +1077,106 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
                     </table>
                   </div>
                 </div>
-                <div className="mt-2 flex flex-shrink-0 items-center justify-between border-t border-subtle bg-surface-1 px-2 py-2">
-                  <div className="text-sm text-secondary">{filesTotal > 0 ? `共 ${filesTotal} 条` : ""}</div>
-                  <Pagination
-                    simple
-                    current={filesPage}
-                    pageSize={filesPageSize}
-                    total={filesTotal}
-                    onChange={(p) => fetchFiles(p)}
-                    size="small"
-                  />
-                </div>
               </div>
             )}
           </div>
         </div>
       </CycleOverviewFullscreenModal>
+
+      <Modal
+        title="关联测试计划"
+        open={planAssociateOpen}
+        onCancel={() => setPlanAssociateOpen(false)}
+        onOk={handleConfirmAssociatePlans}
+        okText="确定"
+        cancelText="取消"
+        okButtonProps={{
+          disabled: selectedPlanIds.length === 0 || selectablePlansLoading,
+          loading: associatingPlans,
+        }}
+        width={720}
+        destroyOnClose
+      >
+        <div className="mt-2">
+          {selectablePlansLoading ? (
+            <div className="flex items-center justify-center py-8 text-sm text-secondary">加载中...</div>
+          ) : selectablePlansError ? (
+            <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+              {selectablePlansError}
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full table-fixed">
+                <thead>
+                  <tr className="border-b border-subtle text-left text-xs text-secondary">
+                    <th className="w-10 px-2 py-2">
+                      <input
+                        type="checkbox"
+                        className="size-4"
+                        checked={
+                          selectablePlans.length > 0 &&
+                          selectedPlanIds.length === selectablePlans.length
+                        }
+                        onChange={(e) => {
+                          if (e.target.checked) setSelectedPlanIds(selectablePlans.map((p: any) => p.id));
+                          else setSelectedPlanIds([]);
+                        }}
+                      />
+                    </th>
+                    <th className="w-2/5 px-2 py-2">名称</th>
+                    <th className="w-1/5 px-2 py-2">状态</th>
+                    <th className="w-1/5 px-2 py-2">开始时间</th>
+                    <th className="w-1/5 px-2 py-2">结束时间</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {selectablePlans.length === 0 ? (
+                    <tr>
+                      <td className="px-2 py-6 text-sm text-secondary" colSpan={5}>
+                        暂无可选测试计划
+                      </td>
+                    </tr>
+                  ) : (
+                    selectablePlans.map((plan: any) => {
+                      const checked = selectedPlanIds.includes(plan.id);
+                      return (
+                        <tr key={plan.id} className="border-b border-subtle hover:bg-layer-1-hover">
+                          <td className="px-2 py-2">
+                            <input
+                              type="checkbox"
+                              className="size-4"
+                              checked={checked}
+                              onChange={(e) => {
+                                const v = e.target.checked;
+                                setSelectedPlanIds((prev) => {
+                                  if (v) return Array.from(new Set([...prev, plan.id]));
+                                  return prev.filter((x) => x !== plan.id);
+                                });
+                              }}
+                            />
+                          </td>
+                          <td className="truncate px-2 py-2 text-sm text-primary" title={plan.name ?? "-"}>
+                            {plan.name ?? "-"}
+                          </td>
+                          <td className={`px-2 py-2 text-sm ${getPlanStatusClassName(plan.state)}`}>
+                            {plan.state ?? "-"}
+                          </td>
+                          <td className="px-2 py-2 text-sm text-primary">
+                            {formatPlanDate(plan.start_date ?? plan.start_at ?? null)}
+                          </td>
+                          <td className="px-2 py-2 text-sm text-primary">
+                            {formatPlanDate(plan.end_date ?? plan.end_at ?? null)}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </Modal>
     </div>
   );
 });

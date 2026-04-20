@@ -375,7 +375,7 @@ function ProjectStatisticsPage() {
                 <div className="flex flex-shrink-0 items-center gap-2 px-4 py-3">
                   <Tab.List
                     as="div"
-                    className="flex min-w-0 flex-1 items-center justify-between gap-1 rounded-md bg-layer-2 p-1 text-11"
+                    className="flex min-w-0 flex-1 items-center justify-between gap-1 rounded-md bg-layer-2 p-1 text-sm font-medium"
                   >
                     {PROGRESS_LIST_TABS.map((tab) => {
                       const Icon = tab.icon;

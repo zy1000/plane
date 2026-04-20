@@ -49,6 +49,7 @@ from plane.app.serializers import (
     ReleaseWriteSerializer,
     CycleSerializer,
 )
+from plane.app.serializers.qa import TestPlanDetailSerializer
 from plane.bgtasks.issue_activities_task import issue_activity
 from plane.db.models import (
     Issue,
@@ -1024,6 +1025,73 @@ class ReleaseAPI(BaseViewSet):
                 }
             )
         return Response(result, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=["get"], url_path="select-plan-list")
+    def select_plan_list(self, request, slug, project_id):
+        """返回当前项目下尚未关联到指定 release 的测试计划（用于发布 -> 关联测试计划弹窗）。"""
+        release_id = request.query_params.get("release_id")
+        if not release_id:
+            return Response({"error": "release_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        plans = TestPlan.objects.filter(
+            project_id=project_id,
+            deleted_at__isnull=True,
+        ).exclude(releases__id=release_id)
+
+        serializer = TestPlanDetailSerializer(plans, many=True)
+        return Response({"data": serializer.data, "count": plans.count()}, status=status.HTTP_200_OK)
+
+    @allow_fine_permission(PermissionKey.RELEASES_EDIT)
+    @action(detail=False, methods=["post"], url_path="associate-plans")
+    def associate_plans(self, request, slug, project_id):
+        release_id = request.data.get("release_id")
+        plan_ids = request.data.get("plan_ids") or []
+        if not release_id:
+            return Response({"error": "release_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+        if not isinstance(plan_ids, list) or len(plan_ids) == 0:
+            return Response(
+                {"error": "plan_ids must be a non-empty list"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        release = Release.objects.filter(id=release_id, project_id=project_id).first()
+        if not release:
+            return Response({"error": "Release not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        plans = list(
+            TestPlan.objects.filter(
+                project_id=project_id,
+                deleted_at__isnull=True,
+                id__in=plan_ids,
+            )
+        )
+        if plans:
+            release.plans.add(*plans)
+
+        return Response({"release_id": str(release_id), "updated": len(plans)}, status=status.HTTP_200_OK)
+
+    @allow_fine_permission(PermissionKey.RELEASES_EDIT)
+    @action(detail=False, methods=["post"], url_path="cancel-plan-association")
+    def cancel_plan_association(self, request, slug, project_id):
+        release_id = request.data.get("release_id")
+        plan_ids = request.data.get("plan_ids") or []
+        if not release_id:
+            return Response({"error": "release_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+        if not isinstance(plan_ids, list) or len(plan_ids) == 0:
+            return Response(
+                {"error": "plan_ids must be a non-empty list"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        release = Release.objects.filter(id=release_id, project_id=project_id).first()
+        if not release:
+            return Response({"error": "Release not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        plans = list(TestPlan.objects.filter(id__in=plan_ids))
+        if plans:
+            release.plans.remove(*plans)
+
+        return Response({"release_id": str(release_id), "updated": len(plans)}, status=status.HTTP_200_OK)
 
 
 class ReleaseOverdueByAssigneeEndpoint(BaseAPIView):

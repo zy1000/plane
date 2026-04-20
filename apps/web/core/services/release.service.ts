@@ -311,6 +311,55 @@ export class ReleaseService extends APIService {
       });
   }
 
+  /** 返回当前项目下尚未关联到指定 release 的测试计划（用于发布 -> 关联计划弹窗） */
+  async getReleaseSelectablePlans(
+    workspaceSlug: string,
+    projectId: string,
+    releaseId: string
+  ): Promise<{ data: any[]; count: number }> {
+    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/release/select-plan-list/`, {
+      params: { release_id: releaseId },
+    })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 将一组测试计划批量关联到当前 release */
+  async associateReleasePlans(
+    workspaceSlug: string,
+    projectId: string,
+    releaseId: string,
+    planIds: string[]
+  ): Promise<any> {
+    return this.post(`/api/workspaces/${workspaceSlug}/projects/${projectId}/release/associate-plans/`, {
+      release_id: releaseId,
+      plan_ids: planIds,
+    })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 解除一组测试计划与当前 release 的关联 */
+  async cancelReleasePlanAssociation(
+    workspaceSlug: string,
+    projectId: string,
+    releaseId: string,
+    planIds: string[]
+  ): Promise<any> {
+    return this.post(`/api/workspaces/${workspaceSlug}/projects/${projectId}/release/cancel-plan-association/`, {
+      release_id: releaseId,
+      plan_ids: planIds,
+    })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
   async getReleaseStatistics(workspaceSlug: string, projectId: string, releaseId: string): Promise<any> {
     return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/release/statistics/`, {
       params: { release_id: releaseId },

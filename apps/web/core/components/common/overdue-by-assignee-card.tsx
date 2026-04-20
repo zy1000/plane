@@ -25,7 +25,7 @@ type Props = {
   data?: { total: number; data: TOverdueByAssigneeRow[] } | null;
   /** 卡片标题，默认：延期工作项负责人 */
   title?: string;
-  /** 右上角副标题，默认：截止时间早于今天且未完成 */
+  /** 右上角副标题（可选） */
   subtitle?: string;
   /** 外层类名（用于控制卡片尺寸） */
   className?: string;
@@ -43,7 +43,7 @@ type Props = {
 export function OverdueByAssigneeCard({
   data,
   title = "延期工作项负责人",
-  subtitle = "截止时间早于今天且未完成",
+  subtitle = "",
   className,
   hideHeader = false,
   headerExtra,

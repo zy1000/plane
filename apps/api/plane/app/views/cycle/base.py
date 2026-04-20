@@ -1220,3 +1220,101 @@ class CycleOverdueByAssigneeEndpoint(BaseAPIView):
             },
             status=status.HTTP_200_OK,
         )
+
+
+class CyclePlansEndpoint(BaseAPIView):
+    """返回当前迭代已关联的测试计划列表。"""
+
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    def get(self, request, slug, project_id, cycle_id):
+        plans_qs = (
+            TestPlan.objects.filter(
+                project_id=project_id,
+                cycle_id=cycle_id,
+                deleted_at__isnull=True,
+            )
+            .order_by("-created_at")
+        )
+        serializer = TestPlanDetailSerializer(plans_qs, many=True)
+        return Response(
+            {"data": serializer.data, "count": plans_qs.count()},
+            status=status.HTTP_200_OK,
+        )
+
+
+class CycleSelectablePlansEndpoint(BaseAPIView):
+    """返回指定项目下尚未关联到任何迭代的测试计划，用于"迭代 -> 关联测试计划"弹窗选择。"""
+
+    def get(self, request, slug, project_id, cycle_id):
+        if not Cycle.objects.filter(
+            workspace__slug=slug, project_id=project_id, id=cycle_id
+        ).exists():
+            return Response({"error": "Cycle not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        plans_qs = (
+            TestPlan.objects.filter(
+                project_id=project_id,
+                deleted_at__isnull=True,
+                cycle__isnull=True,
+            )
+            .order_by("-created_at")
+        )
+        serializer = TestPlanDetailSerializer(plans_qs, many=True)
+        return Response(
+            {"data": serializer.data, "count": plans_qs.count()},
+            status=status.HTTP_200_OK,
+        )
+
+
+class CycleAssociatePlansEndpoint(BaseAPIView):
+    """将一组测试计划的 cycle 字段批量更新为当前迭代。"""
+
+    @allow_fine_permission(PermissionKey.SPRINTS_EDIT)
+    def post(self, request, slug, project_id, cycle_id):
+        plan_ids = request.data.get("plan_ids") or []
+        if not isinstance(plan_ids, list) or len(plan_ids) == 0:
+            return Response(
+                {"error": "plan_ids must be a non-empty list"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not Cycle.objects.filter(
+            workspace__slug=slug, project_id=project_id, id=cycle_id
+        ).exists():
+            return Response({"error": "Cycle not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        updated = TestPlan.objects.filter(
+            project_id=project_id,
+            deleted_at__isnull=True,
+            id__in=plan_ids,
+        ).update(cycle_id=cycle_id)
+
+        return Response(
+            {"cycle_id": str(cycle_id), "updated": updated},
+            status=status.HTTP_200_OK,
+        )
+
+
+class CycleCancelPlanAssociationEndpoint(BaseAPIView):
+    """解除一组测试计划与当前迭代的关联关系（仅当它们当前归属该迭代时）。"""
+
+    @allow_fine_permission(PermissionKey.SPRINTS_EDIT)
+    def post(self, request, slug, project_id, cycle_id):
+        plan_ids = request.data.get("plan_ids") or []
+        if not isinstance(plan_ids, list) or len(plan_ids) == 0:
+            return Response(
+                {"error": "plan_ids must be a non-empty list"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        updated = TestPlan.objects.filter(
+            project_id=project_id,
+            cycle_id=cycle_id,
+            deleted_at__isnull=True,
+            id__in=plan_ids,
+        ).update(cycle=None)
+
+        return Response(
+            {"cycle_id": str(cycle_id), "updated": updated},
+            status=status.HTTP_200_OK,
+        )

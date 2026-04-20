@@ -280,6 +280,68 @@ export class CycleService extends APIService {
         throw error?.response?.data;
       });
   }
+
+  /** 获取当前迭代已关联的测试计划列表 */
+  async getCyclePlans(
+    workspaceSlug: string,
+    projectId: string,
+    cycleId: string
+  ): Promise<{ data: any[]; count: number }> {
+    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/cycles/${cycleId}/plans/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 获取当前项目下、尚未关联到任何迭代的可选测试计划（用于迭代 -> 关联计划弹窗） */
+  async getCycleSelectablePlans(
+    workspaceSlug: string,
+    projectId: string,
+    cycleId: string
+  ): Promise<{ data: any[]; count: number }> {
+    return this.get(
+      `/api/workspaces/${workspaceSlug}/projects/${projectId}/cycles/${cycleId}/selectable-plans/`
+    )
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 将一组测试计划批量关联到当前迭代 */
+  async associateCyclePlans(
+    workspaceSlug: string,
+    projectId: string,
+    cycleId: string,
+    planIds: string[]
+  ): Promise<any> {
+    return this.post(
+      `/api/workspaces/${workspaceSlug}/projects/${projectId}/cycles/${cycleId}/associate-plans/`,
+      { plan_ids: planIds }
+    )
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 解除一组测试计划与当前迭代的关联 */
+  async cancelCyclePlanAssociation(
+    workspaceSlug: string,
+    projectId: string,
+    cycleId: string,
+    planIds: string[]
+  ): Promise<any> {
+    return this.post(
+      `/api/workspaces/${workspaceSlug}/projects/${projectId}/cycles/${cycleId}/cancel-plan-association/`,
+      { plan_ids: planIds }
+    )
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
 }
 
 export type TCycleOverdueAssigneeRow = {

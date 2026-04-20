@@ -16,6 +16,12 @@ import {
   XCircle,
   Layers,
   Timer,
+  ClipboardList,
+  FileText,
+  Repeat,
+  Maximize2,
+  ScrollText,
+  Activity,
 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import useSWR from "swr";
@@ -30,7 +36,7 @@ import { useTranslation } from "@plane/i18n";
 import { CheckIcon, MembersPropertyIcon, WorkItemsIcon } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Dialog, Transition } from "@headlessui/react";
-import { Pagination, Popconfirm, Tag, Tooltip } from "antd";
+import { Modal, Popconfirm, Tag, Tooltip } from "antd";
 import { Avatar, AvatarGroup, CircularProgressIndicator, Loader } from "@plane/ui";
 import { ReadonlyDate } from "@/components/readonly/date";
 import { ReleaseService } from "@/services/release.service";
@@ -44,6 +50,7 @@ import { useEditorAsset } from "@/hooks/store/use-editor-asset";
 import useLocalStorage from "@/hooks/use-local-storage";
 import { RichTextEditor } from "@/components/editor/rich-text";
 import { OverdueByAssigneeCard } from "@/components/common/overdue-by-assignee-card";
+import { CycleOverviewFullscreenModal } from "@/components/cycles/cycle-overview-fullscreen-modal";
 
 type Props = {
   releaseId: string;
@@ -94,10 +101,10 @@ function KpiCard({ icon, label, value, iconColor }: KpiCardProps) {
 }
 
 const OVERVIEW_TABS = [
-  { key: "stat-test-plans", label: "测试计划" },
-  { key: "stat-cycles", label: "关联迭代" },
-  { key: "stat-files", label: "文件" },
-];
+  { key: "stat-test-plans", label: "测试计划", Icon: ClipboardList },
+  { key: "stat-cycles", label: "关联迭代", Icon: Repeat },
+  { key: "stat-files", label: "附件", Icon: FileText },
+] as const;
 
 const formatDateLabel = (d: Date | null | undefined) => {
   if (!d) return "-";
@@ -235,8 +242,17 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
   const [stats, setStats] = useState<any | null>(null);
 
   const [plans, setPlans] = useState<any[]>([]);
+  const [planAssociateOpen, setPlanAssociateOpen] = useState(false);
+  const [selectablePlans, setSelectablePlans] = useState<any[]>([]);
+  const [selectablePlansLoading, setSelectablePlansLoading] = useState(false);
+  const [selectablePlansError, setSelectablePlansError] = useState<string | null>(null);
+  const [selectedPlanIds, setSelectedPlanIds] = useState<string[]>([]);
+  const [associatingPlans, setAssociatingPlans] = useState(false);
+  const [cancelingPlanId, setCancelingPlanId] = useState<string | null>(null);
   const [plansLoading, setPlansLoading] = useState(false);
   const [plansError, setPlansError] = useState<string | null>(null);
+
+  const [statsExpandOpen, setStatsExpandOpen] = useState(false);
 
   const [noteOpen, setNoteOpen] = useState(false);
   const [noteHtml, setNoteHtml] = useState<string>("");
@@ -245,13 +261,13 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
   const [releaseFiles, setReleaseFiles] = useState<TReleaseFile[]>([]);
   const [releaseFilesLoading, setReleaseFilesLoading] = useState(false);
   const [releaseFilesError, setReleaseFilesError] = useState<string | null>(null);
-  const [releaseFilesPage, setReleaseFilesPage] = useState(1);
   const [releaseFilesTotal, setReleaseFilesTotal] = useState(0);
   const [releaseFilesUploading, setReleaseFilesUploading] = useState(false);
   const [releaseFilesDeletingId, setReleaseFilesDeletingId] = useState<string | null>(null);
   const [releaseFilesDownloadingId, setReleaseFilesDownloadingId] = useState<string | null>(null);
 
-  const releaseFilesPageSize = 5;
+  /** 与后端 CustomPaginator.max_page_size 一致，单次请求上限；多页时循环拉取直至全部 */
+  const RELEASE_FILES_PAGE_SIZE = 100;
 
   const releaseOverdueSwrKey =
     workspaceSlug && projectId && releaseId
@@ -309,6 +325,79 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
     }
   };
 
+  const openPlanAssociateModal = async () => {
+    if (!workspaceSlug || !projectId || !releaseId) return;
+    setPlanAssociateOpen(true);
+    setSelectedPlanIds([]);
+    setSelectablePlansLoading(true);
+    setSelectablePlansError(null);
+    try {
+      const res = await releaseService.getReleaseSelectablePlans(
+        workspaceSlug.toString(),
+        projectId.toString(),
+        releaseId
+      );
+      setSelectablePlans(Array.isArray(res?.data) ? res.data : []);
+    } catch (e: any) {
+      setSelectablePlansError(e?.error || e?.detail || "获取可选测试计划失败");
+      setSelectablePlans([]);
+    } finally {
+      setSelectablePlansLoading(false);
+    }
+  };
+
+  const handleConfirmAssociatePlans = async () => {
+    if (!workspaceSlug || !projectId || !releaseId || selectedPlanIds.length === 0) return;
+    try {
+      setAssociatingPlans(true);
+      await releaseService.associateReleasePlans(
+        workspaceSlug.toString(),
+        projectId.toString(),
+        releaseId,
+        selectedPlanIds
+      );
+      setToast({
+        type: TOAST_TYPE.SUCCESS,
+        title: "关联成功",
+        message: `已关联 ${selectedPlanIds.length} 个测试计划`,
+      });
+      setPlanAssociateOpen(false);
+      setSelectedPlanIds([]);
+      void fetchPlans();
+    } catch (e: any) {
+      setToast({
+        type: TOAST_TYPE.ERROR,
+        title: "关联失败",
+        message: e?.error || e?.detail || "请稍后重试",
+      });
+    } finally {
+      setAssociatingPlans(false);
+    }
+  };
+
+  const handleCancelPlanAssociation = async (planId: string) => {
+    if (!workspaceSlug || !projectId || !releaseId) return;
+    try {
+      setCancelingPlanId(planId);
+      await releaseService.cancelReleasePlanAssociation(
+        workspaceSlug.toString(),
+        projectId.toString(),
+        releaseId,
+        [planId]
+      );
+      setToast({ type: TOAST_TYPE.SUCCESS, title: "已取消关联", message: "测试计划已取消关联" });
+      void fetchPlans();
+    } catch (e: any) {
+      setToast({
+        type: TOAST_TYPE.ERROR,
+        title: "操作失败",
+        message: e?.error || e?.detail || "请稍后重试",
+      });
+    } finally {
+      setCancelingPlanId(null);
+    }
+  };
+
   const fetchCycles = async () => {
     if (!workspaceSlug || !projectId || !releaseId) return;
     try {
@@ -324,26 +413,34 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
     }
   };
 
-  const fetchReleaseFiles = async (page = releaseFilesPage) => {
+  const fetchReleaseFiles = async () => {
     if (!workspaceSlug || !projectId || !releaseId) return;
     try {
       setReleaseFilesLoading(true);
       setReleaseFilesError(null);
-      const res = await releaseService.getReleaseFileList(workspaceSlug.toString(), projectId.toString(), releaseId, {
-        page,
-        page_size: releaseFilesPageSize,
-      });
-      const list = Array.isArray(res?.data) ? res.data : [];
-      const count = Number(res?.count ?? 0);
-      const totalPages = Math.max(Math.ceil(count / releaseFilesPageSize), 1);
-      const safePage = Math.min(Math.max(page, 1), totalPages);
-      if (safePage !== page) {
-        await fetchReleaseFiles(safePage);
-        return;
+      const all: TReleaseFile[] = [];
+      let total = 0;
+      let page = 1;
+      for (;;) {
+        const res = await releaseService.getReleaseFileList(
+          workspaceSlug.toString(),
+          projectId.toString(),
+          releaseId,
+          { page, page_size: RELEASE_FILES_PAGE_SIZE }
+        );
+        const list = Array.isArray(res?.data) ? res.data : [];
+        if (page === 1) {
+          total = Number(res?.count ?? 0);
+        }
+        all.push(...list);
+        if (list.length === 0) break;
+        if (total > 0 && all.length >= total) break;
+        if (list.length < RELEASE_FILES_PAGE_SIZE) break;
+        page += 1;
+        if (page > 500) break;
       }
-      setReleaseFiles(list);
-      setReleaseFilesTotal(count);
-      setReleaseFilesPage(page);
+      setReleaseFiles(all);
+      setReleaseFilesTotal(total > 0 ? total : all.length);
     } catch (e: unknown) {
       if (isProjectPermissionError(e)) {
         setReleaseFilesError(t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title));
@@ -367,7 +464,7 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
       formData.append("release_id", releaseId);
       await releaseService.uploadReleaseFile(workspaceSlug.toString(), projectId.toString(), formData);
       setToast({ type: TOAST_TYPE.SUCCESS, title: "上传成功", message: "文件已上传" });
-      await fetchReleaseFiles(1);
+      await fetchReleaseFiles();
     } catch (e: unknown) {
       showReleaseFileApiError(e, "上传失败", "请稍后重试");
     } finally {
@@ -381,7 +478,7 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
       setReleaseFilesDeletingId(fileId);
       await releaseService.deleteReleaseFile(workspaceSlug.toString(), projectId.toString(), fileId);
       setToast({ type: TOAST_TYPE.SUCCESS, title: "删除成功", message: "文件已删除" });
-      await fetchReleaseFiles(releaseFilesPage);
+      await fetchReleaseFiles();
     } catch (e: unknown) {
       showReleaseFileApiError(e, "删除失败", "请稍后重试");
     } finally {
@@ -445,12 +542,10 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
 
     setAssociateOpen(false);
     setSelectedCycleIds([]);
-    setReleaseFilesPage(1);
-
     fetchReleaseDetails(workspaceSlug.toString(), projectId.toString(), releaseId);
     fetchCycles();
     fetchReleaseStatistics();
-    fetchReleaseFiles(1);
+    fetchReleaseFiles();
     fetchPlans();
   }, [fetchReleaseDetails, isOpen, releaseId, projectId, workspaceSlug]);
 
@@ -555,6 +650,12 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
     ? (currentTab as string)
     : "stat-test-plans";
   const overviewTabIndex = OVERVIEW_TABS.findIndex((tab) => tab.key === normalizedOverviewTab);
+
+  const overviewTabCounts: Record<(typeof OVERVIEW_TABS)[number]["key"], number> = {
+    "stat-test-plans": plans.length,
+    "stat-cycles": cycles.length,
+    "stat-files": releaseFilesTotal,
+  };
 
   if (!releaseDetails) {
     return (
@@ -675,7 +776,10 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
           <div className={`${sectionCard} group relative flex h-[280px] flex-col overflow-hidden p-4`}>
             <div className="flex items-center justify-between">
-              <div className="text-sm font-medium text-primary">发布日志</div>
+              <div className="flex min-w-0 items-center gap-2">
+                <ScrollText className="h-4 w-4 shrink-0 text-placeholder" aria-hidden />
+                <div className="text-sm font-medium text-primary">发布日志</div>
+              </div>
               <Button
                 variant="link-neutral"
                 className="p-0 opacity-0 transition-opacity group-hover:opacity-100"
@@ -697,7 +801,10 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
           </div>
 
           <div className={`${sectionCard} flex h-[280px] flex-col p-4`}>
-            <div className="text-sm font-medium text-primary">发布动态</div>
+            <div className="flex items-center gap-2">
+              <Activity className="h-4 w-4 shrink-0 text-placeholder" aria-hidden />
+              <div className="text-sm font-medium text-primary">发布动态</div>
+            </div>
             <div className="mt-3 grid min-h-0 flex-1 place-items-center text-sm text-placeholder">
               {t("no_data_yet")}
             </div>
@@ -706,8 +813,8 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
 
         {/* Tabs + Work item type pie chart */}
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-          {/* Left: Tabs (测试计划 / 关联迭代 / 文件) */}
-          <div className={`${sectionCard} flex flex-col p-4`}>
+          {/* Left: Tabs (测试计划 / 关联迭代 / 附件) */}
+          <div className={`${sectionCard} flex h-[420px] flex-col p-4`}>
             <Tab.Group
               selectedIndex={overviewTabIndex >= 0 ? overviewTabIndex : 0}
               onChange={(index) => {
@@ -715,27 +822,55 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
                 if (nextTab) setCurrentTab(nextTab);
               }}
             >
-              <Tab.List
-                as="div"
-                className="flex w-full items-center justify-between gap-2 rounded-md bg-layer-2 p-1 text-11"
-              >
-                {OVERVIEW_TABS.map((tab) => (
-                  <Tab
-                    className={cn(
-                      "w-full cursor-pointer rounded-sm p-1 text-primary transition-all outline-none focus:outline-none",
-                      tab.key === normalizedOverviewTab
-                        ? "bg-layer-transparent-active text-secondary"
-                        : "text-placeholder hover:text-secondary"
-                    )}
-                    key={tab.key}
-                  >
-                    {tab.label}
-                  </Tab>
-                ))}
-              </Tab.List>
+              <div className="flex w-full flex-shrink-0 items-center gap-1">
+                <Tab.List
+                  as="div"
+                  className="flex min-w-0 flex-1 items-center justify-between gap-2 rounded-md bg-layer-2 p-1 text-sm font-medium"
+                >
+                  {OVERVIEW_TABS.map((tab) => {
+                    const TabIcon = tab.Icon;
+                    return (
+                      <Tab
+                        key={tab.key}
+                        className={({ selected }) =>
+                          cn(
+                            "w-full cursor-pointer rounded-sm p-1 text-primary transition-all outline-none focus:outline-none",
+                            "flex items-center justify-center gap-1.5",
+                            selected
+                              ? "bg-layer-transparent-active text-secondary"
+                              : "text-placeholder hover:text-secondary"
+                          )
+                        }
+                      >
+                        <TabIcon className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                        <span className="min-w-0 truncate">{tab.label}</span>
+                        <span className="shrink-0 tabular-nums text-placeholder">{overviewTabCounts[tab.key]}</span>
+                      </Tab>
+                    );
+                  })}
+                </Tab.List>
+                <button
+                  type="button"
+                  className="grid h-6 w-6 shrink-0 place-items-center rounded transition-colors hover:bg-surface-2"
+                  onClick={() => setStatsExpandOpen(true)}
+                  aria-label="放大"
+                >
+                  <Maximize2 className="h-3.5 w-3.5 text-placeholder" />
+                </button>
+              </div>
               <Tab.Panels className="min-h-0 flex-1 py-3 text-secondary">
                 {/* 测试计划 */}
                 <Tab.Panel key="stat-test-plans" className="flex h-full min-h-0 flex-col">
+                  <div className="flex items-center justify-end pb-2">
+                    <Button
+                      variant="link-neutral"
+                      className="p-0"
+                      onClick={openPlanAssociateModal}
+                      aria-label="关联测试计划"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
                   {plansLoading ? (
                     <div className="flex items-center justify-center py-8 text-sm text-secondary">加载中...</div>
                   ) : plansError ? (
@@ -743,15 +878,16 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
                   ) : plans.length === 0 ? (
                     <div className="grid h-32 place-items-center text-sm text-placeholder">暂无关联测试计划</div>
                   ) : (
-                    <div className="min-h-0 flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm">
+                    <div className="min-h-0 max-h-[min(360px,50vh)] flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm">
                       <table className="min-w-full table-fixed">
                         <thead>
                           <tr className="border-b border-subtle text-left text-xs text-secondary">
-                            <th className="w-[34%] px-2 py-2">名称</th>
-                            <th className="w-[14%] px-2 py-2">状态</th>
-                            <th className="w-[18%] px-2 py-2">通过率</th>
-                            <th className="w-[17%] px-2 py-2">开始时间</th>
-                            <th className="w-[17%] px-2 py-2">结束时间</th>
+                            <th className="w-[30%] px-2 py-2">测试计划</th>
+                            <th className="w-[12%] px-2 py-2">状态</th>
+                            <th className="w-[16%] px-2 py-2">通过率</th>
+                            <th className="w-[15%] px-2 py-2">开始时间</th>
+                            <th className="w-[15%] px-2 py-2">结束时间</th>
+                            <th className="w-[12%] px-2 py-2 text-left">操作</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -776,6 +912,24 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
                               </td>
                               <td className="px-2 py-2 text-sm text-primary">{p.begin_time || "-"}</td>
                               <td className="px-2 py-2 text-sm text-primary">{p.end_time || "-"}</td>
+                              <td className="px-2 py-2 text-left" onClick={(e) => e.stopPropagation()}>
+                                <Popconfirm
+                                  title="确定取消该测试计划的关联吗？"
+                                  okText="取消关联"
+                                  cancelText="取消"
+                                  onConfirm={() => void handleCancelPlanAssociation(p.id)}
+                                >
+                                  <Button
+                                    variant="link-neutral"
+                                    className="p-0"
+                                    loading={cancelingPlanId === p.id}
+                                    disabled={cancelingPlanId === p.id}
+                                    aria-label="取消关联"
+                                  >
+                                    <Unlink className="h-3.5 w-3.5" />
+                                  </Button>
+                                </Popconfirm>
+                              </td>
                             </tr>
                           ))}
                         </tbody>
@@ -786,8 +940,7 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
 
                 {/* 关联迭代 */}
                 <Tab.Panel key="stat-cycles" className="flex h-full min-h-0 flex-col">
-                  <div className="flex items-center justify-between pb-2">
-                    <span className="text-xs font-medium text-secondary">迭代</span>
+                  <div className="flex items-center justify-end pb-2">
                     <Button
                       variant="link-neutral"
                       className="p-0"
@@ -810,7 +963,7 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
                       <table className="min-w-full table-fixed">
                         <thead>
                           <tr className="border-b border-subtle text-left text-xs text-secondary">
-                            <th className="w-2/5 px-2 py-2">名称</th>
+                            <th className="w-2/5 px-2 py-2">迭代</th>
                             <th className="w-1/4 px-2 py-2">开始时间</th>
                             <th className="w-1/4 px-2 py-2">结束时间</th>
                             <th className="w-12 px-2 py-2" />
@@ -850,10 +1003,9 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
                   )}
                 </Tab.Panel>
 
-                {/* 文件 */}
+                {/* 附件 */}
                 <Tab.Panel key="stat-files" className="flex h-full min-h-0 flex-col">
-                  <div className="flex items-center justify-between pb-2">
-                    <span className="text-xs font-medium text-secondary">文件</span>
+                  <div className="flex items-center justify-end pb-2">
                     <Button
                       variant="link-neutral"
                       className="p-0"
@@ -871,78 +1023,63 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
                   ) : releaseFilesError ? (
                     <p className="text-sm text-danger-primary">{releaseFilesError}</p>
                   ) : releaseFiles.length === 0 ? (
-                    <div className="grid h-32 place-items-center text-sm text-placeholder">暂无文件</div>
+                    <div className="grid h-32 place-items-center text-sm text-placeholder">暂无附件</div>
                   ) : (
-                    <div className="flex h-full min-h-0 flex-1 flex-col">
-                      <div className="min-h-0 flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm">
-                        <div className="overflow-x-auto">
-                          <table className="min-w-full table-fixed">
-                            <thead>
-                              <tr className="border-b border-subtle text-left text-xs text-secondary">
-                                <th className="w-2/5 px-2 py-2">文件名</th>
-                                <th className="w-1/5 px-2 py-2">大小</th>
-                                <th className="w-1/5 px-2 py-2">上传时间</th>
-                                <th className="w-1/5 px-2 py-2 text-left">操作</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {releaseFiles.map((file) => (
-                                <tr key={file.id} className="border-b border-subtle hover:bg-layer-1">
-                                  <td className="truncate px-2 py-2 text-sm text-primary" title={file.name}>
-                                    <div className="flex items-center gap-2">
-                                      <WorkItemsIcon className="h-4 w-4 flex-shrink-0 text-placeholder" />
-                                      <span className="truncate">{file.name}</span>
-                                    </div>
-                                  </td>
-                                  <td className="px-2 py-2 text-sm text-primary">{formatFileSize(Number(file.size ?? 0))}</td>
-                                  <td className="px-2 py-2 text-sm text-primary">
-                                    <ReadonlyDate value={file.created_at} formatToken="yyyy-MM-dd" hideIcon={true} />
-                                  </td>
-                                  <td className="px-2 py-2">
-                                    <div className="flex items-center justify-end gap-2">
+                    <div className="min-h-0 flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm">
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full table-fixed">
+                          <thead>
+                            <tr className="border-b border-subtle text-left text-xs text-secondary">
+                              <th className="w-2/5 px-2 py-2">附件</th>
+                              <th className="w-1/5 px-2 py-2">大小</th>
+                              <th className="w-1/5 px-2 py-2">上传时间</th>
+                              <th className="w-1/5 px-2 py-2 text-left">操作</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {releaseFiles.map((file) => (
+                              <tr key={file.id} className="border-b border-subtle hover:bg-layer-1">
+                                <td className="truncate px-2 py-2 text-sm text-primary" title={file.name}>
+                                  <div className="flex items-center gap-2">
+                                    <WorkItemsIcon className="h-4 w-4 flex-shrink-0 text-placeholder" />
+                                    <span className="truncate">{file.name}</span>
+                                  </div>
+                                </td>
+                                <td className="px-2 py-2 text-sm text-primary">{formatFileSize(Number(file.size ?? 0))}</td>
+                                <td className="px-2 py-2 text-sm text-primary">
+                                  <ReadonlyDate value={file.created_at} formatToken="yyyy-MM-dd" hideIcon={true} />
+                                </td>
+                                <td className="px-2 py-2">
+                                  <div className="flex items-center justify-end gap-2">
+                                    <Button
+                                      variant="link-neutral"
+                                      className="p-0"
+                                      disabled={releaseFilesDownloadingId === file.id}
+                                      onClick={() => handleDownloadReleaseFile(file.id, file.name)}
+                                    >
+                                      <Download className="h-3.5 w-3.5" />
+                                    </Button>
+                                    <Popconfirm
+                                      title="确认删除该附件？"
+                                      okText="删除"
+                                      cancelText="取消"
+                                      onConfirm={() => void handleDeleteReleaseFile(file.id)}
+                                    >
                                       <Button
-                                        variant="link-neutral"
+                                        variant="link-danger"
                                         className="p-0"
-                                        disabled={releaseFilesDownloadingId === file.id}
-                                        onClick={() => handleDownloadReleaseFile(file.id, file.name)}
+                                        disabled={releaseFilesDeletingId === file.id}
+                                        loading={releaseFilesDeletingId === file.id}
                                       >
-                                        <Download className="h-3.5 w-3.5" />
+                                        <Trash2 className="h-3.5 w-3.5" />
                                       </Button>
-                                      <Popconfirm
-                                        title="确认删除该文件？"
-                                        okText="删除"
-                                        cancelText="取消"
-                                        onConfirm={() => void handleDeleteReleaseFile(file.id)}
-                                      >
-                                        <Button
-                                          variant="link-danger"
-                                          className="p-0"
-                                          disabled={releaseFilesDeletingId === file.id}
-                                          loading={releaseFilesDeletingId === file.id}
-                                        >
-                                          <Trash2 className="h-3.5 w-3.5" />
-                                        </Button>
-                                      </Popconfirm>
-                                    </div>
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                      <div className="mt-2 flex flex-shrink-0 items-center justify-between border-t border-subtle bg-surface-1 px-2 py-2">
-                        <div className="text-sm text-secondary">
-                          {releaseFilesTotal > 0 ? `共 ${releaseFilesTotal} 条` : ""}
-                        </div>
-                        <Pagination
-                          simple
-                          current={releaseFilesPage}
-                          pageSize={releaseFilesPageSize}
-                          total={releaseFilesTotal}
-                          onChange={(p) => fetchReleaseFiles(p)}
-                          size="small"
-                        />
+                                    </Popconfirm>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
                       </div>
                     </div>
                   )}
@@ -959,6 +1096,243 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
           />
         </div>
       </div>
+
+      <CycleOverviewFullscreenModal
+        isOpen={statsExpandOpen}
+        onClose={() => setStatsExpandOpen(false)}
+        title={
+          normalizedOverviewTab === "stat-test-plans"
+            ? "测试计划"
+            : normalizedOverviewTab === "stat-cycles"
+              ? "关联迭代"
+              : "附件"
+        }
+        icon={
+          normalizedOverviewTab === "stat-test-plans"
+            ? ClipboardList
+            : normalizedOverviewTab === "stat-cycles"
+              ? Repeat
+              : FileText
+        }
+      >
+        <div className="flex min-h-0 flex-1 flex-col bg-surface-1">
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-3 vertical-scrollbar scrollbar-sm">
+            {normalizedOverviewTab === "stat-test-plans" ? (
+              <>
+                <div className="flex items-center justify-end pb-2">
+                  <Button
+                    variant="link-neutral"
+                    className="p-0"
+                    onClick={openPlanAssociateModal}
+                    aria-label="关联测试计划"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+                {plansLoading ? (
+                  <div className="flex items-center justify-center py-8 text-sm text-secondary">加载中...</div>
+                ) : plansError ? (
+                  <p className="text-sm text-danger-primary">{plansError}</p>
+                ) : plans.length === 0 ? (
+                  <div className="grid h-32 place-items-center text-sm text-placeholder">暂无关联测试计划</div>
+                ) : (
+                  <table className="min-w-full table-fixed">
+                    <thead>
+                      <tr className="border-b border-subtle text-left text-xs text-secondary">
+                        <th className="w-[30%] px-2 py-2">测试计划</th>
+                        <th className="w-[12%] px-2 py-2">状态</th>
+                        <th className="w-[16%] px-2 py-2">通过率</th>
+                        <th className="w-[15%] px-2 py-2">开始时间</th>
+                        <th className="w-[15%] px-2 py-2">结束时间</th>
+                        <th className="w-[12%] px-2 py-2 text-left">操作</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {plans.map((p) => (
+                        <tr
+                          key={p.id}
+                          className="cursor-pointer border-b border-subtle hover:bg-layer-1"
+                          onClick={() => {
+                            router.push(
+                              `/${workspaceSlug}/projects/${projectId}/testhub/plan-cases?planId=${p.id}`
+                            );
+                          }}
+                        >
+                          <td className="truncate px-2 py-2 text-sm text-primary" title={p.name ?? "-"}>
+                            {p.name ?? "-"}
+                          </td>
+                          <td className="px-2 py-2">
+                            <div className="flex items-center">{renderPlanStateTag(p.state)}</div>
+                          </td>
+                          <td className="px-2 py-2">
+                            <PlanPassRate passRate={p.pass_rate} />
+                          </td>
+                          <td className="px-2 py-2 text-sm text-primary">{p.begin_time || "-"}</td>
+                          <td className="px-2 py-2 text-sm text-primary">{p.end_time || "-"}</td>
+                          <td className="px-2 py-2 text-left" onClick={(e) => e.stopPropagation()}>
+                            <Popconfirm
+                              title="确定取消该测试计划的关联吗？"
+                              okText="取消关联"
+                              cancelText="取消"
+                              onConfirm={() => void handleCancelPlanAssociation(p.id)}
+                            >
+                              <Button
+                                variant="link-neutral"
+                                className="p-0"
+                                loading={cancelingPlanId === p.id}
+                                disabled={cancelingPlanId === p.id}
+                                aria-label="取消关联"
+                              >
+                                <Unlink className="h-3.5 w-3.5" />
+                              </Button>
+                            </Popconfirm>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </>
+            ) : normalizedOverviewTab === "stat-cycles" ? (
+              <>
+                <div className="flex items-center justify-end pb-2">
+                  <Button
+                    variant="link-neutral"
+                    className="p-0"
+                    onClick={() => {
+                      setAssociateOpen(true);
+                      fetchSelectable(1, selectPageSize);
+                    }}
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+                {cyclesLoading ? (
+                  <div className="flex items-center justify-center py-8 text-sm text-secondary">加载中...</div>
+                ) : cyclesError ? (
+                  <p className="text-sm text-danger-primary">{cyclesError}</p>
+                ) : cycles.length === 0 ? (
+                  <div className="grid h-32 place-items-center text-sm text-placeholder">暂无关联迭代</div>
+                ) : (
+                  <table className="min-w-full table-fixed">
+                    <thead>
+                      <tr className="border-b border-subtle text-left text-xs text-secondary">
+                        <th className="w-2/5 px-2 py-2">迭代</th>
+                        <th className="w-1/4 px-2 py-2">开始时间</th>
+                        <th className="w-1/4 px-2 py-2">结束时间</th>
+                        <th className="w-12 px-2 py-2" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {cycles.map((c) => (
+                        <tr key={c.id} className="border-b border-subtle hover:bg-layer-1">
+                          <td className="truncate px-2 py-2 text-sm text-primary" title={c.name}>
+                            {c.name}
+                          </td>
+                          <td className="px-2 py-2 text-sm text-primary">
+                            <ReadonlyDate value={c.start_date} formatToken="yyyy-MM-dd" hideIcon={true} />
+                          </td>
+                          <td className="px-2 py-2 text-sm text-primary">
+                            <ReadonlyDate value={c.end_date} formatToken="yyyy-MM-dd" hideIcon={true} />
+                          </td>
+                          <td className="px-2 py-2 text-right">
+                            <Button
+                              variant="link-neutral"
+                              className="p-0"
+                              onClick={() => handleCancelAssociation(c.id)}
+                            >
+                              <Unlink className="h-3.5 w-3.5" />
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </>
+            ) : (
+              <>
+                <div className="flex items-center justify-end pb-2">
+                  <Button
+                    variant="link-neutral"
+                    className="p-0"
+                    onClick={() => fileInputRef.current?.click()}
+                    loading={releaseFilesUploading}
+                    disabled={releaseFilesUploading}
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+                {releaseFilesLoading ? (
+                  <div className="flex items-center justify-center py-8 text-sm text-secondary">加载中...</div>
+                ) : releaseFilesError ? (
+                  <p className="text-sm text-danger-primary">{releaseFilesError}</p>
+                ) : releaseFiles.length === 0 ? (
+                  <div className="grid h-32 place-items-center text-sm text-placeholder">暂无附件</div>
+                ) : (
+                  <div className="min-h-0 flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm">
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full table-fixed">
+                        <thead>
+                          <tr className="border-b border-subtle text-left text-xs text-secondary">
+                            <th className="w-2/5 px-2 py-2">附件</th>
+                            <th className="w-1/5 px-2 py-2">大小</th>
+                            <th className="w-1/5 px-2 py-2">上传时间</th>
+                            <th className="w-1/5 px-2 py-2 text-left">操作</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {releaseFiles.map((file) => (
+                            <tr key={file.id} className="border-b border-subtle hover:bg-layer-1">
+                              <td className="truncate px-2 py-2 text-sm text-primary" title={file.name}>
+                                <div className="flex items-center gap-2">
+                                  <WorkItemsIcon className="h-4 w-4 flex-shrink-0 text-placeholder" />
+                                  <span className="truncate">{file.name}</span>
+                                </div>
+                              </td>
+                              <td className="px-2 py-2 text-sm text-primary">{formatFileSize(Number(file.size ?? 0))}</td>
+                              <td className="px-2 py-2 text-sm text-primary">
+                                <ReadonlyDate value={file.created_at} formatToken="yyyy-MM-dd" hideIcon={true} />
+                              </td>
+                              <td className="px-2 py-2">
+                                <div className="flex items-center justify-end gap-2">
+                                  <Button
+                                    variant="link-neutral"
+                                    className="p-0"
+                                    disabled={releaseFilesDownloadingId === file.id}
+                                    onClick={() => handleDownloadReleaseFile(file.id, file.name)}
+                                  >
+                                    <Download className="h-3.5 w-3.5" />
+                                  </Button>
+                                  <Popconfirm
+                                    title="确认删除该附件？"
+                                    okText="删除"
+                                    cancelText="取消"
+                                    onConfirm={() => void handleDeleteReleaseFile(file.id)}
+                                  >
+                                    <Button
+                                      variant="link-danger"
+                                      className="p-0"
+                                      disabled={releaseFilesDeletingId === file.id}
+                                      loading={releaseFilesDeletingId === file.id}
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </Button>
+                                  </Popconfirm>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      </CycleOverviewFullscreenModal>
       <Transition.Root show={associateOpen} as={Fragment}>
         <Dialog as="div" className="relative z-[10000]" onClose={handleAssociateClose}>
           <Transition.Child
@@ -1162,6 +1536,95 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
           </div>
         </Dialog>
       </Transition.Root>
+
+      <Modal
+        title="关联测试计划"
+        open={planAssociateOpen}
+        onCancel={() => setPlanAssociateOpen(false)}
+        onOk={handleConfirmAssociatePlans}
+        okText="确定"
+        cancelText="取消"
+        okButtonProps={{
+          disabled: selectedPlanIds.length === 0 || selectablePlansLoading,
+          loading: associatingPlans,
+        }}
+        width={720}
+        destroyOnClose
+      >
+        <div className="mt-2">
+          {selectablePlansLoading ? (
+            <div className="flex items-center justify-center py-8 text-sm text-secondary">加载中...</div>
+          ) : selectablePlansError ? (
+            <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+              {selectablePlansError}
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full table-fixed">
+                <thead>
+                  <tr className="border-b border-subtle text-left text-xs text-secondary">
+                    <th className="w-10 px-2 py-2">
+                      <input
+                        type="checkbox"
+                        className="size-4"
+                        checked={
+                          selectablePlans.length > 0 &&
+                          selectedPlanIds.length === selectablePlans.length
+                        }
+                        onChange={(e) => {
+                          if (e.target.checked) setSelectedPlanIds(selectablePlans.map((p: any) => p.id));
+                          else setSelectedPlanIds([]);
+                        }}
+                      />
+                    </th>
+                    <th className="w-2/5 px-2 py-2">名称</th>
+                    <th className="w-1/5 px-2 py-2">状态</th>
+                    <th className="w-1/5 px-2 py-2">开始时间</th>
+                    <th className="w-1/5 px-2 py-2">结束时间</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {selectablePlans.length === 0 ? (
+                    <tr>
+                      <td className="px-2 py-6 text-sm text-secondary" colSpan={5}>
+                        暂无可选测试计划
+                      </td>
+                    </tr>
+                  ) : (
+                    selectablePlans.map((plan: any) => {
+                      const checked = selectedPlanIds.includes(plan.id);
+                      return (
+                        <tr key={plan.id} className="border-b border-subtle hover:bg-layer-1-hover">
+                          <td className="px-2 py-2">
+                            <input
+                              type="checkbox"
+                              className="size-4"
+                              checked={checked}
+                              onChange={(e) => {
+                                const v = e.target.checked;
+                                setSelectedPlanIds((prev) => {
+                                  if (v) return Array.from(new Set([...prev, plan.id]));
+                                  return prev.filter((x) => x !== plan.id);
+                                });
+                              }}
+                            />
+                          </td>
+                          <td className="truncate px-2 py-2 text-sm text-primary" title={plan.name ?? "-"}>
+                            {plan.name ?? "-"}
+                          </td>
+                          <td className="px-2 py-2 text-sm text-primary">{plan.state ?? "-"}</td>
+                          <td className="px-2 py-2 text-sm text-primary">{plan.begin_time || "-"}</td>
+                          <td className="px-2 py-2 text-sm text-primary">{plan.end_time || "-"}</td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </Modal>
     </div>
   );
 });

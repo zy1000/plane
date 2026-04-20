@@ -47,7 +47,6 @@ export const BarChart = React.memo(function BarChart<K extends string, T extends
   // states
   const [activeBar, setActiveBar] = useState<string | null>(null);
   const [activeLegend, setActiveLegend] = useState<string | null>(null);
-  const [showCursor, setShowCursor] = useState(false);
 
   // derived values
   const { stackKeys, stackLabels } = useMemo(() => {
@@ -126,17 +125,6 @@ export const BarChart = React.memo(function BarChart<K extends string, T extends
     [activeLegend, stackKeys, bars, getBarColor, data]
   );
 
-  const handleMouseMove = useCallback((state: any) => {
-    const activePayload = state?.activePayload ?? state?.activeTooltipPayload ?? [];
-    const shouldShowCursor =
-      Array.isArray(activePayload) && activePayload.some((p: any) => Number(p?.value ?? 0) > 0);
-    setShowCursor((prev) => (prev === shouldShowCursor ? prev : shouldShowCursor));
-  }, []);
-
-  const handleMouseLeave = useCallback(() => {
-    setShowCursor(false);
-  }, []);
-
   return (
     <div className={className}>
       <ResponsiveContainer width="100%" height="100%">
@@ -150,8 +138,6 @@ export const BarChart = React.memo(function BarChart<K extends string, T extends
           }}
           barSize={barSize}
           className="recharts-wrapper"
-          onMouseMove={handleMouseMove}
-          onMouseLeave={handleMouseLeave}
         >
           <CartesianGrid stroke="var(--border-color-subtle)" vertical={false} />
           <XAxis
@@ -199,14 +185,7 @@ export const BarChart = React.memo(function BarChart<K extends string, T extends
           )}
           {showTooltip && (
             <Tooltip
-              cursor={
-                showCursor
-                  ? {
-                      fill: "var(--alpha-black-300)",
-                      className: "bg-layer-1 cursor-pointer",
-                    }
-                  : false
-              }
+              cursor={false}
               wrapperStyle={{
                 pointerEvents: "auto",
               }}

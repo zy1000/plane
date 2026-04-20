@@ -13,6 +13,10 @@ from plane.app.views import (
     CycleProgressEndpoint,
     CycleAnalyticsEndpoint,
     CycleOverdueByAssigneeEndpoint,
+    CyclePlansEndpoint,
+    CycleSelectablePlansEndpoint,
+    CycleAssociatePlansEndpoint,
+    CycleCancelPlanAssociationEndpoint,
     TransferCycleIssueEndpoint,
     CycleUserPropertiesEndpoint,
     CycleArchiveUnarchiveEndpoint,
@@ -129,5 +133,25 @@ urlpatterns = [
         "workspaces/<str:slug>/projects/<uuid:project_id>/cycles/<uuid:cycle_id>/overdue-by-assignee/",
         CycleOverdueByAssigneeEndpoint.as_view(),
         name="project-cycle-overdue-by-assignee",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/cycles/<uuid:cycle_id>/plans/",
+        CyclePlansEndpoint.as_view(),
+        name="project-cycle-plans",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/cycles/<uuid:cycle_id>/selectable-plans/",
+        CycleSelectablePlansEndpoint.as_view(),
+        name="project-cycle-selectable-plans",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/cycles/<uuid:cycle_id>/associate-plans/",
+        CycleAssociatePlansEndpoint.as_view(),
+        name="project-cycle-associate-plans",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/cycles/<uuid:cycle_id>/cancel-plan-association/",
+        CycleCancelPlanAssociationEndpoint.as_view(),
+        name="project-cycle-cancel-plan-association",
     ),
 ]
