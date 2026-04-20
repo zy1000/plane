@@ -168,6 +168,8 @@ def transfer_cycle_issues(
                 workspace__slug=slug,
                 project_id=project_id,
             )
+            # 排除已软删的 IssueAssignee；LEFT JOIN 下无负责人行的 deleted_at 为 NULL，同样满足此条件，仍会被保留
+            .filter(issue_assignee__deleted_at__isnull=True)
             .annotate(display_name=F("assignees__display_name"))
             .annotate(assignee_id=F("assignees__id"))
             .annotate(
@@ -234,6 +236,8 @@ def transfer_cycle_issues(
                 workspace__slug=slug,
                 project_id=project_id,
             )
+            # 排除已软删的 IssueLabel；LEFT JOIN 下无标签行同样被保留
+            .filter(label_issue__deleted_at__isnull=True)
             .annotate(label_name=F("labels__name"))
             .annotate(color=F("labels__color"))
             .annotate(label_id=F("labels__id"))
@@ -290,6 +294,8 @@ def transfer_cycle_issues(
             workspace__slug=slug,
             project_id=project_id,
         )
+        # 排除已软删的 IssueAssignee；LEFT JOIN 下无负责人行的 deleted_at 为 NULL，同样满足此条件，仍会被保留
+        .filter(issue_assignee__deleted_at__isnull=True)
         .annotate(display_name=F("assignees__display_name"))
         .annotate(assignee_id=F("assignees__id"))
         .annotate(
@@ -354,6 +360,8 @@ def transfer_cycle_issues(
             workspace__slug=slug,
             project_id=project_id,
         )
+        # 排除已软删的 IssueLabel；LEFT JOIN 下无标签行同样被保留
+        .filter(label_issue__deleted_at__isnull=True)
         .annotate(label_name=F("labels__name"))
         .annotate(color=F("labels__color"))
         .annotate(label_id=F("labels__id"))

@@ -27,5 +27,5 @@ export const getProjectFormValues = (): Partial<IProject> => ({
   module_view: true,
   issue_views_view: true,
   page_view: true,
-  intake_view: true,
+  inbox_view: true,
 });

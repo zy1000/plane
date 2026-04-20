@@ -22,12 +22,14 @@ import {
   Maximize2,
   ScrollText,
   Activity,
+  AlertTriangle,
 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import useSWR from "swr";
 import { Tab } from "@headlessui/react";
 import { Button } from "@plane/propel/button";
 import {
+  CYCLE_STATUS,
   MODULE_STATUS,
   PROJECT_ERROR_MESSAGES,
   isProjectPermissionError,
@@ -36,7 +38,7 @@ import { useTranslation } from "@plane/i18n";
 import { CheckIcon, MembersPropertyIcon, WorkItemsIcon } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Dialog, Transition } from "@headlessui/react";
-import { Modal, Popconfirm, Tag, Tooltip } from "antd";
+import { Modal, Popconfirm, Tooltip } from "antd";
 import { Avatar, AvatarGroup, CircularProgressIndicator, Loader } from "@plane/ui";
 import { ReadonlyDate } from "@/components/readonly/date";
 import { ReleaseService } from "@/services/release.service";
@@ -121,14 +123,17 @@ const PASS_RATE_COLORS: Record<string, string> = {
 };
 
 const renderPlanStateTag = (state: string | null | undefined) => {
-  const colorMap: Record<string, string> = {
-    未开始: "default",
-    进行中: "processing",
-    已完成: "success",
-  };
-  const color = colorMap[state ?? ""] || "default";
   const text = state ? String(state) : "-";
-  return <Tag color={color}>{text}</Tag>;
+  const classByState: Record<string, string> = {
+    未开始: "text-secondary",
+    进行中: "text-[#1677ff]",
+    已完成: "text-success-primary",
+  };
+  return (
+    <span className={`text-sm font-medium leading-none ${classByState[text] ?? "text-secondary"}`}>
+      {text}
+    </span>
+  );
 };
 
 const PlanPassRate: React.FC<{ passRate: Record<string, number> | null | undefined }> = ({ passRate }) => {
@@ -253,6 +258,9 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
   const [plansError, setPlansError] = useState<string | null>(null);
 
   const [statsExpandOpen, setStatsExpandOpen] = useState(false);
+  const [noteExpandOpen, setNoteExpandOpen] = useState(false);
+  const [activityExpandOpen, setActivityExpandOpen] = useState(false);
+  const [overdueExpandOpen, setOverdueExpandOpen] = useState(false);
 
   const [noteOpen, setNoteOpen] = useState(false);
   const [noteHtml, setNoteHtml] = useState<string>("");
@@ -780,13 +788,23 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
                 <ScrollText className="h-4 w-4 shrink-0 text-placeholder" aria-hidden />
                 <div className="text-sm font-medium text-primary">发布日志</div>
               </div>
-              <Button
-                variant="link-neutral"
-                className="p-0 opacity-0 transition-opacity group-hover:opacity-100"
-                onClick={handleNoteOpen}
-              >
-                <Pencil className="h-3.5 w-3.5" />
-              </Button>
+              <div className="flex shrink-0 items-center gap-1">
+                <Button
+                  variant="link-neutral"
+                  className="p-0 opacity-0 transition-opacity group-hover:opacity-100"
+                  onClick={handleNoteOpen}
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </Button>
+                <button
+                  type="button"
+                  className="grid h-6 w-6 shrink-0 place-items-center rounded transition-colors hover:bg-surface-2"
+                  onClick={() => setNoteExpandOpen(true)}
+                  aria-label="放大"
+                >
+                  <Maximize2 className="h-3.5 w-3.5 text-placeholder" />
+                </button>
+              </div>
             </div>
             <div className="mt-3 min-h-0 flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm">
               {releaseDetails.note ? (
@@ -801,9 +819,19 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
           </div>
 
           <div className={`${sectionCard} flex h-[280px] flex-col p-4`}>
-            <div className="flex items-center gap-2">
-              <Activity className="h-4 w-4 shrink-0 text-placeholder" aria-hidden />
-              <div className="text-sm font-medium text-primary">发布动态</div>
+            <div className="flex items-center justify-between">
+              <div className="flex min-w-0 items-center gap-2">
+                <Activity className="h-4 w-4 shrink-0 text-placeholder" aria-hidden />
+                <div className="text-sm font-medium text-primary">发布动态</div>
+              </div>
+              <button
+                type="button"
+                className="grid h-6 w-6 shrink-0 place-items-center rounded transition-colors hover:bg-surface-2"
+                onClick={() => setActivityExpandOpen(true)}
+                aria-label="放大"
+              >
+                <Maximize2 className="h-3.5 w-3.5 text-placeholder" />
+              </button>
             </div>
             <div className="mt-3 grid min-h-0 flex-1 place-items-center text-sm text-placeholder">
               {t("no_data_yet")}
@@ -849,28 +877,56 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
                     );
                   })}
                 </Tab.List>
-                <button
-                  type="button"
-                  className="grid h-6 w-6 shrink-0 place-items-center rounded transition-colors hover:bg-surface-2"
-                  onClick={() => setStatsExpandOpen(true)}
-                  aria-label="放大"
-                >
-                  <Maximize2 className="h-3.5 w-3.5 text-placeholder" />
-                </button>
+                <div className="flex shrink-0 items-center gap-1">
+                  {normalizedOverviewTab === "stat-test-plans" && (
+                    <Button
+                      variant="link-neutral"
+                      className="p-0"
+                      onClick={() => void openPlanAssociateModal()}
+                      aria-label="关联测试计划"
+                    >
+                      <Plus className="h-4 w-4 text-placeholder" />
+                    </Button>
+                  )}
+                  {normalizedOverviewTab === "stat-cycles" && (
+                    <Button
+                      variant="link-neutral"
+                      className="p-0"
+                      onClick={() => {
+                        setAssociateOpen(true);
+                        fetchSelectable(1, selectPageSize);
+                      }}
+                      aria-label="关联迭代"
+                    >
+                      <Plus className="h-4 w-4 text-placeholder" />
+                    </Button>
+                  )}
+                  {normalizedOverviewTab === "stat-files" && (
+                    <Button
+                      variant="link-neutral"
+                      className="p-0"
+                      onClick={() => fileInputRef.current?.click()}
+                      loading={releaseFilesUploading}
+                      disabled={releaseFilesUploading}
+                      aria-label="上传附件"
+                    >
+                      <Plus className="h-4 w-4 text-placeholder" />
+                    </Button>
+                  )}
+                  <input ref={fileInputRef} type="file" className="hidden" onChange={handleUploadReleaseFile} />
+                  <button
+                    type="button"
+                    className="grid h-6 w-6 shrink-0 place-items-center rounded transition-colors hover:bg-surface-2"
+                    onClick={() => setStatsExpandOpen(true)}
+                    aria-label="放大"
+                  >
+                    <Maximize2 className="h-3.5 w-3.5 text-placeholder" />
+                  </button>
+                </div>
               </div>
               <Tab.Panels className="min-h-0 flex-1 py-3 text-secondary">
                 {/* 测试计划 */}
                 <Tab.Panel key="stat-test-plans" className="flex h-full min-h-0 flex-col">
-                  <div className="flex items-center justify-end pb-2">
-                    <Button
-                      variant="link-neutral"
-                      className="p-0"
-                      onClick={openPlanAssociateModal}
-                      aria-label="关联测试计划"
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
                   {plansLoading ? (
                     <div className="flex items-center justify-center py-8 text-sm text-secondary">加载中...</div>
                   ) : plansError ? (
@@ -881,28 +937,34 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
                     <div className="min-h-0 max-h-[min(360px,50vh)] flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm">
                       <table className="min-w-full table-fixed">
                         <thead>
-                          <tr className="border-b border-subtle text-left text-xs text-secondary">
-                            <th className="w-[30%] px-2 py-2">测试计划</th>
-                            <th className="w-[12%] px-2 py-2">状态</th>
-                            <th className="w-[16%] px-2 py-2">通过率</th>
-                            <th className="w-[15%] px-2 py-2">开始时间</th>
-                            <th className="w-[15%] px-2 py-2">结束时间</th>
-                            <th className="w-[12%] px-2 py-2 text-left">操作</th>
+                          <tr className="text-left text-xs text-secondary [&>th]:sticky [&>th]:top-0 [&>th]:z-10 [&>th]:bg-surface-1 [&>th]:shadow-[inset_0_-1px_0_var(--border-subtle)]">
+                            <th className="w-1/6 px-2 py-2 text-sm font-medium text-primary">测试计划</th>
+                            <th className="w-1/6 px-2 py-2 text-sm font-medium text-primary">状态</th>
+                            <th className="w-1/6 px-2 py-2 text-sm font-medium text-primary">通过率</th>
+                            <th className="w-1/6 px-2 py-2 text-sm font-medium text-primary">开始时间</th>
+                            <th className="w-1/6 px-2 py-2 text-sm font-medium text-primary">结束时间</th>
+                            <th className="w-1/6 px-2 py-2 text-left text-sm font-medium text-primary">操作</th>
                           </tr>
                         </thead>
                         <tbody>
                           {plans.map((p) => (
-                            <tr
-                              key={p.id}
-                              className="cursor-pointer border-b border-subtle hover:bg-layer-1"
-                              onClick={() => {
-                                router.push(
-                                  `/${workspaceSlug}/projects/${projectId}/testhub/plan-cases?planId=${p.id}`
-                                );
-                              }}
-                            >
+                            <tr key={p.id} className="border-b border-subtle hover:bg-layer-1">
                               <td className="truncate px-2 py-2 text-sm text-primary" title={p.name ?? "-"}>
-                                {p.name ?? "-"}
+                                {p.id ? (
+                                  <button
+                                    type="button"
+                                    className="truncate text-left text-sm text-primary hover:underline"
+                                    onClick={() =>
+                                      router.push(
+                                        `/${workspaceSlug}/projects/${projectId}/testhub/plan-cases?planId=${p.id}`
+                                      )
+                                    }
+                                  >
+                                    {p.name ?? "-"}
+                                  </button>
+                                ) : (
+                                  p.name ?? "-"
+                                )}
                               </td>
                               <td className="px-2 py-2">
                                 <div className="flex items-center">{renderPlanStateTag(p.state)}</div>
@@ -940,18 +1002,6 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
 
                 {/* 关联迭代 */}
                 <Tab.Panel key="stat-cycles" className="flex h-full min-h-0 flex-col">
-                  <div className="flex items-center justify-end pb-2">
-                    <Button
-                      variant="link-neutral"
-                      className="p-0"
-                      onClick={() => {
-                        setAssociateOpen(true);
-                        fetchSelectable(1, selectPageSize);
-                      }}
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
                   {cyclesLoading ? (
                     <div className="flex items-center justify-center py-8 text-sm text-secondary">加载中...</div>
                   ) : cyclesError ? (
@@ -962,11 +1012,12 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
                     <div className="min-h-0 flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm">
                       <table className="min-w-full table-fixed">
                         <thead>
-                          <tr className="border-b border-subtle text-left text-xs text-secondary">
-                            <th className="w-2/5 px-2 py-2">迭代</th>
-                            <th className="w-1/4 px-2 py-2">开始时间</th>
-                            <th className="w-1/4 px-2 py-2">结束时间</th>
-                            <th className="w-12 px-2 py-2" />
+                          <tr className="text-left text-xs text-secondary [&>th]:sticky [&>th]:top-0 [&>th]:z-10 [&>th]:bg-surface-1 [&>th]:shadow-[inset_0_-1px_0_var(--border-subtle)]">
+                            <th className="w-1/5 px-2 py-2 text-sm font-medium text-primary">迭代</th>
+                            <th className="w-1/5 px-2 py-2 text-sm font-medium text-primary">状态</th>
+                            <th className="w-1/5 px-2 py-2 text-sm font-medium text-primary">开始时间</th>
+                            <th className="w-1/5 px-2 py-2 text-sm font-medium text-primary">结束时间</th>
+                            <th className="w-1/5 px-2 py-2 text-left text-sm font-medium text-primary">操作</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -978,7 +1029,61 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
                               onMouseLeave={() => setHoverRowId((prev) => (prev === c.id ? null : prev))}
                             >
                               <td className="truncate px-2 py-2 text-sm text-primary" title={c.name}>
-                                {c.name}
+                                {c.id ? (
+                                  <button
+                                    type="button"
+                                    className="truncate text-left text-sm text-primary hover:underline"
+                                    onClick={() =>
+                                      router.push(`/${workspaceSlug}/projects/${projectId}/cycles/${c.id}/overview`)
+                                    }
+                                  >
+                                    {c.name}
+                                  </button>
+                                ) : (
+                                  c.name
+                                )}
+                              </td>
+                              <td className="px-2 py-2 text-sm text-primary">
+                                {(() => {
+                                  const statusMap: Record<string, string> = {
+                                    未开始: "not_started",
+                                    进行中: "in_progress",
+                                    已延期: "delayed",
+                                    已完成: "completed",
+                                    已取消: "cancelled",
+                                    not_started: "not_started",
+                                    in_progress: "in_progress",
+                                    delayed: "delayed",
+                                    completed: "completed",
+                                    cancelled: "cancelled",
+                                    canceled: "cancelled",
+                                    NOT_STARTED: "not_started",
+                                    IN_PROGRESS: "in_progress",
+                                    DELAYED: "delayed",
+                                    COMPLETED: "completed",
+                                    CANCELLED: "cancelled",
+                                    CURRENT: "in_progress",
+                                    UPCOMING: "not_started",
+                                    DRAFT: "not_started",
+                                  };
+                                  let normalized: string | undefined = c.status ? statusMap[String(c.status)] : undefined;
+                                  if (!normalized) {
+                                    const now = Date.now();
+                                    const start = c.start_date ? new Date(c.start_date).getTime() : NaN;
+                                    const end = c.end_date ? new Date(c.end_date).getTime() : NaN;
+                                    if (!Number.isNaN(start) && start > now) normalized = "not_started";
+                                    else if (!Number.isNaN(end) && end < now) normalized = "completed";
+                                    else if (!Number.isNaN(start) && !Number.isNaN(end)) normalized = "in_progress";
+                                    else normalized = "not_started";
+                                  }
+                                  const info = CYCLE_STATUS.find((s) => s.value === normalized);
+                                  if (!info) return "-";
+                                  return (
+                                    <span className="text-sm font-medium leading-none" style={{ color: info.color }}>
+                                      {t(info.i18n_title)}
+                                    </span>
+                                  );
+                                })()}
                               </td>
                               <td className="px-2 py-2 text-sm text-primary">
                                 <ReadonlyDate value={c.start_date} formatToken="yyyy-MM-dd" hideIcon={true} />
@@ -986,7 +1091,7 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
                               <td className="px-2 py-2 text-sm text-primary">
                                 <ReadonlyDate value={c.end_date} formatToken="yyyy-MM-dd" hideIcon={true} />
                               </td>
-                              <td className="px-2 py-2 text-right">
+                              <td className="px-2 py-2 text-left">
                                 <Button
                                   variant="link-neutral"
                                   className="p-0"
@@ -1005,19 +1110,6 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
 
                 {/* 附件 */}
                 <Tab.Panel key="stat-files" className="flex h-full min-h-0 flex-col">
-                  <div className="flex items-center justify-end pb-2">
-                    <Button
-                      variant="link-neutral"
-                      className="p-0"
-                      onClick={() => fileInputRef.current?.click()}
-                      loading={releaseFilesUploading}
-                      disabled={releaseFilesUploading}
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                    </Button>
-                    <input ref={fileInputRef} type="file" className="hidden" onChange={handleUploadReleaseFile} />
-                  </div>
-
                   {releaseFilesLoading ? (
                     <div className="flex items-center justify-center py-8 text-sm text-secondary">加载中...</div>
                   ) : releaseFilesError ? (
@@ -1029,11 +1121,11 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
                       <div className="overflow-x-auto">
                         <table className="min-w-full table-fixed">
                           <thead>
-                            <tr className="border-b border-subtle text-left text-xs text-secondary">
-                              <th className="w-2/5 px-2 py-2">附件</th>
-                              <th className="w-1/5 px-2 py-2">大小</th>
-                              <th className="w-1/5 px-2 py-2">上传时间</th>
-                              <th className="w-1/5 px-2 py-2 text-left">操作</th>
+                            <tr className="text-left text-xs text-secondary [&>th]:sticky [&>th]:top-0 [&>th]:z-10 [&>th]:bg-surface-1 [&>th]:shadow-[inset_0_-1px_0_var(--border-subtle)]">
+                              <th className="w-1/4 px-2 py-2 text-sm font-medium text-primary">附件</th>
+                              <th className="w-1/4 px-2 py-2 text-sm font-medium text-primary">大小</th>
+                              <th className="w-1/4 px-2 py-2 text-sm font-medium text-primary">上传时间</th>
+                              <th className="w-1/4 pl-3 pr-2 py-2 text-left text-sm font-medium text-primary">操作</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -1049,8 +1141,8 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
                                 <td className="px-2 py-2 text-sm text-primary">
                                   <ReadonlyDate value={file.created_at} formatToken="yyyy-MM-dd" hideIcon={true} />
                                 </td>
-                                <td className="px-2 py-2">
-                                  <div className="flex items-center justify-end gap-2">
+                                <td className="pl-3 pr-2 py-2">
+                                  <div className="flex items-center justify-start gap-2">
                                     <Button
                                       variant="link-neutral"
                                       className="p-0"
@@ -1093,6 +1185,16 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
             data={releaseOverdueByAssignee}
             title="延期工作项负责人"
             subtitle=""
+            headerExtra={
+              <button
+                type="button"
+                className="grid h-6 w-6 shrink-0 place-items-center rounded transition-colors hover:bg-surface-2"
+                onClick={() => setOverdueExpandOpen(true)}
+                aria-label="放大"
+              >
+                <Maximize2 className="h-3.5 w-3.5 text-placeholder" />
+              </button>
+            }
           />
         </div>
       </div>
@@ -1138,28 +1240,34 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
                 ) : (
                   <table className="min-w-full table-fixed">
                     <thead>
-                      <tr className="border-b border-subtle text-left text-xs text-secondary">
-                        <th className="w-[30%] px-2 py-2">测试计划</th>
-                        <th className="w-[12%] px-2 py-2">状态</th>
-                        <th className="w-[16%] px-2 py-2">通过率</th>
-                        <th className="w-[15%] px-2 py-2">开始时间</th>
-                        <th className="w-[15%] px-2 py-2">结束时间</th>
-                        <th className="w-[12%] px-2 py-2 text-left">操作</th>
+                      <tr className="text-left text-xs text-secondary [&>th]:sticky [&>th]:top-0 [&>th]:z-10 [&>th]:bg-surface-1 [&>th]:shadow-[inset_0_-1px_0_var(--border-subtle)]">
+                        <th className="w-1/6 px-2 py-2 text-sm font-medium text-primary">测试计划</th>
+                        <th className="w-1/6 px-2 py-2 text-sm font-medium text-primary">状态</th>
+                        <th className="w-1/6 px-2 py-2 text-sm font-medium text-primary">通过率</th>
+                        <th className="w-1/6 px-2 py-2 text-sm font-medium text-primary">开始时间</th>
+                        <th className="w-1/6 px-2 py-2 text-sm font-medium text-primary">结束时间</th>
+                        <th className="w-1/6 px-2 py-2 text-left text-sm font-medium text-primary">操作</th>
                       </tr>
                     </thead>
                     <tbody>
                       {plans.map((p) => (
-                        <tr
-                          key={p.id}
-                          className="cursor-pointer border-b border-subtle hover:bg-layer-1"
-                          onClick={() => {
-                            router.push(
-                              `/${workspaceSlug}/projects/${projectId}/testhub/plan-cases?planId=${p.id}`
-                            );
-                          }}
-                        >
+                        <tr key={p.id} className="border-b border-subtle hover:bg-layer-1">
                           <td className="truncate px-2 py-2 text-sm text-primary" title={p.name ?? "-"}>
-                            {p.name ?? "-"}
+                            {p.id ? (
+                              <button
+                                type="button"
+                                className="truncate text-left text-sm text-primary hover:underline"
+                                onClick={() =>
+                                  router.push(
+                                    `/${workspaceSlug}/projects/${projectId}/testhub/plan-cases?planId=${p.id}`
+                                  )
+                                }
+                              >
+                                {p.name ?? "-"}
+                              </button>
+                            ) : (
+                              p.name ?? "-"
+                            )}
                           </td>
                           <td className="px-2 py-2">
                             <div className="flex items-center">{renderPlanStateTag(p.state)}</div>
@@ -1216,18 +1324,73 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
                 ) : (
                   <table className="min-w-full table-fixed">
                     <thead>
-                      <tr className="border-b border-subtle text-left text-xs text-secondary">
-                        <th className="w-2/5 px-2 py-2">迭代</th>
-                        <th className="w-1/4 px-2 py-2">开始时间</th>
-                        <th className="w-1/4 px-2 py-2">结束时间</th>
-                        <th className="w-12 px-2 py-2" />
+                      <tr className="text-left text-xs text-secondary [&>th]:sticky [&>th]:top-0 [&>th]:z-10 [&>th]:bg-surface-1 [&>th]:shadow-[inset_0_-1px_0_var(--border-subtle)]">
+                        <th className="w-1/5 px-2 py-2 text-sm font-medium text-primary">迭代</th>
+                        <th className="w-1/5 px-2 py-2 text-sm font-medium text-primary">状态</th>
+                        <th className="w-1/5 px-2 py-2 text-sm font-medium text-primary">开始时间</th>
+                        <th className="w-1/5 px-2 py-2 text-sm font-medium text-primary">结束时间</th>
+                        <th className="w-1/5 px-2 py-2 text-left text-sm font-medium text-primary">操作</th>
                       </tr>
                     </thead>
                     <tbody>
                       {cycles.map((c) => (
                         <tr key={c.id} className="border-b border-subtle hover:bg-layer-1">
                           <td className="truncate px-2 py-2 text-sm text-primary" title={c.name}>
-                            {c.name}
+                            {c.id ? (
+                              <button
+                                type="button"
+                                className="truncate text-left text-sm text-primary hover:underline"
+                                onClick={() =>
+                                  router.push(`/${workspaceSlug}/projects/${projectId}/cycles/${c.id}/overview`)
+                                }
+                              >
+                                {c.name}
+                              </button>
+                            ) : (
+                              c.name
+                            )}
+                          </td>
+                          <td className="px-2 py-2 text-sm text-primary">
+                            {(() => {
+                              const statusMap: Record<string, string> = {
+                                未开始: "not_started",
+                                进行中: "in_progress",
+                                已延期: "delayed",
+                                已完成: "completed",
+                                已取消: "cancelled",
+                                not_started: "not_started",
+                                in_progress: "in_progress",
+                                delayed: "delayed",
+                                completed: "completed",
+                                cancelled: "cancelled",
+                                canceled: "cancelled",
+                                NOT_STARTED: "not_started",
+                                IN_PROGRESS: "in_progress",
+                                DELAYED: "delayed",
+                                COMPLETED: "completed",
+                                CANCELLED: "cancelled",
+                                CURRENT: "in_progress",
+                                UPCOMING: "not_started",
+                                DRAFT: "not_started",
+                              };
+                              let normalized: string | undefined = c.status ? statusMap[String(c.status)] : undefined;
+                              if (!normalized) {
+                                const now = Date.now();
+                                const start = c.start_date ? new Date(c.start_date).getTime() : NaN;
+                                const end = c.end_date ? new Date(c.end_date).getTime() : NaN;
+                                if (!Number.isNaN(start) && start > now) normalized = "not_started";
+                                else if (!Number.isNaN(end) && end < now) normalized = "completed";
+                                else if (!Number.isNaN(start) && !Number.isNaN(end)) normalized = "in_progress";
+                                else normalized = "not_started";
+                              }
+                              const info = CYCLE_STATUS.find((s) => s.value === normalized);
+                              if (!info) return "-";
+                              return (
+                                <span className="text-sm font-medium leading-none" style={{ color: info.color }}>
+                                  {t(info.i18n_title)}
+                                </span>
+                              );
+                            })()}
                           </td>
                           <td className="px-2 py-2 text-sm text-primary">
                             <ReadonlyDate value={c.start_date} formatToken="yyyy-MM-dd" hideIcon={true} />
@@ -1235,7 +1398,7 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
                           <td className="px-2 py-2 text-sm text-primary">
                             <ReadonlyDate value={c.end_date} formatToken="yyyy-MM-dd" hideIcon={true} />
                           </td>
-                          <td className="px-2 py-2 text-right">
+                          <td className="px-2 py-2 text-left">
                             <Button
                               variant="link-neutral"
                               className="p-0"
@@ -1274,11 +1437,11 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
                     <div className="overflow-x-auto">
                       <table className="min-w-full table-fixed">
                         <thead>
-                          <tr className="border-b border-subtle text-left text-xs text-secondary">
-                            <th className="w-2/5 px-2 py-2">附件</th>
-                            <th className="w-1/5 px-2 py-2">大小</th>
-                            <th className="w-1/5 px-2 py-2">上传时间</th>
-                            <th className="w-1/5 px-2 py-2 text-left">操作</th>
+                          <tr className="text-left text-xs text-secondary [&>th]:sticky [&>th]:top-0 [&>th]:z-10 [&>th]:bg-surface-1 [&>th]:shadow-[inset_0_-1px_0_var(--border-subtle)]">
+                            <th className="w-1/4 px-2 py-2 text-sm font-medium text-primary">附件</th>
+                            <th className="w-1/4 px-2 py-2 text-sm font-medium text-primary">大小</th>
+                            <th className="w-1/4 px-2 py-2 text-sm font-medium text-primary">上传时间</th>
+                            <th className="w-1/4 pl-3 pr-2 py-2 text-left text-sm font-medium text-primary">操作</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -1294,8 +1457,8 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
                               <td className="px-2 py-2 text-sm text-primary">
                                 <ReadonlyDate value={file.created_at} formatToken="yyyy-MM-dd" hideIcon={true} />
                               </td>
-                              <td className="px-2 py-2">
-                                <div className="flex items-center justify-end gap-2">
+                              <td className="pl-3 pr-2 py-2">
+                                <div className="flex items-center justify-start gap-2">
                                   <Button
                                     variant="link-neutral"
                                     className="p-0"
@@ -1333,6 +1496,71 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
           </div>
         </div>
       </CycleOverviewFullscreenModal>
+      <CycleOverviewFullscreenModal
+        isOpen={noteExpandOpen}
+        onClose={() => setNoteExpandOpen(false)}
+        title="发布日志"
+        icon={ScrollText}
+      >
+        <div className="flex min-h-0 flex-1 flex-col bg-surface-1">
+          <div className="flex items-center justify-end px-4 pt-3">
+            <Button
+              variant="link-neutral"
+              className="p-0"
+              onClick={handleNoteOpen}
+              aria-label="编辑发布日志"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-3 vertical-scrollbar scrollbar-sm">
+            {releaseDetails.note ? (
+              <div
+                className="prose max-w-none text-sm text-secondary"
+                dangerouslySetInnerHTML={{ __html: releaseDetails.note }}
+              />
+            ) : (
+              <div className="grid h-full min-h-[50vh] place-items-center text-sm text-placeholder">
+                暂无发布日志
+              </div>
+            )}
+          </div>
+        </div>
+      </CycleOverviewFullscreenModal>
+
+      <CycleOverviewFullscreenModal
+        isOpen={activityExpandOpen}
+        onClose={() => setActivityExpandOpen(false)}
+        title="发布动态"
+        icon={Activity}
+      >
+        <div className="flex min-h-0 flex-1 flex-col bg-surface-1">
+          <div className="grid min-h-0 flex-1 place-items-center text-sm text-placeholder">
+            {t("no_data_yet")}
+          </div>
+        </div>
+      </CycleOverviewFullscreenModal>
+
+      <CycleOverviewFullscreenModal
+        isOpen={overdueExpandOpen}
+        onClose={() => setOverdueExpandOpen(false)}
+        title="延期工作项负责人"
+        badgeText={
+          releaseOverdueByAssignee != null ? `共 ${releaseOverdueByAssignee.total} 条` : undefined
+        }
+        icon={AlertTriangle}
+      >
+        <div className="flex min-h-0 flex-1 flex-col bg-surface-1">
+          <div className="min-h-0 flex-1 overflow-hidden px-4 pb-3">
+            <OverdueByAssigneeCard
+              hideHeader
+              data={releaseOverdueByAssignee}
+              className="h-full min-h-[50vh]"
+            />
+          </div>
+        </div>
+      </CycleOverviewFullscreenModal>
+
       <Transition.Root show={associateOpen} as={Fragment}>
         <Dialog as="div" className="relative z-[10000]" onClose={handleAssociateClose}>
           <Transition.Child
@@ -1382,9 +1610,9 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
                             <thead>
                               <tr className="text-left text-xs text-secondary border-b border-subtle">
                                 <th className="w-10 px-2 py-2"></th>
-                                <th className="w-2/5 px-2 py-2">名称</th>
-                                <th className="w-1/5 px-2 py-2">开始时间</th>
-                                <th className="w-1/5 px-2 py-2">结束时间</th>
+                                <th className="w-2/5 px-2 py-2 text-sm font-medium text-primary">名称</th>
+                                <th className="w-1/5 px-2 py-2 text-sm font-medium text-primary">开始时间</th>
+                                <th className="w-1/5 px-2 py-2 text-sm font-medium text-primary">结束时间</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -1562,7 +1790,7 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
             <div className="overflow-x-auto">
               <table className="min-w-full table-fixed">
                 <thead>
-                  <tr className="border-b border-subtle text-left text-xs text-secondary">
+                  <tr className="text-left text-xs text-secondary [&>th]:sticky [&>th]:top-0 [&>th]:z-10 [&>th]:bg-surface-1 [&>th]:shadow-[inset_0_-1px_0_var(--border-subtle)]">
                     <th className="w-10 px-2 py-2">
                       <input
                         type="checkbox"
@@ -1577,10 +1805,10 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
                         }}
                       />
                     </th>
-                    <th className="w-2/5 px-2 py-2">名称</th>
-                    <th className="w-1/5 px-2 py-2">状态</th>
-                    <th className="w-1/5 px-2 py-2">开始时间</th>
-                    <th className="w-1/5 px-2 py-2">结束时间</th>
+                    <th className="w-2/5 px-2 py-2 text-sm font-medium text-primary">名称</th>
+                    <th className="w-1/5 px-2 py-2 text-sm font-medium text-primary">状态</th>
+                    <th className="w-1/5 px-2 py-2 text-sm font-medium text-primary">开始时间</th>
+                    <th className="w-1/5 px-2 py-2 text-sm font-medium text-primary">结束时间</th>
                   </tr>
                 </thead>
                 <tbody>

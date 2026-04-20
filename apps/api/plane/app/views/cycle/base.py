@@ -925,6 +925,8 @@ class CycleAnalyticsEndpoint(BaseAPIView):
                     workspace__slug=slug,
                     project_id=project_id,
                 )
+                # 排除已软删的 IssueAssignee；LEFT JOIN 下无负责人行的 deleted_at 为 NULL，同样满足此条件，仍会被保留
+                .filter(issue_assignee__deleted_at__isnull=True)
                 .annotate(display_name=F("assignees__display_name"))
                 .annotate(assignee_id=F("assignees__id"))
                 .annotate(
@@ -979,6 +981,8 @@ class CycleAnalyticsEndpoint(BaseAPIView):
                     workspace__slug=slug,
                     project_id=project_id,
                 )
+                # 排除已软删的 IssueLabel；LEFT JOIN 下无标签行同样被保留
+                .filter(label_issue__deleted_at__isnull=True)
                 .annotate(label_name=F("labels__name"))
                 .annotate(color=F("labels__color"))
                 .annotate(label_id=F("labels__id"))
@@ -1022,6 +1026,8 @@ class CycleAnalyticsEndpoint(BaseAPIView):
                     project_id=project_id,
                     workspace__slug=slug,
                 )
+                # 排除已软删的 IssueAssignee；LEFT JOIN 下无负责人行的 deleted_at 为 NULL，同样满足此条件，仍会被保留
+                .filter(issue_assignee__deleted_at__isnull=True)
                 .annotate(display_name=F("assignees__display_name"))
                 .annotate(assignee_id=F("assignees__id"))
                 .annotate(
@@ -1045,15 +1051,16 @@ class CycleAnalyticsEndpoint(BaseAPIView):
                     )
                 )
                 .values("display_name", "assignee_id", "avatar_url")
+                # 统计每个负责人对应的工作项数；改用 "id" 以正确统计 assignee_id 为 NULL 的“无负责人”分组
                 .annotate(
                     total_issues=Count(
-                        "assignee_id",
+                        "id",
                         filter=Q(archived_at__isnull=True, is_draft=False),
                     )
                 )
                 .annotate(
                     completed_issues=Count(
-                        "assignee_id",
+                        "id",
                         filter=Q(
                             completed_at__isnull=False,
                             archived_at__isnull=True,
@@ -1063,7 +1070,7 @@ class CycleAnalyticsEndpoint(BaseAPIView):
                 )
                 .annotate(
                     pending_issues=Count(
-                        "assignee_id",
+                        "id",
                         filter=Q(
                             completed_at__isnull=True,
                             archived_at__isnull=True,
@@ -1081,14 +1088,17 @@ class CycleAnalyticsEndpoint(BaseAPIView):
                     project_id=project_id,
                     workspace__slug=slug,
                 )
+                # 排除已软删的 IssueLabel；LEFT JOIN 下无标签行同样被保留
+                .filter(label_issue__deleted_at__isnull=True)
                 .annotate(label_name=F("labels__name"))
                 .annotate(color=F("labels__color"))
                 .annotate(label_id=F("labels__id"))
                 .values("label_name", "color", "label_id")
-                .annotate(total_issues=Count("label_id", filter=Q(archived_at__isnull=True, is_draft=False)))
+                # 改用 "id" 以正确统计 label_id 为 NULL 的“无标签”分组
+                .annotate(total_issues=Count("id", filter=Q(archived_at__isnull=True, is_draft=False)))
                 .annotate(
                     completed_issues=Count(
-                        "label_id",
+                        "id",
                         filter=Q(
                             completed_at__isnull=False,
                             archived_at__isnull=True,
@@ -1098,7 +1108,7 @@ class CycleAnalyticsEndpoint(BaseAPIView):
                 )
                 .annotate(
                     pending_issues=Count(
-                        "label_id",
+                        "id",
                         filter=Q(
                             completed_at__isnull=True,
                             archived_at__isnull=True,

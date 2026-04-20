@@ -7,6 +7,7 @@ import { useParams, useRouter } from "next/navigation";
 import useSWR from "swr";
 import { observer } from "mobx-react";
 import {
+  AlertTriangle,
   BarChart3,
   Bug,
   ClipboardList,
@@ -28,6 +29,7 @@ import { cn, getDate, renderFormattedDate } from "@plane/utils";
 import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
 import { OverdueByAssigneeCard } from "@/components/common/overdue-by-assignee-card";
 import { PageHead } from "@/components/core/page-title";
+import { CycleOverviewFullscreenModal } from "@/components/cycles/cycle-overview-fullscreen-modal";
 import { useProject } from "@/hooks/store/use-project";
 import { useUserPermissions } from "@/hooks/store/user";
 import { ProjectStatisticService, type TProjectStatisticResponse } from "@/services/project";
@@ -168,6 +170,7 @@ function ProjectStatisticsPage() {
   const { getProjectById } = useProject();
   const { workspaceUserInfo, allowProjectPermissionKeys } = useUserPermissions();
   const [expandModalSection, setExpandModalSection] = useState<StatisticSectionType | null>(null);
+  const [overdueExpandOpen, setOverdueExpandOpen] = useState(false);
   const [activeListTabIndex, setActiveListTabIndex] = useState(0);
   const activeTab = PROGRESS_LIST_TABS[activeListTabIndex] ?? PROGRESS_LIST_TABS[0];
 
@@ -366,7 +369,19 @@ function ProjectStatisticsPage() {
 
           {/* 延期工作项负责人（左）+ Progress Lists Tab（右） */}
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-            <OverdueByAssigneeCard data={displayData?.overdue_by_assignee} />
+            <OverdueByAssigneeCard
+              data={displayData?.overdue_by_assignee}
+              headerExtra={
+                <button
+                  type="button"
+                  className="grid h-6 w-6 shrink-0 place-items-center rounded transition-colors hover:bg-surface-2"
+                  onClick={() => setOverdueExpandOpen(true)}
+                  aria-label="放大"
+                >
+                  <Maximize2 className="h-3.5 w-3.5 text-placeholder" />
+                </button>
+              }
+            />
             <div className={`${sectionCard} flex h-[420px] flex-col`}>
               <Tab.Group
                 selectedIndex={activeListTabIndex}
@@ -375,7 +390,7 @@ function ProjectStatisticsPage() {
                 <div className="flex flex-shrink-0 items-center gap-2 px-4 py-3">
                   <Tab.List
                     as="div"
-                    className="flex min-w-0 flex-1 items-center justify-between gap-1 rounded-md bg-layer-2 p-1 text-sm font-medium"
+                    className="grid min-w-0 flex-1 grid-cols-4 gap-1 rounded-md bg-layer-2 p-1 text-sm font-medium"
                   >
                     {PROGRESS_LIST_TABS.map((tab) => {
                       const Icon = tab.icon;
@@ -384,7 +399,7 @@ function ProjectStatisticsPage() {
                           key={tab.key}
                           className={({ selected }) =>
                             cn(
-                              "w-full cursor-pointer rounded-sm p-1 text-primary transition-all outline-none focus:outline-none",
+                              "min-w-0 w-full cursor-pointer rounded-sm p-1 text-primary transition-all outline-none focus:outline-none",
                               "flex items-center justify-center gap-1.5",
                               selected
                                 ? "bg-layer-transparent-active text-secondary"
@@ -443,13 +458,13 @@ function ProjectStatisticsPage() {
                   <Tab.Panel className="flex min-h-0 flex-1 flex-col">
                     <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-3 vertical-scrollbar scrollbar-sm">
                       <Table wrapperClassName="overflow-visible">
-                        <TableHeader className="sticky top-0 z-10 border-b border-subtle border-t-0 bg-surface-1">
+                        <TableHeader className="border-y-0 bg-transparent [&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-surface-1 [&_th]:shadow-[inset_0_-1px_0_var(--border-subtle)]">
                           <TableRow>
-                            <TableHead className="h-8 w-[28%] text-left text-xs font-medium text-placeholder">迭代</TableHead>
-                            <TableHead className="h-8 w-[24%] text-left text-xs font-medium text-placeholder">日期</TableHead>
-                            <TableHead className="h-8 w-[14%] text-left text-xs font-medium text-placeholder">状态</TableHead>
-                            <TableHead className="h-8 w-[14%] text-left text-xs font-medium text-placeholder">工作项</TableHead>
-                            <TableHead className="h-8 w-[20%] pl-6 text-left text-xs font-medium text-placeholder">负责人</TableHead>
+                            <TableHead className="h-8 w-[28%] text-left text-xs font-medium text-primary">迭代</TableHead>
+                            <TableHead className="h-8 w-[24%] text-left text-xs font-medium text-primary">日期</TableHead>
+                            <TableHead className="h-8 w-[14%] text-left text-xs font-medium text-primary">状态</TableHead>
+                            <TableHead className="h-8 w-[14%] text-left text-xs font-medium text-primary">工作项</TableHead>
+                            <TableHead className="h-8 w-[20%] pl-6 text-left text-xs font-medium text-primary">负责人</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -513,13 +528,13 @@ function ProjectStatisticsPage() {
                   <Tab.Panel className="flex min-h-0 flex-1 flex-col">
                     <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-3 vertical-scrollbar scrollbar-sm">
                       <Table wrapperClassName="overflow-visible">
-                        <TableHeader className="sticky top-0 z-10 border-b border-subtle border-t-0 bg-surface-1">
+                        <TableHeader className="border-y-0 bg-transparent [&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-surface-1 [&_th]:shadow-[inset_0_-1px_0_var(--border-subtle)]">
                           <TableRow>
-                            <TableHead className="h-8 w-[28%] text-left text-xs font-medium text-placeholder">发布</TableHead>
-                            <TableHead className="h-8 w-[24%] text-left text-xs font-medium text-placeholder">日期</TableHead>
-                            <TableHead className="h-8 w-[14%] text-left text-xs font-medium text-placeholder">状态</TableHead>
-                            <TableHead className="h-8 w-[14%] text-left text-xs font-medium text-placeholder">工作项</TableHead>
-                            <TableHead className="h-8 w-[20%] pl-6 text-left text-xs font-medium text-placeholder">负责人</TableHead>
+                            <TableHead className="h-8 w-[28%] text-left text-xs font-medium text-primary">发布</TableHead>
+                            <TableHead className="h-8 w-[24%] text-left text-xs font-medium text-primary">日期</TableHead>
+                            <TableHead className="h-8 w-[14%] text-left text-xs font-medium text-primary">状态</TableHead>
+                            <TableHead className="h-8 w-[14%] text-left text-xs font-medium text-primary">工作项</TableHead>
+                            <TableHead className="h-8 w-[20%] pl-6 text-left text-xs font-medium text-primary">负责人</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -580,13 +595,13 @@ function ProjectStatisticsPage() {
                   <Tab.Panel className="flex min-h-0 flex-1 flex-col">
                     <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-3 vertical-scrollbar scrollbar-sm">
                       <Table wrapperClassName="overflow-visible">
-                        <TableHeader className="sticky top-0 z-10 border-b border-subtle border-t-0 bg-surface-1">
+                        <TableHeader className="border-y-0 bg-transparent [&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-surface-1 [&_th]:shadow-[inset_0_-1px_0_var(--border-subtle)]">
                           <TableRow>
-                            <TableHead className="h-8 w-[28%] text-left text-xs font-medium text-placeholder">测试计划</TableHead>
-                            <TableHead className="h-8 w-[24%] text-left text-xs font-medium text-placeholder">日期</TableHead>
-                            <TableHead className="h-8 w-[14%] text-left text-xs font-medium text-placeholder">状态</TableHead>
-                            <TableHead className="h-8 w-[14%] text-left text-xs font-medium text-placeholder">用例</TableHead>
-                            <TableHead className="h-8 w-[20%] pl-6 text-left text-xs font-medium text-placeholder">负责人</TableHead>
+                            <TableHead className="h-8 w-[28%] text-left text-xs font-medium text-primary">测试计划</TableHead>
+                            <TableHead className="h-8 w-[24%] text-left text-xs font-medium text-primary">日期</TableHead>
+                            <TableHead className="h-8 w-[14%] text-left text-xs font-medium text-primary">状态</TableHead>
+                            <TableHead className="h-8 w-[14%] text-left text-xs font-medium text-primary">用例</TableHead>
+                            <TableHead className="h-8 w-[20%] pl-6 text-left text-xs font-medium text-primary">负责人</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -647,13 +662,13 @@ function ProjectStatisticsPage() {
                   <Tab.Panel className="flex min-h-0 flex-1 flex-col">
                     <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-3 vertical-scrollbar scrollbar-sm">
                       <Table wrapperClassName="overflow-visible">
-                        <TableHeader className="sticky top-0 z-10 border-b border-subtle border-t-0 bg-surface-1">
+                        <TableHeader className="border-y-0 bg-transparent [&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-surface-1 [&_th]:shadow-[inset_0_-1px_0_var(--border-subtle)]">
                           <TableRow>
-                            <TableHead className="h-8 w-[28%] text-left text-xs font-medium text-placeholder">评审</TableHead>
-                            <TableHead className="h-8 w-[24%] text-left text-xs font-medium text-placeholder">日期</TableHead>
-                            <TableHead className="h-8 w-[14%] text-left text-xs font-medium text-placeholder">状态</TableHead>
-                            <TableHead className="h-8 w-[14%] text-left text-xs font-medium text-placeholder">类型</TableHead>
-                            <TableHead className="h-8 w-[20%] pl-6 text-left text-xs font-medium text-placeholder">负责人</TableHead>
+                            <TableHead className="h-8 w-[28%] text-left text-xs font-medium text-primary">评审</TableHead>
+                            <TableHead className="h-8 w-[24%] text-left text-xs font-medium text-primary">日期</TableHead>
+                            <TableHead className="h-8 w-[14%] text-left text-xs font-medium text-primary">状态</TableHead>
+                            <TableHead className="h-8 w-[14%] text-left text-xs font-medium text-primary">类型</TableHead>
+                            <TableHead className="h-8 w-[20%] pl-6 text-left text-xs font-medium text-primary">负责人</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -842,6 +857,27 @@ function ProjectStatisticsPage() {
           projectId={effectiveProjectId}
         />
       )}
+      <CycleOverviewFullscreenModal
+        isOpen={overdueExpandOpen}
+        onClose={() => setOverdueExpandOpen(false)}
+        title="延期工作项负责人"
+        badgeText={
+          displayData?.overdue_by_assignee != null
+            ? `共 ${displayData.overdue_by_assignee.total} 条`
+            : undefined
+        }
+        icon={AlertTriangle}
+      >
+        <div className="flex min-h-0 flex-1 flex-col bg-surface-1">
+          <div className="min-h-0 flex-1 overflow-hidden px-4 pb-3">
+            <OverdueByAssigneeCard
+              hideHeader
+              data={displayData?.overdue_by_assignee}
+              className="h-full min-h-[50vh]"
+            />
+          </div>
+        </div>
+      </CycleOverviewFullscreenModal>
     </>
   );
 }

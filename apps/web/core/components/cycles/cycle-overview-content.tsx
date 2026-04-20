@@ -10,7 +10,7 @@ import type { ChangeEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { isEmpty } from "lodash-es";
 import { observer } from "mobx-react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import useSWR from "swr";
 import { Tab } from "@headlessui/react";
 import {
@@ -138,6 +138,7 @@ const validateCycleSnapshot = (cycleDetails: ICycle | null): ICycle | null => {
 export const CycleOverviewContent = observer(function CycleOverviewContent(props: Props) {
   const { workspaceSlug, projectId, cycleId } = props;
   const { t } = useTranslation();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const peekCycle = searchParams.get("peekCycle") || undefined;
   const cycleService = useMemo(() => new CycleService(), []);
@@ -709,27 +710,46 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
                     );
                   })}
                 </Tab.List>
-                <button
-                  type="button"
-                  className="grid h-6 w-6 shrink-0 place-items-center rounded transition-colors hover:bg-surface-2"
-                  onClick={() => setExpandPanel("stats")}
-                  aria-label="放大"
-                >
-                  <Maximize2 className="h-3.5 w-3.5 text-placeholder" />
-                </button>
+                <div className="flex shrink-0 items-center gap-1">
+                  <button
+                    type="button"
+                    className={cn(
+                      "grid h-6 w-6 shrink-0 place-items-center rounded transition-colors hover:bg-surface-2",
+                      activeOverviewTabKey === "stat-assignees" && "pointer-events-none invisible"
+                    )}
+                    onClick={() => {
+                      if (activeOverviewTabKey === "stat-test-plans") {
+                        void openPlanAssociateModal();
+                      } else if (activeOverviewTabKey === "stat-files") {
+                        if (!filesUploading) fileInputRef.current?.click();
+                      }
+                    }}
+                    disabled={activeOverviewTabKey === "stat-files" && filesUploading}
+                    aria-hidden={activeOverviewTabKey === "stat-assignees"}
+                    tabIndex={activeOverviewTabKey === "stat-assignees" ? -1 : 0}
+                    aria-label={
+                      activeOverviewTabKey === "stat-test-plans"
+                        ? "关联测试计划"
+                        : activeOverviewTabKey === "stat-files"
+                          ? "上传附件"
+                          : undefined
+                    }
+                  >
+                    <Plus className="h-4 w-4 text-placeholder" />
+                  </button>
+                  <input ref={fileInputRef} type="file" className="hidden" onChange={handleUploadCycleFile} />
+                  <button
+                    type="button"
+                    className="grid h-6 w-6 shrink-0 place-items-center rounded transition-colors hover:bg-surface-2"
+                    onClick={() => setExpandPanel("stats")}
+                    aria-label="放大"
+                  >
+                    <Maximize2 className="h-3.5 w-3.5 text-placeholder" />
+                  </button>
+                </div>
               </div>
               <Tab.Panels className="min-h-0 flex-1 py-3 text-secondary">
                 <Tab.Panel key="stat-test-plans" className="flex h-full min-h-0 flex-col">
-                  <div className="flex items-center justify-end pb-2">
-                    <Button
-                      variant="link-neutral"
-                      className="p-0"
-                      onClick={openPlanAssociateModal}
-                      aria-label="关联测试计划"
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
                   {cyclePlans.length === 0 ? (
                     <div className="grid h-32 place-items-center text-sm text-placeholder">暂无关联测试计划</div>
                   ) : (
@@ -737,20 +757,34 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
                       <div className="min-h-0 max-h-[min(360px,50vh)] flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm">
                         <table className="min-w-full table-fixed">
                           <thead>
-                            <tr className="border-b border-subtle text-left text-xs text-secondary">
-                              <th className="w-[30%] px-2 py-2">名称</th>
-                              <th className="w-[12%] px-2 py-2">状态</th>
-                              <th className="w-[12%] px-2 py-2">通过率</th>
-                              <th className="w-[17%] px-2 py-2">开始时间</th>
-                              <th className="w-[17%] px-2 py-2">结束时间</th>
-                              <th className="w-[12%] px-2 py-2 text-left">操作</th>
+                            <tr className="text-left text-xs text-secondary [&>th]:sticky [&>th]:top-0 [&>th]:z-10 [&>th]:bg-surface-1 [&>th]:shadow-[inset_0_-1px_0_var(--border-subtle)]">
+                              <th className="w-1/6 px-2 py-2 text-sm font-medium text-primary">测试计划</th>
+                              <th className="w-1/6 px-2 py-2 text-sm font-medium text-primary">状态</th>
+                              <th className="w-1/6 px-2 py-2 text-sm font-medium text-primary">通过率</th>
+                              <th className="w-1/6 px-2 py-2 text-sm font-medium text-primary">开始时间</th>
+                              <th className="w-1/6 px-2 py-2 text-sm font-medium text-primary">结束时间</th>
+                              <th className="w-1/6 px-2 py-2 text-left text-sm font-medium text-primary">操作</th>
                             </tr>
                           </thead>
                           <tbody>
                             {cyclePlans.map((plan: any) => (
                               <tr key={plan.id ?? plan.name} className="border-b border-subtle hover:bg-layer-1">
                                 <td className="truncate px-2 py-2 text-sm text-primary" title={plan.name ?? "-"}>
-                                  {plan.name ?? "-"}
+                                  {plan.id ? (
+                                    <button
+                                      type="button"
+                                      className="truncate text-left text-sm text-primary hover:underline"
+                                      onClick={() =>
+                                        router.push(
+                                          `/${workspaceSlug}/projects/${projectId}/testhub/plan-cases?planId=${plan.id}`
+                                        )
+                                      }
+                                    >
+                                      {plan.name ?? "-"}
+                                    </button>
+                                  ) : (
+                                    plan.name ?? "-"
+                                  )}
                                 </td>
                                 <td className={`px-2 py-2 text-sm ${getPlanStatusClassName(plan.state)}`}>
                                   {plan.state ?? "-"}
@@ -801,19 +835,6 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
                   )}
                 </Tab.Panel>
                 <Tab.Panel key="stat-files" className="flex h-full min-h-0 flex-col">
-                  <div className="flex items-center justify-end pb-2">
-                    <Button
-                      variant="link-neutral"
-                      className="p-0"
-                      onClick={() => fileInputRef.current?.click()}
-                      loading={filesUploading}
-                      disabled={filesUploading}
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                    </Button>
-                    <input ref={fileInputRef} type="file" className="hidden" onChange={handleUploadCycleFile} />
-                  </div>
-
                   {filesLoading ? (
                     <div className="flex items-center justify-center py-8 text-sm text-secondary">加载中...</div>
                   ) : filesError ? (
@@ -826,11 +847,11 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
                         <div className="overflow-x-auto">
                           <table className="min-w-full table-fixed">
                             <thead>
-                              <tr className="border-b border-subtle text-left text-xs text-secondary">
-                                <th className="w-2/5 px-2 py-2">附件名</th>
-                                <th className="w-1/5 px-2 py-2">大小</th>
-                                <th className="w-2/5 px-2 py-2">上传时间</th>
-                                <th className="w-1/5 px-2 py-2 text-left">操作</th>
+                              <tr className="text-left text-xs text-secondary [&>th]:sticky [&>th]:top-0 [&>th]:z-10 [&>th]:bg-surface-1 [&>th]:shadow-[inset_0_-1px_0_var(--border-subtle)]">
+                                <th className="w-1/4 px-2 py-2 text-sm font-medium text-primary">附件</th>
+                                <th className="w-1/4 px-2 py-2 text-sm font-medium text-primary">大小</th>
+                                <th className="w-1/4 px-2 py-2 text-sm font-medium text-primary">上传时间</th>
+                                <th className="w-1/4 px-2 py-2 text-left text-sm font-medium text-primary">操作</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -846,8 +867,8 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
                                   <td className="px-2 py-2 text-sm text-primary">
                                     {file.created_at ? new Date(file.created_at).toLocaleDateString() : "-"}
                                   </td>
-                                  <td className="px-2 py-2">
-                                    <div className="flex items-center justify-end gap-2">
+                                  <td className="px-2 py-2 text-left">
+                                    <div className="flex items-center justify-start gap-2">
                                       <Button
                                         variant="link-neutral"
                                         className="p-0"
@@ -941,20 +962,34 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
                 ) : (
                   <table className="min-w-full table-fixed">
                     <thead>
-                      <tr className="border-b border-subtle text-left text-xs text-secondary">
-                        <th className="w-[30%] px-2 py-2">名称</th>
-                        <th className="w-[12%] px-2 py-2">状态</th>
-                        <th className="w-[12%] px-2 py-2">通过率</th>
-                        <th className="w-[17%] px-2 py-2">开始时间</th>
-                        <th className="w-[17%] px-2 py-2">结束时间</th>
-                        <th className="w-[12%] px-2 py-2 text-left">操作</th>
+                      <tr className="text-left text-xs text-secondary [&>th]:sticky [&>th]:top-0 [&>th]:z-10 [&>th]:bg-surface-1 [&>th]:shadow-[inset_0_-1px_0_var(--border-subtle)]">
+                        <th className="w-1/6 px-2 py-2 text-sm font-medium text-primary">测试计划</th>
+                        <th className="w-1/6 px-2 py-2 text-sm font-medium text-primary">状态</th>
+                        <th className="w-1/6 px-2 py-2 text-sm font-medium text-primary">通过率</th>
+                        <th className="w-1/6 px-2 py-2 text-sm font-medium text-primary">开始时间</th>
+                        <th className="w-1/6 px-2 py-2 text-sm font-medium text-primary">结束时间</th>
+                        <th className="w-1/6 px-2 py-2 text-left text-sm font-medium text-primary">操作</th>
                       </tr>
                     </thead>
                     <tbody>
                       {cyclePlans.map((plan: any) => (
                         <tr key={plan.id ?? plan.name} className="border-b border-subtle hover:bg-layer-1">
                           <td className="truncate px-2 py-2 text-sm text-primary" title={plan.name ?? "-"}>
-                            {plan.name ?? "-"}
+                            {plan.id ? (
+                              <button
+                                type="button"
+                                className="truncate text-left text-sm text-primary hover:underline"
+                                onClick={() =>
+                                  router.push(
+                                    `/${workspaceSlug}/projects/${projectId}/testhub/plan-cases?planId=${plan.id}`
+                                  )
+                                }
+                              >
+                                {plan.name ?? "-"}
+                              </button>
+                            ) : (
+                              plan.name ?? "-"
+                            )}
                           </td>
                           <td className={`px-2 py-2 text-sm ${getPlanStatusClassName(plan.state)}`}>
                             {plan.state ?? "-"}
@@ -1024,11 +1059,11 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
                   <div className="overflow-x-auto">
                     <table className="min-w-full table-fixed">
                       <thead>
-                        <tr className="border-b border-subtle text-left text-xs text-secondary">
-                          <th className="w-2/5 px-2 py-2">附件名</th>
-                          <th className="w-1/5 px-2 py-2">大小</th>
-                          <th className="w-2/5 px-2 py-2">上传时间</th>
-                          <th className="w-1/5 px-2 py-2 text-left">操作</th>
+                        <tr className="text-left text-xs text-secondary [&>th]:sticky [&>th]:top-0 [&>th]:z-10 [&>th]:bg-surface-1 [&>th]:shadow-[inset_0_-1px_0_var(--border-subtle)]">
+                          <th className="w-1/4 px-2 py-2 text-sm font-medium text-primary">附件</th>
+                          <th className="w-1/4 px-2 py-2 text-sm font-medium text-primary">大小</th>
+                          <th className="w-1/4 px-2 py-2 text-sm font-medium text-primary">上传时间</th>
+                          <th className="w-1/4 px-2 py-2 text-left text-sm font-medium text-primary">操作</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1044,8 +1079,8 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
                             <td className="px-2 py-2 text-sm text-primary">
                               {file.created_at ? new Date(file.created_at).toLocaleDateString() : "-"}
                             </td>
-                            <td className="px-2 py-2">
-                              <div className="flex items-center justify-end gap-2">
+                            <td className="px-2 py-2 text-left">
+                              <div className="flex items-center justify-start gap-2">
                                 <Button
                                   variant="link-neutral"
                                   className="p-0"
@@ -1108,7 +1143,7 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
             <div className="overflow-x-auto">
               <table className="min-w-full table-fixed">
                 <thead>
-                  <tr className="border-b border-subtle text-left text-xs text-secondary">
+                  <tr className="text-left text-xs text-secondary [&>th]:sticky [&>th]:top-0 [&>th]:z-10 [&>th]:bg-surface-1 [&>th]:shadow-[inset_0_-1px_0_var(--border-subtle)]">
                     <th className="w-10 px-2 py-2">
                       <input
                         type="checkbox"
@@ -1123,10 +1158,10 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
                         }}
                       />
                     </th>
-                    <th className="w-2/5 px-2 py-2">名称</th>
-                    <th className="w-1/5 px-2 py-2">状态</th>
-                    <th className="w-1/5 px-2 py-2">开始时间</th>
-                    <th className="w-1/5 px-2 py-2">结束时间</th>
+                    <th className="w-2/5 px-2 py-2 text-sm font-medium text-primary">测试计划</th>
+                    <th className="w-1/5 px-2 py-2 text-sm font-medium text-primary">状态</th>
+                    <th className="w-1/5 px-2 py-2 text-sm font-medium text-primary">开始时间</th>
+                    <th className="w-1/5 px-2 py-2 text-sm font-medium text-primary">结束时间</th>
                   </tr>
                 </thead>
                 <tbody>
