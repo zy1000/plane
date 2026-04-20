@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
 import { getAssetIdFromUrl, checkURLValidity } from "@plane/utils";
 // plane ui
@@ -18,7 +18,6 @@ import type { TProject } from "@/plane-web/types/projects";
 // services
 import { FileService } from "@/services/file.service";
 const fileService = new FileService();
-import { ProjectFeatureUpdate } from "./project-feature-update";
 
 type Props = {
   isOpen: boolean;
@@ -29,29 +28,9 @@ type Props = {
   templateId?: string;
 };
 
-enum EProjectCreationSteps {
-  CREATE_PROJECT = "CREATE_PROJECT",
-  FEATURE_SELECTION = "FEATURE_SELECTION",
-}
-
 export function CreateProjectModal(props: Props) {
   const { isOpen, onClose, setToFavorite = false, workspaceSlug, data, templateId } = props;
-  // states
-  const [currentStep, setCurrentStep] = useState<EProjectCreationSteps>(EProjectCreationSteps.CREATE_PROJECT);
-  const [createdProjectId, setCreatedProjectId] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (isOpen) {
-      setCurrentStep(EProjectCreationSteps.CREATE_PROJECT);
-      setCreatedProjectId(null);
-    }
-  }, [isOpen]);
-
-  const handleNextStep = (projectId: string) => {
-    if (!projectId) return;
-    setCreatedProjectId(projectId);
-    setCurrentStep(EProjectCreationSteps.FEATURE_SELECTION);
-  };
+  const router = useRouter();
 
   const handleCoverImageStatusUpdate = async (projectId: string, coverImage: string) => {
     if (!checkURLValidity(coverImage)) {
@@ -61,25 +40,33 @@ export function CreateProjectModal(props: Props) {
     }
   };
 
+  /**
+   * 创建完成直接关闭弹窗并跳转到新项目，不再展示特性选择步骤。
+   * 所有特性开关已在创建接口默认值里置为开启。
+   */
+  const handleProjectCreated = (projectId: string) => {
+    onClose();
+    if (projectId) {
+      router.push(`/${workspaceSlug}/projects/${projectId}/issues`);
+    }
+  };
+
   useKeypress("Escape", () => {
     if (isOpen) onClose();
   });
 
   return (
     <ModalCore isOpen={isOpen} position={EModalPosition.TOP} width={EModalWidth.XXXXL}>
-      {currentStep === EProjectCreationSteps.CREATE_PROJECT && (
+      {isOpen && (
         <CreateProjectForm
           setToFavorite={setToFavorite}
           workspaceSlug={workspaceSlug}
           onClose={onClose}
           updateCoverImageStatus={handleCoverImageStatusUpdate}
-          handleNextStep={handleNextStep}
+          handleNextStep={handleProjectCreated}
           data={data}
           templateId={templateId}
         />
-      )}
-      {currentStep === EProjectCreationSteps.FEATURE_SELECTION && (
-        <ProjectFeatureUpdate projectId={createdProjectId} workspaceSlug={workspaceSlug} onClose={onClose} />
       )}
     </ModalCore>
   );

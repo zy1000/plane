@@ -344,6 +344,7 @@ export default {
   project_name: "Názov projektu",
   project_grade: "Grade",
   select_project_grade: "Select grade",
+  project_grade_required: "Please select a project grade",
   project_id_must_be_at_least_1_character: "ID projektu musí mať aspoň 1 znak",
   project_id_must_be_at_most_5_characters: "ID projektu môže mať maximálne 5 znakov",
   project_id: "ID projektu",

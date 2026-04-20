@@ -346,6 +346,7 @@ export default {
   project_name: "Nama proyek",
   project_grade: "Grade",
   select_project_grade: "Select grade",
+  project_grade_required: "Please select a project grade",
   project_id_must_be_at_least_1_character: "ID proyek harus minimal 1 karakter",
   project_id_must_be_at_most_5_characters: "ID proyek maksimal 5 karakter",
   project_id: "ID proyek",

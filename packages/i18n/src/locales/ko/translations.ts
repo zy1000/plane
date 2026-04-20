@@ -339,6 +339,7 @@ export default {
   project_name: "프로젝트 이름",
   project_grade: "Grade",
   select_project_grade: "Select grade",
+  project_grade_required: "Please select a project grade",
   project_id_must_be_at_least_1_character: "프로젝트 ID는 최소 1자 이상이어야 합니다",
   project_id_must_be_at_most_5_characters: "프로젝트 ID는 최대 5자 이하여야 합니다",
   project_id: "프로젝트 ID",

@@ -122,9 +122,6 @@ export const ProjectOverviewKpiCards: FC<Props> = observer(
                     buttonClassName="!border-0 !shadow-none w-full justify-start bg-transparent !px-0 !py-0 text-left font-normal focus:outline-none focus:ring-0 focus-visible:ring-0 hover:!bg-transparent"
                     input
                   >
-                    <CustomSelect.Option value="">
-                      <span className="text-13 text-secondary">{t("common.none")}</span>
-                    </CustomSelect.Option>
                     {PROJECT_GRADE_OPTIONS.map((opt) => (
                       <CustomSelect.Option key={opt} value={opt}>
                         <ProjectGradeBadge grade={opt} />

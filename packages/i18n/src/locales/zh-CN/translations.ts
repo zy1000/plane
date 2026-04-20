@@ -343,6 +343,7 @@ export default {
   project_name: "项目名称",
   project_grade: "等级",
   select_project_grade: "选择等级",
+  project_grade_required: "请选择项目等级",
   project_id_must_be_at_least_1_character: "项目ID至少需要1个字符",
   project_id_must_be_at_most_5_characters: "项目ID最多只能有5个字符",
   project_id: "项目ID",

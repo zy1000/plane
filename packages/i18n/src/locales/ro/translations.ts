@@ -345,6 +345,7 @@ export default {
   project_name: "Numele proiectului",
   project_grade: "Grade",
   select_project_grade: "Select grade",
+  project_grade_required: "Please select a project grade",
   project_id_must_be_at_least_1_character: "ID-ul proiectului trebuie să conțină cel puțin 1 caracter",
   project_id_must_be_at_most_5_characters: "ID-ul proiectului trebuie să conțină cel mult 5 caractere",
   project_id: "ID-ul Proiectului",

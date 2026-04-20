@@ -22,4 +22,10 @@ export const getProjectFormValues = (): Partial<IProject> => ({
   grade: null,
   network: 2,
   project_lead: null,
+  /** 创建时默认开启全部项目特性，跳过创建后选择特性的环节 */
+  cycle_view: true,
+  module_view: true,
+  issue_views_view: true,
+  page_view: true,
+  intake_view: true,
 });

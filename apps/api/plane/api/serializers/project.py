@@ -9,6 +9,7 @@ from rest_framework import serializers
 
 # Module imports
 from plane.db.models import Project, ProjectIdentifier, WorkspaceMember, State, Estimate
+from plane.db.models.project import PROJECT_GRADE_CHOICES
 
 from plane.utils.content_validator import (
     validate_html_content,
@@ -121,6 +122,15 @@ class ProjectCreateSerializer(BaseSerializer):
                 member_id=data.get("default_assignee"),
             ).exists():
                 raise serializers.ValidationError("Default assignee should be a user in the workspace")
+
+        # 新建项目时等级必填（更新走 ProjectUpdateSerializer，self.instance 已存在则跳过）
+        if self.instance is None:
+            allowed_grades = {c[0] for c in PROJECT_GRADE_CHOICES}
+            grade = data.get("grade")
+            if grade is None or grade == "":
+                raise serializers.ValidationError({"grade": "Project grade is required."})
+            if grade not in allowed_grades:
+                raise serializers.ValidationError({"grade": "Invalid project grade."})
 
         return data
 

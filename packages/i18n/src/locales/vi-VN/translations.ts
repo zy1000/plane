@@ -345,6 +345,7 @@ export default {
   project_name: "Tên dự án",
   project_grade: "Grade",
   select_project_grade: "Select grade",
+  project_grade_required: "Please select a project grade",
   project_id_must_be_at_least_1_character: "ID dự án phải có ít nhất 1 ký tự",
   project_id_must_be_at_most_5_characters: "ID dự án chỉ được tối đa 5 ký tự",
   project_id: "ID dự án",

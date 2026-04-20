@@ -24,6 +24,7 @@ from plane.db.models import (
 )
 from plane.utils.content_validator import validate_html_content
 from ...db.models.project import (
+    PROJECT_GRADE_CHOICES,
     ProjectAnnouncement,
     ProjectPmsInfo,
     ProjectRole,
@@ -91,6 +92,14 @@ class ProjectSerializer(BaseSerializer):
 
             if not is_valid:
                 raise serializers.ValidationError({"error": "html content is not valid"})
+
+        if self.instance is None:
+            allowed_grades = {c[0] for c in PROJECT_GRADE_CHOICES}
+            grade = data.get("grade")
+            if grade is None or grade == "":
+                raise serializers.ValidationError({"grade": "PROJECT_GRADE_REQUIRED"})
+            if grade not in allowed_grades:
+                raise serializers.ValidationError({"grade": "INVALID_PROJECT_GRADE"})
 
         return data
 

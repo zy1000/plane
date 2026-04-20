@@ -348,6 +348,7 @@ export default {
   project_name: "Название проекта",
   project_grade: "Grade",
   select_project_grade: "Select grade",
+  project_grade_required: "Please select a project grade",
   project_id_must_be_at_least_1_character: "ID проекта должен содержать минимум 1 символ",
   project_id_must_be_at_most_5_characters: "ID проекта должен содержать максимум 5 символов",
   project_id: "ID проекта",

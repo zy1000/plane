@@ -179,6 +179,7 @@ export default {
   project_name: "Project name",
   project_grade: "Grade",
   select_project_grade: "Select grade",
+  project_grade_required: "Please select a project grade",
   project_id_must_be_at_least_1_character: "Project ID must at least be of 1 character",
   project_id_must_be_at_most_5_characters: "Project ID must at most be of 5 characters",
   project_id: "Project ID",

@@ -334,6 +334,7 @@ export default {
   project_name: "專案名稱",
   project_grade: "等級",
   select_project_grade: "選擇等級",
+  project_grade_required: "請選擇專案等級",
   project_id_must_be_at_least_1_character: "專案 ID 至少必須有 1 個字元",
   project_id_must_be_at_most_5_characters: "專案 ID 最多只能有 5 個字元",
   project_id: "專案 ID",

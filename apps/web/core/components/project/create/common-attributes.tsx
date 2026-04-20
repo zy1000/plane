@@ -21,6 +21,7 @@ import { cn, projectIdentifierSanitizer, getTabIndex } from "@plane/utils";
 import { ProjectGradeBadge } from "@/components/project/common/project-grade-badge";
 // plane-web types
 import type { TProject } from "@/plane-web/types/projects";
+import type { TProjectGrade } from "@plane/types";
 
 type Props = {
   setValue: UseFormSetValue<TProject>;
@@ -36,6 +37,7 @@ function ProjectCommonAttributes(props: Props) {
     formState: { errors },
     control,
   } = useFormContext<TProject>();
+  const gradeError = errors.grade?.message;
 
   const { getIndex } = getTabIndex(ETabIndices.PROJECT_CREATE, isMobile);
   const { t } = useTranslation();
@@ -81,7 +83,7 @@ function ProjectCommonAttributes(props: Props) {
               onChange={handleNameChange(onChange)}
               hasError={Boolean(errors.name)}
               placeholder={t("project_name")}
-              className="focus:border-blue-400 w-full"
+              className="focus:border-blue-400 h-[38px] min-h-[38px] w-full !py-0 text-13 leading-5"
               tabIndex={getIndex("name")}
             />
           )}
@@ -92,13 +94,14 @@ function ProjectCommonAttributes(props: Props) {
         <Controller
           control={control}
           name="grade"
+          rules={{ required: t("project_grade_required") }}
           render={({ field: { value, onChange } }) => {
             const selected = value ?? null;
             return (
               <CustomSelect
                 value={selected ?? ""}
                 onChange={(val: string) => {
-                  onChange(val === "" ? null : val);
+                  onChange(val as TProjectGrade);
                   handleFormOnChange?.();
                 }}
                 label={
@@ -110,13 +113,14 @@ function ProjectCommonAttributes(props: Props) {
                     <span className="text-placeholder text-13">{t("select_project_grade")}</span>
                   )
                 }
-                buttonClassName="!border-subtle-1 !shadow-none w-full rounded-md border-[0.5px] px-3 py-2 text-left font-normal focus:outline-none focus:border-blue-400"
+                buttonClassName={cn(
+                  /** 与名称、项目 ID 输入框同一行高 38px */
+                  "!border-subtle-1 !shadow-none flex !h-[38px] !min-h-[38px] !max-h-[38px] w-full shrink-0 items-center rounded-md border-[0.5px] px-3 !py-0 text-left text-13 font-normal leading-5 focus:outline-none focus:border-blue-400",
+                  gradeError && "!border-danger-strong"
+                )}
                 input
                 tabIndex={getIndex("grade")}
               >
-                <CustomSelect.Option value="">
-                  <span className="text-13 text-secondary">{t("common.none")}</span>
-                </CustomSelect.Option>
                 {PROJECT_GRADE_OPTIONS.map((opt) => (
                   <CustomSelect.Option key={opt} value={opt}>
                     <ProjectGradeBadge grade={opt} />
@@ -126,6 +130,7 @@ function ProjectCommonAttributes(props: Props) {
             );
           }}
         />
+        <span className="text-11 text-danger-primary">{gradeError}</span>
       </div>
       <div className="relative md:col-span-1">
         <Controller
@@ -154,9 +159,12 @@ function ProjectCommonAttributes(props: Props) {
               onChange={handleIdentifierChange(onChange)}
               hasError={Boolean(errors.identifier)}
               placeholder={t("project_id")}
-              className={cn("focus:border-blue-400 w-full pr-7 text-11", {
-                uppercase: value,
-              })}
+              className={cn(
+                "focus:border-blue-400 h-[38px] min-h-[38px] w-full !py-0 pr-7 text-13 leading-5",
+                {
+                  uppercase: value,
+                }
+              )}
               tabIndex={getIndex("identifier")}
             />
           )}
@@ -167,7 +175,7 @@ function ProjectCommonAttributes(props: Props) {
           className="text-13"
           position="right-start"
         >
-          <InfoIcon className="absolute top-2.5 right-2 h-3 w-3 text-placeholder" />
+          <InfoIcon className="absolute top-1/2 right-2 h-3 w-3 -translate-y-1/2 text-placeholder" />
         </Tooltip>
         <span className="text-11 text-danger-primary">{errors?.identifier?.message}</span>
       </div>

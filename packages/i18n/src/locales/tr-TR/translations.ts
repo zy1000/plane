@@ -344,6 +344,7 @@ export default {
   project_name: "Proje Adı",
   project_grade: "Grade",
   select_project_grade: "Select grade",
+  project_grade_required: "Please select a project grade",
   project_id_must_be_at_least_1_character: "Proje ID en az 1 karakter olmalı",
   project_id_must_be_at_most_5_characters: "Proje ID en fazla 5 karakter olmalı",
   project_id: "Proje ID",
