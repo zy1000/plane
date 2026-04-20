@@ -1085,21 +1085,29 @@ export default function TestCasesPage() {
       key: "name",
       width: 260,
       ...getColumnSearchProps("name"),
-      render: (_: any, record: any) => (
-        <button
-          type="button"
-          className="inline-block max-w-full"
-          onClick={() => {
-            if (!record || !record.id) return;
-            setActiveCase(record);
-            setIsUpdateModalOpen(true);
-          }}
-        >
-          <span className="block max-w-[240px] truncate" title={record?.name || ""}>
-            {record?.name}
-          </span>
-        </button>
-      ),
+      render: (_: any, record: any) => {
+        const nameColWidth = columnWidths["name"] ?? 260;
+        const textMaxWidth = Math.max(40, nameColWidth - 20);
+        return (
+          <button
+            type="button"
+            className="inline-block max-w-full"
+            onClick={() => {
+              if (!record || !record.id) return;
+              setActiveCase(record);
+              setIsUpdateModalOpen(true);
+            }}
+          >
+            <span
+              className="block truncate"
+              style={{ maxWidth: textMaxWidth }}
+              title={record?.name || ""}
+            >
+              {record?.name}
+            </span>
+          </button>
+        );
+      },
     },
     {
       title: "评审",
