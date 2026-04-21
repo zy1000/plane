@@ -127,10 +127,10 @@ function buildBlocks(
     let label = projectName?.trim() ? projectName : "项目工时";
 
     if (t.issue_detail) {
-      kindLabel = "工作项";
+      kindLabel = "工作项工时";
       label = t.issue_detail.name;
     } else if (t.test_case_detail) {
-      kindLabel = "测试用例";
+      kindLabel = "测试工时";
       label = t.test_case_detail.name;
     }
 

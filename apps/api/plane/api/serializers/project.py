@@ -91,6 +91,7 @@ class ProjectCreateSerializer(BaseSerializer):
             "is_issue_type_enabled",
             "is_time_tracking_enabled",
             "grade",
+            "pms_project_name",
         ]
 
         read_only_fields = [

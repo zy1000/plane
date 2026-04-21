@@ -169,6 +169,8 @@ class Project(BaseModel):
         verbose_name="Project Grade",
     )
 
+    pms_project_name = models.CharField(max_length=255, null=True, blank=True)
+
     objects = SoftProjectManager()
 
     def __init__(self, *args, **kwargs):

@@ -35,8 +35,8 @@ function formatDayHeader(date: Date): { dayLabel: string; dateLabel: string } {
 
 function getRowKindMeta(rowType: "project" | "issue" | "test_case") {
   if (rowType === "project") return { icon: FolderOpen, label: "项目", color: "#3b82f6", bg: "#eff6ff" };
-  if (rowType === "test_case") return { icon: ClipboardCheck, label: "测试用例", color: "#f59e0b", bg: "#fffbeb" };
-  return { icon: Layers, label: "工作项", color: undefined, bg: undefined };
+  if (rowType === "test_case") return { icon: ClipboardCheck, label: "测试工时", color: "#f59e0b", bg: "#fffbeb" };
+  return { icon: Layers, label: "工作项工时", color: undefined, bg: undefined };
 }
 
 type TTimesheetTableViewProps = {
@@ -157,7 +157,7 @@ export const TimesheetTableView = observer(function TimesheetTableView({
                           <WorkItemTypeIcon
                             typeName={row.issueTypeName}
                             className="h-5 w-5 rounded-md"
-                            title={row.issueTypeName ?? "工作项"}
+                            title={row.issueTypeName ?? "工作项工时"}
                           />
                         ) : (
                           <span

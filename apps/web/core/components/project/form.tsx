@@ -152,6 +152,7 @@ export function ProjectDetailsForm(props: IProjectDetailsForm) {
       description_html: formData.description_html ?? "<p></p>",
       logo_props: formData.logo_props,
       timezone: formData.timezone,
+      pms_project_name: formData.pms_project_name?.trim() || null,
       estimated_hours: formData.estimated_hours,
     };
 
@@ -403,26 +404,58 @@ export function ProjectDetailsForm(props: IProjectDetailsForm) {
               }}
             />
           </div>
-          <div className="col-span-1 flex flex-col gap-1 sm:col-span-2 xl:col-span-1">
-            <h4 className="text-13">{t("common.project_timezone")}</h4>
-            <Controller
-              name="timezone"
-              control={control}
-              rules={{ required: t("project_settings.general.please_select_a_timezone") }}
-              render={({ field: { value, onChange } }) => (
-                <>
-                  <TimezoneSelect
-                    value={value}
-                    onChange={(value: string) => {
-                      onChange(value);
-                    }}
-                    error={Boolean(errors.timezone)}
+          <div className="col-span-1 flex flex-col gap-4 sm:col-span-2 xl:col-span-1">
+            <div className="flex flex-col gap-1">
+              <h4 className="text-13">{t("common.project_timezone")}</h4>
+              <Controller
+                name="timezone"
+                control={control}
+                rules={{ required: t("project_settings.general.please_select_a_timezone") }}
+                render={({ field: { value, onChange } }) => (
+                  <>
+                    <TimezoneSelect
+                      value={value}
+                      onChange={(value: string) => {
+                        onChange(value);
+                      }}
+                      error={Boolean(errors.timezone)}
+                      disabled={!isAdmin}
+                    />
+                  </>
+                )}
+              />
+              {errors.timezone && <span className="text-11 text-danger-primary">{errors.timezone.message}</span>}
+            </div>
+            <div className="flex flex-col gap-1">
+              <h4 className="text-13">PMS项目名称</h4>
+              <Controller
+                control={control}
+                name="pms_project_name"
+                rules={{
+                  maxLength: {
+                    value: 255,
+                    message: "PMS项目名称不能超过 255 个字符",
+                  },
+                }}
+                render={({ field: { value, onChange, ref } }) => (
+                  <Input
+                    id="pms_project_name"
+                    name="pms_project_name"
+                    type="text"
+                    ref={ref}
+                    value={value ?? ""}
+                    onChange={onChange}
+                    hasError={Boolean(errors.pms_project_name)}
+                    className="font-medium"
+                    placeholder="PMS项目名称"
                     disabled={!isAdmin}
                   />
-                </>
+                )}
+              />
+              {errors.pms_project_name && (
+                <span className="text-11 text-danger-primary">{errors.pms_project_name.message}</span>
               )}
-            />
-            {errors.timezone && <span className="text-11 text-danger-primary">{errors.timezone.message}</span>}
+            </div>
           </div>
           <div className="col-span-1 flex flex-col gap-1 sm:col-span-2 xl:col-span-1">
             <h4 className="text-13">{t("common.project_estimated_hours")}</h4>

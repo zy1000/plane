@@ -368,21 +368,23 @@ function ProjectStatisticsPage() {
           </div>
 
           {/* 延期工作项负责人（左）+ Progress Lists Tab（右） */}
-          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-            <OverdueByAssigneeCard
-              data={displayData?.overdue_by_assignee}
-              headerExtra={
-                <button
-                  type="button"
-                  className="grid h-6 w-6 shrink-0 place-items-center rounded transition-colors hover:bg-surface-2"
-                  onClick={() => setOverdueExpandOpen(true)}
-                  aria-label="放大"
-                >
-                  <Maximize2 className="h-3.5 w-3.5 text-placeholder" />
-                </button>
-              }
-            />
-            <div className={`${sectionCard} flex h-[420px] flex-col`}>
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-4">
+            <div className="xl:col-span-1">
+              <OverdueByAssigneeCard
+                data={displayData?.overdue_by_assignee}
+                headerExtra={
+                  <button
+                    type="button"
+                    className="grid h-6 w-6 shrink-0 place-items-center rounded transition-colors hover:bg-surface-2"
+                    onClick={() => setOverdueExpandOpen(true)}
+                    aria-label="放大"
+                  >
+                    <Maximize2 className="h-3.5 w-3.5 text-placeholder" />
+                  </button>
+                }
+              />
+            </div>
+            <div className={`${sectionCard} flex h-[420px] flex-col xl:col-span-3`}>
               <Tab.Group
                 selectedIndex={activeListTabIndex}
                 onChange={(index) => setActiveListTabIndex(index)}

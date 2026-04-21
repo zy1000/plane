@@ -405,7 +405,7 @@ export const TimesheetRowAddModal = observer(function TimesheetRowAddModal({
               )}
             >
               <Layers className="h-3.5 w-3.5 shrink-0" />
-              <span>工作项</span>
+              <span>工作项工时</span>
             </button>
             <button
               onClick={() => handleSelectCategory(pid, "test_case")}
@@ -415,7 +415,7 @@ export const TimesheetRowAddModal = observer(function TimesheetRowAddModal({
               )}
             >
               <ClipboardCheck className="h-3.5 w-3.5 shrink-0" />
-              <span>测试用例</span>
+              <span>测试工时</span>
             </button>
           </div>
         )}
@@ -480,8 +480,8 @@ export const TimesheetRowAddModal = observer(function TimesheetRowAddModal({
   const renderItemListPanel = () => {
     if (!selectedCategory || selectedCategory.type === "project") return null;
 
-    const categoryLabel = selectedCategory.type === "issue" ? "工作项" : "测试用例";
-    const searchPlaceholder = selectedCategory.type === "issue" ? "搜索工作项…" : "搜索测试用例…";
+    const categoryLabel = selectedCategory.type === "issue" ? "工作项工时" : "测试工时";
+    const searchPlaceholder = selectedCategory.type === "issue" ? "搜索工作项工时…" : "搜索测试工时…";
 
     return (
       <>
@@ -526,7 +526,7 @@ export const TimesheetRowAddModal = observer(function TimesheetRowAddModal({
           ) : selectedCategory.type === "issue" ? (
             issues.length === 0 && !isLoadingItems ? (
               <div className="flex h-full items-center justify-center">
-                <p className="text-sm text-tertiary">未找到与我相关的工作项</p>
+                <p className="text-sm text-tertiary">未找到与我相关的工作项工时</p>
               </div>
             ) : (
               <div className="space-y-0.5">
@@ -562,7 +562,7 @@ export const TimesheetRowAddModal = observer(function TimesheetRowAddModal({
             )
           ) : testCases.length === 0 && !isLoadingItems ? (
             <div className="flex h-full items-center justify-center">
-              <p className="text-sm text-tertiary">未找到测试用例</p>
+              <p className="text-sm text-tertiary">未找到测试工时</p>
             </div>
           ) : (
             <div className="space-y-0.5">
@@ -707,7 +707,7 @@ export const TimesheetRowAddModal = observer(function TimesheetRowAddModal({
                           <FolderOpen className="h-10 w-10 text-tertiary/30" />
                           <div className="space-y-1">
                             <p className="text-sm font-medium text-secondary">展开左侧项目</p>
-                            <p className="text-xs text-tertiary">选择「项目工时」「工作项」或「测试用例」以浏览和添加</p>
+                            <p className="text-xs text-tertiary">选择「项目工时」「工作项工时」或「测试工时」以浏览和添加</p>
                           </div>
                         </div>
                       </div>
