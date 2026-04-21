@@ -123,6 +123,8 @@ type TTimesheetCellPopoverProps = {
   currentUserId?: string;
   issueId?: string;
   testCaseId?: string;
+  /** 当前行所属工时类别 id；创建时会带上，保证送样工时 / 项目工时等分类落到正确桶里。 */
+  categoryId?: string;
   hours: number;
   readOnly?: boolean;
   onCreate: (data: TTimeSheetCreatePayload) => Promise<TTimeSheet | undefined>;
@@ -136,6 +138,7 @@ export function TimesheetCellPopover({
   currentUserId,
   issueId,
   testCaseId,
+  categoryId,
   hours,
   readOnly = false,
   onCreate,
@@ -241,6 +244,7 @@ export function TimesheetCellPopover({
         endTime,
         issueId,
         testCaseId,
+        categoryId,
       })
     ) {
       setTimeError("同一成员在同一项目/任务的同一时间段已存在工时记录，请勿重复登记。");
@@ -256,6 +260,7 @@ export function TimesheetCellPopover({
         description,
         issue: issueId,
         test_case: testCaseId,
+        category: categoryId,
       });
       close();
     } catch (error) {

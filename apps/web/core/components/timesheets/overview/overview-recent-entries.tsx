@@ -14,7 +14,7 @@ function formatTimeRange(start: string, end: string) {
 function getEntryLabel(entry: TTimeSheet): string {
   if (entry.issue_detail) return `#${entry.issue_detail.sequence_id} ${entry.issue_detail.name}`;
   if (entry.test_case_detail) return entry.test_case_detail.name;
-  return "项目工时";
+  return entry.category_detail?.name ?? "项目工时";
 }
 
 export function OverviewRecentEntries({ entries, title = "最近填报（本月）" }: Props) {

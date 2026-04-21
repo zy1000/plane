@@ -9,9 +9,11 @@ from rest_framework.response import Response
 from plane.app.serializers.timesheet import (
     TimeSheetCopyPreviousWeekSerializer,
     TimeSheetSerializer,
+    TimesheetCategorySerializer,
 )
 from plane.app.views import BaseViewSet
-from plane.db.models import TimeSheet
+from plane.app.views.base import BaseAPIView
+from plane.db.models import TimeSheet, TimesheetCategory
 
 
 class TimeSheetViewSet(BaseViewSet):
@@ -26,6 +28,8 @@ class TimeSheetViewSet(BaseViewSet):
         "test_case_id": ["exact"],
         "member_id": ["exact"],
         "date": ["exact", "gte", "lte"],
+        "category_id": ["exact"],
+        "category__key": ["exact"],
     }
 
     def _format_validation_error(self, error: DjangoValidationError):
@@ -38,7 +42,7 @@ class TimeSheetViewSet(BaseViewSet):
     def get_queryset(self):
         qs = TimeSheet.objects.filter(
             project__workspace__slug=self.kwargs.get("slug"),
-        ).select_related("member", "project", "issue", "test_case")
+        ).select_related("member", "project", "issue", "test_case", "category")
 
         project_id = self.kwargs.get("project_id")
         if project_id:
@@ -111,6 +115,7 @@ class TimeSheetViewSet(BaseViewSet):
                 project=source.project,
                 issue=source.issue,
                 test_case=source.test_case,
+                category=source.category,
                 date=target_date,
                 start_time=source.start_time,
                 end_time=source.end_time,
@@ -166,3 +171,17 @@ class TimeSheetViewSet(BaseViewSet):
             target_week_start=serializer.validated_data["week_start"],
         )
         return Response(payload, status=status.HTTP_200_OK)
+
+
+class TimesheetCategoryListView(BaseAPIView):
+    """工时类别字典下发接口（全局只读）。
+
+    前端用来渲染填报弹窗左侧的类别菜单。当前仅下发 is_active 的记录。
+    """
+
+    def get(self, request):
+        categories = TimesheetCategory.objects.filter(is_active=True).order_by(
+            "sort_order", "key"
+        )
+        serializer = TimesheetCategorySerializer(categories, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)

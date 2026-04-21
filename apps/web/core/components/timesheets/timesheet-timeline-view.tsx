@@ -7,9 +7,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { observer } from "mobx-react";
 import { message, Modal } from "antd";
-import { ClipboardCheck, FolderOpen, Layers, Plus, Trash2 } from "lucide-react";
+import { Beaker, ClipboardCheck, FolderOpen, Layers, Plus, Trash2 } from "lucide-react";
 import { Logo } from "@plane/propel/emoji-icon-picker";
 import { cn } from "@plane/utils";
+import {
+  CATEGORY_PANEL_KIND,
+  TIMESHEET_CATEGORY_KEY,
+  type TTimesheetPanelKind,
+} from "@/constants/timesheet-category";
 import { useProject } from "@/hooks/store/use-project";
 import type { TTimeSheet, TTimeSheetCreatePayload } from "@/services/issue/timesheet.service";
 import { formatDateKey, isDateEditable, type TTimesheetRow } from "@/hooks/store/use-timesheet-page";
@@ -92,20 +97,50 @@ type TTimesheetBlock = TTimeSheet & {
   label: string;
   projectName: string;
   blockType: TTimesheetBlockType;
+  categoryKey: string;
 };
 
-type TTimesheetBlockType = "project" | "issue" | "test_case";
+type TTimesheetBlockType = TTimesheetPanelKind;
 
 function getBlockType(timesheet: TTimeSheet): TTimesheetBlockType {
+  const key = timesheet.category_detail?.key;
+  if (key && CATEGORY_PANEL_KIND[key]) return CATEGORY_PANEL_KIND[key];
   if (timesheet.issue_detail) return "issue";
   if (timesheet.test_case_detail) return "test_case";
   return "project";
 }
 
-function getBlockStyleClasses(type: TTimesheetBlockType): string {
-  if (type === "issue") return "border-l-accent-primary bg-accent-primary/[0.04]";
-  if (type === "test_case") return "border-l-warning-primary bg-warning-primary/[0.04]";
-  return "border-l-success-primary bg-success-primary/[0.04]";
+/**
+ * 时间轴工时块的左边框/底色。
+ *
+ * - issue / test_case 沿用旧配色；
+ * - 对于 project 面板，按类别 key 再区分：
+ *   - PROJECT 走默认「成功色」，表示项目工时；
+ *   - SAMPLE 单独走紫色，便于与项目工时肉眼区分；
+ *   - 未来新增的 project 面板类别默认回落到灰色。
+ */
+function getBlockStyleClasses(block: TTimesheetBlock): string {
+  if (block.blockType === "issue") {
+    // 工作项工时拆分后按子类别着色；未识别的子类别回落到通用强调色
+    switch (block.categoryKey) {
+      case TIMESHEET_CATEGORY_KEY.REQUIREMENT:
+        return "border-l-sky-500 bg-sky-500/[0.05]";
+      case TIMESHEET_CATEGORY_KEY.TASK:
+        return "border-l-teal-500 bg-teal-500/[0.05]";
+      case TIMESHEET_CATEGORY_KEY.BUG:
+        return "border-l-red-500 bg-red-500/[0.05]";
+      default:
+        return "border-l-accent-primary bg-accent-primary/[0.04]";
+    }
+  }
+  if (block.blockType === "test_case") return "border-l-warning-primary bg-warning-primary/[0.04]";
+  if (block.categoryKey === TIMESHEET_CATEGORY_KEY.SAMPLE) {
+    return "border-l-purple-500 bg-purple-500/[0.04]";
+  }
+  if (block.categoryKey === TIMESHEET_CATEGORY_KEY.PROJECT) {
+    return "border-l-success-primary bg-success-primary/[0.04]";
+  }
+  return "border-l-tertiary bg-layer-1/60";
 }
 
 function buildBlocks(
@@ -122,19 +157,23 @@ function buildBlocks(
     const project = getProjectById?.(String(t.project));
     const projectName = project?.name ?? "";
     const blockType = getBlockType(t);
+    const categoryKey = t.category_detail?.key ?? TIMESHEET_CATEGORY_KEY.PROJECT;
+    const categoryName = t.category_detail?.name;
 
-    let kindLabel = "项目";
-    let label = projectName?.trim() ? projectName : "项目工时";
+    let kindLabel = categoryName ?? "项目";
+    let label = projectName?.trim() ? projectName : categoryName ?? "项目工时";
 
-    if (t.issue_detail) {
-      kindLabel = "工作项工时";
+    if (blockType === "issue" && t.issue_detail) {
+      kindLabel = categoryName ?? "工作项工时";
       label = t.issue_detail.name;
-    } else if (t.test_case_detail) {
-      kindLabel = "测试工时";
+    } else if (blockType === "test_case" && t.test_case_detail) {
+      kindLabel = categoryName ?? "测试工时";
       label = t.test_case_detail.name;
+    } else if (blockType === "project") {
+      kindLabel = categoryName ?? "项目工时";
     }
 
-    return { ...t, topPx, heightPx, kindLabel, label, projectName, blockType };
+    return { ...t, topPx, heightPx, kindLabel, label, projectName, blockType, categoryKey };
   });
 }
 
@@ -163,6 +202,18 @@ function renderBlockIcon(
         style={{ backgroundColor: "#fffbeb", color: "#f59e0b" }}
       >
         <ClipboardCheck className={sizeClass} />
+      </span>
+    );
+  }
+
+  // project 面板：送样工时用独立图标，其余（项目工时 / 其他未来 project 类别）走项目 logo / 文件夹。
+  if (block.categoryKey === TIMESHEET_CATEGORY_KEY.SAMPLE) {
+    return (
+      <span
+        className={`inline-flex ${wrapClass} shrink-0 items-center justify-center rounded`}
+        style={{ backgroundColor: "#faf5ff", color: "#a855f7" }}
+      >
+        <Beaker className={sizeClass} />
       </span>
     );
   }
@@ -551,6 +602,7 @@ export const TimesheetTimelineView = observer(function TimesheetTimelineView({
       hours,
       issue: row.type === "issue" ? row.issueId : undefined,
       test_case: row.type === "test_case" ? row.testCaseId : undefined,
+      category: row.categoryId,
     }).catch((err: any) => {
       message.error(err?.detail || err?.error || "创建工时失败");
     });
@@ -705,7 +757,7 @@ export const TimesheetTimelineView = observer(function TimesheetTimelineView({
                         "group/block absolute left-1 right-1 rounded-md overflow-hidden cursor-pointer select-none",
                         "border border-subtle/90 shadow-sm",
                         "border-l-[3px] transition-[opacity] hover:bg-layer-1",
-                        getBlockStyleClasses(block.blockType),
+                        getBlockStyleClasses(block),
                         isDragged && "invisible"
                       )}
                       style={{ top: CONTENT_PADDING_TOP + block.topPx, height: block.heightPx }}
@@ -790,7 +842,6 @@ export const TimesheetTimelineView = observer(function TimesheetTimelineView({
                   const ghCompact = dragPreview.heightPx < 36;
                   const ghHoursStr = formatHours(parseFloat(gb.hours));
                   const ghTimeRange = `${dragPreview.startTime}–${dragPreview.endTime}`;
-                  const ghIssueTypesMap = projectIssueTypeMaps[String(gb.project)] ?? {};
                   const ghShowProject = gb.blockType !== "project" && gb.projectName;
                   return (
                     <div
@@ -798,13 +849,13 @@ export const TimesheetTimelineView = observer(function TimesheetTimelineView({
                         "absolute left-1 right-1 rounded-md overflow-hidden pointer-events-none z-20",
                         "border border-subtle/90 shadow-lg",
                         "border-l-[3px] ring-2 ring-accent-primary/30",
-                        getBlockStyleClasses(gb.blockType),
+                        getBlockStyleClasses(gb),
                       )}
                       style={{ top: CONTENT_PADDING_TOP + dragPreview.topPx, height: dragPreview.heightPx }}
                     >
                       <div className={cn("flex h-full min-h-0 justify-start overflow-hidden px-2 py-1", ghCompact ? "flex-col gap-0" : "flex-col gap-0.5")}>
                         <div className="flex items-center gap-1 min-w-0">
-                          {renderBlockIcon(gb, getProjectById, ghIssueTypesMap, 3)}
+                          {renderBlockIcon(gb, getProjectById, 3)}
                           <p className="text-sm font-medium leading-snug text-primary truncate min-w-0">{gb.label}</p>
                         </div>
                         {!ghCompact && (

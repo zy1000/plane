@@ -13,9 +13,9 @@ export type TWorkItemTypeIconConfig = {
 };
 
 const FIXED_WORK_ITEM_TYPE_ICON_CONFIG: Record<TWorkItemTypeIconKey, TWorkItemTypeIconConfig> = {
-  EPIC: { name: "Layers", color: "#6796ff", background_color: "#FFFFFF" },
-  FEATURE: { name: "Layers", color: "#6796ff", background_color: "#FFFFFF" },
-  STORY: { name: "Layers", color: "#6796ff", background_color: "#FFFFFF" },
+  EPIC: { name: "Mountain", color: "#ff877b", background_color: "#FFFFFF" },
+  FEATURE: { name: "Cog", color: "#9191f9", background_color: "#FFFFFF" },
+  STORY: { name: "NotebookPen", color: "#00A1EC", background_color: "#FFFFFF" },
   TASK: { name: "Layers", color: "#6796ff", background_color: "#FFFFFF" },
   BUG: { name: "Bug", color: "#8e0119", background_color: "#FFFFFF" },
 };

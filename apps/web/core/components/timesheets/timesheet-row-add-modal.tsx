@@ -7,25 +7,36 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Dialog, Transition } from "@headlessui/react";
 import {
+  Beaker,
+  Bug,
   ChevronRight,
   ClipboardCheck,
   Clock,
   FolderOpen,
   Layers,
+  ListTodo,
   Loader2,
   Search,
   Square,
   SquareCheckBig,
+  Target,
   X,
 } from "lucide-react";
 import { observer } from "mobx-react";
 import { Logo } from "@plane/propel/emoji-icon-picker";
 import { cn } from "@plane/utils";
+import {
+  getCategoryIconName,
+  getCategoryIssueTypeNames,
+  getCategoryPanelKind,
+} from "@/constants/timesheet-category";
 import { useProject } from "@/hooks/store/use-project";
+import { useTimesheetCategories } from "@/hooks/store/use-timesheet-categories";
 import { useUser } from "@/hooks/store/user";
 import { IssueService } from "@/services/issue/issue.service";
 import { CaseService } from "@/services/qa/case.service";
 import type { TTimesheetRow } from "@/hooks/store/use-timesheet-page";
+import type { TTimesheetCategory } from "@/services/issue/timesheet-category.service";
 import { WorkItemTypeIcon } from "@/components/issues/work-item-type-icon";
 
 const issueService = new IssueService();
@@ -33,12 +44,13 @@ const caseService = new CaseService();
 
 const TEST_CASE_PAGE_SIZE = 50;
 
-
-type TCategoryType = "issue" | "test_case" | "project";
-
+/**
+ * 左侧菜单被选中的节点：既要记住是哪个项目，又要记住选了哪个类别 key。
+ * 类别 key 直接决定右侧渲染哪种面板（项目 / 工作项 / 测试用例）。
+ */
 type TSelectedCategory = {
   projectId: string;
-  type: TCategoryType;
+  categoryKey: string;
 };
 
 type TIssueItem = {
@@ -89,6 +101,28 @@ function deduplicateIssues(a: TIssueItem[], b: TIssueItem[]): TIssueItem[] {
   return result;
 }
 
+function CategoryIcon({ keyName, className }: { keyName: string | undefined; className?: string }) {
+  const iconName = getCategoryIconName(keyName);
+  const cls = className ?? "h-3.5 w-3.5 shrink-0";
+  switch (iconName) {
+    case "Layers":
+      return <Layers className={cls} />;
+    case "ClipboardCheck":
+      return <ClipboardCheck className={cls} />;
+    case "Beaker":
+      return <Beaker className={cls} />;
+    case "Target":
+      return <Target className={cls} />;
+    case "ListTodo":
+      return <ListTodo className={cls} />;
+    case "Bug":
+      return <Bug className={cls} />;
+    case "Clock":
+    default:
+      return <Clock className={cls} />;
+  }
+}
+
 export const TimesheetRowAddModal = observer(function TimesheetRowAddModal({
   open,
   workspaceSlug,
@@ -98,6 +132,7 @@ export const TimesheetRowAddModal = observer(function TimesheetRowAddModal({
   const { joinedProjectIds, favoriteProjectIds, getProjectById } = useProject();
   const { data: currentUser } = useUser();
   const currentUserId = currentUser?.id;
+  const { categories, isLoading: isCategoriesLoading } = useTimesheetCategories();
 
   // Tree state
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
@@ -122,6 +157,12 @@ export const TimesheetRowAddModal = observer(function TimesheetRowAddModal({
   const searchInputRef = useRef<HTMLInputElement>(null);
   const listScrollRef = useRef<HTMLDivElement>(null);
 
+  const selectedCategoryMeta: TTimesheetCategory | undefined = useMemo(
+    () => categories.find((c) => c.key === selectedCategory?.categoryKey),
+    [categories, selectedCategory?.categoryKey]
+  );
+  const selectedPanelKind = selectedCategory ? getCategoryPanelKind(selectedCategory.categoryKey) : undefined;
+
   // Filtered project IDs
   const filteredProjectIds = useMemo(() => {
     const q = projectSearchQuery.toLowerCase().trim();
@@ -144,14 +185,20 @@ export const TimesheetRowAddModal = observer(function TimesheetRowAddModal({
 
   const fetchItems = useCallback(
     async (category: TSelectedCategory, query: string) => {
-      if (!workspaceSlug || !category || category.type === "project") return;
+      if (!workspaceSlug || !category) return;
+      const panel = getCategoryPanelKind(category.categoryKey);
+      if (panel === "project") return;
       setIsLoadingItems(true);
       setItemsError(null);
 
       try {
-        if (category.type === "issue") {
+        if (panel === "issue") {
+          // 工作项工时被拆分为 REQUIREMENT / TASK / BUG 后，需要把类别允许的 issue type.name
+          // 透传到后端做筛选，从而让每个子菜单只看到自己归属的工作项。
+          const typeNames = getCategoryIssueTypeNames(category.categoryKey);
           const baseParams: Record<string, any> = {
             ...(query ? { name: query } : {}),
+            ...(typeNames && typeNames.length > 0 ? { type__name: typeNames.join(",") } : {}),
           };
 
           if (currentUserId) {
@@ -196,7 +243,7 @@ export const TimesheetRowAddModal = observer(function TimesheetRowAddModal({
           setTestCaseTotal(total);
         }
       } catch {
-        if (category.type === "issue") {
+        if (panel === "issue") {
           setIssues([]);
           setItemsError("加载工作项失败");
         } else {
@@ -211,7 +258,7 @@ export const TimesheetRowAddModal = observer(function TimesheetRowAddModal({
   );
 
   const loadMoreTestCases = useCallback(async () => {
-    if (!selectedCategory || selectedCategory.type !== "test_case" || isLoadingMore) return;
+    if (!selectedCategory || getCategoryPanelKind(selectedCategory.categoryKey) !== "test_case" || isLoadingMore) return;
     const nextPage = testCasePage + 1;
     if (testCasePage * TEST_CASE_PAGE_SIZE >= testCaseTotal) return;
 
@@ -238,7 +285,7 @@ export const TimesheetRowAddModal = observer(function TimesheetRowAddModal({
 
   const handleListScroll = useCallback(
     (e: React.UIEvent<HTMLDivElement>) => {
-      if (selectedCategory?.type !== "test_case") return;
+      if (!selectedCategory || getCategoryPanelKind(selectedCategory.categoryKey) !== "test_case") return;
       const el = e.currentTarget;
       if (el.scrollHeight - el.scrollTop - el.clientHeight < 120) {
         loadMoreTestCases();
@@ -248,7 +295,8 @@ export const TimesheetRowAddModal = observer(function TimesheetRowAddModal({
   );
 
   useEffect(() => {
-    if (!open || !selectedCategory || selectedCategory.type === "project") return;
+    if (!open || !selectedCategory) return;
+    if (getCategoryPanelKind(selectedCategory.categoryKey) === "project") return;
     const timer = setTimeout(() => {
       fetchItems(selectedCategory, itemSearchQuery);
     }, 300);
@@ -284,8 +332,8 @@ export const TimesheetRowAddModal = observer(function TimesheetRowAddModal({
     });
   };
 
-  const handleSelectCategory = (projectId: string, type: TCategoryType) => {
-    setSelectedCategory({ projectId, type });
+  const handleSelectCategory = (projectId: string, categoryKey: string) => {
+    setSelectedCategory({ projectId, categoryKey });
     setItemSearchQuery("");
     setIssues([]);
     setTestCases([]);
@@ -304,43 +352,57 @@ export const TimesheetRowAddModal = observer(function TimesheetRowAddModal({
     });
   };
 
-  const makeIssueRow = (issue: TIssueItem, projectId: string): TTimesheetRow => {
+  const makeIssueRow = (issue: TIssueItem, projectId: string, category: TTimesheetCategory): TTimesheetRow => {
     const project = getProjectById(projectId);
     return {
       id: `issue-${issue.id}`,
       type: "issue",
       projectId,
       projectName: project?.name,
+      categoryId: category.id,
+      categoryKey: category.key,
+      categoryName: category.name,
+      categorySortOrder: category.sort_order,
       issueId: issue.id,
       issueName: issue.name,
       issueSequenceId: issue.sequence_id,
-      issueTypeId: issue.type?.id ?? issue.type_id ?? null,
+      issueTypeId: issue.type_id ?? null,
+      issueTypeName: issue.type_name ?? null,
       displayName: `#${issue.sequence_id} ${issue.name}`,
     };
   };
 
-  const makeTestCaseRow = (tc: TTestCaseItem, projectId: string): TTimesheetRow => {
+  const makeTestCaseRow = (tc: TTestCaseItem, projectId: string, category: TTimesheetCategory): TTimesheetRow => {
     const project = getProjectById(projectId);
     return {
       id: `test_case-${tc.id}`,
       type: "test_case",
       projectId,
       projectName: project?.name,
+      categoryId: category.id,
+      categoryKey: category.key,
+      categoryName: category.name,
+      categorySortOrder: category.sort_order,
       testCaseId: tc.id,
       testCaseName: tc.name,
       displayName: tc.name,
     };
   };
 
-  const makeProjectRow = (projectId: string): TTimesheetRow => {
+  const makeProjectRow = (projectId: string, category: TTimesheetCategory): TTimesheetRow => {
     const project = getProjectById(projectId);
-    const name = project?.name || "项目工时";
+    const projectLabel = project?.name || "项目";
+    const displayName = category.name ? `${projectLabel} · ${category.name}` : projectLabel;
     return {
-      id: `project-${projectId}`,
+      id: `project-${projectId}-${category.key}`,
       type: "project",
       projectId,
-      projectName: name,
-      displayName: name,
+      projectName: project?.name,
+      categoryId: category.id,
+      categoryKey: category.key,
+      categoryName: category.name,
+      categorySortOrder: category.sort_order,
+      displayName,
     };
   };
 
@@ -361,9 +423,6 @@ export const TimesheetRowAddModal = observer(function TimesheetRowAddModal({
     const project = getProjectById(pid);
     if (!project) return null;
     const isExpanded = expandedProjects.has(pid);
-    const isIssueSelected = selectedCategory?.projectId === pid && selectedCategory?.type === "issue";
-    const isTestCaseSelected = selectedCategory?.projectId === pid && selectedCategory?.type === "test_case";
-    const isProjectSelected = selectedCategory?.projectId === pid && selectedCategory?.type === "project";
 
     return (
       <div key={pid}>
@@ -387,50 +446,47 @@ export const TimesheetRowAddModal = observer(function TimesheetRowAddModal({
 
         {isExpanded && (
           <div className="ml-5 border-l border-subtle pl-2 space-y-0.5 mt-0.5">
-            <button
-              onClick={() => handleSelectCategory(pid, "project")}
-              className={cn(
-                "w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors cursor-pointer",
-                isProjectSelected ? "bg-accent-primary/10 text-accent-primary" : "text-secondary hover:bg-layer-1"
-              )}
-            >
-              <Clock className="h-3.5 w-3.5 shrink-0" />
-              <span>项目工时</span>
-            </button>
-            <button
-              onClick={() => handleSelectCategory(pid, "issue")}
-              className={cn(
-                "w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors cursor-pointer",
-                isIssueSelected ? "bg-accent-primary/10 text-accent-primary" : "text-secondary hover:bg-layer-1"
-              )}
-            >
-              <Layers className="h-3.5 w-3.5 shrink-0" />
-              <span>工作项工时</span>
-            </button>
-            <button
-              onClick={() => handleSelectCategory(pid, "test_case")}
-              className={cn(
-                "w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors cursor-pointer",
-                isTestCaseSelected ? "bg-accent-primary/10 text-accent-primary" : "text-secondary hover:bg-layer-1"
-              )}
-            >
-              <ClipboardCheck className="h-3.5 w-3.5 shrink-0" />
-              <span>测试工时</span>
-            </button>
+            {isCategoriesLoading && categories.length === 0 ? (
+              <div className="flex items-center gap-2 px-2 py-1.5 text-sm text-tertiary">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                <span>加载类别…</span>
+              </div>
+            ) : (
+              categories.map((cat) => {
+                const isSelected =
+                  selectedCategory?.projectId === pid && selectedCategory?.categoryKey === cat.key;
+                return (
+                  <button
+                    key={cat.id}
+                    onClick={() => handleSelectCategory(pid, cat.key)}
+                    className={cn(
+                      "w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors cursor-pointer",
+                      isSelected ? "bg-accent-primary/10 text-accent-primary" : "text-secondary hover:bg-layer-1"
+                    )}
+                  >
+                    <CategoryIcon keyName={cat.key} />
+                    <span>{cat.name}</span>
+                  </button>
+                );
+              })
+            )}
           </div>
         )}
       </div>
     );
   };
 
-  // Right panel: project category content
+  // Right panel: project-kind content (无二级对象，只登记到项目+类别)
   const renderProjectCategoryPanel = () => {
-    if (!selectedCategory || selectedCategory.type !== "project") return null;
+    if (!selectedCategory || !selectedCategoryMeta) return null;
     const project = getProjectById(selectedCategory.projectId);
     if (!project) return null;
 
-    const projectRow = makeProjectRow(selectedCategory.projectId);
+    const projectRow = makeProjectRow(selectedCategory.projectId, selectedCategoryMeta);
     const isSelected = selectedItems.has(projectRow.id);
+    const description = selectedCategoryMeta.description?.trim()
+      ? selectedCategoryMeta.description
+      : `将工时登记在「${selectedCategoryMeta.name}」类别下，不关联具体工作项或测试用例。`;
 
     return (
       <>
@@ -438,13 +494,11 @@ export const TimesheetRowAddModal = observer(function TimesheetRowAddModal({
           <div className="flex items-center gap-1.5 text-sm text-secondary">
             <span className="font-medium text-primary truncate">{project.name}</span>
             <ChevronRight className="h-3 w-3 text-tertiary shrink-0" />
-            <span className="text-accent-primary font-medium">项目工时</span>
+            <span className="text-accent-primary font-medium">{selectedCategoryMeta.name}</span>
           </div>
         </div>
         <div className="flex-1 overflow-y-auto px-4 py-4">
-          <p className="text-sm text-tertiary mb-4">
-            将工时直接记录在项目级别，不关联具体的工作项或测试用例。
-          </p>
+          <p className="text-sm text-tertiary mb-4">{description}</p>
           <button
             onClick={() => toggleItemSelection(projectRow)}
             className={cn(
@@ -468,7 +522,9 @@ export const TimesheetRowAddModal = observer(function TimesheetRowAddModal({
             </div>
             <div className="min-w-0">
               <p className="text-sm font-medium text-primary truncate">{project.name}</p>
-              <p className="text-xs text-tertiary">{project.identifier} · 项目工时</p>
+              <p className="text-xs text-tertiary">
+                {project.identifier} · {selectedCategoryMeta.name}
+              </p>
             </div>
           </button>
         </div>
@@ -478,10 +534,13 @@ export const TimesheetRowAddModal = observer(function TimesheetRowAddModal({
 
   // Right panel: issue / test_case list content
   const renderItemListPanel = () => {
-    if (!selectedCategory || selectedCategory.type === "project") return null;
+    if (!selectedCategory || !selectedCategoryMeta) return null;
+    const panel = getCategoryPanelKind(selectedCategory.categoryKey);
+    if (panel === "project") return null;
 
-    const categoryLabel = selectedCategory.type === "issue" ? "工作项工时" : "测试工时";
-    const searchPlaceholder = selectedCategory.type === "issue" ? "搜索工作项工时…" : "搜索测试工时…";
+    const categoryLabel = selectedCategoryMeta.name;
+    const searchPlaceholder = `搜索${categoryLabel}…`;
+    const emptyText = panel === "issue" ? "未找到与我相关的工作项" : "未找到测试用例";
 
     return (
       <>
@@ -491,7 +550,7 @@ export const TimesheetRowAddModal = observer(function TimesheetRowAddModal({
             <span className="font-medium text-primary truncate">{selectedProject?.name}</span>
             <ChevronRight className="h-3 w-3 text-tertiary shrink-0" />
             <span className="text-accent-primary font-medium">{categoryLabel}</span>
-            {selectedCategory.type === "issue" && (
+            {panel === "issue" && (
               <span className="ml-1 text-xs text-tertiary">(我创建 / 我负责)</span>
             )}
           </div>
@@ -523,17 +582,17 @@ export const TimesheetRowAddModal = observer(function TimesheetRowAddModal({
             <div className="flex h-full items-center justify-center">
               <p className="text-sm text-danger-primary">{itemsError}</p>
             </div>
-          ) : selectedCategory.type === "issue" ? (
+          ) : panel === "issue" ? (
             issues.length === 0 && !isLoadingItems ? (
               <div className="flex h-full items-center justify-center">
-                <p className="text-sm text-tertiary">未找到与我相关的工作项工时</p>
+                <p className="text-sm text-tertiary">{emptyText}</p>
               </div>
             ) : (
               <div className="space-y-0.5">
                 {issues.map((issue) => {
                   const rowId = `issue-${issue.id}`;
                   const isSelected = selectedItems.has(rowId);
-                  const row = makeIssueRow(issue, selectedCategory.projectId);
+                  const row = makeIssueRow(issue, selectedCategory.projectId, selectedCategoryMeta);
                   return (
                     <button
                       key={issue.id}
@@ -562,14 +621,14 @@ export const TimesheetRowAddModal = observer(function TimesheetRowAddModal({
             )
           ) : testCases.length === 0 && !isLoadingItems ? (
             <div className="flex h-full items-center justify-center">
-              <p className="text-sm text-tertiary">未找到测试工时</p>
+              <p className="text-sm text-tertiary">{emptyText}</p>
             </div>
           ) : (
             <div className="space-y-0.5">
               {testCases.map((tc) => {
                 const rowId = `test_case-${tc.id}`;
                 const isSelected = selectedItems.has(rowId);
-                const row = makeTestCaseRow(tc, selectedCategory.projectId);
+                const row = makeTestCaseRow(tc, selectedCategory.projectId, selectedCategoryMeta);
                 return (
                   <button
                     key={tc.id}
@@ -696,7 +755,7 @@ export const TimesheetRowAddModal = observer(function TimesheetRowAddModal({
                   {/* Right: Content panel */}
                   <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
                     {selectedCategory ? (
-                      selectedCategory.type === "project" ? (
+                      selectedPanelKind === "project" ? (
                         renderProjectCategoryPanel()
                       ) : (
                         renderItemListPanel()
@@ -707,7 +766,7 @@ export const TimesheetRowAddModal = observer(function TimesheetRowAddModal({
                           <FolderOpen className="h-10 w-10 text-tertiary/30" />
                           <div className="space-y-1">
                             <p className="text-sm font-medium text-secondary">展开左侧项目</p>
-                            <p className="text-xs text-tertiary">选择「项目工时」「工作项工时」或「测试工时」以浏览和添加</p>
+                            <p className="text-xs text-tertiary">选择工时类别以浏览和添加</p>
                           </div>
                         </div>
                       </div>

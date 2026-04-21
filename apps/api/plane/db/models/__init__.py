@@ -116,4 +116,4 @@ from .workflow import (
     IssueTransitionRecord,
     IssueTransitionApprovalRecord,
 )
-from .timesheet import TimeSheet
+from .timesheet import TimeSheet, TimesheetCategory

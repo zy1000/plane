@@ -6,12 +6,25 @@
 
 import { useState } from "react";
 import { observer } from "mobx-react";
-import { ClipboardCheck, FolderOpen, Layers, Plus, Trash2 } from "lucide-react";
+import {
+  Beaker,
+  Bug,
+  ClipboardCheck,
+  Clock,
+  FolderOpen,
+  Layers,
+  ListTodo,
+  Plus,
+  Target,
+  Trash2,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { cn } from "@plane/utils";
+import { getCategoryIconName, TIMESHEET_CATEGORY_KEY } from "@/constants/timesheet-category";
 import { useProject } from "@/hooks/store/use-project";
 import { TimesheetCellPopover } from "./timesheet-cell-popover";
 import { TimesheetRowAddModal } from "./timesheet-row-add-modal";
-import { formatDateKey, isDateEditable } from "@/hooks/store/use-timesheet-page";
+import { formatDateKey, isDateEditable, type TTimesheetRow } from "@/hooks/store/use-timesheet-page";
 import type { useTimesheetPage } from "@/hooks/store/use-timesheet-page";
 import { WorkItemTypeIcon } from "@/components/issues/work-item-type-icon";
 
@@ -33,10 +46,47 @@ function formatDayHeader(date: Date): { dayLabel: string; dateLabel: string } {
   return { dayLabel: day, dateLabel };
 }
 
-function getRowKindMeta(rowType: "project" | "issue" | "test_case") {
-  if (rowType === "project") return { icon: FolderOpen, label: "项目", color: "#3b82f6", bg: "#eff6ff" };
-  if (rowType === "test_case") return { icon: ClipboardCheck, label: "测试工时", color: "#f59e0b", bg: "#fffbeb" };
-  return { icon: Layers, label: "工作项工时", color: undefined, bg: undefined };
+const ICON_BY_NAME: Record<string, LucideIcon> = {
+  Clock,
+  Layers,
+  ClipboardCheck,
+  Beaker,
+  Target,
+  ListTodo,
+  Bug,
+};
+
+// 工作项子类别 → 行首色块（仅影响视觉区分，不影响数据）。
+const ISSUE_CATEGORY_STYLE: Record<string, { color: string; bg: string; icon: LucideIcon }> = {
+  [TIMESHEET_CATEGORY_KEY.REQUIREMENT]: { color: "#0ea5e9", bg: "#eff6ff", icon: Target },
+  [TIMESHEET_CATEGORY_KEY.TASK]: { color: "#14b8a6", bg: "#ecfeff", icon: ListTodo },
+  [TIMESHEET_CATEGORY_KEY.BUG]: { color: "#ef4444", bg: "#fef2f2", icon: Bug },
+};
+
+function getRowKindMeta(row: TTimesheetRow) {
+  const fallbackLabel = row.categoryName ?? "项目";
+  const iconName = getCategoryIconName(row.categoryKey);
+  const Icon = ICON_BY_NAME[iconName] ?? Clock;
+
+  if (row.type === "issue") {
+    const style = row.categoryKey ? ISSUE_CATEGORY_STYLE[row.categoryKey] : undefined;
+    return {
+      icon: style?.icon ?? Layers,
+      label: row.categoryName ?? "工作项工时",
+      color: style?.color,
+      bg: style?.bg,
+    };
+  }
+  if (row.type === "test_case") {
+    return { icon: ClipboardCheck, label: row.categoryName ?? "测试工时", color: "#f59e0b", bg: "#fffbeb" };
+  }
+  if (row.categoryKey === TIMESHEET_CATEGORY_KEY.SAMPLE) {
+    return { icon: Beaker, label: fallbackLabel, color: "#a855f7", bg: "#faf5ff" };
+  }
+  if (row.categoryKey === TIMESHEET_CATEGORY_KEY.PROJECT) {
+    return { icon: FolderOpen, label: fallbackLabel, color: "#3b82f6", bg: "#eff6ff" };
+  }
+  return { icon: Icon, label: fallbackLabel, color: "#64748b", bg: "#f1f5f9" };
 }
 
 type TTimesheetTableViewProps = {
@@ -78,7 +128,9 @@ export const TimesheetTableView = observer(function TimesheetTableView({
   const getRowDisplayName = (row: (typeof rows)[0]): string => {
     if (row.type === "project") {
       const project = getProjectById(row.projectId);
-      return project?.name || row.displayName || "项目工时";
+      const projectLabel = project?.name || row.projectName || "项目";
+      const categoryLabel = row.categoryName || "项目工时";
+      return `${projectLabel} · ${categoryLabel}`;
     }
     return row.displayName;
   };
@@ -138,7 +190,7 @@ export const TimesheetTableView = observer(function TimesheetTableView({
               const rowWeekHours = weekDays.reduce((sum, date) => {
                 return sum + getCellHours(row, formatDateKey(date));
               }, 0);
-              const rowKind = getRowKindMeta(row.type);
+              const rowKind = getRowKindMeta(row);
               const projectLabel = getRowProjectLabel(row.projectId);
               const displayName = getRowDisplayName(row);
 
@@ -215,6 +267,7 @@ export const TimesheetTableView = observer(function TimesheetTableView({
                           currentUserId={currentUserId}
                           issueId={row.type === "issue" ? row.issueId : undefined}
                           testCaseId={row.type === "test_case" ? row.testCaseId : undefined}
+                          categoryId={row.categoryId}
                           hours={cellHours}
                           readOnly={!editable}
                           onCreate={(data) => createTimesheet(row.projectId, data)}

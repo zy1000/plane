@@ -7,6 +7,16 @@
 import { API_BASE_URL } from "@plane/constants";
 import { APIService } from "@/services/api.service";
 
+export type TTimesheetCategoryDetail = {
+  id: string;
+  key: string;
+  name: string;
+  description?: string;
+  sort_order: number;
+  is_active: boolean;
+  is_system: boolean;
+};
+
 export type TTimeSheet = {
   id: string;
   member: string;
@@ -22,6 +32,8 @@ export type TTimeSheet = {
   hours: string;
   description: string;
   project: string;
+  category: string;
+  category_detail: TTimesheetCategoryDetail | null;
   issue: string | null;
   issue_detail: {
     id: string;
@@ -48,6 +60,8 @@ export type TTimesheetListParams = {
   date__lte?: string;
   issue_id?: string;
   test_case_id?: string;
+  category_id?: string;
+  category_key?: string;
 };
 
 export type TTimeSheetCreatePayload = {
@@ -58,6 +72,8 @@ export type TTimeSheetCreatePayload = {
   description?: string;
   issue?: string;
   test_case?: string;
+  /** 工时类别 id。若不传，后端会根据 issue/test_case 回落推断，兼容旧客户端。 */
+  category?: string;
 };
 
 export type TCopyPreviousWeekPayload = {
@@ -81,6 +97,8 @@ type TDuplicateTimesheetCheck = {
   endTime: string;
   issueId?: string;
   testCaseId?: string;
+  /** 精确到类别维度判重；不传时回落到旧逻辑（按 issue/test_case 推断）。 */
+  categoryId?: string;
 };
 
 const normalizeClockValue = (value: string) => value.slice(0, 5);
@@ -93,10 +111,12 @@ export const hasDuplicateTimesheetEntry = ({
   endTime,
   issueId,
   testCaseId,
+  categoryId,
 }: TDuplicateTimesheetCheck): boolean => {
   if (!memberId) return false;
 
   return timesheets.some((timesheet) => {
+    const sameCategory = categoryId ? timesheet.category === categoryId : true;
     const sameTask = issueId
       ? timesheet.issue === issueId
       : testCaseId
@@ -108,6 +128,7 @@ export const hasDuplicateTimesheetEntry = ({
       timesheet.date === date &&
       normalizeClockValue(timesheet.start_time) === normalizeClockValue(startTime) &&
       normalizeClockValue(timesheet.end_time) === normalizeClockValue(endTime) &&
+      sameCategory &&
       sameTask
     );
   });
@@ -171,6 +192,8 @@ export class TimesheetService extends APIService {
     if (params.date__lte) queryParams["date__lte"] = params.date__lte;
     if (params.issue_id) queryParams["issue_id"] = params.issue_id;
     if (params.test_case_id) queryParams["test_case_id"] = params.test_case_id;
+    if (params.category_id) queryParams["category_id"] = params.category_id;
+    if (params.category_key) queryParams["category__key"] = params.category_key;
     return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/timesheets/`, {
       params: queryParams,
     })
@@ -185,6 +208,8 @@ export class TimesheetService extends APIService {
     if (params.member_id) queryParams["member_id"] = params.member_id;
     if (params.date__gte) queryParams["date__gte"] = params.date__gte;
     if (params.date__lte) queryParams["date__lte"] = params.date__lte;
+    if (params.category_id) queryParams["category_id"] = params.category_id;
+    if (params.category_key) queryParams["category__key"] = params.category_key;
     return this.get(`/api/workspaces/${workspaceSlug}/timesheets/`, { params: queryParams })
       .then((response) => response?.data)
       .catch((error) => {

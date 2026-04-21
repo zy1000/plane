@@ -10,8 +10,10 @@ import { Listbox, Transition } from "@headlessui/react";
 import { Check, ChevronDown, Clock, Trash2, FileText } from "lucide-react";
 import { Avatar } from "@plane/ui";
 import { cn, getFileURL } from "@plane/utils";
+import { TIMESHEET_CATEGORY_KEY } from "@/constants/timesheet-category";
 import { useUser } from "@/hooks/store/user";
 import { useMember } from "@/hooks/store/use-member";
+import { useTimesheetCategories } from "@/hooks/store/use-timesheet-categories";
 import {
   getTimesheetErrorMessage,
   hasDuplicateTimesheetEntry,
@@ -178,6 +180,15 @@ export const TimesheetPanel = observer(function TimesheetPanel(props: TTimesheet
 
   const { data: currentUser } = useUser();
   const { getUserDetails } = useMember();
+  const { getCategoryByKey } = useTimesheetCategories();
+
+  // 测试用例面板固定走 TEST_CASE 类别；
+  // 工作项（issue）面板不再硬编码 ISSUE 类别 —— 通用 ISSUE 已在工时类别拆分后停用，
+  // 真实类别（REQUIREMENT / TASK / BUG）需要后端根据 issue.type.name 推断，
+  // 所以这里保留 test_case 的显式绑定，工作项场景下 category 为 undefined，
+  // 由 TimeSheetSerializer 的 fallback 路由到对应子类别。
+  const boundCategoryKey = testCaseId ? TIMESHEET_CATEGORY_KEY.TEST_CASE : undefined;
+  const boundCategory = getCategoryByKey(boundCategoryKey);
 
   const [timeInput, setTimeInput] = useState("");
   const [description, setDescription] = useState("");
@@ -260,6 +271,7 @@ export const TimesheetPanel = observer(function TimesheetPanel(props: TTimesheet
         endTime,
         issueId,
         testCaseId,
+        categoryId: boundCategory?.id,
       })
     ) {
       setTimeError("同一成员在同一项目/任务的同一时间段已存在工时记录，请勿重复登记。");
@@ -276,6 +288,7 @@ export const TimesheetPanel = observer(function TimesheetPanel(props: TTimesheet
         description,
         issue: issueId,
         test_case: testCaseId,
+        category: boundCategory?.id,
       });
       setTimeInput("");
       setDescription("");

@@ -5,17 +5,42 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { TimesheetService, type TTimeSheet, type TTimeSheetCreatePayload } from "@/services/issue/timesheet.service";
+import {
+  CATEGORY_PANEL_KIND,
+  getCategoryPanelKind,
+  TIMESHEET_CATEGORY_KEY,
+  type TTimesheetPanelKind,
+} from "@/constants/timesheet-category";
+import {
+  TimesheetService,
+  type TTimeSheet,
+  type TTimeSheetCreatePayload,
+} from "@/services/issue/timesheet.service";
 
 const timesheetService = new TimesheetService();
 
-export type TTimesheetRowType = "project" | "issue" | "test_case";
+/**
+ * 行类别的面板形态，决定该行在右侧单元格里是纯项目级、工作项级还是测试用例级。
+ *
+ * 历史字段名仍保留为 `project`/`issue`/`test_case`，但语义已经从「唯一类别」
+ * 迁移为「面板类别」：例如「项目工时」和「送样工时」都是 `"project"` 类面板，
+ * 仅通过 `categoryKey`/`categoryId` 区分。
+ */
+export type TTimesheetRowType = TTimesheetPanelKind;
 
 export type TTimesheetRow = {
   id: string;
   type: TTimesheetRowType;
   projectId: string;
   projectName?: string;
+  /** 类别字典 id；由后端返回、前端创建时必须透传。 */
+  categoryId?: string;
+  /** 类别字典 key（PROJECT/ISSUE/TEST_CASE/SAMPLE/...）。 */
+  categoryKey?: string;
+  /** 类别字典展示名，用于在卡片/行名旁展示。 */
+  categoryName?: string;
+  /** 类别字典排序值，用于同一项目内多类别行的稳定排序。 */
+  categorySortOrder?: number;
   issueId?: string;
   issueName?: string;
   issueSequenceId?: number;
@@ -61,7 +86,31 @@ export type TUseTimesheetPageOptions = {
   projectName?: string;
 };
 
-const ROW_TYPE_ORDER: Record<TTimesheetRowType, number> = { project: 0, issue: 1, test_case: 2 };
+/**
+ * 构造任务行的唯一 id。
+ *
+ * - project 面板：`project-${projectId}-${categoryKey}`，允许同一项目下出现多条
+ *   不同类别的纯项目级行（例如同时存在「项目工时」和「送样工时」）。
+ * - issue / test_case 面板：对象 id 已经唯一确定类别，保留旧 id 规则以减少老数据兼容问题。
+ */
+function makeRowId(
+  panel: TTimesheetPanelKind,
+  payload: { projectId: string; categoryKey?: string; issueId?: string; testCaseId?: string }
+): string {
+  if (panel === "issue" && payload.issueId) return `issue-${payload.issueId}`;
+  if (panel === "test_case" && payload.testCaseId) return `test_case-${payload.testCaseId}`;
+  const key = payload.categoryKey || TIMESHEET_CATEGORY_KEY.PROJECT;
+  return `project-${payload.projectId}-${key}`;
+}
+
+function resolvePanelKind(timesheet: TTimeSheet): TTimesheetPanelKind {
+  const key = timesheet.category_detail?.key;
+  if (key && CATEGORY_PANEL_KIND[key]) return CATEGORY_PANEL_KIND[key];
+  // 兼容极早期还没有 category_detail 的响应：按挂靠对象推断
+  if (timesheet.issue) return "issue";
+  if (timesheet.test_case) return "test_case";
+  return "project";
+}
 
 function sortTimesheetRows(rows: TTimesheetRow[]): TTimesheetRow[] {
   const projectOrder = new Map<string, number>();
@@ -74,7 +123,11 @@ function sortTimesheetRows(rows: TTimesheetRow[]): TTimesheetRow[] {
     const pa = projectOrder.get(a.projectId) ?? Number.MAX_SAFE_INTEGER;
     const pb = projectOrder.get(b.projectId) ?? Number.MAX_SAFE_INTEGER;
     if (pa !== pb) return pa - pb;
-    return ROW_TYPE_ORDER[a.type] - ROW_TYPE_ORDER[b.type];
+    const sa = a.categorySortOrder ?? Number.MAX_SAFE_INTEGER;
+    const sb = b.categorySortOrder ?? Number.MAX_SAFE_INTEGER;
+    if (sa !== sb) return sa - sb;
+    // 同一类别内（例如一个项目下多条 issue），按 displayName 稳定排序
+    return a.displayName.localeCompare(b.displayName);
   });
 }
 
@@ -83,9 +136,12 @@ function buildRowsFromTimesheets(sheets: TTimeSheet[], projectName?: string): TT
 
   for (const t of sheets) {
     const projectId = String(t.project);
+    const panel = resolvePanelKind(t);
+    const categoryDetail = t.category_detail;
+    const categoryKey = categoryDetail?.key;
 
-    if (t.issue) {
-      const id = `issue-${t.issue}`;
+    if (panel === "issue" && t.issue) {
+      const id = makeRowId("issue", { projectId, issueId: t.issue });
       if (!rowsById.has(id)) {
         const detail = t.issue_detail;
         rowsById.set(id, {
@@ -93,6 +149,10 @@ function buildRowsFromTimesheets(sheets: TTimeSheet[], projectName?: string): TT
           type: "issue",
           projectId,
           projectName,
+          categoryId: t.category || categoryDetail?.id,
+          categoryKey,
+          categoryName: categoryDetail?.name,
+          categorySortOrder: categoryDetail?.sort_order,
           issueId: t.issue,
           issueName: detail?.name ?? "",
           issueSequenceId: detail?.sequence_id ?? 0,
@@ -101,8 +161,8 @@ function buildRowsFromTimesheets(sheets: TTimeSheet[], projectName?: string): TT
           displayName: detail ? `#${detail.sequence_id} ${detail.name}` : `#${t.issue}`,
         });
       }
-    } else if (t.test_case) {
-      const id = `test_case-${t.test_case}`;
+    } else if (panel === "test_case" && t.test_case) {
+      const id = makeRowId("test_case", { projectId, testCaseId: t.test_case });
       if (!rowsById.has(id)) {
         const detail = t.test_case_detail;
         const name = detail?.name ?? "";
@@ -111,20 +171,29 @@ function buildRowsFromTimesheets(sheets: TTimeSheet[], projectName?: string): TT
           type: "test_case",
           projectId,
           projectName,
+          categoryId: t.category || categoryDetail?.id,
+          categoryKey,
+          categoryName: categoryDetail?.name,
+          categorySortOrder: categoryDetail?.sort_order,
           testCaseId: t.test_case,
           testCaseName: name,
           displayName: name,
         });
       }
     } else {
-      const id = `project-${projectId}`;
+      const id = makeRowId("project", { projectId, categoryKey });
       if (!rowsById.has(id)) {
+        const fallbackLabel = projectName?.trim() ? projectName : "项目工时";
         rowsById.set(id, {
           id,
           type: "project",
           projectId,
           projectName,
-          displayName: projectName?.trim() ? projectName : "项目工时",
+          categoryId: t.category || categoryDetail?.id,
+          categoryKey,
+          categoryName: categoryDetail?.name,
+          categorySortOrder: categoryDetail?.sort_order,
+          displayName: fallbackLabel,
         });
       }
     }
@@ -344,7 +413,11 @@ export const useTimesheetPage = ({ workspaceSlug, memberId, projectId, projectNa
         if (t.date !== dateKey) return false;
         if (row.type === "issue") return t.issue === row.issueId;
         if (row.type === "test_case") return t.test_case === row.testCaseId;
-        return t.project === row.projectId && !t.issue && !t.test_case;
+        // project 面板：同一项目可能有多条不同类别的纯项目级行，必须按 category 区分
+        if (t.project !== row.projectId || t.issue || t.test_case) return false;
+        if (row.categoryId) return t.category === row.categoryId;
+        if (row.categoryKey) return t.category_detail?.key === row.categoryKey;
+        return true;
       });
     },
     [timesheets]

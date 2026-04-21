@@ -43,7 +43,7 @@ import { Avatar, AvatarGroup, CircularProgressIndicator, Loader } from "@plane/u
 import { ReadonlyDate } from "@/components/readonly/date";
 import { ReleaseService } from "@/services/release.service";
 import { WorkspaceService } from "@/services/workspace.service";
-import { cn, getDate, getFileURL, renderFormattedPayloadDate, findTotalDaysInRange } from "@plane/utils";
+import { cn, getDate, getFileURL, renderFormattedDate, renderFormattedPayloadDate, findTotalDaysInRange } from "@plane/utils";
 import { EFileAssetType } from "@plane/types";
 import { useMember } from "@/hooks/store/use-member";
 import { useRelease } from "@/hooks/store/use-release";
@@ -112,6 +112,18 @@ const formatDateLabel = (d: Date | null | undefined) => {
   if (!d) return "-";
   return d.toLocaleDateString("zh-CN", { month: "short", day: "numeric", year: "numeric" });
 };
+
+/** 与项目统计页迭代表格一致：yyyy/MM/dd ~ yyyy/MM/dd */
+function formatReleaseOverviewDateRange(
+  startDate: string | null | undefined,
+  endDate: string | null | undefined
+): string {
+  const start = startDate ? getDate(startDate) : null;
+  const end = endDate ? getDate(endDate) : null;
+  const fullStart = start ? renderFormattedDate(start, "yyyy/MM/dd") : "-";
+  const fullEnd = end ? renderFormattedDate(end, "yyyy/MM/dd") : "-";
+  return `${fullStart} ~ ${fullEnd}`;
+}
 
 const PASS_RATE_KEYS = ["成功", "失败", "阻塞", "无效", "未执行"] as const;
 const PASS_RATE_COLORS: Record<string, string> = {
@@ -939,11 +951,10 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
                       <table className="min-w-full table-fixed">
                         <thead>
                           <tr className="text-left text-xs text-secondary [&>th]:sticky [&>th]:top-0 [&>th]:z-10 [&>th]:bg-surface-1 [&>th]:shadow-[inset_0_-1px_0_var(--border-subtle)]">
-                            <th className="w-1/5 px-2 py-2 text-sm font-medium text-primary">迭代</th>
-                            <th className="w-1/5 px-2 py-2 text-sm font-medium text-primary">状态</th>
-                            <th className="w-1/5 px-2 py-2 text-sm font-medium text-primary">开始时间</th>
-                            <th className="w-1/5 px-2 py-2 text-sm font-medium text-primary">结束时间</th>
-                            <th className="w-1/5 px-2 py-2 text-left text-sm font-medium text-primary">操作</th>
+                            <th className="w-1/4 px-2 py-2 text-sm font-medium text-primary">迭代</th>
+                            <th className="w-1/4 px-2 py-2 text-sm font-medium text-primary">状态</th>
+                            <th className="w-1/4 px-2 py-2 text-sm font-medium tabular-nums text-primary">日期</th>
+                            <th className="w-1/4 pl-10 pr-2 py-2 text-left text-sm font-medium text-primary">操作</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -1011,13 +1022,10 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
                                   );
                                 })()}
                               </td>
-                              <td className="px-2 py-2 text-sm text-primary">
-                                <ReadonlyDate value={c.start_date} formatToken="yyyy-MM-dd" hideIcon={true} />
+                              <td className="whitespace-nowrap px-2 py-2 text-sm tabular-nums text-primary">
+                                {formatReleaseOverviewDateRange(c.start_date, c.end_date)}
                               </td>
-                              <td className="px-2 py-2 text-sm text-primary">
-                                <ReadonlyDate value={c.end_date} formatToken="yyyy-MM-dd" hideIcon={true} />
-                              </td>
-                              <td className="px-2 py-2 text-left">
+                              <td className="pl-10 pr-2 py-2 text-left">
                                 <Button
                                   variant="link-neutral"
                                   className="p-0"
@@ -1047,12 +1055,10 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
                       <table className="min-w-full table-fixed">
                         <thead>
                           <tr className="text-left text-xs text-secondary [&>th]:sticky [&>th]:top-0 [&>th]:z-10 [&>th]:bg-surface-1 [&>th]:shadow-[inset_0_-1px_0_var(--border-subtle)]">
-                            <th className="w-1/6 px-2 py-2 text-sm font-medium text-primary">测试计划</th>
-                            <th className="w-1/6 px-2 py-2 text-sm font-medium text-primary">状态</th>
-                            <th className="w-1/6 px-2 py-2 text-sm font-medium text-primary">通过率</th>
-                            <th className="w-1/6 px-2 py-2 text-sm font-medium text-primary">开始时间</th>
-                            <th className="w-1/6 px-2 py-2 text-sm font-medium text-primary">结束时间</th>
-                            <th className="w-1/6 px-2 py-2 text-left text-sm font-medium text-primary">操作</th>
+                            <th className="w-1/4 px-2 py-2 text-sm font-medium text-primary">测试计划</th>
+                            <th className="w-1/4 px-2 py-2 text-sm font-medium text-primary">状态</th>
+                            <th className="w-1/4 px-2 py-2 text-sm font-medium tabular-nums text-primary">日期</th>
+                            <th className="w-1/4 pl-10 pr-2 py-2 text-left text-sm font-medium text-primary">操作</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -1078,12 +1084,10 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
                               <td className="px-2 py-2">
                                 <div className="flex items-center">{renderPlanStateTag(p.state)}</div>
                               </td>
-                              <td className="px-2 py-2">
-                                <PlanPassRate passRate={p.pass_rate} />
+                              <td className="whitespace-nowrap px-2 py-2 text-sm tabular-nums text-primary">
+                                {formatReleaseOverviewDateRange(p.begin_time, p.end_time)}
                               </td>
-                              <td className="px-2 py-2 text-sm text-primary">{p.begin_time || "-"}</td>
-                              <td className="px-2 py-2 text-sm text-primary">{p.end_time || "-"}</td>
-                              <td className="px-2 py-2 text-left" onClick={(e) => e.stopPropagation()}>
+                              <td className="pl-10 pr-2 py-2 text-left" onClick={(e) => e.stopPropagation()}>
                                 <Popconfirm
                                   title="确定取消该测试计划的关联吗？"
                                   okText="取消关联"
@@ -1126,7 +1130,7 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
                               <th className="w-1/4 px-2 py-2 text-sm font-medium text-primary">附件</th>
                               <th className="w-1/4 px-2 py-2 text-sm font-medium text-primary">大小</th>
                               <th className="w-1/4 px-2 py-2 text-sm font-medium text-primary">上传时间</th>
-                              <th className="w-1/4 pl-3 pr-2 py-2 text-left text-sm font-medium text-primary">操作</th>
+                              <th className="w-1/4 pl-10 pr-2 py-2 text-left text-sm font-medium text-primary">操作</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -1142,7 +1146,7 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
                                 <td className="px-2 py-2 text-sm text-primary">
                                   <ReadonlyDate value={file.created_at} formatToken="yyyy-MM-dd" hideIcon={true} />
                                 </td>
-                                <td className="pl-3 pr-2 py-2">
+                                <td className="pl-10 pr-2 py-2">
                                   <div className="flex items-center justify-start gap-2">
                                     <Button
                                       variant="link-neutral"
@@ -1242,12 +1246,11 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
                   <table className="min-w-full table-fixed">
                     <thead>
                       <tr className="text-left text-xs text-secondary [&>th]:sticky [&>th]:top-0 [&>th]:z-10 [&>th]:bg-surface-1 [&>th]:shadow-[inset_0_-1px_0_var(--border-subtle)]">
-                        <th className="w-1/6 px-2 py-2 text-sm font-medium text-primary">测试计划</th>
-                        <th className="w-1/6 px-2 py-2 text-sm font-medium text-primary">状态</th>
-                        <th className="w-1/6 px-2 py-2 text-sm font-medium text-primary">通过率</th>
-                        <th className="w-1/6 px-2 py-2 text-sm font-medium text-primary">开始时间</th>
-                        <th className="w-1/6 px-2 py-2 text-sm font-medium text-primary">结束时间</th>
-                        <th className="w-1/6 px-2 py-2 text-left text-sm font-medium text-primary">操作</th>
+                        <th className="w-1/5 px-2 py-2 text-sm font-medium text-primary">测试计划</th>
+                        <th className="w-1/5 px-2 py-2 text-sm font-medium text-primary">状态</th>
+                        <th className="w-1/5 px-2 py-2 text-sm font-medium text-primary">通过率</th>
+                        <th className="w-1/5 px-2 py-2 text-sm font-medium tabular-nums text-primary">日期</th>
+                        <th className="w-1/5 pl-10 pr-2 py-2 text-left text-sm font-medium text-primary">操作</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1276,9 +1279,10 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
                           <td className="px-2 py-2">
                             <PlanPassRate passRate={p.pass_rate} />
                           </td>
-                          <td className="px-2 py-2 text-sm text-primary">{p.begin_time || "-"}</td>
-                          <td className="px-2 py-2 text-sm text-primary">{p.end_time || "-"}</td>
-                          <td className="px-2 py-2 text-left" onClick={(e) => e.stopPropagation()}>
+                          <td className="whitespace-nowrap px-2 py-2 text-sm tabular-nums text-primary">
+                            {formatReleaseOverviewDateRange(p.begin_time, p.end_time)}
+                          </td>
+                          <td className="pl-10 pr-2 py-2 text-left" onClick={(e) => e.stopPropagation()}>
                             <Popconfirm
                               title="确定取消该测试计划的关联吗？"
                               okText="取消关联"
@@ -1326,11 +1330,10 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
                   <table className="min-w-full table-fixed">
                     <thead>
                       <tr className="text-left text-xs text-secondary [&>th]:sticky [&>th]:top-0 [&>th]:z-10 [&>th]:bg-surface-1 [&>th]:shadow-[inset_0_-1px_0_var(--border-subtle)]">
-                        <th className="w-1/5 px-2 py-2 text-sm font-medium text-primary">迭代</th>
-                        <th className="w-1/5 px-2 py-2 text-sm font-medium text-primary">状态</th>
-                        <th className="w-1/5 px-2 py-2 text-sm font-medium text-primary">开始时间</th>
-                        <th className="w-1/5 px-2 py-2 text-sm font-medium text-primary">结束时间</th>
-                        <th className="w-1/5 px-2 py-2 text-left text-sm font-medium text-primary">操作</th>
+                        <th className="w-1/4 px-2 py-2 text-sm font-medium text-primary">迭代</th>
+                        <th className="w-1/4 px-2 py-2 text-sm font-medium text-primary">状态</th>
+                        <th className="w-1/4 px-2 py-2 text-sm font-medium tabular-nums text-primary">日期</th>
+                        <th className="w-1/4 pl-10 pr-2 py-2 text-left text-sm font-medium text-primary">操作</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1393,13 +1396,10 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
                               );
                             })()}
                           </td>
-                          <td className="px-2 py-2 text-sm text-primary">
-                            <ReadonlyDate value={c.start_date} formatToken="yyyy-MM-dd" hideIcon={true} />
+                          <td className="whitespace-nowrap px-2 py-2 text-sm tabular-nums text-primary">
+                            {formatReleaseOverviewDateRange(c.start_date, c.end_date)}
                           </td>
-                          <td className="px-2 py-2 text-sm text-primary">
-                            <ReadonlyDate value={c.end_date} formatToken="yyyy-MM-dd" hideIcon={true} />
-                          </td>
-                          <td className="px-2 py-2 text-left">
+                          <td className="pl-10 pr-2 py-2 text-left">
                             <Button
                               variant="link-neutral"
                               className="p-0"
@@ -1442,7 +1442,7 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
                             <th className="w-1/4 px-2 py-2 text-sm font-medium text-primary">附件</th>
                             <th className="w-1/4 px-2 py-2 text-sm font-medium text-primary">大小</th>
                             <th className="w-1/4 px-2 py-2 text-sm font-medium text-primary">上传时间</th>
-                            <th className="w-1/4 pl-3 pr-2 py-2 text-left text-sm font-medium text-primary">操作</th>
+                            <th className="w-1/4 pl-10 pr-2 py-2 text-left text-sm font-medium text-primary">操作</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -1458,7 +1458,7 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
                               <td className="px-2 py-2 text-sm text-primary">
                                 <ReadonlyDate value={file.created_at} formatToken="yyyy-MM-dd" hideIcon={true} />
                               </td>
-                              <td className="pl-3 pr-2 py-2">
+                              <td className="pl-10 pr-2 py-2">
                                 <div className="flex items-center justify-start gap-2">
                                   <Button
                                     variant="link-neutral"
@@ -1612,14 +1612,13 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
                               <tr className="text-left text-xs text-secondary border-b border-subtle">
                                 <th className="w-10 px-2 py-2"></th>
                                 <th className="w-2/5 px-2 py-2 text-sm font-medium text-primary">名称</th>
-                                <th className="w-1/5 px-2 py-2 text-sm font-medium text-primary">开始时间</th>
-                                <th className="w-1/5 px-2 py-2 text-sm font-medium text-primary">结束时间</th>
+                                <th className="w-2/5 px-2 py-2 text-sm font-medium tabular-nums text-primary">日期</th>
                               </tr>
                             </thead>
                             <tbody>
                               {selectData.length === 0 && (
                                 <tr>
-                                  <td className="px-2 py-6 text-sm text-secondary" colSpan={4}>
+                                  <td className="px-2 py-6 text-sm text-secondary" colSpan={3}>
                                     暂无可选迭代
                                   </td>
                                 </tr>
@@ -1645,11 +1644,8 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
                                     <td className="px-2 py-2">
                                       <span className="truncate text-sm text-primary">{c.name}</span>
                                     </td>
-                                    <td className="px-2 py-2">
-                                      <ReadonlyDate value={c.start_date} formatToken="yyyy-MM-dd" hideIcon={true} />
-                                    </td>
-                                    <td className="px-2 py-2">
-                                      <ReadonlyDate value={c.end_date} formatToken="yyyy-MM-dd" hideIcon={true} />
+                                    <td className="whitespace-nowrap px-2 py-2 text-sm tabular-nums text-primary">
+                                      {formatReleaseOverviewDateRange(c.start_date, c.end_date)}
                                     </td>
                                   </tr>
                                 );
@@ -1808,14 +1804,13 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
                     </th>
                     <th className="w-2/5 px-2 py-2 text-sm font-medium text-primary">名称</th>
                     <th className="w-1/5 px-2 py-2 text-sm font-medium text-primary">状态</th>
-                    <th className="w-1/5 px-2 py-2 text-sm font-medium text-primary">开始时间</th>
-                    <th className="w-1/5 px-2 py-2 text-sm font-medium text-primary">结束时间</th>
+                    <th className="w-2/5 px-2 py-2 text-sm font-medium tabular-nums text-primary">日期</th>
                   </tr>
                 </thead>
                 <tbody>
                   {selectablePlans.length === 0 ? (
                     <tr>
-                      <td className="px-2 py-6 text-sm text-secondary" colSpan={5}>
+                      <td className="px-2 py-6 text-sm text-secondary" colSpan={4}>
                         暂无可选测试计划
                       </td>
                     </tr>
@@ -1842,8 +1837,9 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
                             {plan.name ?? "-"}
                           </td>
                           <td className="px-2 py-2 text-sm text-primary">{plan.state ?? "-"}</td>
-                          <td className="px-2 py-2 text-sm text-primary">{plan.begin_time || "-"}</td>
-                          <td className="px-2 py-2 text-sm text-primary">{plan.end_time || "-"}</td>
+                          <td className="whitespace-nowrap px-2 py-2 text-sm tabular-nums text-primary">
+                            {formatReleaseOverviewDateRange(plan.begin_time, plan.end_time)}
+                          </td>
                         </tr>
                       );
                     })

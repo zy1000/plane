@@ -1,8 +1,14 @@
 from django.urls import path
 
-from plane.app.views.timesheet import TimeSheetViewSet
+from plane.app.views.timesheet import TimeSheetViewSet, TimesheetCategoryListView
 
 urlpatterns = [
+    # 工时类别字典（全局只读，前端渲染类别菜单）
+    path(
+        "timesheet-categories/",
+        TimesheetCategoryListView.as_view(),
+        name="timesheet-categories",
+    ),
     # 项目级工时接口
     path(
         "workspaces/<str:slug>/projects/<uuid:project_id>/timesheets/",

@@ -96,18 +96,15 @@ function normalizeCycleStatusValue(status?: string): string {
   return status ? (CYCLE_STATUS_NORMALIZE_MAP[status] ?? status.toLowerCase()) : "not_started";
 }
 
-/** 表格内日期列：同年只写一次年份（起始完整 yyyy-MM-dd，结束仅 MM-dd） */
+/** 表格内日期列：yyyy/MM/dd ~ yyyy/MM/dd */
 function formatStatisticTableDateRange(
   startDate: string | null | undefined,
   endDate: string | null | undefined
 ): string {
   const start = startDate ? getDate(startDate) : null;
   const end = endDate ? getDate(endDate) : null;
-  const fullStart = start ? renderFormattedDate(start, "yyyy-MM-dd") : "-";
-  const fullEnd = end ? renderFormattedDate(end, "yyyy-MM-dd") : "-";
-  if (start && end && start.getFullYear() === end.getFullYear()) {
-    return `${fullStart} ~ ${renderFormattedDate(end, "MM-dd")}`;
-  }
+  const fullStart = start ? renderFormattedDate(start, "yyyy/MM/dd") : "-";
+  const fullEnd = end ? renderFormattedDate(end, "yyyy/MM/dd") : "-";
   return `${fullStart} ~ ${fullEnd}`;
 }
 
@@ -367,24 +364,8 @@ function ProjectStatisticsPage() {
             </div>
           </div>
 
-          {/* 延期工作项负责人（左）+ Progress Lists Tab（右） */}
-          <div className="grid grid-cols-1 gap-4 xl:grid-cols-4">
-            <div className="xl:col-span-1">
-              <OverdueByAssigneeCard
-                data={displayData?.overdue_by_assignee}
-                headerExtra={
-                  <button
-                    type="button"
-                    className="grid h-6 w-6 shrink-0 place-items-center rounded transition-colors hover:bg-surface-2"
-                    onClick={() => setOverdueExpandOpen(true)}
-                    aria-label="放大"
-                  >
-                    <Maximize2 className="h-3.5 w-3.5 text-placeholder" />
-                  </button>
-                }
-              />
-            </div>
-            <div className={`${sectionCard} flex h-[420px] flex-col xl:col-span-3`}>
+          {/* Progress Lists Tab（独占整行） */}
+          <div className={`${sectionCard} flex h-[420px] flex-col`}>
               <Tab.Group
                 selectedIndex={activeListTabIndex}
                 onChange={(index) => setActiveListTabIndex(index)}
@@ -459,26 +440,25 @@ function ProjectStatisticsPage() {
                   {/* 迭代 */}
                   <Tab.Panel className="flex min-h-0 flex-1 flex-col">
                     <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-3 vertical-scrollbar scrollbar-sm">
-                      <Table wrapperClassName="overflow-visible">
+                      <Table className="table-fixed" wrapperClassName="overflow-visible">
                         <TableHeader className="border-y-0 bg-transparent [&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-surface-1 [&_th]:shadow-[inset_0_-1px_0_var(--border-subtle)]">
                           <TableRow>
-                            <TableHead className="h-8 w-[28%] text-left text-xs font-medium text-primary">迭代</TableHead>
-                            <TableHead className="h-8 w-[24%] text-left text-xs font-medium text-primary">日期</TableHead>
-                            <TableHead className="h-8 w-[14%] text-left text-xs font-medium text-primary">状态</TableHead>
-                            <TableHead className="h-8 w-[14%] text-left text-xs font-medium text-primary">工作项</TableHead>
-                            <TableHead className="h-8 w-[20%] pl-6 text-left text-xs font-medium text-primary">负责人</TableHead>
+                            <TableHead className="h-8 w-[22%] text-left text-xs font-medium text-primary">迭代</TableHead>
+                            <TableHead className="h-8 w-[38%] text-left text-xs font-medium tabular-nums text-primary">日期</TableHead>
+                            <TableHead className="h-8 w-[12%] text-left text-xs font-medium text-primary">状态</TableHead>
+                            <TableHead className="h-8 w-[28%] pl-20 text-left text-xs font-medium text-primary">负责人</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
                           {!displayData ? (
                             <TableRow>
-                              <TableCell colSpan={5}>
+                              <TableCell colSpan={4}>
                                 <div className="grid h-14 place-items-center text-sm text-placeholder">加载中...</div>
                               </TableCell>
                             </TableRow>
                           ) : (displayData?.cycles?.data?.length ?? 0) === 0 ? (
                             <TableRow>
-                              <TableCell colSpan={5}>
+                              <TableCell colSpan={4}>
                                 <div className="grid h-14 place-items-center text-sm text-placeholder">暂无进行中的迭代</div>
                               </TableCell>
                             </TableRow>
@@ -486,7 +466,7 @@ function ProjectStatisticsPage() {
                             (displayData?.cycles?.data ?? []).map((cycle) => (
                               <TableRow key={cycle.id} className="transition-colors hover:bg-layer-1">
                                 <TableCell
-                                  className="max-w-[200px] truncate text-sm text-primary"
+                                  className="min-w-0 truncate text-sm text-primary"
                                   title={cycle.name}
                                 >
                                   <button
@@ -497,7 +477,7 @@ function ProjectStatisticsPage() {
                                     {cycle.name}
                                   </button>
                                 </TableCell>
-                                <TableCell className="text-sm text-primary">
+                                <TableCell className="whitespace-nowrap tabular-nums text-sm text-primary">
                                   {formatStatisticTableDateRange(cycle.start_date, cycle.end_date)}
                                 </TableCell>
                                 <TableCell className="pl-0 -ml-1 text-left">
@@ -512,10 +492,7 @@ function ProjectStatisticsPage() {
                                     );
                                   })()}
                                 </TableCell>
-                                <TableCell className="text-sm text-primary">
-                                  {cycle.work_item_count ?? 0}
-                                </TableCell>
-                                <TableCell className="max-w-[120px] truncate pl-6 text-sm text-primary" title={cycle.owner?.display_name ?? "-"}>
+                                <TableCell className="min-w-0 truncate pl-20 text-sm text-primary" title={cycle.owner?.display_name ?? "-"}>
                                   {cycle.owner?.display_name ?? "-"}
                                 </TableCell>
                               </TableRow>
@@ -529,26 +506,25 @@ function ProjectStatisticsPage() {
                   {/* 发布 */}
                   <Tab.Panel className="flex min-h-0 flex-1 flex-col">
                     <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-3 vertical-scrollbar scrollbar-sm">
-                      <Table wrapperClassName="overflow-visible">
+                      <Table className="table-fixed" wrapperClassName="overflow-visible">
                         <TableHeader className="border-y-0 bg-transparent [&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-surface-1 [&_th]:shadow-[inset_0_-1px_0_var(--border-subtle)]">
                           <TableRow>
-                            <TableHead className="h-8 w-[28%] text-left text-xs font-medium text-primary">发布</TableHead>
-                            <TableHead className="h-8 w-[24%] text-left text-xs font-medium text-primary">日期</TableHead>
-                            <TableHead className="h-8 w-[14%] text-left text-xs font-medium text-primary">状态</TableHead>
-                            <TableHead className="h-8 w-[14%] text-left text-xs font-medium text-primary">工作项</TableHead>
-                            <TableHead className="h-8 w-[20%] pl-6 text-left text-xs font-medium text-primary">负责人</TableHead>
+                            <TableHead className="h-8 w-[22%] text-left text-xs font-medium text-primary">发布</TableHead>
+                            <TableHead className="h-8 w-[38%] text-left text-xs font-medium tabular-nums text-primary">日期</TableHead>
+                            <TableHead className="h-8 w-[12%] text-left text-xs font-medium text-primary">状态</TableHead>
+                            <TableHead className="h-8 w-[28%] pl-20 text-left text-xs font-medium text-primary">负责人</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
                           {!displayData ? (
                             <TableRow>
-                              <TableCell colSpan={5}>
+                              <TableCell colSpan={4}>
                                 <div className="grid h-14 place-items-center text-sm text-placeholder">加载中...</div>
                               </TableCell>
                             </TableRow>
                           ) : (displayData?.releases?.data?.length ?? 0) === 0 ? (
                             <TableRow>
-                              <TableCell colSpan={5}>
+                              <TableCell colSpan={4}>
                                 <div className="grid h-14 place-items-center text-sm text-placeholder">
                                   暂无进行中的发布
                                 </div>
@@ -557,7 +533,7 @@ function ProjectStatisticsPage() {
                           ) : (
                             (displayData?.releases?.data ?? []).map((release) => (
                               <TableRow key={release.id} className="transition-colors hover:bg-layer-1">
-                                <TableCell className="max-w-[200px] truncate text-sm text-primary" title={release.name}>
+                                <TableCell className="min-w-0 truncate text-sm text-primary" title={release.name}>
                                   <button
                                     type="button"
                                     className="truncate hover:underline text-left"
@@ -566,7 +542,7 @@ function ProjectStatisticsPage() {
                                     {release.name}
                                   </button>
                                 </TableCell>
-                                <TableCell className="text-sm text-primary">
+                                <TableCell className="whitespace-nowrap tabular-nums text-sm text-primary">
                                   {formatStatisticTableDateRange(release.start_date, release.end_date)}
                                 </TableCell>
                                 <TableCell className="pl-0 -ml-1 text-left">
@@ -581,8 +557,7 @@ function ProjectStatisticsPage() {
                                     );
                                   })()}
                                 </TableCell>
-                                <TableCell className="text-sm">{release.work_item_count ?? 0}</TableCell>
-                                <TableCell className="max-w-[120px] truncate pl-6 text-sm text-primary" title={release.owner?.display_name ?? "-"}>
+                                <TableCell className="min-w-0 truncate pl-20 text-sm text-primary" title={release.owner?.display_name ?? "-"}>
                                   {release.owner?.display_name ?? "-"}
                                 </TableCell>
                               </TableRow>
@@ -596,26 +571,25 @@ function ProjectStatisticsPage() {
                   {/* 测试计划 */}
                   <Tab.Panel className="flex min-h-0 flex-1 flex-col">
                     <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-3 vertical-scrollbar scrollbar-sm">
-                      <Table wrapperClassName="overflow-visible">
+                      <Table className="table-fixed" wrapperClassName="overflow-visible">
                         <TableHeader className="border-y-0 bg-transparent [&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-surface-1 [&_th]:shadow-[inset_0_-1px_0_var(--border-subtle)]">
                           <TableRow>
-                            <TableHead className="h-8 w-[28%] text-left text-xs font-medium text-primary">测试计划</TableHead>
-                            <TableHead className="h-8 w-[24%] text-left text-xs font-medium text-primary">日期</TableHead>
-                            <TableHead className="h-8 w-[14%] text-left text-xs font-medium text-primary">状态</TableHead>
-                            <TableHead className="h-8 w-[14%] text-left text-xs font-medium text-primary">用例</TableHead>
-                            <TableHead className="h-8 w-[20%] pl-6 text-left text-xs font-medium text-primary">负责人</TableHead>
+                            <TableHead className="h-8 w-[22%] text-left text-xs font-medium text-primary">测试计划</TableHead>
+                            <TableHead className="h-8 w-[38%] text-left text-xs font-medium tabular-nums text-primary">日期</TableHead>
+                            <TableHead className="h-8 w-[12%] text-left text-xs font-medium text-primary">状态</TableHead>
+                            <TableHead className="h-8 w-[28%] pl-20 text-left text-xs font-medium text-primary">负责人</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
                           {!displayData ? (
                             <TableRow>
-                              <TableCell colSpan={5}>
+                              <TableCell colSpan={4}>
                                 <div className="grid h-14 place-items-center text-sm text-placeholder">加载中...</div>
                               </TableCell>
                             </TableRow>
                           ) : (displayData?.test_plans?.data?.length ?? 0) === 0 ? (
                             <TableRow>
-                              <TableCell colSpan={5}>
+                              <TableCell colSpan={4}>
                                 <div className="grid h-14 place-items-center text-sm text-placeholder">
                                   暂无进行中的测试计划
                                 </div>
@@ -624,7 +598,7 @@ function ProjectStatisticsPage() {
                           ) : (
                             (displayData?.test_plans?.data ?? []).map((plan) => (
                               <TableRow key={plan.id} className="transition-colors hover:bg-layer-1">
-                                <TableCell className="max-w-[200px] truncate text-sm text-primary" title={plan.name}>
+                                <TableCell className="min-w-0 truncate text-sm text-primary" title={plan.name}>
                                   <button
                                     type="button"
                                     className="truncate hover:underline text-left"
@@ -633,7 +607,7 @@ function ProjectStatisticsPage() {
                                     {plan.name}
                                   </button>
                                 </TableCell>
-                                <TableCell className="text-sm text-primary">
+                                <TableCell className="whitespace-nowrap tabular-nums text-sm text-primary">
                                   {formatStatisticTableDateRange(plan.start_date, plan.end_date)}
                                 </TableCell>
                                 <TableCell className="pl-0 -ml-1 text-left">
@@ -648,8 +622,7 @@ function ProjectStatisticsPage() {
                                     );
                                   })()}
                                 </TableCell>
-                                <TableCell className="text-sm">{plan.case_count ?? 0}</TableCell>
-                                <TableCell className="max-w-[120px] truncate pl-6 text-sm text-primary" title={plan.owner?.display_name ?? "-"}>
+                                <TableCell className="min-w-0 truncate pl-20 text-sm text-primary" title={plan.owner?.display_name ?? "-"}>
                                   {plan.owner?.display_name ?? "-"}
                                 </TableCell>
                               </TableRow>
@@ -663,26 +636,25 @@ function ProjectStatisticsPage() {
                   {/* 评审 */}
                   <Tab.Panel className="flex min-h-0 flex-1 flex-col">
                     <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-3 vertical-scrollbar scrollbar-sm">
-                      <Table wrapperClassName="overflow-visible">
+                      <Table className="table-fixed" wrapperClassName="overflow-visible">
                         <TableHeader className="border-y-0 bg-transparent [&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-surface-1 [&_th]:shadow-[inset_0_-1px_0_var(--border-subtle)]">
                           <TableRow>
-                            <TableHead className="h-8 w-[28%] text-left text-xs font-medium text-primary">评审</TableHead>
-                            <TableHead className="h-8 w-[24%] text-left text-xs font-medium text-primary">日期</TableHead>
-                            <TableHead className="h-8 w-[14%] text-left text-xs font-medium text-primary">状态</TableHead>
-                            <TableHead className="h-8 w-[14%] text-left text-xs font-medium text-primary">类型</TableHead>
-                            <TableHead className="h-8 w-[20%] pl-6 text-left text-xs font-medium text-primary">负责人</TableHead>
+                            <TableHead className="h-8 w-[22%] text-left text-xs font-medium text-primary">评审</TableHead>
+                            <TableHead className="h-8 w-[38%] text-left text-xs font-medium tabular-nums text-primary">日期</TableHead>
+                            <TableHead className="h-8 w-[12%] text-left text-xs font-medium text-primary">状态</TableHead>
+                            <TableHead className="h-8 w-[28%] pl-20 text-left text-xs font-medium text-primary">负责人</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
                           {!displayData ? (
                             <TableRow>
-                              <TableCell colSpan={5}>
+                              <TableCell colSpan={4}>
                                 <div className="grid h-14 place-items-center text-sm text-placeholder">加载中...</div>
                               </TableCell>
                             </TableRow>
                           ) : (displayData?.case_reviews?.data?.length ?? 0) === 0 ? (
                             <TableRow>
-                              <TableCell colSpan={5}>
+                              <TableCell colSpan={4}>
                                 <div className="grid h-14 place-items-center text-sm text-placeholder">
                                   暂无进行中的用例评审
                                 </div>
@@ -691,7 +663,7 @@ function ProjectStatisticsPage() {
                           ) : (
                             (displayData?.case_reviews?.data ?? []).map((review) => (
                               <TableRow key={review.id} className="transition-colors hover:bg-layer-1">
-                                <TableCell className="max-w-[200px] truncate text-sm text-primary" title={review.name}>
+                                <TableCell className="min-w-0 truncate text-sm text-primary" title={review.name}>
                                   <button
                                     type="button"
                                     className="truncate hover:underline text-left"
@@ -700,7 +672,7 @@ function ProjectStatisticsPage() {
                                     {review.name}
                                   </button>
                                 </TableCell>
-                                <TableCell className="text-sm text-primary">
+                                <TableCell className="whitespace-nowrap tabular-nums text-sm text-primary">
                                   {formatStatisticTableDateRange(review.start_date, review.end_date)}
                                 </TableCell>
                                 <TableCell className="pl-0 -ml-1 text-left">
@@ -715,8 +687,7 @@ function ProjectStatisticsPage() {
                                     );
                                   })()}
                                 </TableCell>
-                                <TableCell className="text-sm">用例评审</TableCell>
-                                <TableCell className="max-w-[120px] truncate pl-6 text-sm text-primary" title={review.owner?.display_name ?? "-"}>
+                                <TableCell className="min-w-0 truncate pl-20 text-sm text-primary" title={review.owner?.display_name ?? "-"}>
                                   {review.owner?.display_name ?? "-"}
                                 </TableCell>
                               </TableRow>
@@ -728,7 +699,23 @@ function ProjectStatisticsPage() {
                   </Tab.Panel>
                 </Tab.Panels>
               </Tab.Group>
-            </div>
+          </div>
+
+          {/* 延期工作项负责人（独占整行） */}
+          <div>
+            <OverdueByAssigneeCard
+              data={displayData?.overdue_by_assignee}
+              headerExtra={
+                <button
+                  type="button"
+                  className="grid h-6 w-6 shrink-0 place-items-center rounded transition-colors hover:bg-surface-2"
+                  onClick={() => setOverdueExpandOpen(true)}
+                  aria-label="放大"
+                >
+                  <Maximize2 className="h-3.5 w-3.5 text-placeholder" />
+                </button>
+              }
+            />
           </div>
 
           {/* Work Item Stats（独占整行） */}

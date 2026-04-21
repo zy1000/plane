@@ -4,18 +4,39 @@ from decimal import Decimal
 import pytest
 from rest_framework import status
 
-from plane.db.models import Project, TimeSheet
+from plane.db.models import Project, TimeSheet, TimesheetCategory
+
+
+def _ensure_categories_seeded():
+    seeds = [
+        ("PROJECT", "项目工时", 10),
+        ("ISSUE", "工作项工时", 20),
+        ("TEST_CASE", "测试工时", 30),
+        ("SAMPLE", "送样工时", 40),
+    ]
+    for key, name, sort_order in seeds:
+        TimesheetCategory.objects.update_or_create(
+            key=key,
+            defaults={
+                "name": name,
+                "sort_order": sort_order,
+                "is_active": True,
+                "is_system": True,
+            },
+        )
 
 
 @pytest.mark.unit
 class TestTimeSheetCopyPreviousWeekView:
     @pytest.mark.django_db
     def test_copies_previous_week_timesheets(self, session_client, workspace, create_user):
+        _ensure_categories_seeded()
         project = Project.objects.create(
             name="Test Project",
             identifier="TST",
             workspace=workspace,
         )
+        sample_cat = TimesheetCategory.objects.get(key="SAMPLE")
 
         TimeSheet.objects.create(
             member=create_user,
@@ -29,11 +50,12 @@ class TestTimeSheetCopyPreviousWeekView:
         TimeSheet.objects.create(
             member=create_user,
             project=project,
+            category=sample_cat,
             date=date(2026, 4, 8),
             start_time=time(13, 0),
             end_time=time(15, 0),
             hours=Decimal("2.00"),
-            description="需求开发",
+            description="送样工时",
         )
 
         response = session_client.post(
@@ -63,11 +85,17 @@ class TestTimeSheetCopyPreviousWeekView:
         ]
         assert [timesheet.description for timesheet in copied_timesheets] == [
             "周计划",
-            "需求开发",
+            "送样工时",
+        ]
+        # category 需要一同复制
+        assert [timesheet.category.key for timesheet in copied_timesheets] == [
+            "PROJECT",
+            "SAMPLE",
         ]
 
     @pytest.mark.django_db
     def test_skips_conflicting_entries_in_target_week(self, session_client, workspace, create_user):
+        _ensure_categories_seeded()
         project = Project.objects.create(
             name="Conflict Project",
             identifier="CFT",

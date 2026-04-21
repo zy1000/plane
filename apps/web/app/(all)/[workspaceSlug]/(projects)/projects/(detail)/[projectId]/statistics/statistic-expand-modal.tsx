@@ -72,11 +72,8 @@ function formatStatisticTableDateRange(
 ): string {
   const start = startDate ? getDate(startDate) : null;
   const end = endDate ? getDate(endDate) : null;
-  const fullStart = start ? renderFormattedDate(start, "yyyy-MM-dd") : "-";
-  const fullEnd = end ? renderFormattedDate(end, "yyyy-MM-dd") : "-";
-  if (start && end && start.getFullYear() === end.getFullYear()) {
-    return `${fullStart} ~ ${renderFormattedDate(end, "MM-dd")}`;
-  }
+  const fullStart = start ? renderFormattedDate(start, "yyyy/MM/dd") : "-";
+  const fullEnd = end ? renderFormattedDate(end, "yyyy/MM/dd") : "-";
   return `${fullStart} ~ ${fullEnd}`;
 }
 
