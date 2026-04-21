@@ -364,8 +364,9 @@ function ProjectStatisticsPage() {
             </div>
           </div>
 
-          {/* Progress Lists Tab（独占整行） */}
-          <div className={`${sectionCard} flex h-[420px] flex-col`}>
+          {/* Progress Lists Tab（左 1/2）+ 延期工作项负责人（右 1/2） */}
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+            <div className={`${sectionCard} flex h-[420px] flex-col`}>
               <Tab.Group
                 selectedIndex={activeListTabIndex}
                 onChange={(index) => setActiveListTabIndex(index)}
@@ -699,23 +700,22 @@ function ProjectStatisticsPage() {
                   </Tab.Panel>
                 </Tab.Panels>
               </Tab.Group>
-          </div>
-
-          {/* 延期工作项负责人（独占整行） */}
-          <div>
-            <OverdueByAssigneeCard
-              data={displayData?.overdue_by_assignee}
-              headerExtra={
-                <button
-                  type="button"
-                  className="grid h-6 w-6 shrink-0 place-items-center rounded transition-colors hover:bg-surface-2"
-                  onClick={() => setOverdueExpandOpen(true)}
-                  aria-label="放大"
-                >
-                  <Maximize2 className="h-3.5 w-3.5 text-placeholder" />
-                </button>
-              }
-            />
+            </div>
+            <div>
+              <OverdueByAssigneeCard
+                data={displayData?.overdue_by_assignee}
+                headerExtra={
+                  <button
+                    type="button"
+                    className="grid h-6 w-6 shrink-0 place-items-center rounded transition-colors hover:bg-surface-2"
+                    onClick={() => setOverdueExpandOpen(true)}
+                    aria-label="放大"
+                  >
+                    <Maximize2 className="h-3.5 w-3.5 text-placeholder" />
+                  </button>
+                }
+              />
+            </div>
           </div>
 
           {/* Work Item Stats（独占整行） */}
