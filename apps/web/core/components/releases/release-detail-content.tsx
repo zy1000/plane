@@ -35,7 +35,7 @@ import {
   isProjectPermissionError,
 } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
-import { CheckIcon, MembersPropertyIcon, WorkItemsIcon } from "@plane/propel/icons";
+import { CheckIcon, MembersPropertyIcon } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Dialog, Transition } from "@headlessui/react";
 import { Modal, Popconfirm, Tooltip } from "antd";
@@ -1137,10 +1137,7 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
                             {releaseFiles.map((file) => (
                               <tr key={file.id} className="border-b border-subtle hover:bg-layer-1">
                                 <td className="truncate px-2 py-2 text-sm text-primary" title={file.name}>
-                                  <div className="flex items-center gap-2">
-                                    <WorkItemsIcon className="h-4 w-4 flex-shrink-0 text-placeholder" />
-                                    <span className="truncate">{file.name}</span>
-                                  </div>
+                                  <span className="truncate">{file.name}</span>
                                 </td>
                                 <td className="px-2 py-2 text-sm text-primary">{formatFileSize(Number(file.size ?? 0))}</td>
                                 <td className="px-2 py-2 text-sm text-primary">
@@ -1449,10 +1446,7 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
                           {releaseFiles.map((file) => (
                             <tr key={file.id} className="border-b border-subtle hover:bg-layer-1">
                               <td className="truncate px-2 py-2 text-sm text-primary" title={file.name}>
-                                <div className="flex items-center gap-2">
-                                  <WorkItemsIcon className="h-4 w-4 flex-shrink-0 text-placeholder" />
-                                  <span className="truncate">{file.name}</span>
-                                </div>
+                                <span className="truncate">{file.name}</span>
                               </td>
                               <td className="px-2 py-2 text-sm text-primary">{formatFileSize(Number(file.size ?? 0))}</td>
                               <td className="px-2 py-2 text-sm text-primary">
