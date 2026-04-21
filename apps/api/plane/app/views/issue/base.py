@@ -266,7 +266,6 @@ class IssueViewSet(BaseViewSet):
         return issues
 
     @method_decorator(gzip_page)
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
     def list(self, request, slug, project_id):
         extra_filters = {}
         if request.GET.get("updated_at__gt", None) is not None:
@@ -405,7 +404,6 @@ class IssueViewSet(BaseViewSet):
                 on_results=lambda issues: issue_on_results(group_by=group_by, issues=issues, sub_group_by=sub_group_by),
             )
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
     def create(self, request, slug, project_id):
         project = Project.objects.get(pk=project_id)
         if 'dynamic_properties' in request.data:
@@ -910,7 +908,6 @@ class IssueViewSet(BaseViewSet):
         if activities_to_create:
             IssueActivity.objects.bulk_create(activities_to_create)
 
-    @allow_permission([ROLE.ADMIN], creator=True, model=Issue)
     def destroy(self, request, slug, project_id, pk=None):
         issue = Issue.objects.select_related("type").get(workspace__slug=slug, project_id=project_id, pk=pk)
 
@@ -980,7 +977,7 @@ class ProjectUserDisplayPropertyEndpoint(BaseAPIView):
 
 
 class BulkDeleteIssuesEndpoint(BaseAPIView):
-    @allow_permission([ROLE.ADMIN])
+
     def delete(self, request, slug, project_id):
         issue_ids = request.data.get("issue_ids", [])
 

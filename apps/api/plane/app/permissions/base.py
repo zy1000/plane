@@ -65,7 +65,7 @@ def _get_user_project_permission_keys(user, workspace_slug: str, project_id: str
     此函数是第二阶段细粒度鉴权的基础，首阶段暂不强制使用。
     """
     project = Project.objects.get(pk=project_id)
-    if user == project.created_by or _is_instance_admin(user):
+    if user == project.project_lead or _is_instance_admin(user) or (not project.project_lead and user == project.created_by):
         return set(PermissionKey.values())
 
     project_member = ProjectMember.objects.filter(

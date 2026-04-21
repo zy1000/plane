@@ -72,8 +72,8 @@ export function ReleaseForm(props: Props) {
       <div className="space-y-5 p-5">
         <div className="flex items-center gap-x-3">
           <h3 className="text-18 font-medium text-secondary">
-            {isUpdate ? t("common.update") : t("common.create")}{" "}
-            {t("project_release.add_release") ?? t("sidebar.releases")}
+            {isUpdate ? t("common.update") : t("common.create")}
+            {t("sidebar.releases")}
           </h3>
         </div>
         <div className="space-y-3">

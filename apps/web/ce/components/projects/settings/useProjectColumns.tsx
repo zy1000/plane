@@ -37,7 +37,7 @@ export const useProjectColumns = (props: TUseProjectColumnsProps) => {
 
   // store hooks
   const { data: currentUser } = useUser();
-  const { allowPermissions, getProjectRoleByWorkspaceSlugAndProjectId } = useUserPermissions();
+  const { allowPermissions, allowProjectPermissionKeys } = useUserPermissions();
   const {
     project: {
       filters: { getFilters, updateFilters },
@@ -51,8 +51,11 @@ export const useProjectColumns = (props: TUseProjectColumnsProps) => {
     workspaceSlug.toString(),
     projectId.toString()
   );
-  const currentProjectRole =
-    getProjectRoleByWorkspaceSlugAndProjectId(workspaceSlug.toString(), projectId.toString()) ?? EUserPermissions.GUEST;
+  const canBindProjectRole = allowProjectPermissionKeys(
+    ["project.member.bind_role"],
+    workspaceSlug.toString(),
+    projectId.toString()
+  );
 
   const displayFilters = getFilters(projectId);
 
@@ -124,7 +127,7 @@ export const useProjectColumns = (props: TUseProjectColumnsProps) => {
       tdRender: (rowData: RowData) => (
         <AccountTypeColumn
           rowData={rowData}
-          currentProjectRole={currentProjectRole}
+          canBindProjectRole={canBindProjectRole}
           projectId={projectId}
           workspaceSlug={workspaceSlug}
           roles={roles}

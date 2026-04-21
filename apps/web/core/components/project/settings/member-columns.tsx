@@ -9,7 +9,7 @@ import Link from "next/link";
 import { CircleMinus } from "lucide-react";
 import { Disclosure } from "@headlessui/react";
 // plane imports
-import { EUserPermissions, MEMBER_TRACKER_ELEMENTS } from "@plane/constants";
+import { MEMBER_TRACKER_ELEMENTS } from "@plane/constants";
 import type { EUserProjectRoles, IProjectRole, IUser, IWorkspaceMember } from "@plane/types";
 import { CustomMenu } from "@plane/ui";
 import { getFileURL } from "@plane/utils";
@@ -33,7 +33,7 @@ type NameProps = {
 
 type AccountTypeProps = {
   rowData: RowData;
-  currentProjectRole: EUserPermissions | undefined;
+  canBindProjectRole: boolean;
   workspaceSlug: string;
   projectId: string;
   roles: IProjectRole[];
@@ -97,11 +97,7 @@ export function NameColumn(props: NameProps) {
 }
 
 export const AccountTypeColumn = observer(function AccountTypeColumn(props: AccountTypeProps) {
-  const { rowData, projectId, workspaceSlug, currentProjectRole, roles, isRolesLoading } = props;
-  const isCurrentUserProjectAdmin = currentProjectRole
-    ? ![EUserPermissions.MEMBER, EUserPermissions.GUEST].includes(Number(currentProjectRole) ?? EUserPermissions.GUEST)
-    : false;
-
+  const { rowData, projectId, workspaceSlug, canBindProjectRole, roles, isRolesLoading } = props;
   return (
     <ProjectRoleMultiSelect
       workspaceSlug={workspaceSlug}
@@ -110,7 +106,7 @@ export const AccountTypeColumn = observer(function AccountTypeColumn(props: Acco
       selectedRoleIds={rowData.custom_role_ids ?? []}
       roles={roles}
       isLoading={isRolesLoading}
-      disabled={!isCurrentUserProjectAdmin}
+      disabled={!canBindProjectRole}
     />
   );
 });

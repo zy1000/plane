@@ -103,8 +103,8 @@ function KpiCard({ icon, label, value, iconColor }: KpiCardProps) {
 }
 
 const OVERVIEW_TABS = [
-  { key: "stat-test-plans", label: "测试计划", Icon: ClipboardList },
   { key: "stat-cycles", label: "关联迭代", Icon: Repeat },
+  { key: "stat-test-plans", label: "测试计划", Icon: ClipboardList },
   { key: "stat-files", label: "附件", Icon: FileText },
 ] as const;
 
@@ -210,7 +210,7 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
   const workspaceService = useMemo(() => new WorkspaceService(), []);
   const { storedValue: currentTab, setValue: setCurrentTab } = useLocalStorage(
     `release-overview-tab-${releaseId}`,
-    "stat-test-plans"
+    "stat-cycles"
   );
 
   const todayStr = renderFormattedPayloadDate(new Date());
@@ -550,12 +550,13 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
 
     setAssociateOpen(false);
     setSelectedCycleIds([]);
+    setCurrentTab("stat-cycles");
     fetchReleaseDetails(workspaceSlug.toString(), projectId.toString(), releaseId);
     fetchCycles();
     fetchReleaseStatistics();
     fetchReleaseFiles();
     fetchPlans();
-  }, [fetchReleaseDetails, isOpen, releaseId, projectId, workspaceSlug]);
+  }, [fetchReleaseDetails, isOpen, releaseId, projectId, setCurrentTab, workspaceSlug]);
 
   const handleNoteEditorUploadFile = async (blockId: string | undefined, file: File) => {
     if (!workspaceSlug || !projectId) throw new Error("Missing context");
@@ -656,7 +657,7 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
 
   const normalizedOverviewTab = OVERVIEW_TABS.some((t) => t.key === currentTab)
     ? (currentTab as string)
-    : "stat-test-plans";
+    : "stat-cycles";
   const overviewTabIndex = OVERVIEW_TABS.findIndex((tab) => tab.key === normalizedOverviewTab);
 
   const overviewTabCounts: Record<(typeof OVERVIEW_TABS)[number]["key"], number> = {
@@ -782,7 +783,7 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
 
         {/* Release log + Activity (moved above chart row) */}
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-          <div className={`${sectionCard} group relative flex h-[280px] flex-col overflow-hidden p-4`}>
+          <div className={`${sectionCard} group relative flex h-[420px] flex-col overflow-hidden p-4`}>
             <div className="flex items-center justify-between">
               <div className="flex min-w-0 items-center gap-2">
                 <ScrollText className="h-4 w-4 shrink-0 text-placeholder" aria-hidden />
@@ -818,7 +819,7 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
             </div>
           </div>
 
-          <div className={`${sectionCard} flex h-[280px] flex-col p-4`}>
+          <div className={`${sectionCard} flex h-[420px] flex-col p-4`}>
             <div className="flex items-center justify-between">
               <div className="flex min-w-0 items-center gap-2">
                 <Activity className="h-4 w-4 shrink-0 text-placeholder" aria-hidden />
@@ -925,81 +926,6 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
                 </div>
               </div>
               <Tab.Panels className="min-h-0 flex-1 py-3 text-secondary">
-                {/* 测试计划 */}
-                <Tab.Panel key="stat-test-plans" className="flex h-full min-h-0 flex-col">
-                  {plansLoading ? (
-                    <div className="flex items-center justify-center py-8 text-sm text-secondary">加载中...</div>
-                  ) : plansError ? (
-                    <p className="text-sm text-danger-primary">{plansError}</p>
-                  ) : plans.length === 0 ? (
-                    <div className="grid h-32 place-items-center text-sm text-placeholder">暂无关联测试计划</div>
-                  ) : (
-                    <div className="min-h-0 max-h-[min(360px,50vh)] flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm">
-                      <table className="min-w-full table-fixed">
-                        <thead>
-                          <tr className="text-left text-xs text-secondary [&>th]:sticky [&>th]:top-0 [&>th]:z-10 [&>th]:bg-surface-1 [&>th]:shadow-[inset_0_-1px_0_var(--border-subtle)]">
-                            <th className="w-1/6 px-2 py-2 text-sm font-medium text-primary">测试计划</th>
-                            <th className="w-1/6 px-2 py-2 text-sm font-medium text-primary">状态</th>
-                            <th className="w-1/6 px-2 py-2 text-sm font-medium text-primary">通过率</th>
-                            <th className="w-1/6 px-2 py-2 text-sm font-medium text-primary">开始时间</th>
-                            <th className="w-1/6 px-2 py-2 text-sm font-medium text-primary">结束时间</th>
-                            <th className="w-1/6 px-2 py-2 text-left text-sm font-medium text-primary">操作</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {plans.map((p) => (
-                            <tr key={p.id} className="border-b border-subtle hover:bg-layer-1">
-                              <td className="truncate px-2 py-2 text-sm text-primary" title={p.name ?? "-"}>
-                                {p.id ? (
-                                  <button
-                                    type="button"
-                                    className="truncate text-left text-sm text-primary hover:underline"
-                                    onClick={() =>
-                                      router.push(
-                                        `/${workspaceSlug}/projects/${projectId}/testhub/plan-cases?planId=${p.id}`
-                                      )
-                                    }
-                                  >
-                                    {p.name ?? "-"}
-                                  </button>
-                                ) : (
-                                  p.name ?? "-"
-                                )}
-                              </td>
-                              <td className="px-2 py-2">
-                                <div className="flex items-center">{renderPlanStateTag(p.state)}</div>
-                              </td>
-                              <td className="px-2 py-2">
-                                <PlanPassRate passRate={p.pass_rate} />
-                              </td>
-                              <td className="px-2 py-2 text-sm text-primary">{p.begin_time || "-"}</td>
-                              <td className="px-2 py-2 text-sm text-primary">{p.end_time || "-"}</td>
-                              <td className="px-2 py-2 text-left" onClick={(e) => e.stopPropagation()}>
-                                <Popconfirm
-                                  title="确定取消该测试计划的关联吗？"
-                                  okText="取消关联"
-                                  cancelText="取消"
-                                  onConfirm={() => void handleCancelPlanAssociation(p.id)}
-                                >
-                                  <Button
-                                    variant="link-neutral"
-                                    className="p-0"
-                                    loading={cancelingPlanId === p.id}
-                                    disabled={cancelingPlanId === p.id}
-                                    aria-label="取消关联"
-                                  >
-                                    <Unlink className="h-3.5 w-3.5" />
-                                  </Button>
-                                </Popconfirm>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </Tab.Panel>
-
                 {/* 关联迭代 */}
                 <Tab.Panel key="stat-cycles" className="flex h-full min-h-0 flex-col">
                   {cyclesLoading ? (
@@ -1007,7 +933,7 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
                   ) : cyclesError ? (
                     <p className="text-sm text-danger-primary">{cyclesError}</p>
                   ) : cycles.length === 0 ? (
-                    <div className="grid h-32 place-items-center text-sm text-placeholder">暂无关联迭代</div>
+                    <div className="grid min-h-0 flex-1 place-items-center text-sm text-placeholder">暂无关联迭代</div>
                   ) : (
                     <div className="min-h-0 flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm">
                       <table className="min-w-full table-fixed">
@@ -1108,6 +1034,81 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
                   )}
                 </Tab.Panel>
 
+                {/* 测试计划 */}
+                <Tab.Panel key="stat-test-plans" className="flex h-full min-h-0 flex-col">
+                  {plansLoading ? (
+                    <div className="flex items-center justify-center py-8 text-sm text-secondary">加载中...</div>
+                  ) : plansError ? (
+                    <p className="text-sm text-danger-primary">{plansError}</p>
+                  ) : plans.length === 0 ? (
+                    <div className="grid min-h-0 flex-1 place-items-center text-sm text-placeholder">暂无关联测试计划</div>
+                  ) : (
+                    <div className="min-h-0 max-h-[min(360px,50vh)] flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm">
+                      <table className="min-w-full table-fixed">
+                        <thead>
+                          <tr className="text-left text-xs text-secondary [&>th]:sticky [&>th]:top-0 [&>th]:z-10 [&>th]:bg-surface-1 [&>th]:shadow-[inset_0_-1px_0_var(--border-subtle)]">
+                            <th className="w-1/6 px-2 py-2 text-sm font-medium text-primary">测试计划</th>
+                            <th className="w-1/6 px-2 py-2 text-sm font-medium text-primary">状态</th>
+                            <th className="w-1/6 px-2 py-2 text-sm font-medium text-primary">通过率</th>
+                            <th className="w-1/6 px-2 py-2 text-sm font-medium text-primary">开始时间</th>
+                            <th className="w-1/6 px-2 py-2 text-sm font-medium text-primary">结束时间</th>
+                            <th className="w-1/6 px-2 py-2 text-left text-sm font-medium text-primary">操作</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {plans.map((p) => (
+                            <tr key={p.id} className="border-b border-subtle hover:bg-layer-1">
+                              <td className="truncate px-2 py-2 text-sm text-primary" title={p.name ?? "-"}>
+                                {p.id ? (
+                                  <button
+                                    type="button"
+                                    className="truncate text-left text-sm text-primary hover:underline"
+                                    onClick={() =>
+                                      router.push(
+                                        `/${workspaceSlug}/projects/${projectId}/testhub/plan-cases?planId=${p.id}`
+                                      )
+                                    }
+                                  >
+                                    {p.name ?? "-"}
+                                  </button>
+                                ) : (
+                                  p.name ?? "-"
+                                )}
+                              </td>
+                              <td className="px-2 py-2">
+                                <div className="flex items-center">{renderPlanStateTag(p.state)}</div>
+                              </td>
+                              <td className="px-2 py-2">
+                                <PlanPassRate passRate={p.pass_rate} />
+                              </td>
+                              <td className="px-2 py-2 text-sm text-primary">{p.begin_time || "-"}</td>
+                              <td className="px-2 py-2 text-sm text-primary">{p.end_time || "-"}</td>
+                              <td className="px-2 py-2 text-left" onClick={(e) => e.stopPropagation()}>
+                                <Popconfirm
+                                  title="确定取消该测试计划的关联吗？"
+                                  okText="取消关联"
+                                  cancelText="取消"
+                                  onConfirm={() => void handleCancelPlanAssociation(p.id)}
+                                >
+                                  <Button
+                                    variant="link-neutral"
+                                    className="p-0"
+                                    loading={cancelingPlanId === p.id}
+                                    disabled={cancelingPlanId === p.id}
+                                    aria-label="取消关联"
+                                  >
+                                    <Unlink className="h-3.5 w-3.5" />
+                                  </Button>
+                                </Popconfirm>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </Tab.Panel>
+
                 {/* 附件 */}
                 <Tab.Panel key="stat-files" className="flex h-full min-h-0 flex-col">
                   {releaseFilesLoading ? (
@@ -1115,7 +1116,7 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
                   ) : releaseFilesError ? (
                     <p className="text-sm text-danger-primary">{releaseFilesError}</p>
                   ) : releaseFiles.length === 0 ? (
-                    <div className="grid h-32 place-items-center text-sm text-placeholder">暂无附件</div>
+                    <div className="grid min-h-0 flex-1 place-items-center text-sm text-placeholder">暂无附件</div>
                   ) : (
                     <div className="min-h-0 flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm">
                       <div className="overflow-x-auto">

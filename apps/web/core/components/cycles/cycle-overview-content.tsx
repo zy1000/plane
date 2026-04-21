@@ -38,7 +38,7 @@ import { Modal, Popconfirm } from "antd";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { CYCLE_STATUS, EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
-import { CheckIcon, MembersPropertyIcon, WorkItemsIcon } from "@plane/propel/icons";
+import { CheckIcon, MembersPropertyIcon } from "@plane/propel/icons";
 import type { ICycle, TCyclePlotType, TProgressSnapshot, TCycleDistribution, TCycleEstimateDistribution } from "@plane/types";
 import { EIssuesStoreType } from "@plane/types";
 import { Loader, Avatar, AvatarGroup, Button, CircularProgressIndicator } from "@plane/ui";
@@ -171,6 +171,11 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
     `cycle-overview-tab-${cycleId}`,
     "stat-test-plans"
   );
+
+  useEffect(() => {
+    if (!cycleId) return;
+    setCurrentTab("stat-test-plans");
+  }, [cycleId, setCurrentTab]);
 
   useCyclesDetails({ workspaceSlug, projectId, cycleId });
 
@@ -751,7 +756,7 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
               <Tab.Panels className="min-h-0 flex-1 py-3 text-secondary">
                 <Tab.Panel key="stat-test-plans" className="flex h-full min-h-0 flex-col">
                   {cyclePlans.length === 0 ? (
-                    <div className="grid h-32 place-items-center text-sm text-placeholder">暂无关联测试计划</div>
+                    <div className="grid min-h-0 flex-1 place-items-center text-sm text-placeholder">暂无关联测试计划</div>
                   ) : (
                     <div className="flex h-full min-h-0 flex-col">
                       <div className="min-h-0 max-h-[min(360px,50vh)] flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm">
@@ -831,7 +836,7 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
                       selectedAssigneeIds={selectedAssigneeIds}
                     />
                   ) : (
-                    <div className="grid h-32 place-items-center text-sm text-placeholder">{t("no_data_yet")}</div>
+                    <div className="grid min-h-0 h-full place-items-center text-sm text-placeholder">{t("no_data_yet")}</div>
                   )}
                 </Tab.Panel>
                 <Tab.Panel key="stat-files" className="flex h-full min-h-0 flex-col">
@@ -840,7 +845,7 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
                   ) : filesError ? (
                     <p className="text-sm text-danger-primary">{filesError}</p>
                   ) : files.length === 0 ? (
-                    <div className="grid h-32 place-items-center text-sm text-placeholder">暂无附件</div>
+                    <div className="grid min-h-0 flex-1 place-items-center text-sm text-placeholder">暂无附件</div>
                   ) : (
                     <div className="flex min-h-0 flex-1 flex-col">
                       <div className="min-h-0 max-h-[min(360px,50vh)] flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm">
@@ -858,10 +863,7 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
                               {files.map((file) => (
                                 <tr key={file.id} className="border-b border-subtle hover:bg-layer-1">
                                   <td className="truncate px-2 py-2 text-sm text-primary" title={file.name}>
-                                    <div className="flex items-center gap-2">
-                                      <WorkItemsIcon className="h-4 w-4 flex-shrink-0 text-placeholder" />
-                                      <span className="truncate">{file.name}</span>
-                                    </div>
+                                    <span className="truncate">{file.name}</span>
                                   </td>
                                   <td className="px-2 py-2 text-sm text-primary">{formatFileSize(file.size)}</td>
                                   <td className="px-2 py-2 text-sm text-primary">
@@ -1070,10 +1072,7 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
                         {files.map((file) => (
                           <tr key={file.id} className="border-b border-subtle hover:bg-layer-1">
                             <td className="truncate px-2 py-2 text-sm text-primary" title={file.name}>
-                              <div className="flex items-center gap-2">
-                                <WorkItemsIcon className="h-4 w-4 flex-shrink-0 text-placeholder" />
-                                <span className="truncate">{file.name}</span>
-                              </div>
+                              <span className="truncate">{file.name}</span>
                             </td>
                             <td className="px-2 py-2 text-sm text-primary">{formatFileSize(file.size)}</td>
                             <td className="px-2 py-2 text-sm text-primary">

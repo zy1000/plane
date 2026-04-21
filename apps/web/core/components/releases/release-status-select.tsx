@@ -31,6 +31,8 @@ export function ReleaseStatusSelect({ control, error, tabIndex }: Props) {
         return (
           <CustomSelect
             value={value}
+            className="h-full"
+            buttonClassName="h-full"
             label={
               <div
                 className={`flex items-center justify-center gap-2 py-0.5 text-11 ${error ? "text-danger-primary" : ""}`}
