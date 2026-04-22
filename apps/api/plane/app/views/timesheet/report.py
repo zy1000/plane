@@ -29,7 +29,14 @@ class TimeSheetReportViewSet(BaseViewSet):
         return (
             super()
             .get_queryset()
-            .select_related("project", "issue", "test_case", "category", "member")
+            .select_related(
+                "project",
+                "issue",
+                "test_case",
+                "category",
+                "member",
+                "member__extra_info",
+            )
             .exclude(project__pms_project_name__isnull=True)
         )
 
@@ -88,6 +95,8 @@ class TimeSheetReportViewSet(BaseViewSet):
             ("工作项", "issue_name"),
             ("测试用例", "case_name"),
             ("成员", "member_name"),
+            ("工号", "employee_id"),
+            ("部门", "department"),
             ("日期", "date"),
             ("开始时间", "start_time"),
             ("结束时间", "end_time"),
@@ -126,6 +135,14 @@ class TimeSheetReportViewSet(BaseViewSet):
                     or getattr(record.member, "email", "")
                     or ""
                 )
+            if key in ("employee_id", "department"):
+                if not record.member_id:
+                    return ""
+                try:
+                    extra_info = record.member.extra_info
+                except Exception:
+                    return ""
+                return getattr(extra_info, key, "") or ""
             if key == "category_name":
                 return record.category.name if record.category_id else ""
             if key == "date":
@@ -144,7 +161,7 @@ class TimeSheetReportViewSet(BaseViewSet):
         for item in queryset.iterator():
             ws.append([format_value(item, key) for _, key in columns])
 
-        widths = [16, 24, 30, 30, 14, 12, 10, 10, 8, 14, 40]
+        widths = [16, 24, 30, 30, 14, 14, 20, 12, 10, 10, 8, 14, 40]
         for idx, width in enumerate(widths, start=1):
             ws.column_dimensions[ws.cell(row=1, column=idx).column_letter].width = width
 
