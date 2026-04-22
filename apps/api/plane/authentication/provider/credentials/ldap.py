@@ -25,11 +25,11 @@ class LdapProvider(CredentialAdapter):
         )
         # Note: We don't raise exception here for check_exists to work safely
         self.is_enabled = ENABLE_LDAP == "1"
-        
+
         if not self.is_enabled and code:
-             # Only raise if trying to authenticate with password
+            # Only raise if trying to authenticate with password
             raise AuthenticationException(
-                error_code=AUTHENTICATION_ERROR_CODES["PASSWORD_LOGIN_DISABLED"], 
+                error_code=AUTHENTICATION_ERROR_CODES["PASSWORD_LOGIN_DISABLED"],
                 error_message="LDAP_AUTHENTICATION_DISABLED",
             )
 
@@ -47,7 +47,7 @@ class LdapProvider(CredentialAdapter):
                 config.bind_dn,
                 decrypt_data(config.bind_password),
                 "0",  # STARTTLS not supported in DB config yet
-                None, # CA Cert not supported in DB config yet
+                None,  # CA Cert not supported in DB config yet
             )
         raise AuthenticationException(
             error_code=AUTHENTICATION_ERROR_CODES["INSTANCE_NOT_CONFIGURED"],
@@ -66,7 +66,7 @@ class LdapProvider(CredentialAdapter):
         ) = self._get_config()
 
         if not all([LDAP_URL, LDAP_BASE_DN, LDAP_BIND_DN, LDAP_BIND_PASSWORD]):
-             raise AuthenticationException(
+            raise AuthenticationException(
                 error_code=AUTHENTICATION_ERROR_CODES["INSTANCE_NOT_CONFIGURED"],
                 error_message="LDAP_NOT_CONFIGURED",
             )
@@ -102,6 +102,12 @@ class LdapProvider(CredentialAdapter):
                     "last_name": info.last_name,
                     "provider_id": info.dn,
                     "is_password_autoset": True,
+                    "display_name": info.display_name,
+                },
+                "extra_info": {
+                    "department": info.department,
+                    "employee_id": info.employee_id,
+                    "cn": info.cn,
                 },
             }
         )

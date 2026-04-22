@@ -55,7 +55,7 @@ LOGGING = {
         "console": {
             "level": "DEBUG",
             "class": "logging.StreamHandler",
-            "formatter": "json",
+            "formatter": "verbose",
         }
     },
     "loggers": {

@@ -1,6 +1,6 @@
 from django.urls import path
 
-from plane.app.views.timesheet import TimeSheetViewSet, TimesheetCategoryListView
+from plane.app.views.timesheet import TimeSheetViewSet, TimesheetCategoryListView, TimeSheetReportViewSet
 
 urlpatterns = [
     # 工时类别字典（全局只读，前端渲染类别菜单）
@@ -35,5 +35,15 @@ urlpatterns = [
         "workspaces/<str:slug>/timesheets/copy-previous-week/",
         TimeSheetViewSet.as_view({"post": "workspace_copy_previous_week"}),
         name="workspace-timesheets-copy-previous-week",
+    ),
+    path(
+        "workspaces/<str:slug>/timesheets/reports/",
+        TimeSheetReportViewSet.as_view({"get": "list"}),
+        name="timesheet-reports",
+    ),
+    path(
+        "workspaces/<str:slug>/timesheets/reports/export/",
+        TimeSheetReportViewSet.as_view({"get": "export_xlsx"}),
+        name="timesheet-reports-export",
     ),
 ]

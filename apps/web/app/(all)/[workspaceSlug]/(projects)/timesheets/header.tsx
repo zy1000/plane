@@ -8,6 +8,7 @@ import { useAppRouter } from "@/hooks/use-app-router";
 const TAB_ITEMS = [
   { key: "overview", label: "概览", path: "/overview" },
   { key: "manage", label: "填报工时", path: "" },
+  { key: "report", label: "报表", path: "/report" },
 ];
 
 export const WorkspaceTimesheetsHeader = observer(function WorkspaceTimesheetsHeader() {
@@ -22,6 +23,7 @@ export const WorkspaceTimesheetsHeader = observer(function WorkspaceTimesheetsHe
 
   const activeTab = (() => {
     if (pathForTab.endsWith("/overview")) return "overview";
+    if (pathForTab.endsWith("/report")) return "report";
     return "manage";
   })();
 

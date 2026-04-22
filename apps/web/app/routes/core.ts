@@ -121,6 +121,7 @@ export const coreRoutes: RouteConfigEntry[] = [
         layout("./(all)/[workspaceSlug]/(projects)/timesheets/layout.tsx", [
           route(":workspaceSlug/timesheets", "./(all)/[workspaceSlug]/(projects)/timesheets/page.tsx"),
           route(":workspaceSlug/timesheets/overview", "./(all)/[workspaceSlug]/(projects)/timesheets/overview/page.tsx"),
+          route(":workspaceSlug/timesheets/report", "./(all)/[workspaceSlug]/(projects)/timesheets/report/page.tsx"),
         ]),
 
         // Archived Projects

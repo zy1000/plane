@@ -7,11 +7,15 @@ from ldap3.core.exceptions import LDAPBindError, LDAPException
 
 @dataclass(frozen=True)
 class LdapUserInfo:
-    dn: str
-    email: str
-    first_name: str
-    last_name: str
-    display_name: str
+    dn: str = ""
+    email: str = ""
+    first_name: str = ""
+    last_name: str = ""
+    display_name: str = ""
+    department: str = ""
+    description: str = ""
+    employee_id: str = ""
+    cn: str = ""
 
 
 def ldap_verify_and_get_user(
@@ -52,7 +56,16 @@ def ldap_verify_and_get_user(
                 search_base=base_dn,
                 search_filter=user_filter % {"user": login},
                 search_scope=SUBTREE,
-                attributes=["mail", "givenName", "sn", "cn", "displayName"],
+                attributes=[
+                    "mail",
+                    "givenName",
+                    "sn",
+                    "cn",
+                    "displayName",
+                    "department",
+                    "description",
+                    "employeeID",
+                ],
                 size_limit=1,
             )
             if not admin_conn.entries:
@@ -63,10 +76,10 @@ def ldap_verify_and_get_user(
         else:
             # If no bind_dn provided, assume the login itself is the DN or constructed via filter (less common for AD)
             # But usually for search-based auth, bind_dn is needed.
-            # If the user_filter implies direct DN construction (e.g. uid=%s,ou=users...), 
+            # If the user_filter implies direct DN construction (e.g. uid=%s,ou=users...),
             # we might need different logic, but standard practice is search-then-bind.
             # For simplicity, we assume bind_dn is provided or we can't search easily.
-            # Let's support a simple template case if bind_dn is missing? 
+            # Let's support a simple template case if bind_dn is missing?
             # Actually, standard practice:
             # If no bind_dn, we can't search first. We have to guess the DN.
             # Let's assume bind_dn is configured for now as it's most robust.
@@ -86,7 +99,7 @@ def ldap_verify_and_get_user(
         # 3. Retrieve user attributes (re-read from user_conn or use admin_conn's result)
         # It's safer to use the admin_conn's result for attributes as the user might not have read permissions on themselves
         # But we already have 'entry' from admin_conn.
-        
+
         def _get(attr: str) -> str:
             if hasattr(entry, attr) and entry[attr].value:
                 return str(entry[attr].value)
@@ -97,14 +110,19 @@ def ldap_verify_and_get_user(
         given = _get("givenName")
         sn = _get("sn")
         cn = _get("cn")
-        display = _get("displayName") or cn or email.split("@")[0]
-
+        department = _get("department")
+        description = _get("description")
+        employee_id = _get("employeeID")
         return LdapUserInfo(
             dn=user_dn,
-            email=email.strip().lower(), # Force lowercase email as requested
+            email=email.strip().lower(),  # Force lowercase email as requested
             first_name=given,
             last_name=sn,
-            display_name=display,
+            display_name=description,
+            department=department,
+            description=description,
+            employee_id=employee_id,
+            cn=cn,
         )
     except (LDAPBindError, LDAPException) as e:
         # Re-raise as LDAPBindError to be caught upstream
@@ -154,7 +172,7 @@ def ldap_user_exists(
         else:
             # Without bind_dn, we can't search easily.
             return False
-            
+
     except (LDAPBindError, LDAPException):
         return False
 
@@ -174,7 +192,7 @@ def ldap_test_connection(
         tls = Tls(validate=ssl.CERT_REQUIRED, ca_certs_file=ca_certs_file)
 
     server = Server(ldap_url, tls=tls, connect_timeout=connect_timeout)
-    
+
     try:
         conn = Connection(
             server,

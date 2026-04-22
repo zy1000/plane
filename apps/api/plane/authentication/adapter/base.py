@@ -19,6 +19,7 @@ from django.utils import timezone
 # Third party imports
 from zxcvbn import zxcvbn
 
+from plane.db.models.user import UserExtraInfo
 from plane.bgtasks.user_activation_email_task import user_activation_email
 
 # Module imports
@@ -103,12 +104,15 @@ class Adapter:
         """Check if sign up is enabled or not and raise exception if not enabled"""
 
         # Get configuration value
-        (ENABLE_SIGNUP,) = get_configuration_value([
-            {"key": "ENABLE_SIGNUP", "default": os.environ.get("ENABLE_SIGNUP", "1")}
-        ])
+        (ENABLE_SIGNUP,) = get_configuration_value(
+            [{"key": "ENABLE_SIGNUP", "default": os.environ.get("ENABLE_SIGNUP", "1")}]
+        )
 
         # Check if sign up is disabled and invite is present or not
-        if ENABLE_SIGNUP == "0" and not WorkspaceMemberInvite.objects.filter(email=email).exists():
+        if (
+            ENABLE_SIGNUP == "0"
+            and not WorkspaceMemberInvite.objects.filter(email=email).exists()
+        ):
             self.logger.warning("Sign up is disabled and invite is not present")
             # Raise exception
             raise AuthenticationException(
@@ -132,7 +136,9 @@ class Adapter:
         }
         config_key = provider_config_map.get(self.provider)
         if config_key:
-            (enabled,) = get_configuration_value([{"key": config_key, "default": os.environ.get(config_key, "0")}])
+            (enabled,) = get_configuration_value(
+                [{"key": config_key, "default": os.environ.get(config_key, "0")}]
+            )
             return enabled == "1"
         return False
 
@@ -191,7 +197,9 @@ class Adapter:
             file_obj.seek(0)
 
             # Upload using boto3 directly
-            upload_success = storage.upload_file(file_obj=file_obj, object_name=filename, content_type=content_type)
+            upload_success = storage.upload_file(
+                file_obj=file_obj, object_name=filename, content_type=content_type
+            )
             if not upload_success:
                 return None
 
@@ -200,7 +208,11 @@ class Adapter:
 
             # Create FileAsset record
             file_asset = FileAsset.objects.create(
-                attributes={"name": f"{self.provider}-avatar.{extension}", "type": content_type, "size": file_size},
+                attributes={
+                    "name": f"{self.provider}-avatar.{extension}",
+                    "type": content_type,
+                    "size": file_size,
+                },
                 asset=filename,
                 size=file_size,
                 user=user,
@@ -324,13 +336,20 @@ class Adapter:
             last_name = self.user_data.get("user", {}).get("last_name", "")
             user.first_name = first_name if first_name else ""
             user.last_name = last_name if last_name else ""
+            user.display_name = self.user_data.get("user", {}).get(
+                "display_name", user.first_name
+            )
+            extra_info = self.user_data.get("extra_info", {})
 
             user.save()
+            UserExtraInfo.objects.create(user=user, **extra_info)
 
             # Download and upload avatar
             avatar = self.user_data.get("user", {}).get("avatar", "")
             if avatar:
-                avatar_asset = self.download_and_upload_avatar(avatar_url=avatar, user=user)
+                avatar_asset = self.download_and_upload_avatar(
+                    avatar_url=avatar, user=user
+                )
                 if avatar_asset:
                     user.avatar_asset = avatar_asset
                     user.avatar = avatar

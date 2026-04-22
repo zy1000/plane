@@ -2,6 +2,7 @@ from django.urls import path
 
 from plane.app.views.custom.project_analytics import CustomProjectAdvanceAnalyticsEndpoint
 from plane.app.views.custom.simple_api import SimpleTestAPIView, HealthCheckAPIView
+from plane.app.views.custom.ldap_sync import LdapUserSyncAPIView
 
 urlpatterns = [
     path(
@@ -19,5 +20,11 @@ urlpatterns = [
         "test/health/",
         HealthCheckAPIView.as_view(),
         name="health_check_api",
+    ),
+    # LDAP 人员信息同步（无鉴权，无参数）
+    path(
+        "ldap/sync-users/",
+        LdapUserSyncAPIView.as_view(),
+        name="ldap_sync_users",
     ),
 ]

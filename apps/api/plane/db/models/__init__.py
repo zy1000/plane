@@ -48,7 +48,13 @@ from .issue import (
     IssueDescriptionVersion,
 )
 from .module import Module, ModuleIssue, ModuleLink, ModuleMember, ModuleUserProperties
-from .release import Release, ReleaseIssue, ReleaseLink, ReleaseMember, ReleaseUserProperties
+from .release import (
+    Release,
+    ReleaseIssue,
+    ReleaseLink,
+    ReleaseMember,
+    ReleaseUserProperties,
+)
 from .notification import EmailNotificationLog, Notification, UserNotificationPreference
 from .page import Page, PageLabel, PageLog, ProjectPage, PageVersion
 from .permission import Permission
@@ -63,12 +69,14 @@ from .project import (
     ProjectPublicMember,
     ProjectRole,
     ProjectGroupRole,
-    ProjectUserProperty, ProjectMemberRole, ProjectRole
+    ProjectUserProperty,
+    ProjectMemberRole,
+    ProjectRole,
 )
 from .session import Session
 from .social_connection import SocialLoginConnection
 from .state import State, StateGroup, DEFAULT_STATES, DEFAULT_BUG_STATES
-from .user import Account, Profile, User, BotTypeEnum
+from .user import Account, Profile, User, BotTypeEnum, UserExtraInfo
 from .view import IssueView
 from .webhook import Webhook, WebhookLog
 from .workspace import (

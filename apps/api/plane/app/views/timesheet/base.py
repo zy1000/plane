@@ -18,7 +18,9 @@ from plane.db.models import TimeSheet, TimesheetCategory
 
 class TimeSheetViewSet(BaseViewSet):
     duplicate_error = {
-        "non_field_errors": ["同一成员在同一项目/任务的同一时间段已存在工时记录，请勿重复登记。"]
+        "non_field_errors": [
+            "同一成员在同一项目/任务的同一时间段已存在工时记录，请勿重复登记。"
+        ]
     }
 
     model = TimeSheet
@@ -67,9 +69,14 @@ class TimeSheetViewSet(BaseViewSet):
             try:
                 serializer.save()
             except DjangoValidationError as exc:
-                return Response(self._format_validation_error(exc), status=status.HTTP_400_BAD_REQUEST)
+                return Response(
+                    self._format_validation_error(exc),
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
             except IntegrityError:
-                return Response(self.duplicate_error, status=status.HTTP_400_BAD_REQUEST)
+                return Response(
+                    self.duplicate_error, status=status.HTTP_400_BAD_REQUEST
+                )
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -80,9 +87,14 @@ class TimeSheetViewSet(BaseViewSet):
             try:
                 serializer.save()
             except DjangoValidationError as exc:
-                return Response(self._format_validation_error(exc), status=status.HTTP_400_BAD_REQUEST)
+                return Response(
+                    self._format_validation_error(exc),
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
             except IntegrityError:
-                return Response(self.duplicate_error, status=status.HTTP_400_BAD_REQUEST)
+                return Response(
+                    self.duplicate_error, status=status.HTTP_400_BAD_REQUEST
+                )
             return Response(serializer.data, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 

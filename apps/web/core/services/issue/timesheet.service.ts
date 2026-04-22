@@ -64,6 +64,44 @@ export type TTimesheetListParams = {
   category_key?: string;
 };
 
+export type TTimesheetReportRow = {
+  id: string;
+  pms_project_name: string | null;
+  project_name: string | null;
+  issue_name: string | null;
+  case_name: string | null;
+  member_name: string | null;
+  date: string;
+  start_time: string;
+  end_time: string;
+  hours: string;
+  description: string;
+  category_name: string | null;
+};
+
+export type TTimesheetReportParams = {
+  project_id?: string;
+  member_id?: string;
+  category_id?: string;
+  category_key?: string;
+  start_time?: string;
+  end_time?: string;
+  cursor?: string;
+  per_page?: number;
+};
+
+export type TTimesheetReportResponse = {
+  total_count: number;
+  next_cursor: string;
+  prev_cursor: string;
+  next_page_results: boolean;
+  prev_page_results: boolean;
+  count: number;
+  total_pages: number;
+  total_results: number;
+  results: TTimesheetReportRow[];
+};
+
 export type TTimeSheetCreatePayload = {
   date: string;
   start_time: string;
@@ -226,6 +264,61 @@ export class TimesheetService extends APIService {
       data
     )
       .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async reportList(
+    workspaceSlug: string,
+    params: TTimesheetReportParams
+  ): Promise<TTimesheetReportResponse> {
+    const queryParams: Record<string, string | number> = {};
+    if (params.project_id) queryParams.project_id = params.project_id;
+    if (params.member_id) queryParams.member_id = params.member_id;
+    if (params.category_id) queryParams.category_id = params.category_id;
+    if (params.category_key) queryParams.category_key = params.category_key;
+    if (params.start_time) queryParams.start_time = params.start_time;
+    if (params.end_time) queryParams.end_time = params.end_time;
+    if (params.cursor) queryParams.cursor = params.cursor;
+    if (params.per_page) queryParams.per_page = params.per_page;
+    return this.get(`/api/workspaces/${workspaceSlug}/timesheets/reports/`, {
+      params: queryParams,
+    })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async reportExport(
+    workspaceSlug: string,
+    params: TTimesheetReportParams,
+    ids?: string[]
+  ): Promise<{ blob: Blob; filename: string }> {
+    const queryParams: Record<string, string> = {};
+    if (params.project_id) queryParams.project_id = params.project_id;
+    if (params.member_id) queryParams.member_id = params.member_id;
+    if (params.category_id) queryParams.category_id = params.category_id;
+    if (params.category_key) queryParams.category_key = params.category_key;
+    if (params.start_time) queryParams.start_time = params.start_time;
+    if (params.end_time) queryParams.end_time = params.end_time;
+    if (ids && ids.length > 0) queryParams.ids = ids.join(",");
+    return this.get(
+      `/api/workspaces/${workspaceSlug}/timesheets/reports/export/`,
+      {
+        params: queryParams,
+        responseType: "blob",
+      }
+    )
+      .then((response) => {
+        const disposition: string = response?.headers?.["content-disposition"] ?? "";
+        const match = disposition.match(/filename\*?=(?:UTF-8'')?([^;]+)/i);
+        const filename = match
+          ? decodeURIComponent(match[1].trim().replace(/^"|"$/g, ""))
+          : `timesheet-report-${Date.now()}.xlsx`;
+        return { blob: response?.data as Blob, filename };
+      })
       .catch((error) => {
         throw error?.response?.data;
       });

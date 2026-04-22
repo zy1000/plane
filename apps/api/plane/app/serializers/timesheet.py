@@ -153,8 +153,8 @@ class TimeSheetSerializer(BaseSerializer):
             # 优先取启用项；若目标 key 被停用（如拆分后被停用的 ISSUE），
             # 放开 is_active 以保证兜底仍能命中。
             fallback_category = (
-                TimesheetCategory.objects.filter(key=fallback_key, is_active=True).first()
-                or TimesheetCategory.objects.filter(key=fallback_key).first()
+                    TimesheetCategory.objects.filter(key=fallback_key, is_active=True).first()
+                    or TimesheetCategory.objects.filter(key=fallback_key).first()
             )
             if fallback_category is not None:
                 attrs["category"] = fallback_category
@@ -177,3 +177,18 @@ class TimeSheetCopyPreviousWeekSerializer(serializers.Serializer):
         if value.weekday() != 0:
             raise serializers.ValidationError("week_start 必须是周一。")
         return value
+
+
+class TimeSheetReportListSerializer(serializers.ModelSerializer):
+    pms_project_name = serializers.CharField(source="project.pms_project_name", read_only=True)
+    issue_name = serializers.CharField(source="issue.name", read_only=True)
+    case_name = serializers.CharField(source="test_case.name", read_only=True)
+    project_name = serializers.CharField(source="project.name", read_only=True)
+    member_name = serializers.CharField(source="member.display_name", read_only=True)
+    category_name = serializers.CharField(source="category.name", read_only=True)
+
+    class Meta:
+        model = TimeSheet
+        fields = ['id', 'pms_project_name', 'issue_name', 'case_name', 'project_name', 'member_name', 'date',
+                  'start_time', 'end_time', 'hours', 'description', 'category_name']
+        read_only_fields = fields
