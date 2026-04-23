@@ -46,11 +46,12 @@ def workspace_invitation(email, workspace_id, token, current_site, inviter):
         ) = get_email_configuration()
 
         # Subject of the email
-        subject = f"{user.first_name or user.display_name or user.email} has invited you to join them in {workspace.name} on Plane"  # noqa: E501
+        inviter_name = user.display_name or user.first_name or user.email
+        subject = f"{inviter_name} has invited you to join them in {workspace.name} on Plane"  # noqa: E501
 
         context = {
             "email": email,
-            "first_name": user.first_name or user.display_name or user.email,
+            "first_name": inviter_name,
             "workspace_name": workspace.name,
             "abs_url": abs_url,
         }

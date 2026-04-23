@@ -4,13 +4,19 @@
 
 """Celery tasks that fan out status-change notifications for Cycle/Release.
 
-These tasks enqueue rows into :class:`EmailNotificationLog` (one per eligible
-project member) so the existing Beat aggregator (``stack_email_notification``)
+These tasks enqueue rows into :class:`EmailNotificationLog` (one eligible
+recipient) so the existing Beat aggregator (``stack_email_notification``)
 picks them up and dispatches the actual emails.
 
-They are broadcast-style notifications (every active project member) rather
-than subscriber/mention based as ``issue_activity`` does, so we implement
-them separately.
+Recipients are scoped to the people most directly tied to the entity rather
+than every project member:
+
+* Cycle: the cycle owner (``owned_by``) plus every assignee of issues that
+  currently live under the cycle.
+* Release: the release lead (``lead``) plus its explicit ``members``.
+
+We still require recipients to be active project members and honour their
+``UserNotificationPreference.state_change`` opt-out.
 """
 
 # Python imports
@@ -24,8 +30,10 @@ from django.utils import timezone
 from plane.db.models import (
     Cycle,
     EmailNotificationLog,
+    IssueAssignee,
     ProjectMember,
     Release,
+    ReleaseMember,
     UserNotificationPreference,
 )
 from plane.settings.redis import redis_instance
@@ -65,33 +73,75 @@ CYCLE_ORIGIN_REDIS_PREFIX = "cycle_status_email_origin"
 RELEASE_ORIGIN_REDIS_PREFIX = "release_status_email_origin"
 
 
-def _eligible_receiver_ids(project_id, actor_id):
-    """Return set of user ids that should receive an email for this event.
+def _filter_eligible_receivers(project_id, candidate_ids, actor_id):
+    """Narrow a set of candidate user ids down to people we should email.
 
     Rules:
-    - Must be an active member of the project (``ProjectMember.is_active``).
     - Exclude the actor that triggered the change (if any).
+    - Must be an active member of the project (``ProjectMember.is_active``) -
+      protects against stale assignees who no longer belong to the project.
     - Honour ``UserNotificationPreference.state_change``. Missing preference
       rows default to ``True`` (opt-out, not opt-in).
     """
-    member_ids = set(
-        str(mid)
-        for mid in ProjectMember.objects.filter(project_id=project_id, is_active=True)
-        .exclude(member_id=actor_id)
-        .values_list("member_id", flat=True)
-        if mid is not None
-    )
-    if not member_ids:
+    candidates = {str(cid) for cid in candidate_ids if cid is not None}
+    if actor_id:
+        candidates.discard(str(actor_id))
+    if not candidates:
         return []
 
-    # Users that explicitly disabled state_change emails.
+    active_ids = set(
+        str(mid)
+        for mid in ProjectMember.objects.filter(
+            project_id=project_id,
+            is_active=True,
+            member_id__in=candidates,
+        ).values_list("member_id", flat=True)
+        if mid is not None
+    )
+    if not active_ids:
+        return []
+
     disabled = set(
         str(uid)
         for uid in UserNotificationPreference.objects.filter(
-            user_id__in=member_ids, state_change=False
+            user_id__in=active_ids, state_change=False
         ).values_list("user_id", flat=True)
     )
-    return [mid for mid in member_ids if mid not in disabled]
+    return [mid for mid in active_ids if mid not in disabled]
+
+
+def _cycle_candidate_receiver_ids(cycle):
+    """Owner of the cycle plus every assignee of issues currently in it."""
+    ids = set()
+    if cycle.owned_by_id:
+        ids.add(str(cycle.owned_by_id))
+    ids.update(
+        str(uid)
+        for uid in IssueAssignee.objects.filter(
+            issue__issue_cycle__cycle_id=cycle.id,
+            issue__issue_cycle__deleted_at__isnull=True,
+            deleted_at__isnull=True,
+        )
+        .values_list("assignee_id", flat=True)
+        .distinct()
+        if uid is not None
+    )
+    return ids
+
+
+def _release_candidate_receiver_ids(release):
+    """Lead of the release plus its explicit members."""
+    ids = set()
+    if release.lead_id:
+        ids.add(str(release.lead_id))
+    ids.update(
+        str(uid)
+        for uid in ReleaseMember.objects.filter(
+            release_id=release.id, deleted_at__isnull=True
+        ).values_list("member_id", flat=True)
+        if uid is not None
+    )
+    return ids
 
 
 def _now_iso():
@@ -125,7 +175,11 @@ def dispatch_cycle_status_email(cycle_id, actor_id, old_status, new_status, orig
         # system (auto-delay) so the NOT NULL ``triggered_by`` FK stays valid.
         effective_actor_id = actor_id or str(cycle.owned_by_id)
 
-        receiver_ids = _eligible_receiver_ids(cycle.project_id, actor_id=actor_id)
+        receiver_ids = _filter_eligible_receivers(
+            cycle.project_id,
+            _cycle_candidate_receiver_ids(cycle),
+            actor_id=actor_id,
+        )
         if not receiver_ids:
             return
 
@@ -200,7 +254,11 @@ def dispatch_release_status_email(release_id, actor_id, old_status, new_status, 
             # No user we can attribute to - nothing we can safely persist.
             return
 
-        receiver_ids = _eligible_receiver_ids(release.project_id, actor_id=actor_id)
+        receiver_ids = _filter_eligible_receivers(
+            release.project_id,
+            _release_candidate_receiver_ids(release),
+            actor_id=actor_id,
+        )
         if not receiver_ids:
             return
 

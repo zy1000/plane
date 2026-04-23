@@ -248,6 +248,11 @@ def send_email_notification(issue_id, notification_data, receiver_id, email_noti
                                 "avatar_url": f"{base_api}{actor.avatar_url}",
                                 "first_name": actor.first_name,
                                 "last_name": actor.last_name,
+                                "display_name": (
+                                    actor.display_name
+                                    or actor.first_name
+                                    or actor.email
+                                ),
                             },
                         }
                     )
@@ -261,6 +266,11 @@ def send_email_notification(issue_id, notification_data, receiver_id, email_noti
                                 "avatar_url": f"{base_api}{actor.avatar_url}",
                                 "first_name": actor.first_name,
                                 "last_name": actor.last_name,
+                                "display_name": (
+                                    actor.display_name
+                                    or actor.first_name
+                                    or actor.email
+                                ),
                             },
                         }
                     )
@@ -275,6 +285,11 @@ def send_email_notification(issue_id, notification_data, receiver_id, email_noti
                                 "avatar_url": f"{base_api}{actor.avatar_url}",
                                 "first_name": actor.first_name,
                                 "last_name": actor.last_name,
+                                "display_name": (
+                                    actor.display_name
+                                    or actor.first_name
+                                    or actor.email
+                                ),
                             },
                             "changes": changes,
                             "issue_details": {

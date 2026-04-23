@@ -26,7 +26,7 @@ def project_add_user_email(current_site, project_member_id, invitor_id):
     try:
         # Get the invitor
         invitor = User.objects.get(pk=invitor_id)
-        inviter_first_name = invitor.first_name
+        inviter_first_name = invitor.display_name or invitor.first_name or invitor.email
         # Get the project member
         project_member = ProjectMember.objects.get(pk=project_member_id)
         # Get the project member details

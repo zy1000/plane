@@ -30,11 +30,12 @@ def project_invitation(email, project_id, token, current_site, invitor):
         relativelink = f"/project-invitations/?invitation_id={project_member_invite.id}&email={email}&slug={project.workspace.slug}&project_id={str(project_id)}"  # noqa: E501
         abs_url = current_site + relativelink
 
-        subject = f"{user.first_name or user.display_name or user.email} invited you to join {project.name} on Plane"
+        inviter_name = user.display_name or user.first_name or user.email
+        subject = f"{inviter_name} invited you to join {project.name} on Plane"
 
         context = {
             "email": email,
-            "first_name": user.first_name,
+            "first_name": inviter_name,
             "project_name": project.name,
             "invitation_url": abs_url,
             "current_site": current_site,
