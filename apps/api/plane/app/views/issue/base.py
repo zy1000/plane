@@ -4,8 +4,13 @@
 
 # Python imports
 import copy
+import csv
+import io
 import json
 import time
+from urllib.parse import quote
+
+import pytz
 
 # Django imports
 from django.contrib.postgres.aggregates import ArrayAgg
@@ -24,11 +29,13 @@ from django.db.models import (
     Value,
 )
 from django.db.models.functions import Coalesce
+from django.http import FileResponse, HttpResponse
 from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views.decorators.gzip import gzip_page
 
 # Third Party imports
+from openpyxl import Workbook
 from rest_framework import status
 from rest_framework.response import Response
 
@@ -1019,45 +1026,305 @@ class BulkDeleteIssuesEndpoint(BaseAPIView):
         )
 
 
+# ---------------------------------------------------------------------------
+# 工作项导出相关常量与工具
+# ---------------------------------------------------------------------------
+
+# 有序 manifest：顺序即默认列顺序
+EXPORT_ALL_FIELDS = [
+    "key",
+    "name",
+    "description",
+    "state",
+    "state_group",
+    "priority",
+    "issue_type",
+    "is_draft",
+    "assignees",
+    "created_by",
+    "updated_by",
+    "labels",
+    "cycles",
+    "modules",
+    "parent_key",
+    "parent_name",
+    "project",
+    "start_date",
+    "target_date",
+    "completed_at",
+    "created_at",
+    "updated_at",
+    "id",
+    "estimate",
+    "sub_issues_count",
+    "link_count",
+    "attachment_count",
+]
+
+EXPORT_FIELD_LABELS = {
+    "id": "ID",
+    "key": "标识",
+    "name": "标题",
+    "description": "描述",
+    "state": "状态",
+    "state_group": "状态分组",
+    "priority": "优先级",
+    "issue_type": "工作项类型",
+    "is_draft": "草稿",
+    "assignees": "负责人",
+    "created_by": "创建人",
+    "updated_by": "最后更新人",
+    "labels": "标签",
+    "cycles": "迭代",
+    "modules": "模块",
+    "parent_key": "父工作项标识",
+    "parent_name": "父工作项标题",
+    "project": "项目",
+    "start_date": "开始日期",
+    "target_date": "截止日期",
+    "completed_at": "完成时间",
+    "created_at": "创建时间",
+    "updated_at": "更新时间",
+    "estimate": "预估",
+    "sub_issues_count": "子项数",
+    "link_count": "链接数",
+    "attachment_count": "附件数",
+}
+
+PRIORITY_CN_MAP = {
+    "urgent": "紧急",
+    "high": "高",
+    "medium": "中",
+    "low": "低",
+    "none": "无",
+}
+
+STATE_GROUP_CN_MAP = {
+    "backlog": "待处理",
+    "unstarted": "未开始",
+    "started": "进行中",
+    "completed": "已完成",
+    "cancelled": "已取消",
+}
+
+# 导出时多值字段在 CSV/XLSX 中的连接符
+_LIST_JOIN_SEP = "、"
+
+
+def _fmt_dt(value, tz=None):
+    """将时间字段格式化为 YYYY-MM-DD HH:mm:ss。
+
+    若传入 tz（pytz.tzinfo），会先 astimezone 到目标时区再格式化，
+    用于按当前用户的时区导出；否则按原时区原样打印。
+    """
+    if not value:
+        return None
+    try:
+        if tz is not None and getattr(value, "tzinfo", None) is not None:
+            value = value.astimezone(tz)
+        return value.strftime("%Y-%m-%d %H:%M:%S")
+    except Exception:
+        return str(value)
+
+
+def _fmt_date(value):
+    if not value:
+        return None
+    return str(value)
+
+
+def _resolve_user_tz(user_timezone):
+    """解析用户时区为 pytz tz 对象；解析失败回退到 UTC。"""
+    if not user_timezone:
+        return pytz.UTC
+    try:
+        return pytz.timezone(user_timezone)
+    except Exception:
+        return pytz.UTC
+
+
+def _build_issue_export_row(issue, fields, tz=None):
+    """根据 fields 白名单构造单条工作项导出行。返回有序字典 {key: value}。
+
+    value 保持原始 Python 类型（list / str / int / bool / None），
+    具体格式化（join、None -> 空字符串）由各 format 分支决定。
+    """
+    labels = [il.label.name for il in issue.label_issue.all() if il.label]
+    assignees = [
+        ia.assignee.display_name for ia in issue.issue_assignee.all() if ia.assignee
+    ]
+    cycles = [ci.cycle.name for ci in issue.issue_cycle.all() if ci.cycle]
+    modules = [mi.module.name for mi in issue.issue_module.all() if mi.module]
+
+    project = issue.project
+    project_identifier = project.identifier if project else None
+    issue_key = (
+        f"{project_identifier}-{issue.sequence_id}"
+        if project_identifier and issue.sequence_id is not None
+        else None
+    )
+    parent = issue.parent
+    parent_key = None
+    if parent is not None:
+        parent_project_identifier = (
+            parent.project.identifier if parent.project_id and parent.project else None
+        )
+        if parent_project_identifier and parent.sequence_id is not None:
+            parent_key = f"{parent_project_identifier}-{parent.sequence_id}"
+
+    resolvers = {
+        "id": lambda: str(issue.id),
+        "key": lambda: issue_key,
+        "name": lambda: issue.name,
+        "description": lambda: issue.description_stripped or "",
+        "state": lambda: issue.state.name if issue.state else None,
+        "state_group": lambda: (
+            STATE_GROUP_CN_MAP.get(issue.state.group, issue.state.group)
+            if issue.state
+            else None
+        ),
+        "priority": lambda: PRIORITY_CN_MAP.get(issue.priority, issue.priority),
+        "issue_type": lambda: issue.type.name if issue.type else None,
+        "is_draft": lambda: bool(issue.is_draft),
+        "assignees": lambda: assignees,
+        "created_by": lambda: (
+            issue.created_by.display_name if issue.created_by else None
+        ),
+        "updated_by": lambda: (
+            issue.updated_by.display_name if issue.updated_by else None
+        ),
+        "labels": lambda: labels,
+        "cycles": lambda: cycles,
+        "modules": lambda: modules,
+        "parent_key": lambda: parent_key,
+        "parent_name": lambda: parent.name if parent else None,
+        "project": lambda: project.name if project else None,
+        "start_date": lambda: _fmt_date(issue.start_date),
+        "target_date": lambda: _fmt_date(issue.target_date),
+        "completed_at": lambda: _fmt_dt(issue.completed_at, tz),
+        "created_at": lambda: _fmt_dt(issue.created_at, tz),
+        "updated_at": lambda: _fmt_dt(issue.updated_at, tz),
+        "estimate": lambda: (
+            issue.estimate_point.value if issue.estimate_point else None
+        ),
+        "sub_issues_count": lambda: issue.sub_issues_count or 0,
+        "link_count": lambda: issue.link_count or 0,
+        "attachment_count": lambda: issue.attachment_count or 0,
+    }
+
+    row = {}
+    for key in fields:
+        resolver = resolvers.get(key)
+        row[key] = resolver() if resolver else None
+    return row
+
+
+def _cell_str(value):
+    """将单元格值转为字符串（CSV/XLSX 表格展示用）。"""
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return "是" if value else "否"
+    if isinstance(value, (list, tuple)):
+        return _LIST_JOIN_SEP.join(str(v) for v in value if v is not None)
+    return str(value)
+
+
+def _attach_download_filename(response, filename):
+    """设置下载文件名，兼容中文。"""
+    response["Content-Disposition"] = (
+        f"attachment; filename*=UTF-8''{quote(filename)}"
+    )
+    # 允许前端读取 Content-Disposition（跨域或拦截器场景）
+    existing_expose = response.get("Access-Control-Expose-Headers", "")
+    headers_to_expose = {h.strip() for h in existing_expose.split(",") if h.strip()}
+    headers_to_expose.add("Content-Disposition")
+    response["Access-Control-Expose-Headers"] = ", ".join(sorted(headers_to_expose))
+    return response
+
+
 class BulkExportIssuesEndpoint(BaseAPIView):
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
     def post(self, request, slug, project_id):
-        issue_ids = request.data.get("issue_ids", [])
+        scope = request.data.get("scope", "selected")
+        raw_fields = request.data.get("fields") or []
+        export_format = (request.data.get("format") or "json").lower()
 
-        if not issue_ids:
-            return Response({"error": "issue_ids is required"}, status=status.HTTP_400_BAD_REQUEST)
+        if scope not in ("selected", "filtered"):
+            return Response(
+                {"error": "scope must be 'selected' or 'filtered'"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if export_format not in ("json", "csv", "xlsx"):
+            return Response(
+                {"error": "format must be 'json', 'csv' or 'xlsx'"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # 字段白名单：未传则使用全部，传了则按用户顺序并去掉未知字段
+        if raw_fields:
+            fields = [f for f in raw_fields if f in EXPORT_FIELD_LABELS]
+            if not fields:
+                return Response(
+                    {"error": "fields contains no valid column"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        else:
+            fields = list(EXPORT_ALL_FIELDS)
+
+        queryset = Issue.issue_objects.filter(
+            workspace__slug=slug, project_id=project_id
+        )
+
+        if scope == "selected":
+            issue_ids = request.data.get("issue_ids") or []
+            if not issue_ids:
+                return Response(
+                    {"error": "issue_ids is required when scope=selected"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            queryset = queryset.filter(pk__in=issue_ids)
+        else:
+            # 复用列表接口的筛选逻辑，参数仍从 query string 读取
+            legacy_filters = issue_filters(request.query_params, "GET")
+            if legacy_filters:
+                queryset = queryset.filter(**legacy_filters)
 
         issues = (
-            Issue.issue_objects.filter(
-                workspace__slug=slug,
-                project_id=project_id,
-                pk__in=issue_ids,
-            )
-            .select_related(
+            queryset.select_related(
                 "state",
                 "type",
                 "estimate_point",
                 "project",
                 "parent",
+                "parent__project",
                 "created_by",
                 "updated_by",
             )
             .prefetch_related(
                 Prefetch(
                     "label_issue",
-                    queryset=IssueLabel.objects.filter(deleted_at__isnull=True).select_related("label"),
+                    queryset=IssueLabel.objects.filter(
+                        deleted_at__isnull=True
+                    ).select_related("label"),
                 ),
                 Prefetch(
                     "issue_assignee",
-                    queryset=IssueAssignee.objects.filter(deleted_at__isnull=True).select_related("assignee"),
+                    queryset=IssueAssignee.objects.filter(
+                        deleted_at__isnull=True
+                    ).select_related("assignee"),
                 ),
                 Prefetch(
                     "issue_cycle",
-                    queryset=CycleIssue.objects.filter(deleted_at__isnull=True).select_related("cycle"),
+                    queryset=CycleIssue.objects.filter(
+                        deleted_at__isnull=True
+                    ).select_related("cycle"),
                 ),
                 Prefetch(
                     "issue_module",
-                    queryset=ModuleIssue.objects.filter(deleted_at__isnull=True).select_related("module"),
+                    queryset=ModuleIssue.objects.filter(
+                        deleted_at__isnull=True
+                    ).select_related("module"),
                 ),
             )
             .annotate(
@@ -1083,48 +1350,63 @@ class BulkExportIssuesEndpoint(BaseAPIView):
                     .values("count")
                 ),
             )
+            .order_by("-created_at")
+            .distinct()
         )
 
-        result = []
-        for issue in issues:
-            labels = [il.label.name for il in issue.label_issue.all() if il.label]
-            assignees = [ia.assignee.display_name for ia in issue.issue_assignee.all() if ia.assignee]
-            cycles = [ci.cycle.name for ci in issue.issue_cycle.all() if ci.cycle]
-            modules = [mi.module.name for mi in issue.issue_module.all() if mi.module]
+        user_tz = _resolve_user_tz(getattr(request.user, "user_timezone", None))
+        rows = [_build_issue_export_row(issue, fields, user_tz) for issue in issues]
 
-            result.append({
-                "id": str(issue.id),
-                "sequence_id": issue.sequence_id,
-                "name": issue.name,
-                "description_html": issue.description_html,
-                "priority": issue.priority,
-                "state": issue.state.name if issue.state else None,
-                "state_group": issue.state.group if issue.state else None,
-                "type": issue.type.name if issue.type else None,
-                "project": issue.project.name if issue.project else None,
-                "project_identifier": issue.project.identifier if issue.project else None,
-                "parent_sequence_id": issue.parent.sequence_id if issue.parent else None,
-                "parent_name": issue.parent.name if issue.parent else None,
-                "estimate": issue.estimate_point.value if issue.estimate_point else None,
-                "labels": labels,
-                "assignees": assignees,
-                "cycles": cycles,
-                "modules": modules,
-                "start_date": str(issue.start_date) if issue.start_date else None,
-                "target_date": str(issue.target_date) if issue.target_date else None,
-                "completed_at": issue.completed_at.isoformat() if issue.completed_at else None,
-                "created_at": issue.created_at.isoformat() if issue.created_at else None,
-                "updated_at": issue.updated_at.isoformat() if issue.updated_at else None,
-                "created_by": issue.created_by.display_name if issue.created_by else None,
-                "updated_by": issue.updated_by.display_name if issue.updated_by else None,
-                "is_draft": issue.is_draft,
-                "sub_issues_count": issue.sub_issues_count or 0,
-                "link_count": issue.link_count or 0,
-                "attachment_count": issue.attachment_count or 0,
-                "sort_order": issue.sort_order,
-            })
+        timestamp = timezone.now().strftime("%Y%m%d%H%M%S")
+        filename_base = f"工作项导出_{timestamp}"
+        headers_cn = [EXPORT_FIELD_LABELS.get(k, k) for k in fields]
 
-        return Response(result, status=status.HTTP_200_OK)
+        if export_format == "json":
+            response = Response(rows, status=status.HTTP_200_OK)
+            # 纯 JSON 下载由前端以 blob 形式触发，给出建议文件名
+            _attach_download_filename(response, f"{filename_base}.json")
+            return response
+
+        if export_format == "csv":
+            buffer = io.StringIO()
+            writer = csv.writer(buffer)
+            writer.writerow(headers_cn)
+            for row in rows:
+                writer.writerow([_cell_str(row.get(k)) for k in fields])
+            # utf-8-sig 让 Excel 直接识别中文
+            content = "\ufeff" + buffer.getvalue()
+            response = HttpResponse(
+                content.encode("utf-8"),
+                content_type="text/csv; charset=utf-8",
+            )
+            return _attach_download_filename(response, f"{filename_base}.csv")
+
+        # xlsx
+        workbook = Workbook()
+        ws = workbook.active
+        ws.title = "工作项"
+        ws.append(headers_cn)
+        for row in rows:
+            ws.append([_cell_str(row.get(k)) for k in fields])
+
+        # 简易列宽自适应
+        for idx, key in enumerate(fields, start=1):
+            base_width = max(len(EXPORT_FIELD_LABELS.get(key, key)) * 2 + 4, 12)
+            ws.column_dimensions[ws.cell(row=1, column=idx).column_letter].width = min(
+                base_width, 40
+            )
+
+        bio = io.BytesIO()
+        workbook.save(bio)
+        bio.seek(0)
+        response = FileResponse(
+            bio,
+            as_attachment=True,
+            content_type=(
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            ),
+        )
+        return _attach_download_filename(response, f"{filename_base}.xlsx")
 
 
 class DeletedIssuesListViewSet(BaseAPIView):

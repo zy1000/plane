@@ -21,6 +21,31 @@ import type {
 // services
 import { APIService } from "@/services/api.service";
 
+/**
+ * 从 Content-Disposition 解析附件文件名，支持 RFC5987 的 `filename*=UTF-8''...` 格式。
+ */
+function parseAttachmentFilename(disposition?: string): string | null {
+  if (!disposition) return null;
+  const utf8Match = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utf8Match?.[1]) {
+    try {
+      return decodeURIComponent(utf8Match[1]);
+    } catch {
+      return utf8Match[1];
+    }
+  }
+  const asciiMatch = disposition.match(/filename="?([^";]+)"?/i);
+  return asciiMatch?.[1] ?? null;
+}
+
+function defaultExportFilename(format: "json" | "csv" | "xlsx"): string {
+  const ts = new Date()
+    .toISOString()
+    .replace(/[-:T]/g, "")
+    .slice(0, 14);
+  return `工作项导出_${ts}.${format}`;
+}
+
 export class IssueService extends APIService {
   private serviceType: TIssueServiceType;
 
@@ -136,17 +161,38 @@ export class IssueService extends APIService {
       });
   }
 
-  async bulkExportIssues(
+  async exportIssues(
     workspaceSlug: string,
     projectId: string,
-    issueIds: string[]
-  ): Promise<Record<string, unknown>[]> {
-    return this.post(`/api/workspaces/${workspaceSlug}/projects/${projectId}/issues/bulk-export/`, {
-      issue_ids: issueIds,
-    })
-      .then((response) => response?.data)
-      .catch((error) => {
-        throw error?.response?.data;
+    payload: {
+      scope: "selected" | "filtered";
+      issue_ids?: string[];
+      fields: string[];
+      format: "json" | "csv" | "xlsx";
+    },
+    queryString?: string
+  ): Promise<{ blob: Blob; filename: string }> {
+    const base = `/api/workspaces/${workspaceSlug}/projects/${projectId}/issues/bulk-export/`;
+    const url = queryString ? `${base}?${queryString}` : base;
+    return this.post(url, payload, { responseType: "blob" })
+      .then((response) => {
+        const blob: Blob = response?.data;
+        const disposition: string | undefined = response?.headers?.["content-disposition"];
+        const filename = parseAttachmentFilename(disposition) ?? defaultExportFilename(payload.format);
+        return { blob, filename };
+      })
+      .catch(async (error) => {
+        // 服务端错误时后端返回 JSON（非 blob），这里需要把 blob 解回文本
+        const data = error?.response?.data;
+        if (data instanceof Blob) {
+          try {
+            const text = await data.text();
+            throw JSON.parse(text);
+          } catch (parseErr) {
+            throw parseErr instanceof Error ? { error: parseErr.message } : parseErr;
+          }
+        }
+        throw data;
       });
   }
 
