@@ -297,7 +297,7 @@ export function ProjectDetailsForm(props: IProjectDetailsForm) {
           <span className="text-11 text-danger-primary">{errors?.name?.message}</span>
         </div>
         <div className="flex flex-col gap-1">
-          <h4 className="text-13">项目背景</h4>
+          <h4 className="text-13">项目描述</h4>
           <Controller
             name="description_html"
             control={control}

@@ -41,15 +41,18 @@ class TimeSheetReportViewSet(BaseViewSet):
         )
 
     def _apply_filters(self, request, slug):
-        """按查询参数构造 queryset，供 list / export 复用。"""
+        """按查询参数构造 queryset，供 list / export 复用。
+
+        project_id / member_id / category_id / category_key 均支持单值或逗号分隔的多值。
+        """
         params = request.query_params
         query = self.get_queryset()
 
         if not params.get("all_workspace"):
             query = query.filter(project__workspace__slug=slug)
 
-        if project_id := params.get("project_id"):
-            query = query.filter(project_id=project_id)
+        if project_ids := _parse_ids(params.get("project_id", "")):
+            query = query.filter(project_id__in=project_ids)
 
         if start_time := params.get("start_time"):
             query = query.filter(date__gte=start_time)
@@ -57,14 +60,15 @@ class TimeSheetReportViewSet(BaseViewSet):
         if end_time := params.get("end_time"):
             query = query.filter(date__lte=end_time)
 
-        if member_id := params.get("member_id"):
-            query = query.filter(member_id=member_id)
+        if member_ids := _parse_ids(params.get("member_id", "")):
+            query = query.filter(member_id__in=member_ids)
 
-        if category_id := params.get("category_id"):
-            query = query.filter(category_id=category_id)
+        if category_ids := _parse_ids(params.get("category_id", "")):
+            query = query.filter(category_id__in=category_ids)
 
-        if category_key := (params.get("category_key") or params.get("category__key")):
-            query = query.filter(category__key=category_key)
+        category_key_raw = params.get("category_key") or params.get("category__key") or ""
+        if category_keys := _parse_ids(category_key_raw):
+            query = query.filter(category__key__in=category_keys)
 
         return query.order_by("-date", "-start_time", "-id")
 

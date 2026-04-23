@@ -20,6 +20,7 @@ import {
   Square,
   SquareCheckBig,
   Target,
+  Tag,
   X,
 } from "lucide-react";
 import { observer } from "mobx-react";
@@ -29,6 +30,7 @@ import {
   getCategoryIconName,
   getCategoryIssueTypeNames,
   getCategoryPanelKind,
+  getTimesheetCategoryChroma,
 } from "@/constants/timesheet-category";
 import { useProject } from "@/hooks/store/use-project";
 import { useTimesheetCategories } from "@/hooks/store/use-timesheet-categories";
@@ -103,24 +105,32 @@ function deduplicateIssues(a: TIssueItem[], b: TIssueItem[]): TIssueItem[] {
 
 function CategoryIcon({ keyName, className }: { keyName: string | undefined; className?: string }) {
   const iconName = getCategoryIconName(keyName);
+  const chroma = getTimesheetCategoryChroma(keyName);
   const cls = className ?? "h-3.5 w-3.5 shrink-0";
-  switch (iconName) {
-    case "Layers":
-      return <Layers className={cls} />;
-    case "ClipboardCheck":
-      return <ClipboardCheck className={cls} />;
-    case "Beaker":
-      return <Beaker className={cls} />;
-    case "Target":
-      return <Target className={cls} />;
-    case "ListTodo":
-      return <ListTodo className={cls} />;
-    case "Bug":
-      return <Bug className={cls} />;
-    case "Clock":
-    default:
-      return <Clock className={cls} />;
-  }
+  const inner =
+    iconName === "Layers" ? (
+      <Layers className={cls} />
+    ) : iconName === "ClipboardCheck" ? (
+      <ClipboardCheck className={cls} />
+    ) : iconName === "Beaker" ? (
+      <Beaker className={cls} />
+    ) : iconName === "Target" ? (
+      <Target className={cls} />
+    ) : iconName === "ListTodo" ? (
+      <ListTodo className={cls} />
+    ) : iconName === "Bug" ? (
+      <Bug className={cls} />
+    ) : (
+      <Clock className={cls} />
+    );
+  return (
+    <span
+      className="inline-flex h-5 w-5 shrink-0 items-center justify-center"
+      style={{ color: chroma.color }}
+    >
+      {inner}
+    </span>
+  );
 }
 
 export const TimesheetRowAddModal = observer(function TimesheetRowAddModal({
@@ -135,7 +145,7 @@ export const TimesheetRowAddModal = observer(function TimesheetRowAddModal({
   const { categories, isLoading: isCategoriesLoading } = useTimesheetCategories();
 
   // Tree state
-  const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<TSelectedCategory | null>(null);
   const [projectSearchQuery, setProjectSearchQuery] = useState("");
   const [itemSearchQuery, setItemSearchQuery] = useState("");
@@ -305,7 +315,7 @@ export const TimesheetRowAddModal = observer(function TimesheetRowAddModal({
 
   useEffect(() => {
     if (open) {
-      setExpandedProjects(new Set());
+      setSelectedProjectId(null);
       setSelectedCategory(null);
       setProjectSearchQuery("");
       setItemSearchQuery("");
@@ -320,16 +330,14 @@ export const TimesheetRowAddModal = observer(function TimesheetRowAddModal({
     }
   }, [open]);
 
-  const toggleProjectExpand = (projectId: string) => {
-    setExpandedProjects((prev) => {
-      const next = new Set(prev);
-      if (next.has(projectId)) {
-        next.delete(projectId);
-      } else {
-        next.add(projectId);
-      }
-      return next;
-    });
+  const handleSelectProject = (projectId: string) => {
+    setSelectedProjectId(projectId);
+    // 切换项目时清掉右侧已进入的类别状态，避免把旧项目的类别联动到新项目
+    setSelectedCategory(null);
+    setItemSearchQuery("");
+    setIssues([]);
+    setTestCases([]);
+    setItemsError(null);
   };
 
   const handleSelectCategory = (projectId: string, categoryKey: string) => {
@@ -417,61 +425,89 @@ export const TimesheetRowAddModal = observer(function TimesheetRowAddModal({
     onClose();
   };
 
-  const selectedProject = selectedCategory ? getProjectById(selectedCategory.projectId) : null;
+  const selectedProject = selectedCategory
+    ? getProjectById(selectedCategory.projectId)
+    : selectedProjectId
+      ? getProjectById(selectedProjectId)
+      : null;
 
   const renderProjectNode = (pid: string) => {
     const project = getProjectById(pid);
     if (!project) return null;
-    const isExpanded = expandedProjects.has(pid);
+    const isActive = selectedProjectId === pid;
 
     return (
-      <div key={pid}>
-        <button
-          onClick={() => toggleProjectExpand(pid)}
-          className="group w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-layer-1 cursor-pointer"
-        >
-          <ChevronRight
-            className={cn("h-3 w-3 shrink-0 text-tertiary transition-transform duration-150", isExpanded && "rotate-90")}
-          />
-          <div className="grid size-6 shrink-0 place-items-center rounded-md bg-surface-2">
-            {project.logo_props ? (
-              <Logo logo={project.logo_props} size={14} />
-            ) : (
-              <FolderOpen className="h-3.5 w-3.5 text-tertiary" />
-            )}
-          </div>
-          <span className="text-sm font-medium text-primary truncate">{project.name}</span>
-          <span className="text-xs font-mono text-tertiary ml-auto shrink-0">{project.identifier}</span>
-        </button>
-
-        {isExpanded && (
-          <div className="ml-5 border-l border-subtle pl-2 space-y-0.5 mt-0.5">
-            {isCategoriesLoading && categories.length === 0 ? (
-              <div className="flex items-center gap-2 px-2 py-1.5 text-sm text-tertiary">
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                <span>加载类别…</span>
-              </div>
-            ) : (
-              categories.map((cat) => {
-                const isSelected =
-                  selectedCategory?.projectId === pid && selectedCategory?.categoryKey === cat.key;
-                return (
-                  <button
-                    key={cat.id}
-                    onClick={() => handleSelectCategory(pid, cat.key)}
-                    className={cn(
-                      "w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors cursor-pointer",
-                      isSelected ? "bg-accent-primary/10 text-accent-primary" : "text-secondary hover:bg-layer-1"
-                    )}
-                  >
-                    <CategoryIcon keyName={cat.key} />
-                    <span>{cat.name}</span>
-                  </button>
-                );
-              })
-            )}
-          </div>
+      <button
+        key={pid}
+        onClick={() => handleSelectProject(pid)}
+        className={cn(
+          "group w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors cursor-pointer",
+          isActive ? "bg-accent-primary/10 text-accent-primary" : "hover:bg-layer-1"
         )}
+      >
+        <div className="grid size-6 shrink-0 place-items-center rounded-md bg-surface-2">
+          {project.logo_props ? (
+            <Logo logo={project.logo_props} size={14} />
+          ) : (
+            <FolderOpen className="h-3.5 w-3.5 text-tertiary" />
+          )}
+        </div>
+        <span
+          className={cn(
+            "text-sm font-medium truncate",
+            isActive ? "text-accent-primary" : "text-primary"
+          )}
+        >
+          {project.name}
+        </span>
+        <span className="text-xs font-mono text-tertiary ml-auto shrink-0">{project.identifier}</span>
+      </button>
+    );
+  };
+
+  const renderCategoryColumn = () => {
+    if (!selectedProjectId) return null;
+    return (
+      <div className="w-[180px] shrink-0 border-r border-subtle flex flex-col overflow-hidden">
+        <div className="px-4 pt-3 pb-2 border-b border-subtle shrink-0">
+          <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-tertiary">
+            <Tag className="h-3.5 w-3.5 shrink-0 text-accent-primary" />
+            <span>工时类别</span>
+          </div>
+        </div>
+        <div className="flex-1 overflow-y-auto px-2 py-2 space-y-0.5 vertical-scrollbar scrollbar-sm">
+          {isCategoriesLoading && categories.length === 0 ? (
+            <div className="flex items-center gap-2 px-2 py-1.5 text-sm text-tertiary">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              <span>加载类别…</span>
+            </div>
+          ) : categories.length === 0 ? (
+            <div className="flex items-center justify-center py-6">
+              <p className="text-xs text-tertiary">暂无可用类别</p>
+            </div>
+          ) : (
+            categories.map((cat) => {
+              const isSelected =
+                selectedCategory?.projectId === selectedProjectId &&
+                selectedCategory?.categoryKey === cat.key;
+              return (
+                <button
+                  key={cat.id}
+                  onClick={() => handleSelectCategory(selectedProjectId, cat.key)}
+                  className={cn(
+                    "w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors cursor-pointer",
+                    isSelected
+                      ? "bg-accent-primary/10 text-accent-primary"
+                      : "text-secondary hover:bg-layer-1"
+                  )}
+                >
+                  <CategoryIcon keyName={cat.key} />
+                  <span className="truncate">{cat.name}</span>
+                </button>
+              );
+            })
+          )}
+        </div>
       </div>
     );
   };
@@ -752,6 +788,9 @@ export const TimesheetRowAddModal = observer(function TimesheetRowAddModal({
                     </div>
                   </div>
 
+                  {/* Middle: Category list for selected project */}
+                  {renderCategoryColumn()}
+
                   {/* Right: Content panel */}
                   <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
                     {selectedCategory ? (
@@ -760,13 +799,25 @@ export const TimesheetRowAddModal = observer(function TimesheetRowAddModal({
                       ) : (
                         renderItemListPanel()
                       )
+                    ) : selectedProjectId ? (
+                      <div className="flex h-full items-center justify-center">
+                        <div className="flex flex-col items-center gap-3 text-center">
+                          <Tag className="h-10 w-10 text-accent-primary/30" />
+                          <div className="space-y-1">
+                            <p className="text-sm font-medium text-secondary">选择工时类别</p>
+                            <p className="text-xs text-tertiary">
+                              在中间列选择一个类别，右侧会展示对应的任务列表
+                            </p>
+                          </div>
+                        </div>
+                      </div>
                     ) : (
                       <div className="flex h-full items-center justify-center">
                         <div className="flex flex-col items-center gap-3 text-center">
                           <FolderOpen className="h-10 w-10 text-tertiary/30" />
                           <div className="space-y-1">
-                            <p className="text-sm font-medium text-secondary">展开左侧项目</p>
-                            <p className="text-xs text-tertiary">选择工时类别以浏览和添加</p>
+                            <p className="text-sm font-medium text-secondary">选择左侧项目</p>
+                            <p className="text-xs text-tertiary">再选择工时类别以浏览和添加</p>
                           </div>
                         </div>
                       </div>

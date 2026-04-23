@@ -30,7 +30,7 @@ export const OverviewDescriptionModal: React.FC<Props> = observer((props) => {
       title={
         <div className="flex min-h-11 items-center gap-2 pr-2">
           <BookOpen className="h-4 w-4 shrink-0 text-placeholder" />
-          <span className="text-base font-medium text-primary">项目背景</span>
+          <span className="text-base font-medium text-primary">项目描述</span>
         </div>
       }
       open={isOpen}
@@ -94,7 +94,7 @@ export const OverviewDescriptionModal: React.FC<Props> = observer((props) => {
               workspaceId={workspaceId}
               projectId={projectId}
               onChange={() => {}}
-              placeholder={(isFocused, value) => (value ? "" : "暂无项目背景")}
+              placeholder={(isFocused, value) => (value ? "" : "暂无项目描述")}
               containerClassName="h-full"
             />
           </div>

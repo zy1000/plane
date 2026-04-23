@@ -51,29 +51,34 @@ export const SpreadsheetHeader = observer(function SpreadsheetHeader(props: Prop
       <tr>
         {/* Single header column containing both identifier and workitem */}
         <th
-          className="group/list-header left-0 z-[15] h-11 w-[360px] min-w-[360px] max-w-[360px] border-r-[0.5px] border-subtle bg-layer-1 text-13 font-medium md:sticky"
+          className="group/list-header relative left-0 z-[15] h-11 w-[360px] min-w-[360px] max-w-[360px] border-r-[0.5px] border-subtle bg-layer-1 text-13 font-medium md:sticky"
           tabIndex={-1}
         >
           <div className="flex h-full w-full items-center gap-2 px-page-x">
             {/* Workitem header section */}
             <div className="flex h-full w-full min-w-0 items-center gap-1 py-2.5">
               {canSelectIssues && (
-                <div className="mr-1 flex w-3.5 flex-shrink-0 items-center">
-                  <MultipleSelectGroupAction
-                    className={cn(
-                      "pointer-events-none size-3.5 opacity-0 !outline-none group-hover/list-header:pointer-events-auto group-hover/list-header:opacity-100",
-                      {
-                        "pointer-events-auto opacity-100": !isGroupSelectionEmpty,
-                      }
-                    )}
-                    groupID={SPREADSHEET_SELECT_GROUP}
-                    selectionHelpers={selectionHelpers}
-                  />
-                </div>
+                // 占位：在 flex 流内保留原有的宽度，保证「Work items」文字位置不变
+                <div className="mr-1 flex w-3.5 flex-shrink-0 items-center" aria-hidden />
               )}
               <span className="text-13 font-medium">{`${isEpic ? "Epics" : "Work items"}`}</span>
             </div>
           </div>
+          {canSelectIssues && (
+            // 实际勾选框：绝对定位到 left-1，与 SpreadsheetIssueRow 中 absolute left-1 的行复选框列对齐
+            <div className="absolute inset-y-0 left-1 grid w-3.5 flex-shrink-0 place-items-center">
+              <MultipleSelectGroupAction
+                className={cn(
+                  "pointer-events-none size-3.5 opacity-0 !outline-none group-hover/list-header:pointer-events-auto group-hover/list-header:opacity-100",
+                  {
+                    "pointer-events-auto opacity-100": !isGroupSelectionEmpty,
+                  }
+                )}
+                groupID={SPREADSHEET_SELECT_GROUP}
+                selectionHelpers={selectionHelpers}
+              />
+            </div>
+          )}
         </th>
 
         {spreadsheetColumnsList.map((property) => (

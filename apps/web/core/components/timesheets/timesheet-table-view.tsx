@@ -56,11 +56,11 @@ const ICON_BY_NAME: Record<string, LucideIcon> = {
   Bug,
 };
 
-// 工作项子类别 → 行首色块（仅影响视觉区分，不影响数据）。
-const ISSUE_CATEGORY_STYLE: Record<string, { color: string; bg: string; icon: LucideIcon }> = {
-  [TIMESHEET_CATEGORY_KEY.REQUIREMENT]: { color: "#0ea5e9", bg: "#eff6ff", icon: Target },
-  [TIMESHEET_CATEGORY_KEY.TASK]: { color: "#14b8a6", bg: "#ecfeff", icon: ListTodo },
-  [TIMESHEET_CATEGORY_KEY.BUG]: { color: "#ef4444", bg: "#fef2f2", icon: Bug },
+// 工作项子类别 → 行首图标（仅影响视觉区分，不影响数据）。
+const ISSUE_CATEGORY_STYLE: Record<string, { color: string; icon: LucideIcon }> = {
+  [TIMESHEET_CATEGORY_KEY.REQUIREMENT]: { color: "#0ea5e9", icon: Target },
+  [TIMESHEET_CATEGORY_KEY.TASK]: { color: "#14b8a6", icon: ListTodo },
+  [TIMESHEET_CATEGORY_KEY.BUG]: { color: "#ef4444", icon: Bug },
 };
 
 function getRowKindMeta(row: TTimesheetRow) {
@@ -74,19 +74,18 @@ function getRowKindMeta(row: TTimesheetRow) {
       icon: style?.icon ?? Layers,
       label: row.categoryName ?? "工作项工时",
       color: style?.color,
-      bg: style?.bg,
     };
   }
   if (row.type === "test_case") {
-    return { icon: ClipboardCheck, label: row.categoryName ?? "测试工时", color: "#f59e0b", bg: "#fffbeb" };
+    return { icon: ClipboardCheck, label: row.categoryName ?? "测试工时", color: "#f59e0b" };
   }
   if (row.categoryKey === TIMESHEET_CATEGORY_KEY.SAMPLE) {
-    return { icon: Beaker, label: fallbackLabel, color: "#a855f7", bg: "#faf5ff" };
+    return { icon: Beaker, label: fallbackLabel, color: "#a855f7" };
   }
   if (row.categoryKey === TIMESHEET_CATEGORY_KEY.PROJECT) {
-    return { icon: FolderOpen, label: fallbackLabel, color: "#3b82f6", bg: "#eff6ff" };
+    return { icon: FolderOpen, label: fallbackLabel, color: "#3b82f6" };
   }
-  return { icon: Icon, label: fallbackLabel, color: "#64748b", bg: "#f1f5f9" };
+  return { icon: Icon, label: fallbackLabel, color: "#64748b" };
 }
 
 type TTimesheetTableViewProps = {
@@ -205,22 +204,26 @@ export const TimesheetTableView = observer(function TimesheetTableView({
                   >
                     <div className="flex items-center justify-between gap-2 min-w-0">
                       <div className="flex items-center gap-2 min-w-0">
-                        {row.type === "issue" ? (
-                          <WorkItemTypeIcon
-                            typeName={row.issueTypeName}
-                            className="h-5 w-5 rounded-md"
-                            title={row.issueTypeName ?? "工作项工时"}
-                          />
-                        ) : (
-                          <span
-                            className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md"
-                            style={{ backgroundColor: rowKind.bg, color: rowKind.color }}
-                            aria-label={rowKind.label}
-                            title={rowKind.label}
-                          >
-                            <rowKind.icon className="h-3.5 w-3.5" />
-                          </span>
-                        )}
+                        <div className="flex h-5 w-5 shrink-0 items-center justify-center self-center">
+                          {row.type === "issue" ? (
+                            <WorkItemTypeIcon
+                              typeName={row.issueTypeName}
+                              className="h-5 w-5"
+                              size={20}
+                              plain
+                              title={row.issueTypeName ?? "工作项工时"}
+                            />
+                          ) : (
+                            <span
+                              className="inline-flex size-full items-center justify-center"
+                              style={{ color: rowKind.color }}
+                              aria-label={rowKind.label}
+                              title={rowKind.label}
+                            >
+                              <rowKind.icon className="h-3.5 w-3.5" />
+                            </span>
+                          )}
+                        </div>
                         {projectLabel ? (
                           <span className="shrink-0 rounded bg-layer-1 px-1.5 py-0.5 text-xs font-mono font-medium text-tertiary">
                             {projectLabel}

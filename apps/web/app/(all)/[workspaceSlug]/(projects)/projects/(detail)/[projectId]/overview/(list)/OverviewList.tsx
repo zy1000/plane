@@ -298,7 +298,7 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
               <div className="mb-3 flex flex-shrink-0 items-center justify-between">
                 <div className="flex items-center gap-2">
                   <BookOpen className="h-3.5 w-3.5 text-placeholder" />
-                  <span className="text-sm font-medium text-primary">项目背景</span>
+                  <span className="text-sm font-medium text-primary">项目描述</span>
                   {projectDescriptionEditMeta !== null && (
                     <span className="text-xs text-placeholder">
                       {projectDescriptionEditMeta}
@@ -309,7 +309,7 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
                   <button
                     type="button"
                     className="cursor-pointer rounded-md p-1 text-placeholder transition-colors hover:bg-surface-2 hover:text-primary"
-                    aria-label="全屏查看项目背景"
+                    aria-label="全屏查看项目描述"
                     title="全屏查看"
                     onClick={() => setIsDescriptionModalOpen(true)}
                   >

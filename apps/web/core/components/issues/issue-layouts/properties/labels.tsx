@@ -208,36 +208,38 @@ export const IssuePropertyLabels = observer(function IssuePropertyLabels(props: 
   let projectLabels: IIssueLabel[] = defaultOptions as IIssueLabel[];
   if (storeLabels && storeLabels.length > 0) projectLabels = storeLabels;
 
+  // 过滤掉尚未在 store / defaultOptions 里找到的 undefined，避免空白不可点击的格子
+  const matchedLabels =
+    projectLabels?.filter((l): l is IIssueLabel => !!l && value.includes(l.id)) ?? [];
+
   return (
     <>
       {value.length > 0 ? (
-        value.length <= maxRender ? (
-          projectLabels
-            ?.filter((l) => value.includes(l?.id))
-            .map((label) => (
-              <LabelDropdown
-                key={label.id}
-                projectId={projectId}
-                value={value}
-                onChange={onChange}
-                className={className}
-                buttonClassName={buttonClassName}
-                placement={placement}
-                hideDropdownArrow={hideDropdownArrow}
-                fullWidth={fullWidth}
-                fullHeight={fullHeight}
-                label={
-                  <LabelItem
-                    label={label}
-                    isMobile={isMobile}
-                    renderByDefault={renderByDefault}
-                    disabled={disabled}
-                    fullWidth={fullWidth}
-                    noLabelBorder={noLabelBorder}
-                  />
-                }
-              />
-            ))
+        value.length <= maxRender && matchedLabels.length === value.length ? (
+          matchedLabels.map((label) => (
+            <LabelDropdown
+              key={label.id}
+              projectId={projectId}
+              value={value}
+              onChange={onChange}
+              className={className}
+              buttonClassName={buttonClassName}
+              placement={placement}
+              hideDropdownArrow={hideDropdownArrow}
+              fullWidth={fullWidth}
+              fullHeight={fullHeight}
+              label={
+                <LabelItem
+                  label={label}
+                  isMobile={isMobile}
+                  renderByDefault={renderByDefault}
+                  disabled={disabled}
+                  fullWidth={fullWidth}
+                  noLabelBorder={noLabelBorder}
+                />
+              }
+            />
+          ))
         ) : (
           <LabelDropdown
             projectId={projectId}

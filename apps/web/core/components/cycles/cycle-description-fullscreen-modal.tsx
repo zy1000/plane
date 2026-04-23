@@ -29,7 +29,7 @@ type Props = {
 };
 
 /**
- * 迭代描述全屏查看/编辑（交互对齐项目概览「项目背景」弹窗）。
+ * 迭代描述全屏查看/编辑（交互对齐项目概览「项目描述」弹窗）。
  */
 export const CycleDescriptionFullscreenModal: FC<Props> = observer(function CycleDescriptionFullscreenModal(
   props: Props

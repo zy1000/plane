@@ -14,9 +14,12 @@ import {
 const service = new TimesheetService();
 
 export type TTimesheetReportFilters = {
-  projectId?: string;
-  memberId?: string;
-  categoryKey?: string;
+  /** 项目 id 列表，多选；空数组或 undefined 代表不过滤。 */
+  projectIds?: string[];
+  /** 成员 id 列表，多选；空数组或 undefined 代表不过滤。 */
+  memberIds?: string[];
+  /** 类别 key 列表，多选；空数组或 undefined 代表不过滤。 */
+  categoryKeys?: string[];
   startDate?: string;
   endDate?: string;
 };
@@ -45,9 +48,9 @@ const buildParams = (
   const params: TTimesheetReportParams = {
     per_page: pageSize,
   };
-  if (filters.projectId) params.project_id = filters.projectId;
-  if (filters.memberId) params.member_id = filters.memberId;
-  if (filters.categoryKey) params.category_key = filters.categoryKey;
+  if (filters.projectIds && filters.projectIds.length > 0) params.project_id = filters.projectIds;
+  if (filters.memberIds && filters.memberIds.length > 0) params.member_id = filters.memberIds;
+  if (filters.categoryKeys && filters.categoryKeys.length > 0) params.category_key = filters.categoryKeys;
   if (filters.startDate) params.start_time = filters.startDate;
   if (filters.endDate) params.end_time = filters.endDate;
   // OffsetPaginator 的 cursor 形式为 "<limit>:<pageIndex>:0"，pageIndex 从 0 开始
@@ -122,9 +125,9 @@ export const useTimesheetReport = ({
     setIsExporting(true);
     try {
       const baseParams: TTimesheetReportParams = {};
-      if (filters.projectId) baseParams.project_id = filters.projectId;
-      if (filters.memberId) baseParams.member_id = filters.memberId;
-      if (filters.categoryKey) baseParams.category_key = filters.categoryKey;
+      if (filters.projectIds && filters.projectIds.length > 0) baseParams.project_id = filters.projectIds;
+      if (filters.memberIds && filters.memberIds.length > 0) baseParams.member_id = filters.memberIds;
+      if (filters.categoryKeys && filters.categoryKeys.length > 0) baseParams.category_key = filters.categoryKeys;
       if (filters.startDate) baseParams.start_time = filters.startDate;
       if (filters.endDate) baseParams.end_time = filters.endDate;
       const { blob, filename } = await service.reportExport(

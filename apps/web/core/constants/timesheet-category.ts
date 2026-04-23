@@ -103,3 +103,32 @@ export function getCategoryIconName(key: string | undefined | null): TTimesheetC
   if (!key) return "Clock";
   return CATEGORY_ICON_NAME[key] ?? "Clock";
 }
+
+const DEFAULT_CATEGORY_CHROMA = { color: "#64748b", bg: "#f1f5f9" } as const;
+
+/**
+ * 类别在列表/表头等处的图标底色与主色，与 `timesheet-table-view`、时间轴块视觉一致。
+ */
+export function getTimesheetCategoryChroma(
+  key: string | undefined | null
+): { color: string; bg: string } {
+  if (!key) return { ...DEFAULT_CATEGORY_CHROMA };
+  switch (key) {
+    case TIMESHEET_CATEGORY_KEY.REQUIREMENT:
+      return { color: "#0ea5e9", bg: "#eff6ff" };
+    case TIMESHEET_CATEGORY_KEY.TASK:
+      return { color: "#14b8a6", bg: "#ecfeff" };
+    case TIMESHEET_CATEGORY_KEY.BUG:
+      return { color: "#ef4444", bg: "#fef2f2" };
+    case TIMESHEET_CATEGORY_KEY.TEST_CASE:
+      return { color: "#f59e0b", bg: "#fffbeb" };
+    case TIMESHEET_CATEGORY_KEY.SAMPLE:
+      return { color: "#a855f7", bg: "#faf5ff" };
+    case TIMESHEET_CATEGORY_KEY.PROJECT:
+      return { color: "#3b82f6", bg: "#eff6ff" };
+    case TIMESHEET_CATEGORY_KEY.ISSUE:
+      return { ...DEFAULT_CATEGORY_CHROMA };
+    default:
+      return { ...DEFAULT_CATEGORY_CHROMA };
+  }
+}

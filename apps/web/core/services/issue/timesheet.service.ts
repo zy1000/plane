@@ -80,10 +80,11 @@ export type TTimesheetReportRow = {
 };
 
 export type TTimesheetReportParams = {
-  project_id?: string;
-  member_id?: string;
-  category_id?: string;
-  category_key?: string;
+  /** 单值或多值；多值以逗号分隔后发送给后端。 */
+  project_id?: string | string[];
+  member_id?: string | string[];
+  category_id?: string | string[];
+  category_key?: string | string[];
   start_time?: string;
   end_time?: string;
   cursor?: string;
@@ -140,6 +141,25 @@ type TDuplicateTimesheetCheck = {
 };
 
 const normalizeClockValue = (value: string) => value.slice(0, 5);
+
+/**
+ * 把支持单值或数组的查询参数统一写入到 query 对象中。
+ * - 数组：去重 + 过滤空值后以逗号拼接；全部为空则不写入。
+ * - 字符串：非空时直接写入。
+ */
+const assignMultiValueParam = (
+  target: Record<string, string | number>,
+  key: string,
+  value: string | string[] | undefined
+) => {
+  if (value === undefined || value === null) return;
+  if (Array.isArray(value)) {
+    const joined = Array.from(new Set(value.filter(Boolean))).join(",");
+    if (joined) target[key] = joined;
+    return;
+  }
+  if (value) target[key] = value;
+};
 
 export const hasDuplicateTimesheetEntry = ({
   timesheets,
@@ -274,10 +294,10 @@ export class TimesheetService extends APIService {
     params: TTimesheetReportParams
   ): Promise<TTimesheetReportResponse> {
     const queryParams: Record<string, string | number> = {};
-    if (params.project_id) queryParams.project_id = params.project_id;
-    if (params.member_id) queryParams.member_id = params.member_id;
-    if (params.category_id) queryParams.category_id = params.category_id;
-    if (params.category_key) queryParams.category_key = params.category_key;
+    assignMultiValueParam(queryParams, "project_id", params.project_id);
+    assignMultiValueParam(queryParams, "member_id", params.member_id);
+    assignMultiValueParam(queryParams, "category_id", params.category_id);
+    assignMultiValueParam(queryParams, "category_key", params.category_key);
     if (params.start_time) queryParams.start_time = params.start_time;
     if (params.end_time) queryParams.end_time = params.end_time;
     if (params.cursor) queryParams.cursor = params.cursor;
@@ -297,10 +317,10 @@ export class TimesheetService extends APIService {
     ids?: string[]
   ): Promise<{ blob: Blob; filename: string }> {
     const queryParams: Record<string, string> = {};
-    if (params.project_id) queryParams.project_id = params.project_id;
-    if (params.member_id) queryParams.member_id = params.member_id;
-    if (params.category_id) queryParams.category_id = params.category_id;
-    if (params.category_key) queryParams.category_key = params.category_key;
+    assignMultiValueParam(queryParams, "project_id", params.project_id);
+    assignMultiValueParam(queryParams, "member_id", params.member_id);
+    assignMultiValueParam(queryParams, "category_id", params.category_id);
+    assignMultiValueParam(queryParams, "category_key", params.category_key);
     if (params.start_time) queryParams.start_time = params.start_time;
     if (params.end_time) queryParams.end_time = params.end_time;
     if (ids && ids.length > 0) queryParams.ids = ids.join(",");
