@@ -73,6 +73,10 @@ from plane.utils.paginator import CustomPaginator
 from plane.utils.response import list_response
 from plane.utils.timezone_converter import user_timezone_converter
 from plane.bgtasks.webhook_task import model_activity
+from plane.bgtasks.entity_status_email_task import (
+    dispatch_release_status_email,
+    RELEASE_STATUS_EMAIL_WHITELIST,
+)
 from .. import BaseAPIView, BaseViewSet
 from plane.bgtasks.recent_visited_task import recent_visited_task
 from plane.utils.host import base_host
@@ -667,6 +671,7 @@ class ReleaseViewSet(BaseViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         current_instance = json.dumps(ReleaseSerializer(current_release).data, cls=DjangoJSONEncoder)
+        previous_status = current_release.status
         serializer = ReleaseWriteSerializer(current_release, data=request.data, partial=True)
 
         if serializer.is_valid():
@@ -711,6 +716,20 @@ class ReleaseViewSet(BaseViewSet):
                 slug=slug,
                 origin=base_host(request=request, is_app=True),
             )
+
+            new_status = release.get("status")
+            if (
+                new_status
+                and new_status != previous_status
+                and new_status in RELEASE_STATUS_EMAIL_WHITELIST
+            ):
+                dispatch_release_status_email.delay(
+                    release_id=str(release["id"]),
+                    actor_id=str(request.user.id),
+                    old_status=previous_status,
+                    new_status=new_status,
+                    origin=base_host(request=request, is_app=True),
+                )
 
             datetime_fields = ["created_at", "updated_at"]
             release = user_timezone_converter(release, datetime_fields, request.user.user_timezone)

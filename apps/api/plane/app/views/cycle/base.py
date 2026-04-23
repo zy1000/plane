@@ -60,8 +60,10 @@ from plane.utils.analytics_plot import burndown_plot
 from plane.bgtasks.recent_visited_task import recent_visited_task
 from plane.utils.host import base_host
 from plane.utils.cycle_transfer_issues import transfer_cycle_issues
+from plane.utils.cycle_status import refresh_cycle_statuses, CYCLE_STATUS_EMAIL_WHITELIST
 from .. import BaseAPIView, BaseViewSet
 from plane.bgtasks.webhook_task import model_activity
+from plane.bgtasks.entity_status_email_task import dispatch_cycle_status_email
 from plane.utils.timezone_converter import convert_to_utc, user_timezone_converter
 
 
@@ -198,27 +200,14 @@ class CycleViewSet(BaseViewSet):
         # Convert project local time back to UTC for comparison (start_date is stored in UTC)
         current_time_in_utc = current_time_in_project_tz.astimezone(pytz.utc)
 
-        base_update_queryset = (
-            Cycle.objects.filter(
-                workspace__slug=slug,
-                project_id=project_id,
-                archived_at__isnull=True,
-                deleted_at__isnull=True,
-                start_date__isnull=False,
-                end_date__isnull=False,
-                project__project_projectmember__member=request.user,
-                project__project_projectmember__is_active=True,
-                project__archived_at__isnull=True,
-            )
-            .exclude(status__in=[Cycle.Status.COMPLETED, Cycle.Status.CANCELLED])
+        # Refresh statuses and dispatch status-change emails for whitelisted transitions.
+        refresh_cycle_statuses(
+            slug=slug,
+            project_id=project_id,
+            project_timezone=project_timezone,
+            user_id=request.user.id,
+            origin=base_host(request=request, is_app=True),
         )
-
-        base_update_queryset.filter(start_date__gt=current_time_in_utc).update(status=Cycle.Status.NOT_STARTED)
-        base_update_queryset.filter(
-            start_date__lte=current_time_in_utc,
-            end_date__gte=current_time_in_utc,
-        ).update(status=Cycle.Status.IN_PROGRESS)
-        base_update_queryset.filter(end_date__lt=current_time_in_utc).update(status=Cycle.Status.DELAYED)
 
 
 
@@ -406,6 +395,7 @@ class CycleViewSet(BaseViewSet):
             )
 
         current_instance = json.dumps(CycleSerializer(cycle).data, cls=DjangoJSONEncoder)
+        previous_status = cycle.status
 
         request_data = request.data
 
@@ -468,6 +458,20 @@ class CycleViewSet(BaseViewSet):
                 origin=base_host(request=request, is_app=True),
             )
 
+            new_status = cycle.get("status")
+            if (
+                new_status
+                and new_status != previous_status
+                and new_status in CYCLE_STATUS_EMAIL_WHITELIST
+            ):
+                dispatch_cycle_status_email.delay(
+                    cycle_id=str(cycle["id"]),
+                    actor_id=str(request.user.id),
+                    old_status=previous_status,
+                    new_status=new_status,
+                    origin=base_host(request=request, is_app=True),
+                )
+
             return Response(cycle, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -479,17 +483,14 @@ class CycleViewSet(BaseViewSet):
         # Fetch project for the specific record or pass project_id dynamically
         project_timezone = project.timezone
 
-        # Convert the current time (timezone.now()) to the project's timezone
-        local_tz = pytz.timezone(project_timezone)
-        current_time_in_project_tz = timezone.now().astimezone(local_tz)
-        current_time_in_utc = current_time_in_project_tz.astimezone(pytz.utc)
-        update_query = Cycle.objects.filter(pk=pk).exclude(status__in=[Cycle.Status.COMPLETED, Cycle.Status.CANCELLED])
-        update_query.filter(
-            start_date__lte=current_time_in_utc,
-            end_date__gte=current_time_in_utc,
-        ).update(status=Cycle.Status.IN_PROGRESS)
-        update_query.filter(end_date__lt=current_time_in_utc).update(status=Cycle.Status.DELAYED)
-        update_query.filter(start_date__gt=current_time_in_utc).update(status=Cycle.Status.NOT_STARTED)
+        # Refresh this cycle's status and dispatch status-change emails if needed.
+        refresh_cycle_statuses(
+            slug=slug,
+            project_id=project_id,
+            project_timezone=project_timezone,
+            pk=pk,
+            origin=base_host(request=request, is_app=True),
+        )
 
         data = (
             self.get_queryset()
