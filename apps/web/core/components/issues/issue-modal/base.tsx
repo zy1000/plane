@@ -210,21 +210,37 @@ export const CreateUpdateIssueModalBase = observer(function CreateUpdateIssueMod
 
       if (!response) throw new Error();
 
-      // check if we should add issue to cycle/module
+      // 迭代/模块/发布三类关联是单独接口、并且各有独立的细粒度权限
+      // （sprints.issue.manage / modules.issue.manage / releases.issue.manage）。
+      // 工作项本体此时已经创建成功，这些后置关联任意一个失败（常见原因是权限不足）
+      // 都不应把整体流程判定为「创建失败」——否则会产生脏数据且误导用户。
+      // 因此这里逐个 try/catch，记录失败的关联类别，最后统一给出 warning 提示。
+      const failedAssociations: string[] = [];
+      const runAssociation = async (label: string, task: () => Promise<void>) => {
+        try {
+          await task();
+        } catch (err) {
+          // 打到控制台便于排查；对用户只通过后续 warning toast 反馈
+          // eslint-disable-next-line no-console
+          console.warn(`[IssueModal] 创建工作项后关联${label}失败`, err);
+          failedAssociations.push(label);
+        }
+      };
+
       if (!is_draft_issue) {
         if (
           payload.cycle_id &&
           payload.cycle_id !== "" &&
           (payload.cycle_id !== cycleId || storeType !== EIssuesStoreType.CYCLE)
         ) {
-          await addIssueToCycle(response, payload.cycle_id);
+          await runAssociation("迭代", () => addIssueToCycle(response, payload.cycle_id as string));
         }
         if (
           payload.module_ids &&
           payload.module_ids.length > 0 &&
           (!payload.module_ids.includes(moduleId?.toString()) || storeType !== EIssuesStoreType.MODULE)
         ) {
-          await addIssueToModule(response, payload.module_ids);
+          await runAssociation("模块", () => addIssueToModule(response, payload.module_ids as string[]));
         }
         if (releaseIdsToLink && releaseIdsToLink.length > 0) {
           const urlRelease = releaseId?.toString();
@@ -232,7 +248,9 @@ export const CreateUpdateIssueModalBase = observer(function CreateUpdateIssueMod
             storeType === EIssuesStoreType.RELEASE && urlRelease
               ? releaseIdsToLink.filter((id) => id !== urlRelease)
               : releaseIdsToLink;
-          if (toLink.length > 0) await addIssueToReleases(response, toLink);
+          if (toLink.length > 0) {
+            await runAssociation("发布", () => addIssueToReleases(response, toLink));
+          }
         }
       }
 
@@ -254,18 +272,34 @@ export const CreateUpdateIssueModalBase = observer(function CreateUpdateIssueMod
         });
       }
 
-      setToast({
-        type: TOAST_TYPE.SUCCESS,
-        title: t("success"),
-        message: `${is_draft_issue ? t("draft_created") : t("issue_created_successfully")} `,
-        actionItems: !is_draft_issue && response?.project_id && (
-          <CreateIssueToastActionItems
-            workspaceSlug={workspaceSlug.toString()}
-            projectId={response?.project_id}
-            issueId={response.id}
-          />
-        ),
-      });
+      if (!is_draft_issue && failedAssociations.length > 0) {
+        // 工作项已创建，但部分关联失败（大概率是权限不足）——给出 warning 而非 error
+        setToast({
+          type: TOAST_TYPE.WARNING,
+          title: t("issue_created_successfully"),
+          message: `工作项已创建，但以下关联未能成功（可能是权限不足，请联系管理员）：${failedAssociations.join("、")}`,
+          actionItems: response?.project_id && (
+            <CreateIssueToastActionItems
+              workspaceSlug={workspaceSlug.toString()}
+              projectId={response?.project_id}
+              issueId={response.id}
+            />
+          ),
+        });
+      } else {
+        setToast({
+          type: TOAST_TYPE.SUCCESS,
+          title: t("success"),
+          message: `${is_draft_issue ? t("draft_created") : t("issue_created_successfully")} `,
+          actionItems: !is_draft_issue && response?.project_id && (
+            <CreateIssueToastActionItems
+              workspaceSlug={workspaceSlug.toString()}
+              projectId={response?.project_id}
+              issueId={response.id}
+            />
+          ),
+        });
+      }
       if (!createMore) handleClose();
       if (createMore && issueTitleRef) issueTitleRef?.current?.focus();
       setDescription("<p></p>");
@@ -291,17 +325,37 @@ export const CreateUpdateIssueModalBase = observer(function CreateUpdateIssueMod
         await updateIssue(payload.project_id, data.id, patchPayload);
       }
 
+      // 同创建流程：迭代/模块/发布关联是独立接口、独立细粒度权限，
+      // 单独失败（常见是权限不足）不应把整个「更新工作项」判定为失败。
+      const updateFailedAssociations: string[] = [];
+      const runUpdateAssociation = async (label: string, task: () => Promise<void>) => {
+        try {
+          await task();
+        } catch (err) {
+          // eslint-disable-next-line no-console
+          console.warn(`[IssueModal] 更新工作项后关联${label}失败`, err);
+          updateFailedAssociations.push(label);
+        }
+      };
+
       // check if we should add/remove issue to/from cycle
       if (
         payload.cycle_id &&
         payload.cycle_id !== "" &&
         (payload.cycle_id !== cycleId || storeType !== EIssuesStoreType.CYCLE)
       ) {
-        await addIssueToCycle(data as TBaseIssue, payload.cycle_id);
+        await runUpdateAssociation("迭代", () => addIssueToCycle(data as TBaseIssue, payload.cycle_id as string));
       }
       if (data.cycle_id && "cycle_id" in payload && !payload.cycle_id && data.project_id) {
-        await issues.removeIssueFromCycle(workspaceSlug.toString(), data.project_id, data.cycle_id, data.id);
-        fetchCycleDetails(workspaceSlug.toString(), data.project_id, data.cycle_id);
+        await runUpdateAssociation("迭代", async () => {
+          await issues.removeIssueFromCycle(
+            workspaceSlug.toString(),
+            data.project_id as string,
+            data.cycle_id as string,
+            data.id
+          );
+          fetchCycleDetails(workspaceSlug.toString(), data.project_id as string, data.cycle_id as string);
+        });
       }
 
       if (data.module_ids && payload.module_ids && data.project_id) {
@@ -316,13 +370,17 @@ export const CreateUpdateIssueModalBase = observer(function CreateUpdateIssueMod
             modulesToAdd.push(moduleId);
           }
         }
-        await issues.changeModulesInIssue(
-          workspaceSlug.toString(),
-          data.project_id,
-          data.id,
-          modulesToAdd,
-          modulesToRemove
-        );
+        if (modulesToAdd.length > 0 || modulesToRemove.length > 0) {
+          await runUpdateAssociation("模块", () =>
+            issues.changeModulesInIssue(
+              workspaceSlug.toString(),
+              data.project_id as string,
+              data.id,
+              modulesToAdd,
+              modulesToRemove
+            )
+          );
+        }
       }
 
       if (data.project_id && payload.release_ids !== undefined) {
@@ -336,10 +394,12 @@ export const CreateUpdateIssueModalBase = observer(function CreateUpdateIssueMod
           else releasesToAdd.push(rid);
         }
         if (releasesToAdd.length > 0 || releasesToRemove.length > 0) {
-          await releaseService.addReleasesToIssue(workspaceSlug.toString(), data.project_id, data.id, {
-            releases: releasesToAdd,
-            removed_releases: releasesToRemove,
-          });
+          await runUpdateAssociation("发布", () =>
+            releaseService.addReleasesToIssue(workspaceSlug.toString(), data.project_id as string, data.id, {
+              releases: releasesToAdd,
+              removed_releases: releasesToRemove,
+            })
+          );
         }
       }
 
@@ -352,19 +412,35 @@ export const CreateUpdateIssueModalBase = observer(function CreateUpdateIssueMod
         isDraft: isDraft,
       });
 
-      setToast({
-        type: TOAST_TYPE.SUCCESS,
-        title: t("success"),
-        message: t("issue_updated_successfully"),
-        actionItems:
-          showActionItemsOnUpdate && payload.project_id ? (
-            <CreateIssueToastActionItems
-              workspaceSlug={workspaceSlug.toString()}
-              projectId={payload.project_id}
-              issueId={data.id}
-            />
-          ) : undefined,
-      });
+      if (updateFailedAssociations.length > 0) {
+        setToast({
+          type: TOAST_TYPE.WARNING,
+          title: t("issue_updated_successfully"),
+          message: `工作项已更新，但以下关联未能成功（可能是权限不足，请联系管理员）：${updateFailedAssociations.join("、")}`,
+          actionItems:
+            showActionItemsOnUpdate && payload.project_id ? (
+              <CreateIssueToastActionItems
+                workspaceSlug={workspaceSlug.toString()}
+                projectId={payload.project_id}
+                issueId={data.id}
+              />
+            ) : undefined,
+        });
+      } else {
+        setToast({
+          type: TOAST_TYPE.SUCCESS,
+          title: t("success"),
+          message: t("issue_updated_successfully"),
+          actionItems:
+            showActionItemsOnUpdate && payload.project_id ? (
+              <CreateIssueToastActionItems
+                workspaceSlug={workspaceSlug.toString()}
+                projectId={payload.project_id}
+                issueId={data.id}
+              />
+            ) : undefined,
+        });
+      }
       handleClose();
     } catch (error: any) {
       console.error(error);

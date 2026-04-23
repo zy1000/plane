@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef } from "react";
 import { combine } from "@atlaskit/pragmatic-drag-and-drop/combine";
 import { autoScrollForElements } from "@atlaskit/pragmatic-drag-and-drop-auto-scroll/element";
 import { observer } from "mobx-react";
@@ -55,6 +55,10 @@ export interface IList {
   handleCollapsedGroups: (value: string) => void;
   collapsedGroups: TIssueKanbanFilters;
   isEpic?: boolean;
+  /** 受控的当前分组 id；由 BaseListRoot 持有以便在数据刷新导致 List 卸载后保留选中项 */
+  selectedGroupId: string | null;
+  /** 选中分组的 setter；由 BaseListRoot 提供 */
+  onSelectGroup: (groupId: string | null) => void;
 }
 
 export const List = observer(function List(props: IList) {
@@ -77,6 +81,8 @@ export const List = observer(function List(props: IList) {
     handleCollapsedGroups,
     collapsedGroups,
     isEpic = false,
+    selectedGroupId,
+    onSelectGroup,
   } = props;
 
   const storeType = useIssueStoreType();
@@ -85,7 +91,6 @@ export const List = observer(function List(props: IList) {
   const isBulkOperationsEnabled = useBulkOperationStatus();
 
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
 
   const groups = getGroupByColumns({
     groupBy: group_by as GroupByColumnTypes,
@@ -98,18 +103,17 @@ export const List = observer(function List(props: IList) {
   const is_list = group_by === null;
   const isGrouped = !is_list && !!groups && groups.length > 0;
 
-  const handleSelectGroup = useCallback((groupId: string) => {
-    setSelectedGroupId(groupId);
-  }, []);
-
-  // Auto-select the first visible group when groups change or selectedGroupId is invalid
+  // Auto-select the first visible group when groups change or selectedGroupId is invalid.
+  // 注意：selectedGroupId 由父级（BaseListRoot）持有，因此即使本组件在
+  // fetchIssues('mutation') 时被 IssueLayoutHOC 暂时卸载，选中项也会保留；
+  // 这里的校验只在 groupBy 切换或当前选中真的不在可选集合时生效。
   useEffect(() => {
     if (!isGrouped || !groups) return;
     const currentValid = selectedGroupId && groups.some((g) => g.id === selectedGroupId);
     if (!currentValid) {
-      setSelectedGroupId(groups[0]?.id ?? null);
+      onSelectGroup(groups[0]?.id ?? null);
     }
-  }, [isGrouped, groups, selectedGroupId]);
+  }, [isGrouped, groups, selectedGroupId, onSelectGroup]);
 
   // Enable Auto Scroll for Main Kanban
   useEffect(() => {
@@ -162,7 +166,7 @@ export const List = observer(function List(props: IList) {
           groupedIssueIds={groupedIssueIds}
           groupBy={group_by}
           selectedGroupId={selectedGroupId ?? ""}
-          onSelectGroup={handleSelectGroup}
+          onSelectGroup={onSelectGroup}
           showEmptyGroup={showEmptyGroup}
         />
         <div className="relative flex min-w-0 flex-1 flex-col">

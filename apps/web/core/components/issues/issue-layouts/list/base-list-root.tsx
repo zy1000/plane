@@ -5,7 +5,7 @@
  */
 
 import type { FC } from "react";
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 // plane constants
@@ -87,6 +87,17 @@ export const BaseListRoot = observer(function BaseListRoot(props: IBaseListRoot)
   const collapsedGroups =
     issuesFilter?.issueFilters?.kanbanFilters || ({ group_by: [], sub_group_by: [] } as TIssueKanbanFilters);
 
+  // 将分组侧栏选中项提升到这里持有：IssueLayoutHOC 在数据刷新（如删除工作项后
+  // 触发的 fetchIssues('mutation')）期间可能暂时卸载 <List>，
+  // 若 state 放在 <List> 内部就会被清空，从而回退到首个分组（如 Backlog）。
+  // 放在 BaseListRoot 保证选中分组跨刷新保留。
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+
+  // groupBy 切换时清空选中，交给 <List> 的校验 effect 重新挑选首个可见分组
+  useEffect(() => {
+    setSelectedGroupId(null);
+  }, [group_by, storeType, viewId]);
+
   useEffect(() => {
     fetchIssues("init-loader", { canGroup: true, perPageCount: group_by ? 50 : 100 }, viewId);
   }, [fetchIssues, storeType, group_by, viewId]);
@@ -117,8 +128,11 @@ export const BaseListRoot = observer(function BaseListRoot(props: IBaseListRoot)
         parentRef={parentRef}
         issue={issue}
         handleDelete={async () => {
+          // removeIssue 已经在 store 中乐观更新了 groupedIssueIds / groupedIssueCount，
+          // MobX 会反应式地让 List 无闪动地重渲；如果这里再调用 fetchIssues('mutation', ...)
+          // 会先执行 store.clear() 把 groupedIssueIds 清空，导致 IssueLayoutHOC
+          // 因为 issueCount === undefined 短暂显示 <ActiveLoader />，产生明显闪动。
           await removeIssue(issue.project_id, issue.id);
-          fetchIssues("mutation", { canGroup: true, perPageCount: group_by ? 50 : 100 }, viewId);
         }}
         handleUpdate={async (data) => updateIssue && updateIssue(issue.project_id, issue.id, data)}
         handleRemoveFromView={async () => removeIssueFromView && removeIssueFromView(issue.project_id, issue.id)}
@@ -136,9 +150,6 @@ export const BaseListRoot = observer(function BaseListRoot(props: IBaseListRoot)
       removeIssueFromView,
       archiveIssue,
       restoreIssue,
-      fetchIssues,
-      group_by,
-      viewId,
     ]
   );
 
@@ -189,6 +200,8 @@ export const BaseListRoot = observer(function BaseListRoot(props: IBaseListRoot)
           handleCollapsedGroups={handleCollapsedGroups}
           collapsedGroups={collapsedGroups}
           isEpic={isEpic}
+          selectedGroupId={selectedGroupId}
+          onSelectGroup={setSelectedGroupId}
         />
       </div>
     </IssueLayoutHOC>

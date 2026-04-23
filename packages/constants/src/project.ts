@@ -205,6 +205,8 @@ export const PROJECT_VIEWS_VIEW_PERMISSION_KEY = "view.view" as const;
 export const PROJECT_MODULES_VIEW_PERMISSION_KEY = "modules.view" as const;
 /** 与后端 PermissionKey.MODULES_ARCHIVE 一致 */
 export const PROJECT_MODULES_ARCHIVE_PERMISSION_KEY = "modules.archive" as const;
+/** 与后端 PermissionKey.MODULES_ISSUE_MANAGE 一致：模块与工作项的关联管理 */
+export const PROJECT_MODULES_ISSUE_MANAGE_PERMISSION_KEY = "modules.issue.manage" as const;
 
 /** 项目发布页权限常量，与后端 PermissionKey.RELEASES_VIEW / RELEASES_CREATE 一致 */
 export const PROJECT_RELEASES_VIEW_PERMISSION_KEY = "releases.view" as const;
@@ -212,6 +214,8 @@ export const PROJECT_RELEASES_CREATE_PERMISSION_KEY = "releases.create" as const
 
 /** 发布归档/恢复权限常量，与后端 PermissionKey.RELEASES_ARCHIVE 一致 */
 export const PROJECT_RELEASES_ARCHIVE_PERMISSION_KEY = "releases.archive" as const;
+/** 与后端 PermissionKey.RELEASES_ISSUE_MANAGE 一致：发布与工作项的关联管理 */
+export const PROJECT_RELEASES_ISSUE_MANAGE_PERMISSION_KEY = "releases.issue.manage" as const;
 
 /** 兼容旧命名，避免现有调用方失效 */
 export const PROJECT_PUBLISH_VIEW_PERMISSION_KEY = PROJECT_RELEASES_VIEW_PERMISSION_KEY;

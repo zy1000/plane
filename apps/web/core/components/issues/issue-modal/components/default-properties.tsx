@@ -8,13 +8,20 @@ import { useState } from "react";
 import { observer } from "mobx-react";
 import type { Control } from "react-hook-form";
 import { Controller } from "react-hook-form";
-import { ETabIndices, EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import {
+  ETabIndices,
+  EUserPermissions,
+  EUserPermissionsLevel,
+  PROJECT_SPRINTS_ISSUE_MANAGE_PERMISSION_KEY,
+  PROJECT_MODULES_ISSUE_MANAGE_PERMISSION_KEY,
+  PROJECT_RELEASES_ISSUE_MANAGE_PERMISSION_KEY,
+} from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { ParentPropertyIcon } from "@plane/propel/icons";
 // types
 import type { ISearchIssueResponse, TIssue } from "@plane/types";
 // ui
-import { CustomMenu } from "@plane/ui";
+import { CustomMenu, Tooltip } from "@plane/ui";
 import { getDate, renderFormattedPayloadDate, getTabIndex } from "@plane/utils";
 // components
 import { CycleDropdown } from "@/components/dropdowns/cycle";
@@ -73,7 +80,7 @@ export const IssueDefaultProperties = observer(function IssueDefaultProperties(p
   const { areEstimateEnabledByProjectId } = useProjectEstimates();
   const { getProjectById } = useProject();
   const { isMobile } = usePlatformOS();
-  const { allowPermissions } = useUserPermissions();
+  const { allowPermissions, allowProjectPermissionKeys } = useUserPermissions();
   // derived values
   const projectDetails = getProjectById(projectId);
 
@@ -81,6 +88,29 @@ export const IssueDefaultProperties = observer(function IssueDefaultProperties(p
 
   const canCreateLabel =
     projectId && allowPermissions([EUserPermissions.ADMIN], EUserPermissionsLevel.PROJECT, workspaceSlug, projectId);
+
+  // 以下三个是后端独立细粒度权限，对应三条独立的关联接口：
+  //   /cycle-issues/        sprints.issue.manage
+  //   /issues/:id/modules/  modules.issue.manage
+  //   /issues/:id/releases/ releases.issue.manage
+  // 用户拥有「创建工作项」权限不代表就能把工作项绑到 cycle/module/release 上。
+  // 这里在表单侧就禁掉对应控件，避免用户选了之后提交时拿到 403。
+  const canManageCycleIssues = !!(
+    projectId &&
+    allowProjectPermissionKeys([PROJECT_SPRINTS_ISSUE_MANAGE_PERMISSION_KEY], workspaceSlug, projectId)
+  );
+  const canManageModuleIssues = !!(
+    projectId &&
+    allowProjectPermissionKeys([PROJECT_MODULES_ISSUE_MANAGE_PERMISSION_KEY], workspaceSlug, projectId)
+  );
+  const canManageReleaseIssues = !!(
+    projectId &&
+    allowProjectPermissionKeys([PROJECT_RELEASES_ISSUE_MANAGE_PERMISSION_KEY], workspaceSlug, projectId)
+  );
+
+  const NO_CYCLE_PERMISSION_HINT = "你没有将工作项加入迭代的权限，如需使用请联系项目管理员";
+  const NO_MODULE_PERMISSION_HINT = "你没有将工作项加入模块的权限，如需使用请联系项目管理员";
+  const NO_RELEASE_PERMISSION_HINT = "你没有将工作项加入发布的权限，如需使用请联系项目管理员";
 
   const minDate = getDate(startDate);
   minDate?.setDate(minDate.getDate());
@@ -209,19 +239,22 @@ export const IssueDefaultProperties = observer(function IssueDefaultProperties(p
           control={control}
           name="cycle_id"
           render={({ field: { value, onChange } }) => (
-            <div className="h-7">
-              <CycleDropdown
-                projectId={projectId ?? undefined}
-                onChange={(cycleId) => {
-                  onChange(cycleId);
-                  handleFormChange();
-                }}
-                placeholder={t("cycle.label", { count: 1 })}
-                value={value}
-                buttonVariant="border-with-text"
-                tabIndex={getIndex("cycle_id")}
-              />
-            </div>
+            <Tooltip tooltipContent={NO_CYCLE_PERMISSION_HINT} disabled={canManageCycleIssues}>
+              <div className="h-7">
+                <CycleDropdown
+                  projectId={projectId ?? undefined}
+                  onChange={(cycleId) => {
+                    onChange(cycleId);
+                    handleFormChange();
+                  }}
+                  placeholder={t("cycle.label", { count: 1 })}
+                  value={value}
+                  buttonVariant="border-with-text"
+                  tabIndex={getIndex("cycle_id")}
+                  disabled={!canManageCycleIssues}
+                />
+              </div>
+            </Tooltip>
           )}
         />
       )}
@@ -230,21 +263,24 @@ export const IssueDefaultProperties = observer(function IssueDefaultProperties(p
           control={control}
           name="module_ids"
           render={({ field: { value, onChange } }) => (
-            <div className="h-7">
-              <ModuleDropdown
-                projectId={projectId ?? undefined}
-                value={value ?? []}
-                onChange={(moduleIds) => {
-                  onChange(moduleIds);
-                  handleFormChange();
-                }}
-                placeholder={t("modules")}
-                buttonVariant="border-with-text"
-                tabIndex={getIndex("module_ids")}
-                multiple
-                showCount
-              />
-            </div>
+            <Tooltip tooltipContent={NO_MODULE_PERMISSION_HINT} disabled={canManageModuleIssues}>
+              <div className="h-7">
+                <ModuleDropdown
+                  projectId={projectId ?? undefined}
+                  value={value ?? []}
+                  onChange={(moduleIds) => {
+                    onChange(moduleIds);
+                    handleFormChange();
+                  }}
+                  placeholder={t("modules")}
+                  buttonVariant="border-with-text"
+                  tabIndex={getIndex("module_ids")}
+                  multiple
+                  showCount
+                  disabled={!canManageModuleIssues}
+                />
+              </div>
+            </Tooltip>
           )}
         />
       )}
@@ -253,21 +289,24 @@ export const IssueDefaultProperties = observer(function IssueDefaultProperties(p
           control={control}
           name="release_ids"
           render={({ field: { value, onChange } }) => (
-            <div className="h-7">
-              <ReleaseDropdown
-                projectId={projectId ?? undefined}
-                value={value ?? []}
-                onChange={(releaseIds) => {
-                  onChange(releaseIds);
-                  handleFormChange();
-                }}
-                placeholder={t("issue.display.properties.release")}
-                buttonVariant="border-with-text"
-                tabIndex={getIndex("release_ids")}
-                multiple
-                showCount
-              />
-            </div>
+            <Tooltip tooltipContent={NO_RELEASE_PERMISSION_HINT} disabled={canManageReleaseIssues}>
+              <div className="h-7">
+                <ReleaseDropdown
+                  projectId={projectId ?? undefined}
+                  value={value ?? []}
+                  onChange={(releaseIds) => {
+                    onChange(releaseIds);
+                    handleFormChange();
+                  }}
+                  placeholder={t("issue.display.properties.release")}
+                  buttonVariant="border-with-text"
+                  tabIndex={getIndex("release_ids")}
+                  multiple
+                  showCount
+                  disabled={!canManageReleaseIssues}
+                />
+              </div>
+            </Tooltip>
           )}
         />
       )}
