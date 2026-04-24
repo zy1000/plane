@@ -4,43 +4,22 @@
  * See the LICENSE file for details.
  */
 
-import type { FC } from "react";
 import { useState } from "react";
 import { observer } from "mobx-react";
+import { CalendarClock, CalendarPlus, ChevronDown, Rocket, Type, UserRound } from "lucide-react";
 // i18n
 import { useTranslation } from "@plane/i18n";
-import { Button } from "@plane/propel/button";
 // ui icons
-import {
-  CycleIcon,
-  StatePropertyIcon,
-  ModuleIcon,
-  MembersPropertyIcon,
-  PriorityPropertyIcon,
-  StartDatePropertyIcon,
-  LabelPropertyIcon,
-  UserCirclePropertyIcon,
-  EstimatePropertyIcon,
-  ParentPropertyIcon,
-} from "@plane/propel/icons";
-import { cn, getDate, renderFormattedPayloadDate, shouldHighlightIssueDueDate } from "@plane/utils";
+import { CycleIcon, ModuleIcon, LabelPropertyIcon } from "@plane/propel/icons";
+import { cn, renderFormattedDate, renderFormattedTime } from "@plane/utils";
 // components
-import { DateDropdown } from "@/components/dropdowns/date";
-import { EstimateDropdown } from "@/components/dropdowns/estimate";
-import { ButtonAvatars } from "@/components/dropdowns/member/avatar";
-import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
-import { PriorityDropdown } from "@/components/dropdowns/priority";
-import { StateDropdown } from "@/components/dropdowns/state/dropdown";
 import { SidebarPropertyListItem } from "@/components/common/layout/sidebar/property-list-item";
 // helpers
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useMember } from "@/hooks/store/use-member";
 import { useProject } from "@/hooks/store/use-project";
-import { useProjectState } from "@/hooks/store/use-project-state";
+
 // plane web components
-import { WorkItemAdditionalSidebarProperties } from "@/plane-web/components/issues/issue-details/additional-properties";
-import { IssueParentSelectRoot } from "@/plane-web/components/issues/issue-details/parent-select-root";
-import { DateAlert } from "@/plane-web/components/issues/issue-details/sidebar/date-alert";
 import { TransferHopInfo } from "@/plane-web/components/issues/issue-details/sidebar/transfer-hop-info";
 import { IssueWorklogProperty } from "@/plane-web/components/issues/worklog/property";
 import type { TIssueOperations } from "../issue-detail";
@@ -48,7 +27,6 @@ import { IssueCycleSelect } from "../issue-detail/cycle-select";
 import { IssueLabel } from "../issue-detail/label";
 import { IssueModuleSelect } from "../issue-detail/module-select";
 import { IssueReleaseSelect } from "../issue-detail/release-select";
-import { ChevronDown, ChevronUp, Rocket, Type } from "lucide-react";
 import { WorkItemTypeIcon } from "@/components/issues/work-item-type-icon";
 
 interface IPeekOverviewProperties {
@@ -59,216 +37,122 @@ interface IPeekOverviewProperties {
   issueOperations: TIssueOperations;
 }
 
+/** 分组折叠标题：二级标题加粗 + 可折叠箭头，风格对齐设计稿（属性 > 详情 / 项目结构 …） */
+function PropertyGroupSection(props: { title: string; defaultOpen?: boolean; children: React.ReactNode }) {
+  const { title, defaultOpen = true, children } = props;
+  const [open, setOpen] = useState(defaultOpen);
+
+  return (
+    <section className="w-full">
+      <button
+        type="button"
+        onClick={() => setOpen((prev) => !prev)}
+        className="flex items-center gap-1 text-body-sm-semibold text-primary outline-none hover:text-primary focus-visible:outline-none"
+      >
+        <span>{title}</span>
+        <ChevronDown
+          className={cn("h-3 w-3 text-tertiary transition-transform duration-200", open ? "rotate-0" : "-rotate-90")}
+          strokeWidth={2}
+          aria-hidden
+        />
+      </button>
+      {open && <div className="mt-2 w-full space-y-3">{children}</div>}
+    </section>
+  );
+}
+
 export const PeekOverviewProperties = observer(function PeekOverviewProperties(props: IPeekOverviewProperties) {
   const { workspaceSlug, projectId, issueId, issueOperations, disabled } = props;
   const { t } = useTranslation();
-  const [isMetaExpanded, setIsMetaExpanded] = useState(false);
   // store hooks
   const { getProjectById } = useProject();
   const {
     issue: { getIssueById },
   } = useIssueDetail();
-  const { getStateById } = useProjectState();
   const { getUserDetails } = useMember();
   // derived values
   const issue = getIssueById(issueId);
   if (!issue) return <></>;
-  const createdByDetails = getUserDetails(issue?.created_by);
   const projectDetails = getProjectById(issue.project_id);
-  const isEstimateEnabled = projectDetails?.estimate;
-  const stateDetails = getStateById(issue.state_id);
+  const createdByDetails = getUserDetails(issue?.created_by);
+  const formatDateTime = (date: string | Date | undefined | null) => {
+    if (!date) return null;
+    const day = renderFormattedDate(date);
+    if (!day) return null;
+    const time = renderFormattedTime(date, "12-hour");
+    return time ? `${day} ${time}` : day;
+  };
+  const createdByLabel = createdByDetails?.display_name?.includes("-intake")
+    ? "Plane"
+    : (createdByDetails?.display_name ?? "-");
+  const createdAtLabel = formatDateTime(issue.created_at);
+  const updatedAtLabel = formatDateTime(issue.updated_at);
 
   return (
     <div>
-      <h6 className="text-body-xs-medium">{t("common.properties")}</h6>
-      <div className={`mt-3 w-full space-y-3 ${disabled ? "opacity-60" : ""}`}>
-        <SidebarPropertyListItem icon={StatePropertyIcon} label={t("common.state")}>
-          <StateDropdown
-            value={issue?.state_id}
-            onChange={(val) => issueOperations.update(workspaceSlug, projectId, issueId, { state_id: val })}
-            projectId={projectId}
-            issueTypeId={issue?.type_id}
-            disabled={disabled}
-            buttonVariant="transparent-with-text"
-            className="group w-full grow"
-            buttonContainerClassName="w-full text-left h-7.5"
-            buttonClassName={`text-body-xs-medium ${issue?.state_id ? "" : "text-placeholder"}`}
-            dropdownArrow
-            dropdownArrowClassName="h-3.5 w-3.5 hidden group-hover:inline"
-          />
-        </SidebarPropertyListItem>
-
-        {/* type */}
-        {issue?.type_name && (
-          <SidebarPropertyListItem icon={Type} label="类型">
-            <div className="flex min-w-0 w-full flex-nowrap items-center gap-2">
-              <WorkItemTypeIcon typeName={issue.type_name} className="flex-shrink-0" />
-              <span className="text-body-xs-medium">{issue.type_name}</span>
-            </div>
-          </SidebarPropertyListItem>
-        )}
-
-        <SidebarPropertyListItem icon={MembersPropertyIcon} label={t("common.assignees")}>
-          <MemberDropdown
-            value={issue?.assignee_ids ?? undefined}
-            onChange={(val) => issueOperations.update(workspaceSlug, projectId, issueId, { assignee_ids: val })}
-            disabled={disabled}
-            projectId={projectId}
-            placeholder={t("issue.add.assignee")}
-            multiple
-            buttonVariant={issue?.assignee_ids?.length > 1 ? "transparent-without-text" : "transparent-with-text"}
-            className="group w-full grow"
-            buttonContainerClassName="w-full text-left h-7.5"
-            buttonClassName={`text-body-xs-medium justify-between ${issue?.assignee_ids?.length > 0 ? "" : "text-placeholder"}`}
-            hideIcon={issue.assignee_ids?.length === 0}
-            dropdownArrow
-            dropdownArrowClassName="h-3.5 w-3.5 hidden group-hover:inline"
-          />
-        </SidebarPropertyListItem>
-
-        {/* date range */}
-        <SidebarPropertyListItem icon={StartDatePropertyIcon} label={t("project_cycles.date_range")}>
-          <div className="flex min-w-0 w-full flex-1 items-center gap-2">
-            <div className="flex items-center gap-1">
-              <div className="h-7 w-28 flex-shrink-0">
-                <DateDropdown
-                  value={issue.start_date ?? null}
-                  onChange={(date) =>
-                    issueOperations.update(workspaceSlug, projectId, issueId, {
-                      start_date: date ? renderFormattedPayloadDate(date) : null,
-                    })
-                  }
-                  maxDate={getDate(issue.target_date)}
-                  placeholder={t("issue.add.start_date")}
-                  buttonVariant="transparent-with-text"
-                  disabled={disabled}
-                  className="group w-full"
-                  buttonContainerClassName="w-full text-left"
-                  buttonClassName={cn("text-sm justify-between", !issue.start_date ? "text-custom-text-400" : "")}
-                  clearIconClassName="hidden group-hover:inline !text-custom-text-100"
-                  hideIcon
-                />
+      <h6 className="text-body-sm-semibold text-primary">{t("common.properties")}</h6>
+      <div className={cn("mt-3 flex w-full flex-col gap-5", disabled && "opacity-60")}>
+        {/* 详情：类型、工时、标签 */}
+        <PropertyGroupSection title="详情">
+          {issue?.type_name && (
+            <SidebarPropertyListItem icon={Type} label="类型">
+              <div className="flex min-w-0 w-full flex-nowrap items-center gap-2">
+                <WorkItemTypeIcon typeName={issue.type_name} className="flex-shrink-0" />
+                <span className="text-body-xs-medium">{issue.type_name}</span>
               </div>
-              <span className="text-custom-text-300 flex-shrink-0">→</span>
-              <div className="h-7 w-32 flex-shrink-0">
-                <DateDropdown
-                  value={issue.target_date ?? null}
-                  onChange={(date) =>
-                    issueOperations.update(workspaceSlug, projectId, issueId, {
-                      target_date: date ? renderFormattedPayloadDate(date) : null,
-                    })
-                  }
-                  minDate={getDate(issue.start_date)}
-                  placeholder={t("issue.add.due_date")}
-                  buttonVariant="transparent-with-text"
-                  disabled={disabled}
-                  className="group w-full"
-                  buttonContainerClassName="w-full text-left"
-                  buttonClassName={cn(
-                    "text-sm justify-between",
-                    shouldHighlightIssueDueDate(issue.target_date, stateDetails?.group)
-                      ? "text-red-500"
-                      : !issue.target_date
-                        ? "text-custom-text-400"
-                        : ""
-                  )}
-                  clearIconClassName="hidden group-hover:inline !text-custom-text-100"
-                  hideIcon
-                />
-              </div>
+            </SidebarPropertyListItem>
+          )}
+
+          <IssueWorklogProperty
+            workspaceSlug={workspaceSlug}
+            projectId={projectId}
+            issueId={issueId}
+            disabled={disabled}
+          />
+
+          <div className="flex w-full items-start gap-2">
+            <div className="flex h-7.5 w-30 shrink-0 items-center gap-1.5 text-body-xs-regular text-tertiary">
+              <LabelPropertyIcon className="size-4 shrink-0" />
+              <span>{t("common.labels")}</span>
             </div>
-            {issue.target_date && <DateAlert date={issue.target_date} workItem={issue} projectId={projectId} />}
+            <div className="flex grow flex-wrap items-center gap-1 truncate">
+              <IssueLabel workspaceSlug={workspaceSlug} projectId={projectId} issueId={issueId} disabled={disabled} />
+            </div>
           </div>
-        </SidebarPropertyListItem>
+        </PropertyGroupSection>
 
-        <SidebarPropertyListItem icon={PriorityPropertyIcon} label={t("common.priority")}>
-          <PriorityDropdown
-            value={issue?.priority}
-            onChange={(val) => issueOperations.update(workspaceSlug, projectId, issueId, { priority: val })}
-            disabled={disabled}
-            buttonVariant="transparent-with-text"
-            className="h-7.5 w-full grow rounded-sm"
-            buttonContainerClassName="w-full text-left h-7.5"
-            buttonClassName={`text-body-xs-medium whitespace-nowrap [&_svg]:size-3.5 ${!issue?.priority || issue?.priority === "none" ? "text-placeholder" : ""}`}
-          />
-        </SidebarPropertyListItem>
-
-        {/* created by */}
-        {createdByDetails && (
-          <SidebarPropertyListItem
-            icon={UserCirclePropertyIcon}
-            label={t("common.created_by")}
-            childrenClassName="min-w-0 px-2"
-          >
-            <div className="flex min-w-0 w-full flex-nowrap items-center gap-2">
-              <ButtonAvatars
-                showTooltip
-                userIds={createdByDetails?.display_name.includes("-intake") ? null : createdByDetails?.id}
+        {/* 项目结构：模块、迭代、发布 */}
+        <PropertyGroupSection title="结构">
+          {projectDetails?.module_view && (
+            <SidebarPropertyListItem icon={ModuleIcon} label={t("common.modules")}>
+              <IssueModuleSelect
+                className="w-full grow"
+                workspaceSlug={workspaceSlug}
+                projectId={projectId}
+                issueId={issueId}
+                issueOperations={issueOperations}
+                disabled={disabled}
               />
-              <span className="min-w-0 flex-1 truncate text-body-xs-medium leading-5 text-secondary">
-                {createdByDetails?.display_name.includes("-intake") ? "Plane" : createdByDetails?.display_name}
-              </span>
-            </div>
-          </SidebarPropertyListItem>
-        )}
+            </SidebarPropertyListItem>
+          )}
 
-        <IssueWorklogProperty
-          workspaceSlug={workspaceSlug}
-          projectId={projectId}
-          issueId={issueId}
-          disabled={disabled}
-        />
+          {projectDetails?.cycle_view && (
+            <SidebarPropertyListItem
+              icon={CycleIcon}
+              label={t("common.cycle")}
+              appendElement={<TransferHopInfo workItem={issue} />}
+            >
+              <IssueCycleSelect
+                className="h-7.5 w-full grow"
+                workspaceSlug={workspaceSlug}
+                projectId={projectId}
+                issueId={issueId}
+                issueOperations={issueOperations}
+                disabled={disabled}
+              />
+            </SidebarPropertyListItem>
+          )}
 
-        {isEstimateEnabled && (
-          <SidebarPropertyListItem icon={EstimatePropertyIcon} label={t("common.estimate")}>
-            <EstimateDropdown
-              value={issue.estimate_point ?? undefined}
-              onChange={(val) => issueOperations.update(workspaceSlug, projectId, issueId, { estimate_point: val })}
-              projectId={projectId}
-              disabled={disabled}
-              buttonVariant="transparent-with-text"
-              className="group w-full grow"
-              buttonContainerClassName="w-full text-left h-7.5"
-              buttonClassName={`text-body-xs-medium ${issue?.estimate_point !== undefined ? "" : "text-placeholder"}`}
-              placeholder="None"
-              hideIcon
-              dropdownArrow
-              dropdownArrowClassName="h-3.5 w-3.5 hidden group-hover:inline"
-            />
-          </SidebarPropertyListItem>
-        )}
-
-        {isMetaExpanded && projectDetails?.module_view && (
-          <SidebarPropertyListItem icon={ModuleIcon} label={t("common.modules")}>
-            <IssueModuleSelect
-              className="w-full grow"
-              workspaceSlug={workspaceSlug}
-              projectId={projectId}
-              issueId={issueId}
-              issueOperations={issueOperations}
-              disabled={disabled}
-            />
-          </SidebarPropertyListItem>
-        )}
-
-        {isMetaExpanded && projectDetails?.cycle_view && (
-          <SidebarPropertyListItem
-            icon={CycleIcon}
-            label={t("common.cycle")}
-            appendElement={<TransferHopInfo workItem={issue} />}
-          >
-            <IssueCycleSelect
-              className="h-7.5 w-full grow"
-              workspaceSlug={workspaceSlug}
-              projectId={projectId}
-              issueId={issueId}
-              issueOperations={issueOperations}
-              disabled={disabled}
-            />
-          </SidebarPropertyListItem>
-        )}
-
-        {isMetaExpanded && (
           <SidebarPropertyListItem icon={Rocket} label="发布">
             <IssueReleaseSelect
               className="w-full grow"
@@ -279,68 +163,28 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
               disabled={disabled}
             />
           </SidebarPropertyListItem>
-        )}
+        </PropertyGroupSection>
 
-        {/* parent */}
-        {isMetaExpanded && (
-          <div className="flex w-full items-center gap-2 h-8">
-            <div className="flex h-7.5 w-30 shrink-0 items-center gap-1.5 text-body-xs-regular text-tertiary">
-              <ParentPropertyIcon className="size-4 shrink-0" />
-              <p>{t("common.parent")}</p>
-            </div>
-            <IssueParentSelectRoot
-              className="grow h-full"
-              disabled={disabled}
-              issueId={issueId}
-              issueOperations={issueOperations}
-              projectId={projectId}
-              workspaceSlug={workspaceSlug}
-            />
-          </div>
-        )}
-
-        {/* label + toggle */}
-        <div className="flex w-full flex-col gap-1">
-          {isMetaExpanded && (
-            <div className="flex w-full items-start gap-2 min-h-8">
-              <div className="flex h-7.5 w-30 shrink-0 items-center gap-1.5 text-body-xs-regular text-tertiary">
-                <LabelPropertyIcon className="size-4 shrink-0" />
-                <span>{t("common.labels")}</span>
-              </div>
-              <div className="flex grow flex-wrap items-center gap-1 truncate">
-                <IssueLabel workspaceSlug={workspaceSlug} projectId={projectId} issueId={issueId} disabled={disabled} />
-              </div>
-            </div>
-          )}
-          <div className="flex w-full items-center justify-start h-6">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-6 px-0"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                setIsMetaExpanded((prev) => !prev);
-              }}
-            >
-              {isMetaExpanded ? (
-                <ChevronUp className="size-4" />
-              ) : (
-                <ChevronDown className="size-4" />
-              )}
-              {isMetaExpanded ? <p className="text-[#a3a3a3]">收起更多</p> : <p className="text-[#a3a3a3]">展开更多</p>}
-            </Button>
-          </div>
+        {/* 元信息：单列 grid，标签列用 max-content 与最宽「创建于/更新于」对齐，无多余空白 */}
+        <div className="mt-1 grid grid-cols-[auto_max-content_1fr] items-center gap-x-1.5 gap-y-1.5 text-caption-sm-regular text-placeholder">
+          <UserRound className="h-3.5 w-3.5 shrink-0" aria-hidden />
+          <span className="shrink-0">创建者</span>
+          <span className="min-w-0 truncate">{createdByLabel}</span>
+          {createdAtLabel ? (
+            <CalendarPlus className="h-3.5 w-3.5 shrink-0" aria-hidden />
+          ) : null}
+          {createdAtLabel ? <span className="shrink-0">创建于</span> : null}
+          {createdAtLabel ? (
+            <span className="min-w-0 truncate tabular-nums">{createdAtLabel}</span>
+          ) : null}
+          {updatedAtLabel ? (
+            <CalendarClock className="h-3.5 w-3.5 shrink-0" aria-hidden />
+          ) : null}
+          {updatedAtLabel ? <span className="shrink-0">更新于</span> : null}
+          {updatedAtLabel ? (
+            <span className="min-w-0 truncate tabular-nums">{updatedAtLabel}</span>
+          ) : null}
         </div>
-
-        <WorkItemAdditionalSidebarProperties
-          workItemId={issue.id}
-          workItemTypeId={issue.type_id}
-          projectId={projectId}
-          workspaceSlug={workspaceSlug}
-          isEditable={!disabled}
-          isPeekView
-        />
       </div>
     </div>
   );

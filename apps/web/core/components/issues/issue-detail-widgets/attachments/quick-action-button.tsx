@@ -10,6 +10,7 @@ import { observer } from "mobx-react";
 import type { FileRejection } from "react-dropzone";
 import { useDropzone } from "react-dropzone";
 import { PlusIcon } from "@plane/propel/icons";
+import { cn } from "@plane/utils";
 // plane imports
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TIssueServiceType } from "@plane/types";
@@ -26,12 +27,13 @@ type Props = {
   projectId: string;
   issueId: string;
   customButton?: React.ReactNode;
+  className?: string;
   disabled?: boolean;
   issueServiceType: TIssueServiceType;
 };
 
 export const IssueAttachmentActionButton = observer(function IssueAttachmentActionButton(props: Props) {
-  const { workspaceSlug, projectId, issueId, customButton, disabled = false, issueServiceType } = props;
+  const { workspaceSlug, projectId, issueId, customButton, className, disabled = false, issueServiceType } = props;
   const { t } = useTranslation();
   // state
   const [isLoading, setIsLoading] = useState(false);
@@ -105,7 +107,16 @@ export const IssueAttachmentActionButton = observer(function IssueAttachmentActi
         e.stopPropagation();
       }}
     >
-      <button {...getRootProps()} type="button" disabled={disabled}>
+      <button
+        {...getRootProps({
+          className: cn(
+            "inline-flex min-w-0 items-center justify-center gap-1 outline-none focus-visible:ring-0 disabled:cursor-not-allowed",
+            className
+          ),
+        })}
+        type="button"
+        disabled={disabled}
+      >
         <input {...getInputProps()} />
         {customButton ? customButton : <PlusIcon className="h-4 w-4" />}
       </button>

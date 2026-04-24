@@ -30,6 +30,7 @@ import { WorkItemVersionService } from "@/services/issue";
 // local imports
 import { IssueDetailWidgets } from "../issue-detail-widgets";
 import { NameDescriptionUpdateStatus } from "../issue-update-status";
+import { PeekOverviewCorePropertyBar } from "../peek-overview/core-property-bar";
 import { PeekOverviewProperties } from "../peek-overview/properties";
 import { IssueTitleInput } from "../title-input";
 import { IssueActivity } from "./issue-activity";
@@ -93,15 +94,14 @@ export const IssueMainContent = observer(function IssueMainContent(props: Props)
   return (
     <>
       <div className="space-y-4 rounded-lg">
-        {issue.parent_id && (
-          <IssueParentDetail
-            workspaceSlug={workspaceSlug}
-            projectId={projectId}
-            issueId={issueId}
-            issue={issue}
-            issueOperations={issueOperations}
-          />
-        )}
+        <IssueParentDetail
+          workspaceSlug={workspaceSlug}
+          projectId={projectId}
+          issueId={issueId}
+          issue={issue}
+          issueOperations={issueOperations}
+          disabled={!isEditable || isArchived}
+        />
 
         <div className="mb-2.5 flex items-center justify-between gap-4">
           <IssueTypeSwitcher issueId={issueId} disabled={isArchived || !isEditable} />
@@ -131,6 +131,16 @@ export const IssueMainContent = observer(function IssueMainContent(props: Props)
           value={issue.name}
           containerClassName="-ml-3"
         />
+
+        <div className="-ml-3 md:hidden">
+          <PeekOverviewCorePropertyBar
+            workspaceSlug={workspaceSlug}
+            projectId={projectId}
+            issueId={issueId}
+            issueOperations={issueOperations}
+            disabled={isArchived || !isEditable}
+          />
+        </div>
 
         <DescriptionInput
           issueSequenceId={issue.sequence_id}

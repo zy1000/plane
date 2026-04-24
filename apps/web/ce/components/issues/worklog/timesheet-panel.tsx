@@ -12,7 +12,6 @@ import { Avatar } from "@plane/ui";
 import { cn, getFileURL } from "@plane/utils";
 import { TIMESHEET_CATEGORY_KEY } from "@/constants/timesheet-category";
 import { useUser } from "@/hooks/store/user";
-import { useMember } from "@/hooks/store/use-member";
 import { useTimesheetCategories } from "@/hooks/store/use-timesheet-categories";
 import {
   getTimesheetErrorMessage,
@@ -30,6 +29,11 @@ type TTimesheetPanelProps = {
   createTimesheet: (data: TTimeSheetCreatePayload) => Promise<TTimeSheet | undefined>;
   deleteTimesheet: (timesheetId: string) => Promise<void>;
   onClose?: () => void;
+  /**
+   * 是否在面板底部渲染「工时记录」明细列表。工作项详情已经把明细挪到 activity 区的
+   * 「工时记录」tab 下，所以会传 false 隐藏，避免信息重复；测试用例等场景仍默认保留。
+   */
+  showDetailList?: boolean;
 };
 
 const TIME_OPTIONS = Array.from({ length: 48 }, (_, index) => {
@@ -104,7 +108,9 @@ function formatDisplayTime(timeStr: string): string {
 }
 
 /** 按用户聚合工时 */
-function aggregateByUser(timesheets: TTimeSheet[]): { userId: string; name: string; avatarUrl?: string; totalHours: number }[] {
+function aggregateByUser(
+  timesheets: TTimeSheet[]
+): { userId: string; name: string; avatarUrl?: string; totalHours: number }[] {
   const map = new Map<string, { name: string; avatarUrl?: string; totalHours: number }>();
   for (const t of timesheets) {
     const existing = map.get(t.member);
@@ -176,10 +182,19 @@ function TimeSelect(props: TTimeSelectProps) {
 }
 
 export const TimesheetPanel = observer(function TimesheetPanel(props: TTimesheetPanelProps) {
-  const { issueId, testCaseId, timesheets, isLoading, totalHours, createTimesheet, deleteTimesheet, onClose } = props;
+  const {
+    issueId,
+    testCaseId,
+    timesheets,
+    isLoading,
+    totalHours,
+    createTimesheet,
+    deleteTimesheet,
+    onClose,
+    showDetailList = true,
+  } = props;
 
   const { data: currentUser } = useUser();
-  const { getUserDetails } = useMember();
   const { getCategoryByKey } = useTimesheetCategories();
 
   // 测试用例面板固定走 TEST_CASE 类别；
@@ -203,7 +218,6 @@ export const TimesheetPanel = observer(function TimesheetPanel(props: TTimesheet
   const [startTime, setStartTime] = useState(DEFAULT_START_TIME);
   const [endTime, setEndTime] = useState(DEFAULT_START_TIME);
 
-  const currentUserDetails = currentUser ? getUserDetails(currentUser.id) : undefined;
   const aggregated = useMemo(() => aggregateByUser(timesheets), [timesheets]);
   const derivedHours = getDurationHours(startTime, endTime);
   const canSave = !!timeInput.trim() && !!derivedHours;
@@ -316,7 +330,7 @@ export const TimesheetPanel = observer(function TimesheetPanel(props: TTimesheet
       </div>
 
       {/* 时间录入表单 */}
-      <div className="px-4 pb-3 space-y-2">
+      <div className="px-4 pt-3 pb-3 space-y-2">
         <div className="relative">
           <input
             type="text"
@@ -390,8 +404,8 @@ export const TimesheetPanel = observer(function TimesheetPanel(props: TTimesheet
         </div>
       </div>
 
-      {/* 工时明细列表 */}
-      {timesheets.length > 0 && (
+      {/* 工时明细列表（测试用例等场景使用；工作项已移至 activity 区的「工时记录」tab） */}
+      {showDetailList && timesheets.length > 0 && (
         <div className="border-t border-subtle px-4 py-3">
           <p className="text-body-xs-medium text-tertiary mb-2">工时记录</p>
           {isLoading ? (
@@ -430,7 +444,8 @@ export const TimesheetPanel = observer(function TimesheetPanel(props: TTimesheet
                               className="group grid grid-cols-[minmax(0,1fr)_52px_20px] items-center gap-2 text-body-xs-regular text-tertiary"
                             >
                               <span className="truncate tabular-nums">
-                                {formatDisplayDate(t.date)} {formatDisplayTime(t.start_time)} — {formatDisplayTime(t.end_time)}
+                                {formatDisplayDate(t.date)} {formatDisplayTime(t.start_time)} —{" "}
+                                {formatDisplayTime(t.end_time)}
                               </span>
                               <span className="text-right tabular-nums text-secondary">
                                 {formatHours(parseFloat(t.hours))}

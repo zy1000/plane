@@ -22,12 +22,14 @@ import type { TIssueRelationTypes } from "@/plane-web/types";
 type Props = {
   issueId: string;
   customButton?: React.ReactNode;
+  className?: string;
+  customButtonClassName?: string;
   disabled?: boolean;
   issueServiceType: TIssueServiceType;
 };
 
 export const RelationActionButton = observer(function RelationActionButton(props: Props) {
-  const { customButton, issueId, disabled = false, issueServiceType } = props;
+  const { customButton, className, customButtonClassName, issueId, disabled = false, issueServiceType } = props;
   const { t } = useTranslation();
   // store hooks
   const { toggleRelationModal, setRelationKey } = useIssueDetail(issueServiceType);
@@ -45,6 +47,8 @@ export const RelationActionButton = observer(function RelationActionButton(props
 
   return (
     <CustomMenu
+      className={className}
+      customButtonClassName={customButtonClassName}
       customButton={customButtonElement}
       placement="bottom-start"
       disabled={disabled}

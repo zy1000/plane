@@ -187,7 +187,9 @@ export const WorkItemStateDropdownBase = observer(function WorkItemStateDropdown
                   />
                 )}
                 {BUTTON_VARIANTS_WITH_TEXT.includes(buttonVariant) && (
-                  <span className="flex-grow truncate text-left">{selectedState?.name ?? t("state")}</span>
+                  <span className="flex-grow truncate text-left text-body-xs-medium leading-5">
+                    {selectedState?.name ?? t("state")}
+                  </span>
                 )}
                 {dropdownArrow && (
                   <ChevronDownIcon

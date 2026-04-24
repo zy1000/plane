@@ -107,18 +107,9 @@ export const CommentCardDisplay = observer(function CommentCardDisplay(props: TC
 
   return (
     <div id={commentBlockId} className="relative flex flex-col gap-2">
-      {showAccessSpecifier && (
-        <div className="absolute top-2.5 right-2.5 z-[1] text-tertiary">
-          {comment.access === EIssueCommentAccessSpecifier.INTERNAL ? (
-            <LockIcon className="size-3" />
-          ) : (
-            <GlobeIcon className="size-3" />
-          )}
-        </div>
-      )}
       <div className="relative mb-3 flex w-full items-center gap-2">
         <Avatar size="sm" name={displayName} src={getFileURL(avatarUrl)} className="shrink-0" />
-        <div className="flex flex-1 flex-wrap items-center gap-1">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
           <div className="text-caption-sm-medium">{displayName}</div>
           <div className="text-caption-sm-regular text-tertiary">
             commented{" "}
@@ -133,17 +124,27 @@ export const CommentCardDisplay = observer(function CommentCardDisplay(props: TC
             </Tooltip>
           </div>
         </div>
-        {!disabled && (
-          <div className="flex shrink-0 items-center gap-1">
-            <EmojiReactionPicker
-              isOpen={isPickerOpen}
-              handleToggle={setIsPickerOpen}
-              onChange={handleEmojiSelect}
-              disabled={disabled}
-              label={<EmojiReactionButton onAddReaction={() => setIsPickerOpen(true)} />}
-              placement="bottom-start"
-            />
-            {renderQuickActions ? renderQuickActions() : null}
+        {(showAccessSpecifier || !disabled) && (
+          <div className="flex shrink-0 items-center gap-1.5 text-tertiary">
+            {showAccessSpecifier &&
+              (comment.access === EIssueCommentAccessSpecifier.INTERNAL ? (
+                <LockIcon className="size-3 shrink-0" />
+              ) : (
+                <GlobeIcon className="size-3 shrink-0" />
+              ))}
+            {!disabled && (
+              <>
+                <EmojiReactionPicker
+                  isOpen={isPickerOpen}
+                  handleToggle={setIsPickerOpen}
+                  onChange={handleEmojiSelect}
+                  disabled={disabled}
+                  label={<EmojiReactionButton onAddReaction={() => setIsPickerOpen(true)} />}
+                  placement="bottom-start"
+                />
+                {renderQuickActions ? renderQuickActions() : null}
+              </>
+            )}
           </div>
         )}
       </div>

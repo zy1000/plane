@@ -95,6 +95,7 @@ export const IssueWorklogProperty = observer(function IssueWorklogProperty(props
                   popperRef.current = node;
                   setPopperElement(node);
                 }}
+                data-prevent-outside-click
                 style={styles.popper}
                 {...attributes.popper}
                 className="z-[2000] rounded-lg border border-subtle bg-surface-1 shadow-raised-300 overflow-hidden"

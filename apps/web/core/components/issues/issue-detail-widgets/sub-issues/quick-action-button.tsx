@@ -18,12 +18,14 @@ import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 type Props = {
   issueId: string;
   customButton?: React.ReactNode;
+  className?: string;
+  customButtonClassName?: string;
   disabled?: boolean;
   issueServiceType: TIssueServiceType;
 };
 
 export const SubIssuesActionButton = observer(function SubIssuesActionButton(props: Props) {
-  const { issueId, customButton, disabled = false, issueServiceType } = props;
+  const { issueId, customButton, className, customButtonClassName, disabled = false, issueServiceType } = props;
   // translation
   const { t } = useTranslation();
   // store hooks
@@ -84,7 +86,14 @@ export const SubIssuesActionButton = observer(function SubIssuesActionButton(pro
   const customButtonElement = customButton ? <>{customButton}</> : <PlusIcon className="h-4 w-4" />;
 
   return (
-    <CustomMenu customButton={customButtonElement} placement="bottom-start" disabled={disabled} closeOnSelect>
+    <CustomMenu
+      className={className}
+      customButtonClassName={customButtonClassName}
+      customButton={customButtonElement}
+      placement="bottom-start"
+      disabled={disabled}
+      closeOnSelect
+    >
       {optionItems.map((item, index) => (
         <CustomMenu.MenuItem
           key={index}

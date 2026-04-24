@@ -33,7 +33,7 @@ export function CollapsibleButton(props: Props) {
     ChevronIcon = DropdownIcon,
   } = props;
   return (
-    <div className={cn("flex h-12 items-center justify-between gap-3 border-b border-subtle px-2.5 py-3", className)}>
+    <div className={cn("flex h-12 items-center justify-between gap-3 px-2.5 py-3", className)}>
       <div className="flex items-center gap-3.5">
         <div className="flex items-center gap-3">
           {!hideChevron && (

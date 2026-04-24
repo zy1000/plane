@@ -7,6 +7,7 @@
 import type {
   IIssueFilterOptions,
   ILayoutDisplayFiltersOptions,
+  TIssueActivity,
   TIssueActivityComment,
   TWorkItemFilterProperty,
 } from "@plane/types";
@@ -522,3 +523,65 @@ export const BASE_ACTIVITY_FILTER_TYPES = [
   EActivityFilterType.ASSIGNEE,
   EActivityFilterType.DEFAULT,
 ];
+
+export enum EActivityTab {
+  ALL = "ALL",
+  ACTIVITY = "ACTIVITY",
+  COMMENT = "COMMENT",
+  TIMESHEET = "TIMESHEET",
+  TRANSITION = "TRANSITION",
+  HISTORY = "HISTORY",
+}
+
+export const TRANSITION_ACTIVITY_FIELDS = [
+  "state",
+  "workflow_approval_request",
+  "workflow_approval_action",
+];
+
+export const HISTORY_ACTIVITY_FIELDS = [
+  "parent",
+  "link",
+  "attachment",
+  "relates_to",
+  "duplicate",
+  "blocked_by",
+  "blocking",
+];
+
+export const ACTIVITY_TAB_OPTIONS: { key: EActivityTab; labelTranslationKey: string; fallbackLabel: string }[] = [
+  { key: EActivityTab.ALL, labelTranslationKey: "common.all", fallbackLabel: "全部" },
+  { key: EActivityTab.ACTIVITY, labelTranslationKey: "common.updates", fallbackLabel: "活动" },
+  { key: EActivityTab.COMMENT, labelTranslationKey: "common.comments", fallbackLabel: "评论" },
+  { key: EActivityTab.TIMESHEET, labelTranslationKey: "common.timesheet", fallbackLabel: "工时记录" },
+  { key: EActivityTab.TRANSITION, labelTranslationKey: "common.transitions", fallbackLabel: "转换" },
+  { key: EActivityTab.HISTORY, labelTranslationKey: "common.history", fallbackLabel: "历史" },
+];
+
+/**
+ * Classify a single activity/comment timeline item into one of the
+ * activity tabs. Comments always belong to COMMENT. For activities, the
+ * backing `field` is used: TRANSITION_ACTIVITY_FIELDS -> TRANSITION,
+ * HISTORY_ACTIVITY_FIELDS -> HISTORY, otherwise ACTIVITY (including the
+ * issue creation default activity where `field` is null/undefined).
+ */
+export const classifyActivityItem = (
+  item: TIssueActivityComment,
+  getActivityById: (id: string) => TIssueActivity | undefined
+): EActivityTab => {
+  if (item.activity_type === EActivityFilterType.COMMENT) return EActivityTab.COMMENT;
+  const activity = getActivityById(item.id);
+  const field = activity?.field ?? null;
+  if (field && TRANSITION_ACTIVITY_FIELDS.includes(field)) return EActivityTab.TRANSITION;
+  if (field && HISTORY_ACTIVITY_FIELDS.includes(field)) return EActivityTab.HISTORY;
+  return EActivityTab.ACTIVITY;
+};
+
+export const filterActivityByTab = (
+  items: TIssueActivityComment[],
+  tab: EActivityTab,
+  getActivityById: (id: string) => TIssueActivity | undefined
+): TIssueActivityComment[] => {
+  if (tab === EActivityTab.ALL) return items;
+  return items.filter((item) => classifyActivityItem(item, getActivityById) === tab);
+};
