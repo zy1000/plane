@@ -19,6 +19,7 @@ import { IssueAdditionalPropertiesActivity } from "@/plane-web/components/issues
 import { IssueActivityWorklog } from "@/plane-web/components/issues/worklog/activity/root";
 // local imports
 import { IssueActivityItem } from "./activity/activity-list";
+import { ActivityTabProvider } from "./activity/actions/helpers/activity-tab-context";
 import { IssueActivityLoader } from "./loader";
 
 type TIssueActivityCommentRoot = {
@@ -201,15 +202,17 @@ export const IssueActivityCommentRoot = observer(function IssueActivityCommentRo
 
   if (activeTab === EActivityTab.ALL) {
     return (
-      <ActivityAllFeedCollapsible
-        issueId={issueId}
-        listLength={filteredActivityAndComments.length}
-        sortOrder={sortOrder}
-      >
-        {list}
-      </ActivityAllFeedCollapsible>
+      <ActivityTabProvider value={activeTab}>
+        <ActivityAllFeedCollapsible
+          issueId={issueId}
+          listLength={filteredActivityAndComments.length}
+          sortOrder={sortOrder}
+        >
+          {list}
+        </ActivityAllFeedCollapsible>
+      </ActivityTabProvider>
     );
   }
 
-  return list;
+  return <ActivityTabProvider value={activeTab}>{list}</ActivityTabProvider>;
 });

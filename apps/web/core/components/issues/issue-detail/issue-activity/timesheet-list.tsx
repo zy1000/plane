@@ -83,8 +83,8 @@ function TimesheetActivityItem(props: TTimesheetActivityItemProps) {
   return (
     <div
       className={cn(
-        "relative flex items-center gap-3 text-caption-sm-regular",
-        ends === "top" ? "pb-2" : ends === "bottom" ? "pt-2" : "py-2"
+        "relative flex items-center gap-4 text-body-sm-regular",
+        ends === "top" ? "pb-3.5" : ends === "bottom" ? "pt-3.5" : "py-3.5"
       )}
     >
       <div className="absolute top-0 bottom-0 left-[13px] w-px bg-layer-3" aria-hidden />

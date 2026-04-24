@@ -24,13 +24,13 @@ import { useUserPermissions } from "@/hooks/store/user";
 import { useAppRouter } from "@/hooks/use-app-router";
 // local components
 import { IssuePeekOverview } from "../peek-overview";
+import { PeekOverviewProperties } from "../peek-overview/properties";
 import {
   extractIssueUpdateErrorMessage,
   isWorkflowApprovalInitiated,
   type TIssueWorkflowUpdateError,
 } from "../workflow-error-utils";
 import { IssueMainContent } from "./main-content";
-import { IssueDetailsSidebar } from "./sidebar";
 
 export type TIssueOperations = {
   fetch: (workspaceSlug: string, projectId: string, issueId: string, loader?: boolean) => Promise<void>;
@@ -281,28 +281,33 @@ export const IssueDetailRoot = observer(function IssueDetailRoot(props: TIssueDe
           }}
         />
       ) : (
-        <div className="flex h-full w-full overflow-hidden">
-          <div className="h-full w-full space-y-6 overflow-y-auto px-9 py-5">
-            <IssueMainContent
-              workspaceSlug={workspaceSlug}
-              projectId={projectId}
-              issueId={issueId}
-              issueOperations={issueOperations}
-              isEditable={isEditable}
-              isArchived={is_archived}
-            />
-          </div>
-          <div
-            className="fixed right-0 z-[5] h-full w-full min-w-[300px] border-l border-subtle bg-surface-1 sm:w-1/2 md:relative md:w-1/4 lg:min-w-80 xl:min-w-96"
-            style={issueDetailSidebarCollapsed ? { right: `-${window?.innerWidth || 0}px` } : {}}
-          >
-            <IssueDetailsSidebar
-              workspaceSlug={workspaceSlug}
-              projectId={projectId}
-              issueId={issueId}
-              issueOperations={issueOperations}
-              isEditable={!is_archived && isEditable}
-            />
+        <div className="relative flex h-full w-full flex-col overflow-hidden">
+          <div className="vertical-scrollbar flex h-full w-full overflow-auto">
+            <div className="relative h-full w-full space-y-6 overflow-auto p-4 py-5">
+              <IssueMainContent
+                workspaceSlug={workspaceSlug}
+                projectId={projectId}
+                issueId={issueId}
+                issueOperations={issueOperations}
+                isEditable={isEditable}
+                isArchived={is_archived}
+              />
+            </div>
+            {!issueDetailSidebarCollapsed && (
+              <div
+                className={`vertical-scrollbar scrollbar-sm h-full !w-[400px] flex-shrink-0 overflow-hidden border-l border-subtle p-4 py-5 ${
+                  is_archived ? "pointer-events-none" : ""
+                }`}
+              >
+                <PeekOverviewProperties
+                  workspaceSlug={workspaceSlug}
+                  projectId={projectId}
+                  issueId={issueId}
+                  issueOperations={issueOperations}
+                  disabled={!isEditable || is_archived}
+                />
+              </div>
+            )}
           </div>
         </div>
       )}

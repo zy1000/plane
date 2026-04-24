@@ -9,9 +9,11 @@ import { ParentPropertyIcon } from "@plane/propel/icons";
 // hooks
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 // components
-import { IssueActivityBlockComponent, IssueLink } from "./";
+import { ActivityChangeFooter, IssueActivityBlockComponent, IssueLink } from "./";
 
 type TIssueParentActivity = { activityId: string; showIssue?: boolean; ends: "top" | "bottom" | undefined };
+
+const parentIcon = <ParentPropertyIcon className="h-3.5 w-3.5 text-secondary" aria-hidden="true" />;
 
 export const IssueParentActivity = observer(function IssueParentActivity(props: TIssueParentActivity) {
   const { activityId, showIssue = true, ends } = props;
@@ -23,11 +25,24 @@ export const IssueParentActivity = observer(function IssueParentActivity(props: 
   const activity = getActivityById(activityId);
 
   if (!activity) return <></>;
+
+  const oldLabel = activity.old_value || "None";
+  const newLabel = activity.new_value || "None";
+  const showFooter = !!(activity.old_value || activity.new_value);
+
   return (
     <IssueActivityBlockComponent
-      icon={<ParentPropertyIcon className="h-3.5 w-3.5 text-secondary" aria-hidden="true" />}
+      icon={parentIcon}
       activityId={activityId}
       ends={ends}
+      footer={
+        showFooter ? (
+          <ActivityChangeFooter
+            from={{ icon: parentIcon, label: oldLabel }}
+            to={{ icon: parentIcon, label: newLabel }}
+          />
+        ) : null
+      }
     >
       <>
         {activity.new_value ? `set the parent to ` : `removed the parent `}

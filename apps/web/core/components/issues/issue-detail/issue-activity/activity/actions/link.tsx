@@ -5,13 +5,15 @@
  */
 
 import { observer } from "mobx-react";
-import { MessageSquare } from "lucide-react";
+import { Link2, MessageSquare } from "lucide-react";
 // hooks
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 // components
-import { IssueActivityBlockComponent, IssueLink } from "./";
+import { ActivityChangeFooter, IssueActivityBlockComponent, IssueLink } from "./";
 
 type TIssueLinkActivity = { activityId: string; showIssue?: boolean; ends: "top" | "bottom" | undefined };
+
+const linkIcon = <Link2 className="h-3.5 w-3.5 flex-shrink-0 text-secondary" aria-hidden="true" />;
 
 export const IssueLinkActivity = observer(function IssueLinkActivity(props: TIssueLinkActivity) {
   const { activityId, showIssue = false, ends } = props;
@@ -23,11 +25,26 @@ export const IssueLinkActivity = observer(function IssueLinkActivity(props: TIss
   const activity = getActivityById(activityId);
 
   if (!activity) return <></>;
+
+  const oldLabel = activity.old_value || "None";
+  const newLabel = activity.new_value || "None";
+  const oldHref = activity.old_value || undefined;
+  const newHref = activity.new_value || undefined;
+  const showFooter = !!(activity.old_value || activity.new_value);
+
   return (
     <IssueActivityBlockComponent
       icon={<MessageSquare size={14} className="text-secondary" aria-hidden="true" />}
       activityId={activityId}
       ends={ends}
+      footer={
+        showFooter ? (
+          <ActivityChangeFooter
+            from={{ icon: linkIcon, label: oldLabel, href: oldHref }}
+            to={{ icon: linkIcon, label: newLabel, href: newHref }}
+          />
+        ) : null
+      }
     >
       <>
         {activity.verb === "created" ? (

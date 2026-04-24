@@ -9,9 +9,11 @@ import { EstimatePropertyIcon } from "@plane/propel/icons";
 // hooks
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 // components
-import { IssueActivityBlockComponent, IssueLink } from "./";
+import { ActivityChangeFooter, IssueActivityBlockComponent, IssueLink } from "./";
 
 type TIssueEstimateActivity = { activityId: string; showIssue?: boolean; ends: "top" | "bottom" | undefined };
+
+const estimateIcon = <EstimatePropertyIcon className="h-3.5 w-3.5 text-secondary" aria-hidden="true" />;
 
 export const IssueEstimateActivity = observer(function IssueEstimateActivity(props: TIssueEstimateActivity) {
   const { activityId, showIssue = true, ends } = props;
@@ -24,11 +26,23 @@ export const IssueEstimateActivity = observer(function IssueEstimateActivity(pro
 
   if (!activity) return <></>;
 
+  const oldLabel = activity.old_value || "None";
+  const newLabel = activity.new_value || "None";
+  const showFooter = !!(activity.old_value || activity.new_value);
+
   return (
     <IssueActivityBlockComponent
-      icon={<EstimatePropertyIcon className="h-3.5 w-3.5 text-secondary" aria-hidden="true" />}
+      icon={estimateIcon}
       activityId={activityId}
       ends={ends}
+      footer={
+        showFooter ? (
+          <ActivityChangeFooter
+            from={{ icon: estimateIcon, label: oldLabel }}
+            to={{ icon: estimateIcon, label: newLabel }}
+          />
+        ) : null
+      }
     >
       <>
         {activity.new_value ? `set the estimate point to ` : `removed the estimate point`}

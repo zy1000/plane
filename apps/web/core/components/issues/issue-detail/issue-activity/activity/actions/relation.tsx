@@ -11,7 +11,7 @@ import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { getRelationActivityContent, useTimeLineRelationOptions } from "@/plane-web/components/relations";
 import type { TIssueRelationTypes } from "@/plane-web/types";
 //
-import { IssueActivityBlockComponent } from "./";
+import { ActivityChangeFooter, IssueActivityBlockComponent } from "./";
 
 type TIssueRelationActivity = { activityId: string; ends: "top" | "bottom" | undefined };
 
@@ -27,11 +27,30 @@ export const IssueRelationActivity = observer(function IssueRelationActivity(pro
   const activityContent = getRelationActivityContent(activity);
 
   if (!activity) return <></>;
+
+  const relationOption = activity.field
+    ? ISSUE_RELATION_OPTIONS[activity.field as TIssueRelationTypes]
+    : undefined;
+  const headerIcon = relationOption ? relationOption.icon(14) : null;
+  const footerIcon = relationOption ? relationOption.icon(14) : null;
+
+  const oldLabel = activity.old_value || "None";
+  const newLabel = activity.new_value || "None";
+  const showFooter = !!(activity.old_value || activity.new_value);
+
   return (
     <IssueActivityBlockComponent
-      icon={activity.field ? ISSUE_RELATION_OPTIONS[activity.field as TIssueRelationTypes]?.icon(14) : <></>}
+      icon={headerIcon ?? <></>}
       activityId={activityId}
       ends={ends}
+      footer={
+        showFooter ? (
+          <ActivityChangeFooter
+            from={{ icon: footerIcon, label: oldLabel }}
+            to={{ icon: footerIcon, label: newLabel }}
+          />
+        ) : null
+      }
     >
       {activityContent}
       {activity.old_value === "" ? (

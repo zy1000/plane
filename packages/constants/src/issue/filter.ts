@@ -583,5 +583,15 @@ export const filterActivityByTab = (
   getActivityById: (id: string) => TIssueActivity | undefined
 ): TIssueActivityComment[] => {
   if (tab === EActivityTab.ALL) return items;
-  return items.filter((item) => classifyActivityItem(item, getActivityById) === tab);
+  return items.filter((item) => {
+    const category = classifyActivityItem(item, getActivityById);
+    if (tab === EActivityTab.ACTIVITY) {
+      return (
+        category === EActivityTab.ACTIVITY ||
+        category === EActivityTab.TRANSITION ||
+        category === EActivityTab.HISTORY
+      );
+    }
+    return category === tab;
+  });
 };

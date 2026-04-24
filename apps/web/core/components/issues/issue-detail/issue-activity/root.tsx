@@ -89,7 +89,7 @@ export const IssueActivity = observer(function IssueActivity(props: TIssueActivi
   if (!project) return <></>;
 
   return (
-    <div className="mt-6 space-y-4">
+    <div className="mt-6 space-y-5">
       {/* header：底边横线铺满整行，与右侧排序等按钮右缘对齐 */}
       <div className="border-b border-subtle">
         <div className="flex items-center justify-between gap-2">
@@ -111,9 +111,9 @@ export const IssueActivity = observer(function IssueActivity(props: TIssueActivi
       </div>
 
       {/* rendering activity */}
-      <div className="space-y-3">
+      <div className="space-y-4">
         <div className="min-h-[200px]">
-          <div className="space-y-3">
+          <div className="space-y-4">
             {!disabled && showCommentComposer && sortOrder === E_SORT_ORDER.DESC && renderCommentCreationBox}
             {activeTab === EActivityTab.TIMESHEET ? (
               <IssueActivityTimesheetList

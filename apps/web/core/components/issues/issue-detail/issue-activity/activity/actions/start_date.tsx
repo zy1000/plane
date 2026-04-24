@@ -10,10 +10,12 @@ import { CalendarDays } from "lucide-react";
 import { renderFormattedDate } from "@plane/utils";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 // components
-import { IssueActivityBlockComponent, IssueLink } from "./";
+import { ActivityChangeFooter, IssueActivityBlockComponent, IssueLink } from "./";
 // helpers
 
 type TIssueStartDateActivity = { activityId: string; showIssue?: boolean; ends: "top" | "bottom" | undefined };
+
+const dateIcon = <CalendarDays className="h-3.5 w-3.5 flex-shrink-0 text-secondary" aria-hidden="true" />;
 
 export const IssueStartDateActivity = observer(function IssueStartDateActivity(props: TIssueStartDateActivity) {
   const { activityId, showIssue = true, ends } = props;
@@ -25,11 +27,24 @@ export const IssueStartDateActivity = observer(function IssueStartDateActivity(p
   const activity = getActivityById(activityId);
 
   if (!activity) return <></>;
+
+  const oldLabel = activity.old_value ? renderFormattedDate(activity.old_value) || "None" : "None";
+  const newLabel = activity.new_value ? renderFormattedDate(activity.new_value) || "None" : "None";
+  const showFooter = !!(activity.old_value || activity.new_value);
+
   return (
     <IssueActivityBlockComponent
       icon={<CalendarDays size={14} className="text-secondary" aria-hidden="true" />}
       activityId={activityId}
       ends={ends}
+      footer={
+        showFooter ? (
+          <ActivityChangeFooter
+            from={{ icon: dateIcon, label: oldLabel }}
+            to={{ icon: dateIcon, label: newLabel }}
+          />
+        ) : null
+      }
     >
       <>
         {activity.new_value ? `set the start date to ` : `removed the start date `}

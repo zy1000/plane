@@ -10,9 +10,17 @@ import { LabelPropertyIcon } from "@plane/propel/icons";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useLabel } from "@/hooks/store/use-label";
 // components
-import { IssueActivityBlockComponent, IssueLink, LabelActivityChip } from "./";
+import { ActivityChangeFooter, IssueActivityBlockComponent, IssueLink, LabelActivityChip } from "./";
 
 type TIssueLabelActivity = { activityId: string; showIssue?: boolean; ends: "top" | "bottom" | undefined };
+
+const labelDot = (color?: string) => (
+  <span
+    className="h-2 w-2 flex-shrink-0 rounded-full border border-strong"
+    style={{ backgroundColor: color ?? "transparent" }}
+    aria-hidden="true"
+  />
+);
 
 export const IssueLabelActivity = observer(function IssueLabelActivity(props: TIssueLabelActivity) {
   const { activityId, showIssue = true, ends } = props;
@@ -27,11 +35,24 @@ export const IssueLabelActivity = observer(function IssueLabelActivity(props: TI
   const newLabelColor = getLabelById(activity?.new_identifier ?? "")?.color;
 
   if (!activity) return <></>;
+
+  const oldLabel = activity.old_value || "None";
+  const newLabel = activity.new_value || "None";
+  const showFooter = !!(activity.old_value || activity.new_value);
+
   return (
     <IssueActivityBlockComponent
       icon={<LabelPropertyIcon height={14} width={14} className="text-secondary" />}
       activityId={activityId}
       ends={ends}
+      footer={
+        showFooter ? (
+          <ActivityChangeFooter
+            from={{ icon: labelDot(oldLabelColor), label: oldLabel }}
+            to={{ icon: labelDot(newLabelColor), label: newLabel }}
+          />
+        ) : null
+      }
     >
       <>
         {activity.old_value === "" ? `added a new label ` : `removed the label `}

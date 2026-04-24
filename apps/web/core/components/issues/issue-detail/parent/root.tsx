@@ -97,7 +97,8 @@ export const IssueParentDetail = observer(function IssueParentDetail(props: TIss
           onChange={handleAddParent}
         />
       )}
-      <div className="mb-5 flex w-min items-center gap-2 text-caption-sm-regular whitespace-nowrap">
+      {/* min-h-5 固定该行高度（>=hover 时 "..." 按钮的高度），避免按钮出现时撑高行，导致下方内容上下抖动 */}
+      <div className="mb-5 flex min-h-5 w-min items-center gap-2 text-caption-sm-regular whitespace-nowrap">
         {parentIssue ? (
           <div className="group flex items-center gap-1.5">
             <ControlLink href={workItemLink} onClick={handleParentIssueClick}>

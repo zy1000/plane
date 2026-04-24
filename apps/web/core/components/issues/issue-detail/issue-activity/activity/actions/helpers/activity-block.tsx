@@ -15,6 +15,7 @@ import { usePlatformOS } from "@/hooks/use-platform-os";
 import { IssueCreatorDisplay } from "@/plane-web/components/issues/issue-details/issue-creator";
 // local imports
 import { IssueUser } from "../";
+import { shouldHideActivityChangeFooter, useActivityTab } from "./activity-tab-context";
 
 type TIssueActivityBlockComponent = {
   icon?: ReactNode;
@@ -22,43 +23,51 @@ type TIssueActivityBlockComponent = {
   ends: "top" | "bottom" | undefined;
   children: ReactNode;
   customUserName?: string;
+  footer?: ReactNode;
 };
 
 export function IssueActivityBlockComponent(props: TIssueActivityBlockComponent) {
-  const { icon, activityId, ends, children, customUserName } = props;
+  const { icon, activityId, ends, children, customUserName, footer } = props;
   // hooks
   const {
     activity: { getActivityById },
   } = useIssueDetail();
+  const activeTab = useActivityTab();
 
   const activity = getActivityById(activityId);
   const { isMobile } = usePlatformOS();
   if (!activity) return <></>;
+  // 「活动」Tab 下仅显示标题行，不渲染「旧值 → 新值」的详情 footer；
+  // 「全部 / 转换 / 历史」等其它 Tab 仍保留 footer。
+  const resolvedFooter = shouldHideActivityChangeFooter(activeTab) ? null : footer;
   return (
     <div
-      className={`relative flex items-center gap-3 text-caption-sm-regular ${
-        ends === "top" ? `pb-2` : ends === "bottom" ? `pt-2` : `py-2`
+      className={`relative flex ${resolvedFooter ? "items-start" : "items-center"} gap-4 text-body-sm-regular ${
+        ends === "top" ? `pb-3.5` : ends === "bottom" ? `pt-3.5` : `py-3.5`
       }`}
     >
       <div className="absolute top-0 bottom-0 left-[13px] w-px bg-layer-3" aria-hidden />
       <div className="z-[4] flex h-7 w-7 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border border-subtle bg-layer-2 text-secondary shadow-raised-100">
         {icon ? icon : <Network className="h-3.5 w-3.5" />}
       </div>
-      <div className="w-full truncate text-secondary">
-        {!activity?.field && activity?.verb === "created" ? (
-          <IssueCreatorDisplay activityId={activityId} customUserName={customUserName} />
-        ) : (
-          <IssueUser activityId={activityId} customUserName={customUserName} />
-        )}
-        <span> {children} </span>
-        <span>
-          <Tooltip
-            isMobile={isMobile}
-            tooltipContent={`${renderFormattedDate(activity.created_at)}, ${renderFormattedTime(activity.created_at)}`}
-          >
-            <span className="whitespace-nowrap text-tertiary"> {calculateTimeAgo(activity.created_at)}</span>
-          </Tooltip>
-        </span>
+      <div className="w-full min-w-0 text-secondary">
+        <div className="truncate">
+          {!activity?.field && activity?.verb === "created" ? (
+            <IssueCreatorDisplay activityId={activityId} customUserName={customUserName} />
+          ) : (
+            <IssueUser activityId={activityId} customUserName={customUserName} />
+          )}
+          <span> {children} </span>
+          <span>
+            <Tooltip
+              isMobile={isMobile}
+              tooltipContent={`${renderFormattedDate(activity.created_at)}, ${renderFormattedTime(activity.created_at)}`}
+            >
+              <span className="whitespace-nowrap text-tertiary"> {calculateTimeAgo(activity.created_at)}</span>
+            </Tooltip>
+          </span>
+        </div>
+        {resolvedFooter ? <div className="mt-4">{resolvedFooter}</div> : null}
       </div>
     </div>
   );

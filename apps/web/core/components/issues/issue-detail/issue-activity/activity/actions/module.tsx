@@ -9,10 +9,11 @@ import { observer } from "mobx-react";
 import { ModuleIcon } from "@plane/propel/icons";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 // components
-import { IssueActivityBlockComponent } from "./";
-// icons
+import { ActivityChangeFooter, IssueActivityBlockComponent } from "./";
 
 type TIssueModuleActivity = { activityId: string; ends: "top" | "bottom" | undefined };
+
+const moduleIcon = <ModuleIcon className="h-3.5 w-3.5 flex-shrink-0 text-secondary" />;
 
 export const IssueModuleActivity = observer(function IssueModuleActivity(props: TIssueModuleActivity) {
   const { activityId, ends } = props;
@@ -24,11 +25,24 @@ export const IssueModuleActivity = observer(function IssueModuleActivity(props: 
   const activity = getActivityById(activityId);
 
   if (!activity) return <></>;
+
+  const oldLabel = activity.old_value || "None";
+  const newLabel = activity.new_value || "None";
+  const showFooter = !!(activity.old_value || activity.new_value);
+
   return (
     <IssueActivityBlockComponent
       icon={<ModuleIcon className="h-4 w-4 flex-shrink-0 text-secondary" />}
       activityId={activityId}
       ends={ends}
+      footer={
+        showFooter ? (
+          <ActivityChangeFooter
+            from={{ icon: moduleIcon, label: oldLabel }}
+            to={{ icon: moduleIcon, label: newLabel }}
+          />
+        ) : null
+      }
     >
       <>
         {activity.verb === "created" ? (

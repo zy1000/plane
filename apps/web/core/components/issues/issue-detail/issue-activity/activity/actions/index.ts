@@ -27,5 +27,6 @@ export * from "./workflow-approval";
 
 // helpers
 export * from "./helpers/activity-block";
+export * from "./helpers/activity-change-footer";
 export * from "./helpers/issue-user";
 export * from "./helpers/issue-link";

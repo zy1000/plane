@@ -9,10 +9,11 @@ import { observer } from "mobx-react";
 import { CycleIcon } from "@plane/propel/icons";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 // components
-import { IssueActivityBlockComponent } from "./";
-// icons
+import { ActivityChangeFooter, IssueActivityBlockComponent } from "./";
 
 type TIssueCycleActivity = { activityId: string; ends: "top" | "bottom" | undefined };
+
+const cycleIcon = <CycleIcon className="h-3.5 w-3.5 flex-shrink-0 text-secondary" />;
 
 export const IssueCycleActivity = observer(function IssueCycleActivity(props: TIssueCycleActivity) {
   const { activityId, ends } = props;
@@ -24,14 +25,34 @@ export const IssueCycleActivity = observer(function IssueCycleActivity(props: TI
   const activity = getActivityById(activityId);
 
   if (!activity) return <></>;
+
+  const isCreated = activity.verb === "created";
+  const isUpdated = activity.verb === "updated";
+
+  const oldLabel = activity.old_value || "None";
+  const newLabel = isCreated
+    ? activity.new_value || "None"
+    : isUpdated
+      ? activity.new_value || "None"
+      : "None";
+  const showFooter = !!(activity.old_value || activity.new_value);
+
   return (
     <IssueActivityBlockComponent
       icon={<CycleIcon className="h-4 w-4 flex-shrink-0 text-secondary" />}
       activityId={activityId}
       ends={ends}
+      footer={
+        showFooter ? (
+          <ActivityChangeFooter
+            from={{ icon: cycleIcon, label: oldLabel }}
+            to={{ icon: cycleIcon, label: newLabel }}
+          />
+        ) : null
+      }
     >
       <>
-        {activity.verb === "created" ? (
+        {isCreated ? (
           <>
             <span>added this work item to the cycle </span>
             <a
@@ -43,7 +64,7 @@ export const IssueCycleActivity = observer(function IssueCycleActivity(props: TI
               <span className="truncate">{activity.new_value}</span>
             </a>
           </>
-        ) : activity.verb === "updated" ? (
+        ) : isUpdated ? (
           <>
             <span>set the cycle to </span>
             <a
