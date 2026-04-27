@@ -7,7 +7,7 @@ from plane.db.models import (
     ProjectMember,
     ProjectMemberRole,
     ProjectRole,
-    ProjectIssueType,
+    IssueType,
     Project,
     TestCaseRepository,
 )
@@ -112,18 +112,17 @@ def _get_user_project_permission_keys(
 def resolve_project_issue_type_name(
     project_id: str, issue_type_id: str
 ) -> Optional[str]:
-    project_issue_type = (
-        ProjectIssueType.objects.filter(
+    issue_type = (
+        IssueType.objects.filter(
             project_id=project_id,
-            issue_type_id=issue_type_id,
+            id=issue_type_id,
             deleted_at__isnull=True,
         )
-        .select_related("issue_type")
         .first()
     )
-    if not project_issue_type:
+    if not issue_type:
         return None
-    return project_issue_type.issue_type.name
+    return issue_type.name
 
 
 REQUIREMENT_TYPE_NAMES = {"史诗", "特性", "用户故事"}

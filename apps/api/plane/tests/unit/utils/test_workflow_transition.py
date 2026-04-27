@@ -8,7 +8,6 @@ from plane.db.models import (
     IssueTransitionApprovalRecord,
     IssueType,
     Project,
-    ProjectIssueType,
     ProjectMember,
     State,
     Workflow,
@@ -55,12 +54,8 @@ class TestWorkflowTransitionDynamicApprovers:
             ProjectMember.objects.create(project=project, member=member, role=20)
 
         issue_type = IssueType.objects.create(
-            workspace=workspace,
-            name="任务",
-        )
-        ProjectIssueType.objects.create(
             project=project,
-            issue_type=issue_type,
+            name="任务",
         )
 
         from_state = State.objects.create(

@@ -50,7 +50,7 @@ class StateViewSet(BaseViewSet):
     @allow_fine_permission(PermissionKey.STATE_CREATE)
     def create(self, request, slug, project_id):
         try:
-            serializer = StateSerializer(data=request.data)
+            serializer = StateSerializer(data=request.data, context={"project_id": project_id})
             if serializer.is_valid():
                 serializer.save(project_id=project_id)
                 return Response(serializer.data, status=status.HTTP_200_OK)
@@ -66,7 +66,7 @@ class StateViewSet(BaseViewSet):
     def partial_update(self, request, slug, project_id, pk):
         try:
             state = State.objects.get(pk=pk, project_id=project_id, workspace__slug=slug)
-            serializer = StateSerializer(state, data=request.data, partial=True)
+            serializer = StateSerializer(state, data=request.data, partial=True, context={"project_id": project_id})
             if serializer.is_valid():
                 serializer.save()
                 return Response(serializer.data, status=status.HTTP_200_OK)

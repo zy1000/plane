@@ -8,11 +8,9 @@ from django.db.models import Q
 
 # Module imports
 from .project import ProjectBaseModel
-from .base import BaseModel
 
 
-class IssueType(BaseModel):
-    workspace = models.ForeignKey("db.Workspace", related_name="issue_types", on_delete=models.CASCADE)
+class IssueType(ProjectBaseModel):
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True)
     logo_props = models.JSONField(default=dict)
@@ -24,6 +22,14 @@ class IssueType(BaseModel):
     external_id = models.CharField(max_length=255, blank=True, null=True)
 
     class Meta:
+        unique_together = ["project", "name", "deleted_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["project", "name"],
+                condition=Q(deleted_at__isnull=True),
+                name="issue_type_unique_project_name_when_deleted_at_null",
+            )
+        ]
         verbose_name = "Issue Type"
         verbose_name_plural = "Issue Types"
         db_table = "issue_types"
@@ -33,6 +39,14 @@ class IssueType(BaseModel):
 
 
 class ProjectIssueType(ProjectBaseModel):
+    """
+    Legacy compatibility table.
+
+    IssueType is now project-scoped directly. Keep this model/table for old
+    migrations and rollback inspection, but new business logic should not use it
+    as the source of project membership.
+    """
+
     issue_type = models.ForeignKey("db.IssueType", related_name="project_issue_types", on_delete=models.CASCADE)
     level = models.PositiveIntegerField(default=0)
     is_default = models.BooleanField(default=False)

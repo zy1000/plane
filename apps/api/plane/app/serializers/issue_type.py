@@ -7,10 +7,14 @@ from plane.db.models import IssueType, ProjectIssueType, IssueTypeProperty, Issu
 
 
 class IssueTypeSerializer(BaseSerializer):
+    project_id = serializers.UUIDField(source="project.id", read_only=True)
+
     class Meta:
         model = IssueType
         fields = [
             "id",
+            "project",
+            "project_id",
             "name",
             "description",
             "logo_props",
@@ -24,7 +28,7 @@ class IssueTypeSerializer(BaseSerializer):
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["workspace", "created_at", "updated_at"]
+        read_only_fields = ["project", "workspace", "created_at", "updated_at"]
 
 
 class ProjectIssueTypeSerializer(BaseSerializer):
@@ -76,11 +80,14 @@ class IssueTypePropertySerializer(BaseSerializer):
 
 class IssueTypeWithPropertySerializer(BaseSerializer):
     properties = IssueTypePropertySerializer(many=True, read_only=True)
+    project_id = serializers.UUIDField(source="project.id", read_only=True)
 
     class Meta:
         model = IssueType
         fields = [
             "id",
+            "project",
+            "project_id",
             "name",
             "description",
             "logo_props",
@@ -95,21 +102,18 @@ class IssueTypeWithPropertySerializer(BaseSerializer):
             "updated_at",
             "properties"
         ]
-        read_only_fields = ["workspace", "created_at", "updated_at"]
+        read_only_fields = ["project", "workspace", "created_at", "updated_at"]
 
 
 class WorkspaceIssueTypeWithPropertySerializer(BaseSerializer):
     properties = IssueTypePropertySerializer(many=True, read_only=True)
-    project_id = serializers.SerializerMethodField()
-
-
-    def get_project_id(self,obj:IssueType):
-        return obj.project_issue_types.first().project_id
+    project_id = serializers.UUIDField(source="project.id", read_only=True)
 
     class Meta:
         model = IssueType
         fields = [
             "id",
+            "project",
             "name",
             "description",
             "logo_props",
@@ -125,7 +129,7 @@ class WorkspaceIssueTypeWithPropertySerializer(BaseSerializer):
             "properties",
             "project_id"
         ]
-        read_only_fields = ["workspace", "created_at", "updated_at"]
+        read_only_fields = ["project", "workspace", "created_at", "updated_at"]
 
 
 class IssuePropertyValueSerializer(BaseSerializer):

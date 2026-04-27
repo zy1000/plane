@@ -127,6 +127,9 @@ class IssueSerializer(BaseSerializer):
             raise serializers.ValidationError("State is not valid please pass a valid state_id")
 
         # Check state belongs to the issue's type when the state is type-scoped
+        if data.get("type") and str(data["type"].project_id) != str(self.context.get("project_id")):
+            raise serializers.ValidationError("Issue type is not valid please pass a valid type_id")
+
         if data.get("state"):
             state = data["state"]
             issue_type = data.get("type") or (self.instance.type if self.instance else None)
@@ -169,7 +172,7 @@ class IssueSerializer(BaseSerializer):
 
         if not issue_type:
             # Get default issue type
-            issue_type = IssueType.objects.filter(project_issue_types__project_id=project_id, is_default=True).first()
+            issue_type = IssueType.objects.filter(project_id=project_id, is_default=True).first()
             issue_type = issue_type
 
         issue = Issue.objects.create(**validated_data, project_id=project_id, type=issue_type)

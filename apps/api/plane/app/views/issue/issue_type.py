@@ -1,7 +1,5 @@
-# Django imports
 from django.db import transaction
 from django.shortcuts import get_object_or_404
-from collections import defaultdict
 
 
 # Third party imports
@@ -13,7 +11,6 @@ from plane.app.views import BaseAPIView
 from plane.app.permissions import ProjectMemberPermission, ProjectEntityPermission
 from plane.app.serializers.issue_type import (
     IssueTypeSerializer,
-    ProjectIssueTypeSerializer,
     IssueTypePropertySerializer,
     IssuePropertyValueSerializer,
     IssuePropertyValueBulkSerializer,
@@ -22,11 +19,9 @@ from plane.app.serializers.issue_type import (
 )
 from plane.db.models import (
     IssueType,
-    ProjectIssueType,
     IssueTypeProperty,
     IssuePropertyValue,
     Issue,
-    Workspace
 )
 
 
@@ -40,9 +35,8 @@ class ProjectIssueTypeListCreateAPIEndpoint(BaseAPIView):
     def get_queryset(self):
         return IssueType.objects.filter(
             workspace__slug=self.kwargs.get("slug"),
-            project_issue_types__project_id=self.kwargs.get("project_id"),
-            project_issue_types__deleted_at__isnull=True,
-        ).distinct()
+            project_id=self.kwargs.get("project_id"),
+        )
 
     def get(self, request, slug, project_id):
         """获取项目的Issue Type列表"""
@@ -51,24 +45,12 @@ class ProjectIssueTypeListCreateAPIEndpoint(BaseAPIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     def post(self, request, slug, project_id):
-        """创建新的Issue Type并关联到项目"""
+        """创建新的项目级Issue Type"""
         serializer = IssueTypeSerializer(data=request.data)
         if serializer.is_valid():
-            with transaction.atomic():
-                # 创建IssueType
-                issue_type = serializer.save(
-                    workspace_id=Workspace.objects.get(slug=slug).id
-                )
-
-                # 创建ProjectIssueType关联
-                ProjectIssueType.objects.create(
-                    project_id=project_id,
-                    issue_type=issue_type,
-                    level=request.data.get("level", 0),
-                    is_default=request.data.get("is_default", False),
-                )
-
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
+            issue_type = serializer.save(project_id=project_id)
+            response_serializer = IssueTypeSerializer(issue_type)
+            return Response(response_serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -76,14 +58,11 @@ class WorkspaceIssueTypeApiView(BaseAPIView):
     model = IssueType
 
     def get_queryset(self):
-        return IssueType.objects.filter(project_issue_types__deleted_at__isnull=True)
+        return IssueType.objects.filter(project__isnull=False)
 
     def get(self, request, slug: str):
         queryset = self.get_queryset().filter(workspace__slug=slug)
         serializer = WorkspaceIssueTypeWithPropertySerializer(queryset, many=True)
-        result = defaultdict(list)
-        for data in serializer.data:
-            result[data['project_id']].append(data)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
@@ -93,24 +72,20 @@ class IssueTypeViewSet(BaseAPIView):
     def get_queryset(self):
         return IssueType.objects.filter(
             workspace__slug=self.kwargs.get("slug"),
-            project_issue_types__project_id=self.kwargs.get("project_id"),
-            project_issue_types__deleted_at__isnull=True,
-        ).distinct()
+            project_id=self.kwargs.get("project_id"),
+        )
 
     def delete(self, request, slug, project_id, issue_type_id):
-        issue_type = IssueType.objects.get(pk=issue_type_id)
+        issue_type = IssueType.objects.get(pk=issue_type_id, project_id=project_id, workspace__slug=slug)
         if issue_type.is_default:
             return Response(
                 {"msg": "默认工作项类型不能删除"}, status=status.HTTP_400_BAD_REQUEST
             )
-        if Issue.objects.filter(type=issue_type).exists():
+        if Issue.objects.filter(project_id=project_id, type=issue_type).exists():
             return Response(
                 {"msg": "该工作项类型正在被使用,请先删除对应工作项"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        ProjectIssueType.objects.filter(
-            project_id=project_id, issue_type=issue_type
-        ).delete()
         issue_type.delete(soft=False)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -141,12 +116,13 @@ class IssueTypePropertyListCreateAPIEndpoint(BaseAPIView):
         issue_type = get_object_or_404(
             IssueType,
             id=issue_type_id,
-            project_issue_types__project_id=project_id,
-            project_issue_types__deleted_at__isnull=True,
+            project_id=project_id,
+            workspace__slug=slug,
         )
-        request.data['issue_type'] = issue_type.id
+        data = request.data.copy()
+        data['issue_type'] = issue_type.id
 
-        serializer = IssueTypePropertySerializer(data=request.data)
+        serializer = IssueTypePropertySerializer(data=data)
         if serializer.is_valid():
             property_obj = serializer.save(
                 project_id=project_id,
@@ -160,7 +136,11 @@ class IssueTypePropertyViewSet(BaseAPIView):
     model = IssueTypeProperty
 
     def delete(self, request, slug, project_id, issue_type_id, property_id):
-        property_obj = IssueTypeProperty.objects.get(pk=property_id)
+        property_obj = IssueTypeProperty.objects.get(
+            pk=property_id,
+            project_id=project_id,
+            issue_type_id=issue_type_id,
+        )
 
         property_obj.delete(soft=False)
         return Response(status=status.HTTP_204_NO_CONTENT)
@@ -188,7 +168,8 @@ class IssuePropertyValueAPIEndpoint(BaseAPIView):
         # 验证issue是否存在
         issue = get_object_or_404(
             Issue,
-            id=issue_id
+            id=issue_id,
+            project_id=project_id,
         )
 
         serializer = IssuePropertyValueBulkSerializer(data=request.data)

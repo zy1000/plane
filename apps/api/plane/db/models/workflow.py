@@ -58,17 +58,11 @@ class Workflow(ProjectBaseModel):
 
     def clean(self):
         super().clean()
-        # issue_type 必须已关联到当前项目
-        from .issue_type import ProjectIssueType
-
-        if not ProjectIssueType.objects.filter(
-                project=self.project,
-                issue_type=self.issue_type,
-                deleted_at__isnull=True,
-        ).exists():
+        # issue_type 必须属于当前项目
+        if self.issue_type_id and str(self.issue_type.project_id) != str(self.project_id):
             raise ValidationError(
                 {
-                    "issue_type": "该工作项类型未关联到当前项目，无法为其创建工作流。"
+                    "issue_type": "该工作项类型不属于当前项目，无法为其创建工作流。"
                 }
             )
 

@@ -77,7 +77,7 @@ from plane.db.models import (
     ReleaseIssue,
     Project,
     ProjectMember,
-    UserRecentVisit, IssueType, ProjectIssueType, State,
+    UserRecentVisit, IssueType, State,
 )
 from plane.utils.filters import ComplexFilterBackend, IssueFilterSet
 from plane.utils.global_paginator import paginate
@@ -420,7 +420,16 @@ class IssueViewSet(BaseViewSet):
 
         data = dict(request.data)
         if not data.get("type_id"):
-            data['type_id'] = str(ProjectIssueType.objects.get(project=project, issue_type__name='任务').issue_type_id)
+            default_issue_type = (
+                IssueType.objects.filter(project=project, is_default=True, deleted_at__isnull=True).first()
+                or IssueType.objects.filter(project=project, name='任务', deleted_at__isnull=True).first()
+            )
+            if default_issue_type is None:
+                return Response(
+                    {"error": "Issue type is not valid please pass a valid type_id"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            data['type_id'] = str(default_issue_type.id)
 
         issue_type_name = resolve_project_issue_type_name(str(project_id), str(data["type_id"]))
         if issue_type_name is None:

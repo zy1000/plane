@@ -38,6 +38,8 @@ class StateSerializer(BaseSerializer):
     def validate(self, attrs):
         if attrs.get("group") == StateGroup.TRIAGE.value:
             raise serializers.ValidationError("Cannot create triage state")
+        if attrs.get("issue_type") and str(attrs["issue_type"].project_id) != str(self.context.get("project_id")):
+            raise serializers.ValidationError("Issue type is not valid please pass a valid issue_type_id")
         return attrs
 
 

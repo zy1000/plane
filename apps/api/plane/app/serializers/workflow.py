@@ -30,6 +30,11 @@ class WorkflowSerializer(BaseSerializer):
             "issue_type_id",
         ]
 
+    def validate(self, attrs):
+        if attrs.get("issue_type") and str(attrs["issue_type"].project_id) != str(self.context.get("project_id")):
+            raise serializers.ValidationError("Issue type is not valid please pass a valid issue_type_id")
+        return attrs
+
 
 class WorkflowTransitionSerializer(BaseSerializer):
     from_state_id = serializers.PrimaryKeyRelatedField(
@@ -63,6 +68,20 @@ class WorkflowTransitionSerializer(BaseSerializer):
             "required_count",
             "dynamic_approver_types",
         ]
+
+    def validate(self, attrs):
+        project_id = self.context.get("project_id")
+        workflow = attrs.get("workflow") or (self.instance.workflow if self.instance else None)
+        from_state = attrs.get("from_state") or (self.instance.from_state if self.instance else None)
+        to_state = attrs.get("to_state") or (self.instance.to_state if self.instance else None)
+
+        if workflow and str(workflow.project_id) != str(project_id):
+            raise serializers.ValidationError("Workflow is not valid for this project")
+        if from_state and str(from_state.project_id) != str(project_id):
+            raise serializers.ValidationError("From state is not valid for this project")
+        if to_state and str(to_state.project_id) != str(project_id):
+            raise serializers.ValidationError("To state is not valid for this project")
+        return attrs
 
 
 class IssueTransitionApprovalRecordSerializer(BaseSerializer):

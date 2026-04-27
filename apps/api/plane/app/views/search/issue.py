@@ -129,8 +129,14 @@ class IssueSearchEndpoint(BaseAPIView):
         method = self.get_child_optional_types if type_filter == 'child' else self.get_parent_optional_types
         return issues.filter(type__name__in=method(type_name=issue.type.name))
 
-    def filter_issues_by_type(self, issues: QuerySet, issue_type_id: str, type_filter: str = 'parent') -> QuerySet:
-        issue_type = IssueType.objects.get(pk=issue_type_id)
+    def filter_issues_by_type(
+        self,
+        issues: QuerySet,
+        issue_type_id: str,
+        project_id: str,
+        type_filter: str = 'parent',
+    ) -> QuerySet:
+        issue_type = IssueType.objects.get(pk=issue_type_id, project_id=project_id)
         method = self.get_child_optional_types if type_filter == 'child' else self.get_parent_optional_types
         return issues.filter(type__name__in=method(type_name=issue_type.name))
 
@@ -175,7 +181,7 @@ class IssueSearchEndpoint(BaseAPIView):
             issues = self.filter_issues_by_id(issues, issue_id, type_filter='child')
 
         if issue_type_id:
-            issues = self.filter_issues_by_type(issues, issue_type_id)
+            issues = self.filter_issues_by_type(issues, issue_type_id, project_id)
 
         if cycle == "true":
             issues = self.exclude_issues_in_cycles(issues)

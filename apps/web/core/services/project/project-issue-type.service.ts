@@ -38,6 +38,8 @@ export type TIssueTypeProperty = {
 
 export type TIssueType = {
   id: string;
+  project?: string;
+  project_id?: string;
   name: string;
   description?: string;
   logo_props?: {
@@ -69,21 +71,21 @@ export class ProjectIssueTypeService extends APIService {
     projectIssueTypesCache.delete(cacheKey);
   }
 
-  async fetchProjectIssueTypes(workspaceSlug: string, projectId: string): Promise<TIssueType[]> {
+  async fetchProjectIssueTypes(workspaceSlug: string, projectId: string, force = false): Promise<TIssueType[]> {
     const cacheKey = projectId;
     const cached = projectIssueTypesCache.get(cacheKey);
-    if (cached && Object.keys(cached).length > 0) {
+    if (!force && cached && Object.keys(cached).length > 0) {
       return Promise.resolve(Object.values(cached));
     }
     return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/issue-types/`)
       .then((response) => {
+        const map: Record<string, TIssueType> = {};
         response?.data.forEach((t: any) => {
           if (t?.id) {
-            const map = projectIssueTypesCache.get(cacheKey) || {};
             map[t.id] = t;
-            projectIssueTypesCache.set(cacheKey, map);
           }
         });
+        projectIssueTypesCache.set(cacheKey, map);
         return response?.data;
       })
       .catch((error) => {
@@ -95,10 +97,11 @@ export class ProjectIssueTypeService extends APIService {
     return this.get(`/api/workspaces/${workspaceSlug}/issue-types/`)
       .then((response) => {
         response?.data.forEach((t:any) => {
-          if (t?.id) {
-            const map = projectIssueTypesCache.get(t.project_id) || {};
+          const typeProjectId = t?.project_id ?? t?.project;
+          if (t?.id && typeProjectId) {
+            const map = projectIssueTypesCache.get(typeProjectId) || {};
             map[t.id] = t;
-            projectIssueTypesCache.set(t.project_id, map);
+            projectIssueTypesCache.set(typeProjectId, map);
           }
         });
         return response?.data

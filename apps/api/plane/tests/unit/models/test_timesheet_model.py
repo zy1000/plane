@@ -195,7 +195,7 @@ class TestTimeSheetModel:
             sequence=1,
         )
 
-        bug_type = IssueType.objects.create(workspace=workspace, name="缺陷")
+        bug_type = IssueType.objects.create(project=project, name="缺陷")
         issue = Issue.objects.create(
             workspace=workspace,
             project=project,

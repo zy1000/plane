@@ -7,7 +7,7 @@ from rest_framework.response import Response
 from rest_framework import status
 
 from plane.app.views import BaseViewSet
-from plane.db.models import Issue, Workspace, IssueType, ProjectIssueType, Label, IssueLabel
+from plane.db.models import Issue, Workspace, IssueType, Label, IssueLabel
 from plane.utils.import_export import parser_excel_issue, parser_issue_file
 
 
@@ -24,9 +24,9 @@ class IssueAPI(BaseViewSet):
         epic_dic = dict()
         label_dic = dict()
         workspace = Workspace.objects.get(slug=slug)
-        epic_type = ProjectIssueType.objects.get(project_id=project_id, issue_type__name='史诗').issue_type
-        feature_type = ProjectIssueType.objects.get(project_id=project_id, issue_type__name='特性').issue_type
-        story_type = ProjectIssueType.objects.get(project_id=project_id, issue_type__name='用户故事').issue_type
+        epic_type = IssueType.objects.get(project_id=project_id, name='史诗')
+        feature_type = IssueType.objects.get(project_id=project_id, name='特性')
+        story_type = IssueType.objects.get(project_id=project_id, name='用户故事')
         total_count = len(issue_data)
         success_count = 0
         fail_list = []

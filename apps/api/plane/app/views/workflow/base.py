@@ -46,7 +46,7 @@ class WorkflowAPIView(BaseAPIView):
 
     @allow_fine_permission(PermissionKey.WORKFLOW_CREATE)
     def post(self, request, slug, project_id):
-        serializer = self.serializer_class(data=request.data)
+        serializer = self.serializer_class(data=request.data, context={"project_id": project_id})
         if serializer.is_valid():
             serializer.save(project_id=project_id)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
@@ -62,7 +62,7 @@ class WorkflowAPIView(BaseAPIView):
         data = request.data.copy()
         workflow_id = data.pop('id')
         workflow = self.get_project_queryset(project_id).get(id=workflow_id)
-        update_serializer = self.serializer_class(instance=workflow, data=data, partial=True)
+        update_serializer = self.serializer_class(instance=workflow, data=data, partial=True, context={"project_id": project_id})
         update_serializer.is_valid(raise_exception=True)
         update_serializer.save()
         return Response(update_serializer.data, status=status.HTTP_200_OK)
@@ -122,7 +122,7 @@ class WorkflowTransitionAPIView(BaseAPIView):
     @allow_fine_permission(PermissionKey.WORKFLOW_CONFIG)
     def post(self, request, slug, project_id, workflow_id):
         data = {**request.data, "workflow_id": str(workflow_id)}
-        serializer = self.serializer_class(data=data)
+        serializer = self.serializer_class(data=data, context={"project_id": project_id})
         if serializer.is_valid():
             transition = serializer.save(project_id=project_id)
             approver_ids = request.data.get("approver_ids") or []
@@ -140,7 +140,7 @@ class WorkflowTransitionAPIView(BaseAPIView):
         data = request.data.copy()
         transition_id = data.pop("id")
         transition = self.get_workflow_queryset(project_id, workflow_id).get(id=transition_id)
-        serializer = self.serializer_class(instance=transition, data=data, partial=True)
+        serializer = self.serializer_class(instance=transition, data=data, partial=True, context={"project_id": project_id})
         serializer.is_valid(raise_exception=True)
         serializer.save()
         # 若请求中包含 approver_ids，则全量替换审批人

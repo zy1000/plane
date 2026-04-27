@@ -52,7 +52,7 @@ export const useProjectIssueTypes = (workspaceSlug: string | undefined, projectI
     setError(null);
 
     try {
-      const types = await projectIssueTypeService.fetchProjectIssueTypes(workspaceSlug, projectId);
+      const types = await projectIssueTypeService.fetchProjectIssueTypes(workspaceSlug, projectId, true);
       setIssueTypes(types);
       
       // 更新缓存

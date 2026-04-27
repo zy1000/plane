@@ -4,7 +4,6 @@ from plane.db.models import (
     DEFAULT_STATES,
     IssueType,
     Project,
-    ProjectIssueType,
     State,
     Workflow,
     WorkflowTransition,
@@ -32,17 +31,16 @@ def init_issue_type() -> list[IssueTypeModel]:
 def temporary_create_issue_type(project: Project = None, project_id: str = None):
     if project_id:
         project = Project.objects.get(id=project_id)
-    if ProjectIssueType.objects.filter(project=project).exists():
+    if IssueType.objects.filter(project=project).exists():
         return
 
     types = init_issue_type()
     issue_types = list()
     for issue_type in types:
-        obj = IssueType.objects.create(name=issue_type.display, workspace=project.workspace,
+        obj = IssueType.objects.create(name=issue_type.display, project=project,
                                        description=issue_type.display, is_default=issue_type.is_default,
                                        logo_props=issue_type.icon)
         issue_types.append(obj)
-        ProjectIssueType.objects.create(project=project, issue_type=obj, workspace=project.workspace)
         # if obj.name == '缺陷':
         #     property_logo_props = {"icon": {"name": "AlignLeft", "color": "#6d7b8a"}, "in_use": "icon"}
         #     IssueTypeProperty.objects.create(issue_type=obj, project=project, workspace=project.workspace,

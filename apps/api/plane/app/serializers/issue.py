@@ -43,7 +43,7 @@ from plane.db.models import (
     IssueVersion,
     IssueDescriptionVersion,
     ProjectMember,
-    EstimatePoint, IssueTypeProperty, IssuePropertyValue, ProjectIssueType, IssueType,
+    EstimatePoint, IssueTypeProperty, IssuePropertyValue, IssueType,
 )
 from plane.utils.content_validator import (
     validate_html_content,
@@ -213,6 +213,9 @@ class IssueCreateSerializer(BaseSerializer):
             raise serializers.ValidationError("State is not valid please pass a valid state_id")
 
         # Check state belongs to the issue's type when the state is type-scoped
+        if attrs.get("type") and str(attrs["type"].project_id) != str(self.context.get("project_id")):
+            raise serializers.ValidationError("Issue type is not valid please pass a valid type_id")
+
         if attrs.get("state"):
             state = attrs["state"]
             issue_type = attrs.get("type") or (self.instance.type if self.instance else None)
