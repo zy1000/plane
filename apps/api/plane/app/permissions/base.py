@@ -2,8 +2,15 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
-from plane.db.models import WorkspaceMember, ProjectMember, ProjectMemberRole, ProjectRole, ProjectIssueType, Project, \
-    TestCaseRepository
+from plane.db.models import (
+    WorkspaceMember,
+    ProjectMember,
+    ProjectMemberRole,
+    ProjectRole,
+    ProjectIssueType,
+    Project,
+    TestCaseRepository,
+)
 from plane.license.models import Instance, InstanceAdmin
 from functools import wraps
 from rest_framework.response import Response
@@ -29,11 +36,15 @@ def _get_user_workspace_permission_keys(user, workspace_slug: str) -> set:
     """
     from plane.db.models import WorkspaceRole
 
-    workspace_member = WorkspaceMember.objects.filter(
-        member=user,
-        workspace__slug=workspace_slug,
-        is_active=True,
-    ).select_related("workspace").first()
+    workspace_member = (
+        WorkspaceMember.objects.filter(
+            member=user,
+            workspace__slug=workspace_slug,
+            is_active=True,
+        )
+        .select_related("workspace")
+        .first()
+    )
 
     if not workspace_member:
         return set()
@@ -58,14 +69,20 @@ def _is_instance_admin(user) -> bool:
     return InstanceAdmin.objects.filter(instance=instance, user=user).exists()
 
 
-def _get_user_project_permission_keys(user, workspace_slug: str, project_id: str) -> set:
+def _get_user_project_permission_keys(
+    user, workspace_slug: str, project_id: str
+) -> set:
     """
     计算用户在某项目内的有效 permission_keys 集合。
     目前仅从直接绑定的 ProjectRole 取键，后续可合并组角色。
     此函数是第二阶段细粒度鉴权的基础，首阶段暂不强制使用。
     """
     project = Project.objects.get(pk=project_id)
-    if user == project.project_lead or _is_instance_admin(user) or (not project.project_lead and user == project.created_by):
+    if (
+        user == project.project_lead
+        or _is_instance_admin(user)
+        or user == project.created_by
+    ):
         return set(PermissionKey.values())
 
     project_member = ProjectMember.objects.filter(
@@ -92,7 +109,9 @@ def _get_user_project_permission_keys(user, workspace_slug: str, project_id: str
     return keys
 
 
-def resolve_project_issue_type_name(project_id: str, issue_type_id: str) -> Optional[str]:
+def resolve_project_issue_type_name(
+    project_id: str, issue_type_id: str
+) -> Optional[str]:
     project_issue_type = (
         ProjectIssueType.objects.filter(
             project_id=project_id,
@@ -149,31 +168,41 @@ def get_issue_permission_key(action: str, issue_type_name: Optional[str] = None)
 
 
 def get_project_from_qa(request):
-    '''测试模块目前传入的参数有一些不带project_id，所以需要从其他关系获取'''
-    project_id = ''
+    """测试模块目前传入的参数有一些不带project_id，所以需要从其他关系获取"""
+    project_id = ""
     repository_id = (
-            request.query_params.get("repository_id")
-            or request.data.get("repository_id")
-            or request.query_params.get("repository")
-            or request.data.get("repository")
+        request.query_params.get("repository_id")
+        or request.data.get("repository_id")
+        or request.query_params.get("repository")
+        or request.data.get("repository")
     )
     if repository_id:
-        project_id = TestCaseRepository.objects.filter(pk=repository_id).values_list('project_id', flat=True).first()
+        project_id = (
+            TestCaseRepository.objects.filter(pk=repository_id)
+            .values_list("project_id", flat=True)
+            .first()
+        )
     return project_id
 
 
 def has_project_issue_permission(
-        user,
-        workspace_slug: str,
-        project_id: str,
-        action: str,
-        issue_type_name: Optional[str] = None,
-        issue_assignee_ids: Optional[Iterable] = None,
+    user,
+    workspace_slug: str,
+    project_id: str,
+    action: str,
+    issue_type_name: Optional[str] = None,
+    issue_assignee_ids: Optional[Iterable] = None,
 ) -> bool:
     # edit: assignees may update the issue when issue_assignee_ids is provided; None skips this bypass.
-    if action == "edit" and issue_assignee_ids is not None and user.pk in issue_assignee_ids:
+    if (
+        action == "edit"
+        and issue_assignee_ids is not None
+        and user.pk in issue_assignee_ids
+    ):
         return True
-    required_permission = get_issue_permission_key(action=action, issue_type_name=issue_type_name)
+    required_permission = get_issue_permission_key(
+        action=action, issue_type_name=issue_type_name
+    )
     user_keys = _get_user_project_permission_keys(user, workspace_slug, project_id)
     return required_permission in user_keys
 
@@ -202,7 +231,9 @@ def allow_fine_permission(*permission_keys: str, level: str = "PROJECT"):
                 )
                 if not project_id:
                     project_id = get_project_from_qa(request)
-                user_keys = _get_user_project_permission_keys(request.user, slug, project_id)
+                user_keys = _get_user_project_permission_keys(
+                    request.user, slug, project_id
+                )
                 error_msg = "您没有所需的项目权限。"
             if user_keys.intersection(permission_keys):
                 return view_func(instance, request, *args, **kwargs)
@@ -219,20 +250,24 @@ def allow_permission(allowed_roles, level="PROJECT", creator=False, model=None):
         def _wrapped_view(instance, request, *args, **kwargs):
             # Check for creator if required
             if creator and model:
-                obj = model.objects.filter(id=kwargs["pk"], created_by=request.user).exists()
+                obj = model.objects.filter(
+                    id=kwargs["pk"], created_by=request.user
+                ).exists()
                 if obj:
                     return view_func(instance, request, *args, **kwargs)
 
             # Convert allowed_roles to their values if they are enum members
-            allowed_role_values = [role.value if isinstance(role, ROLE) else role for role in allowed_roles]
+            allowed_role_values = [
+                role.value if isinstance(role, ROLE) else role for role in allowed_roles
+            ]
 
             # Check role permissions
             if level == "WORKSPACE":
                 if WorkspaceMember.objects.filter(
-                        member=request.user,
-                        workspace__slug=kwargs["slug"],
-                        role__in=allowed_role_values,
-                        is_active=True,
+                    member=request.user,
+                    workspace__slug=kwargs["slug"],
+                    role__in=allowed_role_values,
+                    is_active=True,
                 ).exists():
                     return view_func(instance, request, *args, **kwargs)
             else:
@@ -248,18 +283,18 @@ def allow_permission(allowed_roles, level="PROJECT", creator=False, model=None):
                 if is_user_has_allowed_role:
                     return view_func(instance, request, *args, **kwargs)
                 elif (
-                        ProjectMember.objects.filter(
-                            member=request.user,
-                            workspace__slug=kwargs["slug"],
-                            project_id=kwargs["project_id"],
-                            is_active=True,
-                        ).exists()
-                        and WorkspaceMember.objects.filter(
-                    member=request.user,
-                    workspace__slug=kwargs["slug"],
-                    role=ROLE.ADMIN.value,
-                    is_active=True,
-                ).exists()
+                    ProjectMember.objects.filter(
+                        member=request.user,
+                        workspace__slug=kwargs["slug"],
+                        project_id=kwargs["project_id"],
+                        is_active=True,
+                    ).exists()
+                    and WorkspaceMember.objects.filter(
+                        member=request.user,
+                        workspace__slug=kwargs["slug"],
+                        role=ROLE.ADMIN.value,
+                        is_active=True,
+                    ).exists()
                 ):
                     return view_func(instance, request, *args, **kwargs)
 
