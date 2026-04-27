@@ -47,19 +47,20 @@ export function IdentifierText(props: TIdentifierTextProps) {
 
   const textSizeClassName = SIZE_MAP[size];
   const variantClassName = VARIANT_MAP[variant];
+  const textClassName = cn("text-12 font-medium whitespace-nowrap", textSizeClassName, variantClassName, {
+    "cursor-pointer": enableClickToCopyIdentifier,
+  });
 
+  // 非「点击复制」时为纯文本：避免在外层为 <button> 的父级中再包一层 <button disabled>，否则点击会落在内层，无法触发行级操作（如菜单项跳转）
   return (
     <Tooltip tooltipContent="Click to copy" disabled={!enableClickToCopyIdentifier} position="top">
-      <button
-        type="button"
-        className={cn("text-12 font-medium whitespace-nowrap text-tertiary", textSizeClassName, variantClassName, {
-          "cursor-pointer": enableClickToCopyIdentifier,
-        })}
-        onClick={handleCopyIssueIdentifier}
-        disabled={!enableClickToCopyIdentifier}
-      >
-        {identifier}
-      </button>
+      {enableClickToCopyIdentifier ? (
+        <button type="button" className={textClassName} onClick={handleCopyIssueIdentifier}>
+          {identifier}
+        </button>
+      ) : (
+        <span className={textClassName}>{identifier}</span>
+      )}
     </Tooltip>
   );
 }
