@@ -22,6 +22,7 @@ import { CommentReactions } from "../comment-reaction";
 import { CommentCardEditForm } from "./edit-form";
 import { EmojiReactionButton, EmojiReactionPicker } from "@plane/propel/emoji-reaction";
 import { Avatar, Tooltip } from "@plane/ui";
+import { getUserAvatarFallbackBackgroundColor } from "@/helpers/user-avatar.helper";
 import { useMember } from "@/hooks/store/use-member";
 
 export type TCommentCardDisplayProps = {
@@ -108,7 +109,13 @@ export const CommentCardDisplay = observer(function CommentCardDisplay(props: TC
   return (
     <div id={commentBlockId} className="relative flex flex-col gap-2">
       <div className="relative mb-3 flex w-full items-center gap-2">
-        <Avatar size="sm" name={displayName} src={getFileURL(avatarUrl)} className="shrink-0" />
+        <Avatar
+          size="sm"
+          name={displayName}
+          src={getFileURL(avatarUrl)}
+          className="shrink-0"
+          fallbackBackgroundColor={getUserAvatarFallbackBackgroundColor(comment?.actor_detail)}
+        />
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1 text-body-sm-regular">
           <span className="font-medium text-primary">{displayName}</span>
           <span className="text-secondary">

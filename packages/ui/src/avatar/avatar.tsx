@@ -98,7 +98,7 @@ export function Avatar(props: Props) {
               className
             )}
             style={{
-              backgroundColor: fallbackBackgroundColor ?? "#028375",
+              backgroundColor: fallbackBackgroundColor ?? "#006399",
               color: fallbackTextColor ?? "#ffffff",
             }}
           >

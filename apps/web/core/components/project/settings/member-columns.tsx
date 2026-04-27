@@ -13,6 +13,8 @@ import { MEMBER_TRACKER_ELEMENTS } from "@plane/constants";
 import type { EUserProjectRoles, IProjectRole, IUser, IWorkspaceMember } from "@plane/types";
 import { CustomMenu } from "@plane/ui";
 import { getFileURL } from "@plane/utils";
+// helpers
+import { SYSTEM_USER_AVATAR_FALLBACK_COLOR } from "@/helpers/user-avatar.helper";
 // local imports
 import { ProjectRoleMultiSelect } from "./project-role-multi-select";
 
@@ -63,7 +65,10 @@ export function NameColumn(props: NameProps) {
                 </Link>
               ) : (
                 <Link href={`/${workspaceSlug}/profile/${id}`}>
-                  <span className="relative flex size-6 items-center justify-center rounded-full bg-layer-3 text-11 text-on-color capitalize">
+                  <span
+                    className="relative flex size-6 items-center justify-center rounded-full text-11 text-on-color capitalize"
+                    style={{ backgroundColor: SYSTEM_USER_AVATAR_FALLBACK_COLOR }}
+                  >
                     {(email ?? display_name ?? "?")[0]}
                   </span>
                 </Link>

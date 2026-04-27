@@ -14,6 +14,7 @@ import { DateDropdown } from "@/components/dropdowns/date";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { PriorityDropdown } from "@/components/dropdowns/priority";
 import { StateDropdown } from "@/components/dropdowns/state/dropdown";
+import { WorkItemTypeIcon } from "@/components/issues/work-item-type-icon";
 // hooks
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useProjectState } from "@/hooks/store/use-project-state";
@@ -62,6 +63,15 @@ export const PeekOverviewCorePropertyBar = observer(function PeekOverviewCorePro
       )}
     >
       <div className={fieldShell(0)}>
+        {issue.type_name ? (
+          <div className="flex h-7 w-full min-w-0 items-center gap-1.5 truncate rounded-sm pr-1.5 text-body-xs-medium leading-5 text-secondary">
+            <WorkItemTypeIcon typeName={issue.type_name} className="size-3.5 flex-shrink-0" />
+            <span className="min-w-0 truncate">{issue.type_name}</span>
+          </div>
+        ) : null}
+      </div>
+
+      <div className={fieldShell(1)}>
         <StateDropdown
           value={issue?.state_id}
           onChange={(val) => issueOperations.update(workspaceSlug, projectId, issueId, { state_id: val })}
@@ -78,7 +88,7 @@ export const PeekOverviewCorePropertyBar = observer(function PeekOverviewCorePro
         />
       </div>
 
-      <div className={fieldShell(1)}>
+      <div className={fieldShell(2)}>
         <PriorityDropdown
           value={issue?.priority}
           onChange={(val) => issueOperations.update(workspaceSlug, projectId, issueId, { priority: val })}
@@ -93,7 +103,7 @@ export const PeekOverviewCorePropertyBar = observer(function PeekOverviewCorePro
         />
       </div>
 
-      <div className={fieldShell(2)}>
+      <div className={fieldShell(3)}>
         <MemberDropdown
           value={issue?.assignee_ids ?? undefined}
           onChange={(val) => issueOperations.update(workspaceSlug, projectId, issueId, { assignee_ids: val })}
@@ -111,7 +121,7 @@ export const PeekOverviewCorePropertyBar = observer(function PeekOverviewCorePro
         />
       </div>
 
-      <div className={fieldShell(3)}>
+      <div className={fieldShell(4)}>
         <DateDropdown
           value={issue.start_date ?? null}
           onChange={(date) =>
@@ -133,7 +143,7 @@ export const PeekOverviewCorePropertyBar = observer(function PeekOverviewCorePro
         />
       </div>
 
-      <div className={fieldShell(4)}>
+      <div className={fieldShell(5)}>
         <div className="flex w-full min-w-0 items-center gap-1">
           <div className="min-w-0 flex-1">
             <DateDropdown

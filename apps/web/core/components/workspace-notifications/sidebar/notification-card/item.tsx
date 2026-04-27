@@ -10,6 +10,8 @@ import { Clock } from "lucide-react";
 // plane imports
 import { Avatar, Row } from "@plane/ui";
 import { cn, calculateTimeAgo, renderFormattedDate, renderFormattedTime, getFileURL } from "@plane/utils";
+// helpers
+import { getUserAvatarFallbackBackgroundColor } from "@/helpers/user-avatar.helper";
 // hooks
 import { useWorkspaceNotifications } from "@/hooks/store/notifications";
 import { useNotification } from "@/hooks/store/notifications/use-notification";
@@ -96,6 +98,7 @@ export const NotificationItem = observer(function NotificationItem(props: TNotif
               size={42}
               shape="circle"
               className="bg-layer-1 text-body-sm-medium"
+              fallbackBackgroundColor={getUserAvatarFallbackBackgroundColor(notificationTriggeredBy)}
             />
           )}
         </div>

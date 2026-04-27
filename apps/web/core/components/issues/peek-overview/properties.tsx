@@ -6,7 +6,7 @@
 
 import { useState } from "react";
 import { observer } from "mobx-react";
-import { CalendarClock, CalendarPlus, Rocket, Type, UserRound } from "lucide-react";
+import { CalendarClock, CalendarPlus, Rocket, UserRound } from "lucide-react";
 // i18n
 import { useTranslation } from "@plane/i18n";
 // ui icons
@@ -27,7 +27,6 @@ import { IssueCycleSelect } from "../issue-detail/cycle-select";
 import { IssueLabel } from "../issue-detail/label";
 import { IssueModuleSelect } from "../issue-detail/module-select";
 import { IssueReleaseSelect } from "../issue-detail/release-select";
-import { WorkItemTypeIcon } from "@/components/issues/work-item-type-icon";
 
 interface IPeekOverviewProperties {
   workspaceSlug: string;
@@ -94,17 +93,8 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
     <div>
       <h6 className="text-body-sm-semibold text-primary">{t("common.properties")}</h6>
       <div className={cn("mt-3 flex w-full flex-col gap-5", disabled && "opacity-60")}>
-        {/* 详情：类型、工时、标签 */}
+        {/* 详情：工时、标签 */}
         <PropertyGroupSection title="详情">
-          {issue?.type_name && (
-            <SidebarPropertyListItem icon={Type} label="类型">
-              <div className="flex min-w-0 w-full flex-nowrap items-center gap-2 pl-2">
-                <WorkItemTypeIcon typeName={issue.type_name} className="flex-shrink-0" />
-                <span className="text-body-xs-medium">{issue.type_name}</span>
-              </div>
-            </SidebarPropertyListItem>
-          )}
-
           <IssueWorklogProperty
             workspaceSlug={workspaceSlug}
             projectId={projectId}

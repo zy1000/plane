@@ -18,6 +18,7 @@ import type { IUser, IWorkspaceMember } from "@plane/types";
 // plane ui
 import { CustomSelect, PopoverMenu } from "@plane/ui";
 // helpers
+import { SYSTEM_USER_AVATAR_FALLBACK_COLOR } from "@/helpers/user-avatar.helper";
 import { getFileURL } from "@plane/utils";
 // hooks
 import { useMember } from "@/hooks/store/use-member";
@@ -70,7 +71,10 @@ export function NameColumn(props: NameProps) {
                 </Link>
               ) : (
                 <Link href={`/${workspaceSlug}/profile/${id}`}>
-                  <span className="relative flex size-6 items-center justify-center rounded-full bg-layer-3 text-11 text-tertiary capitalize">
+                  <span
+                    className="relative flex size-6 items-center justify-center rounded-full text-11 text-on-color capitalize"
+                    style={{ backgroundColor: SYSTEM_USER_AVATAR_FALLBACK_COLOR }}
+                  >
                     {(email ?? display_name ?? "?")[0]}
                   </span>
                 </Link>
