@@ -46,7 +46,7 @@ export const IssueRelationActivity = observer(function IssueRelationActivity(pro
       footer={
         showFooter ? (
           <ActivityChangeFooter
-            from={{ icon: footerIcon, label: oldLabel }}
+            from={{ icon: footerIcon, label: oldLabel, labelEmphasis: "muted" }}
             to={{ icon: footerIcon, label: newLabel }}
           />
         ) : null

@@ -109,20 +109,20 @@ export const CommentCardDisplay = observer(function CommentCardDisplay(props: TC
     <div id={commentBlockId} className="relative flex flex-col gap-2">
       <div className="relative mb-3 flex w-full items-center gap-2">
         <Avatar size="sm" name={displayName} src={getFileURL(avatarUrl)} className="shrink-0" />
-        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
-          <div className="text-caption-sm-medium">{displayName}</div>
-          <div className="text-caption-sm-regular text-tertiary">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1 text-body-sm-regular">
+          <span className="font-medium text-primary">{displayName}</span>
+          <span className="text-secondary">
             commented{" "}
             <Tooltip
               tooltipContent={`${renderFormattedDate(comment.created_at)} at ${renderFormattedTime(comment.created_at)}`}
               position="bottom"
             >
-              <span className="text-tertiary">
+              <span className="whitespace-nowrap text-tertiary">
                 {calculateTimeAgo(comment.created_at)}
                 {comment.edited_at && " (edited)"}
               </span>
             </Tooltip>
-          </div>
+          </span>
         </div>
         {(showAccessSpecifier || !disabled) && (
           <div className="flex shrink-0 items-center gap-1.5 text-tertiary">

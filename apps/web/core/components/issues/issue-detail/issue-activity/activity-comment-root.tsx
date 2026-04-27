@@ -9,7 +9,7 @@ import { observer } from "mobx-react";
 // plane imports
 import type { E_SORT_ORDER, EActivityFilterType } from "@plane/constants";
 import { BASE_ACTIVITY_FILTER_TYPES, EActivityTab, filterActivityByTab } from "@plane/constants";
-import type { TCommentsOperations } from "@plane/types";
+import type { TCommentsOperations, TIssueActivityComment } from "@plane/types";
 // components
 import { CommentCard } from "@/components/comments/card/root";
 // hooks
@@ -32,6 +32,7 @@ type TIssueActivityCommentRoot = {
   showAccessSpecifier?: boolean;
   disabled?: boolean;
   sortOrder: E_SORT_ORDER;
+  operatorFilterIds?: string[];
 };
 
 const EMPTY_TAB_LABELS: Record<EActivityTab, string> = {
@@ -138,6 +139,7 @@ export const IssueActivityCommentRoot = observer(function IssueActivityCommentRo
     projectId,
     disabled,
     sortOrder,
+    operatorFilterIds = [],
   } = props;
   // store hooks
   const {
@@ -149,10 +151,31 @@ export const IssueActivityCommentRoot = observer(function IssueActivityCommentRo
 
   if (!activityAndComments) return <IssueActivityLoader />;
 
-  const filteredActivityAndComments = filterActivityByTab(activityAndComments, activeTab, getActivityById);
+  const tabFilteredActivityAndComments = filterActivityByTab(activityAndComments, activeTab, getActivityById);
+  const selectedOperatorSet = new Set(operatorFilterIds);
+  const matchesOperatorFilter = (activityComment: TIssueActivityComment) => {
+    if (selectedOperatorSet.size === 0) return true;
+
+    if (activityComment.activity_type === "COMMENT") {
+      const comment = getCommentById(activityComment.id);
+      return [comment?.actor, comment?.actor_detail?.id, comment?.created_by, comment?.updated_by].some(
+        (userId) => !!userId && selectedOperatorSet.has(userId)
+      );
+    }
+
+    const activity = getActivityById(activityComment.id);
+    const activityUserIds = [activity?.actor, activity?.actor_detail?.id, activity?.created_by, activity?.updated_by];
+
+    return activityUserIds.some((userId) => !!userId && selectedOperatorSet.has(userId));
+  };
+  const filteredActivityAndComments = tabFilteredActivityAndComments.filter(matchesOperatorFilter);
 
   if (filteredActivityAndComments.length <= 0)
-    return <div className="py-6 text-center text-body-sm-regular text-placeholder">{EMPTY_TAB_LABELS[activeTab]}</div>;
+    return (
+      <div className="py-6 text-center text-body-sm-regular text-placeholder">
+        {operatorFilterIds.length > 0 ? "暂无匹配操作人员的记录" : EMPTY_TAB_LABELS[activeTab]}
+      </div>
+    );
 
   const list = (
     <div>

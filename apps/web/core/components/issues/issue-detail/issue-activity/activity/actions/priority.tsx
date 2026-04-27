@@ -48,7 +48,7 @@ export const IssuePriorityActivity = observer(function IssuePriorityActivity(pro
       footer={
         showFooter ? (
           <ActivityChangeFooter
-            from={{ icon: priorityIcon(activity.old_value), label: oldLabel }}
+            from={{ icon: priorityIcon(activity.old_value), label: oldLabel, labelEmphasis: "muted" }}
             to={{ icon: priorityIcon(activity.new_value), label: newLabel }}
           />
         ) : null

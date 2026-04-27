@@ -6,7 +6,7 @@
 
 import { useState } from "react";
 import { observer } from "mobx-react";
-import { CalendarClock, CalendarPlus, ChevronDown, Rocket, Type, UserRound } from "lucide-react";
+import { CalendarClock, CalendarPlus, Rocket, Type, UserRound } from "lucide-react";
 // i18n
 import { useTranslation } from "@plane/i18n";
 // ui icons
@@ -47,16 +47,18 @@ function PropertyGroupSection(props: { title: string; defaultOpen?: boolean; chi
       <button
         type="button"
         onClick={() => setOpen((prev) => !prev)}
-        className="flex items-center gap-1 text-body-sm-semibold text-primary outline-none hover:text-primary focus-visible:outline-none"
+        className="flex items-center gap-2 text-body-sm-semibold text-primary outline-none hover:text-primary focus-visible:outline-none"
       >
         <span>{title}</span>
-        <ChevronDown
-          className={cn("h-3 w-3 text-tertiary transition-transform duration-200", open ? "rotate-0" : "-rotate-90")}
-          strokeWidth={2}
+        <span
+          className={cn(
+            "h-0 w-0 border-t-[5px] border-r-[4px] border-l-[4px] border-t-black border-r-transparent border-l-transparent transition-transform duration-200",
+            open ? "rotate-0" : "-rotate-90"
+          )}
           aria-hidden
         />
       </button>
-      {open && <div className="mt-2 w-full space-y-3">{children}</div>}
+      {open && <div className="mt-2 w-full space-y-2">{children}</div>}
     </section>
   );
 }
@@ -96,7 +98,7 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
         <PropertyGroupSection title="详情">
           {issue?.type_name && (
             <SidebarPropertyListItem icon={Type} label="类型">
-              <div className="flex min-w-0 w-full flex-nowrap items-center gap-2">
+              <div className="flex min-w-0 w-full flex-nowrap items-center gap-2 pl-2">
                 <WorkItemTypeIcon typeName={issue.type_name} className="flex-shrink-0" />
                 <span className="text-body-xs-medium">{issue.type_name}</span>
               </div>

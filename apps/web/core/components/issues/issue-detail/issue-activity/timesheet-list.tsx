@@ -20,6 +20,8 @@ type TIssueActivityTimesheetListProps = {
   projectId: string;
   issueId: string;
   sortOrder: E_SORT_ORDER;
+  operatorFilterIds?: string[];
+  onOperatorIdsChange?: (operatorIds: string[]) => void;
 };
 
 function formatHours(hoursStr: string): string {
@@ -84,7 +86,7 @@ function TimesheetActivityItem(props: TTimesheetActivityItemProps) {
     <div
       className={cn(
         "relative flex items-center gap-4 text-body-sm-regular",
-        ends === "top" ? "pb-3.5" : ends === "bottom" ? "pt-3.5" : "py-3.5"
+        ends === "top" ? "pb-2" : ends === "bottom" ? "pt-2" : "py-2"
       )}
     >
       <div className="absolute top-0 bottom-0 left-[13px] w-px bg-layer-3" aria-hidden />
@@ -116,7 +118,7 @@ function TimesheetActivityItem(props: TTimesheetActivityItemProps) {
 export const IssueActivityTimesheetList = observer(function IssueActivityTimesheetList(
   props: TIssueActivityTimesheetListProps
 ) {
-  const { workspaceSlug, projectId, issueId, sortOrder } = props;
+  const { workspaceSlug, projectId, issueId, sortOrder, operatorFilterIds = [], onOperatorIdsChange } = props;
 
   const { timesheets, isLoading, fetchTimesheets } = useTimesheet(workspaceSlug, projectId, issueId);
 
@@ -124,16 +126,43 @@ export const IssueActivityTimesheetList = observer(function IssueActivityTimeshe
     fetchTimesheets();
   }, [fetchTimesheets]);
 
+  const timesheetOperatorIds = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          timesheets
+            .flatMap((timesheet) => [timesheet.created_by, timesheet.updated_by])
+            .filter((userId): userId is string => !!userId)
+        )
+      ),
+    [timesheets]
+  );
+
+  useEffect(() => {
+    onOperatorIdsChange?.(timesheetOperatorIds);
+  }, [onOperatorIdsChange, timesheetOperatorIds]);
+
+  const filteredTimesheets = useMemo(() => {
+    if (operatorFilterIds.length === 0) return timesheets;
+
+    const selectedOperatorSet = new Set(operatorFilterIds);
+    return timesheets.filter((timesheet) =>
+      [timesheet.created_by, timesheet.updated_by].some(
+        (userId) => !!userId && selectedOperatorSet.has(userId)
+      )
+    );
+  }, [timesheets, operatorFilterIds]);
+
   // 按 created_at 排序，尊重 activity 模块的 sortOrder（升序=最旧在前）
   const ordered = useMemo(() => {
-    const copy = [...timesheets];
+    const copy = [...filteredTimesheets];
     copy.sort((a, b) => {
       const ta = new Date(a.created_at).getTime();
       const tb = new Date(b.created_at).getTime();
       return sortOrder === E_SORT_ORDER.ASC ? ta - tb : tb - ta;
     });
     return copy;
-  }, [timesheets, sortOrder]);
+  }, [filteredTimesheets, sortOrder]);
 
   if (isLoading && ordered.length === 0) {
     return (
@@ -145,7 +174,11 @@ export const IssueActivityTimesheetList = observer(function IssueActivityTimeshe
   }
 
   if (ordered.length === 0) {
-    return <div className="py-6 text-center text-body-sm-regular text-placeholder">暂无工时记录</div>;
+    return (
+      <div className="py-6 text-center text-body-sm-regular text-placeholder">
+        {operatorFilterIds.length > 0 ? "暂无匹配操作人员的工时记录" : "暂无工时记录"}
+      </div>
+    );
   }
 
   return (

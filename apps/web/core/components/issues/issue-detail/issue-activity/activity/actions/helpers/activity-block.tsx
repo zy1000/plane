@@ -43,7 +43,7 @@ export function IssueActivityBlockComponent(props: TIssueActivityBlockComponent)
   return (
     <div
       className={`relative flex ${resolvedFooter ? "items-start" : "items-center"} gap-4 text-body-sm-regular ${
-        ends === "top" ? `pb-3.5` : ends === "bottom" ? `pt-3.5` : `py-3.5`
+        ends === "top" ? `pb-2` : ends === "bottom" ? `pt-2` : `py-2`
       }`}
     >
       <div className="absolute top-0 bottom-0 left-[13px] w-px bg-layer-3" aria-hidden />

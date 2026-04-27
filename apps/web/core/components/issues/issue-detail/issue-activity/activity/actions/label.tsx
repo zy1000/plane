@@ -48,7 +48,7 @@ export const IssueLabelActivity = observer(function IssueLabelActivity(props: TI
       footer={
         showFooter ? (
           <ActivityChangeFooter
-            from={{ icon: labelDot(oldLabelColor), label: oldLabel }}
+            from={{ icon: labelDot(oldLabelColor), label: oldLabel, labelEmphasis: "muted" }}
             to={{ icon: labelDot(newLabelColor), label: newLabel }}
           />
         ) : null

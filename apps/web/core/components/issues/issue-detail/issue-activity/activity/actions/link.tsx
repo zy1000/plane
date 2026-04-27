@@ -40,7 +40,7 @@ export const IssueLinkActivity = observer(function IssueLinkActivity(props: TIss
       footer={
         showFooter ? (
           <ActivityChangeFooter
-            from={{ icon: linkIcon, label: oldLabel, href: oldHref }}
+            from={{ icon: linkIcon, label: oldLabel, href: oldHref, labelEmphasis: "muted" }}
             to={{ icon: linkIcon, label: newLabel, href: newHref }}
           />
         ) : null

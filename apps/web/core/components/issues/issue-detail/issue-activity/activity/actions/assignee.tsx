@@ -39,7 +39,7 @@ export const IssueAssigneeActivity = observer(function IssueAssigneeActivity(pro
       footer={
         showFooter ? (
           <ActivityChangeFooter
-            from={{ icon: assigneeIcon, label: oldLabel }}
+            from={{ icon: assigneeIcon, label: oldLabel, labelEmphasis: "muted" }}
             to={{ icon: assigneeIcon, label: newLabel }}
           />
         ) : null

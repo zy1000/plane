@@ -1026,13 +1026,16 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
                                 {formatReleaseOverviewDateRange(c.start_date, c.end_date)}
                               </td>
                               <td className="pl-10 pr-2 py-2 text-left">
-                                <Button
-                                  variant="link-neutral"
-                                  className="p-0"
-                                  onClick={() => handleCancelAssociation(c.id)}
+                                <Popconfirm
+                                  title="确定取消该迭代的关联吗？"
+                                  okText="取消关联"
+                                  cancelText="取消"
+                                  onConfirm={() => void handleCancelAssociation(c.id)}
                                 >
-                                  <Unlink className="h-3.5 w-3.5" />
-                                </Button>
+                                  <Button variant="link-neutral" className="p-0" aria-label="取消关联">
+                                    <Unlink className="h-3.5 w-3.5" />
+                                  </Button>
+                                </Popconfirm>
                               </td>
                             </tr>
                           ))}
@@ -1165,7 +1168,7 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
                                         disabled={releaseFilesDeletingId === file.id}
                                         loading={releaseFilesDeletingId === file.id}
                                       >
-                                        <Trash2 className="h-3.5 w-3.5" />
+                                        <Trash2 className="h-3.5 w-3.5 text-danger-primary" />
                                       </Button>
                                     </Popconfirm>
                                   </div>
@@ -1397,13 +1400,16 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
                             {formatReleaseOverviewDateRange(c.start_date, c.end_date)}
                           </td>
                           <td className="pl-10 pr-2 py-2 text-left">
-                            <Button
-                              variant="link-neutral"
-                              className="p-0"
-                              onClick={() => handleCancelAssociation(c.id)}
+                            <Popconfirm
+                              title="确定取消该迭代的关联吗？"
+                              okText="取消关联"
+                              cancelText="取消"
+                              onConfirm={() => void handleCancelAssociation(c.id)}
                             >
-                              <Unlink className="h-3.5 w-3.5" />
-                            </Button>
+                              <Button variant="link-neutral" className="p-0" aria-label="取消关联">
+                                <Unlink className="h-3.5 w-3.5" />
+                              </Button>
+                            </Popconfirm>
                           </td>
                         </tr>
                       ))}
@@ -1474,7 +1480,7 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
                                       disabled={releaseFilesDeletingId === file.id}
                                       loading={releaseFilesDeletingId === file.id}
                                     >
-                                      <Trash2 className="h-3.5 w-3.5" />
+                                      <Trash2 className="h-3.5 w-3.5 text-danger-primary" />
                                     </Button>
                                   </Popconfirm>
                                 </div>

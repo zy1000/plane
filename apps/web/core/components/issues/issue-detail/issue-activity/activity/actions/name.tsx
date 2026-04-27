@@ -38,7 +38,7 @@ export const IssueNameActivity = observer(function IssueNameActivity(props: TIss
       footer={
         showFooter ? (
           <ActivityChangeFooter
-            from={{ icon: nameIcon, label: oldLabel }}
+            from={{ icon: nameIcon, label: oldLabel, labelEmphasis: "muted" }}
             to={{ icon: nameIcon, label: newLabel }}
           />
         ) : null

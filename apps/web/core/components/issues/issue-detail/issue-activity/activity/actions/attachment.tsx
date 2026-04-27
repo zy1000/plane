@@ -39,7 +39,7 @@ export const IssueAttachmentActivity = observer(function IssueAttachmentActivity
       footer={
         showFooter ? (
           <ActivityChangeFooter
-            from={{ icon: attachmentIcon, label: oldLabel }}
+            from={{ icon: attachmentIcon, label: oldLabel, labelEmphasis: "muted" }}
             to={{ icon: attachmentIcon, label: newLabel }}
           />
         ) : null

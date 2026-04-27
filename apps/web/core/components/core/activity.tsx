@@ -21,6 +21,7 @@ import {
   LayoutGridIcon,
   SignalMediumIcon,
   MessageSquareIcon,
+  FileText,
   UsersIcon,
   ClipboardCheck,
   CheckCircle2,
@@ -246,7 +247,7 @@ const activityDetails: {
         )}
       </>
     ),
-    icon: <MessageSquareIcon size={12} className="text-secondary" aria-hidden="true" />,
+    icon: <FileText size={12} className="text-secondary" aria-hidden="true" />,
   },
   estimate_point: {
     message: (activity, showIssue) => {
@@ -823,7 +824,19 @@ export function ActivityIcon({ activity }: { activity: IIssueActivity }) {
   const activityConfig = activityDetails[activity.field as keyof typeof activityDetails];
   const icon = activityConfig?.icon;
 
-  return <>{typeof icon === "function" ? icon(activity) : icon}</>;
+  return (
+    <>
+      {icon ? (
+        typeof icon === "function" ? (
+          icon(activity)
+        ) : (
+          icon
+        )
+      ) : (
+        <WorkItemsIcon width={12} height={12} className="text-secondary" aria-hidden="true" />
+      )}
+    </>
+  );
 }
 
 type ActivityMessageProps = {

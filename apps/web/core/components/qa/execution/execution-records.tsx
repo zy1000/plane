@@ -364,8 +364,8 @@ export const ExecutionRecordDetailModal: React.FC<ExecutionRecordDetailModalProp
                                     cancelText="取消"
                                     onConfirm={() => void handleDeleteFile(f.id)}
                                   >
-                                    <PropelButton variant="link-neutral" className="p-0 text-red-500 hover:text-red-600">
-                                      <Trash2 className="h-3.5 w-3.5" />
+                                    <PropelButton variant="link-danger" className="p-0">
+                                      <Trash2 className="h-3.5 w-3.5 text-danger-primary" />
                                     </PropelButton>
                                   </Popconfirm>
                                 </div>

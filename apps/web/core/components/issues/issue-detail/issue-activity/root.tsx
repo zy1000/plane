@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { observer } from "mobx-react";
 // plane package imports
 import { E_SORT_ORDER, EActivityTab, EUserPermissions } from "@plane/constants";
@@ -19,6 +19,7 @@ import { useProject } from "@/hooks/store/use-project";
 import { useUser, useUserPermissions } from "@/hooks/store/user";
 // plane web components
 import { IssueActivityWorklogCreateButton } from "@/plane-web/components/issues/worklog/activity/worklog-create-button";
+import { ActivityOperatorFilterRoot } from "./operator-filter-root";
 import { IssueActivityCommentRoot } from "./activity-comment-root";
 import { ActivityTabs } from "./activity-tabs";
 import { useWorkItemCommentOperations } from "./helper";
@@ -50,21 +51,48 @@ export const IssueActivity = observer(function IssueActivity(props: TIssueActivi
   const { setValue: setSortOrder, storedValue: sortOrder } = useLocalStorage("activity_sort_order", E_SORT_ORDER.ASC);
   // store hooks
   const {
+    activity: { getActivityAndCommentsByIssueId, getActivityById },
+    comment: { getCommentById },
     issue: { getIssueById },
   } = useIssueDetail();
+  const [selectedOperatorIds, setSelectedOperatorIds] = useState<string[]>([]);
+  const [timesheetOperatorIds, setTimesheetOperatorIds] = useState<string[]>([]);
 
   const { getProjectRoleByWorkspaceSlugAndProjectId } = useUserPermissions();
   const { getProjectById } = useProject();
   const { data: currentUser } = useUser();
   // derived values
   const activeTab = storedActiveTab ?? EActivityTab.ALL;
+  const resolvedSortOrder = sortOrder || E_SORT_ORDER.ASC;
   const issue = issueId ? getIssueById(issueId) : undefined;
+  const activityAndComments = getActivityAndCommentsByIssueId(issueId, resolvedSortOrder);
   const currentUserProjectRole = getProjectRoleByWorkspaceSlugAndProjectId(workspaceSlug, projectId);
   const isAdmin = currentUserProjectRole === EUserPermissions.ADMIN;
   const isGuest = currentUserProjectRole === EUserPermissions.GUEST;
   const isAssigned = issue?.assignee_ids && currentUser?.id ? issue?.assignee_ids.includes(currentUser?.id) : false;
   const isWorklogButtonEnabled = !isIntakeIssue && !isGuest && (isAdmin || isAssigned);
   const showCommentComposer = activeTab === EActivityTab.ALL || activeTab === EActivityTab.COMMENT;
+  const operatorFilterOptionIdSet = new Set<string>([...selectedOperatorIds, ...timesheetOperatorIds]);
+  activityAndComments?.forEach((activityComment) => {
+    if (activityComment.activity_type === "COMMENT") {
+      const comment = getCommentById(activityComment.id);
+      [comment?.actor, comment?.actor_detail?.id, comment?.created_by, comment?.updated_by].forEach((userId) => {
+        if (userId) operatorFilterOptionIdSet.add(userId);
+      });
+      return;
+    }
+
+    const activity = getActivityById(activityComment.id);
+    [activity?.actor, activity?.actor_detail?.id, activity?.created_by, activity?.updated_by].forEach((userId) => {
+      if (userId) operatorFilterOptionIdSet.add(userId);
+    });
+  });
+  const operatorFilterOptionIds = Array.from(operatorFilterOptionIdSet);
+
+  useEffect(() => {
+    setSelectedOperatorIds([]);
+    setTimesheetOperatorIds([]);
+  }, [issueId]);
 
   const toggleSortOrder = () => {
     setSortOrder(sortOrder === E_SORT_ORDER.ASC ? E_SORT_ORDER.DESC : E_SORT_ORDER.ASC);
@@ -105,7 +133,12 @@ export const IssueActivity = observer(function IssueActivity(props: TIssueActivi
                 disabled={disabled}
               />
             )}
-            <ActivitySortRoot sortOrder={sortOrder || E_SORT_ORDER.ASC} toggleSort={toggleSortOrder} />
+            <ActivityOperatorFilterRoot
+              operatorIds={operatorFilterOptionIds}
+              selectedOperatorIds={selectedOperatorIds}
+              onChange={setSelectedOperatorIds}
+            />
+            <ActivitySortRoot sortOrder={resolvedSortOrder} toggleSort={toggleSortOrder} />
           </div>
         </div>
       </div>
@@ -114,13 +147,15 @@ export const IssueActivity = observer(function IssueActivity(props: TIssueActivi
       <div className="space-y-4">
         <div className="min-h-[200px]">
           <div className="space-y-4">
-            {!disabled && showCommentComposer && sortOrder === E_SORT_ORDER.DESC && renderCommentCreationBox}
+            {!disabled && showCommentComposer && resolvedSortOrder === E_SORT_ORDER.DESC && renderCommentCreationBox}
             {activeTab === EActivityTab.TIMESHEET ? (
               <IssueActivityTimesheetList
                 workspaceSlug={workspaceSlug}
                 projectId={projectId}
                 issueId={issueId}
-                sortOrder={sortOrder || E_SORT_ORDER.ASC}
+                sortOrder={resolvedSortOrder}
+                operatorFilterIds={selectedOperatorIds}
+                onOperatorIdsChange={setTimesheetOperatorIds}
               />
             ) : (
               <IssueActivityCommentRoot
@@ -132,10 +167,11 @@ export const IssueActivity = observer(function IssueActivity(props: TIssueActivi
                 activityOperations={activityOperations}
                 showAccessSpecifier={!!project.anchor}
                 disabled={disabled}
-                sortOrder={sortOrder || E_SORT_ORDER.ASC}
+                sortOrder={resolvedSortOrder}
+                operatorFilterIds={selectedOperatorIds}
               />
             )}
-            {!disabled && showCommentComposer && sortOrder === E_SORT_ORDER.ASC && renderCommentCreationBox}
+            {!disabled && showCommentComposer && resolvedSortOrder === E_SORT_ORDER.ASC && renderCommentCreationBox}
           </div>
         </div>
       </div>

@@ -38,7 +38,7 @@ export const IssueParentActivity = observer(function IssueParentActivity(props: 
       footer={
         showFooter ? (
           <ActivityChangeFooter
-            from={{ icon: parentIcon, label: oldLabel }}
+            from={{ icon: parentIcon, label: oldLabel, labelEmphasis: "muted" }}
             to={{ icon: parentIcon, label: newLabel }}
           />
         ) : null

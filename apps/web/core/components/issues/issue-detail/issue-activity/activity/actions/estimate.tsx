@@ -38,7 +38,7 @@ export const IssueEstimateActivity = observer(function IssueEstimateActivity(pro
       footer={
         showFooter ? (
           <ActivityChangeFooter
-            from={{ icon: estimateIcon, label: oldLabel }}
+            from={{ icon: estimateIcon, label: oldLabel, labelEmphasis: "muted" }}
             to={{ icon: estimateIcon, label: newLabel }}
           />
         ) : null

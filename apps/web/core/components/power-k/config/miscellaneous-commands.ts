@@ -83,7 +83,8 @@ export const usePowerKMiscellaneousCommands = (): TPowerKCommandConfig[] => {
       i18n_title: "power_k.miscellaneous_actions.focus_top_nav_search",
       icon: SearchIcon,
       action: focusTopNavSearch,
-      modifierShortcut: "cmd+f",
+      // Use Cmd/Ctrl+Shift+F so Cmd/Ctrl+F remains the browser "find in page" shortcut
+      modifierShortcut: "cmd+shift+f",
       isEnabled: () => true,
       isVisible: () => true,
       closeOnSelect: true,

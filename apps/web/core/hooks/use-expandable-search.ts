@@ -14,7 +14,7 @@ type UseExpandableSearchOptions = {
 /**
  * Custom hook for expandable search input behavior
  * Handles focus management to prevent unwanted opening on programmatic focus restoration
- * Opens on click, typing, or keyboard shortcut (via PowerK Cmd+F)
+ * Opens on click, typing, or keyboard shortcut (via PowerK Cmd/Ctrl+Shift+F)
  */
 export const useExpandableSearch = (options?: UseExpandableSearchOptions) => {
   const { onClose } = options || {};
@@ -45,11 +45,10 @@ export const useExpandableSearch = (options?: UseExpandableSearchOptions) => {
   // Outside click detection
   useOutsideClickDetector(containerRef, handleOutsideClick);
 
-  // Track keyboard shortcuts that trigger focus (Cmd+F / Ctrl+F)
+  // Track PowerK focus shortcut (Cmd/Ctrl+Shift+F) so expandable panel opens on focus
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "f") {
-        // Mark as keyboard triggered so handleFocus knows to open
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === "f") {
         wasKeyboardTriggeredRef.current = true;
       }
     };

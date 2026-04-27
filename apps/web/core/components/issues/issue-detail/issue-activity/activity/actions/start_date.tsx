@@ -40,7 +40,7 @@ export const IssueStartDateActivity = observer(function IssueStartDateActivity(p
       footer={
         showFooter ? (
           <ActivityChangeFooter
-            from={{ icon: dateIcon, label: oldLabel }}
+            from={{ icon: dateIcon, label: oldLabel, labelEmphasis: "muted" }}
             to={{ icon: dateIcon, label: newLabel }}
           />
         ) : null

@@ -12,6 +12,8 @@ type TActivityChangeItem = {
   label: string;
   /** 是否把 label 当作链接地址在新标签中打开 */
   href?: string;
+  /** 变更前列等场景：用次要色，避免与「变更后」同样强调 */
+  labelEmphasis?: "default" | "muted";
 };
 
 type TActivityChangeFooterProps = {
@@ -27,7 +29,7 @@ export function ActivityChangeFooter(props: TActivityChangeFooterProps) {
   const { from, to } = props;
 
   return (
-    <div className="flex flex-wrap items-center gap-2.5 text-body-sm-regular">
+    <div className="flex flex-wrap items-center gap-2.5 text-body-xs-regular">
       <ActivityChangeItem {...from} />
       <ArrowRight className="h-4 w-4 flex-shrink-0 text-tertiary" aria-hidden="true" />
       <ActivityChangeItem {...to} />
@@ -35,21 +37,27 @@ export function ActivityChangeFooter(props: TActivityChangeFooterProps) {
   );
 }
 
+const labelEmphasisClass = {
+  default: "text-primary",
+  muted: "text-secondary",
+} as const;
+
 function ActivityChangeItem(props: TActivityChangeItem) {
-  const { icon, label, href } = props;
+  const { icon, label, href, labelEmphasis = "default" } = props;
+  const tone = labelEmphasisClass[labelEmphasis];
 
   const labelNode = href ? (
     <a
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className="max-w-[280px] truncate font-medium text-primary hover:underline"
+      className={`max-w-[280px] truncate font-medium ${tone} hover:underline`}
       title={label}
     >
       {label}
     </a>
   ) : (
-    <span className="max-w-[280px] truncate font-medium text-primary" title={label}>
+    <span className={`max-w-[280px] truncate font-medium ${tone}`} title={label}>
       {label}
     </span>
   );

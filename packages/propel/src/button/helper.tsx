@@ -25,6 +25,11 @@ export const buttonVariants = cva(
         ghost:
           "bg-layer-transparent text-secondary hover:bg-layer-transparent-hover focus:bg-layer-transparent-active active:bg-layer-transparent-active disabled:bg-layer-transparent disabled:text-disabled",
         link: "px-0 text-link-primary underline hover:text-link-primary-hover focus:text-link-primary-hover active:text-link-primary-hover disabled:text-disabled",
+        /** 与 @plane/ui 的 link-neutral / link-danger 对齐，供图标型操作列等场景使用 */
+        "link-neutral":
+          "bg-transparent text-tertiary hover:text-secondary active:text-primary disabled:text-disabled",
+        "link-danger":
+          "bg-transparent text-danger-primary hover:text-danger-primary active:text-danger-primary disabled:text-disabled",
       },
       size: {
         sm: "h-5 rounded-sm px-1.5 text-caption-md-medium",

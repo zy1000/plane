@@ -47,7 +47,7 @@ export const IssueStateActivity = observer(function IssueStateActivity(props: TI
       footer={
         showFooter ? (
           <ActivityChangeFooter
-            from={{ icon: stateIcon(oldState), label: oldName }}
+            from={{ icon: stateIcon(oldState), label: oldName, labelEmphasis: "muted" }}
             to={{ icon: stateIcon(newState), label: newName }}
           />
         ) : null

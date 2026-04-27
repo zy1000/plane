@@ -5,8 +5,8 @@ import { observer } from "mobx-react";
 import Link from "next/link";
 import useSWR from "swr";
 import { useTheme } from "next-themes";
-import { History, Clock } from "lucide-react";
-import { calculateTimeAgo, getFileURL } from "@plane/utils";
+import { History, MessageSquareIcon } from "lucide-react";
+import { calculateTimeAgo, cn, getFileURL } from "@plane/utils";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 
@@ -80,40 +80,46 @@ const ProjectActivityListPage = observer((props: ProjectActivityListPageProps) =
               : actorDetail.display_name;
         if (activityItem.field === "comment")
           return (
-            <div key={activityItem.id} className="mt-2">
-              <div className="relative flex items-start space-x-3">
-                <div className="relative px-1">
-                  {activityItem.field ? (
-                    activityItem.new_value === "restore" && <History className="h-3.5 w-3.5 text-primary" />
-                  ) : actorDetail?.avatar_url && actorDetail.avatar_url !== "" ? (
-                    <img
-                      src={getFileURL(actorDetail.avatar_url)}
-                      alt={actorDisplayName}
-                      height={24}
-                      width={24}
-                      className="grid h-6 w-6 place-items-center rounded-full border-2 border-white bg-gray-500 text-white"
-                    />
+            <li key={activityItem.id}>
+              <div className="relative flex items-start gap-3 py-2 text-caption-sm-regular">
+                <div className="absolute top-0 bottom-0 left-[13px] w-px bg-layer-3" aria-hidden />
+                <div className="z-[4] flex h-7 w-7 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border border-subtle bg-layer-2 text-secondary shadow-raised-100 [&_svg]:!text-secondary">
+                  {activityItem.new_value === "restore" ? (
+                    <History size={12} className="text-secondary" aria-hidden="true" />
                   ) : (
-                    <div className="grid h-6 w-6 place-items-center rounded-full border-2 border-white bg-gray-700 text-xs capitalize text-white">
-                      {actorDisplayName?.[0]}
-                    </div>
+                    <MessageSquareIcon size={12} className="text-secondary" aria-hidden="true" />
                   )}
                 </div>
-                <div className="min-w-0 flex-1">
-                  <div className="text-[0.7875rem] text-primary">
-                    <span className="font-medium text-primary">{actorDisplayName}</span>
-                    <span className="ml-2 text-[0.7875rem] text-placeholder">
+                <div className="min-w-0 flex-1 text-secondary">
+                  <div className="flex min-w-0 flex-wrap items-center gap-x-1">
+                    {isSystemActivity ? (
+                      <span className="font-medium text-secondary">{actorDisplayName}</span>
+                    ) : actorDetail.is_bot ? (
+                      <span className="font-medium text-secondary">{actorDetail.first_name} Bot</span>
+                    ) : (
+                      <Link
+                        href={`/${activityItem.workspace_detail?.slug}/profile/${actorDetail.id}`}
+                        className="inline font-medium text-[#1677ff]"
+                      >
+                        {actorDisplayName}
+                      </Link>
+                    )}
+                    <span className="whitespace-nowrap text-tertiary">
                       {calculateTimeAgo(activityItem.created_at)}
                     </span>
                   </div>
-                  <div className="mt-2 text-[0.7875rem] text-primary">
+                  <div className="mt-2 text-caption-sm-regular text-secondary">
                     <RichTextEditor
                       editable={false}
                       id={activityItem.id}
                       initialValue={
                         activityItem?.new_value !== "" ? activityItem.new_value : activityItem.old_value
                       }
-                      containerClassName="text-xs bg-surface-1"
+                      displayConfig={{ fontSize: "small-font" }}
+                      containerClassName={cn(
+                        "bg-surface-1 pb-0 pl-0",
+                        "[&_.ProseMirror]:text-caption-sm-regular [&_.ProseMirror]:leading-[var(--text-caption-sm-regular--line-height)]"
+                      )}
                       workspaceId={activityItem?.workspace_detail?.id?.toString() ?? ""}
                       workspaceSlug={activityItem?.workspace_detail?.slug?.toString() ?? ""}
                       projectId={activityItem.project ?? ""}
@@ -121,7 +127,7 @@ const ProjectActivityListPage = observer((props: ProjectActivityListPageProps) =
                   </div>
                 </div>
               </div>
-            </div>
+            </li>
           );
 
         const message = <ActivityMessage activity={activityItem} showIssue />;
@@ -131,7 +137,7 @@ const ProjectActivityListPage = observer((props: ProjectActivityListPageProps) =
             <li key={activityItem.id}>
               <div className="relative flex items-center gap-3 py-2 text-caption-sm-regular">
                 <div className="absolute top-0 bottom-0 left-[13px] w-px bg-layer-3" aria-hidden />
-                <div className="z-[4] flex h-7 w-7 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border border-subtle bg-layer-2 text-secondary shadow-raised-100">
+                <div className="z-[4] flex h-7 w-7 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border border-subtle bg-layer-2 text-secondary shadow-raised-100 [&_svg]:!text-secondary">
                   {activityItem.field ? (
                     activityItem.new_value === "restore" ? (
                       <History className="h-3.5 w-3.5" />

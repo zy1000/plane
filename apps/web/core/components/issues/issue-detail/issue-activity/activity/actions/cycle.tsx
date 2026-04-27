@@ -45,7 +45,7 @@ export const IssueCycleActivity = observer(function IssueCycleActivity(props: TI
       footer={
         showFooter ? (
           <ActivityChangeFooter
-            from={{ icon: cycleIcon, label: oldLabel }}
+            from={{ icon: cycleIcon, label: oldLabel, labelEmphasis: "muted" }}
             to={{ icon: cycleIcon, label: newLabel }}
           />
         ) : null

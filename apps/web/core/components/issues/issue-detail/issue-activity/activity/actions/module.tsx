@@ -38,7 +38,7 @@ export const IssueModuleActivity = observer(function IssueModuleActivity(props: 
       footer={
         showFooter ? (
           <ActivityChangeFooter
-            from={{ icon: moduleIcon, label: oldLabel }}
+            from={{ icon: moduleIcon, label: oldLabel, labelEmphasis: "muted" }}
             to={{ icon: moduleIcon, label: newLabel }}
           />
         ) : null
