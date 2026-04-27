@@ -14,6 +14,7 @@ import { calculateTimeAgo, cn, getFileURL, renderFormattedDate, renderFormattedT
 import { useTimesheet } from "@/hooks/store/use-timesheet";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 import type { TTimeSheet } from "@/services/issue/timesheet.service";
+import { ActivityFeedCollapsible } from "./activity-feed-collapsible";
 
 type TIssueActivityTimesheetListProps = {
   workspaceSlug: string;
@@ -182,14 +183,16 @@ export const IssueActivityTimesheetList = observer(function IssueActivityTimeshe
   }
 
   return (
-    <div>
-      {ordered.map((t, index) => (
-        <TimesheetActivityItem
-          key={t.id}
-          timesheet={t}
-          ends={index === 0 ? "top" : index === ordered.length - 1 ? "bottom" : undefined}
-        />
-      ))}
-    </div>
+    <ActivityFeedCollapsible resetKey={`${issueId}:${sortOrder}`} listLength={ordered.length}>
+      <div>
+        {ordered.map((t, index) => (
+          <TimesheetActivityItem
+            key={t.id}
+            timesheet={t}
+            ends={index === 0 ? "top" : index === ordered.length - 1 ? "bottom" : undefined}
+          />
+        ))}
+      </div>
+    </ActivityFeedCollapsible>
   );
 });
