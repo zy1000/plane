@@ -1876,10 +1876,21 @@ export default {
       },
     },
     states: {
+      heading: "状态",
+      description: "定义和自定义工作流状态，用于跟踪工作项进展。",
       describe_this_state_for_your_members: "为您的成员描述此状态。",
       empty_state: {
         title: "{groupKey} 组中没有状态",
         description: "请创建一个新状态",
+      },
+    },
+    issue_types: {
+      label: "工作项类型",
+      heading: "工作项类型",
+      description: "管理项目中的工作项类型。此页面暂时占位，后续会添加配置内容。",
+      placeholder: {
+        title: "工作项类型配置即将推出",
+        description: "这里将用于创建和管理项目的工作项类型、图标和相关属性。",
       },
     },
     labels: {

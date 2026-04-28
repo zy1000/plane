@@ -101,6 +101,15 @@ export const PROJECT_SETTINGS: Record<TProjectSettingsTabs, TProjectSettingsItem
     permissionKeys: ["state.view"],
     highlight: (pathname: string, baseUrl: string) => pathname === `${baseUrl}/states/`,
   },
+  issue_types: {
+    key: "issue_types",
+    i18n_label: "project_settings.issue_types.label",
+    href: `/issue-types`,
+    access: [EUserProjectRoles.ADMIN, EUserProjectRoles.MEMBER],
+    permissionKeys: ["project.settings.view"],
+    editPermissionKeys: ["project.settings.edit"],
+    highlight: (pathname: string, baseUrl: string) => pathname === `${baseUrl}/issue-types/`,
+  },
   labels: {
     key: "labels",
     i18n_label: "common.labels",
@@ -158,6 +167,7 @@ export const GROUPED_PROJECT_SETTINGS: Record<PROJECT_SETTINGS_CATEGORY, TProjec
   ],
   [PROJECT_SETTINGS_CATEGORY.WORK_STRUCTURE]: [
     PROJECT_SETTINGS["states"],
+    PROJECT_SETTINGS["issue_types"],
     PROJECT_SETTINGS["labels"],
     PROJECT_SETTINGS["estimates"],
   ],

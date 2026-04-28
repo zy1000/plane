@@ -1755,6 +1755,15 @@ export default {
         description: "Please create a new state",
       },
     },
+    issue_types: {
+      label: "Work item types",
+      heading: "Work item types",
+      description: "Manage the work item types available in this project. This page is a placeholder for upcoming configuration.",
+      placeholder: {
+        title: "Work item type settings are coming soon",
+        description: "You will be able to create and manage project work item types, icons, and related properties here.",
+      },
+    },
     labels: {
       heading: "Labels",
       description: "Create custom labels to categorize and organize your work items",
