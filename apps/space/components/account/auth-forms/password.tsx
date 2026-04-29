@@ -14,7 +14,7 @@ import { AuthService } from "@plane/services";
 import { Input, Spinner, PasswordStrengthIndicator } from "@plane/ui";
 import { getPasswordStrength } from "@plane/utils";
 // types
-import { EAuthModes, EAuthSteps } from "@/types/auth";
+import { EAuthModes } from "@/types/auth";
 
 type Props = {
   email: string;
@@ -23,7 +23,6 @@ type Props = {
   mode: EAuthModes;
   nextPath: string | undefined;
   handleEmailClear: () => void;
-  handleAuthStep: (step: EAuthSteps) => void;
 };
 
 type TPasswordFormValues = {
@@ -40,7 +39,7 @@ const defaultValues: TPasswordFormValues = {
 const authService = new AuthService();
 
 export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props) {
-  const { email, nextPath, isSMTPConfigured, handleAuthStep, handleEmailClear, mode } = props;
+  const { email, nextPath, isSMTPConfigured, handleEmailClear, mode } = props;
   // ref
   const formRef = useRef<HTMLFormElement>(null);
   // states
@@ -66,10 +65,6 @@ export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props)
       setCsrfPromise(promise);
     }
   }, [csrfPromise]);
-
-  const redirectToUniqueCodeSignIn = async () => {
-    handleAuthStep(EAuthSteps.UNIQUE_CODE);
-  };
 
   const passwordSupport = passwordFormData.password.length > 0 &&
     mode === EAuthModes.SIGN_UP &&
@@ -214,28 +209,15 @@ export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props)
 
       <div className="space-y-2.5">
         {mode === EAuthModes.SIGN_IN ? (
-          <>
-            <Button type="submit" variant="primary" className="w-full" size="xl" disabled={isButtonDisabled}>
-              {isSubmitting ? (
-                <Spinner height="20px" width="20px" />
-              ) : isSMTPConfigured ? (
-                "Continue"
-              ) : (
-                "Go to workspace"
-              )}
-            </Button>
-            {isSMTPConfigured && (
-              <Button
-                type="button"
-                onClick={redirectToUniqueCodeSignIn}
-                variant="secondary"
-                className="w-full"
-                size="xl"
-              >
-                Sign in with unique code
-              </Button>
+          <Button type="submit" variant="primary" className="w-full" size="xl" disabled={isButtonDisabled}>
+            {isSubmitting ? (
+              <Spinner height="20px" width="20px" />
+            ) : isSMTPConfigured ? (
+              "Continue"
+            ) : (
+              "Go to workspace"
             )}
-          </>
+          </Button>
         ) : (
           <Button type="submit" variant="primary" className="w-full" size="xl" disabled={isButtonDisabled}>
             {isSubmitting ? <Spinner height="20px" width="20px" /> : "Create account"}

@@ -10,7 +10,7 @@ import Link from "next/link";
 // icons
 import { Eye, EyeOff, Info } from "lucide-react";
 // plane imports
-import { API_BASE_URL, E_PASSWORD_STRENGTH, AUTH_TRACKER_EVENTS, AUTH_TRACKER_ELEMENTS } from "@plane/constants";
+import { API_BASE_URL, E_PASSWORD_STRENGTH, AUTH_TRACKER_EVENTS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { CloseIcon } from "@plane/propel/icons";
@@ -20,7 +20,7 @@ import { getPasswordStrength } from "@plane/utils";
 import { ForgotPasswordPopover } from "@/components/account/auth-forms/forgot-password-popover";
 // constants
 // helpers
-import { EAuthModes, EAuthSteps } from "@/helpers/authentication.helper";
+import { EAuthModes } from "@/helpers/authentication.helper";
 // services
 import { AuthService } from "@/services/auth.service";
 
@@ -29,7 +29,6 @@ type Props = {
   isSMTPConfigured: boolean;
   mode: EAuthModes;
   handleEmailClear: () => void;
-  handleAuthStep: (step: EAuthSteps) => void;
   nextPath: string | undefined;
 };
 
@@ -47,7 +46,7 @@ const defaultValues: TPasswordFormValues = {
 const authService = new AuthService();
 
 export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props) {
-  const { email, isSMTPConfigured, handleAuthStep, mode, nextPath } = props;
+  const { email, isSMTPConfigured, mode, nextPath } = props;
   // plane imports
   const { t } = useTranslation();
   // ref
@@ -76,10 +75,6 @@ export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props)
       setCsrfPromise(promise);
     }
   }, [csrfPromise]);
-
-  const redirectToUniqueCodeSignIn = async () => {
-    handleAuthStep(EAuthSteps.UNIQUE_CODE);
-  };
 
   const passwordSupport =
     mode === EAuthModes.SIGN_IN ? (
@@ -268,29 +263,15 @@ export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props)
 
         <div className="space-y-2.5">
           {mode === EAuthModes.SIGN_IN ? (
-            <>
-              <Button type="submit" variant="primary" className="w-full" size="xl" disabled={isButtonDisabled}>
-                {isSubmitting ? (
-                  <Spinner height="20px" width="20px" />
-                ) : isSMTPConfigured ? (
-                  t("common.continue")
-                ) : (
-                  t("common.go_to_workspace")
-                )}
-              </Button>
-              {isSMTPConfigured && (
-                <Button
-                  type="button"
-                  data-ph-element={AUTH_TRACKER_ELEMENTS.SIGN_IN_WITH_UNIQUE_CODE}
-                  onClick={redirectToUniqueCodeSignIn}
-                  variant="secondary"
-                  className="w-full"
-                  size="xl"
-                >
-                  {t("auth.common.sign_in_with_unique_code")}
-                </Button>
+            <Button type="submit" variant="primary" className="w-full" size="xl" disabled={isButtonDisabled}>
+              {isSubmitting ? (
+                <Spinner height="20px" width="20px" />
+              ) : isSMTPConfigured ? (
+                t("common.continue")
+              ) : (
+                t("common.go_to_workspace")
               )}
-            </>
+            </Button>
           ) : (
             <Button type="submit" variant="primary" className="w-full" size="xl" disabled={isButtonDisabled}>
               {isSubmitting ? <Spinner height="20px" width="20px" /> : "Create account"}

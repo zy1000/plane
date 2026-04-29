@@ -179,10 +179,6 @@ export const AuthRoot = observer(function AuthRoot() {
               setEmail("");
               setAuthStep(EAuthSteps.EMAIL);
             }}
-            handleAuthStep={(step: EAuthSteps) => {
-              if (step === EAuthSteps.UNIQUE_CODE) generateEmailUniqueCode(email);
-              setAuthStep(step);
-            }}
           />
         )}
         <TermsAndConditions isSignUp={authMode === EAuthModes.SIGN_UP ? true : false} />

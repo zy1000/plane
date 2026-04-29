@@ -101,10 +101,6 @@ export const AuthFormRoot = observer(function AuthFormRoot(props: TAuthFormRoot)
         isSMTPConfigured={isSMTPConfigured}
         email={email}
         handleEmailClear={handleEmailClear}
-        handleAuthStep={(step: EAuthSteps) => {
-          if (step === EAuthSteps.UNIQUE_CODE) generateEmailUniqueCode(email);
-          setAuthStep(step);
-        }}
         nextPath={nextPath || undefined}
       />
     );
