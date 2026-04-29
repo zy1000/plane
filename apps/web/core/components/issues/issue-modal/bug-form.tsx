@@ -11,14 +11,10 @@ import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TIssue } from "@plane/types";
-import { EIssuesStoreType } from "@plane/types";
-import { ToggleSwitch } from "@plane/ui";
 import {
   convertWorkItemDataToSearchResponse,
   getUpdateFormDataForReset,
-  cn,
   getTextContent,
-  getChangedIssuefields,
   getTabIndex,
 } from "@plane/utils";
 import {
@@ -32,7 +28,6 @@ import { useIssueModal } from "@/hooks/context/use-issue-modal";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useProject } from "@/hooks/store/use-project";
 import { useProjectState } from "@/hooks/store/use-project-state";
-import { useWorkspaceDraftIssues } from "@/hooks/store/workspace-draft";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 import { useProjectIssueProperties } from "@/hooks/use-project-issue-properties";
 import { DeDupeButtonRoot } from "@/plane-web/components/de-dupe/de-dupe-button";
@@ -44,19 +39,13 @@ import { IssueTypeSelect } from "@/plane-web/components/issues/issue-modal";
 import { useProjectIssueTypes } from "@/hooks/store/use-project-issue-types";
 import { IssueService } from "@/services/issue/issue.service";
 
-type TIssueWithDynamicProperties = TIssue & {
-  dynamic_properties?: Record<string, any>;
-};
-
 export interface BugIssueFormProps {
-  data?: Partial<TIssueWithDynamicProperties>;
+  data?: Partial<TIssue>;
   issueTitleRef: React.MutableRefObject<HTMLInputElement | null>;
-  isCreateMoreToggleEnabled: boolean;
   onAssetUpload: (assetId: string) => void;
-  onCreateMoreToggleChange: (value: boolean) => void;
-  onChange?: (formData: Partial<TIssueWithDynamicProperties> | null) => void;
+  onChange?: (formData: Partial<TIssue> | null) => void;
   onClose: () => void;
-  onSubmit: (values: Partial<TIssueWithDynamicProperties>, is_draft_issue?: boolean) => Promise<void>;
+  onSubmit: (values: Partial<TIssue>, is_draft_issue?: boolean) => Promise<void>;
   projectId: string;
   isDraft: boolean;
   moveToIssue?: boolean;
@@ -71,7 +60,6 @@ export interface BugIssueFormProps {
   isProjectSelectionDisabled?: boolean;
   showActionButtons?: boolean;
   dataResetProperties?: any[];
-  storeType: EIssuesStoreType;
   initialDescriptionHtml?: string;
 }
 
@@ -85,8 +73,6 @@ export const BugIssueFormRoot: FC<BugIssueFormProps> = observer((props) => {
     onClose,
     onSubmit,
     projectId: defaultProjectId,
-    isCreateMoreToggleEnabled,
-    onCreateMoreToggleChange,
     isDraft,
     moveToIssue = false,
     modalTitle = `${data?.id ? t("update") : isDraft ? t("create_a_draft") : t("create_new_issue")}`,
@@ -100,12 +86,10 @@ export const BugIssueFormRoot: FC<BugIssueFormProps> = observer((props) => {
     isProjectSelectionDisabled = false,
     showActionButtons = true,
     dataResetProperties = [],
-    storeType,
     initialDescriptionHtml,
   } = props;
 
   const [gptAssistantModal, setGptAssistantModal] = useState(false);
-  const [isMoving, setIsMoving] = useState<boolean>(false);
 
   const editorRef = useRef<EditorRefApi>(null);
   const submitBtnRef = useRef<HTMLButtonElement | null>(null);
@@ -121,15 +105,10 @@ export const BugIssueFormRoot: FC<BugIssueFormProps> = observer((props) => {
     selectedParentIssue,
     setWorkItemTemplateId,
     setSelectedParentIssue,
-    getIssueTypeIdOnProjectChange,
-    getActiveAdditionalPropertiesLength,
-    handlePropertyValuesValidation,
-    handleCreateUpdatePropertyValues,
     handleTemplateChange,
     allowedProjectIds,
   } = useIssueModal();
   const { isMobile } = usePlatformOS();
-  const { moveIssue } = useWorkspaceDraftIssues();
 
   const {
     issue: { getIssueById },
@@ -137,19 +116,18 @@ export const BugIssueFormRoot: FC<BugIssueFormProps> = observer((props) => {
   const { fetchCycles } = useProjectIssueProperties();
   const { getStateById } = useProjectState();
 
-  const methods = useForm<TIssueWithDynamicProperties>({
+  const methods = useForm<TIssue>({
     defaultValues: {
       ...DEFAULT_WORK_ITEM_FORM_VALUES,
       project_id: defaultProjectId,
       ...data,
-      dynamic_properties: data?.dynamic_properties || {},
       description_html: data?.description_html ?? initialDescriptionHtml ?? "<p></p>",
     },
     reValidateMode: "onChange",
   });
   const {
     formState,
-    formState: { isDirty, isSubmitting, dirtyFields },
+    formState: { isDirty, isSubmitting },
     handleSubmit,
     reset,
     watch,
@@ -161,11 +139,6 @@ export const BugIssueFormRoot: FC<BugIssueFormProps> = observer((props) => {
   const projectId = watch("project_id");
   const [creating, setCreating] = useState<boolean>(false);
   const [projectInitDone, setProjectInitDone] = useState<boolean>(false);
-  const activeAdditionalPropertiesLength = getActiveAdditionalPropertiesLength({
-    projectId: projectId,
-    workspaceSlug: workspaceSlug?.toString(),
-    watch: watch,
-  });
 
   const projectDetails = projectId ? getProjectById(projectId) : undefined;
   const isDisabled = isSubmitting || isApplyingTemplate;
@@ -191,14 +164,12 @@ export const BugIssueFormRoot: FC<BugIssueFormProps> = observer((props) => {
         reset({
           ...DEFAULT_WORK_ITEM_FORM_VALUES,
           project_id: projectId,
-          dynamic_properties: {},
         });
         editorRef.current?.clearEditor();
       } else {
         const resetData = getUpdateFormDataForReset(projectId, getValues());
         reset({
           ...resetData,
-          dynamic_properties: {},
         });
       }
     }
@@ -278,18 +249,16 @@ export const BugIssueFormRoot: FC<BugIssueFormProps> = observer((props) => {
 
   const shouldRenderDuplicateModal = isDuplicateModalOpen && duplicateIssues?.length > 0;
 
-  const handleFormSubmit = async (formData: Partial<TIssueWithDynamicProperties>, is_draft_issue = false) => {
+  const handleFormSubmit = async (formData: Partial<TIssue>, is_draft_issue = false) => {
     if (!editorRef.current?.isEditorReadyToDiscard()) {
       setToast({ type: TOAST_TYPE.ERROR, title: t("error"), message: t("editor_is_not_ready_to_discard_changes") });
       return;
     }
-    if (!handlePropertyValuesValidation({ projectId: projectId, workspaceSlug: workspaceSlug?.toString(), watch }))
-      return;
     if (!workspaceSlug || !projectId) {
       setToast({ type: TOAST_TYPE.ERROR, title: t("error"), message: "缺少项目或空间信息，无法创建缺陷" });
       return;
     }
-    const payload: Partial<TIssueWithDynamicProperties> = {
+    const payload: Partial<TIssue> = {
       ...formData,
       project_id: projectId,
       type_id: getValues<"type_id">("type_id"),
@@ -307,7 +276,6 @@ export const BugIssueFormRoot: FC<BugIssueFormProps> = observer((props) => {
         project_id: getValues<"project_id">("project_id"),
         type_id: getValues<"type_id">("type_id"),
         description_html: "<p></p>",
-        dynamic_properties: {},
       });
       editorRef?.current?.clearEditor();
     } catch (error: any) {
@@ -396,11 +364,7 @@ export const BugIssueFormRoot: FC<BugIssueFormProps> = observer((props) => {
               </div>
             </div>
             <div
-              className={cn(
-                "pb-4 space-y-3 bg-surface-1 flex-1",
-                activeAdditionalPropertiesLength > 4 &&
-                  "max-h-[65vh] overflow-hidden overflow-y-auto vertical-scrollbar scrollbar-sm"
-              )}
+              className="pb-4 space-y-3 bg-surface-1 flex-1"
             >
               <div className="max-h-[55vh] overflow-y-auto vertical-scrollbar scrollbar-sm">
                 <div className="px-5">
@@ -428,10 +392,7 @@ export const BugIssueFormRoot: FC<BugIssueFormProps> = observer((props) => {
               </div>
             </div>
             <div
-              className={cn(
-                "px-4 py-3 border-t-[0.5px] border-subtle rounded-b-lg bg-surface-1",
-                activeAdditionalPropertiesLength > 0 && "shadow-raised-100"
-              )}
+              className="px-4 py-3 border-t-[0.5px] border-subtle rounded-b-lg bg-surface-1"
             >
               <div className="pb-3 border-b-[0.5px] border-subtle">
                 <IssueDefaultProperties

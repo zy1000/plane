@@ -4,4 +4,4 @@
  * See the LICENSE file for details.
  */
 
-export * from "./issue-property-values.d";
+export {};

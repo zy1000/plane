@@ -3,7 +3,7 @@
 import React from "react";
 import { observer } from "mobx-react";
 import { EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
-import type { EIssuesStoreType, TIssue } from "@plane/types";
+import type { TIssue } from "@plane/types";
 import { BugIssueFormRoot } from "./bug-form";
 import { IssueModalProvider } from "@/plane-web/components/issues/issue-modal";
 
@@ -12,7 +12,6 @@ export interface BugIssueModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSubmit?: (res: TIssue) => Promise<void>;
-  storeType?: EIssuesStoreType;
   isDraft?: boolean;
   modalTitle?: string;
   primaryButtonText?: { default: string; loading: string };
@@ -28,7 +27,6 @@ export const BugIssueModal: React.FC<BugIssueModalProps> = observer((props) => {
     isOpen,
     onClose,
     onSubmit,
-    storeType,
     isDraft = false,
     modalTitle,
     primaryButtonText,
@@ -60,8 +58,6 @@ export const BugIssueModal: React.FC<BugIssueModalProps> = observer((props) => {
             }
           }}
           projectId={(data?.project_id as string) || ""}
-          isCreateMoreToggleEnabled={false}
-          onCreateMoreToggleChange={() => {}}
           isDraft={isDraft}
           moveToIssue={false}
           modalTitle={modalTitle}
@@ -69,7 +65,6 @@ export const BugIssueModal: React.FC<BugIssueModalProps> = observer((props) => {
           isDuplicateModalOpen={false}
           handleDuplicateIssueModal={() => {}}
           isProjectSelectionDisabled={isProjectSelectionDisabled}
-          storeType={storeType ?? ("GLOBAL" as unknown as EIssuesStoreType)}
           initialDescriptionHtml={initialDescriptionHtml}
         />
       </ModalCore>

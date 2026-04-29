@@ -49,7 +49,6 @@ import { useProjectIssueProperties } from "@/hooks/use-project-issue-properties"
 import { DeDupeButtonRoot } from "@/plane-web/components/de-dupe/de-dupe-button";
 import { DuplicateModalRoot } from "@/plane-web/components/de-dupe/duplicate-modal";
 import { IssueTypeSelect, WorkItemTemplateSelect } from "@/plane-web/components/issues/issue-modal";
-import { WorkItemModalAdditionalProperties } from "@/plane-web/components/issues/issue-modal/modal-additional-properties";
 import { useDebouncedDuplicateIssues } from "@/plane-web/hooks/use-debounced-duplicate-issues";
 import { ChevronRight } from "lucide-react";
 
@@ -129,9 +128,6 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
     setWorkItemTemplateId,
     setSelectedParentIssue,
     getIssueTypeIdOnProjectChange,
-    getActiveAdditionalPropertiesLength,
-    handlePropertyValuesValidation,
-    handleCreateUpdatePropertyValues,
     handleTemplateChange,
   } = useIssueModal();
   const { isMobile } = usePlatformOS();
@@ -160,11 +156,6 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
   } = methods;
 
   const projectId = watch("project_id");
-  const activeAdditionalPropertiesLength = getActiveAdditionalPropertiesLength({
-    projectId: projectId,
-    workspaceSlug: workspaceSlug?.toString(),
-    watch: watch,
-  });
 
   // derived values
   const projectDetails = projectId ? getProjectById(projectId) : undefined;
@@ -251,16 +242,6 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
       return;
     }
 
-    // check for required properties validation
-    if (
-      !handlePropertyValuesValidation({
-        projectId: projectId,
-        workspaceSlug: workspaceSlug?.toString(),
-        watch: watch,
-      })
-    )
-      return;
-
     const submitData = !data?.id
       ? formData
       : {
@@ -303,14 +284,6 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
     if (!data?.id || !data?.project_id || !data) return;
     setIsMoving(true);
     try {
-      await handleCreateUpdatePropertyValues({
-        issueId: data.id,
-        issueTypeId: data.type_id,
-        projectId: data.project_id,
-        workspaceSlug: workspaceSlug?.toString(),
-        isDraft: true,
-      });
-
       await moveIssue(workspaceSlug.toString(), data.id, {
         ...data,
         ...getValues(),
@@ -475,11 +448,7 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
               </div>
             </div>
             <div
-              className={cn(
-                "space-y-3 bg-surface-1 pb-4",
-                activeAdditionalPropertiesLength > 4 &&
-                  "vertical-scrollbar scrollbar-sm max-h-[45vh] overflow-hidden overflow-y-auto"
-              )}
+              className="space-y-3 bg-surface-1 pb-4"
             >
               <div className="px-5">
                 <IssueDescriptionEditor
@@ -503,18 +472,9 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
                   onClose={onClose}
                 />
               </div>
-              <WorkItemModalAdditionalProperties
-                isDraft={isDraft}
-                workItemId={data?.id ?? data?.sourceIssueId}
-                projectId={projectId}
-                workspaceSlug={workspaceSlug?.toString()}
-              />
             </div>
             <div
-              className={cn(
-                "rounded-b-lg border-t-[0.5px] border-subtle bg-surface-1 px-4 py-3",
-                activeAdditionalPropertiesLength > 0 && "shadow-raised-100"
-              )}
+              className="rounded-b-lg border-t-[0.5px] border-subtle bg-surface-1 px-4 py-3"
             >
               <div className="pb-3">
                 <IssueDefaultProperties

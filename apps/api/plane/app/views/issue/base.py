@@ -63,15 +63,12 @@ from plane.db.models import (
     FileAsset,
     IntakeIssue,
     Issue,
-    IssueActivity,
     IssueAssignee,
     IssueLabel,
     IssueLink,
-    IssuePropertyValue,
     IssueReaction,
     IssueRelation,
     IssueSubscriber,
-    IssueTypeProperty,
     ProjectUserProperty,
     ModuleIssue,
     ReleaseIssue,
@@ -413,11 +410,6 @@ class IssueViewSet(BaseViewSet):
 
     def create(self, request, slug, project_id):
         project = Project.objects.get(pk=project_id)
-        if 'dynamic_properties' in request.data:
-            dynamic_properties = request.data.pop('dynamic_properties')
-        else:
-            dynamic_properties = {}
-
         data = dict(request.data)
         if not data.get("type_id"):
             default_issue_type = (
@@ -455,7 +447,6 @@ class IssueViewSet(BaseViewSet):
                 "type_id": data['type_id'],
                 "workspace_id": project.workspace_id,
                 "default_assignee_id": project.default_assignee_id,
-                'dynamic_properties': dynamic_properties
             },
         )
 
@@ -803,37 +794,12 @@ class IssueViewSet(BaseViewSet):
         #             status=status.HTTP_400_BAD_REQUEST,
         #         )
 
-        # 获取当前的动态字段值
-        current_dynamic_properties = {}
-        if 'dynamic_properties' in self.request.data:
-            current_property_values = IssuePropertyValue.objects.filter(
-                issue_id=pk,
-                project_id=project_id,
-                deleted_at__isnull=True
-            ).select_related('property')
-
-            for prop_value in current_property_values:
-                current_dynamic_properties[str(prop_value.property.id)] = prop_value.value
-
         requested_data = json.dumps(self.request.data, cls=DjangoJSONEncoder)
 
-        dynamic_properties = self.request.data.pop(
-            'dynamic_properties') if 'dynamic_properties' in self.request.data else {}
         serializer = IssueCreateSerializer(issue, data=request.data, partial=True,
-                                           context={"project_id": project_id, 'dynamic_properties': dynamic_properties})
+                                           context={"project_id": project_id})
         if serializer.is_valid():
             serializer.save()
-            # 记录动态字段的变更
-            if dynamic_properties:
-                self._record_dynamic_properties_activity(
-                    current_dynamic_properties=current_dynamic_properties,
-                    new_dynamic_properties=dynamic_properties,
-                    issue_id=str(pk),
-                    project_id=str(project_id),
-                    actor_id=str(request.user.id),
-                    request=request
-                )
-
             # # Check if the update is a migration description update
             # is_migration_description_update = skip_activity and is_description_update
             # # Log all the updates
@@ -868,61 +834,6 @@ class IssueViewSet(BaseViewSet):
             return Response(status=status.HTTP_204_NO_CONTENT)
         redis_client.delete(lock_id)
         return Response({'error': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
-
-    def _record_dynamic_properties_activity(self, current_dynamic_properties, new_dynamic_properties, issue_id,
-                                            project_id, actor_id, request):
-        """记录动态字段变更的活动"""
-        # 获取workspace_id
-        project = Project.objects.get(pk=project_id)
-        workspace_id = project.workspace_id
-
-        # 获取所有相关的属性信息
-        property_ids = set(current_dynamic_properties.keys()) | set(new_dynamic_properties.keys())
-        properties = IssueTypeProperty.objects.filter(
-            id__in=property_ids,
-            project_id=project_id,
-            deleted_at__isnull=True
-        ).values('id', 'display_name')
-
-        property_names = {str(prop['id']): prop['display_name'] for prop in properties}
-
-        # 比较每个字段的变更
-        activities_to_create = []
-        for property_id, new_value in new_dynamic_properties.items():
-            old_value = current_dynamic_properties.get(property_id)
-            property_name = property_names.get(property_id, f"Property {property_id}")
-
-            # 处理值的格式化
-            def format_value(value):
-                if value is None or value == "":
-                    return ""
-                if isinstance(value, list):
-                    return ", ".join(str(v) for v in value) if value else ""
-                return str(value)
-
-            old_value_formatted = format_value(old_value)
-            new_value_formatted = format_value(new_value)
-
-            # 只有当值真正发生变化时才记录
-            if old_value_formatted != new_value_formatted:
-                activities_to_create.append(
-                    IssueActivity(
-                        issue_id=issue_id,
-                        actor_id=actor_id,
-                        verb="updated",
-                        old_value=old_value_formatted,
-                        new_value=new_value_formatted,
-                        field=property_name,
-                        project_id=project_id,
-                        workspace_id=workspace_id,
-                        comment=f"updated {property_name} to",
-                        epoch=int(timezone.now().timestamp()),
-                    )
-                )
-
-        # 批量创建活动记录
-        if activities_to_create:
-            IssueActivity.objects.bulk_create(activities_to_create)
 
     def destroy(self, request, slug, project_id, pk=None):
         issue = Issue.objects.select_related("type").get(workspace__slug=slug, project_id=project_id, pk=pk)

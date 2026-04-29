@@ -43,7 +43,7 @@ from plane.db.models import (
     IssueVersion,
     IssueDescriptionVersion,
     ProjectMember,
-    EstimatePoint, IssueTypeProperty, IssuePropertyValue, IssueType,
+    EstimatePoint, IssueType,
 )
 from plane.utils.content_validator import (
     validate_html_content,
@@ -336,16 +336,6 @@ class IssueCreateSerializer(BaseSerializer):
         workspace_id = instance.workspace_id
         created_by_id = instance.created_by_id
         updated_by_id = instance.updated_by_id
-        if self.context.get('dynamic_properties'):
-            dynamic_properties = self.context["dynamic_properties"]
-            for property_id, issue_value in dynamic_properties.items():
-                IssuePropertyValue.objects.update_or_create(
-                    issue_id=instance.id,
-                    property_id=property_id,
-                    project_id=project_id,
-                    defaults={"value": issue_value},
-                )
-
         if assignees is not None:
             IssueAssignee.objects.filter(issue=instance).delete()
             try:
@@ -1003,36 +993,14 @@ class IssueDetailSerializer(IssueSerializer):
     description_html = serializers.CharField()
     is_subscribed = serializers.BooleanField(read_only=True)
     is_intake = serializers.BooleanField(read_only=True)
-    dynamic_properties = serializers.SerializerMethodField()
 
     class Meta(IssueSerializer.Meta):
         fields = IssueSerializer.Meta.fields + [
             "description_html",
             "is_subscribed",
             "is_intake",
-            "dynamic_properties",
         ]
         read_only_fields = fields
-
-    def get_dynamic_properties(self, obj):
-        """获取Issue的动态属性值，格式为 {property_id: value}"""
-        dynamic_props = {}
-
-        # 获取该Issue的所有属性值
-        property_values = obj.property_values.select_related('property').all()
-
-        for prop_value in property_values:
-            # 将property的id作为键，value作为值
-            # 如果value是列表且只有一个元素，则取第一个元素
-            value = prop_value.value
-            if isinstance(value, list) and len(value) == 1:
-                value = value[0]
-            elif isinstance(value, list) and len(value) == 0:
-                value = ""
-
-            dynamic_props[str(prop_value.property.id)] = str(value) if value is not None else ""
-
-        return dynamic_props
 
 
 class IssuePublicSerializer(BaseSerializer):

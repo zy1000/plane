@@ -41,11 +41,6 @@ def temporary_create_issue_type(project: Project = None, project_id: str = None)
                                        description=issue_type.display, is_default=issue_type.is_default,
                                        logo_props=issue_type.icon)
         issue_types.append(obj)
-        # if obj.name == '缺陷':
-        #     property_logo_props = {"icon": {"name": "AlignLeft", "color": "#6d7b8a"}, "in_use": "icon"}
-        #     IssueTypeProperty.objects.create(issue_type=obj, project=project, workspace=project.workspace,
-        #                                      display_name='修复版本', is_multi=False, logo_props=property_logo_props,
-        #                                      settings={"display_format": "single-line"})
     return issue_types
 
 

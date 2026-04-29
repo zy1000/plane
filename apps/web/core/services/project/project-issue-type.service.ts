@@ -7,35 +7,6 @@ export type TIssueTypeIconProps = {
   background_color?: string;
 };
 
-export type TIssueTypeProperty = {
-  is_default: boolean | undefined;
-  id: string;
-  issue_type: string;
-  display_name: string;
-  property_type: "TEXT" | "NUMBER" | "DATE" | "DATETIME" | "SELECT" | "MULTI_SELECT" | "BOOLEAN" | "URL" | "EMAIL";
-  relation_type?: string | null;
-  is_multi: boolean;
-  is_active: boolean;
-  is_required: boolean;
-  logo_props: {
-    icon?: {
-      name: string;
-      color?: string;
-      background_color?: string;
-    };
-    in_use?: string;
-  };
-  default_value: any[];
-  settings: {
-    display_format?: string;
-  };
-  options: any[];
-  sort_order: number;
-  project: string;
-  created_at: string;
-  updated_at: string;
-};
-
 export type TIssueType = {
   id: string;
   project?: string;
@@ -55,7 +26,6 @@ export type TIssueType = {
   workspace?: string;
   created_at?: string;
   updated_at?: string;
-  properties?: TIssueTypeProperty[];
 };
 
 export const projectIssueTypesCache: Map<string, Record<string, TIssueType>> = new Map();
@@ -139,55 +109,6 @@ export class ProjectIssueTypeService extends APIService {
       })
       .catch((error) => {
         throw error?.response?.data.msg;
-      });
-  }
-
-  // 新增：创建工作项类型属性
-  async createIssueTypeProperty(
-    workspaceSlug: string,
-    projectId: string,
-    issueTypeId: string,
-    data: Partial<TIssueTypeProperty>
-  ): Promise<TIssueTypeProperty> {
-    return this.post(`/api/workspaces/${workspaceSlug}/projects/${projectId}/issue-types/${issueTypeId}/issue-properties/`, data)
-      .then((response) => {
-        // 清除缓存以确保下次获取最新数据（包含新属性）
-        this.clearCache(workspaceSlug, projectId);
-        return response?.data;
-      })
-      .catch((error) => {
-        throw error?.response?.data;
-      });
-  }
-
-  // 新增：获取工作项类型属性列表
-  async fetchIssueTypeProperties(
-    workspaceSlug: string,
-    projectId: string,
-    issueTypeId: string
-  ): Promise<TIssueTypeProperty[]> {
-    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/issue-types/${issueTypeId}/properties/`)
-      .then((response) => response?.data)
-      .catch((error) => {
-        throw error?.response?.data;
-      });
-  }
-
-  // 新增：删除工作项类型属性
-  async deleteIssueTypeProperty(
-    workspaceSlug: string,
-    projectId: string,
-    issueTypeId: string,
-    propertyId: string
-  ): Promise<any> {
-    return this.delete(`/api/workspaces/${workspaceSlug}/projects/${projectId}/issue-types/${issueTypeId}/issue-properties/${propertyId}/`)
-      .then((response) => {
-        // 清除缓存以确保下次获取最新数据
-        this.clearCache(workspaceSlug, projectId);
-        return response?.data;
-      })
-      .catch((error) => {
-        throw error?.response?.data;
       });
   }
   
