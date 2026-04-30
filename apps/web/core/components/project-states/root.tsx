@@ -34,7 +34,7 @@ type TIssueTypeSidebarItemProps = {
 };
 
 const IssueTypeSidebarItem: FC<TIssueTypeSidebarItemProps> = ({ issueType, isSelected, onClick }) => {
-  const { name, color, background_color } = issueType.logo_props?.icon || {};
+  const { name, color } = issueType.logo_props?.icon || {};
   const IconComp = name ? ((LucideIcons as any)[name] as React.FC<any> | undefined) : undefined;
 
   return (
@@ -51,7 +51,6 @@ const IssueTypeSidebarItem: FC<TIssueTypeSidebarItemProps> = ({ issueType, isSel
       <span
         className="inline-flex flex-shrink-0 items-center justify-center rounded"
         style={{
-          backgroundColor: background_color || "transparent",
           color: color || "currentColor",
           width: "20px",
           height: "20px",

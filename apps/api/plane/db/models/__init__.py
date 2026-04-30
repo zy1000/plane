@@ -109,7 +109,7 @@ from .sticky import Sticky
 
 from .description import Description, DescriptionVersion
 
-from .issue_type import *
+from .issue_type import IssueType, TypeExtraField, TypeExtraFieldValue
 from .qa import *
 from .ldap import LdapConfig
 from .milestone import *

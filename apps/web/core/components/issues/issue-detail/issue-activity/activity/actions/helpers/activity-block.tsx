@@ -42,13 +42,14 @@ export function IssueActivityBlockComponent(props: TIssueActivityBlockComponent)
   const resolvedFooter = shouldHideActivityChangeFooter(activeTab) ? null : footer;
   return (
     <div
-      className={`relative flex ${resolvedFooter ? "items-start" : "items-center"} gap-4 text-body-sm-regular ${
-        ends === "top" ? `pb-2` : ends === "bottom" ? `pt-2` : `py-2`
+      className={`relative flex ${resolvedFooter ? "items-start" : "items-center"} gap-3 text-body-sm-regular ${
+        ends === "top" ? `pb-1.5` : ends === "bottom" ? `pt-1.5` : `py-1.5`
       }`}
+      style={{ fontSize: "85%" }}
     >
-      <div className="absolute top-0 bottom-0 left-[13px] w-px bg-layer-3" aria-hidden />
-      <div className="z-[4] flex h-7 w-7 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border border-subtle bg-layer-2 text-secondary shadow-raised-100">
-        {icon ? icon : <Network className="h-3.5 w-3.5" />}
+      <div className="absolute top-0 bottom-0 left-[12px] w-px bg-layer-3" aria-hidden />
+      <div className="z-[4] flex h-6 w-6 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border border-subtle bg-layer-2 text-secondary shadow-raised-100 [&_svg]:size-3">
+        {icon ? icon : <Network className="h-3 w-3" />}
       </div>
       <div className="w-full min-w-0 text-secondary">
         <div className="truncate">

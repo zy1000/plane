@@ -260,7 +260,6 @@ export function ExistingIssuesListModal(props: Props) {
                       <span
                         className="inline-flex items-center justify-center rounded-sm"
                         style={{
-                          backgroundColor: type.logo_props?.icon?.background_color || "transparent",
                           color: type.logo_props?.icon?.color || "currentColor",
                           width: "14px",
                           height: "14px",
@@ -336,14 +335,12 @@ export function ExistingIssuesListModal(props: Props) {
                             issue?.type_id &&
                             projectIssueTypesMap[issue.type_id]?.logo_props?.icon &&
                             (() => {
-                              const { name, color, background_color } =
-                                projectIssueTypesMap[issue.type_id].logo_props!.icon!;
+                              const { name, color } = projectIssueTypesMap[issue.type_id].logo_props!.icon!;
                               const IconComp = (LucideIcons as any)[name] as React.FC<any> | undefined;
                               return (
                                 <span
                                   className="inline-flex flex-shrink-0 items-center justify-center rounded-sm"
                                   style={{
-                                    backgroundColor: background_color || "transparent",
                                     color: color || "currentColor",
                                     width: "16px",
                                     height: "16px",

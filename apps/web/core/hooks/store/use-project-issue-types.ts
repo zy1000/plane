@@ -68,6 +68,43 @@ export const useProjectIssueTypes = (workspaceSlug: string | undefined, projectI
     }
   }, [workspaceSlug, projectId]);
 
+  const createIssueType = useCallback(
+    async (data: Partial<TIssueType>) => {
+      if (!workspaceSlug || !projectId) return;
+
+      const createdIssueType = await projectIssueTypeService.createProjectIssueType(workspaceSlug, projectId, data);
+      setIssueTypes((prev) => [...(prev ?? []), createdIssueType]);
+      return createdIssueType;
+    },
+    [workspaceSlug, projectId]
+  );
+
+  const updateIssueType = useCallback(
+    async (issueTypeId: string, data: Partial<TIssueType>) => {
+      if (!workspaceSlug || !projectId) return;
+
+      const updatedIssueType = await projectIssueTypeService.updateProjectIssueType(
+        workspaceSlug,
+        projectId,
+        issueTypeId,
+        data
+      );
+      setIssueTypes((prev) => prev?.map((issueType) => (issueType.id === issueTypeId ? updatedIssueType : issueType)));
+      return updatedIssueType;
+    },
+    [workspaceSlug, projectId]
+  );
+
+  const deleteIssueType = useCallback(
+    async (issueTypeId: string) => {
+      if (!workspaceSlug || !projectId) return;
+
+      await projectIssueTypeService.deleteProjectIssueType(workspaceSlug, projectId, issueTypeId);
+      setIssueTypes((prev) => prev?.filter((issueType) => issueType.id !== issueTypeId));
+    },
+    [workspaceSlug, projectId]
+  );
+
   useEffect(() => {
     fetchIssueTypes();
   }, [fetchIssueTypes]);
@@ -79,5 +116,8 @@ export const useProjectIssueTypes = (workspaceSlug: string | undefined, projectI
     error,
     refetch: fetchIssueTypes,
     forceRefetch: forceFetchIssueTypes,
+    createIssueType,
+    updateIssueType,
+    deleteIssueType,
   };
 };

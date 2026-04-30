@@ -414,13 +414,12 @@ export const useWorkItemFiltersConfig = (props: TUseWorkItemFiltersConfigProps):
         getOptionIcon: (issueType: any) => {
           // 如果有图标配置，使用具体的图标
           if (issueType?.logo_props?.icon) {
-            const { name, color, background_color } = issueType.logo_props.icon;
+            const { name, color } = issueType.logo_props.icon;
             const IconComp = (LucideIcons as any)[name] as React.FC<any> | undefined;
             return (
               <span
                 className="inline-flex items-center justify-center rounded-sm"
                 style={{
-                  backgroundColor: background_color || "transparent",
                   color: color || "currentColor",
                   width: "16px",
                   height: "16px",

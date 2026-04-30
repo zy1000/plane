@@ -22,8 +22,6 @@ type Props = {
   iconClassName?: string;
   title?: string;
   size?: number;
-  /** 仅使用类型主色，不铺浅色底（与部分列表/表格行首图标的去阴影样式一致） */
-  plain?: boolean;
   fallbackIcon?: TLegacyWorkItemIcon;
   fallbackTypeName?: string | null;
 };
@@ -35,7 +33,6 @@ export const WorkItemTypeIcon = (props: Props) => {
     iconClassName,
     title,
     size = 16,
-    plain = false,
     fallbackIcon,
     fallbackTypeName,
   } = props;
@@ -45,7 +42,6 @@ export const WorkItemTypeIcon = (props: Props) => {
   const wrapperStyle: CSSProperties = {
     width: `${size}px`,
     height: `${size}px`,
-    backgroundColor: plain ? "transparent" : (iconConfig?.background_color || "transparent"),
     color: iconConfig?.color || "currentColor",
   };
   const IconComp = iconConfig?.name

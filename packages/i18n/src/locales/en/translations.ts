@@ -1758,7 +1758,9 @@ export default {
     issue_types: {
       label: "Work item types",
       heading: "Work item types",
-      description: "Manage the work item types available in this project. This page is a placeholder for upcoming configuration.",
+      description: "Create and customize different work item types with their own properties.",
+      add: "Add work item type",
+      edit_title: "Edit work item type",
       placeholder: {
         title: "Work item type settings are coming soon",
         description: "You will be able to create and manage project work item types, icons, and related properties here.",

@@ -134,14 +134,13 @@ export const IssueTypeSelect = observer(<T extends Partial<TIssueFields>>(props:
 
   // 渲染类型图标的函数
   const renderTypeIcon = (issueType: any, className: string = "h-3.5 w-3.5") => {
-    const { name, color, background_color } = issueType.logo_props?.icon || {};
+    const { name, color } = issueType.logo_props?.icon || {};
     const IconComp = name ? ((LucideIcons as any)[name] as React.FC<any> | undefined) : undefined;
 
     return (
       <span
         className={cn("inline-flex items-center justify-center rounded-sm flex-shrink-0", className)}
         style={{
-          backgroundColor: background_color || "transparent",
           color: color || "currentColor",
           width: "16px",
           height: "16px",

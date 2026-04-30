@@ -24,11 +24,15 @@ class ProjectIssueTypeListCreateAPIEndpoint(BaseAPIView):
     permission_classes = [ProjectMemberPermission]
 
     def get_queryset(self):
-        return IssueType.objects.filter(
-            workspace__slug=self.kwargs.get("slug"),
-            project_id=self.kwargs.get("project_id"),
-            deleted_at__isnull=True,
-        ).order_by("level", "created_at")
+        return (
+            IssueType.objects.filter(
+                workspace__slug=self.kwargs.get("slug"),
+                project_id=self.kwargs.get("project_id"),
+                deleted_at__isnull=True,
+            )
+            .select_related("project")
+            .order_by("level", "created_at")
+        )
 
     def get(self, request, slug, project_id):
         """获取项目的Issue Type列表"""
@@ -51,11 +55,13 @@ class WorkspaceIssueTypeApiView(BaseAPIView):
     model = IssueType
 
     def get_queryset(self):
-        return IssueType.objects.filter(
-            project__isnull=False,
-            deleted_at__isnull=True,
-        ).select_related("project").order_by(
-            "project_id", "level", "created_at"
+        return (
+            IssueType.objects.filter(
+                project__isnull=False,
+                deleted_at__isnull=True,
+            )
+            .select_related("project")
+            .order_by("project_id", "level", "created_at")
         )
 
     def get(self, request, slug: str):
@@ -66,6 +72,7 @@ class WorkspaceIssueTypeApiView(BaseAPIView):
 
 class IssueTypeViewSet(BaseAPIView):
     model = IssueType
+    permission_classes = [ProjectMemberPermission]
 
     def get_queryset(self):
         return IssueType.objects.filter(
@@ -73,6 +80,24 @@ class IssueTypeViewSet(BaseAPIView):
             project_id=self.kwargs.get("project_id"),
             deleted_at__isnull=True,
         )
+
+    def patch(self, request, slug, project_id, issue_type_id):
+        issue_type = get_object_or_404(self.get_queryset(), pk=issue_type_id)
+        serializer = IssueTypeSerializer(issue_type, data=request.data, partial=True)
+        if serializer.is_valid():
+            issue_type = serializer.save()
+            response_serializer = IssueTypeSerializer(issue_type)
+            return Response(response_serializer.data, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def put(self, request, slug, project_id, issue_type_id):
+        issue_type = get_object_or_404(self.get_queryset(), pk=issue_type_id)
+        serializer = IssueTypeSerializer(issue_type, data=request.data, partial=False)
+        if serializer.is_valid():
+            issue_type = serializer.save()
+            response_serializer = IssueTypeSerializer(issue_type)
+            return Response(response_serializer.data, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     def delete(self, request, slug, project_id, issue_type_id):
         issue_type = get_object_or_404(self.get_queryset(), pk=issue_type_id)
@@ -87,5 +112,3 @@ class IssueTypeViewSet(BaseAPIView):
             )
         issue_type.delete(soft=False)
         return Response(status=status.HTTP_204_NO_CONTENT)
-
-
