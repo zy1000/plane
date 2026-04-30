@@ -24,6 +24,7 @@ class IssueExtraViewSet(BaseViewSet):
             TypeExtraField.objects.filter(
                 workspace__slug=self.kwargs.get("slug"),
                 project_id=self.kwargs.get("project_id"),
+                deleted_at__isnull=True,
             )
             .select_related("issue_type", "project", "workspace")
             .order_by("sort_order", "created_at")

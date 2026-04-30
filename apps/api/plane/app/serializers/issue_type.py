@@ -36,7 +36,7 @@ class TypeExtraFieldSerializer(BaseSerializer):
     project_id = serializers.UUIDField(source="project.id", read_only=True)
     workspace_id = serializers.UUIDField(source="workspace.id", read_only=True)
     issue_type_id = serializers.PrimaryKeyRelatedField(
-        queryset=IssueType.objects.all(),
+        queryset=IssueType.objects.none(),
         source="issue_type",
     )
 
@@ -72,6 +72,21 @@ class TypeExtraFieldSerializer(BaseSerializer):
             "created_at",
             "updated_at",
         ]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        project_id = self.context.get("project_id")
+        workspace_slug = self.context.get("workspace_slug")
+        issue_type_queryset = IssueType.objects.none()
+
+        if project_id or workspace_slug:
+            issue_type_queryset = IssueType.objects.filter(deleted_at__isnull=True)
+            if project_id:
+                issue_type_queryset = issue_type_queryset.filter(project_id=project_id)
+            if workspace_slug:
+                issue_type_queryset = issue_type_queryset.filter(workspace__slug=workspace_slug)
+
+        self.fields["issue_type_id"].queryset = issue_type_queryset
 
     def validate(self, attrs):
         attrs = super().validate(attrs)

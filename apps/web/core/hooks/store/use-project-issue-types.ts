@@ -2,6 +2,13 @@ import { useCallback, useEffect, useState } from "react";
 // services
 import { ProjectIssueTypeService, type TIssueType, projectIssueTypesCache } from "@/services/project/project-issue-type.service";
 
+const getErrorMessage = (error: unknown, fallback: string) => {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  if (error && typeof error === "object" && "msg" in error && typeof error.msg === "string") return error.msg;
+  return fallback;
+};
+
 export const useProjectIssueTypes = (workspaceSlug: string | undefined, projectId: string | undefined) => {
   const [issueTypes, setIssueTypes] = useState<TIssueType[] | undefined>(undefined);
   const [isLoading, setIsLoading] = useState(false);
@@ -36,7 +43,7 @@ export const useProjectIssueTypes = (workspaceSlug: string | undefined, projectI
       }, {} as Record<string, TIssueType>);
       projectIssueTypesCache.set(cacheKey, typesMap);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to fetch issue types");
+      setError(getErrorMessage(err, "Failed to fetch issue types"));
     } finally {
       setIsLoading(false);
     }
@@ -62,11 +69,29 @@ export const useProjectIssueTypes = (workspaceSlug: string | undefined, projectI
       }, {} as Record<string, TIssueType>);
       projectIssueTypesCache.set(cacheKey, typesMap);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to fetch issue types");
+      setError(getErrorMessage(err, "Failed to fetch issue types"));
     } finally {
       setIsLoading(false);
     }
   }, [workspaceSlug, projectId]);
+
+  const fetchIssueType = useCallback(
+    async (issueTypeId: string) => {
+      if (!workspaceSlug || !projectId) return;
+
+      const issueType = await projectIssueTypeService.fetchProjectIssueType(workspaceSlug, projectId, issueTypeId);
+      setIssueTypes((prev) => {
+        const existingIssueTypes = prev ?? [];
+        const exists = existingIssueTypes.some((type) => type.id === issueTypeId);
+
+        return exists
+          ? existingIssueTypes.map((type) => (type.id === issueTypeId ? issueType : type))
+          : [...existingIssueTypes, issueType];
+      });
+      return issueType;
+    },
+    [workspaceSlug, projectId]
+  );
 
   const createIssueType = useCallback(
     async (data: Partial<TIssueType>) => {
@@ -74,6 +99,10 @@ export const useProjectIssueTypes = (workspaceSlug: string | undefined, projectI
 
       const createdIssueType = await projectIssueTypeService.createProjectIssueType(workspaceSlug, projectId, data);
       setIssueTypes((prev) => [...(prev ?? []), createdIssueType]);
+      projectIssueTypesCache.set(projectId, {
+        ...(projectIssueTypesCache.get(projectId) ?? {}),
+        [createdIssueType.id]: createdIssueType,
+      });
       return createdIssueType;
     },
     [workspaceSlug, projectId]
@@ -90,6 +119,10 @@ export const useProjectIssueTypes = (workspaceSlug: string | undefined, projectI
         data
       );
       setIssueTypes((prev) => prev?.map((issueType) => (issueType.id === issueTypeId ? updatedIssueType : issueType)));
+      projectIssueTypesCache.set(projectId, {
+        ...(projectIssueTypesCache.get(projectId) ?? {}),
+        [issueTypeId]: updatedIssueType,
+      });
       return updatedIssueType;
     },
     [workspaceSlug, projectId]
@@ -101,6 +134,11 @@ export const useProjectIssueTypes = (workspaceSlug: string | undefined, projectI
 
       await projectIssueTypeService.deleteProjectIssueType(workspaceSlug, projectId, issueTypeId);
       setIssueTypes((prev) => prev?.filter((issueType) => issueType.id !== issueTypeId));
+      const cache = projectIssueTypesCache.get(projectId);
+      if (cache) {
+        delete cache[issueTypeId];
+        projectIssueTypesCache.set(projectId, cache);
+      }
     },
     [workspaceSlug, projectId]
   );
@@ -116,6 +154,7 @@ export const useProjectIssueTypes = (workspaceSlug: string | undefined, projectI
     error,
     refetch: fetchIssueTypes,
     forceRefetch: forceFetchIssueTypes,
+    fetchIssueType,
     createIssueType,
     updateIssueType,
     deleteIssueType,

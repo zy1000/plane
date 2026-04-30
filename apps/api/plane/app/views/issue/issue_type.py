@@ -81,6 +81,11 @@ class IssueTypeViewSet(BaseAPIView):
             deleted_at__isnull=True,
         )
 
+    def get(self, request, slug, project_id, issue_type_id):
+        issue_type = get_object_or_404(self.get_queryset(), pk=issue_type_id)
+        serializer = IssueTypeSerializer(issue_type)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
     def patch(self, request, slug, project_id, issue_type_id):
         issue_type = get_object_or_404(self.get_queryset(), pk=issue_type_id)
         serializer = IssueTypeSerializer(issue_type, data=request.data, partial=True)

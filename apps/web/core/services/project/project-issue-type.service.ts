@@ -61,6 +61,8 @@ export type TTypeExtraFieldPayload = Omit<Partial<TTypeExtraField>, "id" | "proj
 
 export const projectIssueTypesCache: Map<string, Record<string, TIssueType>> = new Map();
 
+const getErrorPayload = (error: any) => error?.response?.data ?? error;
+
 export class ProjectIssueTypeService extends APIService {
   constructor() {
     super(API_BASE_URL);
@@ -90,7 +92,23 @@ export class ProjectIssueTypeService extends APIService {
         return response?.data;
       })
       .catch((error) => {
-        throw error?.response?.data;
+        throw getErrorPayload(error);
+      });
+  }
+
+  async fetchProjectIssueType(workspaceSlug: string, projectId: string, issueTypeId: string): Promise<TIssueType> {
+    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/issue-types/${issueTypeId}/`)
+      .then((response) => {
+        const issueType = response?.data;
+        if (issueType?.id) {
+          const map = projectIssueTypesCache.get(projectId) || {};
+          map[issueType.id] = issueType;
+          projectIssueTypesCache.set(projectId, map);
+        }
+        return issueType;
+      })
+      .catch((error) => {
+        throw getErrorPayload(error);
       });
   }
   
@@ -108,7 +126,7 @@ export class ProjectIssueTypeService extends APIService {
         return response?.data
       })
       .catch((error) => {
-        throw error?.response?.data;
+        throw getErrorPayload(error);
       });
   }
 
@@ -126,7 +144,7 @@ export class ProjectIssueTypeService extends APIService {
         return response?.data;
       })
       .catch((error) => {
-        throw error?.response?.data;
+        throw getErrorPayload(error);
       });
   }
 
@@ -142,7 +160,7 @@ export class ProjectIssueTypeService extends APIService {
         return response?.data;
       })
       .catch((error) => {
-        throw error?.response?.data;
+        throw getErrorPayload(error);
       });
   }
 
@@ -155,7 +173,7 @@ export class ProjectIssueTypeService extends APIService {
         return response?.data;
       })
       .catch((error) => {
-        throw error?.response?.data.msg;
+        throw getErrorPayload(error);
       });
   }
 
@@ -168,7 +186,7 @@ export class ProjectIssueTypeService extends APIService {
     return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/type-extra-fields/`, params)
       .then((response) => response?.data)
       .catch((error) => {
-        throw error?.response?.data;
+        throw getErrorPayload(error);
       });
   }
 
@@ -180,7 +198,7 @@ export class ProjectIssueTypeService extends APIService {
     return this.post(`/api/workspaces/${workspaceSlug}/projects/${projectId}/type-extra-fields/`, data)
       .then((response) => response?.data)
       .catch((error) => {
-        throw error?.response?.data;
+        throw getErrorPayload(error);
       });
   }
 
@@ -193,7 +211,7 @@ export class ProjectIssueTypeService extends APIService {
     return this.patch(`/api/workspaces/${workspaceSlug}/projects/${projectId}/type-extra-fields/${fieldId}/`, data)
       .then((response) => response?.data)
       .catch((error) => {
-        throw error?.response?.data;
+        throw getErrorPayload(error);
       });
   }
 
@@ -201,7 +219,7 @@ export class ProjectIssueTypeService extends APIService {
     return this.delete(`/api/workspaces/${workspaceSlug}/projects/${projectId}/type-extra-fields/${fieldId}/`)
       .then((response) => response?.data)
       .catch((error) => {
-        throw error?.response?.data;
+        throw getErrorPayload(error);
       });
   }
   

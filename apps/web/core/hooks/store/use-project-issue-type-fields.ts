@@ -6,6 +6,13 @@ import {
   type TTypeExtraFieldPayload,
 } from "@/services/project/project-issue-type.service";
 
+const getErrorMessage = (error: unknown, fallback: string) => {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  if (error && typeof error === "object" && "msg" in error && typeof error.msg === "string") return error.msg;
+  return fallback;
+};
+
 export const useProjectIssueTypeFields = (workspaceSlug: string | undefined, projectId: string | undefined) => {
   const [fields, setFields] = useState<TTypeExtraField[] | undefined>(undefined);
   const [isLoading, setIsLoading] = useState(false);
@@ -23,7 +30,7 @@ export const useProjectIssueTypeFields = (workspaceSlug: string | undefined, pro
       const typeFields = await projectIssueTypeService.fetchTypeExtraFields(workspaceSlug, projectId);
       setFields(typeFields);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to fetch issue type fields");
+      setError(getErrorMessage(err, "Failed to fetch issue type fields"));
     } finally {
       setIsLoading(false);
     }
