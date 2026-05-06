@@ -32,6 +32,7 @@ import {
 import {
   IssueDefaultProperties,
   IssueDescriptionEditor,
+  IssueExtraFields,
   IssueParentTag,
   IssueProjectSelect,
   IssueTitleInput,
@@ -201,6 +202,16 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, projectId]);
+
+  // 切换工作项类型时清空已填的自定义字段值，避免跨类型脏数据；
+  // 编辑模式下若与初始类型一致，仍保留服务端回填值。
+  useEffect(() => {
+    const currentTypeId = watch("type_id");
+    if (!currentTypeId) return;
+    if (data?.id && currentTypeId === data?.type_id) return;
+    setValue("extra_field_values", [], { shouldValidate: false, shouldDirty: false });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [watch("type_id")]);
 
   // 新建工作项时，自动拉取当前类型的状态并回填默认状态
   useEffect(() => {
@@ -470,6 +481,15 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
                   handleGptAssistantClose={() => reset(getValues())}
                   onAssetUpload={onAssetUpload}
                   onClose={onClose}
+                />
+              </div>
+              <div className="px-5">
+                <IssueExtraFields
+                  control={control}
+                  workspaceSlug={workspaceSlug?.toString()}
+                  projectId={projectId}
+                  issueTypeId={watch("type_id")}
+                  handleFormChange={handleFormChange}
                 />
               </div>
             </div>

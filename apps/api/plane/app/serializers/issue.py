@@ -49,6 +49,14 @@ from plane.utils.content_validator import (
     validate_html_content,
     validate_binary_data,
 )
+from plane.utils.extra_field_value import (
+    save_extra_field_values,
+    serialize_extra_field_values,
+    validate_extra_field_values,
+)
+from .issue_type import (
+    TypeExtraFieldValueWriteSerializer,
+)
 
 
 def _is_allowed_to_add_parent(parent_issue, sub_issue):
@@ -118,6 +126,11 @@ class IssueCreateSerializer(BaseSerializer):
         write_only=True,
         required=False,
     )
+    extra_field_values = serializers.ListField(
+        child=TypeExtraFieldValueWriteSerializer(),
+        write_only=True,
+        required=False,
+    )
     project_id = serializers.UUIDField(source="project.id", read_only=True)
     workspace_id = serializers.UUIDField(source="workspace.id", read_only=True)
 
@@ -139,6 +152,7 @@ class IssueCreateSerializer(BaseSerializer):
         data["assignee_ids"] = assignee_ids if assignee_ids else []
         label_ids = self.initial_data.get("label_ids")
         data["label_ids"] = label_ids if label_ids else []
+        data["extra_field_values"] = serialize_extra_field_values(instance)
         return data
 
     def validate(self, attrs):
@@ -247,11 +261,29 @@ class IssueCreateSerializer(BaseSerializer):
             if not _is_allowed_to_add_parent(parent_issue=parent, sub_issue=sub_issue):
                 raise serializers.ValidationError(f"{parent.type.name}不能作为{sub_issue}的父工作项")
 
+        # 校验工作项类型自定义字段值
+        if "extra_field_values" in attrs or self.instance is None:
+            raw_values = attrs.get("extra_field_values") or []
+            issue_type = attrs.get("type") or (self.instance.type if self.instance else None)
+            project_id = self.context.get("project_id") or (
+                str(self.instance.project_id) if self.instance else None
+            )
+            issue_type_id = str(issue_type.id) if issue_type else None
+            items, errors = validate_extra_field_values(
+                raw_values=raw_values,
+                project_id=str(project_id) if project_id else None,
+                issue_type_id=issue_type_id,
+            )
+            if errors:
+                raise serializers.ValidationError({"extra_field_values": errors})
+            attrs["extra_field_values"] = items
+
         return attrs
 
     def create(self, validated_data):
         assignees = validated_data.pop("assignee_ids", None)
         labels = validated_data.pop("label_ids", None)
+        extra_field_items = validated_data.pop("extra_field_values", None)
 
         project_id = self.context["project_id"]
         workspace_id = self.context["workspace_id"]
@@ -260,6 +292,13 @@ class IssueCreateSerializer(BaseSerializer):
 
         # Create Issue
         issue = Issue.objects.create(**validated_data, project_id=project_id)
+        save_extra_field_values(
+            issue=issue,
+            items=extra_field_items or [],
+            project_id=project_id,
+            workspace_id=workspace_id,
+            actor_id=issue.created_by_id,
+        )
 
         # Issue Audit Users
         created_by_id = issue.created_by_id
@@ -330,12 +369,22 @@ class IssueCreateSerializer(BaseSerializer):
     def update(self, instance, validated_data):
         assignees = validated_data.pop("assignee_ids", None)
         labels = validated_data.pop("label_ids", None)
+        extra_field_items = validated_data.pop("extra_field_values", None)
 
         # Related models
         project_id = instance.project_id
         workspace_id = instance.workspace_id
         created_by_id = instance.created_by_id
         updated_by_id = instance.updated_by_id
+
+        if extra_field_items is not None:
+            save_extra_field_values(
+                issue=instance,
+                items=extra_field_items,
+                project_id=project_id,
+                workspace_id=workspace_id,
+                actor_id=updated_by_id or created_by_id,
+            )
         if assignees is not None:
             IssueAssignee.objects.filter(issue=instance).delete()
             try:
@@ -993,12 +1042,17 @@ class IssueDetailSerializer(IssueSerializer):
     description_html = serializers.CharField()
     is_subscribed = serializers.BooleanField(read_only=True)
     is_intake = serializers.BooleanField(read_only=True)
+    extra_field_values = serializers.SerializerMethodField()
+
+    def get_extra_field_values(self, obj):
+        return serialize_extra_field_values(obj)
 
     class Meta(IssueSerializer.Meta):
         fields = IssueSerializer.Meta.fields + [
             "description_html",
             "is_subscribed",
             "is_intake",
+            "extra_field_values",
         ]
         read_only_fields = fields
 

@@ -20,6 +20,7 @@ import {
 import {
   IssueDefaultProperties,
   IssueDescriptionEditor,
+  IssueExtraFields,
   IssueParentTag,
   IssueProjectSelect,
   IssueTitleInput,
@@ -196,6 +197,15 @@ export const BugIssueFormRoot: FC<BugIssueFormProps> = observer((props) => {
     const bugType = issueTypes.find((t) => t.name === "Bug");
     if (bugType) setValue("type_id", bugType.id, { shouldValidate: true });
   }, [issueTypes]);
+
+  // 切换工作项类型时清空已填的自定义字段值，避免跨类型脏数据。
+  useEffect(() => {
+    const currentTypeId = watch("type_id");
+    if (!currentTypeId) return;
+    if (data?.id && currentTypeId === data?.type_id) return;
+    setValue("extra_field_values", [], { shouldValidate: false, shouldDirty: false });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [watch("type_id")]);
 
   const condition =
     (watch("name") && watch("name") !== "") || (watch("description_html") && watch("description_html") !== "<p></p>");
@@ -387,6 +397,15 @@ export const BugIssueFormRoot: FC<BugIssueFormProps> = observer((props) => {
                     handleGptAssistantClose={() => reset(getValues())}
                     onAssetUpload={onAssetUpload}
                     onClose={onClose}
+                  />
+                </div>
+                <div className="px-5 mt-3">
+                  <IssueExtraFields
+                    control={control}
+                    workspaceSlug={workspaceSlug?.toString()}
+                    projectId={projectId}
+                    issueTypeId={watch("type_id")}
+                    handleFormChange={handleFormChange}
                   />
                 </div>
               </div>

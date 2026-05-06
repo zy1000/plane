@@ -88,6 +88,7 @@ from plane.utils.issue_filters import issue_filters
 from plane.utils.order_queryset import order_issue_queryset
 from plane.utils.paginator import GroupedOffsetPaginator, SubGroupedOffsetPaginator
 from plane.utils.timezone_converter import user_timezone_converter
+from plane.utils.extra_field_value import serialize_extra_field_values
 from plane.settings.redis import redis_instance
 from plane.utils.workflow import check_update_state_permission, cancel_issue_pending_transitions
 from plane.db.models import State as StateModel
@@ -507,6 +508,7 @@ class IssueViewSet(BaseViewSet):
             )
             datetime_fields = ["created_at", "updated_at"]
             issue = user_timezone_converter(issue, datetime_fields, request.user.user_timezone)
+            issue["extra_field_values"] = serialize_extra_field_values(serializer.instance)
             # Send the model activity
             model_activity.delay(
                 model_name="issue",

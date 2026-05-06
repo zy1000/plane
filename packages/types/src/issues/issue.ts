@@ -43,6 +43,14 @@ export enum EIssuesStoreType {
   TEAM_PROJECT_WORK_ITEMS = "TEAM_PROJECT_WORK_ITEMS",
 }
 
+export type TIssueExtraFieldType = "text" | "number" | "date" | "boolean" | "select" | "user";
+
+export type TIssueExtraFieldValue = {
+  extra_field_id: string;
+  value: string | string[] | number | boolean | null;
+  field_type?: TIssueExtraFieldType;
+};
+
 export type TBaseIssue = {
   id: string;
   sequence_id: number;
@@ -80,6 +88,8 @@ export type TBaseIssue = {
   is_draft: boolean;
   is_epic?: boolean;
   is_intake?: boolean;
+
+  extra_field_values?: TIssueExtraFieldValue[];
 };
 
 type IssueRelation = {

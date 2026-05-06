@@ -4,7 +4,7 @@ from rest_framework import serializers
 
 # Module imports
 from .base import BaseSerializer
-from plane.db.models import IssueType, TypeExtraField
+from plane.db.models import IssueType, TypeExtraField, TypeExtraFieldValue
 
 
 class TypeExtraFieldSerializer(BaseSerializer):
@@ -103,6 +103,26 @@ class IssueTypeExtraFieldSerializer(BaseSerializer):
             "default_value",
             "validation",
         ]
+
+
+class TypeExtraFieldValueWriteSerializer(serializers.Serializer):
+    """工作项创建/更新时单个自定义字段值的输入校验。
+
+    仅做最基础的形状校验，复杂的字段类型/必填/选项校验由
+    `IssueCreateSerializer.validate` 中统一执行，因为那里能拿到
+    `project_id` / `type_id` 的上下文。
+    """
+
+    extra_field_id = serializers.UUIDField()
+    value = serializers.JSONField(required=False, allow_null=True)
+
+
+class TypeExtraFieldValueReadSerializer(serializers.Serializer):
+    """工作项详情/创建响应中单个自定义字段值的输出形态。"""
+
+    extra_field_id = serializers.UUIDField()
+    field_type = serializers.CharField()
+    value = serializers.JSONField(allow_null=True)
 
 
 class IssueTypeSerializer(BaseSerializer):
