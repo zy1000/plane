@@ -47,8 +47,7 @@ function countWorkDays(start: Date, end: Date): number {
   let count = 0;
   const d = new Date(start);
   while (d <= end) {
-    const day = d.getDay();
-    if (day !== 0 && day !== 6) count++;
+    if (isChinaWorkday(d, formatDateKey(d))) count++;
     d.setDate(d.getDate() + 1);
   }
   return count;
@@ -193,7 +192,9 @@ export const useTimesheetOverview = ({ workspaceSlug, memberId }: TUseTimesheetO
     const filledDays = new Set(activeTimesheets.map((t) => t.date)).size;
     const projects = new Set(activeTimesheets.map((t) => t.project));
     const targetDays =
-      mode === "week" ? 5 : countWorkDays(monthRange.start, monthRange.end);
+      mode === "week"
+        ? countWorkDays(weekStart, weekEnd)
+        : countWorkDays(monthRange.start, monthRange.end);
 
     return {
       totalHours: Math.round(total * 100) / 100,
@@ -202,7 +203,7 @@ export const useTimesheetOverview = ({ workspaceSlug, memberId }: TUseTimesheetO
       avgDailyHours: filledDays > 0 ? Math.round((total / filledDays) * 100) / 100 : 0,
       totalProjects: projects.size,
     };
-  }, [activeTimesheets, mode, monthRange]);
+  }, [activeTimesheets, mode, weekStart, weekEnd, monthRange]);
 
   // --- Daily hours chart data ---
   const dailyHours: TDailyHoursItem[] = useMemo(() => {

@@ -26,7 +26,7 @@ const KPI_CARDS: KpiCardDef[] = [
     iconBg: "bg-blue-500/10",
     iconColor: "text-blue-500",
     getValue: (k) => `${k.totalHours}h`,
-    getSub: (k, m) => (m === "week" ? `目标 40h` : `${k.filledDays} 天累计`),
+    getSub: (k, m) => (m === "week" ? `目标 ${k.targetDays * 8}h` : `${k.filledDays} 天累计`),
     getProgress: (k) => [
       {
         id: "filled",
@@ -97,7 +97,7 @@ export function OverviewKpiCards({ kpis, mode }: Props) {
         const Icon = card.icon;
         const progressData = card.getProgress?.(kpis);
         return (
-          <Card key={card.key} className="p-4 border border-subtle">
+          <Card key={card.key} className="flex h-full flex-col p-4 border border-subtle">
             <div className="flex items-center gap-3">
               <div className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg ${card.iconBg}`}>
                 <Icon className={`h-4.5 w-4.5 ${card.iconColor}`} />
@@ -107,11 +107,13 @@ export function OverviewKpiCards({ kpis, mode }: Props) {
                 <div className="mt-0.5 text-xl font-semibold text-primary">{card.getValue(kpis)}</div>
               </div>
             </div>
-            {progressData && (
-              <div className="mt-3">
+            <div className="mt-3">
+              {progressData ? (
                 <LinearProgressIndicator size="md" data={progressData} />
-              </div>
-            )}
+              ) : (
+                <div className="h-3 w-full shrink-0" aria-hidden />
+              )}
+            </div>
             <div className="mt-2 text-sm text-placeholder">{card.getSub(kpis, mode)}</div>
           </Card>
         );
