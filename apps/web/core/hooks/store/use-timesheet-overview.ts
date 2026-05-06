@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { TimesheetService, type TTimeSheet } from "@/services/issue/timesheet.service";
+import { isChinaWorkday } from "@/helpers/china-holidays.helper";
 import { formatDateKey, getWeekStart, getWeekDays } from "@/hooks/store/use-timesheet-page";
 
 const timesheetService = new TimesheetService();
@@ -90,13 +91,10 @@ function buildAlertDays(dates: Date[], hoursMap: Map<string, number>): TAlertDay
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   return dates
-    .filter((d) => {
-      if (d > today) return false;
-      const day = d.getDay();
-      return day !== 0 && day !== 6;
-    })
+    .filter((d) => d <= today)
     .map((d) => {
       const dateKey = formatDateKey(d);
+      if (!isChinaWorkday(d, dateKey)) return null;
       const hours = hoursMap.get(dateKey) ?? 0;
       if (hours === 0) return { date: dateKey, type: "missing" as const, hours: 0 };
       if (hours < 8) return { date: dateKey, type: "insufficient" as const, hours: Math.round(hours * 100) / 100 };
