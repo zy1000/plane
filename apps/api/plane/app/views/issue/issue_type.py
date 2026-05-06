@@ -31,6 +31,7 @@ class ProjectIssueTypeListCreateAPIEndpoint(BaseAPIView):
                 deleted_at__isnull=True,
             )
             .select_related("project")
+            .prefetch_related("extra_fields")
             .order_by("level", "created_at")
         )
 
@@ -61,6 +62,7 @@ class WorkspaceIssueTypeApiView(BaseAPIView):
                 deleted_at__isnull=True,
             )
             .select_related("project")
+            .prefetch_related("extra_fields")
             .order_by("project_id", "level", "created_at")
         )
 

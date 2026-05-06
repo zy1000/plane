@@ -46,7 +46,6 @@ class TypeExtraField(ProjectBaseModel):
         ("date", "Date"),
         ("boolean", "Boolean"),
         ("select", "Select"),
-        ("multi_select", "Multi Select"),
         ("user", "User"),
     )
 
@@ -56,7 +55,6 @@ class TypeExtraField(ProjectBaseModel):
         related_name="extra_fields",
     )
     name = models.CharField(max_length=255)
-    key = models.CharField(max_length=255)
     description = models.TextField(blank=True)
     logo_props = models.JSONField(default=dict)
     field_type = models.CharField(
@@ -73,9 +71,9 @@ class TypeExtraField(ProjectBaseModel):
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=["project", "issue_type", "key"],
+                fields=["project", "issue_type", "name"],
                 condition=Q(deleted_at__isnull=True),
-                name="type_extra_field_unique_key_active",
+                name="type_extra_field_unique_name_active",
             )
         ]
         verbose_name = "Type Extra Field"

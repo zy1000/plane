@@ -37,10 +37,9 @@ export type TTypeExtraField = {
   issue_type?: string;
   issue_type_id: string;
   name: string;
-  key: string;
   description?: string;
   logo_props?: Record<string, unknown>;
-  field_type: "text" | "number" | "date" | "boolean" | "select" | "multi_select" | "user";
+  field_type: "text" | "number" | "date" | "boolean" | "select" | "user";
   is_required?: boolean;
   is_default?: boolean;
   is_active?: boolean;
@@ -55,7 +54,6 @@ export type TTypeExtraField = {
 export type TTypeExtraFieldPayload = Omit<Partial<TTypeExtraField>, "id" | "project" | "workspace"> & {
   issue_type_id: string;
   name: string;
-  key: string;
   field_type: TTypeExtraField["field_type"];
 };
 

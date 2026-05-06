@@ -261,7 +261,6 @@ function BlockBreakOverlay({ startTime, endTime }: { startTime: string; endTime:
             className="absolute inset-x-0 z-[5] flex items-center justify-center border-y border-tertiary/25 bg-zinc-300/75 dark:bg-zinc-700/75 pointer-events-none select-none"
             style={{ top, height }}
           >
-            <span className="text-[10px] font-medium tracking-wider text-secondary">休息</span>
           </div>
         );
       })}
@@ -827,7 +826,7 @@ export const TimesheetTimelineView = observer(function TimesheetTimelineView({
                         }}
                         aria-label="删除工时"
                       >
-                        <Trash2 className="h-3 w-3" />
+                        <Trash2 className="h-3 w-3" color="red"/>
                       </button>
 
                       {/* 上边界拖拽手柄 */}
@@ -844,9 +843,9 @@ export const TimesheetTimelineView = observer(function TimesheetTimelineView({
                           compact ? "flex-col gap-0" : "flex-col gap-0.5"
                         )}
                       >
-                        <div className="flex items-center gap-1 min-w-0">
+                        <div className="flex items-center gap-1 min-w-0 pr-6">
                           {renderBlockIcon(block, getProjectById, compact ? 3 : 3)}
-                          <p className="text-sm font-medium leading-snug text-primary truncate min-w-0">{block.label}</p>
+                          <p className="text-xs font-medium leading-snug text-primary truncate min-w-0">{block.label}</p>
                         </div>
                         {!compact && (
                           <p className="text-xs leading-snug text-tertiary tabular-nums truncate">
@@ -901,7 +900,7 @@ export const TimesheetTimelineView = observer(function TimesheetTimelineView({
                       <div className={cn("flex h-full min-h-0 justify-start overflow-hidden px-2 py-1", ghCompact ? "flex-col gap-0" : "flex-col gap-0.5")}>
                         <div className="flex items-center gap-1 min-w-0">
                           {renderBlockIcon(gb, getProjectById, 3)}
-                          <p className="text-sm font-medium leading-snug text-primary truncate min-w-0">{gb.label}</p>
+                          <p className="text-xs font-medium leading-snug text-primary truncate min-w-0">{gb.label}</p>
                         </div>
                         {!ghCompact && (
                           <p className="text-xs leading-snug text-tertiary tabular-nums truncate">

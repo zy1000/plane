@@ -7,31 +7,6 @@ from .base import BaseSerializer
 from plane.db.models import IssueType, TypeExtraField
 
 
-class IssueTypeSerializer(BaseSerializer):
-    project_id = serializers.UUIDField(source="project.id", read_only=True)
-
-    class Meta:
-        model = IssueType
-        fields = [
-            "id",
-            "project",
-            "project_id",
-            "name",
-            "description",
-            "logo_props",
-            "is_epic",
-            "is_default",
-            "is_active",
-            "level",
-            "external_source",
-            "external_id",
-            "workspace",
-            "created_at",
-            "updated_at",
-        ]
-        read_only_fields = ["project", "workspace", "created_at", "updated_at"]
-
-
 class TypeExtraFieldSerializer(BaseSerializer):
     project_id = serializers.UUIDField(source="project.id", read_only=True)
     workspace_id = serializers.UUIDField(source="workspace.id", read_only=True)
@@ -51,7 +26,6 @@ class TypeExtraFieldSerializer(BaseSerializer):
             "issue_type",
             "issue_type_id",
             "name",
-            "key",
             "description",
             "logo_props",
             "field_type",
@@ -84,7 +58,9 @@ class TypeExtraFieldSerializer(BaseSerializer):
             if project_id:
                 issue_type_queryset = issue_type_queryset.filter(project_id=project_id)
             if workspace_slug:
-                issue_type_queryset = issue_type_queryset.filter(workspace__slug=workspace_slug)
+                issue_type_queryset = issue_type_queryset.filter(
+                    workspace__slug=workspace_slug
+                )
 
         self.fields["issue_type_id"].queryset = issue_type_queryset
 
@@ -108,3 +84,53 @@ class TypeExtraFieldSerializer(BaseSerializer):
     def create(self, validated_data):
         validated_data.setdefault("project", validated_data["issue_type"].project)
         return super().create(validated_data)
+
+
+class IssueTypeExtraFieldSerializer(BaseSerializer):
+    class Meta:
+        model = TypeExtraField
+        fields = [
+            "id",
+            "name",
+            "description",
+            "logo_props",
+            "field_type",
+            "is_required",
+            "is_default",
+            "is_active",
+            "sort_order",
+            "options",
+            "default_value",
+            "validation",
+        ]
+
+
+class IssueTypeSerializer(BaseSerializer):
+    project_id = serializers.UUIDField(source="project.id", read_only=True)
+    extra_fields = serializers.SerializerMethodField()
+
+    def get_extra_fields(self, obj):
+        active_fields = obj.extra_fields.filter(is_active=True)
+        return IssueTypeExtraFieldSerializer(active_fields, many=True).data
+
+    class Meta:
+        model = IssueType
+        fields = [
+            "id",
+            "project",
+            "project_id",
+            "name",
+            "description",
+            "logo_props",
+            "is_epic",
+            "is_default",
+            "is_active",
+            "level",
+            "external_source",
+            "external_id",
+            "workspace",
+            "extra_fields",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["project", "workspace", "created_at", "updated_at"]

@@ -36,7 +36,7 @@ import { useOutsideClickDetector } from "@plane/hooks";
 import { useTranslation } from "@plane/i18n";
 import { LUCIDE_ICONS_LIST } from "@plane/propel/emoji-icon-picker";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import { Button, EModalPosition, EModalWidth, Input, ModalCore, TextArea, ToggleSwitch } from "@plane/ui";
+import { AlertModalCore, Button, EModalPosition, EModalWidth, Input, ModalCore, TextArea, ToggleSwitch } from "@plane/ui";
 // components
 import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
 import { PageHead } from "@/components/core/page-title";
@@ -103,12 +103,29 @@ const TYPE_ICON_ALIASES: Record<string, TLucideIcon> = {
   type: Type,
 };
 
-const isSelectFieldType = (fieldType: TTypeExtraField["field_type"]) => fieldType === "select" || fieldType === "multi_select";
+const isSelectFieldType = (fieldType: TTypeExtraField["field_type"]) => fieldType === "select";
+
+/**
+ * 从 options 解析选择模式：select / user 共用 options.selection_mode 表达单/多选。
+ * 兼容老字段中可能出现的 selectionMode / multiple: true 写法。
+ */
+const getSelectionMode = (options: TTypeExtraField["options"]): "single" | "multiple" => {
+  if (!options || typeof options !== "object" || Array.isArray(options)) return "single";
+  const raw = (options as { selection_mode?: unknown; selectionMode?: unknown; multiple?: unknown });
+  const selectionMode = raw.selection_mode ?? raw.selectionMode;
+  if (selectionMode === "multiple" || selectionMode === "multi") return "multiple";
+  if (raw.multiple === true) return "multiple";
+  return "single";
+};
 
 const getFieldTypeOption = (fieldType: TTypeExtraField["field_type"]) =>
-  fieldType === "multi_select"
-    ? { ...SELECT_FIELD_TYPE_OPTION, rowLabel: "多选" }
-    : FIELD_TYPE_OPTIONS.find((option) => option.value === fieldType) ?? DEFAULT_FIELD_TYPE_OPTION;
+  FIELD_TYPE_OPTIONS.find((option) => option.value === fieldType) ?? DEFAULT_FIELD_TYPE_OPTION;
+
+/** 字段行展示文案：仅 select 多选会替换为「多选」，其余沿用属性类型原始 rowLabel。 */
+const getFieldRowLabel = (field: TTypeExtraField): string => {
+  if (field.field_type === "select" && getSelectionMode(field.options) === "multiple") return "多选";
+  return getFieldTypeOption(field.field_type).rowLabel;
+};
 
 const getLucideIcon = (iconName?: string) =>
   iconName
@@ -130,16 +147,6 @@ const getTypeIconOption = (issueType?: Partial<TIssueType>) => {
 };
 
 type TTypeIconOption = ReturnType<typeof getTypeIconOption>;
-
-const getFieldKey = (name: string) => {
-  const key = name
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, "_")
-    .replace(/[^a-z0-9_]/g, "");
-
-  return key || `field_${Date.now()}`;
-};
 
 const getApiErrorMessage = (error: unknown, fallback: string) => {
   if (typeof error === "string") return error;
@@ -178,10 +185,25 @@ type TMoreMenuItem = {
 
 function MoreMenu({ items, title = "更多操作" }: { items: TMoreMenuItem[]; title?: string }) {
   const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [referenceElement, setReferenceElement] = useState<HTMLButtonElement | null>(null);
+  const [popperElement, setPopperElement] = useState<HTMLDivElement | null>(null);
+
+  const { styles, attributes } = usePopper(referenceElement, popperElement, {
+    placement: "bottom-end",
+    strategy: "fixed",
+    modifiers: [
+      { name: "preventOverflow", options: { padding: 12 } },
+      { name: "offset", options: { offset: [0, 4] } },
+    ],
+  });
+
+  useOutsideClickDetector(containerRef, () => setIsOpen(false), true);
 
   return (
-    <div className="relative">
+    <div ref={containerRef} className="relative">
       <button
+        ref={setReferenceElement}
         type="button"
         className="rounded-md p-1.5 text-tertiary transition hover:bg-layer-1-hover hover:text-primary"
         onClick={(event) => {
@@ -192,30 +214,39 @@ function MoreMenu({ items, title = "更多操作" }: { items: TMoreMenuItem[]; t
       >
         <MoreHorizontal className="size-4" />
       </button>
-      {isOpen && (
-        <div className="absolute right-0 z-20 mt-1 min-w-36 overflow-hidden rounded-md border border-subtle bg-surface-1 p-1 shadow-raised-200">
-          {items.map((item) => (
-            <button
-              key={item.label}
-              type="button"
-              disabled={item.disabled}
-              className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs transition ${
-                item.tone === "danger"
-                  ? "text-danger-primary hover:bg-danger-subtle"
-                  : "text-primary hover:bg-layer-1-hover"
-              } ${item.disabled ? "cursor-not-allowed opacity-50" : ""}`}
-              onClick={() => {
-                if (item.disabled) return;
-                setIsOpen(false);
-                item.onClick();
-              }}
-            >
-              {item.icon}
-              <span className="min-w-0 flex-1 truncate">{item.label}</span>
-            </button>
-          ))}
-        </div>
-      )}
+      {isOpen &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            ref={setPopperElement}
+            style={styles.popper}
+            {...attributes.popper}
+            data-prevent-outside-click
+            className="z-50 min-w-36 overflow-hidden rounded-md border border-subtle bg-surface-1 p-1 shadow-raised-200"
+          >
+            {items.map((item) => (
+              <button
+                key={item.label}
+                type="button"
+                disabled={item.disabled}
+                className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs transition ${
+                  item.tone === "danger"
+                    ? "text-danger-primary hover:bg-danger-subtle"
+                    : "text-primary hover:bg-layer-1-hover"
+                } ${item.disabled ? "cursor-not-allowed opacity-50" : ""}`}
+                onClick={() => {
+                  if (item.disabled) return;
+                  setIsOpen(false);
+                  item.onClick();
+                }}
+              >
+                {item.icon}
+                <span className="min-w-0 flex-1 truncate">{item.label}</span>
+              </button>
+            ))}
+          </div>,
+          document.body
+        )}
     </div>
   );
 }
@@ -337,17 +368,23 @@ function WorkItemTypeIconPicker({
   );
 }
 
+type TDeleteTarget =
+  | { kind: "issueType"; issueType: TIssueType }
+  | { kind: "field"; field: TTypeExtraField };
+
 type TFieldFormState = {
   name: string;
   description: string;
   field_type: TTypeExtraField["field_type"];
   /** 仅当 field_type 为 number 时使用；空字符串表示不设置默认值 */
   number_default_value: string;
-  /** 仅当 field_type 为 select / multi_select 时使用 */
+  /** 仅当 field_type 为 select 时使用 */
   select_options: string[];
+  /** 仅当 field_type 为 select 时使用：true 表示多选 */
+  select_is_multiple: boolean;
   select_default_value: string;
   select_default_values: string[];
-  /** 仅当 field_type 为 user 时使用 */
+  /** 仅当 field_type 为 user 时使用：true 表示多选 */
   user_is_multiple: boolean;
   is_required: boolean;
   is_active: boolean;
@@ -359,6 +396,7 @@ const DEFAULT_FIELD_FORM: TFieldFormState = {
   field_type: "text",
   number_default_value: "",
   select_options: [""],
+  select_is_multiple: false,
   select_default_value: "",
   select_default_values: [],
   user_is_multiple: false,
@@ -403,12 +441,19 @@ function formatSelectOptionsForForm(field: TTypeExtraField): string[] {
 
 function formatSelectDefaultValueForForm(field: TTypeExtraField): string {
   if (field.field_type !== "select") return "";
+  if (getSelectionMode(field.options) === "multiple") return "";
   return typeof field.default_value === "string" ? field.default_value : "";
 }
 
 function formatSelectDefaultValuesForForm(field: TTypeExtraField): string[] {
-  if (field.field_type !== "multi_select") return [];
+  if (field.field_type !== "select") return [];
+  if (getSelectionMode(field.options) !== "multiple") return [];
   return Array.isArray(field.default_value) ? field.default_value.map((value) => String(value)) : [];
+}
+
+function formatSelectIsMultipleForForm(field: TTypeExtraField): boolean {
+  if (field.field_type !== "select") return false;
+  return getSelectionMode(field.options) === "multiple";
 }
 
 function getNormalizedSelectOptions(values: string[]) {
@@ -418,14 +463,7 @@ function getNormalizedSelectOptions(values: string[]) {
 
 function formatUserIsMultipleForForm(field: TTypeExtraField): boolean {
   if (field.field_type !== "user") return false;
-  const options = field.options;
-  if (!options || typeof options !== "object" || Array.isArray(options)) return false;
-
-  const selectionMode = (options as { selection_mode?: unknown; selectionMode?: unknown; multiple?: unknown }).selection_mode ??
-    (options as { selectionMode?: unknown }).selectionMode;
-  if (selectionMode === "multiple" || selectionMode === "multi") return true;
-
-  return (options as { multiple?: unknown }).multiple === true;
+  return getSelectionMode(field.options) === "multiple";
 }
 
 function FieldTypeSelect({
@@ -598,7 +636,9 @@ function InlineFieldForm({
                 ...form,
                 field_type: fieldType,
                 ...(fieldType !== "number" ? { number_default_value: "" } : {}),
-                ...(!isSelectFieldType(fieldType) ? { select_default_value: "", select_default_values: [] } : {}),
+                ...(!isSelectFieldType(fieldType)
+                  ? { select_default_value: "", select_default_values: [], select_is_multiple: false }
+                  : {}),
                 ...(fieldType !== "user" ? { user_is_multiple: false } : {}),
               })
             }
@@ -623,8 +663,8 @@ function InlineFieldForm({
                   <label className="flex items-center gap-1.5">
                     <input
                       type="radio"
-                      checked={form.field_type === "select"}
-                      onChange={() => onChange({ ...form, field_type: "select", select_default_values: [] })}
+                      checked={!form.select_is_multiple}
+                      onChange={() => onChange({ ...form, select_is_multiple: false, select_default_values: [] })}
                       className="size-3.5"
                     />
                     单选
@@ -632,8 +672,8 @@ function InlineFieldForm({
                   <label className="flex items-center gap-1.5">
                     <input
                       type="radio"
-                      checked={form.field_type === "multi_select"}
-                      onChange={() => onChange({ ...form, field_type: "multi_select", select_default_value: "" })}
+                      checked={form.select_is_multiple}
+                      onChange={() => onChange({ ...form, select_is_multiple: true, select_default_value: "" })}
                       className="size-3.5"
                     />
                     多选
@@ -691,7 +731,7 @@ function InlineFieldForm({
               {selectOptions.length > 0 && (
                 <div>
                   <label className="mb-1 block text-xs font-medium text-secondary">默认值</label>
-                  {form.field_type === "select" ? (
+                  {!form.select_is_multiple ? (
                     <div className="space-y-1.5 text-xs text-secondary">
                       <label className="flex items-center gap-2">
                         <input
@@ -906,9 +946,12 @@ function IssueTypesSettingsPage({ params }: Route.ComponentProps) {
   const [editingField, setEditingField] = useState<TTypeExtraField | undefined>();
   const [fieldForm, setFieldForm] = useState<TFieldFormState>(DEFAULT_FIELD_FORM);
   const [isFieldSubmitting, setIsFieldSubmitting] = useState(false);
+  const inlineFormRef = useRef<HTMLDivElement>(null);
   const [isTypeModalOpen, setIsTypeModalOpen] = useState(false);
   const [editingIssueType, setEditingIssueType] = useState<TIssueType | undefined>();
   const [isTypeSubmitting, setIsTypeSubmitting] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<TDeleteTarget | undefined>();
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     if (isTypeModalOpen) {
@@ -953,6 +996,7 @@ function IssueTypesSettingsPage({ params }: Route.ComponentProps) {
       field_type: field.field_type,
       number_default_value: formatNumberFieldDefaultForForm(field),
       select_options: formatSelectOptionsForForm(field),
+      select_is_multiple: formatSelectIsMultipleForForm(field),
       select_default_value: formatSelectDefaultValueForForm(field),
       select_default_values: formatSelectDefaultValuesForForm(field),
       user_is_multiple: formatUserIsMultipleForForm(field),
@@ -960,6 +1004,11 @@ function IssueTypesSettingsPage({ params }: Route.ComponentProps) {
       is_active: field.is_active !== false,
     });
   };
+
+  useEffect(() => {
+    if (!addingFieldFor) return;
+    inlineFormRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [addingFieldFor]);
 
   const issueTypeIdsKey = useMemo(
     () => (issueTypes?.length ? [...issueTypes].map((t) => t.id).sort().join(",") : ""),
@@ -1027,20 +1076,9 @@ function IssueTypesSettingsPage({ params }: Route.ComponentProps) {
     }
   };
 
-  const handleDeleteIssueType = async (issueType: TIssueType) => {
+  const requestDeleteIssueType = (issueType: TIssueType) => {
     if (issueType.is_default) return;
-    if (!window.confirm(`确定要删除工作项类型「${issueType.name}」吗？`)) return;
-
-    try {
-      await deleteIssueType(issueType.id);
-      if (expandedId === issueType.id) setExpandedId(undefined);
-    } catch (error) {
-      setToast({
-        type: TOAST_TYPE.ERROR,
-        title: "删除失败",
-        message: getApiErrorMessage(error, "该工作项类型可能正在使用中，暂时无法删除。"),
-      });
-    }
+    setDeleteTarget({ kind: "issueType", issueType });
   };
 
   const handleSubmitField = async (issueTypeId: string) => {
@@ -1061,7 +1099,7 @@ function IssueTypesSettingsPage({ params }: Route.ComponentProps) {
       numberDefaultPayload = parsed.value;
     }
 
-    let selectOptionsPayload: { choices: string[] } | undefined;
+    let selectOptionsPayload: { choices: string[]; selection_mode: "single" | "multiple" } | undefined;
     let selectDefaultPayload: string | string[] | null | undefined;
     if (isSelectFieldType(fieldForm.field_type)) {
       const filledOptions = fieldForm.select_options.map((option) => option.trim()).filter(Boolean);
@@ -1085,13 +1123,15 @@ function IssueTypesSettingsPage({ params }: Route.ComponentProps) {
         return;
       }
 
-      selectOptionsPayload = { choices: selectOptions };
-      selectDefaultPayload =
-        fieldForm.field_type === "select"
-          ? selectOptions.includes(fieldForm.select_default_value)
-            ? fieldForm.select_default_value
-            : null
-          : fieldForm.select_default_values.filter((value) => selectOptions.includes(value));
+      selectOptionsPayload = {
+        choices: selectOptions,
+        selection_mode: fieldForm.select_is_multiple ? "multiple" : "single",
+      };
+      selectDefaultPayload = fieldForm.select_is_multiple
+        ? fieldForm.select_default_values.filter((value) => selectOptions.includes(value))
+        : selectOptions.includes(fieldForm.select_default_value)
+          ? fieldForm.select_default_value
+          : null;
     }
 
     const userOptionsPayload =
@@ -1120,7 +1160,6 @@ function IssueTypesSettingsPage({ params }: Route.ComponentProps) {
         const payload: TTypeExtraFieldPayload = {
           issue_type_id: issueTypeId,
           name,
-          key: getFieldKey(name),
           description: fieldForm.description.trim(),
           field_type: fieldForm.field_type,
           is_required: fieldForm.is_required,
@@ -1145,18 +1184,35 @@ function IssueTypesSettingsPage({ params }: Route.ComponentProps) {
     }
   };
 
-  const handleDeleteField = async (field: TTypeExtraField) => {
-    if (!window.confirm(`确定要删除自定义属性「${field.name}」吗？`)) return;
+  const requestDeleteField = (field: TTypeExtraField) => {
+    setDeleteTarget({ kind: "field", field });
+  };
 
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+    setIsDeleting(true);
     try {
-      await deleteField(field.id);
-      if (editingField?.id === field.id) resetFieldForm();
+      if (deleteTarget.kind === "issueType") {
+        await deleteIssueType(deleteTarget.issueType.id);
+        if (expandedId === deleteTarget.issueType.id) setExpandedId(undefined);
+      } else {
+        await deleteField(deleteTarget.field.id);
+        if (editingField?.id === deleteTarget.field.id) resetFieldForm();
+      }
+      setDeleteTarget(undefined);
     } catch (error) {
       setToast({
         type: TOAST_TYPE.ERROR,
         title: "删除失败",
-        message: getApiErrorMessage(error, "无法删除自定义属性，请稍后重试。"),
+        message: getApiErrorMessage(
+          error,
+          deleteTarget.kind === "issueType"
+            ? "该工作项类型可能正在使用中，暂时无法删除。"
+            : "无法删除自定义属性，请稍后重试。"
+        ),
       });
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -1223,6 +1279,10 @@ function IssueTypesSettingsPage({ params }: Route.ComponentProps) {
               {issueTypes?.map((issueType) => {
                 const isExpanded = expandedId === issueType.id;
                 const typeFields = fieldsByIssueTypeId[issueType.id] ?? [];
+                const fieldsForList =
+                  editingField && addingFieldFor === issueType.id
+                    ? typeFields.filter((f) => f.id !== editingField.id)
+                    : typeFields;
 
                 return (
                   <div key={issueType.id} className="py-1.5 first:pt-0 last:pb-0">
@@ -1276,7 +1336,7 @@ function IssueTypesSettingsPage({ params }: Route.ComponentProps) {
                             disabled: issueType.is_default,
                             tone: "danger",
                             icon: <Trash2 className="size-3.5 shrink-0" strokeWidth={2} />,
-                            onClick: () => handleDeleteIssueType(issueType),
+                            onClick: () => requestDeleteIssueType(issueType),
                           },
                         ]}
                       />
@@ -1294,27 +1354,16 @@ function IssueTypesSettingsPage({ params }: Route.ComponentProps) {
                           <div className="p-4">
                             <div className="mb-3 text-sm font-medium text-primary">属性</div>
 
-                            {addingFieldFor === issueType.id ? (
-                              <InlineFieldForm
-                                form={fieldForm}
-                                isSubmitting={isFieldSubmitting}
-                                submitLabel={editingField ? "更新" : "创建"}
-                                onChange={setFieldForm}
-                                onCancel={resetFieldForm}
-                                onSubmit={() => handleSubmitField(issueType.id)}
-                              />
-                            ) : (
-                              <div className="space-y-2">
-                                {typeFields.map((field) => {
-                                  const fieldTypeOption = getFieldTypeOption(field.field_type);
-                                  return (
+                            {fieldsForList.length > 0 && (
+                              <div className="mb-4 space-y-2">
+                                {fieldsForList.map((field) => (
                                     <div
                                       key={field.id}
-                                      className="flex items-center gap-3 rounded-md border border-subtle px-3 py-2.5 text-sm transition hover:border-primary/20 hover:bg-layer-1-hover"
+                                      className="flex items-center gap-3 rounded-md border border-strong px-3 py-2.5 text-sm transition hover:border-primary/40 hover:bg-layer-1-hover"
                                     >
                                       <GripVertical className="size-4 shrink-0 text-tertiary" />
                                       <span className="min-w-0 flex-1 truncate font-medium text-primary">{field.name}</span>
-                                      <span className="text-xs text-secondary">{fieldTypeOption.rowLabel}</span>
+                                      <span className="text-xs text-secondary">{getFieldRowLabel(field)}</span>
                                       {field.is_active === false && <StatusBadge tone="danger">已禁用</StatusBadge>}
                                       <MoreMenu
                                         items={[
@@ -1331,22 +1380,35 @@ function IssueTypesSettingsPage({ params }: Route.ComponentProps) {
                                             label: "删除",
                                             tone: "danger",
                                             icon: <Trash2 className="size-3.5 shrink-0" strokeWidth={2} />,
-                                            onClick: () => handleDeleteField(field),
+                                            onClick: () => requestDeleteField(field),
                                           },
                                         ]}
                                       />
                                     </div>
-                                  );
-                                })}
-                                <Button
-                                  variant="neutral-primary"
-                                  size="sm"
-                                  prependIcon={<Plus className="size-3" />}
-                                  onClick={() => openCreateFieldForm(issueType.id)}
-                                >
-                                  添加新属性
-                                </Button>
+                                  ))}
                               </div>
+                            )}
+
+                            {addingFieldFor === issueType.id ? (
+                              <div ref={inlineFormRef}>
+                              <InlineFieldForm
+                                form={fieldForm}
+                                isSubmitting={isFieldSubmitting}
+                                submitLabel={editingField ? "更新" : "创建"}
+                                onChange={setFieldForm}
+                                onCancel={resetFieldForm}
+                                onSubmit={() => handleSubmitField(issueType.id)}
+                              />
+                              </div>
+                            ) : (
+                              <Button
+                                variant="neutral-primary"
+                                size="sm"
+                                prependIcon={<Plus className="size-3" />}
+                                onClick={() => openCreateFieldForm(issueType.id)}
+                              >
+                                添加新属性
+                              </Button>
                             )}
                             {fieldsLoading && <p className="mt-2 text-xs text-secondary">正在同步属性...</p>}
                           </div>
@@ -1393,6 +1455,31 @@ function IssueTypesSettingsPage({ params }: Route.ComponentProps) {
               await handleCreateIssueType(data);
             }
           }}
+        />
+        <AlertModalCore
+          isOpen={!!deleteTarget}
+          isSubmitting={isDeleting}
+          variant="danger"
+          title={deleteTarget?.kind === "field" ? "删除自定义属性" : "删除工作项类型"}
+          primaryButtonText={{ loading: "删除中", default: "删除" }}
+          secondaryButtonText="取消"
+          content={
+            deleteTarget ? (
+              <>
+                确定要删除{deleteTarget.kind === "field" ? "自定义属性" : "工作项类型"}
+                <span className="font-medium text-primary">
+                  「{deleteTarget.kind === "field" ? deleteTarget.field.name : deleteTarget.issueType.name}」
+                </span>
+                吗？此操作不可撤销。
+              </>
+            ) : (
+              ""
+            )
+          }
+          handleClose={() => {
+            if (!isDeleting) setDeleteTarget(undefined);
+          }}
+          handleSubmit={handleConfirmDelete}
         />
       </div>
     </SettingsContentWrapper>
