@@ -15,6 +15,7 @@ import {
   TIMESHEET_CATEGORY_KEY,
   type TTimesheetPanelKind,
 } from "@/constants/timesheet-category";
+import { calcWorkMinutes, getOverlappingBreaks } from "@/helpers/timesheet-break.helper";
 import { useProject } from "@/hooks/store/use-project";
 import type { TTimeSheet, TTimeSheetCreatePayload } from "@/services/issue/timesheet.service";
 import { formatDateKey, isDateEditable, type TTimesheetRow } from "@/hooks/store/use-timesheet-page";
@@ -234,6 +235,37 @@ function renderBlockIcon(
     >
       <FolderOpen className={sizeClass} />
     </span>
+  );
+}
+
+/**
+ * 渲染工时块内部与休息时段（午休 / 晚饭）相交的灰色"休息"覆盖。
+ *
+ * - 仅当工时块本身覆盖到休息段时才会渲染（即"如果有时间块才显示休息块"）。
+ * - 位置基于块自身坐标系计算；父容器 `overflow-hidden` 自动负责越界裁切。
+ * - `pointer-events: none` 避免干扰块的点击 / 拖拽。
+ */
+function BlockBreakOverlay({ startTime, endTime }: { startTime: string; endTime: string }) {
+  const startMins = parseTimeToMinutes(startTime);
+  const endMins = parseTimeToMinutes(endTime);
+  const overlaps = getOverlappingBreaks(startMins, endMins);
+  if (overlaps.length === 0) return null;
+  return (
+    <>
+      {overlaps.map((ov) => {
+        const top = ((ov.start - startMins) / 60) * HOUR_HEIGHT;
+        const height = ((ov.end - ov.start) / 60) * HOUR_HEIGHT;
+        return (
+          <div
+            key={`${ov.start}-${ov.end}`}
+            className="absolute inset-x-0 z-[5] flex items-center justify-center border-y border-tertiary/25 bg-zinc-300/75 dark:bg-zinc-700/75 pointer-events-none select-none"
+            style={{ top, height }}
+          >
+            <span className="text-[10px] font-medium tracking-wider text-secondary">休息</span>
+          </div>
+        );
+      })}
+    </>
   );
 }
 
@@ -473,7 +505,13 @@ function useTimelineBlockDrag({
         return;
       }
 
-      const hours = String(Math.round(((newEnd - newStart) / 60) * 100) / 100);
+      const workMinutes = calcWorkMinutes(newStart, newEnd);
+      if (workMinutes <= 0) {
+        message.warning("该时间段全部为休息时间，无法登记工时");
+        setDragPreview(null);
+        return;
+      }
+      const hours = String(Math.round((workMinutes / 60) * 100) / 100);
       try {
         await updateRef.current(drag.blockId, {
           date: preview.date,
@@ -517,7 +555,7 @@ export const TimesheetTimelineView = observer(function TimesheetTimelineView({
   workspaceSlug,
 }: TTimesheetTimelineViewProps) {
   const { getProjectById } = useProject();
-  const { timesheets, weekDays, getDayTotalHours, isLoading, updateTimesheet, deleteTimesheet, createTimesheet, addRow } = timesheetPage;
+  const { timesheets, weekDays, getDayTotalHours, updateTimesheet, deleteTimesheet, createTimesheet, addRow } = timesheetPage;
 
   const today = formatDateKey(new Date());
 
@@ -594,7 +632,12 @@ export const TimesheetTimelineView = observer(function TimesheetTimelineView({
     if (!pc) return;
     const startMins = parseTimeToMinutes(pc.startTime);
     const endMins = parseTimeToMinutes(pc.endTime);
-    const hours = String(Math.round(((endMins - startMins) / 60) * 100) / 100);
+    const workMinutes = calcWorkMinutes(startMins, endMins);
+    if (workMinutes <= 0) {
+      message.warning("该时间段全部为休息时间，无法登记工时");
+      return;
+    }
+    const hours = String(Math.round((workMinutes / 60) * 100) / 100);
     createTimesheet(row.projectId, {
       date: pc.date,
       start_time: pc.startTime,
@@ -825,6 +868,8 @@ export const TimesheetTimelineView = observer(function TimesheetTimelineView({
                         )}
                       </div>
 
+                      <BlockBreakOverlay startTime={block.start_time} endTime={block.end_time} />
+
                       {/* 下边界拖拽手柄 */}
                       <div
                         className="absolute inset-x-0 bottom-0 h-2 cursor-ns-resize z-10 group/bottom"
@@ -874,16 +919,10 @@ export const TimesheetTimelineView = observer(function TimesheetTimelineView({
                           </p>
                         )}
                       </div>
+                      <BlockBreakOverlay startTime={dragPreview.startTime} endTime={dragPreview.endTime} />
                     </div>
                   );
                 })()}
-
-                {/* 空状态提示 */}
-                {blocks.length === 0 && !isLoading && (
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <span className="text-xs text-subtle/30 select-none">—</span>
-                  </div>
-                )}
               </div>
             );
           })}

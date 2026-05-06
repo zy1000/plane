@@ -11,6 +11,7 @@ import { Check, ChevronDown, Clock, FileText, Plus, Trash2 } from "lucide-react"
 import { usePopper } from "react-popper";
 import { useOutsideClickDetector } from "@plane/hooks";
 import { cn } from "@plane/utils";
+import { addWorkHoursToStart, getWorkHours } from "@/helpers/timesheet-break.helper";
 import {
   getTimesheetErrorMessage,
   hasDuplicateTimesheetEntry,
@@ -28,16 +29,6 @@ const END_TIME_OPTIONS = [...TIME_OPTIONS, "24:00"];
 
 const DEFAULT_START_TIME = "08:30";
 
-function getDurationHours(startTime: string, endTime: string): number | null {
-  if (!startTime || !endTime) return null;
-  const [sh, sm] = startTime.split(":").map(Number);
-  const [eh, em] = endTime.split(":").map(Number);
-  const startMins = sh * 60 + sm;
-  const endMins = eh * 60 + em;
-  if (isNaN(startMins) || isNaN(endMins) || endMins <= startMins) return null;
-  return Math.round(((endMins - startMins) / 60) * 100) / 100;
-}
-
 function parseTimeInput(input: string): number | null {
   const trimmed = input.trim().toLowerCase();
   if (!trimmed) return null;
@@ -48,15 +39,6 @@ function parseTimeInput(input: string): number | null {
   if (isNaN(val) || val < 0.5) return null;
   // 取整到最近的 0.5 小时
   return Math.round(val * 2) / 2;
-}
-
-function hoursToEndTime(startTime: string, hours: number): string {
-  const [sh, sm] = startTime.split(":").map(Number);
-  const totalMinutes = sh * 60 + sm + Math.round(hours * 60);
-  if (totalMinutes >= 24 * 60) return "24:00";
-  const eh = Math.floor(totalMinutes / 60);
-  const em = totalMinutes % 60;
-  return `${String(eh).padStart(2, "0")}:${String(em).padStart(2, "0")}`;
 }
 
 function formatHours(hours: number): string {
@@ -182,7 +164,7 @@ export function TimesheetCellPopover({
 
   useOutsideClickDetector(dropdownRef, closePopover);
 
-  const derivedHours = getDurationHours(startTime, endTime);
+  const derivedHours = getWorkHours(startTime, endTime);
   const canSave = !!derivedHours && !timeError;
 
   const handleStartTimeChange = (v: string) => {
@@ -190,10 +172,10 @@ export function TimesheetCellPopover({
     setTimeError("");
     const parsedHours = parseTimeInput(timeInput);
     if (parsedHours) {
-      setEndTime(hoursToEndTime(v, parsedHours));
+      setEndTime(addWorkHoursToStart(v, parsedHours));
       return;
     }
-    if (getDurationHours(v, endTime) === null && endTime !== v) {
+    if (getWorkHours(v, endTime) === null && endTime !== v) {
       setTimeError("结束时间必须晚于开始时间");
     }
   };
@@ -201,7 +183,7 @@ export function TimesheetCellPopover({
   const handleEndTimeChange = (v: string) => {
     setEndTime(v);
     setTimeError("");
-    const duration = getDurationHours(startTime, v);
+    const duration = getWorkHours(startTime, v);
     if (duration !== null) {
       setTimeInput(String(duration));
       return;
@@ -221,7 +203,7 @@ export function TimesheetCellPopover({
 
     const parsedHours = parseTimeInput(value);
     if (parsedHours) {
-      setEndTime(hoursToEndTime(startTime, parsedHours));
+      setEndTime(addWorkHoursToStart(startTime, parsedHours));
       setTimeError("");
       return;
     }
@@ -230,7 +212,7 @@ export function TimesheetCellPopover({
   };
 
   const handleSave = async (close: () => void) => {
-    const h = getDurationHours(startTime, endTime);
+    const h = getWorkHours(startTime, endTime);
     if (!h) {
       setTimeError("请选择有效的开始和结束时间");
       return;

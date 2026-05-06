@@ -11,6 +11,7 @@ import { Check, ChevronDown, Clock, Trash2, FileText } from "lucide-react";
 import { Avatar } from "@plane/ui";
 import { cn, getFileURL } from "@plane/utils";
 import { TIMESHEET_CATEGORY_KEY } from "@/constants/timesheet-category";
+import { addWorkHoursToStart, getWorkHours } from "@/helpers/timesheet-break.helper";
 import { useUser } from "@/hooks/store/user";
 import { useTimesheetCategories } from "@/hooks/store/use-timesheet-categories";
 import {
@@ -42,6 +43,8 @@ const TIME_OPTIONS = Array.from({ length: 48 }, (_, index) => {
   return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
 });
 
+const END_TIME_OPTIONS = [...TIME_OPTIONS, "24:00"];
+
 const DEFAULT_START_TIME = "08:30";
 
 /**
@@ -63,25 +66,6 @@ function parseTimeInput(input: string): number | null {
 function formatHours(hours: number): string {
   if (hours === 0) return "0h";
   return `${hours}h`;
-}
-
-/** 将 hours 十进制转成 HH:MM 时间字符串（用于 start_time/end_time） */
-function hoursToEndTime(startTime: string, hours: number): string {
-  const [sh, sm] = startTime.split(":").map(Number);
-  const totalMinutes = sh * 60 + sm + Math.round(hours * 60);
-  const eh = Math.floor(totalMinutes / 60) % 24;
-  const em = totalMinutes % 60;
-  return `${String(eh).padStart(2, "0")}:${String(em).padStart(2, "0")}`;
-}
-
-function getDurationHours(startTime: string, endTime: string): number | null {
-  if (!startTime || !endTime) return null;
-  const [startHour, startMinute] = startTime.split(":").map(Number);
-  const [endHour, endMinute] = endTime.split(":").map(Number);
-  const startMinutes = startHour * 60 + startMinute;
-  const endMinutes = endHour * 60 + endMinute;
-  if (Number.isNaN(startMinutes) || Number.isNaN(endMinutes) || endMinutes <= startMinutes) return null;
-  return Math.round(((endMinutes - startMinutes) / 60) * 100) / 100;
 }
 
 /** 格式化日期为 "YYYY/MM/DD" */
@@ -132,10 +116,11 @@ type TTimeSelectProps = {
   value: string;
   onChange: (value: string) => void;
   className?: string;
+  options?: string[];
 };
 
 function TimeSelect(props: TTimeSelectProps) {
-  const { value, onChange, className } = props;
+  const { value, onChange, className, options = TIME_OPTIONS } = props;
 
   return (
     <Listbox value={value} onChange={onChange}>
@@ -154,7 +139,7 @@ function TimeSelect(props: TTimeSelectProps) {
           leaveTo="opacity-0 translate-y-1"
         >
           <Listbox.Options className="absolute z-30 mt-1 max-h-44 w-full overflow-y-auto rounded-md border border-subtle bg-surface-1 p-1.5 shadow-raised-200 focus:outline-none">
-            {TIME_OPTIONS.map((option) => (
+            {options.map((option) => (
               <Listbox.Option
                 key={option}
                 value={option}
@@ -219,7 +204,7 @@ export const TimesheetPanel = observer(function TimesheetPanel(props: TTimesheet
   const [endTime, setEndTime] = useState(DEFAULT_START_TIME);
 
   const aggregated = useMemo(() => aggregateByUser(timesheets), [timesheets]);
-  const derivedHours = getDurationHours(startTime, endTime);
+  const derivedHours = getWorkHours(startTime, endTime);
   const canSave = !!timeInput.trim() && !!derivedHours;
 
   const handleTimeInputChange = (value: string) => {
@@ -228,7 +213,7 @@ export const TimesheetPanel = observer(function TimesheetPanel(props: TTimesheet
 
     const parsedHours = parseTimeInput(value);
     if (parsedHours) {
-      setEndTime(hoursToEndTime(startTime, parsedHours));
+      setEndTime(addWorkHoursToStart(startTime, parsedHours));
     }
   };
 
@@ -238,17 +223,17 @@ export const TimesheetPanel = observer(function TimesheetPanel(props: TTimesheet
 
     const parsedHours = parseTimeInput(timeInput);
     if (parsedHours) {
-      setEndTime(hoursToEndTime(value, parsedHours));
+      setEndTime(addWorkHoursToStart(value, parsedHours));
       return;
     }
 
-    const recalculatedHours = getDurationHours(value, endTime);
+    const recalculatedHours = getWorkHours(value, endTime);
     if (recalculatedHours) {
       setTimeInput(String(recalculatedHours));
       return;
     }
 
-    if (endTime && getDurationHours(value, endTime) === null) {
+    if (endTime && getWorkHours(value, endTime) === null) {
       setTimeError("结束时间必须晚于开始时间");
     }
   };
@@ -257,7 +242,7 @@ export const TimesheetPanel = observer(function TimesheetPanel(props: TTimesheet
     setEndTime(value);
     if (timeError) setTimeError("");
 
-    const recalculatedHours = getDurationHours(startTime, value);
+    const recalculatedHours = getWorkHours(startTime, value);
     if (recalculatedHours) {
       setTimeInput(String(recalculatedHours));
       return;
@@ -267,7 +252,7 @@ export const TimesheetPanel = observer(function TimesheetPanel(props: TTimesheet
   };
 
   const handleSave = async () => {
-    const hours = getDurationHours(startTime, endTime);
+    const hours = getWorkHours(startTime, endTime);
     if (!hours) {
       setTimeError("请选择有效的开始时间和结束时间");
       return;
@@ -370,6 +355,7 @@ export const TimesheetPanel = observer(function TimesheetPanel(props: TTimesheet
                 value={endTime}
                 onChange={handleEndTimeChange}
                 className="min-w-0 w-full"
+                options={END_TIME_OPTIONS}
               />
             </div>
           </div>
