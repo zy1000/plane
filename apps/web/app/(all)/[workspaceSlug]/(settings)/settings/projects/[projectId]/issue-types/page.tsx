@@ -161,15 +161,22 @@ const getApiErrorMessage = (error: unknown, fallback: string) => {
   return fallback;
 };
 
-const StatusBadge = ({ children, tone = "neutral" }: { children: string; tone?: "neutral" | "danger" | "blue" }) => {
+const StatusBadge = ({
+  children,
+  tone = "neutral",
+}: {
+  children: string;
+  tone?: "neutral" | "danger" | "blue" | "success";
+}) => {
   const toneClassName = {
-    neutral: "border-subtle bg-surface-2 text-secondary",
-    danger: "border-danger-strong/40 bg-danger-subtle text-danger-primary",
-    blue: "border-accent-primary/30 bg-accent-primary/10 text-accent-primary",
+    neutral: "border border-subtle bg-surface-2 text-secondary",
+    danger: "border-0 bg-danger-subtle/35 text-danger-primary",
+    blue: "border border-accent-primary/30 bg-accent-primary/10 text-accent-primary",
+    success: "border-0 bg-success-subtle/35 text-success-primary",
   }[tone];
 
   return (
-    <span className={`inline-flex items-center rounded border px-2 py-0.5 text-[11px] font-medium ${toneClassName}`}>
+    <span className={`inline-flex items-center rounded px-2 py-0.5 text-[11px] font-medium ${toneClassName}`}>
       {children}
     </span>
   );
@@ -1216,18 +1223,6 @@ function IssueTypesSettingsPage({ params }: Route.ComponentProps) {
     }
   };
 
-  const handleToggleField = async (field: TTypeExtraField) => {
-    try {
-      await updateField(field.id, { is_active: field.is_active === false });
-    } catch (error) {
-      setToast({
-        type: TOAST_TYPE.ERROR,
-        title: "更新失败",
-        message: getApiErrorMessage(error, "无法更新属性状态，请稍后重试。"),
-      });
-    }
-  };
-
   if (workspaceUserInfo && !canView) {
     return <NotAuthorizedView section="settings" isProjectView className="h-auto" />;
   }
@@ -1279,10 +1274,6 @@ function IssueTypesSettingsPage({ params }: Route.ComponentProps) {
               {issueTypes?.map((issueType) => {
                 const isExpanded = expandedId === issueType.id;
                 const typeFields = fieldsByIssueTypeId[issueType.id] ?? [];
-                const fieldsForList =
-                  editingField && addingFieldFor === issueType.id
-                    ? typeFields.filter((f) => f.id !== editingField.id)
-                    : typeFields;
 
                 return (
                   <div key={issueType.id} className="py-1.5 first:pt-0 last:pb-0">
@@ -1309,10 +1300,11 @@ function IssueTypesSettingsPage({ params }: Route.ComponentProps) {
                       </span>
                     </button>
                     <div className="flex shrink-0 items-center gap-3">
-                      {issueType.is_default ? (
-                        <StatusBadge tone="blue">默认</StatusBadge>
-                      ) : issueType.is_active === false ? (
+                      {issueType.is_default ? <StatusBadge tone="blue">默认</StatusBadge> : null}
+                      {issueType.is_active === false ? (
                         <StatusBadge tone="danger">已禁用</StatusBadge>
+                      ) : !issueType.is_default ? (
+                        <StatusBadge tone="success">活动</StatusBadge>
                       ) : null}
                       {!issueType.is_default && (
                         <ToggleSwitch
@@ -1354,9 +1346,26 @@ function IssueTypesSettingsPage({ params }: Route.ComponentProps) {
                           <div className="p-4">
                             <div className="mb-3 text-sm font-medium text-primary">属性</div>
 
-                            {fieldsForList.length > 0 && (
+                            {(typeFields.length > 0 || addingFieldFor === issueType.id) && (
                               <div className="mb-4 space-y-2">
-                                {fieldsForList.map((field) => (
+                                {typeFields.map((field) => {
+                                  const isEditingThisRow =
+                                    addingFieldFor === issueType.id && editingField?.id === field.id;
+                                  if (isEditingThisRow) {
+                                    return (
+                                      <div key={field.id} ref={inlineFormRef}>
+                                        <InlineFieldForm
+                                          form={fieldForm}
+                                          isSubmitting={isFieldSubmitting}
+                                          submitLabel="更新"
+                                          onChange={setFieldForm}
+                                          onCancel={resetFieldForm}
+                                          onSubmit={() => handleSubmitField(issueType.id)}
+                                        />
+                                      </div>
+                                    );
+                                  }
+                                  return (
                                     <div
                                       key={field.id}
                                       className="flex items-center gap-3 rounded-md border border-strong px-3 py-2.5 text-sm transition hover:border-primary/40 hover:bg-layer-1-hover"
@@ -1364,17 +1373,17 @@ function IssueTypesSettingsPage({ params }: Route.ComponentProps) {
                                       <GripVertical className="size-4 shrink-0 text-tertiary" />
                                       <span className="min-w-0 flex-1 truncate font-medium text-primary">{field.name}</span>
                                       <span className="text-xs text-secondary">{getFieldRowLabel(field)}</span>
-                                      {field.is_active === false && <StatusBadge tone="danger">已禁用</StatusBadge>}
+                                      {field.is_active === false ? (
+                                        <StatusBadge tone="danger">已禁用</StatusBadge>
+                                      ) : (
+                                        <StatusBadge tone="success">活动</StatusBadge>
+                                      )}
                                       <MoreMenu
                                         items={[
                                           {
                                             label: "编辑",
                                             icon: <Pencil className="size-3.5 shrink-0 text-tertiary" strokeWidth={2} />,
                                             onClick: () => openEditFieldForm(field),
-                                          },
-                                          {
-                                            label: field.is_active === false ? "启用属性" : "禁用属性",
-                                            onClick: () => handleToggleField(field),
                                           },
                                           {
                                             label: "删除",
@@ -1385,22 +1394,24 @@ function IssueTypesSettingsPage({ params }: Route.ComponentProps) {
                                         ]}
                                       />
                                     </div>
-                                  ))}
+                                  );
+                                })}
+                                {addingFieldFor === issueType.id && !editingField && (
+                                  <div ref={inlineFormRef}>
+                                    <InlineFieldForm
+                                      form={fieldForm}
+                                      isSubmitting={isFieldSubmitting}
+                                      submitLabel="创建"
+                                      onChange={setFieldForm}
+                                      onCancel={resetFieldForm}
+                                      onSubmit={() => handleSubmitField(issueType.id)}
+                                    />
+                                  </div>
+                                )}
                               </div>
                             )}
 
-                            {addingFieldFor === issueType.id ? (
-                              <div ref={inlineFormRef}>
-                              <InlineFieldForm
-                                form={fieldForm}
-                                isSubmitting={isFieldSubmitting}
-                                submitLabel={editingField ? "更新" : "创建"}
-                                onChange={setFieldForm}
-                                onCancel={resetFieldForm}
-                                onSubmit={() => handleSubmitField(issueType.id)}
-                              />
-                              </div>
-                            ) : (
+                            {addingFieldFor !== issueType.id && (
                               <Button
                                 variant="neutral-primary"
                                 size="sm"

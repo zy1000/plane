@@ -60,7 +60,10 @@ export type TTypeExtraFieldPayload = Omit<Partial<TTypeExtraField>, "id" | "proj
 export const projectIssueTypesCache: Map<string, Record<string, TIssueType>> = new Map();
 
 // extra-fields schema cache: key = `${workspaceSlug}:${projectId}:${issueTypeId}`
-const typeExtraFieldsCache = new Map<string, TTypeExtraField[]>();
+const EXTRA_FIELDS_CACHE_TTL_MS = 10_000; // 10 秒
+
+type TCacheEntry = { data: TTypeExtraField[]; expiresAt: number };
+const typeExtraFieldsCache = new Map<string, TCacheEntry>();
 // in-flight dedup: same key, same Promise
 const typeExtraFieldsInflight = new Map<string, Promise<TTypeExtraField[]>>();
 
@@ -71,7 +74,15 @@ export const getCachedTypeExtraFields = (
   slug: string,
   projectId: string,
   issueTypeId?: string
-): TTypeExtraField[] | undefined => typeExtraFieldsCache.get(extraFieldsCacheKey(slug, projectId, issueTypeId));
+): TTypeExtraField[] | undefined => {
+  const entry = typeExtraFieldsCache.get(extraFieldsCacheKey(slug, projectId, issueTypeId));
+  if (!entry) return undefined;
+  if (Date.now() > entry.expiresAt) {
+    typeExtraFieldsCache.delete(extraFieldsCacheKey(slug, projectId, issueTypeId));
+    return undefined;
+  }
+  return entry.data;
+};
 
 const clearExtraFieldsCacheForProject = (slug: string, projectId: string) => {
   const prefix = `${slug}:${projectId}:`;
@@ -214,7 +225,7 @@ export class ProjectIssueTypeService extends APIService {
     const promise = this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/type-extra-fields/`, params)
       .then((response) => {
         const data: TTypeExtraField[] = response?.data ?? [];
-        typeExtraFieldsCache.set(key, data);
+        typeExtraFieldsCache.set(key, { data, expiresAt: Date.now() + EXTRA_FIELDS_CACHE_TTL_MS });
         return data;
       })
       .catch((error) => {

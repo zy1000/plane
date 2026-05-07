@@ -65,7 +65,7 @@ const DeferredFieldRow = observer(function DeferredFieldRow(props: TDeferredFiel
   return (
     <SidebarPropertyListItem
       icon={FieldIcon}
-      label={field.name + (field.is_required ? " *" : "")}
+      label={field.name}
     >
       <div
         className="w-full"
@@ -98,7 +98,7 @@ const ImmediateFieldRow = observer(function ImmediateFieldRow(props: TImmediateF
   const FieldIcon = FIELD_TYPE_ICON[field.field_type] ?? FIELD_TYPE_ICON.text;
 
   return (
-    <SidebarPropertyListItem icon={FieldIcon} label={field.name + (field.is_required ? " *" : "")}>
+    <SidebarPropertyListItem icon={FieldIcon} label={field.name}>
       <ExtraFieldControl
         field={field}
         value={value}
@@ -162,7 +162,7 @@ export const IssueExtraFieldsSection = observer(function IssueExtraFieldsSection
   if (activeFields.length === 0) return null;
 
   return (
-    <PropertyGroupSection title="拓展">
+    <PropertyGroupSection title="自定义">
       <div className={cn("space-y-2", disabled && "opacity-60")}>
         {activeFields.map((field) => {
           const currentValue = findValueForField(

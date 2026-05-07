@@ -85,7 +85,7 @@ export const isValueEmpty = (value: unknown): boolean => {
   return false;
 };
 
-export const FIELD_TYPE_ICON: Record<TIssueExtraFieldType, React.ElementType> = {
+export const FIELD_TYPE_ICON: Record<TIssueExtraFieldType, React.FC<{ className?: string }>> = {
   text: AlignLeft,
   number: Hash,
   select: ListChecks,
@@ -154,16 +154,11 @@ export const ExtraFieldControl = (props: TExtraFieldControlProps) => {
 
   if (fieldType === "boolean") {
     return (
-      <div className="flex items-center gap-2">
-        <ToggleSwitch
-          value={value === true || value === "true" || value === 1}
-          onChange={(checked) => onChange(checked)}
-          disabled={disabled}
-        />
-        <span className="text-12 text-secondary">
-          {value === true || value === "true" || value === 1 ? "是" : "否"}
-        </span>
-      </div>
+      <ToggleSwitch
+        value={value === true || value === "true" || value === 1}
+        onChange={(checked) => onChange(checked)}
+        disabled={disabled}
+      />
     );
   }
 
