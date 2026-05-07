@@ -24,6 +24,7 @@ import { TransferHopInfo } from "@/plane-web/components/issues/issue-details/sid
 import { IssueWorklogProperty } from "@/plane-web/components/issues/worklog/property";
 import type { TIssueOperations } from "../issue-detail";
 import { IssueCycleSelect } from "../issue-detail/cycle-select";
+import { IssueExtraFieldsSection } from "../issue-detail/extra-fields-section";
 import { IssueLabel } from "../issue-detail/label";
 import { IssueModuleSelect } from "../issue-detail/module-select";
 import { IssueReleaseSelect } from "../issue-detail/release-select";
@@ -37,7 +38,7 @@ interface IPeekOverviewProperties {
 }
 
 /** 分组折叠标题：二级标题加粗 + 可折叠箭头，风格对齐设计稿（属性 > 详情 / 项目结构 …） */
-function PropertyGroupSection(props: { title: string; defaultOpen?: boolean; children: React.ReactNode }) {
+export function PropertyGroupSection(props: { title: string; defaultOpen?: boolean; children: React.ReactNode }) {
   const { title, defaultOpen = true, children } = props;
   const [open, setOpen] = useState(defaultOpen);
 
@@ -156,6 +157,14 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
             />
           </SidebarPropertyListItem>
         </PropertyGroupSection>
+
+        <IssueExtraFieldsSection
+          workspaceSlug={workspaceSlug}
+          projectId={projectId}
+          issueId={issueId}
+          issueOperations={issueOperations}
+          disabled={disabled}
+        />
 
         {/* 元信息：单列 grid，标签列用 max-content 与最宽「创建于/更新于」对齐，无多余空白 */}
         <div className="mt-1 grid grid-cols-[auto_max-content_1fr] items-center gap-x-1.5 gap-y-1.5 text-caption-sm-regular text-placeholder">

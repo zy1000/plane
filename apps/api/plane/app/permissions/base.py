@@ -11,6 +11,10 @@ from plane.db.models import (
     Project,
     TestCaseRepository,
 )
+from plane.db.models.issue_type import (
+    ISSUE_TYPE_PERMISSION_ACTIONS,
+    build_issue_type_permission_key,
+)
 from plane.license.models import Instance, InstanceAdmin
 from functools import wraps
 from rest_framework.response import Response
@@ -69,6 +73,18 @@ def _is_instance_admin(user) -> bool:
     return InstanceAdmin.objects.filter(instance=instance, user=user).exists()
 
 
+def _get_all_issue_type_permission_keys_for_project(project_id: str) -> set:
+    """当前项目下所有未删除 IssueType 衍生出来的全部 project.issue_type.<id_hex>.<action> 集合。"""
+    issue_type_ids = IssueType.objects.filter(
+        project_id=project_id, deleted_at__isnull=True
+    ).values_list("id", flat=True)
+    return {
+        build_issue_type_permission_key(issue_type_id, action)
+        for issue_type_id in issue_type_ids
+        for action, _ in ISSUE_TYPE_PERMISSION_ACTIONS
+    }
+
+
 def _get_user_project_permission_keys(
     user, workspace_slug: str, project_id: str
 ) -> set:
@@ -83,7 +99,12 @@ def _get_user_project_permission_keys(
         or _is_instance_admin(user)
         or user == project.created_by
     ):
-        return set(PermissionKey.values())
+        # 项目负责人 / 实例管理员 / 项目创建者拥有项目内的全部权限。
+        # PermissionKey.values() 仅覆盖静态枚举，issue_type 衍生 key 必须额外注入，
+        # 否则这些超级用户会无法对工作项做 create/edit/delete/archive/unarchive。
+        return set(PermissionKey.values()) | _get_all_issue_type_permission_keys_for_project(
+            project_id
+        )
 
     project_member = ProjectMember.objects.filter(
         member=user,
@@ -109,9 +130,18 @@ def _get_user_project_permission_keys(
     return keys
 
 
+_ISSUE_TYPE_ALLOWED_ACTIONS = frozenset(
+    action for action, _ in ISSUE_TYPE_PERMISSION_ACTIONS
+)
+
+
 def resolve_project_issue_type_name(
     project_id: str, issue_type_id: str
 ) -> Optional[str]:
+    """根据 project_id + issue_type_id 反查 IssueType 名称，找不到返回 None。
+
+    保留这个函数以便调用方做"type_id 是否合法"的快速校验。鉴权本身不再依赖名字。
+    """
     issue_type = (
         IssueType.objects.filter(
             project_id=project_id,
@@ -125,45 +155,18 @@ def resolve_project_issue_type_name(
     return issue_type.name
 
 
-REQUIREMENT_TYPE_NAMES = {"史诗", "特性", "用户故事"}
-DEFECT_TYPE_NAMES = {"缺陷"}
-TASK_TYPE_NAMES = {"任务"}
+def get_issue_permission_key(
+    action: str, issue_type_id: Optional[str] = None
+) -> Optional[str]:
+    """根据 action 与 issue_type_id 推导对应的项目级权限 key。
 
-
-def get_issue_permission_key(action: str, issue_type_name: Optional[str] = None) -> str:
-    defect_permission_map = {
-        "create": PermissionKey.ISSUE_DEFECT_CREATE,
-        "edit": PermissionKey.ISSUE_DEFECT_EDIT,
-        "delete": PermissionKey.ISSUE_DEFECT_DELETE,
-        "archive": PermissionKey.ISSUE_DEFECT_ARCHIVE,
-        "unarchive": PermissionKey.ISSUE_DEFECT_UNARCHIVE,
-    }
-    requirement_permission_map = {
-        "create": PermissionKey.ISSUE_REQUIREMENT_CREATE,
-        "edit": PermissionKey.ISSUE_REQUIREMENT_EDIT,
-        "delete": PermissionKey.ISSUE_REQUIREMENT_DELETE,
-        "archive": PermissionKey.ISSUE_REQUIREMENT_ARCHIVE,
-        "unarchive": PermissionKey.ISSUE_REQUIREMENT_UNARCHIVE,
-    }
-    task_permission_map = {
-        "create": PermissionKey.ISSUE_TASK_CREATE,
-        "edit": PermissionKey.ISSUE_TASK_EDIT,
-        "delete": PermissionKey.ISSUE_TASK_DELETE,
-        "archive": PermissionKey.ISSUE_TASK_ARCHIVE,
-        "unarchive": PermissionKey.ISSUE_TASK_UNARCHIVE,
-    }
-
-    if issue_type_name in DEFECT_TYPE_NAMES:
-        permission_map = defect_permission_map
-    elif issue_type_name in REQUIREMENT_TYPE_NAMES:
-        permission_map = requirement_permission_map
-    elif issue_type_name in TASK_TYPE_NAMES:
-        permission_map = task_permission_map
-
-    try:
-        return permission_map[action]
-    except KeyError as exc:
-        raise ValueError(f"Unsupported issue permission action: {action}") from exc
+    issue_type_id 为空时无法生成 key，返回 None；调用方应据此拒绝放行。
+    """
+    if action not in _ISSUE_TYPE_ALLOWED_ACTIONS:
+        raise ValueError(f"Unsupported issue permission action: {action}")
+    if not issue_type_id:
+        return None
+    return build_issue_type_permission_key(issue_type_id, action)
 
 
 def get_project_from_qa(request):
@@ -189,7 +192,7 @@ def has_project_issue_permission(
     workspace_slug: str,
     project_id: str,
     action: str,
-    issue_type_name: Optional[str] = None,
+    issue_type_id: Optional[str] = None,
     issue_assignee_ids: Optional[Iterable] = None,
 ) -> bool:
     # edit: assignees may update the issue when issue_assignee_ids is provided; None skips this bypass.
@@ -200,8 +203,10 @@ def has_project_issue_permission(
     ):
         return True
     required_permission = get_issue_permission_key(
-        action=action, issue_type_name=issue_type_name
+        action=action, issue_type_id=issue_type_id
     )
+    if not required_permission:
+        return False
     user_keys = _get_user_project_permission_keys(user, workspace_slug, project_id)
     return required_permission in user_keys
 

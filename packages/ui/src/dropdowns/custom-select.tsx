@@ -24,6 +24,7 @@ const DropdownContext = createContext<() => void>(() => {});
 
 function CustomSelect(props: ICustomSelectProps) {
   const {
+    chevronClassName,
     customButtonClassName = "",
     buttonClassName = "",
     placement,
@@ -112,7 +113,9 @@ function CustomSelect(props: ICustomSelectProps) {
                 onClick={toggleDropdown}
               >
                 {label}
-                {!noChevron && !disabled && <ChevronDownIcon className="h-3 w-3" aria-hidden="true" />}
+                {!noChevron && !disabled && (
+                  <ChevronDownIcon className={cn("h-3 w-3 flex-shrink-0", chevronClassName)} aria-hidden="true" />
+                )}
               </button>
             </Combobox.Button>
           )}

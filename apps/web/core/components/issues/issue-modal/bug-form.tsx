@@ -299,13 +299,13 @@ export const BugIssueFormRoot: FC<BugIssueFormProps> = observer((props) => {
   return (
     <FormProvider {...methods}>
       <div className="flex gap-2 bg-transparent">
-        <div className="rounded-lg w-full min-h-[75vh]">
+        <div className="max-h-full min-h-0 w-full rounded-lg">
           <form
             ref={formRef}
             onSubmit={handleSubmit((d) => handleFormSubmit(d))}
-            className="flex flex-col w-full h-full"
+            className="flex max-h-[min(85vh,56rem)] min-h-0 w-full flex-col"
           >
-            <div className="p-5 rounded-t-lg bg-surface-1">
+            <div className="flex-shrink-0 rounded-t-lg bg-surface-1 p-5">
               <h3 className="text-xl font-medium text-primary pb-2">{modalTitle}</h3>
               <div className="flex items-center justify-between pt-2 pb-4">
                 <div className="flex items-center gap-x-1">
@@ -374,44 +374,44 @@ export const BugIssueFormRoot: FC<BugIssueFormProps> = observer((props) => {
               </div>
             </div>
             <div
-              className="pb-4 space-y-3 bg-surface-1 flex-1"
+              data-modal-wheel-scroll
+              className="scrollbar-sm vertical-scrollbar min-h-0 flex-1 space-y-3 overflow-x-hidden overflow-y-auto bg-surface-1 pb-4"
             >
-              <div className="max-h-[55vh] overflow-y-auto vertical-scrollbar scrollbar-sm">
-                <div className="px-5">
-                  <IssueDescriptionEditor
-                    control={control}
-                    isDraft={isDraft}
-                    issueName={watch("name")}
-                    issueId={data?.id}
-                    descriptionHtmlData={initialDescriptionHtml ?? data?.description_html}
-                    editorRef={editorRef}
-                    submitBtnRef={submitBtnRef}
-                    gptAssistantModal={gptAssistantModal}
-                    workspaceSlug={workspaceSlug?.toString()}
-                    projectId={projectId}
-                    handleFormChange={handleFormChange}
-                    handleDescriptionHTMLDataChange={(description_html) =>
-                      setValue<"description_html">("description_html", description_html)
-                    }
-                    setGptAssistantModal={setGptAssistantModal}
-                    handleGptAssistantClose={() => reset(getValues())}
-                    onAssetUpload={onAssetUpload}
-                    onClose={onClose}
-                  />
-                </div>
-                <div className="px-5 mt-3">
-                  <IssueExtraFields
-                    control={control}
-                    workspaceSlug={workspaceSlug?.toString()}
-                    projectId={projectId}
-                    issueTypeId={watch("type_id")}
-                    handleFormChange={handleFormChange}
-                  />
-                </div>
+              <div className="px-5">
+                <IssueDescriptionEditor
+                  control={control}
+                  isDraft={isDraft}
+                  issueName={watch("name")}
+                  issueId={data?.id}
+                  descriptionHtmlData={initialDescriptionHtml ?? data?.description_html}
+                  editorRef={editorRef}
+                  submitBtnRef={submitBtnRef}
+                  gptAssistantModal={gptAssistantModal}
+                  workspaceSlug={workspaceSlug?.toString()}
+                  projectId={projectId}
+                  handleFormChange={handleFormChange}
+                  handleDescriptionHTMLDataChange={(description_html) =>
+                    setValue<"description_html">("description_html", description_html)
+                  }
+                  setGptAssistantModal={setGptAssistantModal}
+                  handleGptAssistantClose={() => reset(getValues())}
+                  onAssetUpload={onAssetUpload}
+                  onClose={onClose}
+                />
+              </div>
+              <div className="px-5">
+                <IssueExtraFields
+                  control={control}
+                  workspaceSlug={workspaceSlug?.toString()}
+                  projectId={projectId}
+                  issueTypeId={watch("type_id")}
+                  handleFormChange={handleFormChange}
+                  embeddedFields={data?.type_extra_fields ?? null}
+                />
               </div>
             </div>
             <div
-              className="px-4 py-3 border-t-[0.5px] border-subtle rounded-b-lg bg-surface-1"
+              className="flex-shrink-0 rounded-b-lg border-t-[0.5px] border-subtle bg-surface-1 px-4 py-3"
             >
               <div className="pb-3 border-b-[0.5px] border-subtle">
                 <IssueDefaultProperties

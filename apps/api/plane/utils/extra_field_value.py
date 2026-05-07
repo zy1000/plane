@@ -43,7 +43,9 @@ def _is_value_empty(value: Any) -> bool:
     return False
 
 
-def _coerce_value_for_field(field: TypeExtraField, value: Any) -> Tuple[Any, Optional[str]]:
+def _coerce_value_for_field(
+    field: TypeExtraField, value: Any
+) -> Tuple[Any, Optional[str]]:
     """根据字段类型把前端传入的 value 归一化为可持久化的形态。
 
     返回 `(normalized_value, error_message)`：当 `error_message` 非空表示校验失败。
@@ -90,15 +92,39 @@ def _coerce_value_for_field(field: TypeExtraField, value: Any) -> Tuple[Any, Opt
 
     if field_type == FIELD_TYPE_SELECT:
         allowed = _select_option_values(field)
+        if _is_multi_selection(field):
+            if not isinstance(value, (list, tuple)):
+                return None, "多选字段需要传入数组"
+            values = list(value)
+            if allowed:
+                invalid = [v for v in values if v not in allowed]
+                if invalid:
+                    return None, "所选选项不在可选范围内"
+            return values, None
+        if isinstance(value, (list, tuple)):
+            return None, "单选字段不支持多个值"
         if allowed and value not in allowed:
             return None, "所选选项不在可选范围内"
         return value, None
 
     if field_type == FIELD_TYPE_USER:
-        try:
-            User.objects.get(pk=value)
-        except (User.DoesNotExist, ValueError, TypeError):
-            return None, "用户不存在"
+        if _is_multi_selection(field):
+            if not isinstance(value, (list, tuple)):
+                return None, "多选用户字段需要传入数组"
+            user_ids = [str(v) for v in value if v not in (None, "")]
+            if not user_ids:
+                return None, None
+            unique_ids = set(user_ids)
+            valid_count = ProjectMember.objects.filter(
+                project_id=field.project_id,
+                member_id__in=list(unique_ids),
+                is_active=True,
+            ).values("member_id").distinct().count()
+            if valid_count != len(unique_ids):
+                return None, "存在不属于当前项目的成员"
+            return user_ids, None
+        if isinstance(value, (list, tuple)):
+            return None, "单选用户字段不支持多个值"
         if not ProjectMember.objects.filter(
             project_id=field.project_id,
             member_id=value,
@@ -108,6 +134,24 @@ def _coerce_value_for_field(field: TypeExtraField, value: Any) -> Tuple[Any, Opt
         return str(value), None
 
     return value, None
+
+
+def _is_multi_selection(field: TypeExtraField) -> bool:
+    """从 field.options 推断 select / user 字段是否为多选模式。
+
+    与前端 `getSelectionMode` 保持一致，兼容以下写法：
+    - `{"selection_mode": "multiple"}` 或 `"multi"`
+    - `{"selectionMode": "multiple"}`
+    - `{"multiple": True}`
+    """
+
+    options = field.options
+    if not isinstance(options, dict):
+        return False
+    mode = options.get("selection_mode") or options.get("selectionMode")
+    if mode in {"multiple", "multi"}:
+        return True
+    return options.get("multiple") is True
 
 
 def _select_option_values(field: TypeExtraField) -> List[Any]:
@@ -163,7 +207,9 @@ def _value_for_jsonfield(field: TypeExtraField, normalized_value: Any) -> Any:
 
     if isinstance(normalized_value, Decimal):
         return float(normalized_value)
-    if isinstance(normalized_value, date) and not isinstance(normalized_value, datetime):
+    if isinstance(normalized_value, date) and not isinstance(
+        normalized_value, datetime
+    ):
         return normalized_value.isoformat()
     if isinstance(normalized_value, datetime):
         return normalized_value.isoformat()
@@ -219,9 +265,7 @@ def validate_extra_field_values(
         if field.is_required and field_id not in seen_ids:
             errors.setdefault(field_id, []).append(f"{field.name} 为必填字段")
         if field.is_required and field_id in seen_ids:
-            normalized = next(
-                (v for f, v in items if str(f.id) == field_id), None
-            )
+            normalized = next((v for f, v in items if str(f.id) == field_id), None)
             if normalized is None:
                 errors.setdefault(field_id, []).append(f"{field.name} 为必填字段")
 

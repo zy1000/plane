@@ -384,13 +384,13 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
   return (
     <FormProvider {...methods}>
       <div className="flex gap-2 bg-transparent">
-        <div className="w-full rounded-lg">
+        <div className="max-h-full min-h-0 w-full rounded-lg">
           <form
             ref={formRef}
             onSubmit={handleSubmit((data) => handleFormSubmit(data))}
-            className="flex w-full flex-col"
+            className="flex max-h-[min(85vh,56rem)] min-h-0 w-full flex-col"
           >
-            <div className="rounded-t-lg bg-surface-1 p-5">
+            <div className="flex-shrink-0 rounded-t-lg bg-surface-1 p-5">
               <h3 className="pb-2 text-h4-medium text-secondary">{modalTitle}</h3>
               <div className="flex items-center justify-between pt-2 pb-4">
                 <div className="flex items-center gap-x-1">
@@ -459,7 +459,8 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
               </div>
             </div>
             <div
-              className="space-y-3 bg-surface-1 pb-4"
+              data-modal-wheel-scroll
+              className="scrollbar-sm vertical-scrollbar min-h-0 flex-1 space-y-3 overflow-x-hidden overflow-y-auto bg-surface-1 pb-4"
             >
               <div className="px-5">
                 <IssueDescriptionEditor
@@ -490,11 +491,12 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
                   projectId={projectId}
                   issueTypeId={watch("type_id")}
                   handleFormChange={handleFormChange}
+                  embeddedFields={data?.type_extra_fields ?? null}
                 />
               </div>
             </div>
             <div
-              className="rounded-b-lg border-t-[0.5px] border-subtle bg-surface-1 px-4 py-3"
+              className="flex-shrink-0 rounded-b-lg border-t-[0.5px] border-subtle bg-surface-1 px-4 py-3"
             >
               <div className="pb-3">
                 <IssueDefaultProperties

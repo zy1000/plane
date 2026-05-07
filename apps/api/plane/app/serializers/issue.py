@@ -55,6 +55,7 @@ from plane.utils.extra_field_value import (
     validate_extra_field_values,
 )
 from .issue_type import (
+    IssueTypeExtraFieldSerializer,
     TypeExtraFieldValueWriteSerializer,
 )
 
@@ -1043,9 +1044,20 @@ class IssueDetailSerializer(IssueSerializer):
     is_subscribed = serializers.BooleanField(read_only=True)
     is_intake = serializers.BooleanField(read_only=True)
     extra_field_values = serializers.SerializerMethodField()
+    type_extra_fields = serializers.SerializerMethodField()
 
     def get_extra_field_values(self, obj):
         return serialize_extra_field_values(obj)
+
+    def get_type_extra_fields(self, obj):
+        if not obj.type_id:
+            return []
+        active_fields = [
+            f for f in obj.type.extra_fields.all()
+            if f.is_active and f.deleted_at is None
+        ]
+        active_fields.sort(key=lambda f: (f.sort_order or 0, f.created_at))
+        return IssueTypeExtraFieldSerializer(active_fields, many=True).data
 
     class Meta(IssueSerializer.Meta):
         fields = IssueSerializer.Meta.fields + [
@@ -1053,6 +1065,7 @@ class IssueDetailSerializer(IssueSerializer):
             "is_subscribed",
             "is_intake",
             "extra_field_values",
+            "type_extra_fields",
         ]
         read_only_fields = fields
 

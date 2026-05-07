@@ -5,7 +5,7 @@
  */
 
 import { Dialog, Transition } from "@headlessui/react";
-import React, { Fragment } from "react";
+import React, { Fragment, useCallback, useRef } from "react";
 // constants
 import { cn } from "../utils";
 import { EModalPosition, EModalWidth } from "./constants";
@@ -28,6 +28,31 @@ export function ModalCore(props: Props) {
     width = EModalWidth.XXL,
     className = "",
   } = props;
+
+  const isOpenRef = useRef(isOpen);
+  isOpenRef.current = isOpen;
+
+  const wheelCleanupRef = useRef<(() => void) | null>(null);
+
+  const panelInnerRef = useCallback((node: HTMLDivElement | null) => {
+    wheelCleanupRef.current?.();
+    wheelCleanupRef.current = null;
+    if (!node || !isOpenRef.current) return;
+
+    const onWheelCapture = (e: WheelEvent) => {
+      if (!node.querySelector("[data-modal-wheel-scroll]")) return;
+      const target = e.target;
+      if (!(target instanceof Element)) return;
+      if (!node.contains(target)) return;
+      if (target.closest("[data-modal-wheel-scroll]")) return;
+      e.preventDefault();
+    };
+
+    node.addEventListener("wheel", onWheelCapture, { passive: false, capture: true });
+    wheelCleanupRef.current = () => {
+      node.removeEventListener("wheel", onWheelCapture, { capture: true });
+    };
+  }, []);
 
   return (
     <Transition.Root show={isOpen} as={Fragment}>
@@ -62,7 +87,9 @@ export function ModalCore(props: Props) {
                   className
                 )}
               >
-                {children}
+                <div ref={panelInnerRef} className="w-full">
+                  {children}
+                </div>
               </Dialog.Panel>
             </Transition.Child>
           </div>

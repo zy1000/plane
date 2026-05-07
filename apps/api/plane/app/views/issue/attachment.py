@@ -138,7 +138,7 @@ class IssueAttachmentV2Endpoint(BaseAPIView):
         )
 
     @allow_permission([ROLE.ADMIN], creator=True, model=FileAsset)
-    @allow_fine_permission(PermissionKey.ISSUE_DEFECT_DELETE)
+    @allow_fine_permission(PermissionKey.ISSUE_ATTACHMENT_DELETE)
     def delete(self, request, slug, project_id, issue_id, pk):
         issue_attachment = FileAsset.objects.get(pk=pk, workspace__slug=slug, project_id=project_id)
         issue_attachment.is_deleted = True

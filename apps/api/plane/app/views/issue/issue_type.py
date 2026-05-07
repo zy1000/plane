@@ -14,6 +14,10 @@ from plane.db.models import (
     Issue,
     Project,
 )
+from plane.utils.project.state import (
+    bulk_create_issue_state,
+    create_default_bug_workflow,
+)
 
 
 class ProjectIssueTypeListCreateAPIEndpoint(BaseAPIView):
@@ -47,6 +51,12 @@ class ProjectIssueTypeListCreateAPIEndpoint(BaseAPIView):
         serializer = IssueTypeSerializer(data=request.data)
         if serializer.is_valid():
             issue_type = serializer.save(project=project)
+            bulk_create_issue_state(
+                issue_types=[issue_type],
+                workspace=project.workspace,
+                project=project,
+                created_by=request.user,
+            )
             response_serializer = IssueTypeSerializer(issue_type)
             return Response(response_serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

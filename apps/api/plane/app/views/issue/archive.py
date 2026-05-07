@@ -262,7 +262,7 @@ class IssueArchiveViewSet(BaseViewSet):
             workspace_slug=slug,
             project_id=str(project_id),
             action="archive",
-            issue_type_name=issue.type.name if issue.type else None,
+            issue_type_id=str(issue.type_id) if issue.type_id else None,
         ):
             return Response(
                 {"error": "您没有所需的项目权限。"},
@@ -304,7 +304,7 @@ class IssueArchiveViewSet(BaseViewSet):
             workspace_slug=slug,
             project_id=str(project_id),
             action="unarchive",
-            issue_type_name=issue.type.name if issue.type else None,
+            issue_type_id=str(issue.type_id) if issue.type_id else None,
         ):
             return Response(
                 {"error": "您没有所需的项目权限。"},
@@ -342,18 +342,21 @@ class BulkArchiveIssuesEndpoint(BaseAPIView):
             "state", "type"
         )
 
-        issue_type_names = set(
-            issues.filter(type__isnull=False).values_list("type__name", flat=True).distinct()
+        # 收集涉及到的 issue_type_id 集合；若存在无 type 的 issue，则按 None 走一次校验
+        # （新的鉴权语义下 issue_type_id=None 必然拒绝，等价于原 add(None) 的拦截意图）。
+        issue_type_ids = set(
+            issues.filter(type__isnull=False).values_list("type_id", flat=True).distinct()
         )
-        issue_type_names.add(None)
+        if issues.filter(type__isnull=True).exists():
+            issue_type_ids.add(None)
 
-        for issue_type_name in issue_type_names:
+        for issue_type_id in issue_type_ids:
             if not has_project_issue_permission(
                 user=request.user,
                 workspace_slug=slug,
                 project_id=str(project_id),
                 action="archive",
-                issue_type_name=issue_type_name,
+                issue_type_id=str(issue_type_id) if issue_type_id else None,
             ):
                 return Response(
                     {"error": "您没有所需的项目权限。"},

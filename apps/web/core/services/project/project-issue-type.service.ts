@@ -59,6 +59,30 @@ export type TTypeExtraFieldPayload = Omit<Partial<TTypeExtraField>, "id" | "proj
 
 export const projectIssueTypesCache: Map<string, Record<string, TIssueType>> = new Map();
 
+// extra-fields schema cache: key = `${workspaceSlug}:${projectId}:${issueTypeId}`
+const typeExtraFieldsCache = new Map<string, TTypeExtraField[]>();
+// in-flight dedup: same key, same Promise
+const typeExtraFieldsInflight = new Map<string, Promise<TTypeExtraField[]>>();
+
+const extraFieldsCacheKey = (slug: string, projectId: string, issueTypeId?: string) =>
+  `${slug}:${projectId}:${issueTypeId ?? "*"}`;
+
+export const getCachedTypeExtraFields = (
+  slug: string,
+  projectId: string,
+  issueTypeId?: string
+): TTypeExtraField[] | undefined => typeExtraFieldsCache.get(extraFieldsCacheKey(slug, projectId, issueTypeId));
+
+const clearExtraFieldsCacheForProject = (slug: string, projectId: string) => {
+  const prefix = `${slug}:${projectId}:`;
+  for (const key of typeExtraFieldsCache.keys()) {
+    if (key.startsWith(prefix)) typeExtraFieldsCache.delete(key);
+  }
+  for (const key of typeExtraFieldsInflight.keys()) {
+    if (key.startsWith(prefix)) typeExtraFieldsInflight.delete(key);
+  }
+};
+
 const getErrorPayload = (error: any) => error?.response?.data ?? error;
 
 export class ProjectIssueTypeService extends APIService {
@@ -180,12 +204,28 @@ export class ProjectIssueTypeService extends APIService {
     projectId: string,
     issueTypeId?: string
   ): Promise<TTypeExtraField[]> {
+    const key = extraFieldsCacheKey(workspaceSlug, projectId, issueTypeId);
+
+    // return in-flight promise if already running
+    const inflight = typeExtraFieldsInflight.get(key);
+    if (inflight) return inflight;
+
     const params = issueTypeId ? { params: { issue_type: issueTypeId } } : {};
-    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/type-extra-fields/`, params)
-      .then((response) => response?.data)
+    const promise = this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/type-extra-fields/`, params)
+      .then((response) => {
+        const data: TTypeExtraField[] = response?.data ?? [];
+        typeExtraFieldsCache.set(key, data);
+        return data;
+      })
       .catch((error) => {
         throw getErrorPayload(error);
+      })
+      .finally(() => {
+        typeExtraFieldsInflight.delete(key);
       });
+
+    typeExtraFieldsInflight.set(key, promise);
+    return promise;
   }
 
   async createTypeExtraField(
@@ -194,7 +234,10 @@ export class ProjectIssueTypeService extends APIService {
     data: TTypeExtraFieldPayload
   ): Promise<TTypeExtraField> {
     return this.post(`/api/workspaces/${workspaceSlug}/projects/${projectId}/type-extra-fields/`, data)
-      .then((response) => response?.data)
+      .then((response) => {
+        clearExtraFieldsCacheForProject(workspaceSlug, projectId);
+        return response?.data;
+      })
       .catch((error) => {
         throw getErrorPayload(error);
       });
@@ -207,7 +250,10 @@ export class ProjectIssueTypeService extends APIService {
     data: Partial<TTypeExtraField>
   ): Promise<TTypeExtraField> {
     return this.patch(`/api/workspaces/${workspaceSlug}/projects/${projectId}/type-extra-fields/${fieldId}/`, data)
-      .then((response) => response?.data)
+      .then((response) => {
+        clearExtraFieldsCacheForProject(workspaceSlug, projectId);
+        return response?.data;
+      })
       .catch((error) => {
         throw getErrorPayload(error);
       });
@@ -215,7 +261,10 @@ export class ProjectIssueTypeService extends APIService {
 
   async deleteTypeExtraField(workspaceSlug: string, projectId: string, fieldId: string): Promise<void> {
     return this.delete(`/api/workspaces/${workspaceSlug}/projects/${projectId}/type-extra-fields/${fieldId}/`)
-      .then((response) => response?.data)
+      .then((response) => {
+        clearExtraFieldsCacheForProject(workspaceSlug, projectId);
+        return response?.data;
+      })
       .catch((error) => {
         throw getErrorPayload(error);
       });

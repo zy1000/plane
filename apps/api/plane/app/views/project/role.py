@@ -2,10 +2,16 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
+from django.db.models import Q
 from rest_framework import status
 from rest_framework.response import Response
 
-from plane.app.permissions import ROLE, allow_permission, allow_fine_permission, PermissionKey
+from plane.app.permissions import (
+    ROLE,
+    allow_permission,
+    allow_fine_permission,
+    PermissionKey,
+)
 from plane.app.serializers import (
     ImportProjectRoleSerializer,
     PermissionSerializer,
@@ -13,8 +19,12 @@ from plane.app.serializers import (
     ProjectRoleSerializer,
 )
 from plane.app.views.base import BaseAPIView, BaseViewSet
-from plane.db.models import Permission, Project, WorkspaceRole
-from plane.db.models.project import ProjectRole
+from plane.db.models import Permission, Project, WorkspaceRole, IssueType, ProjectRole
+from plane.db.models.issue_type import (
+    ISSUE_TYPE_PERMISSION_ACTIONS,
+    ISSUE_TYPE_PERMISSION_KEY_PREFIX,
+    build_issue_type_permission_key,
+)
 
 
 class ProjectRoleViewSet(BaseViewSet):
@@ -49,16 +59,22 @@ class ProjectRoleViewSet(BaseViewSet):
     def retrieve(self, request, slug, project_id, pk):
         role = self.get_role(pk)
         if not role:
-            return Response({"error": "Project role not found."}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"error": "Project role not found."}, status=status.HTTP_404_NOT_FOUND
+            )
         return Response(self.get_serializer(role).data, status=status.HTTP_200_OK)
 
     @allow_fine_permission(PermissionKey.PROJECT_ROLE_CREATE)
     def create(self, request, slug, project_id):
         project = self.get_project(slug, project_id)
         if not project:
-            return Response({"error": "Project not found."}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"error": "Project not found."}, status=status.HTTP_404_NOT_FOUND
+            )
 
-        serializer = self.get_serializer(data=request.data, context={"project": project})
+        serializer = self.get_serializer(
+            data=request.data, context={"project": project}
+        )
         if serializer.is_valid():
             serializer.save(project=project)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
@@ -68,7 +84,9 @@ class ProjectRoleViewSet(BaseViewSet):
     def partial_update(self, request, slug, project_id, pk):
         role = self.get_role(pk)
         if not role:
-            return Response({"error": "Project role not found."}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"error": "Project role not found."}, status=status.HTTP_404_NOT_FOUND
+            )
 
         serializer = self.get_serializer(
             role, data=request.data, partial=True, context={"project": role.project}
@@ -82,7 +100,9 @@ class ProjectRoleViewSet(BaseViewSet):
     def destroy(self, request, slug, project_id, pk):
         role = self.get_role(pk)
         if not role:
-            return Response({"error": "Project role not found."}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"error": "Project role not found."}, status=status.HTTP_404_NOT_FOUND
+            )
 
         role.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
@@ -98,7 +118,9 @@ class ProjectRoleImportAPIView(BaseAPIView):
     def post(self, request, slug, project_id):
         project = self.get_project(slug, project_id)
         if not project:
-            return Response({"error": "Project not found."}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"error": "Project not found."}, status=status.HTTP_404_NOT_FOUND
+            )
 
         serializer = ImportProjectRoleSerializer(data=request.data)
         if not serializer.is_valid():
@@ -113,12 +135,18 @@ class ProjectRoleImportAPIView(BaseAPIView):
         ).first()
         if not workspace_role:
             return Response(
-                {"error": "未找到对应的项目角色模板，请确认该角色属于当前工作区且类型为 project_template。"},
+                {
+                    "error": "未找到对应的项目角色模板，请确认该角色属于当前工作区且类型为 project_template。"
+                },
                 status=status.HTTP_404_NOT_FOUND,
             )
 
         # 校验模板权限全部为 project scope
-        template_permissions = workspace_role.permissions if isinstance(workspace_role.permissions, dict) else {}
+        template_permissions = (
+            workspace_role.permissions
+            if isinstance(workspace_role.permissions, dict)
+            else {}
+        )
         template_keys = template_permissions.get("permission_keys", [])
         if template_keys:
             bad_keys = list(
@@ -133,9 +161,13 @@ class ProjectRoleImportAPIView(BaseAPIView):
                 )
 
         # 检查项目内是否已存在同名角色
-        if ProjectRole.objects.filter(project=project, name=workspace_role.name).exists():
+        if ProjectRole.objects.filter(
+            project=project, name=workspace_role.name
+        ).exists():
             return Response(
-                {"error": f"项目中已存在名为「{workspace_role.name}」的角色，请先删除或重命名后再导入。"},
+                {
+                    "error": f"项目中已存在名为「{workspace_role.name}」的角色，请先删除或重命名后再导入。"
+                },
                 status=status.HTTP_409_CONFLICT,
             )
 
@@ -197,15 +229,39 @@ class ProjectRolePermissionAPIView(BaseAPIView):
 
         permission_keys = role.permissions.get("permission_keys", [])
         if isinstance(permission_keys, list):
-            return list(dict.fromkeys([k for k in permission_keys if isinstance(k, str)]))
+            return list(
+                dict.fromkeys([k for k in permission_keys if isinstance(k, str)])
+            )
         return []
+
+    def get_visible_issue_type_permission_keys(self, project) -> set:
+        """当前项目下尚未删除的 IssueType 对应的权限 key 集合。
+
+        Permission 表是全局的，issue_type 权限会包含其他项目的条目，
+        因此需要结合 IssueType 表按 project 过滤可见范围。
+        """
+        issue_type_ids = IssueType.objects.filter(
+            project=project, deleted_at__isnull=True
+        ).values_list("id", flat=True)
+        return {
+            build_issue_type_permission_key(issue_type_id, action)
+            for issue_type_id in issue_type_ids
+            for action, _ in ISSUE_TYPE_PERMISSION_ACTIONS
+        }
 
     def build_response_data(self, role):
         bound_permission_keys = self.get_bound_permission_keys(role)
-        permissions = Permission.objects.filter(is_active=True, scope="project").order_by(
-            "module",
-            "sort_order",
-            "key",
+        visible_issue_type_keys = self.get_visible_issue_type_permission_keys(
+            role.project
+        )
+        # 保留所有非 issue_type 的项目权限 + 当前项目可见的 issue_type 权限。
+        permissions = (
+            Permission.objects.filter(is_active=True, scope="project")
+            .filter(
+                ~Q(key__startswith=ISSUE_TYPE_PERMISSION_KEY_PREFIX)
+                | Q(key__in=visible_issue_type_keys)
+            )
+            .order_by("module", "sort_order", "key")
         )
         permission_serializer = PermissionSerializer(
             permissions,
@@ -222,15 +278,21 @@ class ProjectRolePermissionAPIView(BaseAPIView):
     def get(self, request, slug, project_id, pk):
         role = self.get_role(slug, project_id, pk)
         if not role:
-            return Response({"error": "Project role not found."}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"error": "Project role not found."}, status=status.HTTP_404_NOT_FOUND
+            )
         return Response(self.build_response_data(role), status=status.HTTP_200_OK)
 
     @allow_fine_permission(PermissionKey.PROJECT_ROLE_EDIT)
     def patch(self, request, slug, project_id, pk):
         role = self.get_role(slug, project_id, pk)
         if not role:
-            return Response({"error": "Project role not found."}, status=status.HTTP_404_NOT_FOUND)
-        serializer = ProjectRolePermissionBindingSerializer(data=request.data, context={"role": role})
+            return Response(
+                {"error": "Project role not found."}, status=status.HTTP_404_NOT_FOUND
+            )
+        serializer = ProjectRolePermissionBindingSerializer(
+            data=request.data, context={"role": role}
+        )
         if serializer.is_valid():
             role = serializer.save()
             return Response(self.build_response_data(role), status=status.HTTP_200_OK)

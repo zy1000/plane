@@ -13,7 +13,7 @@ import { Combobox } from "@headlessui/react";
 // ui
 import type { Matcher } from "@plane/propel/calendar";
 import { Calendar } from "@plane/propel/calendar";
-import { CloseIcon } from "@plane/propel/icons";
+import { ChevronDownIcon, CloseIcon } from "@plane/propel/icons";
 import { ComboDropDown } from "@plane/ui";
 import { cn, renderFormattedDate, getDate } from "@plane/utils";
 // helpers
@@ -42,6 +42,8 @@ type Props = TDropdownProps & {
   formatToken?: string;
   renderByDefault?: boolean;
   labelClassName?: string;
+  dropdownArrow?: boolean;
+  dropdownArrowClassName?: string;
 };
 
 export const DateDropdown = observer(function DateDropdown(props: Props) {
@@ -70,6 +72,8 @@ export const DateDropdown = observer(function DateDropdown(props: Props) {
     formatToken,
     renderByDefault = true,
     labelClassName = "",
+    dropdownArrow = false,
+    dropdownArrowClassName = "",
   } = props;
   // states
   const [isOpen, setIsOpen] = useState(defaultOpen);
@@ -146,20 +150,30 @@ export const DateDropdown = observer(function DateDropdown(props: Props) {
       >
         {!hideIcon && icon}
         {BUTTON_VARIANTS_WITH_TEXT.includes(buttonVariant) && (
-          <span className={cn("flex-grow truncate text-left text-body-xs-medium", labelClassName)}>
+          <span className={cn("min-w-0 flex-1 truncate text-left text-body-xs-medium", labelClassName)}>
             {value ? renderFormattedDate(value, formatToken) : placeholder}
           </span>
         )}
-        {isClearable && !disabled && isDateSelected && (
-          <CloseIcon
-            className={cn("h-2.5 w-2.5 flex-shrink-0", clearIconClassName)}
-            onClick={(e) => {
-              e.stopPropagation();
-              e.preventDefault();
-              onChange(null);
-            }}
-          />
-        )}
+        {(isClearable && !disabled && isDateSelected) || dropdownArrow ? (
+          <div className="flex shrink-0 items-center gap-1">
+            {isClearable && !disabled && isDateSelected && (
+              <CloseIcon
+                className={cn("h-2.5 w-2.5 flex-shrink-0", clearIconClassName)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  onChange(null);
+                }}
+              />
+            )}
+            {dropdownArrow && (
+              <ChevronDownIcon
+                className={cn("h-2.5 w-2.5 flex-shrink-0 text-secondary", dropdownArrowClassName)}
+                aria-hidden="true"
+              />
+            )}
+          </div>
+        ) : null}
       </DropdownButton>
     </button>
   );

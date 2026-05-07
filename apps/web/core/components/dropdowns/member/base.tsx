@@ -47,6 +47,7 @@ export const MemberDropdownBase = observer(function MemberDropdownBase(props: TM
     getUserDetails,
     hideIcon = false,
     icon,
+    labelClassName,
     memberIds,
     multiple,
     onChange,
@@ -100,11 +101,11 @@ export const MemberDropdownBase = observer(function MemberDropdownBase(props: TM
         return placeholder;
       }
     } else {
-      if (showUserDetails && value) {
+      // 与「多选且仅 1 人」分支一致：有 user id 时展示姓名，不依赖 showUserDetails（头像已能解析该用户）
+      if (value) {
         return getUserDetails(value)?.display_name || placeholder;
-      } else {
-        return placeholder;
       }
+      return placeholder;
     }
   };
 
@@ -150,7 +151,12 @@ export const MemberDropdownBase = observer(function MemberDropdownBase(props: TM
           >
             {!hideIcon && <ButtonAvatars showTooltip={showTooltip} userIds={value} icon={icon} />}
             {BUTTON_VARIANTS_WITH_TEXT.includes(buttonVariant) && (
-              <span className="flex-grow truncate text-left text-body-xs-medium leading-5">
+              <span
+                className={cn(
+                  "min-w-0 flex-1 truncate text-left text-body-xs-medium leading-5",
+                  labelClassName
+                )}
+              >
                 {getDisplayName(value, showUserDetails, placeholder)}
               </span>
             )}

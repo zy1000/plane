@@ -13,6 +13,7 @@ from plane.app.serializers.workspace import WorkspaceLiteSerializer
 from plane.app.serializers.user import UserLiteSerializer, UserAdminLiteSerializer
 from plane.app.permissions.base import _get_user_project_permission_keys
 from plane.db.models import (
+    IssueType,
     Permission,
     Project,
     ProjectMember,
@@ -21,6 +22,11 @@ from plane.db.models import (
     DeployBoard,
     ProjectPublicMember,
     IssueSequence,
+)
+from plane.db.models.issue_type import (
+    ISSUE_TYPE_PERMISSION_ACTIONS,
+    ISSUE_TYPE_PERMISSION_KEY_PREFIX,
+    build_issue_type_permission_key,
 )
 from plane.utils.content_validator import validate_html_content
 from ...db.models.project import (
@@ -402,7 +408,30 @@ class ProjectRolePermissionBindingSerializer(serializers.Serializer):
         )
         existing_keys = set(queryset.values_list("key", flat=True))
 
+        # issue_type 权限是按项目维度物化的，需要再校验所传 key 确实属于本项目，
+        # 防止把别的项目的 issue_type 权限写到当前角色上。
+        role = self.context.get("role")
+        project = getattr(role, "project", None) if role else self.context.get("project")
+        if project is not None:
+            allowed_issue_type_keys = self._get_project_issue_type_keys(project)
+            existing_keys = {
+                k
+                for k in existing_keys
+                if not k.startswith(ISSUE_TYPE_PERMISSION_KEY_PREFIX)
+                or k in allowed_issue_type_keys
+            }
+
         return [key for key in normalized_keys if key in existing_keys]
+
+    def _get_project_issue_type_keys(self, project) -> set:
+        issue_type_ids = IssueType.objects.filter(
+            project=project, deleted_at__isnull=True
+        ).values_list("id", flat=True)
+        return {
+            build_issue_type_permission_key(issue_type_id, action)
+            for issue_type_id in issue_type_ids
+            for action, _ in ISSUE_TYPE_PERMISSION_ACTIONS
+        }
 
     def save(self, **kwargs):
         role = self.context["role"]

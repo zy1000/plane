@@ -43,7 +43,6 @@ from rest_framework.response import Response
 from plane.app.permissions import (
     ROLE,
     allow_permission,
-    get_issue_permission_key,
     has_project_issue_permission,
     resolve_project_issue_type_name,
 )
@@ -74,6 +73,7 @@ from plane.db.models import (
     ReleaseIssue,
     Project,
     ProjectMember,
+    TypeExtraField,
     UserRecentVisit, IssueType, State,
 )
 from plane.utils.filters import ComplexFilterBackend, IssueFilterSet
@@ -424,8 +424,8 @@ class IssueViewSet(BaseViewSet):
                 )
             data['type_id'] = str(default_issue_type.id)
 
-        issue_type_name = resolve_project_issue_type_name(str(project_id), str(data["type_id"]))
-        if issue_type_name is None:
+        issue_type_id = str(data["type_id"])
+        if resolve_project_issue_type_name(str(project_id), issue_type_id) is None:
             return Response({"error": "Issue type is not valid please pass a valid type_id"},
                             status=status.HTTP_400_BAD_REQUEST)
 
@@ -434,7 +434,7 @@ class IssueViewSet(BaseViewSet):
                 workspace_slug=slug,
                 project_id=str(project_id),
                 action="create",
-                issue_type_name=issue_type_name,
+                issue_type_id=issue_type_id,
         ):
             return Response(
                 {"error": f"您没有所需的项目权限。"},
@@ -539,7 +539,15 @@ class IssueViewSet(BaseViewSet):
                 workspace__slug=self.kwargs.get("slug"),
                 pk=pk,
             )
-            .select_related("state")
+            .select_related("state", "type")
+            .prefetch_related(
+                Prefetch(
+                    "type__extra_fields",
+                    queryset=TypeExtraField.objects.filter(
+                        is_active=True, deleted_at__isnull=True
+                    ).order_by("sort_order", "created_at"),
+                )
+            )
             .annotate(cycle_id=Subquery(CycleIssue.objects.filter(issue=OuterRef("id")).values("cycle_id")[:1]))
             .annotate(
                 link_count=Subquery(
@@ -749,7 +757,7 @@ class IssueViewSet(BaseViewSet):
                 workspace_slug=slug,
                 project_id=str(project_id),
                 action="edit",
-                issue_type_name=issue.type.name,
+                issue_type_id=str(issue.type_id) if issue.type_id else None,
                 issue_assignee_ids=issue.assignee_ids,
         ):
             redis_client.delete(lock_id)
@@ -845,7 +853,7 @@ class IssueViewSet(BaseViewSet):
                 workspace_slug=slug,
                 project_id=str(project_id),
                 action="delete",
-                issue_type_name=issue.type.name,
+                issue_type_id=str(issue.type_id) if issue.type_id else None,
         ):
             return Response(
                 {"error": f"您没有所需的项目权限。"},
@@ -914,17 +922,17 @@ class BulkDeleteIssuesEndpoint(BaseAPIView):
             return Response({"error": "Issue IDs are required"}, status=status.HTTP_400_BAD_REQUEST)
 
         issues = Issue.issue_objects.filter(workspace__slug=slug, project_id=project_id, pk__in=issue_ids)
-        issue_type_names = set(
-            issues.filter(type__isnull=False).values_list("type__name", flat=True).distinct()
+        issue_type_ids = set(
+            issues.filter(type__isnull=False).values_list("type_id", flat=True).distinct()
         )
 
-        for issue_type_name in issue_type_names:
+        for issue_type_id in issue_type_ids:
             if not has_project_issue_permission(
                     user=request.user,
                     workspace_slug=slug,
                     project_id=str(project_id),
                     action="delete",
-                    issue_type_name=issue_type_name,
+                    issue_type_id=str(issue_type_id),
             ):
                 return Response(
                     {"error": f"您没有所需的项目权限。"},
@@ -1579,6 +1587,14 @@ class IssueDetailEndpoint(BaseAPIView):
                     ).select_related("release"),
                 )
             )
+            .prefetch_related(
+                Prefetch(
+                    "type__extra_fields",
+                    queryset=TypeExtraField.objects.filter(
+                        is_active=True, deleted_at__isnull=True
+                    ).order_by("sort_order", "created_at"),
+                )
+            )
         )
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
@@ -1790,8 +1806,16 @@ class IssueDetailIdentifierEndpoint(BaseAPIView):
         issue = (
             Issue.objects.filter(project_id=project.id)
             .filter(workspace__slug=slug)
-            .select_related("workspace", "project", "state", "parent")
+            .select_related("workspace", "project", "state", "parent", "type")
             .prefetch_related("assignees", "labels", "issue_module__module", "issue_release__release")
+            .prefetch_related(
+                Prefetch(
+                    "type__extra_fields",
+                    queryset=TypeExtraField.objects.filter(
+                        is_active=True, deleted_at__isnull=True
+                    ).order_by("sort_order", "created_at"),
+                )
+            )
             .annotate(cycle_id=Subquery(CycleIssue.objects.filter(issue=OuterRef("id")).values("cycle_id")[:1]))
             .annotate(
                 link_count=IssueLink.objects.filter(issue=OuterRef("id"))

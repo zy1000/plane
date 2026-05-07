@@ -4,9 +4,11 @@
  * See the LICENSE file for details.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { TIssueTypeExtraField } from "@plane/types";
 import {
   ProjectIssueTypeService,
+  getCachedTypeExtraFields,
   type TTypeExtraField,
 } from "@/services/project/project-issue-type.service";
 
@@ -18,29 +20,51 @@ const getErrorMessage = (error: unknown, fallback: string) => {
   return fallback;
 };
 
-const sortAndFilterFields = (raw: TTypeExtraField[] | undefined): TTypeExtraField[] => {
+const sortAndFilterFields = (raw: TTypeExtraField[] | TIssueTypeExtraField[] | undefined): TTypeExtraField[] => {
   if (!raw) return [];
   return [...raw]
     .filter((f) => f.is_active !== false)
     .sort((a, b) => {
-      const sa = a.sort_order ?? 0;
-      const sb = b.sort_order ?? 0;
+      const sa = (a.sort_order ?? 0);
+      const sb = (b.sort_order ?? 0);
       return sa - sb;
-    });
+    }) as TTypeExtraField[];
 };
 
 /**
- * 按 (workspaceSlug, projectId, issueTypeId) 拉取该工作项类型的自定义字段定义。
- * 用于创建/编辑工作项弹窗中动态渲染填写控件。
+ * 按 (workspaceSlug, projectId, issueTypeId) 获取该工作项类型的自定义字段定义。
+ *
+ * 优先使用 embeddedFields（随 issue detail 一起返回的数据），无需再发请求；
+ * 未提供时走 SWR：命中 service 缓存则立即渲染并后台 revalidate，否则发起请求。
+ *
+ * 返回值三态：
+ *   null     — 尚不确定（未提供 embedded 且缓存未命中，请求还在路上）
+ *   []       — 确定该类型没有自定义字段
+ *   [...]    — 字段列表
  */
 export const useIssueTypeExtraFields = (
   workspaceSlug: string | undefined,
   projectId: string | null | undefined,
-  issueTypeId: string | null | undefined
+  issueTypeId: string | null | undefined,
+  embeddedFields?: TIssueTypeExtraField[] | null
 ) => {
-  const [fields, setFields] = useState<TTypeExtraField[]>([]);
+  const getInitialFields = (): TTypeExtraField[] | null => {
+    // embedded data from issue detail response — use it directly
+    if (embeddedFields != null) return sortAndFilterFields(embeddedFields);
+    // try the module-level cache for immediate render
+    if (workspaceSlug && projectId && issueTypeId) {
+      const cached = getCachedTypeExtraFields(workspaceSlug, projectId, issueTypeId);
+      if (cached !== undefined) return sortAndFilterFields(cached);
+    }
+    return null;
+  };
+
+  const [fields, setFields] = useState<TTypeExtraField[] | null>(getInitialFields);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // keep a ref to compare embeddedFields identity and avoid infinite re-renders
+  const prevEmbeddedRef = useRef<TIssueTypeExtraField[] | null | undefined>(undefined);
 
   const projectIssueTypeService = new ProjectIssueTypeService();
 
@@ -60,13 +84,33 @@ export const useIssueTypeExtraFields = (
     } finally {
       setIsLoading(false);
     }
-    // projectIssueTypeService 是无状态封装，无需放入依赖
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceSlug, projectId, issueTypeId]);
 
   useEffect(() => {
+    // if embedded data was just provided (or changed), sync it synchronously and skip request
+    if (embeddedFields !== undefined) {
+      const changed = embeddedFields !== prevEmbeddedRef.current;
+      prevEmbeddedRef.current = embeddedFields;
+      if (embeddedFields != null) {
+        if (changed) setFields(sortAndFilterFields(embeddedFields));
+        return; // embedded present — no request needed
+      }
+    }
+
+    if (!workspaceSlug || !projectId || !issueTypeId) {
+      setFields([]);
+      return;
+    }
+
+    // SWR: show stale cache immediately, then revalidate in background
+    const cached = getCachedTypeExtraFields(workspaceSlug, projectId, issueTypeId);
+    if (cached !== undefined) {
+      setFields(sortAndFilterFields(cached));
+    }
+
     fetchFields();
-  }, [fetchFields]);
+  }, [fetchFields, embeddedFields, workspaceSlug, projectId, issueTypeId]);
 
   return {
     fields,

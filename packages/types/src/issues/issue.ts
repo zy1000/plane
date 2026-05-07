@@ -51,6 +51,21 @@ export type TIssueExtraFieldValue = {
   field_type?: TIssueExtraFieldType;
 };
 
+export type TIssueTypeExtraField = {
+  id: string;
+  name: string;
+  description?: string;
+  logo_props?: Record<string, unknown>;
+  field_type: TIssueExtraFieldType;
+  is_required?: boolean;
+  is_default?: boolean;
+  is_active?: boolean;
+  sort_order?: number;
+  options?: Record<string, unknown>;
+  default_value?: unknown;
+  validation?: Record<string, unknown>;
+};
+
 export type TBaseIssue = {
   id: string;
   sequence_id: number;
@@ -109,6 +124,7 @@ export type TIssue = TBaseIssue & {
   issue_link?: TIssueLink[];
   issue_relation?: IssueRelation[];
   issue_related?: IssueRelation[];
+  type_extra_fields?: TIssueTypeExtraField[];
   // tempId is used for optimistic updates. It is not a part of the API response.
   tempId?: string;
   // sourceIssueId is used to store the original issue id when creating a copy of an issue. Used in cloning property values. It is not a part of the API response.
