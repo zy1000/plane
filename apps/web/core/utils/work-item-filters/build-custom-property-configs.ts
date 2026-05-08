@@ -29,7 +29,11 @@ import {
   getFileURL,
 } from "@plane/utils";
 import type { TIssueType, TTypeExtraField } from "@/services/project/project-issue-type.service";
-import { getSelectOptions, getSelectionMode } from "@/components/issues/extra-fields/extra-field-control";
+import {
+  FIELD_TYPE_ICON,
+  getSelectOptions,
+  getSelectionMode,
+} from "@/components/issues/extra-fields/extra-field-control";
 import { IssueTypeFilterIcon } from "./issue-type-filter-icon";
 
 // All operators available for custom properties (core + extended)
@@ -283,14 +287,18 @@ export const buildCustomPropertyConfigs = (
       const propertyId = `customproperty_${field.id}` as TWorkItemFilterProperty;
       const label = `${field.name}（${issueType.name}）`;
       const iconProps = issueType.logo_props?.icon;
-      const filterIcon: React.FC<React.SVGAttributes<SVGElement>> = () =>
-        React.createElement(IssueTypeFilterIcon, { name: iconProps?.name, color: iconProps?.color });
+      const propertyIcon = FIELD_TYPE_ICON[field.field_type] ?? FIELD_TYPE_ICON.text;
+      const rightContent = React.createElement(IssueTypeFilterIcon, {
+        name: iconProps?.name,
+        color: iconProps?.color,
+      });
 
       if (field.field_type === "text") {
         return createFilterConfig<TWorkItemFilterProperty>({
           id: propertyId,
           label,
-          icon: filterIcon,
+          icon: propertyIcon,
+          rightContent,
           isEnabled: true,
           supportedOperatorConfigsMap: getTextOperatorEntries(field),
         });
@@ -300,7 +308,8 @@ export const buildCustomPropertyConfigs = (
         return createFilterConfig<TWorkItemFilterProperty>({
           id: propertyId,
           label,
-          icon: filterIcon,
+          icon: propertyIcon,
+          rightContent,
           isEnabled: true,
           supportedOperatorConfigsMap: getNumberOperatorEntries(field),
         });
@@ -310,7 +319,8 @@ export const buildCustomPropertyConfigs = (
         return createFilterConfig<TWorkItemFilterProperty>({
           id: propertyId,
           label,
-          icon: filterIcon,
+          icon: propertyIcon,
+          rightContent,
           isEnabled: true,
           supportedOperatorConfigsMap: getDateOperatorEntries(),
         });
@@ -324,7 +334,8 @@ export const buildCustomPropertyConfigs = (
         return createFilterConfig<TWorkItemFilterProperty>({
           id: propertyId,
           label,
-          icon: filterIcon,
+          icon: propertyIcon,
+          rightContent,
           isEnabled: true,
           supportedOperatorConfigsMap: getBooleanOperatorEntries(booleanOptions),
         });
@@ -337,7 +348,8 @@ export const buildCustomPropertyConfigs = (
         return createFilterConfig<TWorkItemFilterProperty>({
           id: propertyId,
           label,
-          icon: filterIcon,
+          icon: propertyIcon,
+          rightContent,
           isEnabled: true,
           supportedOperatorConfigsMap: isMultiple
             ? getMultiSelectOperatorEntries(selectOptions)
@@ -351,7 +363,8 @@ export const buildCustomPropertyConfigs = (
         return createFilterConfig<TWorkItemFilterProperty>({
           id: propertyId,
           label,
-          icon: filterIcon,
+          icon: propertyIcon,
+          rightContent,
           isEnabled: true,
           supportedOperatorConfigsMap: isMultiple ? getMultiUserOperatorEntries(members) : getSingleUserOperatorEntries(members),
         });

@@ -61,7 +61,7 @@ type TFieldTypeOption = {
   rowLabel: string;
   icon: typeof AlignLeft;
 };
-type TLucideIcon = FC<{ className?: string; strokeWidth?: number }>;
+type TLucideIcon = FC<{ className?: string; strokeWidth?: string | number }>;
 
 const DEFAULT_FIELD_TYPE_OPTION: TFieldTypeOption = { value: "text", label: "文本", rowLabel: "单行", icon: AlignLeft };
 const SELECT_FIELD_TYPE_OPTION: TFieldTypeOption = {
@@ -130,7 +130,7 @@ const getFieldRowLabel = (field: TTypeExtraField): string => {
 const getLucideIcon = (iconName?: string) =>
   iconName
     ? (TYPE_ICON_ALIASES[iconName] ??
-      (LucideIcons as Record<string, TLucideIcon | undefined>)[iconName] ??
+      (LucideIcons as unknown as Record<string, TLucideIcon | undefined>)[iconName] ??
       DEFAULT_TYPE_ICON_OPTION.icon)
     : DEFAULT_TYPE_ICON_OPTION.icon;
 
@@ -476,9 +476,12 @@ function formatUserIsMultipleForForm(field: TTypeExtraField): boolean {
 function FieldTypeSelect({
   value,
   onChange,
+  disabled = false,
 }: {
   value: TTypeExtraField["field_type"];
   onChange: (value: TTypeExtraField["field_type"]) => void;
+  /** 为 true 时不可改类型（例如编辑已有属性） */
+  disabled?: boolean;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -517,22 +520,34 @@ function FieldTypeSelect({
 
   useOutsideClickDetector(containerRef, () => setIsOpen(false), true);
 
+  useEffect(() => {
+    if (disabled) {
+      setIsOpen(false);
+      setQuery("");
+    }
+  }, [disabled]);
+
   return (
     <div ref={containerRef} className="relative">
       <label className="mb-1 block text-xs font-medium text-secondary">属性类型</label>
       <button
         ref={setReferenceElement}
         type="button"
-        className="flex h-9 w-full items-center justify-between rounded-md border border-subtle bg-surface-1 px-3 text-left text-sm text-primary shadow-sm transition hover:border-accent-primary/40"
+        disabled={disabled}
+        title={disabled ? "编辑时不可修改属性类型" : undefined}
+        className={`flex h-9 w-full items-center justify-between rounded-md border border-subtle bg-surface-1 px-3 text-left text-sm text-primary shadow-sm transition ${
+          disabled ? "cursor-not-allowed opacity-60" : "hover:border-accent-primary/40"
+        }`}
         onClick={() => setIsOpen((prev) => !prev)}
       >
         <span className="flex items-center gap-2">
           <SelectedIcon className="size-3.5 text-tertiary" />
           {selectedOption.label}
         </span>
-        <ChevronDown className={`size-3.5 text-tertiary transition-transform ${isOpen ? "rotate-180" : ""}`} />
+        <ChevronDown className={`size-3.5 text-tertiary transition-transform ${isOpen && !disabled ? "rotate-180" : ""}`} />
       </button>
       {isOpen &&
+        !disabled &&
         typeof document !== "undefined" &&
         createPortal(
           <div
@@ -578,10 +593,230 @@ function FieldTypeSelect({
   );
 }
 
+/** 下拉单选：含「不设置」与上方选项列表，样式与 FieldTypeSelect 一致 */
+function SelectExtraFieldDefaultSingle({
+  value,
+  options,
+  onChange,
+}: {
+  value: string;
+  options: string[];
+  onChange: (value: string) => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [referenceElement, setReferenceElement] = useState<HTMLButtonElement | null>(null);
+  const [popperElement, setPopperElement] = useState<HTMLDivElement | null>(null);
+  const [popoverWidth, setPopoverWidth] = useState<number | undefined>(undefined);
+
+  const rows = useMemo(
+    () => [{ key: "", label: "不设置" }, ...options.map((o) => ({ key: o, label: o }))],
+    [options]
+  );
+  const filteredRows = useMemo(
+    () => rows.filter((row) => row.label.toLowerCase().includes(query.toLowerCase())),
+    [rows, query]
+  );
+  const selectedLabel = value === "" ? "不设置" : value;
+
+  const { styles, attributes } = usePopper(referenceElement, popperElement, {
+    placement: "bottom-start",
+    strategy: "fixed",
+    modifiers: [
+      { name: "preventOverflow", options: { padding: 12 } },
+      { name: "offset", options: { offset: [0, 4] } },
+    ],
+  });
+
+  useLayoutEffect(() => {
+    if (isOpen && referenceElement) {
+      setPopoverWidth(referenceElement.offsetWidth);
+    }
+  }, [isOpen, referenceElement]);
+
+  useOutsideClickDetector(containerRef, () => setIsOpen(false), true);
+
+  return (
+    <div ref={containerRef} className="relative">
+      <label className="mb-1 block text-xs font-medium text-secondary">默认值</label>
+      <button
+        ref={setReferenceElement}
+        type="button"
+        className="flex h-9 w-full items-center justify-between gap-2 rounded-md border border-subtle bg-surface-1 px-3 text-left text-sm text-primary shadow-sm transition hover:border-accent-primary/40"
+        onClick={() => setIsOpen((prev) => !prev)}
+      >
+        <span className="min-w-0 flex-1 truncate">{selectedLabel}</span>
+        <ChevronDown className={`size-3.5 shrink-0 text-tertiary transition-transform ${isOpen ? "rotate-180" : ""}`} />
+      </button>
+      {isOpen &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            ref={setPopperElement}
+            style={{ ...styles.popper, width: popoverWidth }}
+            {...attributes.popper}
+            data-prevent-outside-click
+            className="z-50 rounded-lg border border-subtle bg-surface-1 p-2 shadow-raised-200"
+          >
+            <div className="mb-1.5 flex items-center gap-2 rounded-md border border-subtle px-2">
+              <Search className="size-3.5 text-tertiary" />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search"
+                className="h-8 w-full bg-transparent text-xs outline-none placeholder:text-tertiary"
+              />
+            </div>
+            <div className="max-h-48 overflow-y-auto">
+              {filteredRows.map((row) => (
+                <button
+                  key={row.key === "" ? "__unset__" : row.key}
+                  type="button"
+                  className="flex w-full items-center justify-between gap-2 rounded-md px-2 py-2 text-left text-sm text-primary transition hover:bg-layer-1-hover"
+                  onClick={() => {
+                    onChange(row.key);
+                    setIsOpen(false);
+                    setQuery("");
+                  }}
+                >
+                  <span className="min-w-0 flex-1 truncate">{row.label}</span>
+                  {value === row.key ? <Check className="size-3.5 shrink-0 text-accent-primary" /> : null}
+                </button>
+              ))}
+            </div>
+          </div>,
+          document.body
+        )}
+    </div>
+  );
+}
+
+/** 多选下拉：按钮展示已选摘要，面板内勾选选项，顺序与上方选项列表一致 */
+function SelectExtraFieldDefaultMultiple({
+  values,
+  options,
+  onChange,
+}: {
+  values: string[];
+  options: string[];
+  onChange: (values: string[]) => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [referenceElement, setReferenceElement] = useState<HTMLButtonElement | null>(null);
+  const [popperElement, setPopperElement] = useState<HTMLDivElement | null>(null);
+  const [popoverWidth, setPopoverWidth] = useState<number | undefined>(undefined);
+
+  const filteredOptions = useMemo(
+    () => options.filter((o: string) => o.toLowerCase().includes(query.toLowerCase())),
+    [options, query]
+  );
+
+  const buttonSummary = useMemo(() => {
+    if (values.length === 0) return "不设置";
+    return values.join("、");
+  }, [values]);
+
+  const { styles, attributes } = usePopper(referenceElement, popperElement, {
+    placement: "bottom-start",
+    strategy: "fixed",
+    modifiers: [
+      { name: "preventOverflow", options: { padding: 12 } },
+      { name: "offset", options: { offset: [0, 4] } },
+    ],
+  });
+
+  useLayoutEffect(() => {
+    if (isOpen && referenceElement) {
+      setPopoverWidth(referenceElement.offsetWidth);
+    }
+  }, [isOpen, referenceElement]);
+
+  useOutsideClickDetector(containerRef, () => setIsOpen(false), true);
+
+  const toggleOption = (opt: string) => {
+    const set = new Set(values);
+    if (set.has(opt)) set.delete(opt);
+    else set.add(opt);
+    onChange(options.filter((o: string) => set.has(o)));
+  };
+
+  return (
+    <div ref={containerRef} className="relative">
+      <label className="mb-1 block text-xs font-medium text-secondary">默认值</label>
+      <button
+        ref={setReferenceElement}
+        type="button"
+        className="flex h-9 w-full items-center justify-between gap-2 rounded-md border border-subtle bg-surface-1 px-3 text-left text-sm text-primary shadow-sm transition hover:border-accent-primary/40"
+        onClick={() => setIsOpen((prev) => !prev)}
+      >
+        <span className="min-w-0 flex-1 truncate" title={values.length > 0 ? buttonSummary : undefined}>
+          {buttonSummary}
+        </span>
+        <ChevronDown className={`size-3.5 shrink-0 text-tertiary transition-transform ${isOpen ? "rotate-180" : ""}`} />
+      </button>
+      {isOpen &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            ref={setPopperElement}
+            style={{ ...styles.popper, width: popoverWidth }}
+            {...attributes.popper}
+            data-prevent-outside-click
+            className="z-50 rounded-lg border border-subtle bg-surface-1 p-2 shadow-raised-200"
+          >
+            <div className="mb-1.5 flex items-center gap-2 rounded-md border border-subtle px-2">
+              <Search className="size-3.5 text-tertiary" />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search"
+                className="h-8 w-full bg-transparent text-xs outline-none placeholder:text-tertiary"
+              />
+            </div>
+            {values.length > 0 && (
+              <button
+                type="button"
+                className="mb-1.5 w-full rounded-md px-2 py-1.5 text-left text-xs text-secondary transition hover:bg-layer-1-hover hover:text-primary"
+                onClick={() => onChange([])}
+              >
+                清除已选默认值
+              </button>
+            )}
+            <div className="max-h-48 overflow-y-auto">
+              {filteredOptions.map((opt: string) => {
+                const checked = values.includes(opt);
+                return (
+                  <button
+                    key={opt}
+                    type="button"
+                    className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm text-primary transition hover:bg-layer-1-hover"
+                    onClick={() => toggleOption(opt)}
+                  >
+                    {checked ? (
+                      <Check className="size-3.5 shrink-0 text-accent-primary" />
+                    ) : (
+                      <span className="size-3.5 shrink-0 rounded border border-subtle" aria-hidden />
+                    )}
+                    <span className="min-w-0 flex-1 truncate">{opt}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>,
+          document.body
+        )}
+    </div>
+  );
+}
+
 function InlineFieldForm({
   form,
   isSubmitting,
   submitLabel = "创建",
+  fieldTypeLocked = false,
   onChange,
   onCancel,
   onSubmit,
@@ -589,6 +824,8 @@ function InlineFieldForm({
   form: TFieldFormState;
   isSubmitting: boolean;
   submitLabel?: string;
+  /** 编辑已有属性时为 true，禁止修改属性类型 */
+  fieldTypeLocked?: boolean;
   onChange: (form: TFieldFormState) => void;
   onCancel: () => void;
   onSubmit: () => void;
@@ -638,6 +875,7 @@ function InlineFieldForm({
         <div className="flex flex-col gap-3">
           <FieldTypeSelect
             value={form.field_type}
+            disabled={fieldTypeLocked}
             onChange={(fieldType) =>
               onChange({
                 ...form,
@@ -659,6 +897,7 @@ function InlineFieldForm({
                 value={form.number_default_value}
                 onChange={(e) => onChange({ ...form, number_default_value: e.target.value })}
                 placeholder="可选，留空表示无默认值"
+                className="w-full"
               />
             </div>
           )}
@@ -692,7 +931,7 @@ function InlineFieldForm({
                 <label className="mb-1 block text-xs font-medium text-secondary">选项</label>
                 <div className="space-y-2">
                   {form.select_options.map((option, index) => (
-                    <div key={index} className="flex items-center gap-2">
+                    <div key={index} className="flex min-w-0 items-center gap-2">
                       <Input
                         value={option}
                         onChange={(e) => {
@@ -701,6 +940,7 @@ function InlineFieldForm({
                           onChange({ ...form, select_options: nextOptions });
                         }}
                         placeholder="添加选项"
+                        className="min-w-0 flex-1"
                       />
                       {form.select_options.length > 1 && (
                         <button
@@ -735,56 +975,20 @@ function InlineFieldForm({
                 </button>
               </div>
 
-              {selectOptions.length > 0 && (
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-secondary">默认值</label>
-                  {!form.select_is_multiple ? (
-                    <div className="space-y-1.5 text-xs text-secondary">
-                      <label className="flex items-center gap-2">
-                        <input
-                          type="radio"
-                          checked={!form.select_default_value}
-                          onChange={() => onChange({ ...form, select_default_value: "" })}
-                          className="size-3.5"
-                        />
-                        不设置
-                      </label>
-                      {selectOptions.map((option) => (
-                        <label key={option} className="flex items-center gap-2">
-                          <input
-                            type="radio"
-                            checked={form.select_default_value === option}
-                            onChange={() => onChange({ ...form, select_default_value: option })}
-                            className="size-3.5"
-                          />
-                          {option}
-                        </label>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="space-y-1.5 text-xs text-secondary">
-                      {selectOptions.map((option) => (
-                        <label key={option} className="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            checked={form.select_default_values.includes(option)}
-                            onChange={(e) =>
-                              onChange({
-                                ...form,
-                                select_default_values: e.target.checked
-                                  ? [...form.select_default_values, option]
-                                  : form.select_default_values.filter((value) => value !== option),
-                              })
-                            }
-                            className="size-3.5"
-                          />
-                          {option}
-                        </label>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
+              {selectOptions.length > 0 &&
+                (!form.select_is_multiple ? (
+                  <SelectExtraFieldDefaultSingle
+                    value={form.select_default_value}
+                    options={selectOptions}
+                    onChange={(select_default_value) => onChange({ ...form, select_default_value })}
+                  />
+                ) : (
+                  <SelectExtraFieldDefaultMultiple
+                    values={form.select_default_values}
+                    options={selectOptions}
+                    onChange={(select_default_values) => onChange({ ...form, select_default_values })}
+                  />
+                ))}
             </div>
           )}
           {form.field_type === "user" && (
@@ -1358,6 +1562,7 @@ function IssueTypesSettingsPage({ params }: Route.ComponentProps) {
                                           form={fieldForm}
                                           isSubmitting={isFieldSubmitting}
                                           submitLabel="更新"
+                                          fieldTypeLocked
                                           onChange={setFieldForm}
                                           onCancel={resetFieldForm}
                                           onSubmit={() => handleSubmitField(issueType.id)}
