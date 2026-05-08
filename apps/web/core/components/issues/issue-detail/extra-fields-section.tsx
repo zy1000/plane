@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { observer } from "mobx-react";
 // types
 import type { TIssueExtraFieldType, TIssueExtraFieldValue } from "@plane/types";
@@ -33,13 +33,18 @@ import type { TIssueOperations } from "./root";
 type TDeferredFieldRowProps = {
   field: TTypeExtraField;
   committedValue: unknown;
+  issueId: string;
   onCommit: (next: TIssueExtraFieldValue["value"]) => Promise<void>;
   disabled?: boolean;
 };
 
 const DeferredFieldRow = observer(function DeferredFieldRow(props: TDeferredFieldRowProps) {
-  const { field, committedValue, onCommit, disabled } = props;
+  const { field, committedValue, issueId, onCommit, disabled } = props;
   const [localValue, setLocalValue] = useState<unknown>(committedValue);
+
+  useEffect(() => {
+    setLocalValue(committedValue);
+  }, [committedValue, issueId, field.id]);
 
   const handleBlur = useCallback(async () => {
     if (localValue !== committedValue) {
@@ -137,20 +142,15 @@ export const IssueExtraFieldsSection = observer(function IssueExtraFieldsSection
     issue?.type_extra_fields ?? null
   );
 
-  const buildMergedValues = useCallback(
-    (fieldId: string, fieldType: TIssueExtraFieldType, nextValue: TIssueExtraFieldValue["value"]) => {
-      const current = (issue?.extra_field_values ?? []) as TIssueExtraFieldValue[];
-      return upsertValue(current, fieldId, fieldType, nextValue);
-    },
-    [issue?.extra_field_values]
-  );
-
   const commit = useCallback(
     async (fieldId: string, fieldType: TIssueExtraFieldType, nextValue: TIssueExtraFieldValue["value"]) => {
-      const merged = buildMergedValues(fieldId, fieldType, nextValue);
+      const allowedFieldIds = new Set((fields ?? []).map((field) => field.id));
+      const current = (issue?.extra_field_values ?? []) as TIssueExtraFieldValue[];
+      const filteredCurrent = current.filter((item) => allowedFieldIds.has(item.extra_field_id));
+      const merged = upsertValue(filteredCurrent, fieldId, fieldType, nextValue);
       await issueOperations.update(workspaceSlug, projectId, issueId, { extra_field_values: merged });
     },
-    [buildMergedValues, issueOperations, workspaceSlug, projectId, issueId]
+    [fields, issue?.extra_field_values, issue?.type_id, issueOperations, workspaceSlug, projectId, issueId]
   );
 
   // fields === null: 尚未确定（embedded 未到，缓存未命中，请求在途）
@@ -174,9 +174,10 @@ export const IssueExtraFieldsSection = observer(function IssueExtraFieldsSection
           if (isDeferred) {
             return (
               <DeferredFieldRow
-                key={field.id}
+                key={`${issueId}-${field.id}`}
                 field={field}
                 committedValue={isValueEmpty(currentValue) ? "" : currentValue}
+                issueId={issueId}
                 onCommit={(next) => commit(field.id, field.field_type, next)}
                 disabled={disabled}
               />

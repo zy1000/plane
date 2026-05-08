@@ -66,9 +66,12 @@ import { useModule } from "@/hooks/store/use-module";
 import { useProject } from "@/hooks/store/use-project";
 import { useProjectState } from "@/hooks/store/use-project-state";
 import { useProjectIssueTypes } from "@/hooks/store/use-project-issue-types";
+import { useProjectTypeExtraFields } from "@/hooks/store/use-project-type-extra-fields";
 import { useRelease } from "@/hooks/store/use-release";
 // plane web imports
 import { useFiltersOperatorConfigs } from "@/plane-web/hooks/rich-filters/use-filters-operator-configs";
+// utils
+import { buildCustomPropertyConfigs } from "@/utils/work-item-filters/build-custom-property-configs";
 
 export type TWorkItemFiltersEntityProps = {
   workspaceSlug: string;
@@ -118,6 +121,7 @@ export const useWorkItemFiltersConfig = (props: TUseWorkItemFiltersConfigProps):
   const { getReleaseById } = useRelease();
   const { getUserDetails } = useMember();
   const { issueTypes: workItemTypes } = useProjectIssueTypes(workspaceSlug, projectId);
+  const { fields: projectExtraFields } = useProjectTypeExtraFields(workspaceSlug, projectId);
   // derived values
   const operatorConfigs = useFiltersOperatorConfigs({ workspaceSlug });
   const filtersToShow = useMemo(() => new Set(allowedFilters), [allowedFilters]);
@@ -169,7 +173,11 @@ export const useWorkItemFiltersConfig = (props: TUseWorkItemFiltersConfigProps):
         : undefined,
     [releaseIds, getReleaseById]
   );
-  const areAllConfigsInitialized = useMemo(() => isLoaderReady(projectLoader), [projectLoader]);
+  // projectExtraFields === null means still loading (no cached data); [] means loaded and empty
+  const areAllConfigsInitialized = useMemo(
+    () => isLoaderReady(projectLoader) && projectExtraFields !== null,
+    [projectLoader, projectExtraFields]
+  );
 
   /**
    * Checks if a filter is enabled based on the filters to show.
@@ -443,6 +451,24 @@ export const useWorkItemFiltersConfig = (props: TUseWorkItemFiltersConfigProps):
     [isFilterEnabled, workItemTypes, operatorConfigs]
   );
 
+  // Build custom property filter configs from all project extra fields
+  const customPropertyConfigs = useMemo(
+    () =>
+      projectExtraFields && projectExtraFields.length > 0 && workItemTypes
+        ? buildCustomPropertyConfigs(projectExtraFields, workItemTypes ?? [], members ?? [], operatorConfigs)
+        : [],
+    [projectExtraFields, workItemTypes, members, operatorConfigs]
+  );
+
+  // Build configMap entry for custom properties
+  const customPropertyConfigMap = useMemo(
+    () =>
+      Object.fromEntries(
+        customPropertyConfigs.map((c) => [c.id, c])
+      ) as { [key in TWorkItemFilterProperty]?: TFilterConfig<TWorkItemFilterProperty, TFilterValue> },
+    [customPropertyConfigs]
+  );
+
   return {
     areAllConfigsInitialized,
     configs: [
@@ -463,6 +489,7 @@ export const useWorkItemFiltersConfig = (props: TUseWorkItemFiltersConfigProps):
       updatedAtFilterConfig,
       createdByFilterConfig,
       subscriberFilterConfig,
+      ...customPropertyConfigs,
     ],
     configMap: {
       project_id: projectFilterConfig,
@@ -482,6 +509,7 @@ export const useWorkItemFiltersConfig = (props: TUseWorkItemFiltersConfigProps):
       target_date: targetDateFilterConfig,
       created_at: createdAtFilterConfig,
       updated_at: updatedAtFilterConfig,
+      ...customPropertyConfigMap,
     } as { [key in TWorkItemFilterProperty]?: TFilterConfig<TWorkItemFilterProperty, TFilterValue> },
     isFilterEnabled,
     members: members ?? [],

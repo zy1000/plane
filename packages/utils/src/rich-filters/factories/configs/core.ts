@@ -96,6 +96,44 @@ export const getMultiSelectConfig = <
       })),
   });
 
+// ------------ Text / Number filters ------------
+
+/**
+ * Text filter configuration
+ */
+export type TTextConfig = TBaseFilterFieldConfig & {
+  placeholder?: string;
+};
+
+/**
+ * Helper to get the text input config
+ * @param config - Text-specific configuration
+ * @returns The text input config
+ */
+export const getTextInputConfig = (config: TTextConfig) =>
+  createFilterFieldConfig<typeof FILTER_FIELD_TYPE.TEXT, string>({
+    type: FILTER_FIELD_TYPE.TEXT,
+    ...config,
+  } as any) as ReturnType<typeof createFilterFieldConfig>;
+
+/**
+ * Number filter configuration
+ */
+export type TNumberConfig = TBaseFilterFieldConfig & {
+  placeholder?: string;
+};
+
+/**
+ * Helper to get the number input config
+ * @param config - Number-specific configuration
+ * @returns The number input config
+ */
+export const getNumberInputConfig = (config: TNumberConfig) =>
+  createFilterFieldConfig<typeof FILTER_FIELD_TYPE.NUMBER, string>({
+    type: FILTER_FIELD_TYPE.NUMBER,
+    ...config,
+  } as any) as ReturnType<typeof createFilterFieldConfig>;
+
 // ------------ Date filters ------------
 
 /**

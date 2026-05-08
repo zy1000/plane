@@ -98,5 +98,5 @@ export const createFilterFieldConfig = <T extends TFilterFieldType, V extends TF
         ? TDateFilterFieldConfig<V>
         : T extends typeof FILTER_FIELD_TYPE.DATE_RANGE
           ? TDateRangeFilterFieldConfig<V>
-          : never
+          : TSupportedFilterFieldConfigs<V>
 ): TSupportedFilterFieldConfigs<V> => config as TSupportedFilterFieldConfigs<V>;

@@ -6,14 +6,45 @@
 
 import type { TFilterValue } from "../expression";
 
+import type { TBaseFilterFieldConfig } from "./shared";
+
 /**
  * Extended filter types
  */
-export const EXTENDED_FILTER_FIELD_TYPE = {} as const;
+export const EXTENDED_FILTER_FIELD_TYPE = {
+  TEXT: "text",
+  NUMBER: "number",
+} as const;
+
+// -------- TEXT FILTER CONFIGURATION --------
+
+/**
+ * Text filter configuration - for free-text input filtering.
+ * - defaultValue: Initial text value
+ */
+export type TTextFilterFieldConfig<V extends TFilterValue> = TBaseFilterFieldConfig & {
+  type: typeof EXTENDED_FILTER_FIELD_TYPE.TEXT;
+  defaultValue?: V;
+  placeholder?: string;
+};
+
+// -------- NUMBER FILTER CONFIGURATION --------
+
+/**
+ * Number filter configuration - for numeric input filtering.
+ * - defaultValue: Initial numeric value
+ */
+export type TNumberFilterFieldConfig<V extends TFilterValue> = TBaseFilterFieldConfig & {
+  type: typeof EXTENDED_FILTER_FIELD_TYPE.NUMBER;
+  defaultValue?: V;
+  placeholder?: string;
+};
 
 // -------- UNION TYPES --------
 
 /**
  * All extended filter configurations
  */
-export type TExtendedFilterFieldConfigs<_V extends TFilterValue = TFilterValue> = never;
+export type TExtendedFilterFieldConfigs<V extends TFilterValue = TFilterValue> =
+  | TTextFilterFieldConfig<V>
+  | TNumberFilterFieldConfig<V>;

@@ -116,7 +116,9 @@ export const WORK_ITEM_FILTER_PROPERTY_KEYS = [
   "created_at",
   "updated_at",
 ] as const;
-export type TWorkItemFilterProperty = (typeof WORK_ITEM_FILTER_PROPERTY_KEYS)[number];
+export type TWorkItemFilterProperty =
+  | (typeof WORK_ITEM_FILTER_PROPERTY_KEYS)[number]
+  | `customproperty_${string}`;
 
 export type TWorkItemFilterConditionKey = `${TWorkItemFilterProperty}__${TSupportedOperators}`;
 
