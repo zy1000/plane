@@ -124,7 +124,11 @@ export const ExtraFieldControl = (props: TExtraFieldControlProps) => {
         placeholder={field.description || field.name}
         disabled={disabled}
         hasError={!!error}
-        className={cn("w-full", compact && "h-7.5 border-transparent bg-transparent px-2 py-1 text-body-xs-regular hover:border-subtle focus:border-subtle")}
+        className={cn(
+          "w-full",
+          compact &&
+            "h-7.5 !border-transparent !bg-transparent px-1.5 py-1 text-body-xs-regular hover:!border-subtle focus:!border-subtle"
+        )}
       />
     );
   }
@@ -147,7 +151,11 @@ export const ExtraFieldControl = (props: TExtraFieldControlProps) => {
         placeholder={field.description || field.name}
         disabled={disabled}
         hasError={!!error}
-        className={cn("w-full", compact && "h-7.5 border-transparent bg-transparent px-2 py-1 text-body-xs-regular hover:border-subtle focus:border-subtle")}
+        className={cn(
+          "w-full",
+          compact &&
+            "h-7.5 !border-transparent !bg-transparent px-1.5 py-1 text-body-xs-regular hover:!border-subtle focus:!border-subtle"
+        )}
       />
     );
   }
@@ -158,6 +166,7 @@ export const ExtraFieldControl = (props: TExtraFieldControlProps) => {
         value={value === true || value === "true" || value === 1}
         onChange={(checked) => onChange(checked)}
         disabled={disabled}
+        className={cn(compact && "ml-1.5")}
       />
     );
   }
