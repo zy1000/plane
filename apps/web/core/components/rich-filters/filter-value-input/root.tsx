@@ -21,16 +21,19 @@ import type {
   TNumberFilterFieldConfig,
   TFilterConditionNodeForDisplay,
 } from "@plane/types";
-import { FILTER_FIELD_TYPE } from "@plane/types";
+import { FILTER_FIELD_TYPE, COMPARISON_OPERATOR, EXTENDED_COMPARISON_OPERATOR } from "@plane/types";
 // local imports
 import { AdditionalFilterValueInput } from "@/plane-web/components/rich-filters/filter-value-input/root";
 import type { TFilterValueInputProps } from "../shared";
 import { DateRangeFilterValueInput } from "./date/range";
 import { SingleDateFilterValueInput } from "./date/single";
+import { NumberRangeFilterValueInput } from "./number/range";
 import { NumberFilterValueInput } from "./number/single";
 import { MultiSelectFilterValueInput } from "./select/multi";
 import { SingleSelectFilterValueInput } from "./select/single";
 import { TextFilterValueInput } from "./text/single";
+
+const NUMBER_RANGE_OPERATORS = new Set([COMPARISON_OPERATOR.RANGE, EXTENDED_COMPARISON_OPERATOR.NOT_RANGE]);
 
 export const FilterValueInput = observer(function FilterValueInput<P extends TFilterProperty, V extends TFilterValue>(
   props: TFilterValueInputProps<P, V>
@@ -97,8 +100,18 @@ export const FilterValueInput = observer(function FilterValueInput<P extends TFi
     );
   }
 
-  // Number filter input
+  // Number filter input (range or single)
   if (filterFieldConfig?.type === FILTER_FIELD_TYPE.NUMBER) {
+    if (NUMBER_RANGE_OPERATORS.has(condition.operator as any)) {
+      return (
+        <NumberRangeFilterValueInput<P>
+          config={filterFieldConfig as TNumberFilterFieldConfig<string>}
+          condition={condition as TFilterConditionNodeForDisplay<P, string>}
+          isDisabled={isDisabled}
+          onChange={(value) => onChange(value as SingleOrArray<V>)}
+        />
+      );
+    }
     return (
       <NumberFilterValueInput<P>
         config={filterFieldConfig as TNumberFilterFieldConfig<string>}

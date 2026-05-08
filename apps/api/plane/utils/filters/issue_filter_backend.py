@@ -9,12 +9,17 @@ keys by translating them into subquery Q-objects against TypeExtraFieldValue.
 
 Supported field types and operators
 ------------------------------------
-text    → value_text  : exact, in
-number  → value_number: exact, in
-date    → value_date  : exact, range
-boolean → value       : exact  (JSON field, value coerced to bool)
-select  → value       : exact (single), contains/in (multi)
-user    → value       : exact (single), contains/in (multi)
+text    → value_text  : exact, not_exact, contains, not_contains
+number  → value_number: exact, not_exact, lt, not_lt, lte, not_lte,
+                        gt, not_gt, gte, not_gte, range, not_range
+date    → value_date  : exact, not_exact, lt, not_lt, lte, not_lte,
+                        gt, not_gt, gte, not_gte, range, not_range
+boolean → value       : exact, not_exact  (JSON field, value coerced to bool)
+select  → value       : exact, not_exact (single), in, not_in (multi)
+user    → value       : exact, not_exact (single), in, not_in (multi)
+
+Negated operators (`not_*`) translate to `~Q(pk__in=subquery)` so that
+work items without any value for the field are also returned.
 """
 
 from decimal import Decimal, InvalidOperation
@@ -25,6 +30,30 @@ from rest_framework.exceptions import ValidationError as DRFValidationError
 from plane.db.models import TypeExtraField, TypeExtraFieldValue
 
 from .filter_backend import ComplexFilterBackend
+
+# Operators that should negate the subquery (i.e. ~Q(pk__in=...))
+_NEGATED_OPS = frozenset({
+    "not_exact",
+    "not_in",
+    "not_contains",
+    "not_lt",
+    "not_lte",
+    "not_gt",
+    "not_gte",
+    "not_range",
+})
+
+# Maps each negated operator to its positive counterpart
+_POSITIVE_OF = {
+    "not_exact": "exact",
+    "not_in": "in",
+    "not_contains": "contains",
+    "not_lt": "lt",
+    "not_lte": "lte",
+    "not_gt": "gt",
+    "not_gte": "gte",
+    "not_range": "range",
+}
 
 
 class IssueComplexFilterBackend(ComplexFilterBackend):
@@ -48,7 +77,7 @@ class IssueComplexFilterBackend(ComplexFilterBackend):
 
         fields = self._extract_field_names(filter_data)
         for field in fields:
-            # Skip customproperty_* — these are validated at query time in _build_custom_property_q
+            # Skip customproperty_* — these are validated at query time
             if field.startswith(self.CUSTOM_PROP_PREFIX):
                 continue
             if field not in allowed_fields:
@@ -81,8 +110,8 @@ class IssueComplexFilterBackend(ComplexFilterBackend):
     def _build_custom_property_q(self, key: str, value, view) -> Q:
         """Translate a customproperty_<field_id>__<op> condition to a Q-object.
 
-        The Q-object uses a subquery against TypeExtraFieldValue so that it
-        can be AND-ed or OR-ed freely with other Q-objects.
+        Negated operators (not_*) produce ~Q(pk__in=subquery) so that work
+        items with no value for the field are also matched.
         """
         # Parse key: customproperty_<field_id>__<op>
         without_prefix = key[len(self.CUSTOM_PROP_PREFIX):]
@@ -118,13 +147,16 @@ class IssueComplexFilterBackend(ComplexFilterBackend):
                 }
             )
 
-        lookup_q = self._build_field_lookup_q(field, op, value)
+        is_negated = op in _NEGATED_OPS
+        positive_op = _POSITIVE_OF.get(op, op)
+
+        lookup_q = self._build_field_lookup_q(field, positive_op, value)
         subquery = TypeExtraFieldValue.objects.filter(
             extra_field_id=field_id,
             deleted_at__isnull=True,
         ).filter(lookup_q).values("issue_id")
 
-        return Q(pk__in=subquery)
+        return ~Q(pk__in=subquery) if is_negated else Q(pk__in=subquery)
 
     def _build_field_lookup_q(self, field: TypeExtraField, op: str, value) -> Q:
         field_type = field.field_type
@@ -148,7 +180,7 @@ class IssueComplexFilterBackend(ComplexFilterBackend):
         )
 
     # ------------------------------------------------------------------ #
-    # Per-type lookup helpers                                              #
+    # Per-type lookup helpers (positive operators only)                    #
     # ------------------------------------------------------------------ #
 
     def _text_q(self, op: str, value) -> Q:
@@ -157,6 +189,8 @@ class IssueComplexFilterBackend(ComplexFilterBackend):
         if op == "in":
             values = self._ensure_list(value)
             return Q(value_text__in=[str(v) for v in values])
+        if op == "contains":
+            return Q(value_text__icontains=str(value))
         raise DRFValidationError(
             {"message": f"Operator '{op}' not supported for text fields", "code": "unsupported_operator"}
         )
@@ -167,6 +201,21 @@ class IssueComplexFilterBackend(ComplexFilterBackend):
         if op == "in":
             values = self._ensure_list(value)
             return Q(value_number__in=[self._to_decimal(v) for v in values])
+        if op == "lt":
+            return Q(value_number__lt=self._to_decimal(value))
+        if op == "lte":
+            return Q(value_number__lte=self._to_decimal(value))
+        if op == "gt":
+            return Q(value_number__gt=self._to_decimal(value))
+        if op == "gte":
+            return Q(value_number__gte=self._to_decimal(value))
+        if op == "range":
+            values = self._ensure_list(value)
+            if len(values) != 2:
+                raise DRFValidationError(
+                    {"message": "Number range filter requires exactly 2 values", "code": "invalid_range"}
+                )
+            return Q(value_number__range=(self._to_decimal(values[0]), self._to_decimal(values[1])))
         raise DRFValidationError(
             {"message": f"Operator '{op}' not supported for number fields", "code": "unsupported_operator"}
         )
@@ -174,6 +223,14 @@ class IssueComplexFilterBackend(ComplexFilterBackend):
     def _date_q(self, op: str, value) -> Q:
         if op == "exact":
             return Q(value_date=value)
+        if op == "lt":
+            return Q(value_date__lt=value)
+        if op == "lte":
+            return Q(value_date__lte=value)
+        if op == "gt":
+            return Q(value_date__gt=value)
+        if op == "gte":
+            return Q(value_date__gte=value)
         if op == "range":
             values = self._ensure_list(value)
             if len(values) != 2:
@@ -201,14 +258,12 @@ class IssueComplexFilterBackend(ComplexFilterBackend):
 
         if op == "exact":
             if is_multi:
-                # For multi-select stored as array, check if the value is contained
                 return Q(value__contains=[value])
             return Q(value=value)
 
         if op == "in":
             values = self._ensure_list(value)
             if is_multi:
-                # Any of the requested values is contained in the stored array
                 q = Q()
                 for v in values:
                     q |= Q(value__contains=[v])

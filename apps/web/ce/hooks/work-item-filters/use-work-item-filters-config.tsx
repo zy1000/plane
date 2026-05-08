@@ -455,9 +455,9 @@ export const useWorkItemFiltersConfig = (props: TUseWorkItemFiltersConfigProps):
   const customPropertyConfigs = useMemo(
     () =>
       projectExtraFields && projectExtraFields.length > 0 && workItemTypes
-        ? buildCustomPropertyConfigs(projectExtraFields, workItemTypes ?? [], members ?? [], operatorConfigs)
+        ? buildCustomPropertyConfigs(projectExtraFields, workItemTypes ?? [], members ?? [])
         : [],
-    [projectExtraFields, workItemTypes, members, operatorConfigs]
+    [projectExtraFields, workItemTypes, members]
   );
 
   // Build configMap entry for custom properties
