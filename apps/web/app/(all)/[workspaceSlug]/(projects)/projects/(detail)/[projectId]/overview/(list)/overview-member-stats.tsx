@@ -66,8 +66,8 @@ export const OverviewMemberStats: FC<Props> = observer(
     }
 
     return (
-      <Table>
-        <TableHeader className="border-b border-subtle border-t-0 bg-transparent">
+      <Table wrapperClassName="overflow-visible">
+        <TableHeader className="border-y-0 bg-transparent [&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-surface-1 [&_th]:shadow-[inset_0_-1px_0_var(--border-subtle)]">
           <TableRow>
             <TableHead className="h-8 w-1/4 text-left text-xs font-medium text-placeholder">成员</TableHead>
             <TableHead className="h-8 text-left text-xs font-medium text-placeholder">角色</TableHead>

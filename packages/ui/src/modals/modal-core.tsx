@@ -87,7 +87,7 @@ export function ModalCore(props: Props) {
                   className
                 )}
               >
-                <div ref={panelInnerRef} className="w-full">
+                <div ref={panelInnerRef} className={cn("h-full min-h-0 w-full")}>
                   {children}
                 </div>
               </Dialog.Panel>

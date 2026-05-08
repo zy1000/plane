@@ -297,8 +297,8 @@ export function StatisticExpandModal({ isOpen, onClose, section, workspaceSlug, 
     >
       <div className="flex min-h-0 flex-1 flex-col bg-surface-1">
         <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-3 vertical-scrollbar scrollbar-sm">
-          <Table>
-            <TableHeader className="border-b border-subtle border-t-0 bg-transparent">
+          <Table wrapperClassName="overflow-visible">
+            <TableHeader className="border-y-0 bg-transparent [&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-surface-1 [&_th]:shadow-[inset_0_-1px_0_var(--border-subtle)]">
               <TableRow>
                 {config.columns.map((col) => (
                   <TableHead
