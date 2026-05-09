@@ -7,11 +7,18 @@ from rest_framework.response import Response
 from plane.app.serializers.issue import IssueBatchUpdateSerializer
 from plane.bgtasks.issue_activities_task import issue_activity
 from plane.app.views import BaseAPIView
-from plane.db.models import Issue, UserRecentVisit
+from plane.db.models import (
+    Issue,
+    IssueTransitionRecord,
+    TransitionRecordStatus,
+    UserRecentVisit,
+)
 from plane.utils.host import base_host
 from plane.utils.workflow.transition import (
     cancel_issue_pending_transitions,
+    capture_issue_content_snapshot,
     check_update_state_permission,
+    reset_pending_transition_votes_if_content_changed,
 )
 
 
@@ -64,7 +71,23 @@ class IssueBatchUpdate(BaseAPIView):
                         cancelled_by=request.user,
                         project_id=str(project_id),
                     )
+                # 评审期间内容变更检测：仅在存在 PENDING 审批时捕获快照
+                approval_before_snapshot = None
+                if IssueTransitionRecord.objects.filter(
+                    issue=query, status=TransitionRecordStatus.PENDING
+                ).exists():
+                    approval_before_snapshot = capture_issue_content_snapshot(issue=query)
+
                 serializer.save()
+
+                if approval_before_snapshot is not None:
+                    query.refresh_from_db()
+                    reset_pending_transition_votes_if_content_changed(
+                        issue=query,
+                        before_snapshot=approval_before_snapshot,
+                        actor=request.user,
+                        project_id=str(project_id),
+                    )
                 updated_issue_ids.append(str(query.id))
 
         if blocked:

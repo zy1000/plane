@@ -68,11 +68,13 @@ from plane.db.models import (
     IssueReaction,
     IssueRelation,
     IssueSubscriber,
+    IssueTransitionRecord,
     ProjectUserProperty,
     ModuleIssue,
     ReleaseIssue,
     Project,
     ProjectMember,
+    TransitionRecordStatus,
     TypeExtraField,
     UserRecentVisit, IssueType, State,
 )
@@ -90,7 +92,12 @@ from plane.utils.paginator import GroupedOffsetPaginator, SubGroupedOffsetPagina
 from plane.utils.timezone_converter import user_timezone_converter
 from plane.utils.extra_field_value import serialize_extra_field_values
 from plane.settings.redis import redis_instance
-from plane.utils.workflow import check_update_state_permission, cancel_issue_pending_transitions
+from plane.utils.workflow import (
+    check_update_state_permission,
+    cancel_issue_pending_transitions,
+    capture_issue_content_snapshot,
+    reset_pending_transition_votes_if_content_changed,
+)
 from plane.db.models import State as StateModel
 
 from .. import BaseAPIView, BaseViewSet
@@ -792,6 +799,15 @@ class IssueViewSet(BaseViewSet):
             except StateModel.DoesNotExist:
                 pass
 
+        # 评审期间内容变更检测：仅在存在 PENDING 审批时捕获快照，避免无谓查询
+        approval_before_snapshot = None
+        if IssueTransitionRecord.objects.filter(
+            issue=issue, status=TransitionRecordStatus.PENDING
+        ).exists():
+            approval_before_snapshot = capture_issue_content_snapshot(
+                issue=issue, assignee_ids=issue.assignee_ids
+            )
+
         current_instance = json.dumps(IssueDetailSerializer(issue).data, cls=DjangoJSONEncoder)
 
         # 规则检查，是否有权限修改状态
@@ -810,6 +826,15 @@ class IssueViewSet(BaseViewSet):
                                            context={"project_id": project_id})
         if serializer.is_valid():
             serializer.save()
+            # 评审期间核心字段或必填字段变更，重置已投票
+            if approval_before_snapshot is not None:
+                issue.refresh_from_db()
+                reset_pending_transition_votes_if_content_changed(
+                    issue=issue,
+                    before_snapshot=approval_before_snapshot,
+                    actor=request.user,
+                    project_id=str(project_id),
+                )
             # # Check if the update is a migration description update
             # is_migration_description_update = skip_activity and is_description_update
             # # Log all the updates
