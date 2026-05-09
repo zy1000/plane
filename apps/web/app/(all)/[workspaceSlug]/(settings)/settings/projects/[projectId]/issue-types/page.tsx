@@ -63,7 +63,7 @@ type TFieldTypeOption = {
 };
 type TLucideIcon = FC<{ className?: string; strokeWidth?: string | number }>;
 
-const DEFAULT_FIELD_TYPE_OPTION: TFieldTypeOption = { value: "text", label: "文本", rowLabel: "单行", icon: AlignLeft };
+const DEFAULT_FIELD_TYPE_OPTION: TFieldTypeOption = { value: "text", label: "文本", rowLabel: "文本", icon: AlignLeft };
 const SELECT_FIELD_TYPE_OPTION: TFieldTypeOption = {
   value: "select",
   label: "下拉菜单",
@@ -105,6 +105,15 @@ const TYPE_ICON_ALIASES: Record<string, TLucideIcon> = {
 
 const isSelectFieldType = (fieldType: TTypeExtraField["field_type"]) => fieldType === "select";
 
+const getTextMode = (options: TTypeExtraField["options"]): "single_line" | "paragraph" => {
+  if (!options || typeof options !== "object" || Array.isArray(options)) return "single_line";
+  return (options as { text_mode?: unknown }).text_mode === "paragraph" ? "paragraph" : "single_line";
+};
+
+function formatTextIsParagraphForForm(field: TTypeExtraField): boolean {
+  return field.field_type === "text" && getTextMode(field.options) === "paragraph";
+}
+
 /**
  * 从 options 解析选择模式：select / user 共用 options.selection_mode 表达单/多选。
  * 兼容老字段中可能出现的 selectionMode / multiple: true 写法。
@@ -121,8 +130,9 @@ const getSelectionMode = (options: TTypeExtraField["options"]): "single" | "mult
 const getFieldTypeOption = (fieldType: TTypeExtraField["field_type"]) =>
   FIELD_TYPE_OPTIONS.find((option) => option.value === fieldType) ?? DEFAULT_FIELD_TYPE_OPTION;
 
-/** 字段行展示文案：仅 select 多选会替换为「多选」，其余沿用属性类型原始 rowLabel。 */
+/** 字段行展示文案 */
 const getFieldRowLabel = (field: TTypeExtraField): string => {
+  if (field.field_type === "text") return getTextMode(field.options) === "paragraph" ? "段落" : "单行";
   if (field.field_type === "select" && getSelectionMode(field.options) === "multiple") return "多选";
   return getFieldTypeOption(field.field_type).rowLabel;
 };
@@ -383,6 +393,8 @@ type TFieldFormState = {
   name: string;
   description: string;
   field_type: TTypeExtraField["field_type"];
+  /** 仅当 field_type 为 text 时使用：true 表示段落模式 */
+  text_is_paragraph: boolean;
   /** 仅当 field_type 为 number 时使用；空字符串表示不设置默认值 */
   number_default_value: string;
   /** 仅当 field_type 为 select 时使用 */
@@ -401,6 +413,7 @@ const DEFAULT_FIELD_FORM: TFieldFormState = {
   name: "",
   description: "",
   field_type: "text",
+  text_is_paragraph: false,
   number_default_value: "",
   select_options: [""],
   select_is_multiple: false,
@@ -880,6 +893,7 @@ function InlineFieldForm({
               onChange({
                 ...form,
                 field_type: fieldType,
+                ...(fieldType !== "text" ? { text_is_paragraph: false } : {}),
                 ...(fieldType !== "number" ? { number_default_value: "" } : {}),
                 ...(!isSelectFieldType(fieldType)
                   ? { select_default_value: "", select_default_values: [], select_is_multiple: false }
@@ -888,6 +902,31 @@ function InlineFieldForm({
               })
             }
           />
+          {form.field_type === "text" && (
+            <div>
+              <label className="mb-1 block text-xs font-medium text-secondary">属性</label>
+              <div className="flex items-center gap-4 text-xs text-secondary">
+                <label className="flex items-center gap-1.5">
+                  <input
+                    type="radio"
+                    checked={!form.text_is_paragraph}
+                    onChange={() => onChange({ ...form, text_is_paragraph: false })}
+                    className="size-3.5"
+                  />
+                  单行
+                </label>
+                <label className="flex items-center gap-1.5">
+                  <input
+                    type="radio"
+                    checked={form.text_is_paragraph}
+                    onChange={() => onChange({ ...form, text_is_paragraph: true })}
+                    className="size-3.5"
+                  />
+                  段落
+                </label>
+              </div>
+            </div>
+          )}
           {form.field_type === "number" && (
             <div>
               <label className="mb-1 block text-xs font-medium text-secondary">默认值</label>
@@ -1205,6 +1244,7 @@ function IssueTypesSettingsPage({ params }: Route.ComponentProps) {
       name: field.name ?? "",
       description: field.description ?? "",
       field_type: field.field_type,
+      text_is_paragraph: formatTextIsParagraphForForm(field),
       number_default_value: formatNumberFieldDefaultForForm(field),
       select_options: formatSelectOptionsForForm(field),
       select_is_multiple: formatSelectIsMultipleForForm(field),
@@ -1345,6 +1385,11 @@ function IssueTypesSettingsPage({ params }: Route.ComponentProps) {
           : null;
     }
 
+    const textOptionsPayload =
+      fieldForm.field_type === "text"
+        ? { text_mode: fieldForm.text_is_paragraph ? "paragraph" : "single_line" }
+        : undefined;
+
     const userOptionsPayload =
       fieldForm.field_type === "user"
         ? {
@@ -1361,6 +1406,7 @@ function IssueTypesSettingsPage({ params }: Route.ComponentProps) {
           field_type: fieldForm.field_type,
           is_required: fieldForm.is_required,
           is_active: fieldForm.is_active,
+          ...(fieldForm.field_type === "text" ? { options: textOptionsPayload } : {}),
           ...(fieldForm.field_type === "number" ? { default_value: numberDefaultPayload ?? null } : {}),
           ...(isSelectFieldType(fieldForm.field_type)
             ? { options: selectOptionsPayload, default_value: selectDefaultPayload ?? null }
@@ -1375,6 +1421,7 @@ function IssueTypesSettingsPage({ params }: Route.ComponentProps) {
           field_type: fieldForm.field_type,
           is_required: fieldForm.is_required,
           is_active: fieldForm.is_active,
+          ...(fieldForm.field_type === "text" ? { options: textOptionsPayload } : {}),
           ...(fieldForm.field_type === "number" ? { default_value: numberDefaultPayload ?? null } : {}),
           ...(isSelectFieldType(fieldForm.field_type)
             ? { options: selectOptionsPayload, default_value: selectDefaultPayload ?? null }

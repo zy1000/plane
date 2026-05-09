@@ -13,6 +13,7 @@ import {
   ExtraFieldControl,
   FIELD_TYPE_ICON,
   findValueForField,
+  getTextMode,
   isValueEmpty,
   upsertValue,
 } from "@/components/issues/extra-fields";
@@ -36,10 +37,12 @@ type TDeferredFieldRowProps = {
   issueId: string;
   onCommit: (next: TIssueExtraFieldValue["value"]) => Promise<void>;
   disabled?: boolean;
+  /** false 时禁用 Enter 提交（段落模式允许换行） */
+  commitOnEnter?: boolean;
 };
 
 const DeferredFieldRow = observer(function DeferredFieldRow(props: TDeferredFieldRowProps) {
-  const { field, committedValue, issueId, onCommit, disabled } = props;
+  const { field, committedValue, issueId, onCommit, disabled, commitOnEnter = true } = props;
   const [localValue, setLocalValue] = useState<unknown>(committedValue);
 
   useEffect(() => {
@@ -54,6 +57,7 @@ const DeferredFieldRow = observer(function DeferredFieldRow(props: TDeferredFiel
 
   const handleKeyDown = useCallback(
     async (e: React.KeyboardEvent) => {
+      if (!commitOnEnter) return;
       if (e.key === "Enter") {
         e.preventDefault();
         if (localValue !== committedValue) {
@@ -62,16 +66,15 @@ const DeferredFieldRow = observer(function DeferredFieldRow(props: TDeferredFiel
         (e.target as HTMLElement).blur();
       }
     },
-    [localValue, committedValue, onCommit]
+    [commitOnEnter, localValue, committedValue, onCommit]
   );
 
   const FieldIcon = FIELD_TYPE_ICON[field.field_type] ?? FIELD_TYPE_ICON.text;
+  // 段落类型的文本域可拖高/多行展示，label 需要贴顶对齐而不是 y 轴居中
+  const isParagraphText = field.field_type === "text" && getTextMode(field.options) === "paragraph";
 
   return (
-    <SidebarPropertyListItem
-      icon={FieldIcon}
-      label={field.name}
-    >
+    <SidebarPropertyListItem icon={FieldIcon} label={field.name} align={isParagraphText ? "start" : "center"}>
       <div
         className="w-full"
         onBlur={handleBlur}
@@ -172,6 +175,7 @@ export const IssueExtraFieldsSection = observer(function IssueExtraFieldsSection
           const isDeferred = field.field_type === "text" || field.field_type === "number";
 
           if (isDeferred) {
+            const commitOnEnter = !(field.field_type === "text" && getTextMode(field.options) === "paragraph");
             return (
               <DeferredFieldRow
                 key={`${issueId}-${field.id}`}
@@ -180,6 +184,7 @@ export const IssueExtraFieldsSection = observer(function IssueExtraFieldsSection
                 issueId={issueId}
                 onCommit={(next) => commit(field.id, field.field_type, next)}
                 disabled={disabled}
+                commitOnEnter={commitOnEnter}
               />
             );
           }

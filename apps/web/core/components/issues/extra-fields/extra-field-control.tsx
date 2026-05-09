@@ -9,7 +9,7 @@ import { AlignLeft, CalendarDays, Hash, ListChecks, ToggleLeft, Users } from "lu
 import type { TIssueExtraFieldType, TIssueExtraFieldValue } from "@plane/types";
 // ui
 import { ChevronDownIcon } from "@plane/propel/icons";
-import { CustomSelect, Input, MultiSelectDropdown, ToggleSwitch } from "@plane/ui";
+import { CustomSelect, Input, MultiSelectDropdown, TextArea, ToggleSwitch } from "@plane/ui";
 import type { TDropdownOption } from "@plane/ui";
 // components
 import { DateDropdown } from "@/components/dropdowns/date";
@@ -46,6 +46,11 @@ export const getSelectOptions = (field: TTypeExtraField): TSelectOption[] => {
       return null;
     })
     .filter((o): o is TSelectOption => o !== null);
+};
+
+export const getTextMode = (options: TTypeExtraField["options"]): "single_line" | "paragraph" => {
+  if (!options || typeof options !== "object" || Array.isArray(options)) return "single_line";
+  return (options as { text_mode?: unknown }).text_mode === "paragraph" ? "paragraph" : "single_line";
 };
 
 export const getSelectionMode = (options: TTypeExtraField["options"]): "single" | "multiple" => {
@@ -115,11 +120,33 @@ export const ExtraFieldControl = (props: TExtraFieldControlProps) => {
   const inputId = `extra-field-${field.id}`;
 
   if (fieldType === "text") {
+    const textMode = getTextMode(field.options);
+    const textValue = typeof value === "string" ? value : value == null ? "" : String(value);
+
+    if (textMode === "paragraph") {
+      return (
+        <TextArea
+          id={inputId}
+          value={textValue}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={field.description || field.name}
+          disabled={disabled}
+          hasError={!!error}
+          className={cn(
+            "w-full resize-y",
+            compact
+              ? "min-h-7.5 !border-transparent !bg-transparent px-1.5 py-1 text-body-xs-regular hover:!border-subtle focus:!border-subtle"
+              : "min-h-[88px]"
+          )}
+        />
+      );
+    }
+
     return (
       <Input
         id={inputId}
         type="text"
-        value={typeof value === "string" ? value : value == null ? "" : String(value)}
+        value={textValue}
         onChange={(e) => onChange(e.target.value)}
         placeholder={field.description || field.name}
         disabled={disabled}

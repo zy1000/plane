@@ -13,13 +13,19 @@ type TSidebarPropertyListItemProps = {
   children: ReactNode;
   appendElement?: ReactNode;
   childrenClassName?: string;
+  /**
+   * 控制 label 与 children 在垂直方向的对齐方式。
+   * - "center"（默认）：label 与 children 在容器内垂直居中，适用于单行控件。
+   * - "start"：label 贴顶对齐，适用于 children 可能撑高（如段落文本域）的场景，避免 label 被居中。
+   */
+  align?: "center" | "start";
 };
 
 export function SidebarPropertyListItem(props: TSidebarPropertyListItemProps) {
-  const { icon: Icon, label, children, appendElement, childrenClassName } = props;
+  const { icon: Icon, label, children, appendElement, childrenClassName, align = "center" } = props;
 
   return (
-    <div className="flex items-center gap-2">
+    <div className={cn("flex gap-2", align === "start" ? "items-start" : "items-center")}>
       <div className="flex h-7.5 w-30 shrink-0 items-center gap-1.5 text-body-xs-regular text-tertiary">
         <Icon className="size-4 shrink-0" />
         <span>{label}</span>
