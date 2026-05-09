@@ -5,25 +5,81 @@ from plane.db.models import (
     IssueType,
     Project,
     State,
+    TypeExtraField,
     Workflow,
     WorkflowTransition,
+    WorkflowTransitionRequiredField,
 )
 from plane.utils.data_model import IssueTypeModel
 
 
 def init_issue_type() -> list[IssueTypeModel]:
     bug = IssueTypeModel(
-        **{'icon': {"icon": {"name": "Bug", "color": "#8e0119", "background_color": "#FFFFFF"}, "in_use": "icon"},
-           'display': '缺陷'})
-    task = IssueTypeModel(**{'icon': {"icon": {"name": "Layers", "color": "#6796ff", "background_color": "#FFFFFF"},
-                                      "in_use": "icon"}, 'display': '任务', 'is_default': True})
-    epic = IssueTypeModel(**{'icon': {"icon": {"name": "Mountain", "color": "#ff877b", "background_color": "#FFFFFF"},
-                                      "in_use": "icon"}, 'display': '史诗'})
-    feature = IssueTypeModel(**{'icon': {"icon": {"name": "Cog", "color": "#9191f9", "background_color": "#FFFFFF"},
-                                         "in_use": "icon"}, 'display': '特性'})
+        **{
+            "icon": {
+                "icon": {
+                    "name": "Bug",
+                    "color": "#8e0119",
+                    "background_color": "#FFFFFF",
+                },
+                "in_use": "icon",
+            },
+            "display": "缺陷(软件)",
+        }
+    )
+    task = IssueTypeModel(
+        **{
+            "icon": {
+                "icon": {
+                    "name": "Layers",
+                    "color": "#6796ff",
+                    "background_color": "#FFFFFF",
+                },
+                "in_use": "icon",
+            },
+            "display": "任务",
+            "is_default": True,
+        }
+    )
+    epic = IssueTypeModel(
+        **{
+            "icon": {
+                "icon": {
+                    "name": "Mountain",
+                    "color": "#ff877b",
+                    "background_color": "#FFFFFF",
+                },
+                "in_use": "icon",
+            },
+            "display": "史诗",
+        }
+    )
+    feature = IssueTypeModel(
+        **{
+            "icon": {
+                "icon": {
+                    "name": "Cog",
+                    "color": "#9191f9",
+                    "background_color": "#FFFFFF",
+                },
+                "in_use": "icon",
+            },
+            "display": "特性",
+        }
+    )
     story = IssueTypeModel(
-        **{'icon': {"icon": {"name": "NotebookPen", "color": "#00A1EC", "background_color": "#FFFFFF"},
-                    "in_use": "icon"}, 'display': '用户故事'})
+        **{
+            "icon": {
+                "icon": {
+                    "name": "NotebookPen",
+                    "color": "#00A1EC",
+                    "background_color": "#FFFFFF",
+                },
+                "in_use": "icon",
+            },
+            "display": "用户故事",
+        }
+    )
 
     return [bug, task, epic, feature, story]
 
@@ -37,9 +93,13 @@ def temporary_create_issue_type(project: Project = None, project_id: str = None)
     types = init_issue_type()
     issue_types = list()
     for issue_type in types:
-        obj = IssueType.objects.create(name=issue_type.display, project=project,
-                                       description=issue_type.display, is_default=issue_type.is_default,
-                                       logo_props=issue_type.icon)
+        obj = IssueType.objects.create(
+            name=issue_type.display,
+            project=project,
+            description=issue_type.display,
+            is_default=issue_type.is_default,
+            logo_props=issue_type.icon,
+        )
         issue_types.append(obj)
     return issue_types
 
@@ -47,18 +107,20 @@ def temporary_create_issue_type(project: Project = None, project_id: str = None)
 def bulk_create_issue_state(issue_types: list[IssueType], **kwargs):
     create_list = list()
     for issue_type in issue_types:
-        default_states = DEFAULT_BUG_STATES if issue_type.name == '缺陷' else DEFAULT_STATES
+        default_states = (
+            DEFAULT_BUG_STATES if issue_type.name == "缺陷(软件)" else DEFAULT_STATES
+        )
         for state in default_states:
             create_list.append(
                 State(
                     name=state["name"],
                     color=state["color"],
-                    project=kwargs['project'],
+                    project=kwargs["project"],
                     sequence=state["sequence"],
-                    workspace=kwargs['workspace'],
+                    workspace=kwargs["workspace"],
                     group=state["group"],
                     default=state.get("default", False),
-                    created_by=kwargs['created_by'],
+                    created_by=kwargs["created_by"],
                     issue_type_id=issue_type.id,
                 )
             )
@@ -66,9 +128,84 @@ def bulk_create_issue_state(issue_types: list[IssueType], **kwargs):
     State.objects.bulk_create(create_list)
 
 
+def create_default_bug_extra_field(issue_types: list[IssueType]):
+    defect_type_names = {"缺陷(软件)", "Bug", "bug", "Defect", "defect"}
+    defect_issue_type = next(
+        (
+            issue_type
+            for issue_type in issue_types
+            if issue_type.name in defect_type_names
+        ),
+        None,
+    )
+    if defect_issue_type is None:
+        return
+    project = defect_issue_type.project
+    # 软件版本
+    TypeExtraField.objects.create(
+        issue_type=defect_issue_type, project=project, name="软件版本", is_required=True
+    )
+    # 缺陷级别
+    bug_level = {
+        "choices": [
+            "security",
+            "key",
+            "major",
+            "general",
+            "minor",
+            "suggest",
+            "safely",
+        ],
+        "selection_mode": "single",
+    }
+    TypeExtraField.objects.create(
+        issue_type=defect_issue_type,
+        project=project,
+        name="缺陷级别",
+        is_required=True,
+        options=bug_level,
+        field_type="select",
+        default_value="general",
+    )
+    # 易现等级
+    trigger_level = {
+        "choices": ["表象级", "操作级", "发散级", "难重现", "其他"],
+        "selection_mode": "single",
+    }
+    TypeExtraField.objects.create(
+        issue_type=defect_issue_type,
+        project=project,
+        name="易现等级",
+        is_required=True,
+        options=trigger_level,
+        field_type="select",
+        default_value="操作级",
+    )
+
+    # Fixed缺陷的软件版本
+    TypeExtraField.objects.create(
+        issue_type=defect_issue_type, project=project, name="Fixed缺陷的软件版本"
+    )
+
+    # 技术原因及解决方案
+    TypeExtraField.objects.create(
+        issue_type=defect_issue_type,
+        project=project,
+        name="技术原因及解决方案",
+        options={"text_mode": "paragraph"},
+    )
+
+
 def create_default_bug_workflow(issue_types: list[IssueType], **kwargs):
-    defect_type_names = {'缺陷', 'Bug', 'bug', 'Defect', 'defect'}
-    defect_issue_type = next((issue_type for issue_type in issue_types if issue_type.name in defect_type_names), None)
+    defect_type_names = {"缺陷(软件)", "Bug", "bug", "Defect", "defect"}
+    defect_issue_type = next(
+        (
+            issue_type
+            for issue_type in issue_types
+            if issue_type.name in defect_type_names
+        ),
+        None,
+    )
     if defect_issue_type is None:
         return None
 
@@ -90,7 +227,9 @@ def create_default_bug_workflow(issue_types: list[IssueType], **kwargs):
             created_by=kwargs["created_by"],
         )
 
-    states = State.objects.filter(project=project, issue_type=defect_issue_type, deleted_at__isnull=True)
+    states = State.objects.filter(
+        project=project, issue_type=defect_issue_type, deleted_at__isnull=True
+    )
     state_map = {state.name: state for state in states}
 
     transition_rules = [
@@ -107,7 +246,9 @@ def create_default_bug_workflow(issue_types: list[IssueType], **kwargs):
     ]
 
     existing_transitions = set(
-        WorkflowTransition.objects.filter(workflow=workflow, deleted_at__isnull=True).values_list(
+        WorkflowTransition.objects.filter(
+            workflow=workflow, deleted_at__isnull=True
+        ).values_list(
             "from_state__name",
             "to_state__name",
         )
@@ -117,7 +258,11 @@ def create_default_bug_workflow(issue_types: list[IssueType], **kwargs):
     for from_name, to_name in transition_rules:
         from_state = state_map.get(from_name)
         to_state = state_map.get(to_name)
-        if from_state is None or to_state is None or (from_name, to_name) in existing_transitions:
+        if (
+            from_state is None
+            or to_state is None
+            or (from_name, to_name) in existing_transitions
+        ):
             continue
         transitions.append(
             WorkflowTransition(
@@ -133,5 +278,41 @@ def create_default_bug_workflow(issue_types: list[IssueType], **kwargs):
 
     if transitions:
         WorkflowTransition.objects.bulk_create(transitions)
+
+    # 为 Open -> Fixed 流转边绑定必填字段
+    open_state = state_map.get("Open")
+    fixed_state = state_map.get("Fixed")
+    if open_state and fixed_state:
+        open_to_fixed = WorkflowTransition.objects.filter(
+            workflow=workflow,
+            from_state=open_state,
+            to_state=fixed_state,
+            deleted_at__isnull=True,
+        ).first()
+        if open_to_fixed:
+            required_field_names = ["Fixed缺陷的软件版本", "技术原因及解决方案"]
+            extra_fields = TypeExtraField.objects.filter(
+                issue_type=defect_issue_type,
+                name__in=required_field_names,
+                deleted_at__isnull=True,
+            )
+            existing_field_ids = set(
+                WorkflowTransitionRequiredField.objects.filter(
+                    workflow=open_to_fixed,
+                    deleted_at__isnull=True,
+                ).values_list("extra_field_id", flat=True)
+            )
+            required_field_records = [
+                WorkflowTransitionRequiredField(
+                    workflow=open_to_fixed,
+                    extra_field=field,
+                )
+                for field in extra_fields
+                if field.id not in existing_field_ids
+            ]
+            if required_field_records:
+                WorkflowTransitionRequiredField.objects.bulk_create(
+                    required_field_records
+                )
 
     return workflow

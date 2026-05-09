@@ -61,7 +61,7 @@ from plane.utils.paginator import CustomPaginator
 from plane.utils.project.state import (
     bulk_create_issue_state,
     create_default_bug_workflow,
-    temporary_create_issue_type,
+    temporary_create_issue_type, create_default_bug_extra_field,
 )
 from plane.utils.response import list_response
 
@@ -404,6 +404,8 @@ class ProjectViewSet(BaseViewSet):
                 project=serializer.instance,
                 created_by=request.user,
             )
+            create_default_bug_extra_field(issue_types=issue_types)
+
             create_default_bug_workflow(
                 issue_types=issue_types,
                 workspace=serializer.instance.workspace,

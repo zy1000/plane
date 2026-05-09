@@ -121,6 +121,7 @@ from .workflow import (
     Workflow,
     WorkflowTransition,
     WorkflowTransitionApproval,
+    WorkflowTransitionRequiredField,
     IssueTransitionRecord,
     IssueTransitionApprovalRecord,
 )
