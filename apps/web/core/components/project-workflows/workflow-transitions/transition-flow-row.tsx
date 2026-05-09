@@ -153,10 +153,9 @@ export const TransitionFlowRow: FC<TTransitionFlowRowProps> = ({
   const box2Done = isNew ? (step === 3 || step === "done") : true;
   const box3Done = isNew ? step === "done" : true;
 
-  // Box 1 & 2 always visible for new rows so the user sees the full wizard upfront;
-  // box 3 appears only once the user reaches step 3
+  // All boxes always visible so the user sees the full wizard upfront
   const showBox2 = true;
-  const showBox3 = !isNew || step === 3 || step === "done";
+  const showBox3 = true;
 
   // Single continuous progress bar width (new flow only)
   const progressWidth = step === 1 ? "0%" : step === 2 ? "33.33%" : step === 3 ? "66.67%" : "100%";
@@ -385,11 +384,41 @@ export const TransitionFlowRow: FC<TTransitionFlowRowProps> = ({
         (isDirty || isNew) && "border-accent-primary/30 bg-accent-subtle/20"
       )}
     >
-      <div className="px-3 pt-2.5 pb-3">
-        {/* Boxes + menu button row */}
-        <div className="flex items-start gap-2">
-          {/* Four boxes in a fixed 4-column grid — positions never shift */}
-          <div className="grid flex-1 grid-cols-4 gap-2">
+      {/* Right-corner menu button — absolutely positioned so it never shifts the grid width */}
+      {!isNew && isEditable && (
+        <div ref={menuRef} className="absolute top-2 right-2 z-10">
+          <button
+            type="button"
+            onClick={() => setShowMenu((prev) => !prev)}
+            className="flex h-7 w-7 items-center justify-center rounded text-tertiary transition-colors hover:bg-layer-1 hover:text-primary"
+          >
+            <MoreHorizontal className="h-4 w-4" />
+          </button>
+          {showMenu && (
+            <div className="absolute right-0 top-full z-20 mt-1 min-w-[100px] overflow-hidden rounded-md border border-subtle bg-surface-1 shadow-lg">
+              <button
+                type="button"
+                onClick={handleEditClick}
+                className="flex w-full items-center gap-2 px-3 py-2 text-sm text-primary transition-colors hover:bg-layer-1"
+              >
+                编辑
+              </button>
+              <button
+                type="button"
+                onClick={handleDelete}
+                disabled={isDeleting}
+                className="flex w-full items-center gap-2 px-3 py-2 text-sm text-danger-primary transition-colors hover:bg-danger-subtle disabled:opacity-50"
+              >
+                删除
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+      {/* pr-9 reserves space for the absolute menu button so the grid never slides under it */}
+      <div className="px-3 pt-2.5 pb-3 pr-9">
+        {/* Four boxes in a fixed 4-column grid — positions never shift */}
+        <div className="grid grid-cols-4 gap-2">
             {/* box 1: via — always visible */}
             <div>
               <p className="mb-1 text-xs text-tertiary">via</p>
@@ -459,39 +488,6 @@ export const TransitionFlowRow: FC<TTransitionFlowRowProps> = ({
                 )}
               </button>
             </div>
-          </div>
-
-          {/* Existing rule: right-corner menu button */}
-          {!isNew && isEditable && (
-            <div ref={menuRef} className="relative flex-shrink-0 -pt-6">
-              <button
-                type="button"
-                onClick={() => setShowMenu((prev) => !prev)}
-                className="flex h-7 w-7 items-center justify-center rounded text-tertiary transition-colors hover:bg-layer-1 hover:text-primary"
-              >
-                <MoreHorizontal className="h-4 w-4" />
-              </button>
-              {showMenu && (
-                <div className="absolute right-0 top-full z-20 mt-1 min-w-[100px] overflow-hidden rounded-md border border-subtle bg-surface-1 shadow-lg">
-                  <button
-                    type="button"
-                    onClick={handleEditClick}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-sm text-primary transition-colors hover:bg-layer-1"
-                  >
-                    编辑
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleDelete}
-                    disabled={isDeleting}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-sm text-danger-primary transition-colors hover:bg-danger-subtle disabled:opacity-50"
-                  >
-                    删除
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
         </div>
 
         {/* Single continuous progress bar spanning all three boxes (new flow only) */}
