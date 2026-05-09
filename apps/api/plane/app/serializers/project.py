@@ -32,10 +32,26 @@ from plane.utils.content_validator import validate_html_content
 from ...db.models.project import (
     PROJECT_GRADE_CHOICES,
     ProjectAnnouncement,
+    ProjectMemberRole,
     ProjectPmsInfo,
     ProjectRole,
     validate_estimated_hours_half_step,
 )
+
+
+def get_active_custom_role_ids(obj):
+    active_member_roles = getattr(obj, "active_member_roles", None)
+    if active_member_roles is not None:
+        return [str(member_role.role_id) for member_role in active_member_roles]
+
+    return [
+        str(role_id)
+        for role_id in ProjectMemberRole.objects.filter(
+            member=obj,
+            deleted_at__isnull=True,
+            role__deleted_at__isnull=True,
+        ).values_list("role_id", flat=True)
+    ]
 
 
 class ProjectSerializer(BaseSerializer):
@@ -67,7 +83,9 @@ class ProjectSerializer(BaseSerializer):
         project_id = self.instance.id if self.instance else None
         workspace_id = self.context["workspace_id"]
 
-        project = Project.objects.filter(identifier=identifier, workspace_id=workspace_id)
+        project = Project.objects.filter(
+            identifier=identifier, workspace_id=workspace_id
+        )
 
         if project_id:
             project = project.exclude(id=project_id)
@@ -91,13 +109,17 @@ class ProjectSerializer(BaseSerializer):
     def validate(self, data):
         # Validate description content for security
         if "description_html" in data and data["description_html"]:
-            is_valid, error_msg, sanitized_html = validate_html_content(str(data["description_html"]))
+            is_valid, error_msg, sanitized_html = validate_html_content(
+                str(data["description_html"])
+            )
             # Update the data with sanitized HTML if available
             if sanitized_html is not None:
                 data["description_html"] = sanitized_html
 
             if not is_valid:
-                raise serializers.ValidationError({"error": "html content is not valid"})
+                raise serializers.ValidationError(
+                    {"error": "html content is not valid"}
+                )
 
         if self.instance is None:
             allowed_grades = {c[0] for c in PROJECT_GRADE_CHOICES}
@@ -114,7 +136,9 @@ class ProjectSerializer(BaseSerializer):
 
         project = Project.objects.create(**validated_data, workspace_id=workspace_id)
 
-        ProjectIdentifier.objects.create(name=project.identifier, project=project, workspace_id=workspace_id)
+        ProjectIdentifier.objects.create(
+            name=project.identifier, project=project, workspace_id=workspace_id
+        )
 
         return project
 
@@ -149,12 +173,18 @@ class ProjectListSerializer(DynamicBaseSerializer):
         project_members = getattr(obj, "members_list", None)
         if project_members is not None:
             # Filter members by the project ID
-            return [member.member_id for member in project_members if member.is_active and not member.member.is_bot]
+            return [
+                member.member_id
+                for member in project_members
+                if member.is_active and not member.member.is_bot
+            ]
         return []
 
     def get_next_work_item_sequence(self, obj):
         """Get the next sequence ID that will be assigned to a new issue"""
-        max_sequence = IssueSequence.objects.filter(project_id=obj.id).aggregate(max_seq=Max("sequence"))["max_seq"]
+        max_sequence = IssueSequence.objects.filter(project_id=obj.id).aggregate(
+            max_seq=Max("sequence")
+        )["max_seq"]
         return (max_sequence + 1) if max_sequence else 1
 
     class Meta:
@@ -188,7 +218,7 @@ class ProjectMemberSerializer(BaseSerializer):
         fields = "__all__"
 
     def get_custom_role_ids(self, obj):
-        return [str(role.id) for role in obj.custom_roles.all()]
+        return get_active_custom_role_ids(obj)
 
     def get_permission_keys(self, obj):
         return list(
@@ -228,11 +258,19 @@ class ProjectMemberRoleSerializer(DynamicBaseSerializer):
 
     class Meta:
         model = ProjectMember
-        fields = ("id", "role", "member", "project", "original_role", "created_at", "custom_role_ids")
+        fields = (
+            "id",
+            "role",
+            "member",
+            "project",
+            "original_role",
+            "created_at",
+            "custom_role_ids",
+        )
         read_only_fields = ["original_role", "created_at", "custom_role_ids"]
 
     def get_custom_role_ids(self, obj):
-        return [str(r.id) for r in obj.custom_roles.all()]
+        return get_active_custom_role_ids(obj)
 
 
 class ProjectMemberInviteSerializer(BaseSerializer):
@@ -286,7 +324,7 @@ class ProjectAnnouncementListSerializer(BaseSerializer):
 class ProjectAnnouncementCreateSerializer(BaseSerializer):
     class Meta:
         model = ProjectAnnouncement
-        fields = ['name', 'description', 'project']
+        fields = ["name", "description", "project"]
 
 
 METER_TYPE_VALUES = frozenset(
@@ -333,7 +371,9 @@ class ProjectPmsInfoSerializer(BaseSerializer):
     def create(self, validated_data):
         project_id = self.context.get("project_id")
         if not project_id:
-            raise serializers.ValidationError({"project": "project_id is required in context"})
+            raise serializers.ValidationError(
+                {"project": "project_id is required in context"}
+            )
         validated_data["project_id"] = project_id
         return super().create(validated_data)
 
@@ -411,7 +451,9 @@ class ProjectRolePermissionBindingSerializer(serializers.Serializer):
         # issue_type 权限是按项目维度物化的，需要再校验所传 key 确实属于本项目，
         # 防止把别的项目的 issue_type 权限写到当前角色上。
         role = self.context.get("role")
-        project = getattr(role, "project", None) if role else self.context.get("project")
+        project = (
+            getattr(role, "project", None) if role else self.context.get("project")
+        )
         if project is not None:
             allowed_issue_type_keys = self._get_project_issue_type_keys(project)
             existing_keys = {
@@ -435,7 +477,9 @@ class ProjectRolePermissionBindingSerializer(serializers.Serializer):
 
     def save(self, **kwargs):
         role = self.context["role"]
-        permissions_payload = role.permissions if isinstance(role.permissions, dict) else {}
+        permissions_payload = (
+            role.permissions if isinstance(role.permissions, dict) else {}
+        )
         permissions_payload["permission_keys"] = self.validated_data["permission_keys"]
         role.permissions = permissions_payload
         role.save()

@@ -5,7 +5,7 @@
 # Third Party imports
 from rest_framework.response import Response
 from rest_framework import status
-from django.db.models import Min
+from django.db.models import Min, Prefetch
 from django.utils import timezone
 
 # Module imports
@@ -25,6 +25,16 @@ from plane.db.models.project import ProjectRole, ProjectMemberRole
 from plane.bgtasks.project_add_user_email_task import project_add_user_email
 from plane.utils.host import base_host
 from plane.app.permissions.base import allow_permission, ROLE, allow_fine_permission
+
+
+ACTIVE_MEMBER_ROLES_PREFETCH = Prefetch(
+    "member_roles",
+    queryset=ProjectMemberRole.objects.filter(
+        deleted_at__isnull=True,
+        role__deleted_at__isnull=True
+    ).select_related("role"),
+    to_attr="active_member_roles",
+)
 
 
 class ProjectMemberViewSet(BaseViewSet):
@@ -66,8 +76,9 @@ class ProjectMemberViewSet(BaseViewSet):
         bulk_issue_props = []
 
         # Create a dictionary of the member_id and their roles
-        member_roles = {member.get("member_id"): member.get("role") for member in members}
-
+        member_roles = {
+            member.get("member_id"): member.get("role") for member in members
+        }
 
         # Update roles in the members array based on the member_roles dictionary and set is_active to True
         for project_member in ProjectMember.objects.filter(
@@ -79,7 +90,9 @@ class ProjectMemberViewSet(BaseViewSet):
             bulk_project_members.append(project_member)
 
         # Update the roles of the existing members
-        ProjectMember.objects.bulk_update(bulk_project_members, ["is_active", "role"], batch_size=100)
+        ProjectMember.objects.bulk_update(
+            bulk_project_members, ["is_active", "role"], batch_size=100
+        )
 
         # Get the minimum sort_order for each member in the workspace
         member_sort_orders = (
@@ -91,7 +104,9 @@ class ProjectMemberViewSet(BaseViewSet):
             .annotate(min_sort_order=Min("sort_order"))
         )
         # Convert to dictionary for easy lookup: {user_id: min_sort_order}
-        sort_order_map = {str(item["user_id"]): item["min_sort_order"] for item in member_sort_orders}
+        sort_order_map = {
+            str(item["user_id"]): item["min_sort_order"] for item in member_sort_orders
+        }
 
         # Loop through requested members
         for member in members:
@@ -113,14 +128,20 @@ class ProjectMemberViewSet(BaseViewSet):
                     user_id=member.get("member_id"),
                     project_id=project_id,
                     workspace_id=project.workspace_id,
-                    sort_order=(min_sort_order - 10000 if min_sort_order is not None else 65535),
+                    sort_order=(
+                        min_sort_order - 10000 if min_sort_order is not None else 65535
+                    ),
                 )
             )
 
         # Bulk create the project members and issue properties
-        project_members = ProjectMember.objects.bulk_create(bulk_project_members, batch_size=10, ignore_conflicts=True)
+        project_members = ProjectMember.objects.bulk_create(
+            bulk_project_members, batch_size=10, ignore_conflicts=True
+        )
 
-        _ = ProjectUserProperty.objects.bulk_create(bulk_issue_props, batch_size=10, ignore_conflicts=True)
+        _ = ProjectUserProperty.objects.bulk_create(
+            bulk_issue_props, batch_size=10, ignore_conflicts=True
+        )
 
         project_members = ProjectMember.objects.filter(
             project_id=project_id,
@@ -140,7 +161,6 @@ class ProjectMemberViewSet(BaseViewSet):
         # Return the serialized data
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
     def list(self, request, slug, project_id):
         # Get the list of project members for the project
         project_members = (
@@ -153,10 +173,12 @@ class ProjectMemberViewSet(BaseViewSet):
                 member__member_workspace__is_active=True,
             )
             .select_related("project", "member", "workspace")
-            .prefetch_related("custom_roles")
+            .prefetch_related(ACTIVE_MEMBER_ROLES_PREFETCH)
         )
 
-        serializer = ProjectMemberRoleSerializer(project_members, fields=("id", "member", "role"), many=True)
+        serializer = ProjectMemberRoleSerializer(
+            project_members, fields=("id", "member", "role"), many=True
+        )
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     def retrieve(self, request, slug, project_id, pk):
@@ -176,6 +198,7 @@ class ProjectMemberViewSet(BaseViewSet):
                 is_active=True,
             )
             .select_related("project", "member", "workspace")
+            .prefetch_related(ACTIVE_MEMBER_ROLES_PREFETCH)
             .first()
         )
 
@@ -188,12 +211,16 @@ class ProjectMemberViewSet(BaseViewSet):
         if requesting_project_member.role > ROLE.GUEST.value:
             serializer = ProjectMemberAdminSerializer(project_member)
         else:
-            serializer = ProjectMemberRoleSerializer(project_member, fields=("id", "member", "role"))
+            serializer = ProjectMemberRoleSerializer(
+                project_member, fields=("id", "member", "role")
+            )
 
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     def partial_update(self, request, slug, project_id, pk):
-        project_member = ProjectMember.objects.get(pk=pk, workspace__slug=slug, project_id=project_id, is_active=True)
+        project_member = ProjectMember.objects.get(
+            pk=pk, workspace__slug=slug, project_id=project_id, is_active=True
+        )
 
         # Fetch the workspace role of the project member
         workspace_role = WorkspaceMember.objects.get(
@@ -215,15 +242,20 @@ class ProjectMemberViewSet(BaseViewSet):
             is_active=True,
         )
 
-        if workspace_role in [5] and int(request.data.get("role", project_member.role)) in [15, 20]:
+        if workspace_role in [5] and int(
+            request.data.get("role", project_member.role)
+        ) in [15, 20]:
             return Response(
-                {"error": "You cannot add a user with role higher than the workspace role"},
+                {
+                    "error": "You cannot add a user with role higher than the workspace role"
+                },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
         if (
             "role" in request.data
-            and int(request.data.get("role", project_member.role)) > requested_project_member.role
+            and int(request.data.get("role", project_member.role))
+            > requested_project_member.role
             and not is_workspace_admin
         ):
             return Response(
@@ -231,7 +263,9 @@ class ProjectMemberViewSet(BaseViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        serializer = ProjectMemberSerializer(project_member, data=request.data, partial=True)
+        serializer = ProjectMemberSerializer(
+            project_member, data=request.data, partial=True
+        )
 
         if serializer.is_valid():
             serializer.save()
@@ -257,7 +291,9 @@ class ProjectMemberViewSet(BaseViewSet):
         # User cannot remove himself
         if str(project_member.id) == str(requesting_project_member.id):
             return Response(
-                {"error": "You cannot remove yourself from the workspace. Please use leave workspace"},
+                {
+                    "error": "You cannot remove yourself from the workspace. Please use leave workspace"
+                },
                 status=status.HTTP_400_BAD_REQUEST,
             )
         # User cannot deactivate higher role
@@ -326,7 +362,9 @@ class UserProjectRolesEndpoint(BaseAPIView):
             member__member_workspace__is_active=True,
         ).values("project_id", "role")
 
-        project_members = {str(member["project_id"]): member["role"] for member in project_members}
+        project_members = {
+            str(member["project_id"]): member["role"] for member in project_members
+        }
         return Response(project_members, status=status.HTTP_200_OK)
 
 
@@ -341,7 +379,7 @@ class ProjectMemberCustomRolesAPIView(BaseAPIView):
                 project__workspace__slug=slug,
                 is_active=True,
             )
-            .prefetch_related("custom_roles")
+            .prefetch_related(ACTIVE_MEMBER_ROLES_PREFETCH)
             .first()
         )
 
@@ -349,19 +387,28 @@ class ProjectMemberCustomRolesAPIView(BaseAPIView):
     def get(self, request, slug, project_id, pk):
         project_member = self.get_project_member(slug, project_id, pk)
         if not project_member:
-            return Response({"error": "Project member not found."}, status=status.HTTP_404_NOT_FOUND)
-        custom_role_ids = [str(r.id) for r in project_member.custom_roles.all()]
+            return Response(
+                {"error": "Project member not found."}, status=status.HTTP_404_NOT_FOUND
+            )
+        custom_role_ids = [
+            str(member_role.role_id) for member_role in project_member.active_member_roles
+        ]
         return Response({"custom_role_ids": custom_role_ids}, status=status.HTTP_200_OK)
 
     @allow_fine_permission(PermissionKey.PROJECT_MEMBER_BIND_ROLE)
     def put(self, request, slug, project_id, pk):
         project_member = self.get_project_member(slug, project_id, pk)
         if not project_member:
-            return Response({"error": "Project member not found."}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"error": "Project member not found."}, status=status.HTTP_404_NOT_FOUND
+            )
 
         role_ids = request.data.get("custom_role_ids", [])
         if not isinstance(role_ids, list):
-            return Response({"error": "custom_role_ids 必须是列表。"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "custom_role_ids 必须是列表。"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         # 验证角色 ID 均属于该项目
         valid_roles = list(
@@ -382,7 +429,7 @@ class ProjectMemberCustomRolesAPIView(BaseAPIView):
         ProjectMemberRole.objects.filter(
             member=project_member,
             deleted_at__isnull=True,
-        ).exclude(role_id__in=valid_role_id_set).update(deleted_at=timezone.now())
+        ).exclude(role_id__in=valid_role_id_set).delete(soft=False)
 
         # 添加新的角色关联
         existing_active_role_ids = set(
@@ -390,6 +437,7 @@ class ProjectMemberCustomRolesAPIView(BaseAPIView):
             for rid in ProjectMemberRole.objects.filter(
                 member=project_member,
                 deleted_at__isnull=True,
+                role__deleted_at__isnull=True,
             ).values_list("role_id", flat=True)
         )
         to_create = [
@@ -399,7 +447,7 @@ class ProjectMemberCustomRolesAPIView(BaseAPIView):
                 created_by=request.user,
                 updated_by=request.user,
                 project_id=project_id,
-                workspace=project_member.workspace
+                workspace=project_member.workspace,
             )
             for role in valid_roles
             if str(role.id) not in existing_active_role_ids
@@ -412,6 +460,7 @@ class ProjectMemberCustomRolesAPIView(BaseAPIView):
             for rid in ProjectMemberRole.objects.filter(
                 member=project_member,
                 deleted_at__isnull=True,
+                role__deleted_at__isnull=True,
             ).values_list("role_id", flat=True)
         ]
         return Response({"custom_role_ids": final_role_ids}, status=status.HTTP_200_OK)
@@ -422,7 +471,9 @@ class ProjectMyPermissionKeysAPIView(BaseAPIView):
 
     def get(self, request, slug, project_id):
         try:
-            keys = _get_user_project_permission_keys(request.user, slug, str(project_id))
+            keys = _get_user_project_permission_keys(
+                request.user, slug, str(project_id)
+            )
         except Exception:
             keys = set()
         return Response({"permission_keys": sorted(keys)}, status=status.HTTP_200_OK)
@@ -440,12 +491,17 @@ class ProjectMemberPreferenceEndpoint(BaseAPIView):
     def patch(self, request, slug, project_id, member_id):
         project_member = self.get_queryset(slug, project_id, member_id)
 
-        serializer = ProjectMemberPreferenceSerializer(project_member, {"preferences": request.data}, partial=True)
+        serializer = ProjectMemberPreferenceSerializer(
+            project_member, {"preferences": request.data}, partial=True
+        )
 
         if serializer.is_valid():
             serializer.save()
 
-            return Response({"preferences": serializer.data["preferences"]}, status=status.HTTP_200_OK)
+            return Response(
+                {"preferences": serializer.data["preferences"]},
+                status=status.HTTP_200_OK,
+            )
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])

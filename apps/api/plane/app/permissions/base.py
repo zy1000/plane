@@ -102,9 +102,9 @@ def _get_user_project_permission_keys(
         # 项目负责人 / 实例管理员 / 项目创建者拥有项目内的全部权限。
         # PermissionKey.values() 仅覆盖静态枚举，issue_type 衍生 key 必须额外注入，
         # 否则这些超级用户会无法对工作项做 create/edit/delete/archive/unarchive。
-        return set(PermissionKey.values()) | _get_all_issue_type_permission_keys_for_project(
-            project_id
-        )
+        return set(
+            PermissionKey.values()
+        ) | _get_all_issue_type_permission_keys_for_project(project_id)
 
     project_member = ProjectMember.objects.filter(
         member=user,
@@ -118,9 +118,11 @@ def _get_user_project_permission_keys(
 
     role_ids = ProjectMemberRole.objects.filter(
         member=project_member,
+        deleted_at__isnull=True,
+        role__deleted_at__isnull=True,
     ).values_list("role_id", flat=True)
 
-    roles = ProjectRole.objects.filter(pk__in=role_ids)
+    roles = ProjectRole.objects.filter(pk__in=role_ids, deleted_at__isnull=True)
     keys: set = set()
     for role in roles:
         perms = role.permissions if isinstance(role.permissions, dict) else {}
@@ -142,14 +144,11 @@ def resolve_project_issue_type_name(
 
     保留这个函数以便调用方做"type_id 是否合法"的快速校验。鉴权本身不再依赖名字。
     """
-    issue_type = (
-        IssueType.objects.filter(
-            project_id=project_id,
-            id=issue_type_id,
-            deleted_at__isnull=True,
-        )
-        .first()
-    )
+    issue_type = IssueType.objects.filter(
+        project_id=project_id,
+        id=issue_type_id,
+        deleted_at__isnull=True,
+    ).first()
     if not issue_type:
         return None
     return issue_type.name
