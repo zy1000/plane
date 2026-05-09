@@ -18,7 +18,9 @@ type TStateTransitionCardProps = {
   state: IState;
   allStates: IState[];
   transitions: TWorkflowTransition[];
+  workspaceSlug: string;
   projectId: string;
+  issueTypeId: string;
   isEditable: boolean;
   activePanelOwner: string | null;
   onSetActivePanelOwner: (key: string | null) => void;
@@ -30,6 +32,7 @@ type TStateTransitionCardProps = {
       approver_ids: string[];
       approval_type: TApprovalType;
       required_count?: number;
+      extra_field_ids: string[];
     }
   ) => Promise<void>;
   onDeleteTransition: (transitionId: string) => Promise<void>;
@@ -43,16 +46,24 @@ type TStateTransitionCardProps = {
     requiredCount: number,
     isNofM: boolean,
     onConfirm: (memberIds: string[], count: number, useNofM: boolean) => void,
-    readOnly?: boolean
+    readOnly?: boolean,
+    onNext?: (memberIds: string[], count: number, useNofM: boolean) => void
   ) => void;
   onRequestFlowPanel: (onConfirm: () => void) => void;
+  onRequestFieldsPanel: (
+    currentValue: string[],
+    onConfirm: (extraFieldIds: string[]) => void,
+    readOnly?: boolean
+  ) => void;
 };
 
 export const StateTransitionCard: FC<TStateTransitionCardProps> = ({
   state,
   allStates,
   transitions,
+  workspaceSlug,
   projectId,
+  issueTypeId,
   isEditable,
   activePanelOwner,
   onSetActivePanelOwner,
@@ -61,6 +72,7 @@ export const StateTransitionCard: FC<TStateTransitionCardProps> = ({
   onRequestStatePanel,
   onRequestMemberPanel,
   onRequestFlowPanel,
+  onRequestFieldsPanel,
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [showNewRow, setShowNewRow] = useState(false);
@@ -118,7 +130,9 @@ export const StateTransitionCard: FC<TStateTransitionCardProps> = ({
               transition={transition}
               fromState={state}
               allStates={allStates}
+              workspaceSlug={workspaceSlug}
               projectId={projectId}
+              issueTypeId={issueTypeId}
               usedToStateIds={usedToStateIds}
               isEditable={isEditable}
               rowKey={transition.id}
@@ -130,6 +144,7 @@ export const StateTransitionCard: FC<TStateTransitionCardProps> = ({
               onRequestStatePanel={onRequestStatePanel}
               onRequestMemberPanel={onRequestMemberPanel}
               onRequestFlowPanel={onRequestFlowPanel}
+              onRequestFieldsPanel={onRequestFieldsPanel}
             />
           ))}
 
@@ -138,7 +153,9 @@ export const StateTransitionCard: FC<TStateTransitionCardProps> = ({
               transition={null}
               fromState={state}
               allStates={allStates}
+              workspaceSlug={workspaceSlug}
               projectId={projectId}
+              issueTypeId={issueTypeId}
               usedToStateIds={usedToStateIds}
               isEditable={isEditable}
               rowKey={`new-${state.id}`}
@@ -153,6 +170,7 @@ export const StateTransitionCard: FC<TStateTransitionCardProps> = ({
               onRequestStatePanel={onRequestStatePanel}
               onRequestMemberPanel={onRequestMemberPanel}
               onRequestFlowPanel={onRequestFlowPanel}
+              onRequestFieldsPanel={onRequestFieldsPanel}
             />
           )}
 

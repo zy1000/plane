@@ -15,8 +15,9 @@ from plane.db.models import (
     Workflow,
     WorkflowApproverTarget,
     WorkflowTransition,
-    WorkflowTransitionApproval,
+    WorkflowTransitionApproval, TypeExtraFieldValue,
 )
+from plane.db.models.workflow import WorkflowTransitionRequiredField
 
 
 def get_active_workflow(issue: Issue):
@@ -79,6 +80,14 @@ def check_update_state_permission(issue: Issue, to_state: State, user, **kwargs)
     - allowed=False, error=str, record=ITR   -> 创建了审批申请，通知前端
     """
     workflow, wft, exist_wft = get_active_transition(issue, to_state)
+
+    # 流转需要的必填字段是否都存在值
+    queryset = WorkflowTransitionRequiredField.objects.filter(workflow=wft)
+    for obj in queryset:
+        value = TypeExtraFieldValue.objects.filter(issue=issue, extra_field=obj.extra_field).values_list(
+            'value', flat=True)[0]
+        if value is None:
+            return False, f"按照工作流规则[{obj.extra_field.name}]是必填项", None
 
     if not workflow:
         return True, None, None

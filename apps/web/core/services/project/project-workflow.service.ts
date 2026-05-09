@@ -28,6 +28,7 @@ export type TWorkflowTransition = {
   approval_type: TApprovalType;
   required_count: number;
   approver_ids: string[];
+  extra_field_ids: string[];
 };
 
 export type TWorkflowTransitionCreatePayload = {
@@ -37,6 +38,7 @@ export type TWorkflowTransitionCreatePayload = {
   approval_type: TApprovalType;
   required_count?: number;
   approver_ids?: string[];
+  extra_field_ids?: string[];
 };
 
 export type TWorkflowTransitionUpdatePayload = {
@@ -45,6 +47,7 @@ export type TWorkflowTransitionUpdatePayload = {
   approval_type?: TApprovalType;
   required_count?: number;
   approver_ids?: string[];
+  extra_field_ids?: string[];
 };
 
 export type TApprovalRecord = {

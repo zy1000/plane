@@ -59,11 +59,11 @@ class Workflow(ProjectBaseModel):
     def clean(self):
         super().clean()
         # issue_type 必须属于当前项目
-        if self.issue_type_id and str(self.issue_type.project_id) != str(self.project_id):
+        if self.issue_type_id and str(self.issue_type.project_id) != str(
+            self.project_id
+        ):
             raise ValidationError(
-                {
-                    "issue_type": "该工作项类型不属于当前项目，无法为其创建工作流。"
-                }
+                {"issue_type": "该工作项类型不属于当前项目，无法为其创建工作流。"}
             )
 
     def save(self, *args, **kwargs):
@@ -133,12 +133,14 @@ class WorkflowTransition(ProjectBaseModel):
             ),
             # n_of_m 模式下 required_count 必须填写
             models.CheckConstraint(
-                check=~Q(approval_type=ApprovalType.N_OF_M) | Q(required_count__isnull=False),
+                check=~Q(approval_type=ApprovalType.N_OF_M)
+                | Q(required_count__isnull=False),
                 name="workflow_transition_required_count_set_when_n_of_m",
             ),
             # 非 n_of_m 模式下 required_count 必须为空
             models.CheckConstraint(
-                check=Q(approval_type=ApprovalType.N_OF_M) | Q(required_count__isnull=True),
+                check=Q(approval_type=ApprovalType.N_OF_M)
+                | Q(required_count__isnull=True),
                 name="workflow_transition_required_count_null_when_not_n_of_m",
             ),
         ]
@@ -197,8 +199,7 @@ class WorkflowTransition(ProjectBaseModel):
             raise ValidationError(
                 {
                     "dynamic_approver_types": (
-                        "存在不支持的动态审批人类型："
-                        + ", ".join(invalid_targets)
+                        "存在不支持的动态审批人类型：" + ", ".join(invalid_targets)
                     )
                 }
             )
@@ -265,12 +266,14 @@ class WorkflowTransitionApproval(BaseModel):
         if self.approver_id and self.transition_id:
             project = self.transition.workflow.project
             if not ProjectMember.objects.filter(
-                    project=project,
-                    member=self.approver,
-                    is_active=True,
+                project=project,
+                member=self.approver,
+                is_active=True,
             ).exists():
                 raise ValidationError(
-                    {"approver": f"用户 '{self.approver}' 不是当前项目的成员，无法设为审批人。"}
+                    {
+                        "approver": f"用户 '{self.approver}' 不是当前项目的成员，无法设为审批人。"
+                    }
                 )
 
     def save(self, *args, **kwargs):
@@ -399,3 +402,31 @@ class IssueTransitionApprovalRecord(BaseModel):
     def __str__(self):
         action_label = self.action or "待审批"
         return f"{self.approver} [{action_label}] on {self.transition_record_id}"
+
+
+class WorkflowTransitionRequiredField(BaseModel):
+    workflow = models.ForeignKey(
+        WorkflowTransition,
+        related_name="required_fields",
+        on_delete=models.CASCADE,
+        verbose_name="所属工作流",
+    )
+    extra_field = models.ForeignKey(
+        "db.TypeExtraField",
+        related_name="required_in_transitions",
+        on_delete=models.CASCADE,
+        verbose_name="所属字段",
+    )
+
+    class Meta:
+        db_table = "workflow_transition_required_fields"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["workflow", "extra_field"],
+                condition=Q(deleted_at__isnull=True),
+                name="workflow_transition_required_field_unique_when_not_deleted",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.workflow.name} - {self.extra_field.name}"

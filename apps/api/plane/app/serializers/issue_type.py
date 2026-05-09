@@ -86,6 +86,16 @@ class TypeExtraFieldSerializer(BaseSerializer):
         return super().create(validated_data)
 
 
+class TypeExtraFieldLiteSerializer(BaseSerializer):
+
+    class Meta:
+        model = TypeExtraField
+        fields = [
+            "id",
+            "name"
+        ]
+
+
 class IssueTypeExtraFieldSerializer(BaseSerializer):
     class Meta:
         model = TypeExtraField

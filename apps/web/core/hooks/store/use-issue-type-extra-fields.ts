@@ -46,14 +46,17 @@ export const useIssueTypeExtraFields = (
   workspaceSlug: string | undefined,
   projectId: string | null | undefined,
   issueTypeId: string | null | undefined,
-  embeddedFields?: TIssueTypeExtraField[] | null
+  embeddedFields?: TIssueTypeExtraField[] | null,
+  options?: { lite?: boolean }
 ) => {
+  const lite = options?.lite;
+
   const getInitialFields = (): TTypeExtraField[] | null => {
     // embedded data from issue detail response — use it directly
     if (embeddedFields != null) return sortAndFilterFields(embeddedFields);
     // try the module-level cache for immediate render
     if (workspaceSlug && projectId && issueTypeId) {
-      const cached = getCachedTypeExtraFields(workspaceSlug, projectId, issueTypeId);
+      const cached = getCachedTypeExtraFields(workspaceSlug, projectId, issueTypeId, lite);
       if (cached !== undefined) return sortAndFilterFields(cached);
     }
     return null;
@@ -76,7 +79,7 @@ export const useIssueTypeExtraFields = (
     setIsLoading(true);
     setError(null);
     try {
-      const result = await projectIssueTypeService.fetchTypeExtraFields(workspaceSlug, projectId, issueTypeId);
+      const result = await projectIssueTypeService.fetchTypeExtraFields(workspaceSlug, projectId, issueTypeId, lite);
       setFields(sortAndFilterFields(result));
     } catch (err) {
       setError(getErrorMessage(err, "获取自定义字段失败"));
@@ -85,7 +88,7 @@ export const useIssueTypeExtraFields = (
       setIsLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workspaceSlug, projectId, issueTypeId]);
+  }, [workspaceSlug, projectId, issueTypeId, lite]);
 
   useEffect(() => {
     // if embedded data was just provided (or changed), sync it synchronously and skip request
@@ -104,13 +107,13 @@ export const useIssueTypeExtraFields = (
     }
 
     // SWR: show stale cache immediately, then revalidate in background
-    const cached = getCachedTypeExtraFields(workspaceSlug, projectId, issueTypeId);
+    const cached = getCachedTypeExtraFields(workspaceSlug, projectId, issueTypeId, lite);
     if (cached !== undefined) {
       setFields(sortAndFilterFields(cached));
     }
 
     fetchFields();
-  }, [fetchFields, embeddedFields, workspaceSlug, projectId, issueTypeId]);
+  }, [fetchFields, embeddedFields, workspaceSlug, projectId, issueTypeId, lite]);
 
   return {
     fields,

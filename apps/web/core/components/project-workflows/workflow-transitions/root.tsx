@@ -16,7 +16,12 @@ import { useProjectState } from "@/hooks/store/use-project-state";
 import { useUserPermissions } from "@/hooks/store/user";
 import type { TApprovalType, TWorkflow } from "@/services/project/project-workflow.service";
 import { StateTransitionCard } from "./state-transition-card";
-import { WorkflowSidePanel, type TPanelConfig, type TMemberPanelConfig } from "./workflow-side-panel";
+import {
+  WorkflowSidePanel,
+  type TPanelConfig,
+  type TMemberPanelConfig,
+  type TFieldsPanelConfig,
+} from "./workflow-side-panel";
 
 type TWorkflowTransitionsRootProps = {
   workspaceSlug: string;
@@ -105,6 +110,7 @@ export const WorkflowTransitionsRoot: FC<TWorkflowTransitionsRootProps> = ({
       approver_ids: string[];
       approval_type: TApprovalType;
       required_count?: number;
+      extra_field_ids: string[];
     }
   ) => {
     const requiredCountField = data.required_count !== undefined ? { required_count: data.required_count } : {};
@@ -115,6 +121,7 @@ export const WorkflowTransitionsRoot: FC<TWorkflowTransitionsRootProps> = ({
           to_state_id: data.to_state_id,
           approver_ids: data.approver_ids,
           approval_type: data.approval_type,
+          extra_field_ids: data.extra_field_ids,
           ...requiredCountField,
         });
       } else {
@@ -124,6 +131,7 @@ export const WorkflowTransitionsRoot: FC<TWorkflowTransitionsRootProps> = ({
           to_state_id: data.to_state_id,
           approver_ids: data.approver_ids,
           approval_type: data.approval_type,
+          extra_field_ids: data.extra_field_ids,
           ...requiredCountField,
         });
       }
@@ -154,7 +162,8 @@ export const WorkflowTransitionsRoot: FC<TWorkflowTransitionsRootProps> = ({
     requiredCount: number,
     isNofM: boolean,
     onConfirm: (memberIds: string[], count: number, useNofM: boolean) => void,
-    readOnly?: boolean
+    readOnly?: boolean,
+    onNext?: (memberIds: string[], count: number, useNofM: boolean) => void
   ) => {
     const config: TMemberPanelConfig = {
       type: "member",
@@ -164,12 +173,30 @@ export const WorkflowTransitionsRoot: FC<TWorkflowTransitionsRootProps> = ({
       isNofM,
       onConfirm,
       readOnly,
+      onNext,
     };
     setActivePanel(config);
   };
 
   const handleRequestFlowPanel = (onConfirm: () => void) => {
     setActivePanel({ type: "flow", onConfirm });
+  };
+
+  const handleRequestFieldsPanel = (
+    currentValue: string[],
+    onConfirm: (extraFieldIds: string[]) => void,
+    readOnly?: boolean
+  ) => {
+    const config: TFieldsPanelConfig = {
+      type: "fields",
+      workspaceSlug,
+      projectId,
+      issueTypeId: workflow.issue_type_id,
+      currentValue,
+      onConfirm,
+      readOnly,
+    };
+    setActivePanel(config);
   };
 
   return (
@@ -214,7 +241,9 @@ export const WorkflowTransitionsRoot: FC<TWorkflowTransitionsRootProps> = ({
                     state={state}
                     allStates={allStates}
                     transitions={transitionsByState[state.id] ?? []}
+                    workspaceSlug={workspaceSlug}
                     projectId={projectId}
+                    issueTypeId={workflow.issue_type_id}
                     isEditable={isEditable}
                     activePanelOwner={activePanelOwner}
                     onSetActivePanelOwner={handleSetActivePanelOwner}
@@ -223,6 +252,7 @@ export const WorkflowTransitionsRoot: FC<TWorkflowTransitionsRootProps> = ({
                     onRequestStatePanel={handleRequestStatePanel}
                     onRequestMemberPanel={handleRequestMemberPanel}
                     onRequestFlowPanel={handleRequestFlowPanel}
+                    onRequestFieldsPanel={handleRequestFieldsPanel}
                   />
                 ))}
               </div>

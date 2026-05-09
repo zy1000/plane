@@ -67,18 +67,20 @@ const typeExtraFieldsCache = new Map<string, TCacheEntry>();
 // in-flight dedup: same key, same Promise
 const typeExtraFieldsInflight = new Map<string, Promise<TTypeExtraField[]>>();
 
-const extraFieldsCacheKey = (slug: string, projectId: string, issueTypeId?: string) =>
-  `${slug}:${projectId}:${issueTypeId ?? "*"}`;
+const extraFieldsCacheKey = (slug: string, projectId: string, issueTypeId?: string, lite?: boolean) =>
+  `${slug}:${projectId}:${issueTypeId ?? "*"}${lite ? ":lite" : ""}`;
 
 export const getCachedTypeExtraFields = (
   slug: string,
   projectId: string,
-  issueTypeId?: string
+  issueTypeId?: string,
+  lite?: boolean
 ): TTypeExtraField[] | undefined => {
-  const entry = typeExtraFieldsCache.get(extraFieldsCacheKey(slug, projectId, issueTypeId));
+  const key = extraFieldsCacheKey(slug, projectId, issueTypeId, lite);
+  const entry = typeExtraFieldsCache.get(key);
   if (!entry) return undefined;
   if (Date.now() > entry.expiresAt) {
-    typeExtraFieldsCache.delete(extraFieldsCacheKey(slug, projectId, issueTypeId));
+    typeExtraFieldsCache.delete(key);
     return undefined;
   }
   return entry.data;
@@ -213,16 +215,21 @@ export class ProjectIssueTypeService extends APIService {
   async fetchTypeExtraFields(
     workspaceSlug: string,
     projectId: string,
-    issueTypeId?: string
+    issueTypeId?: string,
+    lite?: boolean
   ): Promise<TTypeExtraField[]> {
-    const key = extraFieldsCacheKey(workspaceSlug, projectId, issueTypeId);
+    const key = extraFieldsCacheKey(workspaceSlug, projectId, issueTypeId, lite);
 
     // return in-flight promise if already running
     const inflight = typeExtraFieldsInflight.get(key);
     if (inflight) return inflight;
 
-    const params = issueTypeId ? { params: { issue_type: issueTypeId } } : {};
-    const promise = this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/type-extra-fields/`, params)
+    const queryParams: Record<string, string | number> = {};
+    if (issueTypeId) queryParams["issue_type"] = issueTypeId;
+    if (lite) queryParams["lite"] = 1;
+    const promise = this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/type-extra-fields/`, {
+      params: queryParams,
+    })
       .then((response) => {
         const data: TTypeExtraField[] = response?.data ?? [];
         typeExtraFieldsCache.set(key, { data, expiresAt: Date.now() + EXTRA_FIELDS_CACHE_TTL_MS });

@@ -6,12 +6,13 @@
 
 import type { FC } from "react";
 import { useState } from "react";
-import { ArrowRight, Check, ChevronRight } from "lucide-react";
+import { ArrowRight, Check, ChevronRight, Tag } from "lucide-react";
 import { EIconSize } from "@plane/constants";
 import { StateGroupIcon } from "@plane/propel/icons";
 import type { IState, TStateGroups } from "@plane/types";
 import { Avatar } from "@plane/ui";
 import { cn } from "@plane/utils";
+import { useIssueTypeExtraFields } from "@/hooks/store/use-issue-type-extra-fields";
 import { useMember } from "@/hooks/store/use-member";
 import {
   WORKFLOW_SPECIAL_APPROVER_OPTIONS,
@@ -33,6 +34,8 @@ export type TMemberPanelConfig = {
   isNofM: boolean;
   readOnly?: boolean;
   onConfirm: (memberIds: string[], count: number, useNofM: boolean) => void;
+  /** 当设置时，底部按钮变为 Next，点击后调用此回调而不关闭面板（由调用方负责打开下一个面板）。 */
+  onNext?: (memberIds: string[], count: number, useNofM: boolean) => void;
 };
 
 export type TFlowPanelConfig = {
@@ -40,7 +43,17 @@ export type TFlowPanelConfig = {
   onConfirm: () => void;
 };
 
-export type TPanelConfig = TStatePanelConfig | TMemberPanelConfig | TFlowPanelConfig;
+export type TFieldsPanelConfig = {
+  type: "fields";
+  workspaceSlug: string;
+  projectId: string;
+  issueTypeId: string;
+  currentValue: string[];
+  readOnly?: boolean;
+  onConfirm: (extraFieldIds: string[]) => void;
+};
+
+export type TPanelConfig = TStatePanelConfig | TMemberPanelConfig | TFlowPanelConfig | TFieldsPanelConfig;
 
 const STATE_GROUP_ORDER: TStateGroups[] = ["backlog", "unstarted", "started", "completed", "cancelled"];
 const STATE_GROUP_LABELS: Record<TStateGroups, string> = {
@@ -305,10 +318,116 @@ const MemberPanel: FC<{
             >
               关闭
             </button>
+          ) : config.onNext ? (
+            <button
+              type="button"
+              onClick={() => config.onNext!(selected, requiredCount, useNofM)}
+              className="flex w-full items-center justify-center gap-1 rounded-md bg-accent-primary px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-primary/90"
+            >
+              Next
+              <ChevronRight className="h-4 w-4" />
+            </button>
           ) : (
             <button
               type="button"
               onClick={() => onConfirm(selected, requiredCount, useNofM)}
+              className="flex w-full items-center justify-center gap-1 rounded-md bg-accent-primary px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-primary/90"
+            >
+              Save
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const FieldsPanel: FC<{
+  config: TFieldsPanelConfig;
+  onClose: () => void;
+  onConfirm: (extraFieldIds: string[]) => void;
+}> = ({ config, onClose, onConfirm }) => {
+  const readOnly = config.readOnly ?? false;
+  const [selected, setSelected] = useState<string[]>(config.currentValue);
+  const [search, setSearch] = useState("");
+
+  const { fields, isLoading } = useIssueTypeExtraFields(
+    config.workspaceSlug,
+    config.projectId,
+    config.issueTypeId,
+    undefined,
+    { lite: true }
+  );
+
+  const filtered = search
+    ? (fields ?? []).filter((f) => f.name.toLowerCase().includes(search.toLowerCase()))
+    : (fields ?? []);
+
+  const handleToggle = (id: string) => {
+    if (readOnly) return;
+    setSelected((prev) => (prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]));
+  };
+
+  return (
+    <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="border-b border-subtle p-3">
+        <input
+          autoFocus
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="搜索字段"
+          className="w-full rounded-sm border border-subtle bg-surface-2 px-2 py-1.5 text-xs text-primary placeholder:text-tertiary outline-none focus:border-accent-primary/50"
+        />
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-2">
+        {isLoading ? (
+          <p className="px-2 py-4 text-center text-xs text-tertiary">加载中...</p>
+        ) : filtered.length === 0 && !search ? (
+          <div className="flex flex-col items-center gap-2 px-2 py-6 text-center">
+            <Tag className="h-6 w-6 text-tertiary" strokeWidth={1.2} />
+            <p className="text-xs text-tertiary">该工作项类型暂无可选字段</p>
+          </div>
+        ) : filtered.length === 0 ? (
+          <p className="px-2 py-2 text-center text-xs text-tertiary">无匹配字段</p>
+        ) : (
+          filtered.map((field) => {
+            const isSelected = selected.includes(field.id);
+            return (
+              <button
+                key={field.id}
+                type="button"
+                onClick={() => handleToggle(field.id)}
+                className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm transition-colors hover:bg-layer-1"
+              >
+                <div
+                  className={cn(
+                    "flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center rounded border transition-colors",
+                    isSelected ? "border-accent-primary bg-accent-primary" : "border-secondary bg-transparent",
+                    readOnly && "cursor-default opacity-60"
+                  )}
+                >
+                  {isSelected && <Check className="h-2.5 w-2.5 text-white" />}
+                </div>
+                <span className="truncate text-primary">{field.name}</span>
+              </button>
+            );
+          })
+        )}
+
+        <div className="mt-3">
+          {readOnly ? (
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex w-full items-center justify-center gap-1 rounded-md border border-subtle bg-surface-2 px-3 py-2 text-sm font-medium text-primary transition-colors hover:bg-surface-3"
+            >
+              关闭
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => onConfirm(selected)}
               className="flex w-full items-center justify-center gap-1 rounded-md bg-accent-primary px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-primary/90"
             >
               Save
@@ -359,7 +478,13 @@ type TWorkflowSidePanelProps = {
 };
 
 export const WorkflowSidePanel: FC<TWorkflowSidePanelProps> = ({ config, onClose }) => {
-  const title = config.type === "state" ? "States" : config.type === "member" ? "Members" : "Flow";
+  const titleMap: Record<TPanelConfig["type"], string> = {
+    state: "States",
+    member: "Members",
+    flow: "Flow",
+    fields: "必填字段",
+  };
+  const title = titleMap[config.type];
 
   const handleStateConfirm = (stateId: string) => {
     if (config.type === "state") {
@@ -382,6 +507,13 @@ export const WorkflowSidePanel: FC<TWorkflowSidePanelProps> = ({ config, onClose
     }
   };
 
+  const handleFieldsConfirm = (extraFieldIds: string[]) => {
+    if (config.type === "fields") {
+      onClose();
+      config.onConfirm(extraFieldIds);
+    }
+  };
+
   return (
     <div className="flex h-full flex-col rounded-lg border border-subtle bg-surface-1 overflow-hidden">
       {/* panel header */}
@@ -399,6 +531,9 @@ export const WorkflowSidePanel: FC<TWorkflowSidePanelProps> = ({ config, onClose
       {config.type === "state" && <StatePanel config={config} onConfirm={handleStateConfirm} />}
       {config.type === "member" && <MemberPanel config={config} onClose={onClose} onConfirm={handleMemberConfirm} />}
       {config.type === "flow" && <FlowPanel config={config} onConfirm={handleFlowConfirm} />}
+      {config.type === "fields" && (
+        <FieldsPanel config={config} onClose={onClose} onConfirm={handleFieldsConfirm} />
+      )}
     </div>
   );
 };

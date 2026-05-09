@@ -6,7 +6,7 @@
 
 import type { FC } from "react";
 import { useEffect, useRef, useState } from "react";
-import { ArrowRight, MoreHorizontal, Users } from "lucide-react";
+import { ArrowRight, MoreHorizontal, Tag, Users } from "lucide-react";
 import { EIconSize } from "@plane/constants";
 import { StateGroupIcon } from "@plane/propel/icons";
 import type { IState } from "@plane/types";
@@ -22,7 +22,9 @@ type TTransitionFlowRowProps = {
   transition: TWorkflowTransition | null;
   fromState: IState;
   allStates: IState[];
+  workspaceSlug: string;
   projectId: string;
+  issueTypeId: string;
   usedToStateIds: string[];
   isEditable: boolean;
   rowKey: string;
@@ -34,6 +36,7 @@ type TTransitionFlowRowProps = {
     approver_ids: string[];
     approval_type: TApprovalType;
     required_count?: number;
+    extra_field_ids: string[];
   }) => Promise<void>;
   onDelete: (transitionId: string) => Promise<void>;
   onDiscard: () => void;
@@ -47,16 +50,24 @@ type TTransitionFlowRowProps = {
     requiredCount: number,
     isNofM: boolean,
     onConfirm: (memberIds: string[], count: number, useNofM: boolean) => void,
-    readOnly?: boolean
+    readOnly?: boolean,
+    onNext?: (memberIds: string[], count: number, useNofM: boolean) => void
   ) => void;
   onRequestFlowPanel: (onConfirm: () => void) => void;
+  onRequestFieldsPanel: (
+    currentValue: string[],
+    onConfirm: (extraFieldIds: string[]) => void,
+    readOnly?: boolean
+  ) => void;
 };
 
 export const TransitionFlowRow: FC<TTransitionFlowRowProps> = ({
   transition,
   fromState,
   allStates,
+  workspaceSlug,
   projectId,
+  issueTypeId,
   usedToStateIds,
   isEditable,
   rowKey,
@@ -68,10 +79,12 @@ export const TransitionFlowRow: FC<TTransitionFlowRowProps> = ({
   onRequestStatePanel,
   onRequestMemberPanel,
   onRequestFlowPanel,
+  onRequestFieldsPanel,
 }) => {
   const [toStateId, setToStateId] = useState<string | null>(transition?.to_state_id ?? null);
   const [approverIds, setApproverIds] = useState<string[]>(transition?.approver_ids ?? []);
   const [requiredCount, setRequiredCount] = useState(transition?.required_count ?? 1);
+  const [extraFieldIds, setExtraFieldIds] = useState<string[]>(transition?.extra_field_ids ?? []);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [step, setStep] = useState<TStep>(transition ? "done" : 1);
@@ -108,7 +121,8 @@ export const TransitionFlowRow: FC<TTransitionFlowRowProps> = ({
   const isDirty =
     toStateId !== (transition?.to_state_id ?? null) ||
     JSON.stringify([...approverIds].sort()) !== JSON.stringify([...(transition?.approver_ids ?? [])].sort()) ||
-    requiredCount !== (transition?.required_count ?? 1);
+    requiredCount !== (transition?.required_count ?? 1) ||
+    JSON.stringify([...extraFieldIds].sort()) !== JSON.stringify([...(transition?.extra_field_ids ?? [])].sort());
 
   const canSave = isNew ? step === "done" : toStateId !== null && isDirty;
   const showSaveCancel = isEditable && (isNew || (!isNew && (isDirty || isEditMode)));
@@ -182,13 +196,23 @@ export const TransitionFlowRow: FC<TTransitionFlowRowProps> = ({
           setToStateId(stateId);
           setStep(3);
           claimPanel(3);
-          onRequestMemberPanel(approverIds, requiredCount, isNofMApproval, (ids, count, useNofM) => {
-            setApproverIds(ids);
-            setRequiredCount(count);
-            setIsNofMApproval(useNofM);
-            setStep("done");
-            releasePanel();
-          });
+          onRequestMemberPanel(
+            approverIds,
+            requiredCount,
+            isNofMApproval,
+            () => {},
+            false,
+            (ids, count, useNofM) => {
+              setApproverIds(ids);
+              setRequiredCount(count);
+              setIsNofMApproval(useNofM);
+              onRequestFieldsPanel(extraFieldIds, (fieldIds) => {
+                setExtraFieldIds(fieldIds);
+                setStep("done");
+                releasePanel();
+              });
+            }
+          );
         });
       });
     } else {
@@ -210,13 +234,23 @@ export const TransitionFlowRow: FC<TTransitionFlowRowProps> = ({
         setToStateId(stateId);
         setStep(3);
         claimPanel(3);
-        onRequestMemberPanel(approverIds, requiredCount, isNofMApproval, (ids, count, useNofM) => {
-          setApproverIds(ids);
-          setRequiredCount(count);
-          setIsNofMApproval(useNofM);
-          setStep("done");
-          releasePanel();
-        });
+        onRequestMemberPanel(
+          approverIds,
+          requiredCount,
+          isNofMApproval,
+          () => {},
+          false,
+          (ids, count, useNofM) => {
+            setApproverIds(ids);
+            setRequiredCount(count);
+            setIsNofMApproval(useNofM);
+            onRequestFieldsPanel(extraFieldIds, (fieldIds) => {
+              setExtraFieldIds(fieldIds);
+              setStep("done");
+              releasePanel();
+            });
+          }
+        );
       });
     } else {
       claimPanel(2);
@@ -240,13 +274,24 @@ export const TransitionFlowRow: FC<TTransitionFlowRowProps> = ({
       return;
     }
     claimPanel(3);
-    onRequestMemberPanel(approverIds, requiredCount, isNofMApproval, (ids, count, useNofM) => {
-      setApproverIds(ids);
-      setRequiredCount(count);
-      setIsNofMApproval(useNofM);
-      if (isNew) setStep("done");
-      releasePanel();
-    });
+    // 可编辑时：member panel 显示 Next，点击后打开 fields panel
+    onRequestMemberPanel(
+      approverIds,
+      requiredCount,
+      isNofMApproval,
+      () => {},
+      false,
+      (ids, count, useNofM) => {
+        setApproverIds(ids);
+        setRequiredCount(count);
+        setIsNofMApproval(useNofM);
+        onRequestFieldsPanel(extraFieldIds, (fieldIds) => {
+          setExtraFieldIds(fieldIds);
+          if (isNew) setStep("done");
+          releasePanel();
+        });
+      }
+    );
   };
 
   // ── Save / Delete ────────────────────────────────────────────────────────
@@ -264,6 +309,7 @@ export const TransitionFlowRow: FC<TTransitionFlowRowProps> = ({
         approval_type: approvalType,
         // required_count only allowed when approval_type is n_of_m
         ...(approvalType === "n_of_m" ? { required_count: requiredCount } : {}),
+        extra_field_ids: extraFieldIds,
       });
       if (!isNew) setIsEditMode(false);
     } finally {
@@ -282,6 +328,22 @@ export const TransitionFlowRow: FC<TTransitionFlowRowProps> = ({
     }
   };
 
+  const handleOpenFieldsPanel = (forceEditable = false) => {
+    if (!isEditable) {
+      if (!isNew) {
+        onRequestFieldsPanel(extraFieldIds, () => {}, true);
+      }
+      return;
+    }
+    if (!isNew && !isEditMode && !forceEditable) {
+      onRequestFieldsPanel(extraFieldIds, () => {}, true);
+      return;
+    }
+    onRequestFieldsPanel(extraFieldIds, (ids) => {
+      setExtraFieldIds(ids);
+    });
+  };
+
   const handleEditClick = () => {
     setShowMenu(false);
     setIsEditMode(true);
@@ -294,6 +356,7 @@ export const TransitionFlowRow: FC<TTransitionFlowRowProps> = ({
     setApproverIds(transition?.approver_ids ?? []);
     setRequiredCount(transition?.required_count ?? 1);
     setIsNofMApproval(transition?.approval_type === "n_of_m");
+    setExtraFieldIds(transition?.extra_field_ids ?? []);
     setIsEditMode(false);
     releasePanel();
     onDiscard();
@@ -325,8 +388,8 @@ export const TransitionFlowRow: FC<TTransitionFlowRowProps> = ({
       <div className="px-3 pt-2.5 pb-3">
         {/* Boxes + menu button row */}
         <div className="flex items-start gap-2">
-          {/* Three boxes in a fixed 3-column grid — positions never shift */}
-          <div className="grid flex-1 grid-cols-3 gap-2">
+          {/* Four boxes in a fixed 4-column grid — positions never shift */}
+          <div className="grid flex-1 grid-cols-4 gap-2">
             {/* box 1: via — always visible */}
             <div>
               <p className="mb-1 text-xs text-tertiary">via</p>
@@ -375,6 +438,24 @@ export const TransitionFlowRow: FC<TTransitionFlowRowProps> = ({
                   <span className="flex-1 text-left text-primary">All</span>
                 ) : (
                   <span className="flex-1 truncate text-left text-primary">{approverSummaryLabel}</span>
+                )}
+              </button>
+            </div>
+
+            {/* box 4: requiring — optional required fields, always visible */}
+            <div>
+              <p className="mb-1 text-xs text-tertiary">requiring</p>
+              <button
+                type="button"
+                onClick={() => handleOpenFieldsPanel()}
+                disabled={isNew && !isEditable}
+                className={getBoxClassName(false, box3Done, !isNew && !isEditable)}
+              >
+                <Tag className="h-3.5 w-3.5 flex-shrink-0 text-secondary" />
+                {extraFieldIds.length === 0 ? (
+                  <span className="flex-1 text-left text-tertiary">无需必填</span>
+                ) : (
+                  <span className="flex-1 truncate text-left text-primary">{extraFieldIds.length} 个字段</span>
                 )}
               </button>
             </div>

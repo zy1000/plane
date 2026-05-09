@@ -1,6 +1,6 @@
 # Module imports
 from plane.app.permissions import ProjectMemberPermission
-from plane.app.serializers.issue_type import TypeExtraFieldSerializer
+from plane.app.serializers.issue_type import TypeExtraFieldSerializer, TypeExtraFieldLiteSerializer
 from plane.app.views.base import BaseViewSet
 from plane.db.models import TypeExtraField
 
@@ -17,7 +17,7 @@ class IssueExtraViewSet(BaseViewSet):
     model = TypeExtraField
     serializer_class = TypeExtraFieldSerializer
     permission_classes = [ProjectMemberPermission]
-    filterset_fields = ["issue_type"]
+    filterset_fields = ["issue_type",'is_active']
 
     def get_queryset(self):
         return (
@@ -35,3 +35,8 @@ class IssueExtraViewSet(BaseViewSet):
         context["project_id"] = self.kwargs.get("project_id")
         context["workspace_slug"] = self.kwargs.get("slug")
         return context
+
+    def get_serializer_class(self):
+        if self.request.query_params.get("lite"):
+            return TypeExtraFieldLiteSerializer
+        return super().get_serializer_class()
