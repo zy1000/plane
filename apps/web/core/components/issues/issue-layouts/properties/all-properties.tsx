@@ -96,6 +96,29 @@ export const IssueProperties = observer(function IssueProperties(props: IIssuePr
   const stateDetails = getStateById(issue.state_id);
   const subIssueCount = issue?.sub_issues_count ?? 0;
 
+  const showIssueUpdateErrorToast = useCallback(
+    (error: unknown) => {
+      if (isProjectPermissionError(error)) {
+        setToast({
+          type: TOAST_TYPE.ERROR,
+          title: t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title),
+          message: PROJECT_ERROR_MESSAGES.permissionError.i18n_message
+            ? t(PROJECT_ERROR_MESSAGES.permissionError.i18n_message)
+            : undefined,
+        });
+        return;
+      }
+
+      const errorMessage = extractIssueUpdateErrorMessage(error as TIssueWorkflowUpdateError);
+      setToast({
+        type: TOAST_TYPE.ERROR,
+        title: t("common.error.label"),
+        message: errorMessage ?? t("entity.update.failed", { entity: t("issue.label") }),
+      });
+    },
+    [t]
+  );
+
   const issueOperations = useMemo(
     () => ({
       addModulesToIssue: async (moduleIds: string[]) => {
@@ -103,21 +126,7 @@ export const IssueProperties = observer(function IssueProperties(props: IIssuePr
         try {
           await changeModulesInIssue?.(workspaceSlug.toString(), issue.project_id, issue.id, moduleIds, []);
         } catch (error) {
-          if (isProjectPermissionError(error)) {
-            setToast({
-              type: TOAST_TYPE.ERROR,
-              title: t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title),
-              message: PROJECT_ERROR_MESSAGES.permissionError.i18n_message
-                ? t(PROJECT_ERROR_MESSAGES.permissionError.i18n_message)
-                : undefined,
-            });
-          } else {
-            setToast({
-              type: TOAST_TYPE.ERROR,
-              title: t("common.error.label"),
-              message: t("entity.update.failed", { entity: t("issue.label") }),
-            });
-          }
+          showIssueUpdateErrorToast(error);
         }
       },
       removeModulesFromIssue: async (moduleIds: string[]) => {
@@ -125,33 +134,27 @@ export const IssueProperties = observer(function IssueProperties(props: IIssuePr
         try {
           await changeModulesInIssue?.(workspaceSlug.toString(), issue.project_id, issue.id, [], moduleIds);
         } catch (error) {
-          if (isProjectPermissionError(error)) {
-            setToast({
-              type: TOAST_TYPE.ERROR,
-              title: t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title),
-              message: PROJECT_ERROR_MESSAGES.permissionError.i18n_message
-                ? t(PROJECT_ERROR_MESSAGES.permissionError.i18n_message)
-                : undefined,
-            });
-          } else {
-            setToast({
-              type: TOAST_TYPE.ERROR,
-              title: t("common.error.label"),
-              message: t("entity.update.failed", { entity: t("issue.label") }),
-            });
-          }
+          showIssueUpdateErrorToast(error);
         }
       },
       addIssueToCycle: async (cycleId: string) => {
         if (!workspaceSlug || !issue.project_id || !issue.id) return;
-        await addCycleToIssue?.(workspaceSlug.toString(), issue.project_id, cycleId, issue.id);
+        try {
+          await addCycleToIssue?.(workspaceSlug.toString(), issue.project_id, cycleId, issue.id);
+        } catch (error) {
+          showIssueUpdateErrorToast(error);
+        }
       },
       removeIssueFromCycle: async () => {
         if (!workspaceSlug || !issue.project_id || !issue.id) return;
-        await removeCycleFromIssue?.(workspaceSlug.toString(), issue.project_id, issue.id);
+        try {
+          await removeCycleFromIssue?.(workspaceSlug.toString(), issue.project_id, issue.id);
+        } catch (error) {
+          showIssueUpdateErrorToast(error);
+        }
       },
     }),
-    [workspaceSlug, issue, changeModulesInIssue, addCycleToIssue, removeCycleFromIssue, t]
+    [workspaceSlug, issue, changeModulesInIssue, addCycleToIssue, removeCycleFromIssue, showIssueUpdateErrorToast]
   );
 
   const handleState = async (stateId: string) => {
@@ -242,16 +245,12 @@ export const IssueProperties = observer(function IssueProperties(props: IIssuePr
           releases: releasesToAdd,
           removed_releases: releasesToRemove,
         });
-      } catch {
+      } catch (error) {
         storeContext?.issue.issues.updateIssue(issue.id, { release_ids: currentReleaseIds });
-        setToast({
-          type: TOAST_TYPE.ERROR,
-          title: t("common.error.label"),
-          message: t("entity.update.failed", { entity: t("issue.label") }),
-        });
+        showIssueUpdateErrorToast(error);
       }
     },
-    [issue, workspaceSlug, t, storeContext]
+    [issue, workspaceSlug, storeContext, showIssueUpdateErrorToast]
   );
 
   const handleStartDate = async (date: Date | null) => {

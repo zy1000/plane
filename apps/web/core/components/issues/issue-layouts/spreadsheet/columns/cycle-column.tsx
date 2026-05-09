@@ -7,12 +7,16 @@
 import { useCallback } from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
+import { PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
+import { useTranslation } from "@plane/i18n";
+import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 // types
 import type { TIssue } from "@plane/types";
 // components
 import { CycleDropdown } from "@/components/dropdowns/cycle";
 // hooks
 import { useIssuesStore } from "@/hooks/use-issue-layout-store";
+import { extractIssueUpdateErrorMessage, type TIssueWorkflowUpdateError } from "../../../workflow-error-utils";
 
 type Props = {
   issue: TIssue;
@@ -22,6 +26,7 @@ type Props = {
 
 export const SpreadsheetCycleColumn = observer(function SpreadsheetCycleColumn(props: Props) {
   const { issue, disabled, onClose } = props;
+  const { t } = useTranslation();
   // router
   const { workspaceSlug } = useParams();
   // hooks
@@ -32,10 +37,29 @@ export const SpreadsheetCycleColumn = observer(function SpreadsheetCycleColumn(p
   const handleCycle = useCallback(
     async (cycleId: string | null) => {
       if (!workspaceSlug || !issue || !issue.project_id || issue.cycle_id === cycleId) return;
-      if (cycleId) await addCycleToIssue(workspaceSlug.toString(), issue.project_id, cycleId, issue.id);
-      else await removeCycleFromIssue(workspaceSlug.toString(), issue.project_id, issue.id);
+      try {
+        if (cycleId) await addCycleToIssue(workspaceSlug.toString(), issue.project_id, cycleId, issue.id);
+        else await removeCycleFromIssue(workspaceSlug.toString(), issue.project_id, issue.id);
+      } catch (error) {
+        if (isProjectPermissionError(error)) {
+          setToast({
+            type: TOAST_TYPE.ERROR,
+            title: t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title),
+            message: PROJECT_ERROR_MESSAGES.permissionError.i18n_message
+              ? t(PROJECT_ERROR_MESSAGES.permissionError.i18n_message)
+              : undefined,
+          });
+        } else {
+          const errorMessage = extractIssueUpdateErrorMessage(error as TIssueWorkflowUpdateError);
+          setToast({
+            type: TOAST_TYPE.ERROR,
+            title: t("common.error.label"),
+            message: errorMessage ?? t("entity.update.failed", { entity: t("issue.label") }),
+          });
+        }
+      }
     },
-    [workspaceSlug, issue, addCycleToIssue, removeCycleFromIssue]
+    [workspaceSlug, issue, addCycleToIssue, removeCycleFromIssue, t]
   );
 
   return (

@@ -27,7 +27,9 @@ load_dotenv(os.path.join(_API_ROOT, ".env"))
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # Secret Key
-SECRET_KEY = os.environ.get("SECRET_KEY", '4-%4*+&uzpes*9%1=q*ya9@su^$d!9py5ze%67#+lgvqogy%-2')
+SECRET_KEY = os.environ.get(
+    "SECRET_KEY", "4-%4*+&uzpes*9%1=q*ya9@su^$d!9py5ze%67#+lgvqogy%-2"
+)
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = int(os.environ.get("DEBUG", "0"))
@@ -81,7 +83,9 @@ MIDDLEWARE = [
 
 # Rest Framework settings
 REST_FRAMEWORK = {
-    "DEFAULT_AUTHENTICATION_CLASSES": ("rest_framework.authentication.SessionAuthentication",),
+    "DEFAULT_AUTHENTICATION_CLASSES": (
+        "rest_framework.authentication.SessionAuthentication",
+    ),
     "DEFAULT_THROTTLE_CLASSES": ("rest_framework.throttling.AnonRateThrottle",),
     "DEFAULT_THROTTLE_RATES": {
         "anon": "30/minute",
@@ -122,10 +126,16 @@ TEMPLATES = [
 CORS_ALLOW_CREDENTIALS = True
 cors_origins_raw = os.environ.get("CORS_ALLOWED_ORIGINS", "")
 # filter out empty strings
-cors_allowed_origins = [origin.strip() for origin in cors_origins_raw.split(",") if origin.strip()]
+cors_allowed_origins = [
+    origin.strip() for origin in cors_origins_raw.split(",") if origin.strip()
+]
 if cors_allowed_origins:
     CORS_ALLOWED_ORIGINS = cors_allowed_origins
-    secure_origins = False if [origin for origin in cors_allowed_origins if "http:" in origin] else True
+    secure_origins = (
+        False
+        if [origin for origin in cors_allowed_origins if "http:" in origin]
+        else True
+    )
 else:
     CORS_ALLOW_ALL_ORIGINS = True
     secure_origins = False
@@ -160,10 +170,10 @@ AUTH_USER_MODEL = "db.User"
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
-        "NAME": 'plane',
-        "USER": 'plane',
-        "PASSWORD": 'plane',
-        "HOST": '10.32.190.226',
+        "NAME": "plane",
+        "USER": "plane",
+        "PASSWORD": "plane",
+        "HOST": "10.32.190.226",
         "PORT": 5432,
     }
 }
@@ -171,7 +181,9 @@ DATABASES = {
 if os.environ.get("ENABLE_READ_REPLICA", "0") == "1":
     if bool(os.environ.get("DATABASE_READ_REPLICA_URL")):
         # Parse database configuration from $DATABASE_URL
-        DATABASES["replica"] = dj_database_url.parse(os.environ.get("DATABASE_READ_REPLICA_URL"))
+        DATABASES["replica"] = dj_database_url.parse(
+            os.environ.get("DATABASE_READ_REPLICA_URL")
+        )
     else:
         DATABASES["replica"] = {
             "ENGINE": "django.db.backends.postgresql",
@@ -188,7 +200,7 @@ if os.environ.get("ENABLE_READ_REPLICA", "0") == "1":
     MIDDLEWARE.append("plane.middleware.db_routing.ReadReplicaRoutingMiddleware")
 
 # Redis Config
-REDIS_URL = 'redis://10.32.190.226:6379/0'
+REDIS_URL = "redis://10.32.190.226:6379/0"
 REDIS_SSL = REDIS_URL and "rediss" in REDIS_URL
 
 if REDIS_SSL:
@@ -213,7 +225,9 @@ else:
 
 # Password validations
 AUTH_PASSWORD_VALIDATORS = [
-    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
+    {
+        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"
+    },
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
     {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
@@ -250,7 +264,11 @@ EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 # Use Minio settings
 USE_MINIO = int(os.environ.get("USE_MINIO", 0)) == 1
 
-STORAGES = {"staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"}}
+STORAGES = {
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"
+    }
+}
 STORAGES["default"] = {"BACKEND": "plane.settings.storage.S3Storage"}
 AWS_ACCESS_KEY_ID = os.environ.get("AWS_ACCESS_KEY_ID", "plane")
 AWS_SECRET_ACCESS_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY", "plane123456789")
@@ -259,7 +277,9 @@ AWS_REGION = os.environ.get("AWS_REGION", "")
 AWS_DEFAULT_ACL = "public-read"
 AWS_QUERYSTRING_AUTH = False
 AWS_S3_FILE_OVERWRITE = False
-AWS_S3_ENDPOINT_URL = os.environ.get("AWS_S3_ENDPOINT_URL", None) or os.environ.get("MINIO_ENDPOINT_URL", None)
+AWS_S3_ENDPOINT_URL = os.environ.get("AWS_S3_ENDPOINT_URL", None) or os.environ.get(
+    "MINIO_ENDPOINT_URL", None
+)
 if AWS_S3_ENDPOINT_URL and USE_MINIO:
     parsed_url = urlparse(os.environ.get("WEB_URL", "http://localhost"))
     AWS_S3_CUSTOM_DOMAIN = f"{parsed_url.netloc}/{AWS_STORAGE_BUCKET_NAME}"
@@ -481,5 +501,7 @@ MONGO_DB_URL = os.environ.get("MONGO_DB_URL", False)
 MONGO_DB_DATABASE = os.environ.get("MONGO_DB_DATABASE", False)
 
 # onlyoffice
-ONLYOFFICE_DOCUMENT_SERVER_URL = os.environ.get("ONLYOFFICE_DOCUMENT_SERVER_URL", "http://10.32.190.226:89")
+ONLYOFFICE_DOCUMENT_SERVER_URL = os.environ.get(
+    "ONLYOFFICE_DOCUMENT_SERVER_URL", "http://10.32.190.226:89"
+)
 ONLYOFFICE_JWT_ENABLED = os.environ.get("ONLYOFFICE_JWT_ENABLED", "0") == "1"
