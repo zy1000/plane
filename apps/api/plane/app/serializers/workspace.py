@@ -168,14 +168,18 @@ class WorkspaceRoleSerializer(BaseSerializer):
         ]
 
     def validate_name(self, value):
-        workspace = self.context.get("workspace") or getattr(self.instance, "workspace", None)
+        workspace = self.context.get("workspace") or getattr(
+            self.instance, "workspace", None
+        )
         queryset = WorkspaceRole.objects.filter(workspace=workspace, name=value)
 
         if self.instance:
             queryset = queryset.exclude(pk=self.instance.pk)
 
         if workspace and queryset.exists():
-            raise serializers.ValidationError("Role with this name already exists in the workspace.")
+            raise serializers.ValidationError(
+                "Role with this name already exists in the workspace."
+            )
 
         return value
 
@@ -238,7 +242,9 @@ class WorkspaceRolePermissionBindingSerializer(serializers.Serializer):
         invalid_keys = [key for key in normalized_keys if key not in existing_keys]
 
         if invalid_keys:
-            scope_label = {"workspace": "工作区", "project": "项目"}.get(allowed_scope, "")
+            scope_label = {"workspace": "工作区", "project": "项目"}.get(
+                allowed_scope, ""
+            )
             raise serializers.ValidationError(
                 f"无效的{scope_label}权限 key：{', '.join(invalid_keys)}"
             )
@@ -247,7 +253,9 @@ class WorkspaceRolePermissionBindingSerializer(serializers.Serializer):
 
     def save(self, **kwargs):
         role = self.context["role"]
-        permissions_payload = role.permissions if isinstance(role.permissions, dict) else {}
+        permissions_payload = (
+            role.permissions if isinstance(role.permissions, dict) else {}
+        )
         permissions_payload["permission_keys"] = self.validated_data["permission_keys"]
         role.permissions = permissions_payload
         role.save()
@@ -286,14 +294,18 @@ class WorkspaceGroupSerializer(BaseSerializer):
         ]
 
     def validate_name(self, value):
-        workspace = self.context.get("workspace") or getattr(self.instance, "workspace", None)
+        workspace = self.context.get("workspace") or getattr(
+            self.instance, "workspace", None
+        )
         queryset = WorkspaceGroup.objects.filter(workspace=workspace, name=value)
 
         if self.instance:
             queryset = queryset.exclude(pk=self.instance.pk)
 
         if workspace and queryset.exists():
-            raise serializers.ValidationError("Group with this name already exists in the workspace.")
+            raise serializers.ValidationError(
+                "Group with this name already exists in the workspace."
+            )
 
         return value
 
@@ -329,10 +341,14 @@ class WorkspaceGroupMemberSerializer(BaseSerializer):
         group = self.context.get("group")
 
         if not value.is_active:
-            raise serializers.ValidationError("Inactive workspace members cannot be added to a group.")
+            raise serializers.ValidationError(
+                "Inactive workspace members cannot be added to a group."
+            )
 
         if group and value.workspace_id != group.workspace_id:
-            raise serializers.ValidationError("The member does not belong to this workspace.")
+            raise serializers.ValidationError(
+                "The member does not belong to this workspace."
+            )
 
         return value
 
@@ -368,7 +384,9 @@ class WorkspaceGroupRoleSerializer(BaseSerializer):
         group = self.context.get("group")
 
         if group and value.workspace_id != group.workspace_id:
-            raise serializers.ValidationError("The role does not belong to this workspace.")
+            raise serializers.ValidationError(
+                "The role does not belong to this workspace."
+            )
 
         return value
 
@@ -414,7 +432,9 @@ class WorkspaceUserLinkSerializer(BaseSerializer):
         )
 
         if workspace_user_link.exists():
-            raise serializers.ValidationError({"error": "URL already exists for this workspace and owner"})
+            raise serializers.ValidationError(
+                {"error": "URL already exists for this workspace and owner"}
+            )
 
         return super().create(validated_data)
 
@@ -428,7 +448,9 @@ class WorkspaceUserLinkSerializer(BaseSerializer):
         )
 
         if workspace_user_link.exclude(pk=instance.id).exists():
-            raise serializers.ValidationError({"error": "URL already exists for this workspace and owner"})
+            raise serializers.ValidationError(
+                {"error": "URL already exists for this workspace and owner"}
+            )
 
         return super().update(instance, validated_data)
 
@@ -436,7 +458,9 @@ class WorkspaceUserLinkSerializer(BaseSerializer):
 class IssueRecentVisitSerializer(serializers.ModelSerializer):
     project_identifier = serializers.SerializerMethodField()
     assignees = serializers.SerializerMethodField()
-    type_name = serializers.CharField(read_only=True, source="type.name", allow_null=True)
+    type_name = serializers.CharField(
+        read_only=True, source="type.name", allow_null=True
+    )
     is_epic = serializers.SerializerMethodField()
 
     class Meta:
@@ -460,7 +484,11 @@ class IssueRecentVisitSerializer(serializers.ModelSerializer):
         return project.identifier if project else None
 
     def get_assignees(self, obj):
-        return list(obj.assignees.filter(issue_assignee__deleted_at__isnull=True).values_list("id", flat=True))
+        return list(
+            obj.assignees.filter(issue_assignee__deleted_at__isnull=True).values_list(
+                "id", flat=True
+            )
+        )
 
     def get_is_epic(self, obj):
         return bool(obj.type and obj.type.is_epic)
@@ -474,9 +502,9 @@ class ProjectRecentVisitSerializer(serializers.ModelSerializer):
         fields = ["id", "name", "logo_props", "project_members", "identifier"]
 
     def get_project_members(self, obj):
-        members = ProjectMember.objects.filter(project_id=obj.id, member__is_bot=False, is_active=True).values_list(
-            "member", flat=True
-        )
+        members = ProjectMember.objects.filter(
+            project_id=obj.id, member__is_bot=False, is_active=True
+        ).values_list("member", flat=True)
 
         return members
 
@@ -497,7 +525,11 @@ class PageRecentVisitSerializer(serializers.ModelSerializer):
         ]
 
     def get_project_id(self, obj):
-        return obj.project_id if hasattr(obj, "project_id") else obj.projects.values_list("id", flat=True).first()
+        return (
+            obj.project_id
+            if hasattr(obj, "project_id")
+            else obj.projects.values_list("id", flat=True).first()
+        )
 
     def get_project_identifier(self, obj):
         project = obj.projects.first()
@@ -531,7 +563,9 @@ class WorkspaceRecentVisitSerializer(BaseSerializer):
         if entity_model and entity_serializer:
             try:
                 if entity_model is Issue:
-                    entity = entity_model.objects.select_related("type").get(pk=entity_identifier)
+                    entity = entity_model.objects.select_related("type", "project").get(
+                        pk=entity_identifier
+                    )
                 else:
                     entity = entity_model.objects.get(pk=entity_identifier)
 
@@ -558,9 +592,13 @@ class StickySerializer(BaseSerializer):
     def validate(self, data):
         # Validate description content for security
         if "description_html" in data and data["description_html"]:
-            is_valid, error_msg, sanitized_html = validate_html_content(data["description_html"])
+            is_valid, error_msg, sanitized_html = validate_html_content(
+                data["description_html"]
+            )
             if not is_valid:
-                raise serializers.ValidationError({"error": "html content is not valid"})
+                raise serializers.ValidationError(
+                    {"error": "html content is not valid"}
+                )
             # Update the data with sanitized HTML if available
             if sanitized_html is not None:
                 data["description_html"] = sanitized_html
@@ -568,7 +606,9 @@ class StickySerializer(BaseSerializer):
         if "description_binary" in data and data["description_binary"]:
             is_valid, error_msg = validate_binary_data(data["description_binary"])
             if not is_valid:
-                raise serializers.ValidationError({"description_binary": "Invalid binary data"})
+                raise serializers.ValidationError(
+                    {"description_binary": "Invalid binary data"}
+                )
 
         return data
 
