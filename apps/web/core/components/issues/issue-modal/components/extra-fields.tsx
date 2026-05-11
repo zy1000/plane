@@ -47,9 +47,9 @@ const ExtraFieldRow = (props: TFieldRowProps) => {
   const FieldIcon = FIELD_TYPE_ICON[field.field_type] ?? FIELD_TYPE_ICON.text;
 
   return (
-    <div className="flex items-center gap-4 py-1.5">
-      <label htmlFor={inputId} className="flex w-2/5 shrink-0 items-center gap-1.5 text-sm text-secondary">
-        <FieldIcon className="h-3.5 w-3.5 shrink-0 text-tertiary" strokeWidth={1.5} />
+    <div className="flex items-center gap-0 py-1.5">
+      <label htmlFor={inputId} className="flex w-1/4 shrink-0 items-center gap-1.5 text-sm text-secondary">
+        <FieldIcon className="h-3.5 w-3.5 shrink-0 text-tertiary" />
         <span className="truncate">{field.name}</span>
         {field.is_required && <span className="text-danger-primary">*</span>}
       </label>

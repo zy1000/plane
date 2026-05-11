@@ -24,7 +24,7 @@ def init_issue_type() -> list[IssueTypeModel]:
                 },
                 "in_use": "icon",
             },
-            "display": "缺陷(软件)",
+            "display": "缺陷",
         }
     )
     task = IssueTypeModel(
@@ -108,7 +108,7 @@ def bulk_create_issue_state(issue_types: list[IssueType], **kwargs):
     create_list = list()
     for issue_type in issue_types:
         default_states = (
-            DEFAULT_BUG_STATES if issue_type.name == "缺陷(软件)" else DEFAULT_STATES
+            DEFAULT_BUG_STATES if issue_type.name == "缺陷" else DEFAULT_STATES
         )
         for state in default_states:
             create_list.append(
@@ -129,7 +129,7 @@ def bulk_create_issue_state(issue_types: list[IssueType], **kwargs):
 
 
 def create_default_bug_extra_field(issue_types: list[IssueType]):
-    defect_type_names = {"缺陷(软件)", "Bug", "bug", "Defect", "defect"}
+    defect_type_names = {"缺陷", "Bug", "bug", "Defect", "defect"}
     defect_issue_type = next(
         (
             issue_type
@@ -141,9 +141,9 @@ def create_default_bug_extra_field(issue_types: list[IssueType]):
     if defect_issue_type is None:
         return
     project = defect_issue_type.project
-    # 缺陷版本
+    # 软件版本
     TypeExtraField.objects.create(
-        issue_type=defect_issue_type, project=project, name="缺陷版本", is_required=True
+        issue_type=defect_issue_type, project=project, name="软件版本", is_required=True
     )
     # 缺陷级别
     bug_level = {
@@ -194,7 +194,7 @@ def create_default_bug_extra_field(issue_types: list[IssueType]):
         project=project,
         name="缺陷原因",
         options=bug_cause,
-        field_type="select"
+        field_type="select",
     )
 
     # 修复版本
@@ -212,7 +212,7 @@ def create_default_bug_extra_field(issue_types: list[IssueType]):
 
 
 def create_default_bug_workflow(issue_types: list[IssueType], **kwargs):
-    defect_type_names = {"缺陷(软件)", "Bug", "bug", "Defect", "defect"}
+    defect_type_names = {"缺陷", "Bug", "bug", "Defect", "defect"}
     defect_issue_type = next(
         (
             issue_type
