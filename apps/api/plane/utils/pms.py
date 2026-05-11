@@ -635,7 +635,7 @@ def post_task(
     tool_version="最新版本",
     reproduce="操作级",
 ):
-    url = "http://10.32.232.33/DevTrackAPI/api/Task/Create"
+    url = "http://192.168.100.133/DevTrackAPI/api/Task/Create"
     data = {
         "ProjectId": 591,
         "FieldValues": [
