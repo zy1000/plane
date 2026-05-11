@@ -5,7 +5,12 @@
 from rest_framework import status
 from rest_framework.response import Response
 
-from plane.app.permissions import ROLE, allow_permission, allow_fine_permission, PermissionKey
+from plane.app.permissions import (
+    ROLE,
+    allow_permission,
+    allow_fine_permission,
+    PermissionKey,
+)
 from plane.app.serializers.project import ProjectPmsInfoSerializer
 from plane.app.views import BaseAPIView
 from plane.db.models import Project

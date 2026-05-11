@@ -54,6 +54,6 @@ def is_allowed_to_add_parent(parent_issue: Issue, sub_issue: Issue | str):
         return p == "史诗"
     if c == '任务':
         return p == "用户故事" or p == "任务"
-    if c == '缺陷':
-        return p == "任务" or p == "缺陷" or p == '用户故事'
+    if '缺陷' in c:
+        return p == "任务" or "缺陷" in p or p == '用户故事'
     return False

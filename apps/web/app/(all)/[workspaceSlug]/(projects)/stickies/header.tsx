@@ -7,6 +7,7 @@
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 // plane imports
+import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { RecentStickyIcon } from "@plane/propel/icons";
 import { Breadcrumbs, Header } from "@plane/ui";
@@ -22,6 +23,7 @@ export const WorkspaceStickyHeader = observer(function WorkspaceStickyHeader() {
   // hooks
   const { creatingSticky, toggleShowNewSticky } = useSticky();
   const { stickyOperations } = useStickyOperations({ workspaceSlug: workspaceSlug?.toString() });
+  const { t } = useTranslation();
 
   return (
     <>
@@ -52,7 +54,7 @@ export const WorkspaceStickyHeader = observer(function WorkspaceStickyHeader() {
             }}
             loading={creatingSticky}
           >
-            Add sticky
+            {t("stickies.add")}
           </Button>
         </Header.RightItem>
       </Header>

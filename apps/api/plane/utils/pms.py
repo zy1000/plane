@@ -1,6 +1,6 @@
 import requests
 
-from plane.db.models import Issue
+from plane.db.models import Issue, TypeExtraFieldValue
 from plane.db.models.project import ProjectPmsInfo
 
 all_user = [{'id': '1708', 'name': '陈亚', 'login_name': 'yachen'},
@@ -487,7 +487,7 @@ def find_assign_user(name):
 def post_task(title, sub_project, project_code, lead, description, token,
               meter_type='01-电表', level='general',
               software_version='最新版本', tool_version='最新版本', reproduce='操作级'):
-    url = 'http://192.168.100.133/DevTrackAPI/api/Task/Create'
+    url = 'http://10.32.232.33/DevTrackAPI/api/Task/Create'
     data = {
         'ProjectId': 591,
         'FieldValues': [
@@ -523,12 +523,13 @@ def sync_info(instance: ProjectPmsInfo) -> list[dict]:
     project = instance.project
     failed: list[dict] = []
     bug_issues = (
-        Issue.objects.filter(project=project, type__name="缺陷")
+        Issue.objects.filter(project=project, type__name__in=["缺陷","缺陷(软件)"])
         .select_related("created_by", "type")
         .prefetch_related("assignees")
     )
     issue_ids_changed = False
     for issue in bug_issues:
+        query = TypeExtraFieldValue.objects.filter(issue=issue)
         if str(issue.id) in instance.issue_ids:
             continue
         try:
@@ -552,7 +553,14 @@ def sync_info(instance: ProjectPmsInfo) -> list[dict]:
             assign_user = find_assign_user(assignee.email.split('@')[0])
             if not assign_user:
                 raise ValueError(f"未找到受理人对应的 PMS 用户: {assignee.email.split('@')[0]}")
-            level = level_map.get(issue.priority, "general")
+            if obj := query.filter(extra_field__name='缺陷级别').first():
+                level = obj.value
+            else:
+                level = level_map.get(issue.priority, "general")
+            if obj := query.filter(extra_field__name='缺陷版本').first():
+                software_version = obj.value
+            else:
+                software_version = '操作级'
             post_task(
                 title=issue.name,
                 description=issue.description_html or "",
@@ -562,7 +570,7 @@ def sync_info(instance: ProjectPmsInfo) -> list[dict]:
                 project_code=instance.project_code,
                 meter_type=instance.meter_type,
                 level=level,
-                software_version=instance.software_version,
+                software_version=software_version,
                 tool_version=instance.tool_version,
                 reproduce=instance.reproduce,
             )

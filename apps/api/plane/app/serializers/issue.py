@@ -71,8 +71,8 @@ def _is_allowed_to_add_parent(parent_issue, sub_issue):
         return p == "史诗"
     if c == '任务':
         return p == "用户故事" or p == "任务"
-    if c == '缺陷':
-        return p == "任务" or p == "缺陷" or p == '用户故事'
+    if '缺陷' in c:
+        return p == "任务" or "缺陷" in p or p == '用户故事'
     return False
 
 
@@ -197,11 +197,11 @@ class IssueCreateSerializer(BaseSerializer):
 
             # 更新场景：若原工作项已存在负责人，不允许将负责人清空
             if (
-                self.instance is not None
-                and not attrs["assignee_ids"]
-                and IssueAssignee.objects.filter(
-                    issue=self.instance, deleted_at__isnull=True
-                ).exists()
+                    self.instance is not None
+                    and not attrs["assignee_ids"]
+                    and IssueAssignee.objects.filter(
+                issue=self.instance, deleted_at__isnull=True
+            ).exists()
             ):
                 raise serializers.ValidationError(
                     {"assignee_ids": "工作项负责人不能为空"}
@@ -1237,12 +1237,12 @@ class IssueBatchUpdateSerializer(BaseSerializer):
     def validate(self, attrs):
         # 更新场景：若原工作项已存在负责人，不允许将负责人清空
         if (
-            "assignee_ids" in attrs
-            and not attrs["assignee_ids"]
-            and self.instance is not None
-            and IssueAssignee.objects.filter(
-                issue=self.instance, deleted_at__isnull=True
-            ).exists()
+                "assignee_ids" in attrs
+                and not attrs["assignee_ids"]
+                and self.instance is not None
+                and IssueAssignee.objects.filter(
+            issue=self.instance, deleted_at__isnull=True
+        ).exists()
         ):
             raise serializers.ValidationError(
                 {"assignee_ids": "工作项负责人不能为空"}

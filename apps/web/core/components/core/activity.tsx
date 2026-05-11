@@ -249,6 +249,58 @@ const activityDetails: {
     ),
     icon: <FileText size={12} className="text-secondary" aria-hidden="true" />,
   },
+  extra_field: {
+    message: (activity, showIssue) => {
+      const fieldName = activity.comment || "custom field";
+      const hasOld = !!activity.old_value;
+      const hasNew = !!activity.new_value;
+      const oldLabel = hasOld ? activity.old_value : "None";
+      const newLabel = hasNew ? activity.new_value : "None";
+
+      if (!hasOld && hasNew)
+        return (
+          <>
+            set <span className="font-medium text-primary">{fieldName}</span> to{" "}
+            <span className="font-medium text-primary">{newLabel}</span>
+            {showIssue && (
+              <>
+                {" "}
+                for <IssueLink activity={activity} />
+              </>
+            )}
+          </>
+        );
+
+      if (hasOld && !hasNew)
+        return (
+          <>
+            cleared <span className="font-medium text-primary">{fieldName}</span> (was{" "}
+            <span className="font-medium text-secondary">{oldLabel}</span>)
+            {showIssue && (
+              <>
+                {" "}
+                for <IssueLink activity={activity} />
+              </>
+            )}
+          </>
+        );
+
+      return (
+        <>
+          updated <span className="font-medium text-primary">{fieldName}</span> from{" "}
+          <span className="font-medium text-secondary">{oldLabel}</span> to{" "}
+          <span className="font-medium text-primary">{newLabel}</span>
+          {showIssue && (
+            <>
+              {" "}
+              for <IssueLink activity={activity} />
+            </>
+          )}
+        </>
+      );
+    },
+    icon: <TagIcon size={12} className="text-secondary" aria-hidden="true" />,
+  },
   estimate_point: {
     message: (activity, showIssue) => {
       if (!activity.new_value)

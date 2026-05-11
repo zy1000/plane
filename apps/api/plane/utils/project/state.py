@@ -141,9 +141,9 @@ def create_default_bug_extra_field(issue_types: list[IssueType]):
     if defect_issue_type is None:
         return
     project = defect_issue_type.project
-    # 软件版本
+    # 缺陷版本
     TypeExtraField.objects.create(
-        issue_type=defect_issue_type, project=project, name="软件版本", is_required=True
+        issue_type=defect_issue_type, project=project, name="缺陷版本", is_required=True
     )
     # 缺陷级别
     bug_level = {
@@ -167,31 +167,46 @@ def create_default_bug_extra_field(issue_types: list[IssueType]):
         field_type="select",
         default_value="general",
     )
-    # 易现等级
-    trigger_level = {
-        "choices": ["表象级", "操作级", "发散级", "难重现", "其他"],
+
+    # 缺陷原因
+    bug_cause = {
+        "choices": [
+            "需求不明确",
+            "需求未实现",
+            "设计-算法",
+            "设计-框架",
+            "设计-逻辑",
+            "编码",
+            "配置错误",
+            "第三方组件",
+            "测试环境错误",
+            "用例设计错误",
+            "编译打包",
+            "其他",
+            "编码-接口",
+            "编码-调度",
+            "编码-逻辑",
+        ],
         "selection_mode": "single",
     }
     TypeExtraField.objects.create(
         issue_type=defect_issue_type,
         project=project,
-        name="易现等级",
-        is_required=True,
-        options=trigger_level,
-        field_type="select",
-        default_value="操作级",
+        name="缺陷原因",
+        options=bug_cause,
+        field_type="select"
     )
 
-    # Fixed缺陷的软件版本
+    # 修复版本
     TypeExtraField.objects.create(
-        issue_type=defect_issue_type, project=project, name="Fixed缺陷的软件版本"
+        issue_type=defect_issue_type, project=project, name="修复版本"
     )
 
-    # 技术原因及解决方案
+    # 解决方案
     TypeExtraField.objects.create(
         issue_type=defect_issue_type,
         project=project,
-        name="技术原因及解决方案",
+        name="解决方案",
         options={"text_mode": "paragraph"},
     )
 
@@ -290,7 +305,7 @@ def create_default_bug_workflow(issue_types: list[IssueType], **kwargs):
             deleted_at__isnull=True,
         ).first()
         if open_to_fixed:
-            required_field_names = ["Fixed缺陷的软件版本", "技术原因及解决方案"]
+            required_field_names = ["修复版本", "解决方案"]
             extra_fields = TypeExtraField.objects.filter(
                 issue_type=defect_issue_type,
                 name__in=required_field_names,

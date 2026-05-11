@@ -51,7 +51,7 @@ export function ModuleButtonContent(props: ModuleButtonContentProps) {
           <div className="relative flex max-w-full items-center gap-1">
             {!hideIcon && <ModuleIcon className="h-3 w-3 flex-shrink-0" />}
             {(value.length > 0 || !!placeholder) && (
-              <div className="min-w-0 flex-1 max-w-40 truncate text-left">
+              <div className="min-w-0 flex-1 truncate text-left">
                 {value.length > 0
                   ? value.length === 1
                     ? `${getModuleById(value[0])?.name || "module"}`
@@ -110,7 +110,7 @@ export function ModuleButtonContent(props: ModuleButtonContentProps) {
         ) : (
           <>
             {!hideIcon && <ModuleIcon className="h-3 w-3 flex-shrink-0" />}
-            <span className="flex-grow truncate text-left">{placeholder}</span>
+            <span className="min-w-0 flex-1 truncate text-left">{placeholder}</span>
           </>
         )}
         {dropdownArrow && (
@@ -123,7 +123,9 @@ export function ModuleButtonContent(props: ModuleButtonContentProps) {
       <>
         {!hideIcon && <ModuleIcon className="h-3 w-3 flex-shrink-0" />}
         {!hideText && (
-          <span className="flex-grow truncate text-left">{value ? getModuleById(value)?.name : placeholder}</span>
+          <span className="min-w-0 flex-1 truncate text-left">
+            {value ? getModuleById(value)?.name : placeholder}
+          </span>
         )}
         {dropdownArrow && (
           <ChevronDownIcon className={cn("h-2.5 w-2.5 flex-shrink-0", dropdownArrowClassName)} aria-hidden="true" />

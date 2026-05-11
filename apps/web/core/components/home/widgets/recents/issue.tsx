@@ -101,7 +101,7 @@ export const RecentIssue = observer(function RecentIssue(props: BlockProps) {
       }
       appendTitleElement={
         <div className="flex-shrink-0 text-11 font-medium text-placeholder">
-          {calculateTimeAgo(activity.visited_at)}
+          Viewed {calculateTimeAgo(activity.visited_at)}
         </div>
       }
       quickActionElement={

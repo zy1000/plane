@@ -74,8 +74,8 @@ export const IssueReleaseSelect = observer(function IssueReleaseSelect(props: TI
         onChange={handleIssueReleaseChange}
         placeholder={t("release.no_release")}
         disabled={disableSelect}
-        className="group h-full w-full"
-        buttonContainerClassName="w-full text-left rounded-sm"
+        className="group w-full"
+        buttonContainerClassName="w-full text-left h-7.5 rounded-sm"
         buttonClassName={`text-body-xs-medium justify-between ${issue?.release_ids?.length ? "" : "text-placeholder"}`}
         buttonVariant="transparent-with-text"
         hideIcon

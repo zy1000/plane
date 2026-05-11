@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { useState } from "react";
+import { type ComponentType, type ReactNode, useState } from "react";
 import { observer } from "mobx-react";
 import { CalendarClock, CalendarPlus, Rocket, UserRound } from "lucide-react";
 // i18n
@@ -12,8 +12,6 @@ import { useTranslation } from "@plane/i18n";
 // ui icons
 import { CycleIcon, ModuleIcon, LabelPropertyIcon } from "@plane/propel/icons";
 import { cn, renderFormattedDate, renderFormattedTime } from "@plane/utils";
-// components
-import { SidebarPropertyListItem } from "@/components/common/layout/sidebar/property-list-item";
 // helpers
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useMember } from "@/hooks/store/use-member";
@@ -61,6 +59,27 @@ export function PropertyGroupSection(props: { title: string; defaultOpen?: boole
       {open && <div className="mt-2 w-full space-y-2">{children}</div>}
     </section>
   );
+}
+
+// 「结构」三行共用 grid：否则迭代行含 TransferHopInfo 会单独撑宽该行标签列，三行控件左缘无法对齐。
+function StructureFieldLabel(props: {
+  icon: ComponentType<{ className?: string }>;
+  label: ReactNode;
+  append?: ReactNode;
+}) {
+  const { icon: Icon, label, append } = props;
+
+  return (
+    <div className="flex h-7.5 shrink-0 items-center gap-1.5 text-body-xs-regular text-tertiary">
+      <Icon className="size-4 shrink-0" />
+      <span className="whitespace-nowrap">{label}</span>
+      {append != null ? <span className="inline-flex shrink-0">{append}</span> : null}
+    </div>
+  );
+}
+
+function StructureFieldValue(props: { children: ReactNode }) {
+  return <div className="flex min-w-0 flex-wrap items-center gap-1">{props.children}</div>;
 }
 
 export const PeekOverviewProperties = observer(function PeekOverviewProperties(props: IPeekOverviewProperties) {
@@ -116,26 +135,46 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
 
         {/* 项目结构：模块、迭代、发布 */}
         <PropertyGroupSection title="结构">
-          {projectDetails?.module_view && (
-            <SidebarPropertyListItem icon={ModuleIcon} label={t("common.modules")}>
-              <IssueModuleSelect
-                className="w-full grow"
-                workspaceSlug={workspaceSlug}
-                projectId={projectId}
-                issueId={issueId}
-                issueOperations={issueOperations}
-                disabled={disabled}
-              />
-            </SidebarPropertyListItem>
-          )}
+          <div className="grid w-full grid-cols-[minmax(7.5rem,max-content)_minmax(0,1fr)] gap-x-2 gap-y-2">
+            {projectDetails?.module_view && (
+              <>
+                <StructureFieldLabel icon={ModuleIcon} label={t("common.modules")} />
+                <StructureFieldValue>
+                  <IssueModuleSelect
+                    className="h-7.5 w-full grow"
+                    workspaceSlug={workspaceSlug}
+                    projectId={projectId}
+                    issueId={issueId}
+                    issueOperations={issueOperations}
+                    disabled={disabled}
+                  />
+                </StructureFieldValue>
+              </>
+            )}
 
-          {projectDetails?.cycle_view && (
-            <SidebarPropertyListItem
-              icon={CycleIcon}
-              label={t("common.cycle")}
-              appendElement={<TransferHopInfo workItem={issue} />}
-            >
-              <IssueCycleSelect
+            {projectDetails?.cycle_view && (
+              <>
+                <StructureFieldLabel
+                  icon={CycleIcon}
+                  label={t("common.cycle")}
+                  append={<TransferHopInfo workItem={issue} />}
+                />
+                <StructureFieldValue>
+                  <IssueCycleSelect
+                    className="h-7.5 w-full grow"
+                    workspaceSlug={workspaceSlug}
+                    projectId={projectId}
+                    issueId={issueId}
+                    issueOperations={issueOperations}
+                    disabled={disabled}
+                  />
+                </StructureFieldValue>
+              </>
+            )}
+
+            <StructureFieldLabel icon={Rocket} label="发布" />
+            <StructureFieldValue>
+              <IssueReleaseSelect
                 className="h-7.5 w-full grow"
                 workspaceSlug={workspaceSlug}
                 projectId={projectId}
@@ -143,19 +182,8 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
                 issueOperations={issueOperations}
                 disabled={disabled}
               />
-            </SidebarPropertyListItem>
-          )}
-
-          <SidebarPropertyListItem icon={Rocket} label="发布">
-            <IssueReleaseSelect
-              className="w-full grow"
-              workspaceSlug={workspaceSlug}
-              projectId={projectId}
-              issueId={issueId}
-              issueOperations={issueOperations}
-              disabled={disabled}
-            />
-          </SidebarPropertyListItem>
+            </StructureFieldValue>
+          </div>
         </PropertyGroupSection>
 
         <IssueExtraFieldsSection
