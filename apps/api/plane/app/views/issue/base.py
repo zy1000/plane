@@ -76,9 +76,15 @@ from plane.db.models import (
     ProjectMember,
     TransitionRecordStatus,
     TypeExtraField,
-    UserRecentVisit, IssueType, State,
+    UserRecentVisit,
+    IssueType,
+    State,
 )
-from plane.utils.filters import ComplexFilterBackend, IssueComplexFilterBackend, IssueFilterSet
+from plane.utils.filters import (
+    ComplexFilterBackend,
+    IssueComplexFilterBackend,
+    IssueFilterSet,
+)
 from plane.utils.global_paginator import paginate
 from plane.utils.grouper import (
     issue_group_values,
@@ -112,12 +118,16 @@ class IssueListEndpoint(BaseAPIView):
         issue_ids = request.GET.get("issues", False)
 
         if not issue_ids:
-            return Response({"error": "Issues are required"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "Issues are required"}, status=status.HTTP_400_BAD_REQUEST
+            )
 
         issue_ids = [issue_id for issue_id in issue_ids.split(",") if issue_id != ""]
 
         # Base queryset with basic filters
-        queryset = Issue.issue_objects.filter(workspace__slug=slug, project_id=project_id, pk__in=issue_ids)
+        queryset = Issue.issue_objects.filter(
+            workspace__slug=slug, project_id=project_id, pk__in=issue_ids
+        )
 
         # Apply filtering from filterset
         queryset = self.filter_queryset(queryset)
@@ -128,7 +138,9 @@ class IssueListEndpoint(BaseAPIView):
 
         # Add select_related, prefetch_related if fields or expand is not None
         if self.fields or self.expand:
-            issue_queryset = issue_queryset.select_related("workspace", "project", "state", "parent", "type").prefetch_related(
+            issue_queryset = issue_queryset.select_related(
+                "workspace", "project", "state", "parent", "type"
+            ).prefetch_related(
                 "assignees", "labels", "issue_module__module", "issue_release__release"
             )
 
@@ -136,7 +148,9 @@ class IssueListEndpoint(BaseAPIView):
         issue_queryset = (
             issue_queryset.annotate(
                 cycle_id=Subquery(
-                    CycleIssue.objects.filter(issue=OuterRef("id"), deleted_at__isnull=True).values("cycle_id")[:1]
+                    CycleIssue.objects.filter(
+                        issue=OuterRef("id"), deleted_at__isnull=True
+                    ).values("cycle_id")[:1]
                 )
             )
             .annotate(
@@ -165,14 +179,18 @@ class IssueListEndpoint(BaseAPIView):
 
         order_by_param = request.GET.get("order_by", "-created_at")
         # Issue queryset
-        issue_queryset, _ = order_issue_queryset(issue_queryset=issue_queryset, order_by_param=order_by_param)
+        issue_queryset, _ = order_issue_queryset(
+            issue_queryset=issue_queryset, order_by_param=order_by_param
+        )
 
         # Group by
         group_by = request.GET.get("group_by", False)
         sub_group_by = request.GET.get("sub_group_by", False)
 
         # issue queryset
-        issue_queryset = issue_queryset_grouper(queryset=issue_queryset, group_by=group_by, sub_group_by=sub_group_by)
+        issue_queryset = issue_queryset_grouper(
+            queryset=issue_queryset, group_by=group_by, sub_group_by=sub_group_by
+        )
 
         recent_visited_task.delay(
             slug=slug,
@@ -183,7 +201,9 @@ class IssueListEndpoint(BaseAPIView):
         )
 
         if self.fields or self.expand:
-            issues = IssueSerializer(issue_queryset, many=True, fields=self.fields, expand=self.expand).data
+            issues = IssueSerializer(
+                issue_queryset, many=True, fields=self.fields, expand=self.expand
+            ).data
         else:
             issues = issue_queryset.annotate(type_name=F("type__name")).values(
                 "id",
@@ -217,7 +237,9 @@ class IssueListEndpoint(BaseAPIView):
                 "type_name",
             )
             datetime_fields = ["created_at", "updated_at"]
-            issues = user_timezone_converter(issues, datetime_fields, request.user.user_timezone)
+            issues = user_timezone_converter(
+                issues, datetime_fields, request.user.user_timezone
+            )
         return Response(issues, status=status.HTTP_200_OK)
 
 
@@ -229,7 +251,11 @@ class IssueViewSet(BaseViewSet):
     filterset_class = IssueFilterSet
 
     def get_serializer_class(self):
-        return IssueCreateSerializer if self.action in ["create", "update", "partial_update"] else IssueSerializer
+        return (
+            IssueCreateSerializer
+            if self.action in ["create", "update", "partial_update"]
+            else IssueSerializer
+        )
 
     def get_queryset(self):
         issues = Issue.issue_objects.filter(
@@ -243,7 +269,9 @@ class IssueViewSet(BaseViewSet):
         issues = (
             issues.annotate(
                 cycle_id=Subquery(
-                    CycleIssue.objects.filter(issue=OuterRef("id"), deleted_at__isnull=True).values("cycle_id")[:1]
+                    CycleIssue.objects.filter(
+                        issue=OuterRef("id"), deleted_at__isnull=True
+                    ).values("cycle_id")[:1]
                 )
             )
             .annotate(
@@ -313,7 +341,9 @@ class IssueViewSet(BaseViewSet):
         sub_group_by = request.GET.get("sub_group_by", False)
 
         # issue queryset
-        issue_queryset = issue_queryset_grouper(queryset=issue_queryset, group_by=group_by, sub_group_by=sub_group_by)
+        issue_queryset = issue_queryset_grouper(
+            queryset=issue_queryset, group_by=group_by, sub_group_by=sub_group_by
+        )
 
         recent_visited_task.delay(
             slug=slug,
@@ -323,17 +353,19 @@ class IssueViewSet(BaseViewSet):
             user_id=request.user.id,
         )
         if (
-                ProjectMember.objects.filter(
-                    workspace__slug=slug,
-                    project_id=project_id,
-                    member=request.user,
-                    role=5,
-                    is_active=True,
-                ).exists()
-                and not project.guest_view_all_features
+            ProjectMember.objects.filter(
+                workspace__slug=slug,
+                project_id=project_id,
+                member=request.user,
+                role=5,
+                is_active=True,
+            ).exists()
+            and not project.guest_view_all_features
         ):
             issue_queryset = issue_queryset.filter(created_by=request.user)
-            filtered_issue_queryset = filtered_issue_queryset.filter(created_by=request.user)
+            filtered_issue_queryset = filtered_issue_queryset.filter(
+                created_by=request.user
+            )
 
         if group_by:
             if sub_group_by:
@@ -413,7 +445,9 @@ class IssueViewSet(BaseViewSet):
                 request=request,
                 queryset=issue_queryset,
                 total_count_queryset=filtered_issue_queryset,
-                on_results=lambda issues: issue_on_results(group_by=group_by, issues=issues, sub_group_by=sub_group_by),
+                on_results=lambda issues: issue_on_results(
+                    group_by=group_by, issues=issues, sub_group_by=sub_group_by
+                ),
             )
 
     def create(self, request, slug, project_id):
@@ -421,27 +455,33 @@ class IssueViewSet(BaseViewSet):
         data = dict(request.data)
         if not data.get("type_id"):
             default_issue_type = (
-                IssueType.objects.filter(project=project, is_default=True, deleted_at__isnull=True).first()
-                or IssueType.objects.filter(project=project, name='任务', deleted_at__isnull=True).first()
+                IssueType.objects.filter(
+                    project=project, is_default=True, deleted_at__isnull=True
+                ).first()
+                or IssueType.objects.filter(
+                    project=project, name="任务", deleted_at__isnull=True
+                ).first()
             )
             if default_issue_type is None:
                 return Response(
                     {"error": "Issue type is not valid please pass a valid type_id"},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
-            data['type_id'] = str(default_issue_type.id)
+            data["type_id"] = str(default_issue_type.id)
 
         issue_type_id = str(data["type_id"])
         if resolve_project_issue_type_name(str(project_id), issue_type_id) is None:
-            return Response({"error": "Issue type is not valid please pass a valid type_id"},
-                            status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "Issue type is not valid please pass a valid type_id"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         if not has_project_issue_permission(
-                user=request.user,
-                workspace_slug=slug,
-                project_id=str(project_id),
-                action="create",
-                issue_type_id=issue_type_id,
+            user=request.user,
+            workspace_slug=slug,
+            project_id=str(project_id),
+            action="create",
+            issue_type_id=issue_type_id,
         ):
             return Response(
                 {"error": f"您没有所需的项目权限。"},
@@ -452,7 +492,7 @@ class IssueViewSet(BaseViewSet):
             data=data,
             context={
                 "project_id": project_id,
-                "type_id": data['type_id'],
+                "type_id": data["type_id"],
                 "workspace_id": project.workspace_id,
                 "default_assignee_id": project.default_assignee_id,
             },
@@ -509,13 +549,17 @@ class IssueViewSet(BaseViewSet):
                     "is_draft",
                     "archived_at",
                     "deleted_at",
-                    'type_id'
+                    "type_id",
                 )
                 .first()
             )
             datetime_fields = ["created_at", "updated_at"]
-            issue = user_timezone_converter(issue, datetime_fields, request.user.user_timezone)
-            issue["extra_field_values"] = serialize_extra_field_values(serializer.instance)
+            issue = user_timezone_converter(
+                issue, datetime_fields, request.user.user_timezone
+            )
+            issue["extra_field_values"] = serialize_extra_field_values(
+                serializer.instance
+            )
             # Send the model activity
             model_activity.delay(
                 model_name="issue",
@@ -536,7 +580,9 @@ class IssueViewSet(BaseViewSet):
             return Response(issue, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    @allow_permission(allowed_roles=[ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], creator=True, model=Issue)
+    @allow_permission(
+        allowed_roles=[ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], creator=True, model=Issue
+    )
     def retrieve(self, request, slug, project_id, pk=None):
         project = Project.objects.get(pk=project_id, workspace__slug=slug)
 
@@ -555,7 +601,13 @@ class IssueViewSet(BaseViewSet):
                     ).order_by("sort_order", "created_at"),
                 )
             )
-            .annotate(cycle_id=Subquery(CycleIssue.objects.filter(issue=OuterRef("id")).values("cycle_id")[:1]))
+            .annotate(
+                cycle_id=Subquery(
+                    CycleIssue.objects.filter(issue=OuterRef("id")).values("cycle_id")[
+                        :1
+                    ]
+                )
+            )
             .annotate(
                 link_count=Subquery(
                     IssueLink.objects.filter(issue=OuterRef("id"))
@@ -666,15 +718,15 @@ class IssueViewSet(BaseViewSet):
         """
 
         if (
-                ProjectMember.objects.filter(
-                    workspace__slug=slug,
-                    project_id=project_id,
-                    member=request.user,
-                    role=5,
-                    is_active=True,
-                ).exists()
-                and not project.guest_view_all_features
-                and not issue.created_by == request.user
+            ProjectMember.objects.filter(
+                workspace__slug=slug,
+                project_id=project_id,
+                member=request.user,
+                role=5,
+                is_active=True,
+            ).exists()
+            and not project.guest_view_all_features
+            and not issue.created_by == request.user
         ):
             return Response(
                 {"error": "You are not allowed to view this issue"},
@@ -710,7 +762,10 @@ class IssueViewSet(BaseViewSet):
                     ArrayAgg(
                         "labels__id",
                         distinct=True,
-                        filter=Q(~Q(labels__id__isnull=True) & Q(label_issue__deleted_at__isnull=True)),
+                        filter=Q(
+                            ~Q(labels__id__isnull=True)
+                            & Q(label_issue__deleted_at__isnull=True)
+                        ),
                     ),
                     Value([], output_field=ArrayField(UUIDField())),
                 ),
@@ -757,15 +812,17 @@ class IssueViewSet(BaseViewSet):
 
         if not issue:
             redis_client.delete(lock_id)
-            return Response({"error": "Issue not found"}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"error": "Issue not found"}, status=status.HTTP_404_NOT_FOUND
+            )
 
         if not has_project_issue_permission(
-                user=request.user,
-                workspace_slug=slug,
-                project_id=str(project_id),
-                action="edit",
-                issue_type_id=str(issue.type_id) if issue.type_id else None,
-                issue_assignee_ids=issue.assignee_ids,
+            user=request.user,
+            workspace_slug=slug,
+            project_id=str(project_id),
+            action="edit",
+            issue_type_id=str(issue.type_id) if issue.type_id else None,
+            issue_assignee_ids=issue.assignee_ids,
         ):
             redis_client.delete(lock_id)
             return Response(
@@ -782,7 +839,7 @@ class IssueViewSet(BaseViewSet):
                     issue=issue,
                     to_state=to_state,
                     user=request.user,
-                    project_id=project_id
+                    project_id=project_id,
                 )
                 if not allowed:
                     redis_client.delete(lock_id)
@@ -808,7 +865,9 @@ class IssueViewSet(BaseViewSet):
                 issue=issue, assignee_ids=issue.assignee_ids
             )
 
-        current_instance = json.dumps(IssueDetailSerializer(issue).data, cls=DjangoJSONEncoder)
+        current_instance = json.dumps(
+            IssueDetailSerializer(issue).data, cls=DjangoJSONEncoder
+        )
 
         # 规则检查，是否有权限修改状态
         # if to_state_id := request.data.get('state_id'):
@@ -822,8 +881,9 @@ class IssueViewSet(BaseViewSet):
 
         requested_data = json.dumps(self.request.data, cls=DjangoJSONEncoder)
 
-        serializer = IssueCreateSerializer(issue, data=request.data, partial=True,
-                                           context={"project_id": project_id})
+        serializer = IssueCreateSerializer(
+            issue, data=request.data, partial=True, context={"project_id": project_id}
+        )
         if serializer.is_valid():
             serializer.save()
             # 评审期间核心字段或必填字段变更，重置已投票
@@ -868,17 +928,21 @@ class IssueViewSet(BaseViewSet):
             redis_client.delete(lock_id)
             return Response(status=status.HTTP_204_NO_CONTENT)
         redis_client.delete(lock_id)
-        return Response({'error': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(
+            {"error": serializer.errors}, status=status.HTTP_400_BAD_REQUEST
+        )
 
     def destroy(self, request, slug, project_id, pk=None):
-        issue = Issue.objects.select_related("type").get(workspace__slug=slug, project_id=project_id, pk=pk)
+        issue = Issue.objects.select_related("type").get(
+            workspace__slug=slug, project_id=project_id, pk=pk
+        )
 
         if not has_project_issue_permission(
-                user=request.user,
-                workspace_slug=slug,
-                project_id=str(project_id),
-                action="delete",
-                issue_type_id=str(issue.type_id) if issue.type_id else None,
+            user=request.user,
+            workspace_slug=slug,
+            project_id=str(project_id),
+            action="delete",
+            issue_type_id=str(issue.type_id) if issue.type_id else None,
         ):
             return Response(
                 {"error": f"您没有所需的项目权限。"},
@@ -913,19 +977,15 @@ class ProjectUserDisplayPropertyEndpoint(BaseAPIView):
     def patch(self, request, slug, project_id):
         try:
             issue_property = ProjectUserProperty.objects.get(
-                user=request.user,
-                project_id=project_id
+                user=request.user, project_id=project_id
             )
         except ProjectUserProperty.DoesNotExist:
             issue_property = ProjectUserProperty.objects.create(
-                user=request.user,
-                project_id=project_id
+                user=request.user, project_id=project_id
             )
 
         serializer = ProjectUserPropertySerializer(
-            issue_property,
-            data=request.data,
-            partial=True
+            issue_property, data=request.data, partial=True
         )
         serializer.is_valid(raise_exception=True)
         serializer.save()
@@ -933,7 +993,9 @@ class ProjectUserDisplayPropertyEndpoint(BaseAPIView):
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
     def get(self, request, slug, project_id):
-        issue_property, _ = ProjectUserProperty.objects.get_or_create(user=request.user, project_id=project_id)
+        issue_property, _ = ProjectUserProperty.objects.get_or_create(
+            user=request.user, project_id=project_id
+        )
         serializer = ProjectUserPropertySerializer(issue_property)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -944,20 +1006,26 @@ class BulkDeleteIssuesEndpoint(BaseAPIView):
         issue_ids = request.data.get("issue_ids", [])
 
         if not len(issue_ids):
-            return Response({"error": "Issue IDs are required"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "Issue IDs are required"}, status=status.HTTP_400_BAD_REQUEST
+            )
 
-        issues = Issue.issue_objects.filter(workspace__slug=slug, project_id=project_id, pk__in=issue_ids)
+        issues = Issue.issue_objects.filter(
+            workspace__slug=slug, project_id=project_id, pk__in=issue_ids
+        )
         issue_type_ids = set(
-            issues.filter(type__isnull=False).values_list("type_id", flat=True).distinct()
+            issues.filter(type__isnull=False)
+            .values_list("type_id", flat=True)
+            .distinct()
         )
 
         for issue_type_id in issue_type_ids:
             if not has_project_issue_permission(
-                    user=request.user,
-                    workspace_slug=slug,
-                    project_id=str(project_id),
-                    action="delete",
-                    issue_type_id=str(issue_type_id),
+                user=request.user,
+                workspace_slug=slug,
+                project_id=str(project_id),
+                action="delete",
+                issue_type_id=str(issue_type_id),
             ):
                 return Response(
                     {"error": f"您没有所需的项目权限。"},
@@ -1187,9 +1255,7 @@ def _cell_str(value):
 
 def _attach_download_filename(response, filename):
     """设置下载文件名，兼容中文。"""
-    response["Content-Disposition"] = (
-        f"attachment; filename*=UTF-8''{quote(filename)}"
-    )
+    response["Content-Disposition"] = f"attachment; filename*=UTF-8''{quote(filename)}"
     # 允许前端读取 Content-Disposition（跨域或拦截器场景）
     existing_expose = response.get("Access-Control-Expose-Headers", "")
     headers_to_expose = {h.strip() for h in existing_expose.split(",") if h.strip()}
@@ -1385,11 +1451,19 @@ class IssuePaginatedViewSet(BaseViewSet):
         workspace_slug = self.kwargs.get("slug")
         project_id = self.kwargs.get("project_id")
 
-        issue_queryset = Issue.issue_objects.filter(workspace__slug=workspace_slug, project_id=project_id)
+        issue_queryset = Issue.issue_objects.filter(
+            workspace__slug=workspace_slug, project_id=project_id
+        )
 
         return (
             issue_queryset.select_related("state")
-            .annotate(cycle_id=Subquery(CycleIssue.objects.filter(issue=OuterRef("id")).values("cycle_id")[:1]))
+            .annotate(
+                cycle_id=Subquery(
+                    CycleIssue.objects.filter(issue=OuterRef("id")).values("cycle_id")[
+                        :1
+                    ]
+                )
+            )
             .annotate(
                 link_count=Subquery(
                     IssueLink.objects.filter(issue=OuterRef("id"))
@@ -1424,7 +1498,9 @@ class IssuePaginatedViewSet(BaseViewSet):
 
         # converting the datetime fields in paginated data
         datetime_fields = ["created_at", "updated_at"]
-        paginated_data = user_timezone_converter(paginated_data, datetime_fields, timezone)
+        paginated_data = user_timezone_converter(
+            paginated_data, datetime_fields, timezone
+        )
 
         return paginated_data
 
@@ -1469,7 +1545,9 @@ class IssuePaginatedViewSet(BaseViewSet):
             required_fields.append("description_html")
 
         # querying issues
-        base_queryset = Issue.issue_objects.filter(workspace__slug=slug, project_id=project_id)
+        base_queryset = Issue.issue_objects.filter(
+            workspace__slug=slug, project_id=project_id
+        )
 
         base_queryset = base_queryset.order_by("updated_at")
         queryset = self.get_queryset().order_by("updated_at")
@@ -1561,7 +1639,9 @@ class IssueDetailEndpoint(BaseAPIView):
         return (
             issues.annotate(
                 cycle_id=Subquery(
-                    CycleIssue.objects.filter(issue=OuterRef("id"), deleted_at__isnull=True).values("cycle_id")[:1]
+                    CycleIssue.objects.filter(
+                        issue=OuterRef("id"), deleted_at__isnull=True
+                    ).values("cycle_id")[:1]
                 )
             )
             .annotate(
@@ -1629,7 +1709,9 @@ class IssueDetailEndpoint(BaseAPIView):
         # check for the project member role, if the role is 5 then check for the guest_view_all_features
         #  if it is true then show all the issues else show only the issues created by the user
         permission_subquery = (
-            Issue.issue_objects.filter(workspace__slug=slug, project_id=project_id, id=OuterRef("id"))
+            Issue.issue_objects.filter(
+                workspace__slug=slug, project_id=project_id, id=OuterRef("id")
+            )
             .filter(
                 Q(
                     project__project_projectmember__member=self.request.user,
@@ -1653,9 +1735,9 @@ class IssueDetailEndpoint(BaseAPIView):
             .values("id")
         )
         # Main issue query
-        issue = Issue.issue_objects.filter(workspace__slug=slug, project_id=project_id).filter(
-            Exists(permission_subquery)
-        )
+        issue = Issue.issue_objects.filter(
+            workspace__slug=slug, project_id=project_id
+        ).filter(Exists(permission_subquery))
 
         # Add additional prefetch based on expand parameter
         if self.expand:
@@ -1689,7 +1771,9 @@ class IssueDetailEndpoint(BaseAPIView):
         order_by_param = request.GET.get("order_by", "-created_at")
 
         # Issue queryset
-        issue, order_by_param = order_issue_queryset(issue_queryset=issue, order_by_param=order_by_param)
+        issue, order_by_param = order_issue_queryset(
+            issue_queryset=issue, order_by_param=order_by_param
+        )
         return self.paginate(
             request=request,
             order_by=order_by_param,
@@ -1742,7 +1826,9 @@ class IssueBulkUpdateDateEndpoint(BaseAPIView):
 
             start_date = update.get("start_date")
             target_date = update.get("target_date")
-            validate_dates = self.validate_dates(issue.start_date, issue.target_date, start_date, target_date)
+            validate_dates = self.validate_dates(
+                issue.start_date, issue.target_date, start_date, target_date
+            )
             if not validate_dates:
                 return Response(
                     {"message": "Start date cannot exceed target date"},
@@ -1765,8 +1851,12 @@ class IssueBulkUpdateDateEndpoint(BaseAPIView):
             if target_date:
                 issue_activity.delay(
                     type="issue.activity.updated",
-                    requested_data=json.dumps({"target_date": update.get("target_date")}),
-                    current_instance=json.dumps({"target_date": str(issue.target_date)}),
+                    requested_data=json.dumps(
+                        {"target_date": update.get("target_date")}
+                    ),
+                    current_instance=json.dumps(
+                        {"target_date": str(issue.target_date)}
+                    ),
                     issue_id=str(issue_id),
                     actor_id=str(request.user.id),
                     project_id=str(project_id),
@@ -1778,7 +1868,9 @@ class IssueBulkUpdateDateEndpoint(BaseAPIView):
         # Bulk update issues
         Issue.objects.bulk_update(issues_to_update, ["start_date", "target_date"])
 
-        return Response({"message": "Issues updated successfully"}, status=status.HTTP_200_OK)
+        return Response(
+            {"message": "Issues updated successfully"}, status=status.HTTP_200_OK
+        )
 
 
 class IssueMetaEndpoint(BaseAPIView):
@@ -1813,14 +1905,16 @@ class IssueDetailIdentifierEndpoint(BaseAPIView):
             )
 
         # Fetch the project
-        project = Project.objects.get(identifier__iexact=project_identifier, workspace__slug=slug)
+        project = Project.objects.get(
+            identifier__iexact=project_identifier, workspace__slug=slug
+        )
 
         # Check if the user is a member of the project
         if not ProjectMember.objects.filter(
-                workspace__slug=slug,
-                project_id=project.id,
-                member=request.user,
-                is_active=True,
+            workspace__slug=slug,
+            project_id=project.id,
+            member=request.user,
+            is_active=True,
         ).exists():
             return Response(
                 {"error": "You are not allowed to view this issue"},
@@ -1832,7 +1926,9 @@ class IssueDetailIdentifierEndpoint(BaseAPIView):
             Issue.objects.filter(project_id=project.id)
             .filter(workspace__slug=slug)
             .select_related("workspace", "project", "state", "parent", "type")
-            .prefetch_related("assignees", "labels", "issue_module__module", "issue_release__release")
+            .prefetch_related(
+                "assignees", "labels", "issue_module__module", "issue_release__release"
+            )
             .prefetch_related(
                 Prefetch(
                     "type__extra_fields",
@@ -1841,7 +1937,13 @@ class IssueDetailIdentifierEndpoint(BaseAPIView):
                     ).order_by("sort_order", "created_at"),
                 )
             )
-            .annotate(cycle_id=Subquery(CycleIssue.objects.filter(issue=OuterRef("id")).values("cycle_id")[:1]))
+            .annotate(
+                cycle_id=Subquery(
+                    CycleIssue.objects.filter(issue=OuterRef("id")).values("cycle_id")[
+                        :1
+                    ]
+                )
+            )
             .annotate(
                 link_count=IssueLink.objects.filter(issue=OuterRef("id"))
                 .order_by()
@@ -1869,7 +1971,10 @@ class IssueDetailIdentifierEndpoint(BaseAPIView):
                     ArrayAgg(
                         "labels__id",
                         distinct=True,
-                        filter=Q(~Q(labels__id__isnull=True) & Q(label_issue__deleted_at__isnull=True)),
+                        filter=Q(
+                            ~Q(labels__id__isnull=True)
+                            & Q(label_issue__deleted_at__isnull=True)
+                        ),
                     ),
                     Value([], output_field=ArrayField(UUIDField())),
                 ),
@@ -1957,15 +2062,15 @@ class IssueDetailIdentifierEndpoint(BaseAPIView):
         """
 
         if (
-                ProjectMember.objects.filter(
-                    workspace__slug=slug,
-                    project_id=project.id,
-                    member=request.user,
-                    role=5,
-                    is_active=True,
-                ).exists()
-                and not project.guest_view_all_features
-                and not issue.created_by == request.user
+            ProjectMember.objects.filter(
+                workspace__slug=slug,
+                project_id=project.id,
+                member=request.user,
+                role=5,
+                is_active=True,
+            ).exists()
+            and not project.guest_view_all_features
+            and not issue.created_by == request.user
         ):
             return Response(
                 {"error": "You are not allowed to view this issue"},

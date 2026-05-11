@@ -20,6 +20,7 @@ from plane.bgtasks.notification_task import notifications
 from plane.db.models import (
     CommentReaction,
     Cycle,
+    EstimatePoint,
     Issue,
     IssueActivity,
     IssueComment,
@@ -27,11 +28,11 @@ from plane.db.models import (
     IssueSubscriber,
     Label,
     Module,
-    Release,
     Project,
+    Release,
     State,
+    TypeExtraField,
     User,
-    EstimatePoint,
 )
 from plane.settings.redis import redis_instance
 from plane.utils.exception_logger import log_exception
@@ -45,6 +46,102 @@ def extract_ids(data: dict | None, primary_key: str, fallback_key: str) -> set[s
     if primary_key in data:
         return {str(x) for x in data.get(primary_key, [])}
     return {str(x) for x in data.get(fallback_key, [])}
+
+
+def _normalize_extra_field_scalar(field_type, value):
+    """按字段类型对单个标量值做归一化，让 PATCH 入参与 JSON 快照的等值比较稳定。
+
+    - number: 统一为 float，避免 `10` / `10.0` / `"10"` 的误判
+    - boolean: 统一为 bool，兼容 `true/false/1/0` 字符串
+    - date: 截取 `YYYY-MM-DD`，兼容 ISO 字符串或 datetime
+    - 其它（text / select / user）: 统一为字符串
+    """
+
+    if value is None:
+        return None
+    if isinstance(value, str) and value == "":
+        return None
+
+    if field_type == "number":
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return str(value)
+
+    if field_type == "boolean":
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)):
+            return bool(value)
+        if isinstance(value, str):
+            return value.strip().lower() in ("true", "1", "yes")
+        return bool(value)
+
+    if field_type == "date":
+        if hasattr(value, "isoformat"):
+            return value.isoformat()[:10]
+        return str(value)[:10]
+
+    return str(value)
+
+
+def _normalize_extra_field_value(field_type, value):
+    """支持单值 / 多值的归一化，多值统一排序后比较，避免顺序差异误判。"""
+
+    if value is None:
+        return None
+    if isinstance(value, str) and value == "":
+        return None
+
+    if isinstance(value, (list, tuple)):
+        normalized_list = []
+        for item in value:
+            normalized_item = _normalize_extra_field_scalar(field_type, item)
+            if normalized_item is not None:
+                normalized_list.append(normalized_item)
+        if not normalized_list:
+            return None
+        return tuple(sorted(normalized_list, key=lambda x: (str(type(x)), str(x))))
+
+    return _normalize_extra_field_scalar(field_type, value)
+
+
+def _resolve_select_label(value, options):
+    if not isinstance(options, (dict, list)):
+        return str(value)
+
+    if isinstance(options, dict):
+        raw_options = options.get("options") or options.get("choices") or []
+    else:
+        raw_options = options
+
+    for option in raw_options or []:
+        if isinstance(option, dict):
+            option_value = option.get("key") if "key" in option else option.get("value")
+            if str(option_value) == str(value):
+                return option.get("label") or option.get("name") or str(option_value)
+        elif str(option) == str(value):
+            return str(option)
+    return str(value)
+
+
+def _format_extra_field_activity_value(field, raw_value, user_name_map):
+    if raw_value in (None, ""):
+        return ""
+
+    if isinstance(raw_value, (list, tuple)):
+        values = [item for item in raw_value if item not in (None, "")]
+    else:
+        values = [raw_value]
+
+    if field.field_type == "user":
+        display_values = [user_name_map.get(str(user_id), str(user_id)) for user_id in values]
+    elif field.field_type == "select":
+        display_values = [_resolve_select_label(item, field.options) for item in values]
+    else:
+        display_values = [str(item) for item in values]
+
+    return ", ".join(display_values)
 
 
 # Track Changes in name
@@ -354,6 +451,111 @@ def track_labels(
         )
 
 
+def track_extra_field_values(
+    requested_data,
+    current_instance,
+    issue_id,
+    project_id,
+    workspace_id,
+    actor_id,
+    issue_activities,
+    epoch,
+):
+    requested_values = requested_data.get("extra_field_values")
+    if not isinstance(requested_values, list):
+        return
+
+    current_values = current_instance.get("extra_field_values")
+    if not isinstance(current_values, list):
+        current_values = []
+
+    requested_map = {}
+    for item in requested_values:
+        if not isinstance(item, dict):
+            continue
+        extra_field_id = item.get("extra_field_id")
+        if extra_field_id is None:
+            continue
+        requested_map[str(extra_field_id)] = item.get("value")
+
+    current_map = {}
+    for item in current_values:
+        if not isinstance(item, dict):
+            continue
+        extra_field_id = item.get("extra_field_id")
+        if extra_field_id is None:
+            continue
+        current_map[str(extra_field_id)] = item.get("value")
+
+    candidate_field_ids = sorted(requested_map.keys())
+    if not candidate_field_ids:
+        return
+
+    extra_fields = TypeExtraField.objects.filter(pk__in=candidate_field_ids)
+    extra_field_map = {str(extra_field.id): extra_field for extra_field in extra_fields}
+    if not extra_field_map:
+        return
+
+    changed_field_ids = []
+    for extra_field_id in candidate_field_ids:
+        extra_field = extra_field_map.get(extra_field_id)
+        if extra_field is None:
+            continue
+        if _normalize_extra_field_value(
+            extra_field.field_type, current_map.get(extra_field_id)
+        ) != _normalize_extra_field_value(
+            extra_field.field_type, requested_map.get(extra_field_id)
+        ):
+            changed_field_ids.append(extra_field_id)
+
+    if not changed_field_ids:
+        return
+
+    user_ids = set()
+    for extra_field_id in changed_field_ids:
+        extra_field = extra_field_map.get(extra_field_id)
+        if extra_field is None or extra_field.field_type != "user":
+            continue
+        for value in (current_map.get(extra_field_id), requested_map.get(extra_field_id)):
+            if isinstance(value, (list, tuple)):
+                for user_id in value:
+                    if user_id not in (None, ""):
+                        user_ids.add(str(user_id))
+            elif value not in (None, ""):
+                user_ids.add(str(value))
+
+    user_name_map = {}
+    if user_ids:
+        users = User.objects.filter(pk__in=list(user_ids)).values("id", "display_name")
+        user_name_map = {str(user["id"]): user["display_name"] for user in users}
+
+    for extra_field_id in changed_field_ids:
+        extra_field = extra_field_map.get(extra_field_id)
+        if extra_field is None:
+            continue
+
+        issue_activities.append(
+            IssueActivity(
+                issue_id=issue_id,
+                actor_id=actor_id,
+                verb="updated",
+                old_value=_format_extra_field_activity_value(
+                    extra_field, current_map.get(extra_field_id), user_name_map
+                ),
+                new_value=_format_extra_field_activity_value(
+                    extra_field, requested_map.get(extra_field_id), user_name_map
+                ),
+                field="extra_field",
+                project_id=project_id,
+                workspace_id=workspace_id,
+                comment=extra_field.name,
+                old_identifier=extra_field.id,
+                new_identifier=extra_field.id,
+                epoch=epoch,
+            )
+        )
+
+
 # Track changes in issue assignees
 def track_assignees(
     requested_data,
@@ -611,6 +813,7 @@ def update_issue_activity(
         "target_date": track_target_date,
         "start_date": track_start_date,
         "label_ids": track_labels,
+        "extra_field_values": track_extra_field_values,
         "assignee_ids": track_assignees,
         "estimate_point": track_estimate_points,
         "archived_at": track_archive_at,

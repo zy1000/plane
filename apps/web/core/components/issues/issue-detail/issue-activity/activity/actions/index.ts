@@ -18,6 +18,7 @@ export * from "./target_date";
 export * from "./cycle";
 export * from "./module";
 export * from "./label";
+export * from "./extra-field";
 export * from "./link";
 export * from "./attachment";
 export * from "./archived-at";

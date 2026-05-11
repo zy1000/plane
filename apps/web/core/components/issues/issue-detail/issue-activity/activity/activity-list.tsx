@@ -28,6 +28,7 @@ import {
   IssueCycleActivity,
   IssueModuleActivity,
   IssueLabelActivity,
+  IssueExtraFieldActivity,
   IssueLinkActivity,
   IssueAttachmentActivity,
   IssueArchivedAtActivity,
@@ -85,6 +86,8 @@ export const IssueActivityItem = observer(function IssueActivityItem(props: TIss
       return <IssueModuleActivity {...componentDefaultProps} />;
     case "labels":
       return <IssueLabelActivity {...componentDefaultProps} showIssue={false} />;
+    case "extra_field":
+      return <IssueExtraFieldActivity {...componentDefaultProps} showIssue={false} />;
     case "link":
       return <IssueLinkActivity {...componentDefaultProps} showIssue={false} />;
     case "attachment":
