@@ -7,3 +7,6 @@ from django.apps import AppConfig
 
 class AppApiConfig(AppConfig):
     name = "plane.app"
+
+    def ready(self):
+        import plane.app.views.issue.signals

@@ -429,6 +429,10 @@ export const coreRoutes: RouteConfigEntry[] = [
             ":workspaceSlug/settings/releasenote",
             "./(all)/[workspaceSlug]/(settings)/settings/(workspace)/releasenote/page.tsx"
           ),
+          route(
+            ":workspaceSlug/settings/issue-type-categories",
+            "./(all)/[workspaceSlug]/(settings)/settings/(workspace)/issue-type-categories/page.tsx"
+          ),
         ]),
 
         // --------------------------------------------------------------------

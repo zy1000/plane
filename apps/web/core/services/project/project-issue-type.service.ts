@@ -24,6 +24,8 @@ export type TIssueType = {
   external_source?: string | null;
   external_id?: string | null;
   workspace?: string;
+  /** IssueTypeCategory 的主键（工作区级别），后端使用 IntegerField，序列化为数字 */
+  category_id?: number | string | null;
   created_at?: string;
   updated_at?: string;
 };

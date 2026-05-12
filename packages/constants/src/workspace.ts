@@ -126,6 +126,14 @@ export const WORKSPACE_SETTINGS = {
     access: [EUserWorkspaceRoles.ADMIN],
     highlight: (pathname: string, baseUrl: string) => pathname === `${baseUrl}/settings/webhooks/`,
   },
+  "issue-type-categories": {
+    key: "issue-type-categories",
+    i18n_label: "workspace_settings.settings.issue_type_categories.title",
+    href: `/settings/issue-type-categories`,
+    access: [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER],
+    highlight: (pathname: string, baseUrl: string) =>
+      pathname.startsWith(`${baseUrl}/settings/issue-type-categories`),
+  },
   changelog: {
     key: "changelog",
     i18n_label: "更新日志管理",

@@ -5,6 +5,7 @@
  */
 
 export default {
+  project: "项目",
   sidebar: {
     projects: "项目管理",
     pages: "笔记",
@@ -1729,6 +1730,9 @@ export default {
             message: "复制密钥时出错。",
           },
         },
+      },
+      issue_type_categories: {
+        title: "工作项类别",
       },
       api_tokens: {
         title: "API 令牌",

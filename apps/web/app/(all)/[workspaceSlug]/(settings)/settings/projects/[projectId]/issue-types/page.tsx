@@ -42,7 +42,9 @@ import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view
 import { PageHead } from "@/components/core/page-title";
 import { SettingsContentWrapper } from "@/components/settings/content-wrapper";
 import { SettingsHeading } from "@/components/settings/heading";
+import { IssueTypeCategorySelect } from "@/components/workspace/settings/issue-type-categories/issue-type-category-select";
 // hooks
+import { useIssueTypeCategories } from "@/hooks/store/use-issue-type-categories";
 import { useProject } from "@/hooks/store/use-project";
 import { useProjectIssueTypeFields } from "@/hooks/store/use-project-issue-type-fields";
 import { useProjectIssueTypes } from "@/hooks/store/use-project-issue-types";
@@ -1075,18 +1077,22 @@ function WorkItemTypeModal({
   onClose,
   onSubmit,
   editingIssueType,
+  workspaceSlug,
 }: {
   isOpen: boolean;
   isSubmitting: boolean;
   onClose: () => void;
   onSubmit: (data: Partial<TIssueType>) => Promise<void>;
   editingIssueType?: TIssueType | null;
+  workspaceSlug: string;
 }) {
   const { t } = useTranslation();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [isIconPickerOpen, setIsIconPickerOpen] = useState(false);
   const [iconOption, setIconOption] = useState<TTypeIconOption>(TYPE_ICON_OPTIONS[1] ?? DEFAULT_TYPE_ICON_OPTION);
+  const [categoryId, setCategoryId] = useState<number | string | null>(null);
+  const { categories, isLoading: isCategoriesLoading, fetchCategories } = useIssueTypeCategories(workspaceSlug);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -1094,17 +1100,28 @@ function WorkItemTypeModal({
       setName(editingIssueType.name ?? "");
       setDescription(editingIssueType.description ?? "");
       setIconOption(getTypeIconOption(editingIssueType));
+      setCategoryId(editingIssueType.category_id ?? null);
     } else {
       setName("");
       setDescription("");
       setIconOption(TYPE_ICON_OPTIONS[1] ?? DEFAULT_TYPE_ICON_OPTION);
+      setCategoryId(null);
     }
     setIsIconPickerOpen(false);
-  }, [isOpen, editingIssueType?.id]);
+    fetchCategories();
+  }, [isOpen, editingIssueType?.id, fetchCategories]);
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     if (!name.trim()) return;
+    if (categoryId === null || categoryId === undefined || categoryId === "") {
+      setToast({
+        type: TOAST_TYPE.ERROR,
+        title: "校验失败",
+        message: "请选择工作项类型的类别。",
+      });
+      return;
+    }
 
     await onSubmit({
       name: name.trim(),
@@ -1116,6 +1133,7 @@ function WorkItemTypeModal({
           background_color: iconOption.background,
         },
       },
+      category_id: categoryId,
     });
   };
 
@@ -1131,7 +1149,7 @@ function WorkItemTypeModal({
         <h3 className="text-lg font-semibold text-primary">
           {editingIssueType ? t("project_settings.issue_types.edit_title") : "创建工作项类型"}
         </h3>
-        <div className="relative mt-4 flex items-center gap-2">
+        <div className="relative mt-4 flex items-end gap-2">
           <WorkItemTypeIconPicker
             value={iconOption}
             isOpen={isIconPickerOpen}
@@ -1153,6 +1171,17 @@ function WorkItemTypeModal({
               autoFocus
             />
           </div>
+          <div className="flex w-44 shrink-0 flex-col gap-1">
+            <label className="text-xs font-medium text-secondary">
+              类别<span className="ml-0.5 text-danger-primary">*</span>
+            </label>
+            <IssueTypeCategorySelect
+              value={categoryId}
+              categories={categories}
+              isLoading={isCategoriesLoading}
+              onChange={setCategoryId}
+            />
+          </div>
         </div>
         <TextArea
           value={description}
@@ -1164,7 +1193,13 @@ function WorkItemTypeModal({
           <Button variant="neutral-primary" size="sm" onClick={onClose} disabled={isSubmitting}>
             取消
           </Button>
-          <Button variant="primary" size="sm" type="submit" loading={isSubmitting} disabled={isSubmitting}>
+          <Button
+            variant="primary"
+            size="sm"
+            type="submit"
+            loading={isSubmitting}
+            disabled={isSubmitting || !name.trim() || categoryId === null || categoryId === undefined || categoryId === ""}
+          >
             {editingIssueType ? t("update") : t("project_settings.issue_types.add")}
           </Button>
         </div>
@@ -1710,6 +1745,7 @@ function IssueTypesSettingsPage({ params }: Route.ComponentProps) {
           isOpen={isTypeModalOpen}
           isSubmitting={isTypeSubmitting}
           editingIssueType={editingIssueType}
+          workspaceSlug={workspaceSlug}
           onClose={() => setIsTypeModalOpen(false)}
           onSubmit={async (data) => {
             if (editingIssueType) {

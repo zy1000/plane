@@ -1,6 +1,7 @@
 from django.urls import path
 
 from plane.app.views.issue.issue_type import (
+    IssueTypeCategoryViewSet,
     IssueTypeViewSet,
     ProjectIssueTypeListCreateAPIEndpoint,
     WorkspaceIssueTypeApiView,
@@ -24,6 +25,23 @@ urlpatterns = [
         "workspaces/<str:slug>/projects/<uuid:project_id>/issue-types/<uuid:issue_type_id>/",
         IssueTypeViewSet.as_view(),
         name="issue-type",
+    ),
+    path(
+        "workspaces/<str:slug>/issue-type-categories/",
+        IssueTypeCategoryViewSet.as_view({"get": "list", "post": "create"}),
+        name="workspace-issue-type-categories",
+    ),
+    path(
+        "workspaces/<str:slug>/issue-type-categories/<int:pk>/",
+        IssueTypeCategoryViewSet.as_view(
+            {
+                "get": "retrieve",
+                "put": "update",
+                "patch": "partial_update",
+                "delete": "destroy",
+            }
+        ),
+        name="workspace-issue-type-category",
     ),
     # 工作项类型扩展字段（项目作用域）
     path(

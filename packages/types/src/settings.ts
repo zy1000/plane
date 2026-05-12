@@ -17,7 +17,8 @@ export type TWorkspaceSettingsTabs =
   | "roles"
   | "templates"
   | "export"
-  | "webhooks";
+  | "webhooks"
+  | "issue-type-categories";
 export type TWorkspaceSettingsItem = {
   key: TWorkspaceSettingsTabs;
   i18n_label: string;

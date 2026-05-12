@@ -5,6 +5,7 @@ from rest_framework import serializers
 # Module imports
 from .base import BaseSerializer
 from plane.db.models import IssueType, TypeExtraField, TypeExtraFieldValue
+from plane.db.models.issue_type import IssueTypeCategory
 
 
 class TypeExtraFieldSerializer(BaseSerializer):
@@ -90,10 +91,7 @@ class TypeExtraFieldLiteSerializer(BaseSerializer):
 
     class Meta:
         model = TypeExtraField
-        fields = [
-            "id",
-            "name"
-        ]
+        fields = ["id", "name"]
 
 
 class IssueTypeExtraFieldSerializer(BaseSerializer):
@@ -135,9 +133,41 @@ class TypeExtraFieldValueReadSerializer(serializers.Serializer):
     value = serializers.JSONField(allow_null=True)
 
 
+class IssueTypeCategorySerializer(BaseSerializer):
+    workspace_id = serializers.UUIDField(source="workspace.id", read_only=True)
+
+    class Meta:
+        model = IssueTypeCategory
+        fields = [
+            "id",
+            "workspace",
+            "workspace_id",
+            "name",
+            "description",
+            "is_system",
+        ]
+        read_only_fields = ["is_system", "workspace"]
+
+
 class IssueTypeSerializer(BaseSerializer):
     project_id = serializers.UUIDField(source="project.id", read_only=True)
     extra_fields = serializers.SerializerMethodField()
+    # 暴露 category 为可写外键：写入时使用 `category_id`，工作区上下文下限定 queryset，
+    # 避免跨工作区指向不属于当前 workspace 的类别。
+    category_id = serializers.PrimaryKeyRelatedField(
+        queryset=IssueTypeCategory.objects.none(),
+        source="category",
+        required=False,
+        allow_null=True,
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        workspace_slug = self.context.get("workspace_slug")
+        if workspace_slug:
+            self.fields["category_id"].queryset = IssueTypeCategory.objects.filter(
+                workspace__slug=workspace_slug
+            )
 
     def get_extra_fields(self, obj):
         active_fields = obj.extra_fields.filter(is_active=True)
@@ -160,6 +190,7 @@ class IssueTypeSerializer(BaseSerializer):
             "external_id",
             "workspace",
             "extra_fields",
+            "category_id",
             "created_at",
             "updated_at",
         ]

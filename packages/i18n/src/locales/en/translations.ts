@@ -5,6 +5,7 @@
  */
 
 export default {
+  project: "Project",
   submit: "Submit",
   cancel: "Cancel",
   loading: "Loading",
@@ -1595,6 +1596,9 @@ export default {
             message: "Error occurred while copying secret key.",
           },
         },
+      },
+      issue_type_categories: {
+        title: "Issue Type Categories",
       },
       api_tokens: {
         title: "Personal Access Tokens",

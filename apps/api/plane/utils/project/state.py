@@ -1,3 +1,5 @@
+from unicodedata import category
+
 from plane.db.models import (
     ApprovalType,
     DEFAULT_BUG_STATES,
@@ -8,7 +10,7 @@ from plane.db.models import (
     TypeExtraField,
     Workflow,
     WorkflowTransition,
-    WorkflowTransitionRequiredField,
+    WorkflowTransitionRequiredField, IssueTypeCategory,
 )
 from plane.utils.data_model import IssueTypeModel
 
@@ -24,7 +26,8 @@ def init_issue_type() -> list[IssueTypeModel]:
                 },
                 "in_use": "icon",
             },
-            "display": "缺陷",
+            "display": "软件缺陷",
+            "category": "缺陷"
         }
     )
     task = IssueTypeModel(
@@ -39,6 +42,7 @@ def init_issue_type() -> list[IssueTypeModel]:
             },
             "display": "任务",
             "is_default": True,
+            "category": "任务"
         }
     )
     epic = IssueTypeModel(
@@ -52,6 +56,7 @@ def init_issue_type() -> list[IssueTypeModel]:
                 "in_use": "icon",
             },
             "display": "史诗",
+            "category": "需求"
         }
     )
     feature = IssueTypeModel(
@@ -65,6 +70,7 @@ def init_issue_type() -> list[IssueTypeModel]:
                 "in_use": "icon",
             },
             "display": "特性",
+            "category": "需求"
         }
     )
     story = IssueTypeModel(
@@ -78,6 +84,7 @@ def init_issue_type() -> list[IssueTypeModel]:
                 "in_use": "icon",
             },
             "display": "用户故事",
+            "category": "需求"
         }
     )
 
@@ -90,6 +97,12 @@ def temporary_create_issue_type(project: Project = None, project_id: str = None)
     if IssueType.objects.filter(project=project).exists():
         return
 
+    # 获取工作项类型类别
+    category_map = dict()
+    for obj in IssueTypeCategory.objects.filter(workspace=project.workspace):
+        category_map[obj.name] = obj
+
+
     types = init_issue_type()
     issue_types = list()
     for issue_type in types:
@@ -99,6 +112,7 @@ def temporary_create_issue_type(project: Project = None, project_id: str = None)
             description=issue_type.display,
             is_default=issue_type.is_default,
             logo_props=issue_type.icon,
+            category=category_map[issue_type.category],
         )
         issue_types.append(obj)
     return issue_types
@@ -145,6 +159,27 @@ def create_default_bug_extra_field(issue_types: list[IssueType]):
     TypeExtraField.objects.create(
         issue_type=defect_issue_type, project=project, name="软件版本", is_required=True
     )
+
+    # 发现方式
+    discover = {
+        "choices": [
+            "自动化测试",
+            "手工测试",
+            "其他",
+        ],
+        "selection_mode": "single",
+    }
+    TypeExtraField.objects.create(
+        issue_type=defect_issue_type,
+        project=project,
+        name="发现方式",
+        is_required=True,
+        options=discover,
+        field_type="select",
+        default_value="自动化测试",
+    )
+
+
     # 缺陷级别
     bug_level = {
         "choices": [
@@ -197,6 +232,8 @@ def create_default_bug_extra_field(issue_types: list[IssueType]):
         field_type="select",
     )
 
+
+
     # 修复版本
     TypeExtraField.objects.create(
         issue_type=defect_issue_type, project=project, name="修复版本"
@@ -206,7 +243,7 @@ def create_default_bug_extra_field(issue_types: list[IssueType]):
     TypeExtraField.objects.create(
         issue_type=defect_issue_type,
         project=project,
-        name="解决方案",
+        name="技术原因及解决方案",
         options={"text_mode": "paragraph"},
     )
 

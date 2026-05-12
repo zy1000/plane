@@ -10,3 +10,4 @@ class IssueTypeModel(BaseModel):
     in_use: str = 'icon'
     icon: dict
     is_default: bool = False
+    category: str

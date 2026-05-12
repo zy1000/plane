@@ -12,7 +12,6 @@ from django.dispatch import receiver
 # Module imports
 from .project import ProjectBaseModel
 
-
 # IssueType 自动衍生的项目级权限定义。
 # key 形式：project.issue_type.<id_hex>.<action>
 #   - 用 id.hex 而不是 name 作为 key 主体，既能通过 Permission.key 的正则约束
@@ -86,6 +85,24 @@ def remove_issue_type_permissions(issue_type_id) -> None:
     Permission.objects.filter(key__in=keys).delete(soft=False)
 
 
+class IssueTypeCategory(models.Model):
+    name = models.CharField(max_length=255)
+    description = models.TextField(blank=True, null=True)
+    is_system = models.BooleanField(default=False)
+    workspace = models.ForeignKey(
+        "db.Workspace", on_delete=models.CASCADE, related_name="workspace_%(class)s"
+    )
+
+    class Meta:
+        db_table = "issue_type_category"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["workspace", "name"],
+                name='issue_type_category_unique_name',
+            )
+        ]
+
+
 class IssueType(ProjectBaseModel):
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True)
@@ -96,6 +113,10 @@ class IssueType(ProjectBaseModel):
     level = models.FloatField(default=0)
     external_source = models.CharField(max_length=255, null=True, blank=True)
     external_id = models.CharField(max_length=255, blank=True, null=True)
+
+    category = models.ForeignKey(
+        IssueTypeCategory, on_delete=models.CASCADE, related_name="issue_types", null=True
+    )
 
     class Meta:
         unique_together = ["project", "name", "deleted_at"]
@@ -199,9 +220,7 @@ class TypeExtraFieldValue(ProjectBaseModel):
 def _sync_issue_type_permissions_on_save(sender, instance, **kwargs):
     # 软删除时（SoftDeleteModel.delete(soft=True) 走 save 路径），deleted_at 非空，
     # 此时把对应权限标记为 is_active=False，防止它出现在权限选择列表里。
-    sync_issue_type_permissions(
-        instance, deactivate=instance.deleted_at is not None
-    )
+    sync_issue_type_permissions(instance, deactivate=instance.deleted_at is not None)
 
 
 @receiver(post_delete, sender=IssueType)

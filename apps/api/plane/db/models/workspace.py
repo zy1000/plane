@@ -116,6 +116,7 @@ def slug_validator(value):
         raise ValidationError("Slug is not valid")
 
 
+
 class Workspace(BaseModel):
     TIMEZONE_CHOICES = tuple(zip(pytz.common_timezones, pytz.common_timezones))
 
@@ -574,3 +575,6 @@ class WorkspaceGroupRole(BaseModel):
 
     def __str__(self):
         return f"{self.group.name} -> {self.role.name}"
+
+
+
