@@ -37,11 +37,43 @@ const WORK_ITEM_TYPE_NAME_TO_KEY: Record<string, TWorkItemTypeIconKey> = {
 };
 
 const normalizeTypeName = (typeName?: string | null) => (typeName ?? "").trim().toLowerCase();
+const sanitizeTypeName = (typeName: string) =>
+  typeName
+    .replace(/[()（）[\]{}]/g, " ")
+    .replace(/[_-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const WORK_ITEM_TYPE_FALLBACK_KEYWORDS: Array<[string, TWorkItemTypeIconKey]> = [
+  ["史诗", "EPIC"],
+  ["特性", "FEATURE"],
+  ["用户故事", "STORY"],
+  ["故事", "STORY"],
+  ["任务", "TASK"],
+  ["缺陷", "BUG"],
+  ["故障", "BUG"],
+];
 
 export const resolveWorkItemTypeIconKey = (typeName?: string | null): TWorkItemTypeIconKey | undefined => {
   const normalizedTypeName = normalizeTypeName(typeName);
   if (!normalizedTypeName) return undefined;
-  return WORK_ITEM_TYPE_NAME_TO_KEY[normalizedTypeName];
+
+  const exactMatch = WORK_ITEM_TYPE_NAME_TO_KEY[normalizedTypeName];
+  if (exactMatch) return exactMatch;
+
+  const sanitizedTypeName = sanitizeTypeName(normalizedTypeName);
+  if (sanitizedTypeName && sanitizedTypeName !== normalizedTypeName) {
+    const sanitizedMatch = WORK_ITEM_TYPE_NAME_TO_KEY[sanitizedTypeName];
+    if (sanitizedMatch) return sanitizedMatch;
+  }
+
+  const tokenMatch = sanitizedTypeName
+    .split(" ")
+    .find((token) => WORK_ITEM_TYPE_NAME_TO_KEY[token] !== undefined);
+  if (tokenMatch) return WORK_ITEM_TYPE_NAME_TO_KEY[tokenMatch];
+
+  const keywordMatch = WORK_ITEM_TYPE_FALLBACK_KEYWORDS.find(([keyword]) => sanitizedTypeName.includes(keyword));
+  return keywordMatch?.[1];
 };
 
 export const getWorkItemTypeIconConfig = (typeName?: string | null): TWorkItemTypeIconConfig | undefined => {

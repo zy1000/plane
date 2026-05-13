@@ -33,6 +33,7 @@ import { useProjectEstimates } from "@/hooks/store/estimates";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useMember } from "@/hooks/store/use-member";
 import { useProject } from "@/hooks/store/use-project";
+import { useProjectIssueTypes } from "@/hooks/store/use-project-issue-types";
 import { useProjectState } from "@/hooks/store/use-project-state";
 // plane web components
 // components
@@ -41,6 +42,7 @@ import { IssueParentSelectRoot } from "@/plane-web/components/issues/issue-detai
 import { DateAlert } from "@/plane-web/components/issues/issue-details/sidebar/date-alert";
 import { TransferHopInfo } from "@/plane-web/components/issues/issue-details/sidebar/transfer-hop-info";
 import { IssueWorklogProperty } from "@/plane-web/components/issues/worklog/property";
+import { projectIssueTypesCache } from "@/services/project";
 import { IssueCycleSelect } from "./cycle-select";
 import { IssueLabel } from "./label";
 import { IssueModuleSelect } from "./module-select";
@@ -68,6 +70,7 @@ export const IssueDetailsSidebar = observer(function IssueDetailsSidebar(props: 
   } = useIssueDetail();
   const { getUserDetails } = useMember();
   const { getStateById } = useProjectState();
+  const { issueTypes } = useProjectIssueTypes(workspaceSlug, projectId);
   const issue = getIssueById(issueId);
   if (!issue) return <></>;
 
@@ -76,6 +79,10 @@ export const IssueDetailsSidebar = observer(function IssueDetailsSidebar(props: 
   // derived values
   const projectDetails = getProjectById(issue.project_id);
   const stateDetails = getStateById(issue.state_id);
+  const issueTypeLogoIcon = issue?.type_id
+    ? issueTypes?.find((issueType) => issueType.id === issue.type_id)?.logo_props?.icon ??
+      (issue?.project_id ? projectIssueTypesCache.get(issue.project_id)?.[issue.type_id]?.logo_props?.icon : undefined)
+    : undefined;
 
   return (
     <>
@@ -112,7 +119,7 @@ export const IssueDetailsSidebar = observer(function IssueDetailsSidebar(props: 
                   <span>类型</span>
                 </div>
                 <div className="w-2/3 flex-grow flex items-center gap-2 rounded px-2 py-0.5 text-sm">
-                  <WorkItemTypeIcon typeName={issue.type_name} className="flex-shrink-0" />
+                  <WorkItemTypeIcon typeName={issue.type_name} fallbackIcon={issueTypeLogoIcon} className="flex-shrink-0" />
                   <span className="text-secondary">{issue.type_name}</span>
                 </div>
               </div>

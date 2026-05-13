@@ -17,7 +17,9 @@ import { StateDropdown } from "@/components/dropdowns/state/dropdown";
 import { WorkItemTypeIcon } from "@/components/issues/work-item-type-icon";
 // hooks
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
+import { useProjectIssueTypes } from "@/hooks/store/use-project-issue-types";
 import { useProjectState } from "@/hooks/store/use-project-state";
+import { projectIssueTypesCache } from "@/services/project";
 // plane web
 import { DateAlert } from "@/plane-web/components/issues/issue-details/sidebar/date-alert";
 import type { TIssueOperations } from "../issue-detail";
@@ -42,10 +44,15 @@ export const PeekOverviewCorePropertyBar = observer(function PeekOverviewCorePro
     issue: { getIssueById },
   } = useIssueDetail();
   const { getStateById } = useProjectState();
+  const { issueTypes } = useProjectIssueTypes(workspaceSlug, projectId);
 
   const issue = getIssueById(issueId);
   if (!issue) return <></>;
   const stateDetails = getStateById(issue.state_id);
+  const issueTypeLogoIcon = issue?.type_id
+    ? issueTypes?.find((issueType) => issueType.id === issue.type_id)?.logo_props?.icon ??
+      (issue?.project_id ? projectIssueTypesCache.get(issue.project_id)?.[issue.type_id]?.logo_props?.icon : undefined)
+    : undefined;
 
   // 与 IssueTitleInput 的 TextArea（px-3）+ 容器 -ml-3 的文本起点一致；首列补 pl-3，并去掉状态按钮左侧默认内边距，避免相对标题再右偏
   const fieldShell = (index: number) =>
@@ -65,7 +72,11 @@ export const PeekOverviewCorePropertyBar = observer(function PeekOverviewCorePro
       <div className={fieldShell(0)}>
         {issue.type_name ? (
           <div className="flex h-7 w-full min-w-0 items-center gap-1.5 truncate rounded-sm pr-1.5 text-body-xs-medium leading-5 text-secondary">
-            <WorkItemTypeIcon typeName={issue.type_name} className="size-3.5 flex-shrink-0" />
+            <WorkItemTypeIcon
+              typeName={issue.type_name}
+              fallbackIcon={issueTypeLogoIcon}
+              className="size-3.5 flex-shrink-0"
+            />
             <span className="min-w-0 truncate">{issue.type_name}</span>
           </div>
         ) : null}
