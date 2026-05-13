@@ -25,7 +25,7 @@ def init_issue_type() -> list[IssueTypeModel]:
                 },
                 "in_use": "icon",
             },
-            "display": "软件缺陷",
+            "display": "缺陷(软件)",
             "category": "缺陷",
         }
     )
