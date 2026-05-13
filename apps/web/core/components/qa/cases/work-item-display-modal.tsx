@@ -75,7 +75,7 @@ export const WorkItemDisplayModal: React.FC<WorkItemDisplayModalProps> = ({
     setLoading(true);
     setButtonLoading((prev) => ({ ...prev, [type]: true }));
     try {
-      const type_name = type === "Requirement" ? "史诗,特性,用户故事" : type === "Task" ? "任务" : "缺陷";
+      const type_name = type === "Requirement" ? "需求" : type === "Task" ? "任务" : "缺陷";
       const res = await caseService.issueList(String(workspaceSlug), {
         case_id: caseId,
         type_name,

@@ -26,6 +26,8 @@ export type TIssueType = {
   workspace?: string;
   /** IssueTypeCategory 的主键（工作区级别），后端使用 IntegerField，序列化为数字 */
   category_id?: number | string | null;
+  /** IssueTypeCategory 的名称 */
+  category_name?: string | null;
   created_at?: string;
   updated_at?: string;
 };

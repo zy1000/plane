@@ -132,6 +132,7 @@ class CaseVersionCompareSerializer(serializers.Serializer):
                 'name',
                 'sequence_id',
                 'type__name',
+                'type__category__name',
                 'project_id',
                 'archived_at',
             )
@@ -145,11 +146,12 @@ class CaseVersionCompareSerializer(serializers.Serializer):
             for i in id_list:
                 row = issue_by_id.get(i) or {}
                 type_name = row.get('type__name')
+                category_name = row.get('type__category__name')
                 group = (
                     '产品需求'
                     if type_name in ['史诗', '特性', '用户故事']
                     else '缺陷'
-                    if type_name == '缺陷'
+                    if category_name == '缺陷'
                     else '工作项'
                     if type_name == '任务'
                     else '工作项'

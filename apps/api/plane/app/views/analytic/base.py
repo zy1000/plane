@@ -539,7 +539,7 @@ class ProjectStatisticsEndpoint(BaseAPIView):
         created_last_30d = issues.filter(created_at__gte=last_30d).count()
         completed_last_30d = issues.filter(completed_at__gte=last_30d).count()
 
-        defect_work_items = issues.filter(Q(type__name__icontains="bug") | Q(type__name__icontains="缺陷")).count()
+        defect_work_items = issues.filter(type__category__name="缺陷").count()
 
         completion_rate = round((completed_work_items / total_work_items) * 100, 2) if total_work_items > 0 else 0
 
@@ -685,7 +685,7 @@ class ProjectStatisticsEndpoint(BaseAPIView):
             )
 
         defects_in_range = issues.filter(
-            Q(type__name__icontains="bug") | Q(type__name__icontains="缺陷") | Q(type__name__icontains="defect"),
+            type__category__name="缺陷",
             created_at__date__gte=range_start_date,
             created_at__date__lte=range_end_date,
         )

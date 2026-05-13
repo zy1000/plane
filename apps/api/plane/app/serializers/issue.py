@@ -62,7 +62,12 @@ from .issue_type import (
 
 def _is_allowed_to_add_parent(parent_issue, sub_issue):
     p = parent_issue.type.name
-    c = sub_issue.type.name if isinstance(sub_issue, Issue) else sub_issue
+    if isinstance(sub_issue, Issue):
+        c = sub_issue.type.name
+    elif isinstance(sub_issue, IssueType):
+        c = sub_issue.name
+    else:
+        c = sub_issue
     if c == "史诗":
         return False
     if c == "用户故事":
@@ -71,8 +76,15 @@ def _is_allowed_to_add_parent(parent_issue, sub_issue):
         return p == "史诗"
     if c == '任务':
         return p == "用户故事" or p == "任务"
-    if '缺陷' in c:
-        return p == "任务" or "缺陷" in p or p == '用户故事'
+    if isinstance(sub_issue, Issue):
+        sub_is_defect = getattr(sub_issue.type, 'category', None) and sub_issue.type.category.name == "缺陷"
+    elif isinstance(sub_issue, IssueType):
+        sub_is_defect = getattr(sub_issue, 'category', None) and sub_issue.category.name == "缺陷"
+    else:
+        sub_is_defect = '缺陷' in c
+    if sub_is_defect:
+        parent_is_defect = getattr(parent_issue.type, 'category', None) and parent_issue.type.category.name == "缺陷"
+        return p == "任务" or parent_is_defect or p == '用户故事'
     return False
 
 
@@ -258,7 +270,7 @@ class IssueCreateSerializer(BaseSerializer):
             raise serializers.ValidationError("Estimate point is not valid please pass a valid estimate_point_id")
 
         if parent := attrs.get('parent'):
-            sub_issue = self.instance.type.name if self.instance else attrs.get('type').name
+            sub_issue = self.instance.type if self.instance else attrs.get('type')
             if not _is_allowed_to_add_parent(parent_issue=parent, sub_issue=sub_issue):
                 raise serializers.ValidationError(f"{parent.type.name}不能作为{sub_issue}的父工作项")
 

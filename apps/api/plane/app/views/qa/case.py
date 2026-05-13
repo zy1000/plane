@@ -1114,7 +1114,7 @@ class CaseAPI(BaseViewSet):
         type_name = request.query_params.get('type_name').split(',')
         case_id = request.query_params.get('case_id')
 
-        issues = TestCase.objects.get(id=case_id).issues.filter(type__name__in=type_name)
+        issues = TestCase.objects.get(id=case_id).issues.filter(type__category__name__in=type_name)
         paginator = self.pagination_class()
         paginated_queryset = paginator.paginate_queryset(issues, request)
         serializer = IssueListSerializer(paginated_queryset, many=True)
@@ -1126,9 +1126,9 @@ class CaseAPI(BaseViewSet):
         case_id = request.query_params.get('case_id')
         project_id = request.query_params.get('project_id')
 
-        select_issues = TestCase.objects.get(id=case_id).issues.filter(type__name__in=type_name).values_list('id',
+        select_issues = TestCase.objects.get(id=case_id).issues.filter(type__category__name__in=type_name).values_list('id',
                                                                                                              flat=True)
-        issues = Issue.objects.filter(type__name__in=type_name, project_id=project_id).select_related('type').exclude(
+        issues = Issue.objects.filter(type__category__name__in=type_name, project_id=project_id).select_related('type').exclude(
             id__in=select_issues)
         paginator = self.pagination_class()
         paginated_queryset = paginator.paginate_queryset(issues, request)

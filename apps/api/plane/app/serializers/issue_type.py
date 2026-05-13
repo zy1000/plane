@@ -160,6 +160,7 @@ class IssueTypeSerializer(BaseSerializer):
         required=False,
         allow_null=True,
     )
+    category_name = serializers.CharField(source="category.name", read_only=True, allow_null=True)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -191,6 +192,7 @@ class IssueTypeSerializer(BaseSerializer):
             "workspace",
             "extra_fields",
             "category_id",
+            "category_name",
             "created_at",
             "updated_at",
         ]

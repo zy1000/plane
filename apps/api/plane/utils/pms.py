@@ -673,7 +673,7 @@ def sync_info(instance: ProjectPmsInfo) -> list[dict]:
     project = instance.project
     failed: list[dict] = []
     bug_issues = (
-        Issue.objects.filter(project=project, type__name__in=["缺陷", "缺陷"])
+        Issue.objects.filter(project=project, type__category__name="缺陷")
         .select_related("created_by", "type")
         .prefetch_related("assignees")
     )

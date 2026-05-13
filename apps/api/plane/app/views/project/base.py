@@ -192,7 +192,7 @@ class ProjectViewSet(BaseViewSet):
             .annotate(
                 bug_count=Coalesce(
                     Subquery(
-                        Issue.objects.filter(project_id=OuterRef("pk"), type__name="缺陷")
+                        Issue.objects.filter(project_id=OuterRef("pk"), type__category__name="缺陷")
                         .values("project_id")
                         .annotate(count=Count("id"))
                         .values("count")
@@ -786,8 +786,6 @@ class ProjectAPI(BaseViewSet):
             except (ValueError, TypeError):
                 pass
 
-        defect_type_names = ['缺陷', 'Bug', 'bug']
-
         base_issue_qs = Issue.objects.filter(
             workspace__slug=slug,
             project_id=project_id,
@@ -796,15 +794,15 @@ class ProjectAPI(BaseViewSet):
             is_draft=False,
         ).select_related('type', 'state')
 
-        in_progress_requirements = base_issue_qs.exclude(type__name__in=defect_type_names).exclude(
+        in_progress_requirements = base_issue_qs.exclude(type__category__name="缺陷").exclude(
             state__group='completed'
         ).count()
-        total_requirements = base_issue_qs.exclude(type__name__in=defect_type_names).count()
-        pending_defects = base_issue_qs.filter(type__name__in=defect_type_names).exclude(
+        total_requirements = base_issue_qs.exclude(type__category__name="缺陷").count()
+        pending_defects = base_issue_qs.filter(type__category__name="缺陷").exclude(
             state__group='completed').count()
 
-        requirement_qs = base_issue_qs.exclude(type__name__in=defect_type_names)
-        defect_qs = base_issue_qs.filter(type__name__in=defect_type_names)
+        requirement_qs = base_issue_qs.exclude(type__category__name="缺陷")
+        defect_qs = base_issue_qs.filter(type__category__name="缺陷")
         total_defects = defect_qs.count()
 
         test_repository_ids = list(

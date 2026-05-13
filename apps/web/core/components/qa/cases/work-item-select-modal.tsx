@@ -381,7 +381,7 @@ export const WorkItemSelectModal: React.FC<Props> = ({
         };
         if (forceTypeName) {
           if (forceTypeName === "Requirement") {
-            queries.type_name = "史诗,特性,用户故事";
+            queries.type_name = "需求";
           } else if (forceTypeName === "Task") {
             queries.type_name = "任务";
           } else if (forceTypeName === "Bug") {
@@ -401,11 +401,11 @@ export const WorkItemSelectModal: React.FC<Props> = ({
         const queries: any = { per_page: perPage, cursor: `${perPage}:${pageIndex}:0` };
         if (forceTypeName) {
           if (forceTypeName === "Requirement") {
-            queries.type__name__in = "史诗,特性,用户故事";
+            queries.type__category__name__in = "需求";
           } else if (forceTypeName === "Task") {
-            queries.type__name = "任务";
+            queries.type__category__name = "任务";
           } else if (forceTypeName === "Bug") {
-            queries.type__name = "缺陷";
+            queries.type__category__name = "缺陷";
           }
         }
         res = await issueService.getIssues(workspaceSlug, currentProjectId, queries);

@@ -45,18 +45,11 @@ type TTypedProjectLayoutRootProps = {
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-/** 需求页面匹配的类型名称（支持中英文） */
-const REQUIREMENTS_TYPE_NAMES = ["史诗", "epic", "特性", "feature", "用户故事", "story", "user story"];
+/** 需求页面对应的类别名称 */
+const REQUIREMENTS_CATEGORY_NAME = "需求";
 
-/** 缺陷页面匹配的类型名称（支持中英文） */
-const DEFECTS_TYPE_NAMES = ["缺陷", "bug", "defect"];
-
-// ─── Type name matching ───────────────────────────────────────────────────────
-
-function matchesAnyName(typeName: string, allowedNames: string[]): boolean {
-  const lower = typeName.toLowerCase().trim();
-  return allowedNames.some((n) => n.toLowerCase() === lower);
-}
+/** 缺陷页面对应的类别名称 */
+const DEFECTS_CATEGORY_NAME = "缺陷";
 
 // ─── Expression helpers ───────────────────────────────────────────────────────
 
@@ -153,12 +146,12 @@ export const TypedProjectLayoutRoot = observer(function TypedProjectLayoutRoot({
   const { issueTypes } = useProjectIssueTypes(workspaceSlug, projectId);
 
   // ── Compute fixed type IDs ─────────────────────────────────────────────
-  const allowedTypeNames = variant === "requirements" ? REQUIREMENTS_TYPE_NAMES : DEFECTS_TYPE_NAMES;
+  const allowedCategoryName = variant === "requirements" ? REQUIREMENTS_CATEGORY_NAME : DEFECTS_CATEGORY_NAME;
 
   const fixedTypeIds = useMemo(() => {
     if (!issueTypes || issueTypes.length === 0) return [];
-    return issueTypes.filter((t) => matchesAnyName(t.name ?? "", allowedTypeNames)).map((t) => t.id);
-  }, [issueTypes, allowedTypeNames]);
+    return issueTypes.filter((t) => t.category_name === allowedCategoryName).map((t) => t.id);
+  }, [issueTypes, allowedCategoryName]);
 
   const scope = variant as TProjectIssueScope;
 

@@ -54,6 +54,11 @@ def is_allowed_to_add_parent(parent_issue: Issue, sub_issue: Issue | str):
         return p == "史诗"
     if c == '任务':
         return p == "用户故事" or p == "任务"
-    if '缺陷' in c:
-        return p == "任务" or "缺陷" in p or p == '用户故事'
+    if isinstance(sub_issue, Issue) and getattr(sub_issue.type, 'category', None):
+        sub_is_defect = sub_issue.type.category.name == "缺陷"
+    else:
+        sub_is_defect = '缺陷' in c
+    if sub_is_defect:
+        parent_is_defect = getattr(parent_issue.type, 'category', None) and parent_issue.type.category.name == "缺陷"
+        return p == "任务" or parent_is_defect or p == '用户故事'
     return False

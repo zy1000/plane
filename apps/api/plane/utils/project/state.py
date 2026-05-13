@@ -122,7 +122,7 @@ def bulk_create_issue_state(issue_types: list[IssueType], **kwargs):
     create_list = list()
     for issue_type in issue_types:
         default_states = (
-            DEFAULT_BUG_STATES if issue_type.name == "缺陷" else DEFAULT_STATES
+            DEFAULT_BUG_STATES if getattr(issue_type.category, 'name', None) == "缺陷" else DEFAULT_STATES
         )
         for state in default_states:
             create_list.append(
@@ -143,12 +143,11 @@ def bulk_create_issue_state(issue_types: list[IssueType], **kwargs):
 
 
 def create_default_bug_extra_field(issue_types: list[IssueType]):
-    defect_type_names = {"缺陷", "Bug", "bug", "Defect", "defect"}
     defect_issue_type = next(
         (
             issue_type
             for issue_type in issue_types
-            if issue_type.name in defect_type_names
+            if getattr(issue_type.category, 'name', None) == "缺陷"
         ),
         None,
     )
@@ -249,12 +248,11 @@ def create_default_bug_extra_field(issue_types: list[IssueType]):
 
 
 def create_default_bug_workflow(issue_types: list[IssueType], **kwargs):
-    defect_type_names = {"缺陷", "Bug", "bug", "Defect", "defect"}
     defect_issue_type = next(
         (
             issue_type
             for issue_type in issue_types
-            if issue_type.name in defect_type_names
+            if getattr(issue_type.category, 'name', None) == "缺陷"
         ),
         None,
     )

@@ -163,6 +163,8 @@ class IssueFilterSet(BaseFilterSet):
 
     type__name = filters.CharFilter(field_name="type__name")
     type__name__in = CharInFilter(field_name="type__name", lookup_expr="in")
+    type__category__name = filters.CharFilter(field_name="type__category__name")
+    type__category__name__in = CharInFilter(field_name="type__category__name", lookup_expr="in")
 
     subscriber_id = filters.UUIDFilter(method="filter_subscriber_id")
     subscriber_id__in = UUIDInFilter(method="filter_subscriber_id_in", lookup_expr="in")

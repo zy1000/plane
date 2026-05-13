@@ -237,7 +237,7 @@ function UpdateModalBody({ open, onClose, caseId, workspaceSlug: propWorkspaceSl
     setForceTypeName(type);
     if (workspaceSlug && caseId) {
       try {
-        const typeName = type === "Requirement" ? "史诗,特性,用户故事" : type === "Task" ? "任务" : "缺陷";
+        const typeName = type === "Requirement" ? "需求" : type === "Task" ? "任务" : "缺陷";
         const res = await caseService.issueList(String(workspaceSlug), {
           case_id: caseId,
           type_name: typeName,

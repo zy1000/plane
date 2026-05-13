@@ -28,9 +28,6 @@ from plane.utils.date_utils import (
     get_analytics_filters,
 )
 
-DEFECT_TYPE_NAMES = {"缺陷", "Bug", "bug", "Defect", "defect"}
-
-
 class ProjectAdvanceAnalyticsBaseView(BaseAPIView):
     def initialize_workspace(self, slug: str, type: str) -> None:
         self._workspace_slug = slug
@@ -117,7 +114,7 @@ class CustomProjectAdvanceAnalyticsEndpoint(ProjectAdvanceAnalyticsBaseView):
                 total_count=Count("id", distinct=True),
                 defect_count=Count(
                     "id",
-                    filter=Q(type__name__in=DEFECT_TYPE_NAMES),
+                    filter=Q(type__category__name="缺陷"),
                     distinct=True,
                 ),
             )
