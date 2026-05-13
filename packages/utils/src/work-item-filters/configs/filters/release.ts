@@ -39,7 +39,7 @@ export const getReleaseFilterConfig =
   (params: TCreateReleaseFilterParams) =>
     createFilterConfig<P>({
       id: key,
-      label: "Release",
+      label: "发布",
       ...params,
       icon: params.filterIcon,
       supportedOperatorConfigsMap: new Map([
