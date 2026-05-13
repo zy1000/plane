@@ -8,7 +8,8 @@ from plane.db.models import (
     TypeExtraField,
     Workflow,
     WorkflowTransition,
-    WorkflowTransitionRequiredField, IssueTypeCategory,
+    WorkflowTransitionRequiredField,
+    IssueTypeCategory,
 )
 from plane.utils.data_model import IssueTypeModel
 
@@ -25,7 +26,7 @@ def init_issue_type() -> list[IssueTypeModel]:
                 "in_use": "icon",
             },
             "display": "软件缺陷",
-            "category": "缺陷"
+            "category": "缺陷",
         }
     )
     task = IssueTypeModel(
@@ -40,7 +41,7 @@ def init_issue_type() -> list[IssueTypeModel]:
             },
             "display": "任务",
             "is_default": True,
-            "category": "任务"
+            "category": "任务",
         }
     )
     epic = IssueTypeModel(
@@ -54,7 +55,7 @@ def init_issue_type() -> list[IssueTypeModel]:
                 "in_use": "icon",
             },
             "display": "史诗",
-            "category": "需求"
+            "category": "需求",
         }
     )
     feature = IssueTypeModel(
@@ -68,7 +69,7 @@ def init_issue_type() -> list[IssueTypeModel]:
                 "in_use": "icon",
             },
             "display": "特性",
-            "category": "需求"
+            "category": "需求",
         }
     )
     story = IssueTypeModel(
@@ -82,7 +83,7 @@ def init_issue_type() -> list[IssueTypeModel]:
                 "in_use": "icon",
             },
             "display": "用户故事",
-            "category": "需求"
+            "category": "需求",
         }
     )
 
@@ -99,7 +100,6 @@ def temporary_create_issue_type(project: Project = None, project_id: str = None)
     category_map = dict()
     for obj in IssueTypeCategory.objects.filter(workspace=project.workspace):
         category_map[obj.name] = obj
-
 
     types = init_issue_type()
     issue_types = list()
@@ -120,7 +120,9 @@ def bulk_create_issue_state(issue_types: list[IssueType], **kwargs):
     create_list = list()
     for issue_type in issue_types:
         default_states = (
-            DEFAULT_BUG_STATES if getattr(issue_type.category, 'name', None) == "缺陷" else DEFAULT_STATES
+            DEFAULT_BUG_STATES
+            if getattr(issue_type.category, "name", None) == "缺陷"
+            else DEFAULT_STATES
         )
         for state in default_states:
             create_list.append(
@@ -145,7 +147,7 @@ def create_default_bug_extra_field(issue_types: list[IssueType]):
         (
             issue_type
             for issue_type in issue_types
-            if getattr(issue_type.category, 'name', None) == "缺陷"
+            if getattr(issue_type.category, "name", None) == "缺陷"
         ),
         None,
     )
@@ -175,7 +177,6 @@ def create_default_bug_extra_field(issue_types: list[IssueType]):
         field_type="select",
         default_value="自动化测试",
     )
-
 
     # 缺陷级别
     bug_level = {
@@ -229,8 +230,6 @@ def create_default_bug_extra_field(issue_types: list[IssueType]):
         field_type="select",
     )
 
-
-
     # 修复版本
     TypeExtraField.objects.create(
         issue_type=defect_issue_type, project=project, name="修复版本"
@@ -250,7 +249,7 @@ def create_default_bug_workflow(issue_types: list[IssueType], **kwargs):
         (
             issue_type
             for issue_type in issue_types
-            if getattr(issue_type.category, 'name', None) == "缺陷"
+            if getattr(issue_type.category, "name", None) == "缺陷"
         ),
         None,
     )
@@ -281,6 +280,7 @@ def create_default_bug_workflow(issue_types: list[IssueType], **kwargs):
     state_map = {state.name: state for state in states}
 
     transition_rules = [
+        ("Backlog", "Open"),
         ("Open", "Fixed"),
         ("Open", "Pending-Reject"),
         ("Fixed", "Reopen"),
@@ -328,39 +328,38 @@ def create_default_bug_workflow(issue_types: list[IssueType], **kwargs):
         WorkflowTransition.objects.bulk_create(transitions)
 
     # 为 Open -> Fixed 流转边绑定必填字段
-    open_state = state_map.get("Open")
-    fixed_state = state_map.get("Fixed")
-    if open_state and fixed_state:
-        open_to_fixed = WorkflowTransition.objects.filter(
-            workflow=workflow,
-            from_state=open_state,
-            to_state=fixed_state,
+    to_state = [
+        state_map.get("Fixed"),
+        state_map.get("Pending-Reject"),
+        state_map.get("Closed"),
+    ]
+    query = WorkflowTransition.objects.filter(
+        workflow=workflow,
+        to_state__in=to_state,
+        deleted_at__isnull=True,
+    )
+    for obj in query:
+        required_field_names = ["修复版本", "技术原因及解决方案"]
+        extra_fields = TypeExtraField.objects.filter(
+            issue_type=defect_issue_type,
+            name__in=required_field_names,
             deleted_at__isnull=True,
-        ).first()
-        if open_to_fixed:
-            required_field_names = ["修复版本", "解决方案"]
-            extra_fields = TypeExtraField.objects.filter(
-                issue_type=defect_issue_type,
-                name__in=required_field_names,
+        )
+        existing_field_ids = set(
+            WorkflowTransitionRequiredField.objects.filter(
+                workflow=obj,
                 deleted_at__isnull=True,
+            ).values_list("extra_field_id", flat=True)
+        )
+        required_field_records = [
+            WorkflowTransitionRequiredField(
+                workflow=obj,
+                extra_field=field,
             )
-            existing_field_ids = set(
-                WorkflowTransitionRequiredField.objects.filter(
-                    workflow=open_to_fixed,
-                    deleted_at__isnull=True,
-                ).values_list("extra_field_id", flat=True)
-            )
-            required_field_records = [
-                WorkflowTransitionRequiredField(
-                    workflow=open_to_fixed,
-                    extra_field=field,
-                )
-                for field in extra_fields
-                if field.id not in existing_field_ids
-            ]
-            if required_field_records:
-                WorkflowTransitionRequiredField.objects.bulk_create(
-                    required_field_records
-                )
+            for field in extra_fields
+            if field.id not in existing_field_ids
+        ]
+        if required_field_records:
+            WorkflowTransitionRequiredField.objects.bulk_create(required_field_records)
 
     return workflow

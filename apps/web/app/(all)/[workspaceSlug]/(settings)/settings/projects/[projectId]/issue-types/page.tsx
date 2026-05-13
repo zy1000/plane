@@ -1237,6 +1237,21 @@ function IssueTypesSettingsPage({ params }: Route.ComponentProps) {
   const [isTypeSubmitting, setIsTypeSubmitting] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<TDeleteTarget | undefined>();
   const [isDeleting, setIsDeleting] = useState(false);
+  const { categories: issueTypeCategories, fetchCategories: fetchIssueTypeCategories } =
+    useIssueTypeCategories(workspaceSlug);
+
+  const issueTypeCategoryNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const c of issueTypeCategories) {
+      map.set(String(c.id), c.name);
+    }
+    return map;
+  }, [issueTypeCategories]);
+
+  useEffect(() => {
+    if (!workspaceSlug) return;
+    void fetchIssueTypeCategories();
+  }, [workspaceSlug, fetchIssueTypeCategories]);
 
   useEffect(() => {
     if (isTypeModalOpen) {
@@ -1560,6 +1575,13 @@ function IssueTypesSettingsPage({ params }: Route.ComponentProps) {
               {issueTypes?.map((issueType) => {
                 const isExpanded = expandedId === issueType.id;
                 const typeFields = fieldsByIssueTypeId[issueType.id] ?? [];
+                const categoryDisplayName =
+                  issueType.category_name?.trim() ||
+                  (issueType.category_id !== null &&
+                  issueType.category_id !== undefined &&
+                  issueType.category_id !== ""
+                    ? issueTypeCategoryNameById.get(String(issueType.category_id))
+                    : undefined);
 
                 return (
                   <div key={issueType.id} className="py-1.5 first:pt-0 last:pb-0">
@@ -1586,6 +1608,9 @@ function IssueTypesSettingsPage({ params }: Route.ComponentProps) {
                       </span>
                     </button>
                     <div className="flex shrink-0 items-center gap-3">
+                      {categoryDisplayName ? (
+                        <StatusBadge tone="neutral">{categoryDisplayName}</StatusBadge>
+                      ) : null}
                       {issueType.is_default ? <StatusBadge tone="blue">默认</StatusBadge> : null}
                       {issueType.is_active === false ? (
                         <StatusBadge tone="danger">已禁用</StatusBadge>
