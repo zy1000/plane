@@ -83,11 +83,6 @@ const FIELD_TYPE_OPTIONS: TFieldTypeOption[] = [
 
 const TYPE_ICON_BACKGROUND = "#FFFFFF";
 const DEFAULT_TYPE_ICON_OPTION = { name: "Layers3", icon: Layers3, color: "#2563EB", background: TYPE_ICON_BACKGROUND };
-const TYPE_ICON_OPTIONS = [
-  DEFAULT_TYPE_ICON_OPTION,
-  { name: "CircleDot", icon: CircleDot, color: "#7C3AED", background: TYPE_ICON_BACKGROUND },
-  { name: "Type", icon: Type, color: "#059669", background: TYPE_ICON_BACKGROUND },
-];
 const TYPE_ICON_COLOR_OPTIONS = [
   "#0284C7",
   "#E11D48",
@@ -159,6 +154,23 @@ const getTypeIconOption = (issueType?: Partial<TIssueType>) => {
 };
 
 type TTypeIconOption = ReturnType<typeof getTypeIconOption>;
+
+/** 创建工作项类型时，从 lucide 图标库 + 预设色板中随机挑选一套作为默认展示 */
+const getRandomTypeIconOption = (): TTypeIconOption => {
+  const iconCandidate = LUCIDE_ICONS_LIST[Math.floor(Math.random() * LUCIDE_ICONS_LIST.length)];
+  const color =
+    TYPE_ICON_COLOR_OPTIONS[Math.floor(Math.random() * TYPE_ICON_COLOR_OPTIONS.length)] ??
+    DEFAULT_TYPE_ICON_OPTION.color;
+  if (!iconCandidate) {
+    return { ...DEFAULT_TYPE_ICON_OPTION, color };
+  }
+  return {
+    name: iconCandidate.name,
+    icon: iconCandidate.element as TLucideIcon,
+    color,
+    background: TYPE_ICON_BACKGROUND,
+  };
+};
 
 const getApiErrorMessage = (error: unknown, fallback: string) => {
   if (typeof error === "string") return error;
@@ -1090,7 +1102,7 @@ function WorkItemTypeModal({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [isIconPickerOpen, setIsIconPickerOpen] = useState(false);
-  const [iconOption, setIconOption] = useState<TTypeIconOption>(TYPE_ICON_OPTIONS[1] ?? DEFAULT_TYPE_ICON_OPTION);
+  const [iconOption, setIconOption] = useState<TTypeIconOption>(getRandomTypeIconOption);
   const [categoryId, setCategoryId] = useState<number | string | null>(null);
   const { categories, isLoading: isCategoriesLoading, fetchCategories } = useIssueTypeCategories(workspaceSlug);
 
@@ -1104,7 +1116,7 @@ function WorkItemTypeModal({
     } else {
       setName("");
       setDescription("");
-      setIconOption(TYPE_ICON_OPTIONS[1] ?? DEFAULT_TYPE_ICON_OPTION);
+      setIconOption(getRandomTypeIconOption());
       setCategoryId(null);
     }
     setIsIconPickerOpen(false);
