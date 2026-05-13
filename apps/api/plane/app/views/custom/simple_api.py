@@ -5,7 +5,7 @@ from django.utils import timezone
 from datetime import datetime
 from plane.db.models import *
 from plane.utils.data_model import IssueTypeModel
-from plane.utils.project.state import temporary_create_issue_type
+from plane.utils.project.defaults import temporary_create_issue_type
 
 
 class SimpleTestAPIView(APIView):

@@ -58,7 +58,7 @@ from plane.db.models import (
 from plane.db.models.intake import IntakeIssueStatus
 from plane.utils.host import base_host
 from plane.utils.paginator import CustomPaginator
-from plane.utils.project.state import (
+from plane.utils.project.defaults import (
     bulk_create_issue_state,
     create_default_bug_workflow,
     temporary_create_issue_type, create_default_bug_extra_field,

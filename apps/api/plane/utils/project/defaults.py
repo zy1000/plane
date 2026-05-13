@@ -1,5 +1,3 @@
-from unicodedata import category
-
 from plane.db.models import (
     ApprovalType,
     DEFAULT_BUG_STATES,

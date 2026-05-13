@@ -16,7 +16,7 @@ from plane.db.models import (
     Workspace,
 )
 from plane.db.models.issue_type import IssueTypeCategory
-from plane.utils.project.state import (
+from plane.utils.project.defaults import (
     bulk_create_issue_state,
     create_default_bug_workflow,
 )
