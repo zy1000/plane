@@ -712,6 +712,10 @@ def sync_info(instance: ProjectPmsInfo) -> list[dict]:
                 software_version = obj.value
             else:
                 software_version = "操作级"
+            if obj := query.filter(extra_field__name="产品类型").first():
+                meter_type = obj.value
+            else:
+                meter_type = instance.meter_type
             post_task(
                 title=issue.name,
                 description=issue.description_html or "",
@@ -719,7 +723,7 @@ def sync_info(instance: ProjectPmsInfo) -> list[dict]:
                 lead=int(assign_user["id"]),
                 sub_project=instance.sub_project,
                 project_code=instance.project_code,
-                meter_type=instance.meter_type,
+                meter_type=meter_type,
                 level=level,
                 software_version=software_version,
                 tool_version=instance.tool_version,
