@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Button, Modal, Table, Tabs, message } from "antd";
-import type { ColumnsType } from "antd/es/table";
+import type { ColumnsType, TableRowSelection } from "antd/es/table";
 import { DownloadOutlined, ReloadOutlined, UploadOutlined } from "@ant-design/icons";
 import { CaseService } from "@/services/qa/case.service";
 
@@ -41,6 +41,7 @@ export function ImportCaseModal(props: Props) {
   const [downloadingTemplate, setDownloadingTemplate] = useState(false);
   const [validation, setValidation] = useState<ValidationResponse | null>(null);
   const [resultTab, setResultTab] = useState<"all" | "failed">("all");
+  const [selectedRowKeys, setSelectedRowKeys] = useState<number[]>([]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -51,6 +52,7 @@ export function ImportCaseModal(props: Props) {
       setImporting(false);
       setDownloadingTemplate(false);
       setResultTab("all");
+      setSelectedRowKeys([]);
     }
   }, [isOpen]);
 
@@ -79,6 +81,17 @@ export function ImportCaseModal(props: Props) {
     []
   );
 
+  const rowSelection = useMemo<TableRowSelection<ValidationRow>>(
+    () => ({
+      selectedRowKeys,
+      onChange: (keys: React.Key[]) => {
+        setSelectedRowKeys(keys as number[]);
+      },
+      preserveSelectedRowKeys: true,
+    }),
+    [selectedRowKeys]
+  );
+
   const openPicker = () => fileInputRef.current?.click();
 
   const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -86,6 +99,7 @@ export function ImportCaseModal(props: Props) {
     if (selected) {
       setFile(selected);
       setValidation(null);
+      setSelectedRowKeys([]);
     }
     e.target.value = "";
   };
@@ -103,6 +117,7 @@ export function ImportCaseModal(props: Props) {
     try {
       const res = await caseService.validateImportCase(workspaceSlug, formData);
       setValidation(res?.data ?? null);
+      setSelectedRowKeys(res?.data?.results?.map((r: ValidationRow) => r.row_number) ?? []);
       setResultTab("all");
       setCurrentStep(1);
     } catch (err: any) {
@@ -154,14 +169,22 @@ export function ImportCaseModal(props: Props) {
       message.error("请先选择文件");
       return;
     }
-    if (!validation?.all_passed) {
-      message.error("存在未通过的校验项，请重新上传文件");
+    if (selectedRowKeys.length === 0) {
+      message.error("请至少选择一行进行导入");
+      return;
+    }
+    const allSelectedPassed = validation?.results
+      ?.filter((r) => selectedRowKeys.includes(r.row_number))
+      .every((r) => r.passed);
+    if (!allSelectedPassed) {
+      message.error("所选行中存在未通过校验的项，请取消勾选后重试");
       return;
     }
 
     const formData = new FormData();
     formData.append("file", file);
     formData.append("repository_id", repositoryId);
+    formData.append("row_numbers", JSON.stringify(selectedRowKeys));
 
     setImporting(true);
     try {
@@ -202,7 +225,7 @@ export function ImportCaseModal(props: Props) {
           </Button>
         )}
         {currentStep === 1 && (
-          <Button type="primary" onClick={handleImport} disabled={!validation?.all_passed || importing} loading={importing}>
+          <Button type="primary" onClick={handleImport} disabled={!validation?.all_passed || importing || selectedRowKeys.length === 0} loading={importing}>
             开始导入
           </Button>
         )}
@@ -294,14 +317,18 @@ export function ImportCaseModal(props: Props) {
                 { key: "failed", label: "未通过" },
               ]}
             />
+            <div className="mb-2 text-sm text-secondary">
+              已选择 {selectedRowKeys.length} / {validation?.total_count ?? 0} 行
+            </div>
             <Table
+              rowSelection={rowSelection}
               dataSource={
                 resultTab === "failed"
                   ? (validation?.results ?? []).filter((r) => !r.passed)
                   : validation?.results ?? []
               }
               columns={columns}
-              rowKey={(r) => String(r.row_number)}
+              rowKey={(r) => r.row_number}
               size="middle"
               pagination={false}
               bordered

@@ -3,6 +3,7 @@ from pathlib import Path
 from collections import defaultdict
 import csv
 import io
+import json
 from urllib.parse import quote
 
 from django.core.files.uploadedfile import InMemoryUploadedFile
@@ -1207,6 +1208,27 @@ class CaseAPI(BaseViewSet):
             case_data = parser_case_file(files)
         except Exception as e:
             return Response({'error': f'用例导入失败:{str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
+
+        selected_row_numbers_raw = request.data.get('row_numbers')
+        if selected_row_numbers_raw is not None:
+            try:
+                selected_row_numbers = json.loads(selected_row_numbers_raw)
+                selected_set = set(selected_row_numbers)
+                filtered = [
+                    data for idx, data in enumerate(case_data, start=1)
+                    if idx in selected_set
+                ]
+                if not filtered:
+                    return Response(
+                        {'error': '未选择任何有效行，请至少选择一行进行导入'},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                case_data = filtered
+            except (json.JSONDecodeError, TypeError):
+                return Response(
+                    {'error': 'row_numbers 参数格式错误'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
         module_name_max_length = CaseModule._meta.get_field('name').max_length
         total_count = len(case_data)
         success_count = 0
