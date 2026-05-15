@@ -4,7 +4,6 @@
 
 # Python imports
 import json
-import uuid
 import re
 
 # Django imports
@@ -74,6 +73,7 @@ from plane.db.models import (
 )
 from plane.settings.storage import S3Storage
 from plane.bgtasks.storage_metadata_task import get_asset_object_metadata
+from plane.utils.asset_path import build_asset_key
 from .base import BaseAPIView
 from plane.utils.host import base_host
 from plane.bgtasks.webhook_task import model_activity
@@ -1835,17 +1835,21 @@ class IssueAttachmentListCreateAPIEndpoint(BaseAPIView):
 
         size_limit = min(size, settings.FILE_SIZE_LIMIT)
 
-        if not type or type not in settings.ATTACHMENT_MIME_TYPES:
-            return Response(
-                {"error": "Invalid file type.", "status": False},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        # 注：工作项附件不再限制 MIME 类型，前端按业务自行约束。
+        if not type:
+            type = "application/octet-stream"
 
         # Get the workspace
         workspace = Workspace.objects.get(slug=slug)
 
         # asset key
-        asset_key = f"{workspace.id}/{uuid.uuid4().hex}-{name}"
+        asset_key = build_asset_key(
+            entity_type=FileAsset.EntityTypeContext.ISSUE_ATTACHMENT,
+            filename=name,
+            workspace_id=str(workspace.id),
+            project_id=str(project_id),
+            issue_id=str(issue_id),
+        )
 
         if (
             request.data.get("external_id")

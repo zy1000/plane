@@ -1,88 +1,176 @@
-import urllib.parse
+"""Cycle 附件接口（已重构为 FileAsset 体系）。
 
-from django.db import transaction
-from django.http import StreamingHttpResponse
+旧版本基于自建 ``File`` 模型直传 MinIO ``file`` bucket，现统一改走预签名两步式
+上传与统一桶下的 ``{ws}/{proj}/cycle/{cycle_id}/`` 路径。
+"""
+
+from django.conf import settings
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from plane.app.permissions import allow_fine_permission, PermissionKey
-from plane.app.serializers.asset import FileSerializer
 from plane.app.views.base import BaseViewSet
-from plane.db.models import Cycle
-from plane.db.models.asset import File
-from plane.utils.minio_utils import get_minio_utils
+from plane.bgtasks.storage_metadata_task import get_asset_object_metadata
+from plane.db.models import Cycle, FileAsset, Workspace
+from plane.settings.storage import S3Storage
+from plane.utils.asset_path import build_asset_key
 from plane.utils.paginator import CustomPaginator
 from plane.utils.response import list_response
 
 
+CYCLE_FILE_ENTITY_TYPE = FileAsset.EntityTypeContext.CYCLE_FILE
+
+
+def _serialize_asset(asset: FileAsset) -> dict:
+    attrs = asset.attributes or {}
+    return {
+        "id": str(asset.id),
+        "name": attrs.get("name") or "",
+        "size": int(asset.size or 0),
+        "type": attrs.get("type") or "",
+        "is_uploaded": bool(asset.is_uploaded),
+        "created_at": asset.created_at,
+        "created_by_id": str(asset.created_by_id) if asset.created_by_id else None,
+    }
+
+
 class CycleFileAPI(BaseViewSet):
-    model = Cycle
+    model = FileAsset
     pagination_class = CustomPaginator
 
-    @action(detail=False, methods=['post'], url_path='upload')
+    @action(detail=False, methods=["post"], url_path="upload")
     @allow_fine_permission(PermissionKey.SPRINTS_FILE_UPLOAD)
     def upload(self, request, slug, project_id):
-        with transaction.atomic():
-            minio = get_minio_utils()
-            file = request.FILES.get('file')
-            cycle_id = request.data.get('cycle_id')
-            cycle = Cycle.objects.get(id=cycle_id)
-            cycle_file = File.objects.create(name=file.name, path=cycle.get_file_path(), size=file.size,
-                                              is_uploaded=True)
-            cycle.files.add(cycle_file)
-            cycle.save()
-            upload_result = minio.upload_bytes(data=file.read(), object_name=cycle.get_file_path(file.name))
-            if not upload_result:
-                transaction.set_rollback(True)
-                return Response(status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-            return Response(status=status.HTTP_200_OK)
+        cycle_id = request.data.get("cycle_id")
+        name = request.data.get("name")
+        file_type = request.data.get("type") or "application/octet-stream"
+        size = int(request.data.get("size", settings.FILE_SIZE_LIMIT))
+        size_limit = min(size, settings.FILE_SIZE_LIMIT)
 
-    @action(detail=False, methods=['get'], url_path='list')
+        if not cycle_id or not name:
+            return Response(
+                {"error": "cycle_id and name are required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        cycle = Cycle.objects.get(id=cycle_id, workspace__slug=slug, project_id=project_id)
+        workspace = Workspace.objects.get(slug=slug)
+
+        asset_key = build_asset_key(
+            entity_type=CYCLE_FILE_ENTITY_TYPE,
+            filename=name,
+            workspace_id=str(workspace.id),
+            project_id=str(project_id),
+            cycle_id=str(cycle.id),
+        )
+
+        asset = FileAsset.objects.create(
+            attributes={"name": name, "type": file_type, "size": size_limit},
+            asset=asset_key,
+            size=size_limit,
+            workspace_id=workspace.id,
+            project_id=project_id,
+            cycle_id=cycle.id,
+            created_by=request.user,
+            entity_type=CYCLE_FILE_ENTITY_TYPE,
+        )
+
+        storage = S3Storage(request=request)
+        presigned_url = storage.generate_presigned_post(
+            object_name=asset_key, file_type=file_type, file_size=size_limit
+        )
+
+        return Response(
+            {"upload_data": presigned_url, "asset_id": str(asset.id), "asset": _serialize_asset(asset)},
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=False, methods=["patch"], url_path="(?P<asset_id>[^/.]+)/uploaded")
+    @allow_fine_permission(PermissionKey.SPRINTS_FILE_UPLOAD)
+    def mark_uploaded(self, request, slug, project_id, asset_id):
+        asset = FileAsset.objects.get(
+            pk=asset_id,
+            workspace__slug=slug,
+            project_id=project_id,
+            entity_type=CYCLE_FILE_ENTITY_TYPE,
+            is_deleted=False,
+        )
+        asset.is_uploaded = True
+        if not asset.storage_metadata:
+            get_asset_object_metadata.delay(asset_id=str(asset.id))
+        attributes = request.data.get("attributes")
+        if attributes:
+            asset.attributes = attributes
+        asset.save(update_fields=["is_uploaded", "attributes"])
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=False, methods=["get"], url_path="list")
     def file_list(self, request, slug, project_id):
-        cycle_id = request.query_params.get('cycle_id')
+        cycle_id = request.query_params.get("cycle_id")
+        if not cycle_id:
+            return Response({"error": "cycle_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+        assets = (
+            FileAsset.objects.filter(
+                cycle_id=cycle_id,
+                workspace__slug=slug,
+                project_id=project_id,
+                entity_type=CYCLE_FILE_ENTITY_TYPE,
+                is_deleted=False,
+                is_uploaded=True,
+            )
+            .select_related("created_by")
+            .order_by("-created_at")
+        )
         paginator = self.pagination_class()
-        files = Cycle.objects.get(id=cycle_id).files.all()
-        paginated_queryset = paginator.paginate_queryset(files, request)
-        serializer = FileSerializer(paginated_queryset, many=True)
-        return list_response(data=serializer.data, count=files.count())
+        paginated = paginator.paginate_queryset(assets, request)
+        return list_response(
+            data=[_serialize_asset(a) for a in (paginated or [])],
+            count=assets.count(),
+        )
 
     @allow_fine_permission(PermissionKey.SPRINTS_FILE_DELETE)
     def delete_file(self, request, slug, project_id, file_id):
-        cycle = Cycle.objects.filter(
+        asset = FileAsset.objects.filter(
+            pk=file_id,
             workspace__slug=slug,
             project_id=project_id,
-            files__id=file_id,
+            entity_type=CYCLE_FILE_ENTITY_TYPE,
+            is_deleted=False,
         ).first()
-        if not cycle:
+        if not asset:
             return Response({"error": "File not found"}, status=status.HTTP_404_NOT_FOUND)
 
-        file = cycle.files.filter(id=file_id).first()
-        if not file:
-            return Response({"error": "File not found"}, status=status.HTTP_404_NOT_FOUND)
-
-        minio = get_minio_utils()
-        cycle.files.remove(file)
-        file.delete(soft=False)
-        minio.remove_object(object_name=file.path + file.name)
+        asset.is_deleted = True
+        asset.deleted_at = timezone.now()
+        asset.save(update_fields=["is_deleted", "deleted_at"])
+        # 物理删除对象，避免 MinIO 累积孤儿
+        try:
+            storage = S3Storage(request=request)
+            storage.delete_files(object_names=[asset.asset.name])
+        except Exception:
+            pass
         return Response(status=status.HTTP_200_OK)
 
     @allow_fine_permission(PermissionKey.SPRINTS_FILE_DOWNLOAD)
     def download(self, request, slug, project_id, file_id):
-        file = File.objects.filter(
-            id=file_id,
-            cycles__workspace__slug=slug,
-            cycles__project_id=project_id,
-        ).first()
-        if not file:
+        try:
+            asset = FileAsset.objects.get(
+                pk=file_id,
+                workspace__slug=slug,
+                project_id=project_id,
+                entity_type=CYCLE_FILE_ENTITY_TYPE,
+                is_uploaded=True,
+                is_deleted=False,
+            )
+        except FileAsset.DoesNotExist:
             return Response({"error": "File not found"}, status=status.HTTP_404_NOT_FOUND)
 
-        minio = get_minio_utils()
-        response_obj = minio.get_object(object_name=file.path + file.name, bucket_name="file")
-        if not response_obj:
-            return Response({"error": "获取文件失败"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-        encoded_filename = urllib.parse.quote(file.name)
-        resp = StreamingHttpResponse(response_obj, content_type="application/octet-stream")
-        resp["Content-Disposition"] = f"attachment; filename*=UTF-8''{encoded_filename}"
-        return resp
+        storage = S3Storage(request=request)
+        signed_url = storage.generate_presigned_url(
+            object_name=asset.asset.name,
+            disposition="attachment",
+            filename=(asset.attributes or {}).get("name"),
+        )
+        return Response({"download_url": signed_url})

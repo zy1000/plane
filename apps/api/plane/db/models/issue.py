@@ -3,8 +3,6 @@
 # See the LICENSE file for details.
 
 # Python import
-from uuid import uuid4
-
 # Django imports
 from django.conf import settings
 from django.contrib.postgres.fields import ArrayField
@@ -391,7 +389,16 @@ class IssueLink(ProjectBaseModel):
 
 
 def get_upload_path(instance, filename):
-    return f"{instance.workspace.id}/{uuid4().hex}-{filename}"
+    from plane.utils.asset_path import build_asset_key
+
+    return build_asset_key(
+        entity_type="ISSUE_ATTACHMENT",
+        filename=filename,
+        workspace_id=str(instance.workspace_id) if getattr(instance, "workspace_id", None) else None,
+        project_id=str(instance.project_id) if getattr(instance, "project_id", None) else None,
+        issue_id=str(instance.issue_id) if getattr(instance, "issue_id", None) else None,
+        asset_id=str(instance.id) if getattr(instance, "id", None) else None,
+    )
 
 
 def file_size(value):

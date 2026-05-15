@@ -2,9 +2,6 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
-# Python imports
-import uuid
-
 # Django imports
 from django.conf import settings
 from django.http import HttpResponseRedirect
@@ -18,6 +15,7 @@ from rest_framework.response import Response
 from plane.bgtasks.storage_metadata_task import get_asset_object_metadata
 from plane.db.models import DeployBoard, FileAsset
 from plane.settings.storage import S3Storage
+from plane.utils.asset_path import build_asset_key, scope_kwargs_from_identifier
 
 # Module imports
 from .base import BaseAPIView
@@ -104,7 +102,13 @@ class EntityAssetEndpoint(BaseAPIView):
             )
 
         # asset key
-        asset_key = f"{deploy_board.workspace_id}/{uuid.uuid4().hex}-{name}"
+        asset_key = build_asset_key(
+            entity_type=entity_type,
+            filename=name,
+            workspace_id=str(deploy_board.workspace_id),
+            project_id=str(deploy_board.project_id) if deploy_board.project_id else None,
+            **scope_kwargs_from_identifier(entity_type, entity_identifier),
+        )
 
         # Create a File Asset
         asset = FileAsset.objects.create(
@@ -223,4 +227,20 @@ class EntityBulkAssetEndpoint(BaseAPIView):
         if asset.entity_type == FileAsset.EntityTypeContext.COMMENT_DESCRIPTION:
             # update the attributes
             assets.update(comment_id=entity_id)
+            # 与 ProjectBulkAssetEndpoint 保持一致：把 temp/ 中的对象搬到正式路径
+            from plane.app.views.asset.v2 import _migrate_temp_assets_to_final_path
+
+            refreshed_assets = list(
+                FileAsset.objects.filter(
+                    id__in=asset_ids,
+                    workspace=deploy_board.workspace,
+                    project_id=deploy_board.project_id,
+                )
+            )
+            _migrate_temp_assets_to_final_path(
+                refreshed_assets,
+                request=request,
+                comment_id=str(entity_id),
+                project_id=str(deploy_board.project_id) if deploy_board.project_id else None,
+            )
         return Response(status=status.HTTP_204_NO_CONTENT)

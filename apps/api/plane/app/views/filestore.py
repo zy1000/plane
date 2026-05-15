@@ -1,4 +1,3 @@
-import uuid
 import os
 import hashlib
 import hmac
@@ -22,8 +21,13 @@ from plane.settings.storage import S3Storage
 from plane.utils.paginator import CustomPaginator
 from plane.utils.response import list_response
 from plane.utils.host import base_host
+from plane.utils.asset_path import (
+    build_asset_key,
+    build_filestore_version_key,
+    filestore_version_prefix,
+)
 
-FILESTORE_ENTITY_TYPE = "PROJECT_FILESTORE"
+FILESTORE_ENTITY_TYPE = FileAsset.EntityTypeContext.PROJECT_FILESTORE
 
 
 def _onlyoffice_jwt_secret() -> str:
@@ -118,9 +122,14 @@ def _api_base_for_onlyoffice(request) -> str:
 
 def _version_key(asset: FileAsset) -> str:
     workspace_id = str(asset.workspace_id or "workspace")
+    project_id = str(asset.project_id or "project")
     filename = (asset.attributes or {}).get("name") or "file"
-    ts = time.strftime("%Y%m%d%H%M%S", time.gmtime())
-    return f"{workspace_id}/filestore_versions/{asset.id}/{ts}-{filename}"
+    return build_filestore_version_key(
+        workspace_id=workspace_id,
+        project_id=project_id,
+        asset_id=str(asset.id),
+        filename=filename,
+    )
 
 
 def _onlyoffice_versions_from_attributes(attributes: dict) -> list:
@@ -190,7 +199,12 @@ class FilestoreAssetAPIView(BaseAPIView):
             return Response({"error": "name is required"}, status=status.HTTP_400_BAD_REQUEST)
 
         workspace = Workspace.objects.get(slug=slug)
-        asset_key = f"{workspace.id}/{uuid.uuid4().hex}-{name}"
+        asset_key = build_asset_key(
+            entity_type=FILESTORE_ENTITY_TYPE,
+            filename=name,
+            workspace_id=str(workspace.id),
+            project_id=str(project_id),
+        )
         # size_limit = min(size, settings.FILE_SIZE_LIMIT)
         size_limit = size
 
@@ -587,7 +601,11 @@ class FilestoreAssetOnlyOfficeRestoreVersionAPIView(BaseAPIView):
         )
 
         versions = _onlyoffice_versions_from_attributes(asset.attributes)
-        allowed_prefix = f"{asset.workspace_id}/filestore_versions/{asset.id}/"
+        allowed_prefix = filestore_version_prefix(
+            workspace_id=str(asset.workspace_id),
+            project_id=str(asset.project_id),
+            asset_id=str(asset.id),
+        )
         if not str(version_key).startswith(allowed_prefix):
             return Response({"error": "invalid version_key"}, status=status.HTTP_400_BAD_REQUEST)
         if not any(isinstance(v, dict) and v.get("key") == version_key for v in versions):

@@ -28,6 +28,7 @@ from plane.app.serializers import TestPlanCreateUpdateSerializer, TestCaseReposi
     TestCaseRepositoryDetailSerializer, CycleSerializer
 from plane.app.permissions import allow_permission, ROLE, allow_fine_permission, PermissionKey
 from plane.settings.storage import S3Storage
+from plane.utils.asset_path import build_asset_key
 from plane.bgtasks.storage_metadata_task import get_asset_object_metadata
 from django.conf import settings
 from django.http import HttpResponseRedirect, FileResponse, StreamingHttpResponse
@@ -1087,14 +1088,23 @@ class CaseAttachmentV2Endpoint(BaseAPIView):
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
     def post(self, request, slug, project_id, case_id):
         name = request.data.get("name")
-        type = request.data.get("type", False)
+        type = request.data.get("type") or "application/octet-stream"
         size = int(request.data.get("size", settings.FILE_SIZE_LIMIT))
 
-        if not type or type not in settings.ATTACHMENT_MIME_TYPES:
-            return Response({"error": "Invalid file type.", "status": False}, status=status.HTTP_400_BAD_REQUEST)
+        # 注：测试用例附件不再限制 MIME 类型。
 
         workspace = Workspace.objects.get(slug=slug)
-        asset_key = f"{workspace.id}/{uuid.uuid4().hex}-{name}"
+        case_repository_id = (
+            TestCase.objects.filter(pk=case_id).values_list("repository_id", flat=True).first()
+        )
+        asset_key = build_asset_key(
+            entity_type=FileAsset.EntityTypeContext.CASE_ATTACHMENT,
+            filename=name,
+            workspace_id=str(workspace.id),
+            project_id=str(project_id),
+            case_id=str(case_id),
+            case_repository_id=str(case_repository_id) if case_repository_id else None,
+        )
         size_limit = min(size, settings.FILE_SIZE_LIMIT)
 
         asset = FileAsset.objects.create(

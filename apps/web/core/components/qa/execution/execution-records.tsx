@@ -34,7 +34,8 @@ type FileItem = {
   id: string;
   name: string;
   size: number;
-  path: string;
+  path?: string;
+  type?: string;
   created_at?: string;
 };
 
@@ -161,18 +162,11 @@ export const ExecutionRecordDetailModal: React.FC<ExecutionRecordDetailModalProp
   );
 
   const handleDownloadFile = React.useCallback(
-    async (fileId: string, fileName: string) => {
+    async (fileId: string, _fileName: string) => {
       if (!workspaceSlug) return;
       try {
-        const blob = await planService.downloadExecutionFile(String(workspaceSlug), fileId);
-        const objectUrl = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = objectUrl;
-        a.download = fileName;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(objectUrl);
+        const url = await planService.downloadExecutionFile(String(workspaceSlug), fileId);
+        window.open(url, "_blank", "noopener,noreferrer");
       } catch (e: any) {
         message.error(e?.message || e?.error || "下载失败");
       }

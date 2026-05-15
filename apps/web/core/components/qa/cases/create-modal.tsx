@@ -739,8 +739,8 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
   // 新增：三段式上传函数（ProjectAssetEndpoint -> S3 upload -> PATCH）
   const uploadAttachmentViaProjectAssetEndpoint = async (file: File) => {
     try {
-      if (!workspaceSlug) {
-        message.error("缺少必要参数(workspaceSlug)，无法上传附件");
+      if (!workspaceSlug || !projectId) {
+        message.error("缺少必要参数(workspaceSlug, projectId)，无法上传附件");
         return;
       }
       const key = `${file.name}-${file.size}-${file.lastModified}`;
@@ -748,7 +748,7 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
 
       // 1. 获取签名（固定 entity_type 为 CASE_ATTACHMENT）
       const meta = await getFileMetaDataForUpload(file);
-      const presignResp = await caseService.post(`/api/assets/v2/workspaces/${workspaceSlug}/`, {
+      const presignResp = await caseService.post(`/api/assets/v2/workspaces/${workspaceSlug}/projects/${projectId}/`, {
         ...meta,
         entity_type: "CASE_ATTACHMENT",
         entity_identifier: "",
@@ -760,7 +760,7 @@ export const CreateCaseModal: React.FC<Props> = (props) => {
       await fileUploadService.uploadFile(signed.upload_data.url, payload);
 
       // 3. 标记已上传
-      await caseService.patch(`/api/assets/v2/workspaces/${workspaceSlug}/${signed.asset_id}/`);
+      await caseService.patch(`/api/assets/v2/workspaces/${workspaceSlug}/projects/${projectId}/${signed.asset_id}/`);
       // 记录 assetId，用于提交与删除
       setAttachmentAssetIds((prev) => [...prev, String(signed.asset_id)]);
       setAttachmentAssetMap((prev) => ({ ...prev, [key]: String(signed.asset_id) }));

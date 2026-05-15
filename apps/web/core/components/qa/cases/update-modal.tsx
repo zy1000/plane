@@ -328,8 +328,8 @@ function UpdateModalBody({ open, onClose, caseId, workspaceSlug: propWorkspaceSl
 
   const uploadAttachmentViaProjectAssetEndpoint = async (file: File) => {
     try {
-      if (!workspaceSlug) {
-        qaCaseSetToastWarning("缺少必要参数(workspaceSlug)，无法上传附件");
+      if (!workspaceSlug || !projectIdStr) {
+        qaCaseSetToastWarning("缺少必要参数(workspaceSlug, projectId)，无法上传附件");
         return;
       }
       const key = `${file.name}-${file.size}-${file.lastModified}`;
@@ -337,7 +337,7 @@ function UpdateModalBody({ open, onClose, caseId, workspaceSlug: propWorkspaceSl
 
       // 1. 获取签名（固定 entity_type 为 CASE_ATTACHMENT）
       const meta = await getFileMetaDataForUpload(file);
-      const presignResp = await caseService.post(`/api/assets/v2/workspaces/${workspaceSlug}/`, {
+      const presignResp = await caseService.post(`/api/assets/v2/workspaces/${workspaceSlug}/projects/${projectIdStr}/`, {
         ...meta,
         entity_type: "CASE_ATTACHMENT",
         entity_identifier: "",
@@ -349,7 +349,7 @@ function UpdateModalBody({ open, onClose, caseId, workspaceSlug: propWorkspaceSl
       await fileUploadService.uploadFile(signed.upload_data.url, payload);
 
       // 3. 标记已上传
-      await caseService.patch(`/api/assets/v2/workspaces/${workspaceSlug}/${signed.asset_id}/`);
+      await caseService.patch(`/api/assets/v2/workspaces/${workspaceSlug}/projects/${projectIdStr}/${signed.asset_id}/`);
       // 4. 记录case_id
       await caseService.putAssetCaseId(String(workspaceSlug), String(signed.asset_id), {
         case_id: String(caseId),

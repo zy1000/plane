@@ -26,6 +26,7 @@ from plane.bgtasks.user_activation_email_task import user_activation_email
 from plane.db.models import FileAsset, Profile, User, WorkspaceMemberInvite
 from plane.license.utils.instance_value import get_configuration_value
 from plane.settings.storage import S3Storage
+from plane.utils.asset_path import build_asset_key
 from plane.utils.exception_logger import log_exception
 from plane.utils.host import base_host
 from plane.utils.ip_address import get_client_ip
@@ -187,8 +188,12 @@ class Adapter:
             content = b"".join(chunks)
             file_size = len(content)
 
-            # Generate unique filename
-            filename = f"{uuid.uuid4().hex}-user-avatar.{extension}"
+            # 用统一的 asset key 生成器，落到 user/<id>/avatar/ 目录
+            filename = build_asset_key(
+                entity_type=FileAsset.EntityTypeContext.USER_AVATAR,
+                filename=f"{self.provider}-avatar.{extension}",
+                user_id=str(user.id),
+            )
 
             storage = S3Storage(request=self.request)
 

@@ -110,7 +110,7 @@ build/
 .react-router/
 temp/
 scripts/
-1.py
+apps/api/1.py
 docker-compose.-work.yml
 llms-full.txt
 local.json

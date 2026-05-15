@@ -479,10 +479,12 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
     if (!file) return;
     try {
       setReleaseFilesUploading(true);
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("release_id", releaseId);
-      await releaseService.uploadReleaseFile(workspaceSlug.toString(), projectId.toString(), formData);
+      await releaseService.uploadReleaseFile(
+        workspaceSlug.toString(),
+        projectId.toString(),
+        releaseId.toString(),
+        file
+      );
       setToast({ type: TOAST_TYPE.SUCCESS, title: "上传成功", message: "文件已上传" });
       await fetchReleaseFiles();
     } catch (e: unknown) {
@@ -506,22 +508,15 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
     }
   };
 
-  const handleDownloadReleaseFile = async (fileId: string, fileName: string) => {
+  const handleDownloadReleaseFile = async (fileId: string, _fileName: string) => {
     try {
       setReleaseFilesDownloadingId(fileId);
-      const blob = await releaseService.downloadReleaseFile(
+      const url = await releaseService.downloadReleaseFile(
         workspaceSlug.toString(),
         projectId.toString(),
         fileId
       );
-      const objectUrl = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = objectUrl;
-      link.download = fileName;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(objectUrl);
+      window.open(url, "_blank", "noopener,noreferrer");
     } catch (e: unknown) {
       showReleaseFileApiError(e, "下载失败", "请稍后重试");
     } finally {

@@ -31,6 +31,11 @@ urlpatterns = [
         name="cycle-file-upload",
     ),
     path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/cycles/file/<uuid:asset_id>/uploaded/",
+        CycleFileAPI.as_view({"patch": "mark_uploaded"}),
+        name="cycle-file-mark-uploaded",
+    ),
+    path(
         "workspaces/<str:slug>/projects/<uuid:project_id>/cycles/file/list/",
         CycleFileAPI.as_view({"get": "file_list"}),
         name="cycle-file-list",

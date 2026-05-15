@@ -4,13 +4,11 @@
 
 # Python imports
 import json
-import uuid
 
 # Django imports
 from django.utils import timezone
 from django.core.serializers.json import DjangoJSONEncoder
 from django.conf import settings
-from django.http import HttpResponseRedirect
 
 # Third Party imports
 from rest_framework.response import Response
@@ -22,10 +20,16 @@ from .. import BaseAPIView
 from plane.app.serializers import IssueAttachmentSerializer
 from plane.db.models import FileAsset, Workspace
 from plane.bgtasks.issue_activities_task import issue_activity
-from plane.app.permissions import allow_permission, ROLE, allow_fine_permission, PermissionKey
+from plane.app.permissions import (
+    allow_permission,
+    ROLE,
+    allow_fine_permission,
+    PermissionKey,
+)
 from plane.settings.storage import S3Storage
 from plane.bgtasks.storage_metadata_task import get_asset_object_metadata
 from plane.utils.host import base_host
+from plane.utils.asset_path import build_asset_key
 
 
 class IssueAttachmentEndpoint(BaseAPIView):
@@ -83,7 +87,9 @@ class IssueAttachmentEndpoint(BaseAPIView):
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
     def get(self, request, slug, project_id, issue_id):
-        issue_attachments = FileAsset.objects.filter(issue_id=issue_id, workspace__slug=slug, project_id=project_id)
+        issue_attachments = FileAsset.objects.filter(
+            issue_id=issue_id, workspace__slug=slug, project_id=project_id
+        )
         serializer = IssueAttachmentSerializer(issue_attachments, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -92,7 +98,6 @@ class IssueAttachmentV2Endpoint(BaseAPIView):
     serializer_class = IssueAttachmentSerializer
     model = FileAsset
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
     @allow_fine_permission(PermissionKey.ISSUE_ATTACHMENT_UPLOAD)
     def post(self, request, slug, project_id, issue_id):
         name = request.data.get("name")
@@ -103,7 +108,13 @@ class IssueAttachmentV2Endpoint(BaseAPIView):
         workspace = Workspace.objects.get(slug=slug)
 
         # asset key
-        asset_key = f"{workspace.id}/{uuid.uuid4().hex}-{name}"
+        asset_key = build_asset_key(
+            entity_type=FileAsset.EntityTypeContext.ISSUE_ATTACHMENT,
+            filename=name,
+            workspace_id=str(workspace.id),
+            project_id=str(project_id),
+            issue_id=str(issue_id),
+        )
 
         # Get the size limit
         size_limit = min(size, settings.FILE_SIZE_LIMIT)
@@ -124,7 +135,9 @@ class IssueAttachmentV2Endpoint(BaseAPIView):
         storage = S3Storage(request=request)
 
         # Generate a presigned URL to share an S3 object
-        presigned_url = storage.generate_presigned_post(object_name=asset_key, file_type=type, file_size=size_limit)
+        presigned_url = storage.generate_presigned_post(
+            object_name=asset_key, file_type=type, file_size=size_limit
+        )
 
         # Return the presigned URL
         return Response(
@@ -140,7 +153,9 @@ class IssueAttachmentV2Endpoint(BaseAPIView):
     @allow_permission([ROLE.ADMIN], creator=True, model=FileAsset)
     @allow_fine_permission(PermissionKey.ISSUE_ATTACHMENT_DELETE)
     def delete(self, request, slug, project_id, issue_id, pk):
-        issue_attachment = FileAsset.objects.get(pk=pk, workspace__slug=slug, project_id=project_id)
+        issue_attachment = FileAsset.objects.get(
+            pk=pk, workspace__slug=slug, project_id=project_id
+        )
         issue_attachment.is_deleted = True
         issue_attachment.deleted_at = timezone.now()
         issue_attachment.save()
@@ -164,7 +179,9 @@ class IssueAttachmentV2Endpoint(BaseAPIView):
     def get(self, request, slug, project_id, issue_id, pk=None):
         if pk:
             # Get the asset
-            asset = FileAsset.objects.get(id=pk, workspace__slug=slug, project_id=project_id)
+            asset = FileAsset.objects.get(
+                id=pk, workspace__slug=slug, project_id=project_id
+            )
 
             # Check if the asset is uploaded
             if not asset.is_uploaded:
@@ -179,7 +196,7 @@ class IssueAttachmentV2Endpoint(BaseAPIView):
                 disposition="attachment",
                 filename=asset.attributes.get("name"),
             )
-            return HttpResponseRedirect(presigned_url)
+            return Response({"download_url": presigned_url})
 
         # Get all the attachments
         issue_attachments = FileAsset.objects.filter(
@@ -195,7 +212,9 @@ class IssueAttachmentV2Endpoint(BaseAPIView):
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
     def patch(self, request, slug, project_id, issue_id, pk):
-        issue_attachment = FileAsset.objects.get(pk=pk, workspace__slug=slug, project_id=project_id)
+        issue_attachment = FileAsset.objects.get(
+            pk=pk, workspace__slug=slug, project_id=project_id
+        )
         serializer = IssueAttachmentSerializer(issue_attachment)
 
         # Send this activity only if the attachment is not uploaded before

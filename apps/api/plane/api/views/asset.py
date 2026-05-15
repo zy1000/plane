@@ -2,9 +2,6 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
-# Python Imports
-import uuid
-
 # Django Imports
 from django.utils import timezone
 from django.conf import settings
@@ -19,6 +16,7 @@ from plane.bgtasks.storage_metadata_task import get_asset_object_metadata
 from plane.settings.storage import S3Storage
 from plane.db.models import FileAsset, User, Workspace
 from plane.api.views.base import BaseAPIView
+from plane.utils.asset_path import build_asset_key
 from plane.api.serializers import (
     UserAssetUploadSerializer,
     AssetUpdateSerializer,
@@ -147,7 +145,11 @@ class UserAssetEndpoint(BaseAPIView):
             )
 
         # asset key
-        asset_key = f"{uuid.uuid4().hex}-{name}"
+        asset_key = build_asset_key(
+            entity_type=entity_type,
+            filename=name,
+            user_id=str(request.user.id),
+        )
 
         # Create a File Asset
         asset = FileAsset.objects.create(
@@ -320,7 +322,11 @@ class UserServerAssetEndpoint(BaseAPIView):
             )
 
         # asset key
-        asset_key = f"{uuid.uuid4().hex}-{name}"
+        asset_key = build_asset_key(
+            entity_type=entity_type,
+            filename=name,
+            user_id=str(request.user.id),
+        )
 
         # Create a File Asset
         asset = FileAsset.objects.create(
@@ -515,18 +521,18 @@ class GenericAssetEndpoint(BaseAPIView):
         # Check if the file size is within the limit
         size_limit = min(size, settings.FILE_SIZE_LIMIT)
 
-        # Check if the file type is allowed
-        if not type or type not in settings.ATTACHMENT_MIME_TYPES:
-            return Response(
-                {"error": "Invalid file type.", "status": False},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        # 注：通用资产上传不再限定 MIME，由前端业务侧自行约束。
 
         # Get the workspace
         workspace = Workspace.objects.get(slug=slug)
 
-        # asset key
-        asset_key = f"{workspace.id}/{uuid.uuid4().hex}-{name}"
+        # asset key（按 ISSUE_ATTACHMENT 落入 issue/temp 路径，绑定后再迁移）
+        asset_key = build_asset_key(
+            entity_type=FileAsset.EntityTypeContext.ISSUE_ATTACHMENT,
+            filename=name,
+            workspace_id=str(workspace.id),
+            project_id=str(project_id) if project_id else None,
+        )
 
         # Check for existing asset with same external details if provided
         if external_id and external_source:

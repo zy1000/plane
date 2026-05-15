@@ -162,18 +162,11 @@ export const ActiveCycleStats = observer(function ActiveCycleStats(props: Active
     [workspaceSlug, projectId, cycleId]
   );
 
-  const handleDownloadCycleFile = async (fileId: string, fileName: string) => {
+  const handleDownloadCycleFile = async (fileId: string, _fileName: string) => {
     try {
       setCycleFilesDownloadingId(fileId);
-      const blob = await cycleService.current.downloadCycleFile(workspaceSlug, projectId, fileId);
-      const objectUrl = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = objectUrl;
-      link.download = fileName;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(objectUrl);
+      const url = await cycleService.current.downloadCycleFile(workspaceSlug, projectId, fileId);
+      window.open(url, "_blank", "noopener,noreferrer");
     } catch (e: unknown) {
       showCycleFileApiError(e, "下载失败", "请稍后重试");
     } finally {
@@ -186,10 +179,7 @@ export const ActiveCycleStats = observer(function ActiveCycleStats(props: Active
     if (!selectedFile || !cycleId) return;
     try {
       setCycleFilesUploading(true);
-      const formData = new FormData();
-      formData.append("file", selectedFile);
-      formData.append("cycle_id", cycleId);
-      await cycleService.current.uploadCycleFile(workspaceSlug, projectId, formData);
+      await cycleService.current.uploadCycleFile(workspaceSlug, projectId, cycleId, selectedFile);
       setToast({ type: TOAST_TYPE.SUCCESS, title: "上传成功", message: "文件已上传" });
       await fetchCycleFiles(1);
     } catch (e: unknown) {

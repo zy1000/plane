@@ -18,6 +18,11 @@ router.register('release/file', ReleaseFileAPI, basename='release-file')
 
 urlpatterns = [
     path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/release/file/<uuid:asset_id>/uploaded/",
+        ReleaseFileAPI.as_view({"patch": "mark_uploaded"}),
+        name="release-file-mark-uploaded",
+    ),
+    path(
         "workspaces/<str:slug>/projects/<uuid:project_id>/release/file/<uuid:file_id>/delete/",
         ReleaseFileAPI.as_view({"delete": "delete_file"}),
         name="release-file-detail",

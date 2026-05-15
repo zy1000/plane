@@ -58,8 +58,9 @@ export const IssueAttachmentUpload = observer(function IssueAttachmentUpload(pro
     disabled: isLoading || disabled,
   });
 
+  // 注：附件不再限制文件类型，只对超大文件给出提示。
   const fileError =
-    fileRejections.length > 0 ? `Invalid file type or size (max ${maxFileSize / 1024 / 1024} MB)` : null;
+    fileRejections.length > 0 ? `File size too large (max ${maxFileSize / 1024 / 1024} MB)` : null;
 
   return (
     <div

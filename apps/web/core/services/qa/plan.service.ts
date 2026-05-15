@@ -1,5 +1,7 @@
 // plane imports
 import { API_BASE_URL } from "@plane/constants";
+import { FileUploadService, generateFileUploadPayload, getFileMetaDataForUpload } from "@plane/services";
+import type { TFileSignedURLResponse } from "@plane/types";
 // services
 import { APIService } from "@/services/api.service";
 
@@ -236,20 +238,45 @@ export class PlanService extends APIService {
   }
 
   async uploadExecutionFile(workspaceSlug: string, recordId: string, file: File): Promise<any> {
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("record_id", recordId);
-    return this.post(`/api/workspaces/${workspaceSlug}/test/execution-file/upload/`, formData)
-      .then((response) => response?.data)
+    const fileMetaData = await getFileMetaDataForUpload(file);
+    const presignResponse = await this.post(
+      `/api/workspaces/${workspaceSlug}/test/execution-file/upload/`,
+      {
+        ...fileMetaData,
+        record_id: recordId,
+      }
+    )
+      .then((response) => response?.data as { upload_data: TFileSignedURLResponse["upload_data"]; asset_id: string })
       .catch((error) => {
         throw error?.response?.data;
       });
+
+    if (!presignResponse?.upload_data || !presignResponse?.asset_id) {
+      throw new Error("Failed to obtain presigned upload data");
+    }
+
+    const fileUploadPayload = generateFileUploadPayload(
+      { upload_data: presignResponse.upload_data, asset_id: presignResponse.asset_id, asset_url: "" } as TFileSignedURLResponse,
+      file
+    );
+
+    const fileUploader = new FileUploadService();
+    await fileUploader.uploadFile(presignResponse.upload_data.url, fileUploadPayload);
+
+    await this.patch(
+      `/api/workspaces/${workspaceSlug}/test/execution-file/${presignResponse.asset_id}/uploaded/`,
+      { attributes: fileMetaData }
+    ).catch((error) => {
+      throw error?.response?.data;
+    });
+
+    return { asset_id: presignResponse.asset_id };
   }
 
   async deleteExecutionFile(workspaceSlug: string, recordId: string, fileId: string): Promise<void> {
     return this.delete(`/api/workspaces/${workspaceSlug}/test/execution-file/delete/`, {
       record_id: recordId,
-      file_id: fileId,
+      asset_id: fileId,
     })
       .then(() => undefined)
       .catch((error) => {
@@ -257,12 +284,11 @@ export class PlanService extends APIService {
       });
   }
 
-  async downloadExecutionFile(workspaceSlug: string, fileId: string): Promise<Blob> {
+  async downloadExecutionFile(workspaceSlug: string, fileId: string): Promise<string> {
     return this.get(`/api/workspaces/${workspaceSlug}/test/execution-file/download/`, {
-      params: { file_id: fileId },
-      responseType: "blob",
+      params: { asset_id: fileId },
     })
-      .then((response) => response?.data as Blob)
+      .then((response) => response?.data?.download_url as string)
       .catch((error) => {
         throw error?.response?.data;
       });

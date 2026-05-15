@@ -1,5 +1,3 @@
-import uuid
-
 from django.conf import settings
 from django.http import HttpResponseRedirect
 from django.utils import timezone
@@ -11,11 +9,12 @@ from plane.app.views import BaseAPIView
 from plane.bgtasks.storage_metadata_task import get_asset_object_metadata
 from plane.db.models import FileAsset, Workspace
 from plane.settings.storage import S3Storage
+from plane.utils.asset_path import build_asset_key
 from plane.utils.paginator import CustomPaginator
 from plane.utils.response import list_response
 
 
-MINDMAP_ENTITY_TYPE = "CASE_MINDMAP"
+MINDMAP_ENTITY_TYPE = FileAsset.EntityTypeContext.CASE_MINDMAP
 
 
 class MindmapAssetAPIView(BaseAPIView):
@@ -75,7 +74,12 @@ class MindmapAssetAPIView(BaseAPIView):
             return Response({"error": "Invalid file type.", "status": False}, status=status.HTTP_400_BAD_REQUEST)
 
         workspace = Workspace.objects.get(slug=slug)
-        asset_key = f"{workspace.id}/{uuid.uuid4().hex}-{name}"
+        asset_key = build_asset_key(
+            entity_type=MINDMAP_ENTITY_TYPE,
+            filename=name,
+            workspace_id=str(workspace.id),
+            project_id=str(project_id),
+        )
         size_limit = min(size, settings.FILE_SIZE_LIMIT)
 
         asset = FileAsset.objects.create(

@@ -356,10 +356,7 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
 
     try {
       setFilesUploading(true);
-      const formData = new FormData();
-      formData.append("file", selectedFile);
-      formData.append("cycle_id", cycleId);
-      await cycleService.uploadCycleFile(workspaceSlug, projectId, formData);
+      await cycleService.uploadCycleFile(workspaceSlug, projectId, cycleId, selectedFile);
       await fetchFiles();
       setFilesError(null);
     } catch (error: any) {
@@ -370,19 +367,12 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
     }
   };
 
-  const handleDownloadCycleFile = async (fileId: string, fileName: string) => {
+  const handleDownloadCycleFile = async (fileId: string, _fileName: string) => {
     if (!workspaceSlug || !projectId) return;
     try {
       setFilesDownloadingId(fileId);
-      const blob = await cycleService.downloadCycleFile(workspaceSlug, projectId, fileId);
-      const objectUrl = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = objectUrl;
-      link.download = fileName;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(objectUrl);
+      const url = await cycleService.downloadCycleFile(workspaceSlug, projectId, fileId);
+      window.open(url, "_blank", "noopener,noreferrer");
     } catch (error: any) {
       setFilesError(error?.error || error?.detail || "下载文件失败");
     } finally {

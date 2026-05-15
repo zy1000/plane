@@ -91,6 +91,17 @@ class UserAssetsEndpoint(BaseAPIView):
 
 
 class FileAPIView(BaseAPIView):
+    """遗留 File 下载/删除接口。
+
+    新数据已经迁移到 ``FileAsset`` 体系下的统一 ``uploads`` 桶；该接口仅用于
+    兼容尚未迁移的旧 File 记录，桶名由 ``LEGACY_FILE_BUCKET`` 环境变量控制
+    （默认 ``file``）。完成 ``migrate_asset_paths`` 命令后可考虑下线此 API。
+    """
+
+    def _legacy_bucket(self) -> str:
+        import os
+
+        return os.environ.get("LEGACY_FILE_BUCKET", "file")
 
     def post(self, request):
         minio = get_minio_utils()
@@ -100,7 +111,7 @@ class FileAPIView(BaseAPIView):
         file = File.objects.filter(id=file_id).first()
         if not file:
             return Response({"error": "File not found"}, status=status.HTTP_404_NOT_FOUND)
-        response_obj = minio.get_object(object_name=file.path + file.name, bucket_name="file")
+        response_obj = minio.get_object(object_name=file.path + file.name, bucket_name=self._legacy_bucket())
         if not response_obj:
             return Response({"error": "获取文件失败"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         encoded_filename = urllib.parse.quote(file.name)
@@ -113,5 +124,5 @@ class FileAPIView(BaseAPIView):
         file_id = request.query_params.get('file_id')
         file = File.objects.get(id=file_id)
         file.delete(soft=False)
-        minio.remove_object(object_name=file.path + file.name)
+        minio.remove_object(object_name=file.path + file.name, bucket_name=self._legacy_bucket())
         return Response(status=status.HTTP_200_OK)

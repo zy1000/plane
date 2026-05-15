@@ -6,6 +6,7 @@
 
 // services
 import { API_BASE_URL } from "@plane/constants";
+import { FileUploadService, generateFileUploadPayload, getFileMetaDataForUpload } from "@plane/services";
 import type {
   CycleDateCheckData,
   ICycle,
@@ -14,6 +15,7 @@ import type {
   TCycleDistribution,
   TProgressSnapshot,
   TCycleEstimateDistribution,
+  TFileSignedURLResponse,
 } from "@plane/types";
 import { APIService } from "@/services/api.service";
 
@@ -216,36 +218,49 @@ export class CycleService extends APIService {
       });
   }
 
-  async uploadCycleFile(workspaceSlug: string, projectId: string, data: FormData): Promise<any> {
-    return this.post(`/api/workspaces/${workspaceSlug}/projects/${projectId}/cycles/file/upload/`, data)
-      .then((response) => response?.data)
+  async uploadCycleFile(workspaceSlug: string, projectId: string, cycleId: string, file: File): Promise<any> {
+    const fileMetaData = await getFileMetaDataForUpload(file);
+    const presignResponse = await this.post(
+      `/api/workspaces/${workspaceSlug}/projects/${projectId}/cycles/file/upload/`,
+      {
+        ...fileMetaData,
+        cycle_id: cycleId,
+      }
+    )
+      .then((response) => response?.data as { upload_data: TFileSignedURLResponse["upload_data"]; asset_id: string })
       .catch((error) => {
         throw error?.response?.data;
       });
+
+    if (!presignResponse?.upload_data || !presignResponse?.asset_id) {
+      throw new Error("Failed to obtain presigned upload data");
+    }
+
+    const fileUploadPayload = generateFileUploadPayload(
+      { upload_data: presignResponse.upload_data, asset_id: presignResponse.asset_id, asset_url: "" } as TFileSignedURLResponse,
+      file
+    );
+
+    const fileUploader = new FileUploadService();
+    await fileUploader.uploadFile(presignResponse.upload_data.url, fileUploadPayload);
+
+    await this.patch(
+      `/api/workspaces/${workspaceSlug}/projects/${projectId}/cycles/file/${presignResponse.asset_id}/uploaded/`,
+      { attributes: fileMetaData }
+    ).catch((error) => {
+      throw error?.response?.data;
+    });
+
+    return { asset_id: presignResponse.asset_id };
   }
 
-  async downloadCycleFile(workspaceSlug: string, projectId: string, fileId: string): Promise<Blob> {
+  async downloadCycleFile(workspaceSlug: string, projectId: string, fileId: string): Promise<string> {
     return this.get(
-      `/api/workspaces/${workspaceSlug}/projects/${projectId}/cycles/file/${fileId}/download/`,
-      undefined,
-      { responseType: "blob" }
+      `/api/workspaces/${workspaceSlug}/projects/${projectId}/cycles/file/${fileId}/download/`
     )
-      .then((response) => response?.data as Blob)
-      .catch(async (error) => {
-        const raw = error?.response?.data;
-        if (raw instanceof Blob) {
-          const text = await raw.text();
-          try {
-            const parsed = JSON.parse(text) as { error?: string };
-            throw parsed;
-          } catch (e: unknown) {
-            if (e && typeof e === "object" && e !== null && "error" in e) {
-              throw e;
-            }
-            throw { error: text || "Download failed" };
-          }
-        }
-        throw raw;
+      .then((response) => response?.data?.download_url as string)
+      .catch((error) => {
+        throw error?.response?.data;
       });
   }
 

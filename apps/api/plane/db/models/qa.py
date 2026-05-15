@@ -415,12 +415,6 @@ class PlanCaseRecord(BaseModel):
                                   related_name="plan_case_records")
     files = models.ManyToManyField("db.File", blank=True, related_name="plan_case_records")
 
-    def get_file_path(self, filename: str = None):
-        plan_case = self.plan_case
-        project_id = plan_case.plan.project_id if plan_case else "unknown"
-        path = f'plan_case_records/{project_id}/{self.id}/'
-        return path + filename if filename else path
-
     class Meta:
         db_table = "test_plan_case_records"
         ordering = ("-created_at",)

@@ -114,10 +114,6 @@ class Cycle(ProjectBaseModel):
         """Return name of the cycle"""
         return f"{self.name} <{self.project.name}>"
 
-    def get_file_path(self, filename: str = None):
-        path = f'{self.workspace.slug}/{self.project.id}/cycle/{self.id}/'
-        return path + filename if filename else path
-
 
 class CycleIssue(ProjectBaseModel):
     """

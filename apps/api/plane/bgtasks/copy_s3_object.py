@@ -3,7 +3,6 @@
 # See the LICENSE file for details.
 
 # Python imports
-import uuid
 import base64
 import requests
 from bs4 import BeautifulSoup
@@ -13,6 +12,7 @@ from django.conf import settings
 
 # Module imports
 from plane.db.models import FileAsset, Page, Issue
+from plane.utils.asset_path import build_asset_key, scope_kwargs_from_identifier
 from plane.utils.exception_logger import log_exception
 from plane.settings.storage import S3Storage
 from celery import shared_task
@@ -92,7 +92,13 @@ def copy_assets(entity, entity_identifier, project_id, asset_ids, user_id):
     original_assets = FileAsset.objects.filter(workspace=workspace, project_id=project_id, id__in=asset_ids)
 
     for original_asset in original_assets:
-        destination_key = f"{workspace.id}/{uuid.uuid4().hex}-{original_asset.attributes.get('name')}"
+        destination_key = build_asset_key(
+            entity_type=original_asset.entity_type,
+            filename=original_asset.attributes.get("name") or "file",
+            workspace_id=str(workspace.id),
+            project_id=str(project_id) if project_id else None,
+            **scope_kwargs_from_identifier(original_asset.entity_type, entity_identifier),
+        )
         duplicated_asset = FileAsset.objects.create(
             attributes={
                 "name": original_asset.attributes.get("name"),

@@ -20,6 +20,7 @@ from django.db.models import Prefetch
 
 # Module imports
 from plane.db.models import ExporterHistory, Issue, IssueComment, IssueRelation, IssueSubscriber
+from plane.utils.asset_path import build_export_key
 from plane.utils.exception_logger import log_exception
 from plane.utils.porters.exporter import DataExporter
 from plane.utils.porters.serializers.issue import IssueExportSerializer
@@ -43,7 +44,12 @@ def upload_to_s3(zip_file: io.BytesIO, workspace_id: UUID, token_id: str, slug: 
     """
     Upload a ZIP file to S3 and generate a presigned URL.
     """
-    file_name = f"{workspace_id}/export-{slug}-{token_id[:6]}-{str(timezone.now().date())}.zip"
+    file_name = build_export_key(
+        workspace_id=str(workspace_id),
+        slug=slug,
+        token_id=token_id,
+        date_str=str(timezone.now().date()),
+    )
     expires_in = 7 * 24 * 60 * 60
 
     if settings.USE_MINIO:

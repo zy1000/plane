@@ -124,10 +124,6 @@ class Release(ProjectBaseModel):
     def __str__(self):
         return f"{self.name} {self.start_date} {self.target_date}"
 
-    def get_file_path(self, filename: str = None):
-        path = f'{self.workspace.slug}/{self.project.id}/release/{self.id}/'
-        return path + filename if filename else path
-
 
 class ReleaseMember(ProjectBaseModel):
     release = models.ForeignKey("db.Release", on_delete=models.CASCADE)

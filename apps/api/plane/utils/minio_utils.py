@@ -120,7 +120,7 @@ class MinIOUtils:
         self,
         object_name: str,
         data: bytes | str,
-        bucket_name: Optional[str] = 'file',
+        bucket_name: Optional[str] = None,
         content_type: str = "application/octet-stream",
         metadata: Optional[dict] = None,
     ) -> bool:
@@ -183,7 +183,7 @@ class MinIOUtils:
             log_exception(exc)
             return None
 
-    def remove_object(self, object_name: str, bucket_name: Optional[str] = 'file') -> bool:
+    def remove_object(self, object_name: str, bucket_name: Optional[str] = None) -> bool:
         """删除指定对象。"""
         target_bucket = bucket_name or self.bucket_name
         try:
