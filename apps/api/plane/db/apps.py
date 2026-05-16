@@ -7,3 +7,7 @@ from django.apps import AppConfig
 
 class DbConfig(AppConfig):
     name = "plane.db"
+
+    def ready(self) -> None:
+        # 注册 FilePath 名称同步等 ORM 信号
+        from plane.db import signals  # noqa: F401

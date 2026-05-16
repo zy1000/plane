@@ -24,71 +24,29 @@ from plane.app.permissions import allow_permission, ROLE
 from plane.utils.cache import invalidate_cache_directly
 from plane.bgtasks.storage_metadata_task import get_asset_object_metadata
 from plane.throttles.asset import AssetRateThrottle
-from plane.utils.asset_path import (
-    build_asset_key,
-    is_temp_key,
-    scope_kwargs_from_identifier,
-)
+from plane.utils.file_path import build_resolver, rebind_asset_to_path
+from plane.utils.asset_upload import presigned_post_for_asset
 
 
-def _migrate_temp_assets_to_final_path(assets, request, **scope_overrides):
-    """把仍处于 temp/ 的 asset 物理迁移到正式路径，并同步更新 DB 中的 asset 字段。
+def _rebind_assets_to_final_path(assets, request):
+    """把仍处于 _temp 节点下的 asset 物理迁移到正式路径，并同步刷新 path/filename。
 
     用于 bulk 绑定接口在写入 issue_id/case_id 等关联 ID 之后，将先前
-    保存到临时目录的对象搬运到 ``workspace_id/project_id/<业务>/<id>/`` 下。
-    复制失败的 asset 会保留原 temp key，DB 不变，下次绑定可重试。
+    保存到 ``_temp/{asset_id}/`` 下的对象搬运到 ``ws/proj/<业务>/<id>/`` 下。
+    复制失败的 asset 会保留原 temp 位置，DB 不变，下次绑定可重试。
     """
 
     if not assets:
         return
 
     storage = S3Storage(request=request)
+    resolver = build_resolver()
     for asset in assets:
-        old_key = str(asset.asset) if asset.asset else ""
-        if not old_key or not is_temp_key(old_key):
-            continue
-
-        filename = (
-            (asset.attributes or {}).get("name")
-            if isinstance(asset.attributes, dict)
-            else None
-        )
-        if not filename:
-            filename = old_key.rsplit("/", 1)[-1]
-
-        scope_kwargs = {
-            "workspace_id": str(asset.workspace_id) if asset.workspace_id else None,
-            "project_id": str(asset.project_id) if asset.project_id else None,
-            "user_id": str(asset.user_id) if asset.user_id else None,
-            "issue_id": str(asset.issue_id) if asset.issue_id else None,
-            "comment_id": str(asset.comment_id) if asset.comment_id else None,
-            "page_id": str(asset.page_id) if asset.page_id else None,
-            "draft_issue_id": (
-                str(asset.draft_issue_id) if asset.draft_issue_id else None
-            ),
-            "case_id": str(asset.case_id) if asset.case_id else None,
-        }
-        scope_kwargs.update({k: v for k, v in scope_overrides.items() if v is not None})
-
         try:
-            new_key = build_asset_key(
-                entity_type=asset.entity_type,
-                filename=filename,
-                asset_id=str(asset.id),
-                **scope_kwargs,
-            )
-        except ValueError:
+            rebind_asset_to_path(asset, storage=storage, resolver=resolver)
+        except Exception:
+            # 单条失败不要影响后续 asset；下次 bulk 还能重试
             continue
-
-        if not new_key or new_key == old_key:
-            continue
-
-        copy_response = storage.copy_object(old_key, new_key)
-        if copy_response is None:
-            continue
-
-        FileAsset.objects.filter(pk=asset.pk).update(asset=new_key)
-        storage.delete_files(object_names=[old_key])
 
 
 class UserAssetsV2Endpoint(BaseAPIView):
@@ -213,28 +171,17 @@ class UserAssetsV2Endpoint(BaseAPIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # asset key（按 user_id 落到 user/<id>/(avatar|cover)/）
-        asset_key = build_asset_key(
-            entity_type=entity_type,
-            filename=name,
-            user_id=str(request.user.id),
-        )
-
-        # Create a File Asset
+        # Create a File Asset（save() 钩子会自动 resolve path 与 dedup filename）
         asset = FileAsset.objects.create(
             attributes={"name": name, "type": type, "size": size_limit},
-            asset=asset_key,
             size=size_limit,
             user=request.user,
             created_by=request.user,
             entity_type=entity_type,
         )
 
-        # Get the presigned URL
-        storage = S3Storage(request=request)
-        # Generate a presigned URL to share an S3 object
-        presigned_url = storage.generate_presigned_post(
-            object_name=asset_key, file_type=type, file_size=size_limit
+        presigned_url = presigned_post_for_asset(
+            request=request, asset=asset, file_type=type, file_size=size_limit
         )
         # Return the presigned URL
         return Response(
@@ -448,38 +395,24 @@ class WorkspaceFileAssetEndpoint(BaseAPIView):
         ):
             project_scope_id = str(entity_identifier)
 
-        # asset key（带 entity_identifier 时直接落入业务子目录，否则走 temp/）
-        asset_key = build_asset_key(
-            entity_type=entity_type,
-            filename=name,
-            workspace_id=str(workspace.id),
-            project_id=str(project_scope_id) if project_scope_id else None,
-            user_id=(
-                str(request.user.id)
-                if entity_type in ("USER_AVATAR", "USER_COVER")
-                else None
-            ),
-            **scope_kwargs_from_identifier(entity_type, entity_identifier),
+        entity_id_fields = self.get_entity_id_field(
+            entity_type=entity_type, entity_id=entity_identifier
         )
+        if project_scope_id:
+            entity_id_fields["project_id"] = project_scope_id
 
-        # Create a File Asset
+        # Create a File Asset（save() 钩子根据 entity_type + 各 FK 自动落 path/filename）
         asset = FileAsset.objects.create(
             attributes={"name": name, "type": type, "size": size_limit},
-            asset=asset_key,
             size=size_limit,
             workspace=workspace,
             created_by=request.user,
             entity_type=entity_type,
-            **self.get_entity_id_field(
-                entity_type=entity_type, entity_id=entity_identifier
-            ),
+            **entity_id_fields,
         )
 
-        # Get the presigned URL
-        storage = S3Storage(request=request)
-        # Generate a presigned URL to share an S3 object
-        presigned_url = storage.generate_presigned_post(
-            object_name=asset_key, file_type=type, file_size=size_limit
+        presigned_url = presigned_post_for_asset(
+            request=request, asset=asset, file_type=type, file_size=size_limit
         )
         # Return the presigned URL
         return Response(
@@ -519,24 +452,10 @@ class WorkspaceFileAssetEndpoint(BaseAPIView):
         asset.case_id = case_id
         asset.save()
 
-        # 如果这条 asset 是 CASE_ATTACHMENT 且当前还落在 temp/ 下，绑定 case 后立即物理迁移
+        # 如果这条 asset 是 CASE_ATTACHMENT 且当前还挂在 _temp 节点下，绑定 case 后立即物理迁移
         if asset.entity_type == FileAsset.EntityTypeContext.CASE_ATTACHMENT and case_id:
-            from plane.db.models import TestCase  # 局部 import 规避循环依赖
-
-            case_repository_id = (
-                TestCase.objects.filter(pk=case_id)
-                .values_list("repository_id", flat=True)
-                .first()
-            )
-            asset.refresh_from_db(fields=["asset", "case_id", "project_id"])
-            _migrate_temp_assets_to_final_path(
-                [asset],
-                request=request,
-                case_id=str(case_id),
-                case_repository_id=(
-                    str(case_repository_id) if case_repository_id else None
-                ),
-            )
+            asset.refresh_from_db(fields=["filename", "path", "case_id", "project_id"])
+            _rebind_assets_to_final_path([asset], request=request)
 
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -566,7 +485,7 @@ class WorkspaceFileAssetEndpoint(BaseAPIView):
         storage = S3Storage(request=request)
         # Generate a presigned URL to share an S3 object
         signed_url = storage.generate_presigned_url(
-            object_name=asset.asset.name,
+            object_name=asset.storage_key,
             disposition="attachment",
             filename=asset.attributes.get("name"),
         )
@@ -606,25 +525,11 @@ class WorkspaceBulkAssetEndpoint(BaseAPIView):
             except IntegrityError:
                 pass
 
-            # case 绑定后把 temp 路径下的对象迁移到 test/{repo_id}/{case_id}/
-            from plane.db.models import TestCase  # 局部 import 规避循环依赖
-
-            case_repository_id = (
-                TestCase.objects.filter(pk=entity_id)
-                .values_list("repository_id", flat=True)
-                .first()
-            )
+            # case 绑定后把 _temp 节点下的对象迁移到正式路径（resolver 会重新算 path）
             refreshed_assets = list(
                 FileAsset.objects.filter(id__in=asset_ids, workspace__slug=slug)
             )
-            _migrate_temp_assets_to_final_path(
-                refreshed_assets,
-                request=request,
-                case_id=str(entity_id),
-                case_repository_id=(
-                    str(case_repository_id) if case_repository_id else None
-                ),
-            )
+            _rebind_assets_to_final_path(refreshed_assets, request=request)
 
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -660,7 +565,7 @@ class StaticFileAssetEndpoint(BaseAPIView):
         # Get the presigned URL
         storage = S3Storage(request=request)
         # Generate a presigned URL to share an S3 object
-        signed_url = storage.generate_presigned_url(object_name=asset.asset.name)
+        signed_url = storage.generate_presigned_url(object_name=asset.storage_key)
         # Redirect to the signed URL
         return HttpResponseRedirect(signed_url)
 
@@ -734,37 +639,21 @@ class ProjectAssetEndpoint(BaseAPIView):
         # Get the workspace
         workspace = Workspace.objects.get(slug=slug)
 
-        # asset key（按 entity_type 落入项目业务子目录或 temp/）
-        asset_key = build_asset_key(
-            entity_type=entity_type,
-            filename=name,
-            workspace_id=str(workspace.id),
-            project_id=str(project_id),
-            user_id=(
-                str(request.user.id)
-                if entity_type in ("USER_AVATAR", "USER_COVER")
-                else None
-            ),
-            **scope_kwargs_from_identifier(entity_type, entity_identifier),
-        )
+        entity_id_fields = self.get_entity_id_field(entity_type, entity_identifier)
+        entity_id_fields["project_id"] = project_id
 
-        # Create a File Asset
+        # Create a File Asset（save() 钩子按 entity_type + FK 自动 resolve path 与 filename）
         asset = FileAsset.objects.create(
             attributes={"name": name, "type": type, "size": size_limit},
-            asset=asset_key,
             size=size_limit,
             workspace=workspace,
             created_by=request.user,
             entity_type=entity_type,
-            project_id=project_id,
-            **self.get_entity_id_field(entity_type, entity_identifier),
+            **entity_id_fields,
         )
 
-        # Get the presigned URL
-        storage = S3Storage(request=request)
-        # Generate a presigned URL to share an S3 object
-        presigned_url = storage.generate_presigned_post(
-            object_name=asset_key, file_type=type, file_size=size_limit
+        presigned_url = presigned_post_for_asset(
+            request=request, asset=asset, file_type=type, file_size=size_limit
         )
         # Return the presigned URL
         return Response(
@@ -825,7 +714,7 @@ class ProjectAssetEndpoint(BaseAPIView):
         storage = S3Storage(request=request)
         # Generate a presigned URL to share an S3 object
         signed_url = storage.generate_presigned_url(
-            object_name=asset.asset.name,
+            object_name=asset.storage_key,
             disposition="attachment",
             filename=asset.attributes.get("name"),
         )
@@ -862,7 +751,7 @@ class ProjectBulkAssetEndpoint(BaseAPIView):
             )
 
         # Check if the asset is uploaded
-        migrate_kwargs = {}
+        needs_rebind = False
         if asset.entity_type == FileAsset.EntityTypeContext.PROJECT_COVER:
             assets.update(project_id=project_id)
             [self.save_project_cover(asset, project_id) for asset in assets]
@@ -874,7 +763,7 @@ class ProjectBulkAssetEndpoint(BaseAPIView):
                 assets.update(issue_id=entity_id, project_id=project_id)
             except IntegrityError:
                 pass
-            migrate_kwargs = {"issue_id": str(entity_id), "project_id": str(project_id)}
+            needs_rebind = True
 
         if asset.entity_type == FileAsset.EntityTypeContext.COMMENT_DESCRIPTION:
             # For some cases, the bulk api is called after the comment is deleted
@@ -883,14 +772,11 @@ class ProjectBulkAssetEndpoint(BaseAPIView):
                 assets.update(comment_id=entity_id)
             except IntegrityError:
                 pass
-            migrate_kwargs = {
-                "comment_id": str(entity_id),
-                "project_id": str(project_id),
-            }
+            needs_rebind = True
 
         if asset.entity_type == FileAsset.EntityTypeContext.PAGE_DESCRIPTION:
             assets.update(page_id=entity_id)
-            migrate_kwargs = {"page_id": str(entity_id), "project_id": str(project_id)}
+            needs_rebind = True
 
         if asset.entity_type == FileAsset.EntityTypeContext.DRAFT_ISSUE_DESCRIPTION:
             # For some cases, the bulk api is called after the draft issue is deleted
@@ -899,20 +785,13 @@ class ProjectBulkAssetEndpoint(BaseAPIView):
                 assets.update(draft_issue_id=entity_id)
             except IntegrityError:
                 pass
-            migrate_kwargs = {
-                "draft_issue_id": str(entity_id),
-                "project_id": str(project_id),
-            }
+            needs_rebind = True
 
-        if migrate_kwargs:
+        if needs_rebind:
             refreshed_assets = list(
                 FileAsset.objects.filter(id__in=asset_ids, workspace__slug=slug)
             )
-            _migrate_temp_assets_to_final_path(
-                refreshed_assets,
-                request=request,
-                **migrate_kwargs,
-            )
+            _rebind_assets_to_final_path(refreshed_assets, request=request)
 
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -992,29 +871,33 @@ class DuplicateAssetEndpoint(BaseAPIView):
                 {"error": "Asset not found"}, status=status.HTTP_404_NOT_FOUND
             )
 
-        destination_key = build_asset_key(
-            entity_type=entity_type,
-            filename=original_asset.attributes.get("name") or "file",
-            workspace_id=str(workspace.id),
-            project_id=str(project_id) if project_id else None,
-            **scope_kwargs_from_identifier(entity_type, entity_id),
+        entity_id_fields = self.get_entity_id_field(
+            entity_type=entity_type, entity_id=entity_id
         )
+        if project_id:
+            entity_id_fields["project_id"] = project_id
+
         duplicated_asset = FileAsset.objects.create(
             attributes={
                 "name": original_asset.attributes.get("name"),
                 "type": original_asset.attributes.get("type"),
                 "size": original_asset.attributes.get("size"),
             },
-            asset=destination_key,
             size=original_asset.size,
             workspace=workspace,
             created_by_id=request.user.id,
             entity_type=entity_type,
-            project_id=project_id if project_id else None,
             storage_metadata=original_asset.storage_metadata,
-            **self.get_entity_id_field(entity_type=entity_type, entity_id=entity_id),
+            **entity_id_fields,
         )
-        storage.copy_object(original_asset.asset, destination_key)
+        from plane.utils.asset_upload import build_asset_metadata
+
+        storage.copy_object(
+            original_asset.storage_key,
+            duplicated_asset.storage_key,
+            metadata=build_asset_metadata(duplicated_asset),
+            content_type=original_asset.attributes.get("type"),
+        )
         # Update the is_uploaded field for all newly created assets
         FileAsset.objects.filter(id=duplicated_asset.id).update(is_uploaded=True)
 
@@ -1042,7 +925,7 @@ class WorkspaceAssetDownloadEndpoint(BaseAPIView):
 
         storage = S3Storage(request=request)
         signed_url = storage.generate_presigned_url(
-            object_name=asset.asset.name,
+            object_name=asset.storage_key,
             disposition="attachment",
             filename=asset.attributes.get("name", uuid.uuid4().hex),
         )
@@ -1070,7 +953,7 @@ class ProjectAssetDownloadEndpoint(BaseAPIView):
 
         storage = S3Storage(request=request)
         signed_url = storage.generate_presigned_url(
-            object_name=asset.asset.name,
+            object_name=asset.storage_key,
             disposition="attachment",
             filename=asset.attributes.get("name", uuid.uuid4().hex),
         )

@@ -17,6 +17,23 @@ from plane.utils.exception_logger import log_exception
 from storages.backends.s3boto3 import S3Boto3Storage
 
 
+def _sanitize_meta_value(value) -> str:
+    """把 user-defined metadata 的 value 转成可放进 HTTP header 的 ASCII 字符串。
+
+    AWS / MinIO 把 user metadata 当 HTTP header 处理，HTTP header 不支持非 ASCII。
+    这里用 RFC 5987 风格 ``quote()`` 转义中文等多字节字符，运维侧反向 ``unquote``
+    即可还原 ``工作区A/项目A/工作项/工作项B`` 这种展示路径。
+    """
+    if value is None:
+        return ""
+    text = str(value)
+    try:
+        text.encode("ascii")
+        return text
+    except UnicodeEncodeError:
+        return quote(text, safe="/-_.")
+
+
 class S3Storage(S3Boto3Storage):
     def url(self, name, parameters=None, expire=None, http_method=None):
         return name
@@ -63,8 +80,22 @@ class S3Storage(S3Boto3Storage):
                 config=boto3.session.Config(signature_version="s3v4"),
             )
 
-    def generate_presigned_post(self, object_name, file_type, file_size, expiration=None):
-        """Generate a presigned URL to upload an S3 object"""
+    def generate_presigned_post(
+        self,
+        object_name,
+        file_type,
+        file_size,
+        expiration=None,
+        metadata: Optional[dict] = None,
+    ):
+        """Generate a presigned URL to upload an S3 object.
+
+        ``metadata`` 会被转换为 ``x-amz-meta-<key>`` 表单字段并加入 presigned POST
+        的 ``Fields`` 与 ``Conditions``。前端通过 ``signedURLResponse.upload_data.fields``
+        逐项 append 到 FormData，浏览器会作为 HTTP header 一起送给 S3/MinIO，最终
+        以对象 user-defined metadata 形式落盘，供运维侧 ``mc stat`` 直接看见业务路径。
+        值会被 :func:`_sanitize_meta_value` 转成 ASCII，确保中文等多字节字符也能写入。
+        """
         if expiration is None:
             expiration = self.signed_url_expiration
         fields = {"Content-Type": file_type}
@@ -81,6 +112,16 @@ class S3Storage(S3Boto3Storage):
         else:
             fields["key"] = object_name
             conditions.append({"key": object_name})
+
+        # Inject user-defined metadata as x-amz-meta-* fields
+        if metadata:
+            for raw_key, raw_value in metadata.items():
+                if raw_value is None:
+                    continue
+                header = f"x-amz-meta-{str(raw_key).strip().lower()}"
+                value = _sanitize_meta_value(raw_value)
+                fields[header] = value
+                conditions.append({header: value})
 
         # Generate the presigned POST URL
         try:
@@ -156,13 +197,36 @@ class S3Storage(S3Boto3Storage):
             "Metadata": response.get("Metadata", {}),
         }
 
-    def copy_object(self, object_name, new_object_name):
-        """Copy an S3 object to a new location"""
+    def copy_object(
+        self,
+        object_name,
+        new_object_name,
+        metadata: Optional[dict] = None,
+        content_type: Optional[str] = None,
+    ):
+        """Copy an S3 object to a new location.
+
+        当传入 ``metadata`` 时，使用 ``MetadataDirective='REPLACE'`` 覆盖目标对象
+        的 user-defined metadata；用于迁移命令、bulk 绑定 temp→final 等场景给
+        新位置补上 display-path / original-name / asset-id 这些标记。
+        """
         try:
+            extra: dict = {}
+            if metadata:
+                extra["MetadataDirective"] = "REPLACE"
+                extra["Metadata"] = {
+                    str(k).strip().lower(): _sanitize_meta_value(v)
+                    for k, v in metadata.items()
+                    if v is not None
+                }
+                # MinIO 在 REPLACE 模式下要求一并指定 ContentType，否则会清掉源对象的
+                if content_type:
+                    extra["ContentType"] = content_type
             response = self.s3_client.copy_object(
                 Bucket=self.aws_storage_bucket_name,
                 CopySource={"Bucket": self.aws_storage_bucket_name, "Key": object_name},
                 Key=new_object_name,
+                **extra,
             )
         except ClientError as e:
             log_exception(e)

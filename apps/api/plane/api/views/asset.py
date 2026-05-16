@@ -16,7 +16,7 @@ from plane.bgtasks.storage_metadata_task import get_asset_object_metadata
 from plane.settings.storage import S3Storage
 from plane.db.models import FileAsset, User, Workspace
 from plane.api.views.base import BaseAPIView
-from plane.utils.asset_path import build_asset_key
+from plane.utils.asset_upload import presigned_post_for_asset
 from plane.api.serializers import (
     UserAssetUploadSerializer,
     AssetUpdateSerializer,
@@ -144,27 +144,18 @@ class UserAssetEndpoint(BaseAPIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # asset key
-        asset_key = build_asset_key(
-            entity_type=entity_type,
-            filename=name,
-            user_id=str(request.user.id),
-        )
-
-        # Create a File Asset
+        # Create a File Asset（save() 钩子按 entity_type+FK 自动 resolve path + filename）
         asset = FileAsset.objects.create(
             attributes={"name": name, "type": type, "size": size_limit},
-            asset=asset_key,
             size=size_limit,
             user=request.user,
             created_by=request.user,
             entity_type=entity_type,
         )
 
-        # Get the presigned URL
-        storage = S3Storage(request=request)
-        # Generate a presigned URL to share an S3 object
-        presigned_url = storage.generate_presigned_post(object_name=asset_key, file_type=type, file_size=size_limit)
+        presigned_url = presigned_post_for_asset(
+            request=request, asset=asset, file_type=type, file_size=size_limit
+        )
         # Return the presigned URL
         return Response(
             {
@@ -321,27 +312,19 @@ class UserServerAssetEndpoint(BaseAPIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # asset key
-        asset_key = build_asset_key(
-            entity_type=entity_type,
-            filename=name,
-            user_id=str(request.user.id),
-        )
-
         # Create a File Asset
         asset = FileAsset.objects.create(
             attributes={"name": name, "type": type, "size": size_limit},
-            asset=asset_key,
             size=size_limit,
             user=request.user,
             created_by=request.user,
             entity_type=entity_type,
         )
 
-        # Get the presigned URL
-        storage = S3Storage(request=request, is_server=True)
-        # Generate a presigned URL to share an S3 object
-        presigned_url = storage.generate_presigned_post(object_name=asset_key, file_type=type, file_size=size_limit)
+        presigned_url = presigned_post_for_asset(
+            request=request, asset=asset, file_type=type, file_size=size_limit,
+            storage=S3Storage(request=request, is_server=True),
+        )
         # Return the presigned URL
         return Response(
             {
@@ -445,7 +428,7 @@ class GenericAssetEndpoint(BaseAPIView):
             # Generate presigned URL for GET
             storage = S3Storage(request=request, is_server=True)
             presigned_url = storage.generate_presigned_url(
-                object_name=asset.asset.name, filename=asset.attributes.get("name")
+                object_name=asset.storage_key, filename=asset.attributes.get("name")
             )
 
             return Response(
@@ -526,14 +509,6 @@ class GenericAssetEndpoint(BaseAPIView):
         # Get the workspace
         workspace = Workspace.objects.get(slug=slug)
 
-        # asset key（按 ISSUE_ATTACHMENT 落入 issue/temp 路径，绑定后再迁移）
-        asset_key = build_asset_key(
-            entity_type=FileAsset.EntityTypeContext.ISSUE_ATTACHMENT,
-            filename=name,
-            workspace_id=str(workspace.id),
-            project_id=str(project_id) if project_id else None,
-        )
-
         # Check for existing asset with same external details if provided
         if external_id and external_source:
             existing_asset = FileAsset.objects.filter(
@@ -553,10 +528,9 @@ class GenericAssetEndpoint(BaseAPIView):
                     status=status.HTTP_409_CONFLICT,
                 )
 
-        # Create a File Asset
+        # Create a File Asset（issue 还未指定 → save() 钩子落到 _temp 节点，绑定后再 rebind）
         asset = FileAsset.objects.create(
             attributes={"name": name, "type": type, "size": size_limit},
-            asset=asset_key,
             size=size_limit,
             workspace_id=workspace.id,
             project_id=project_id,
@@ -566,9 +540,10 @@ class GenericAssetEndpoint(BaseAPIView):
             entity_type=FileAsset.EntityTypeContext.ISSUE_ATTACHMENT,  # Using ISSUE_ATTACHMENT since we'll bind it to issues # noqa: E501
         )
 
-        # Get the presigned URL
-        storage = S3Storage(request=request, is_server=True)
-        presigned_url = storage.generate_presigned_post(object_name=asset_key, file_type=type, file_size=size_limit)
+        presigned_url = presigned_post_for_asset(
+            request=request, asset=asset, file_type=type, file_size=size_limit,
+            storage=S3Storage(request=request, is_server=True),
+        )
 
         return Response(
             {

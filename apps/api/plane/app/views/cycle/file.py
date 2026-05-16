@@ -15,7 +15,7 @@ from plane.app.views.base import BaseViewSet
 from plane.bgtasks.storage_metadata_task import get_asset_object_metadata
 from plane.db.models import Cycle, FileAsset, Workspace
 from plane.settings.storage import S3Storage
-from plane.utils.asset_path import build_asset_key
+from plane.utils.asset_upload import presigned_post_for_asset
 from plane.utils.paginator import CustomPaginator
 from plane.utils.response import list_response
 
@@ -58,17 +58,8 @@ class CycleFileAPI(BaseViewSet):
         cycle = Cycle.objects.get(id=cycle_id, workspace__slug=slug, project_id=project_id)
         workspace = Workspace.objects.get(slug=slug)
 
-        asset_key = build_asset_key(
-            entity_type=CYCLE_FILE_ENTITY_TYPE,
-            filename=name,
-            workspace_id=str(workspace.id),
-            project_id=str(project_id),
-            cycle_id=str(cycle.id),
-        )
-
         asset = FileAsset.objects.create(
             attributes={"name": name, "type": file_type, "size": size_limit},
-            asset=asset_key,
             size=size_limit,
             workspace_id=workspace.id,
             project_id=project_id,
@@ -77,9 +68,8 @@ class CycleFileAPI(BaseViewSet):
             entity_type=CYCLE_FILE_ENTITY_TYPE,
         )
 
-        storage = S3Storage(request=request)
-        presigned_url = storage.generate_presigned_post(
-            object_name=asset_key, file_type=file_type, file_size=size_limit
+        presigned_url = presigned_post_for_asset(
+            request=request, asset=asset, file_type=file_type, file_size=size_limit
         )
 
         return Response(
@@ -148,7 +138,7 @@ class CycleFileAPI(BaseViewSet):
         # 物理删除对象，避免 MinIO 累积孤儿
         try:
             storage = S3Storage(request=request)
-            storage.delete_files(object_names=[asset.asset.name])
+            storage.delete_files(object_names=[asset.storage_key])
         except Exception:
             pass
         return Response(status=status.HTTP_200_OK)
@@ -169,7 +159,7 @@ class CycleFileAPI(BaseViewSet):
 
         storage = S3Storage(request=request)
         signed_url = storage.generate_presigned_url(
-            object_name=asset.asset.name,
+            object_name=asset.storage_key,
             disposition="attachment",
             filename=(asset.attributes or {}).get("name"),
         )

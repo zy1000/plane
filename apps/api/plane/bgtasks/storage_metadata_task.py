@@ -19,7 +19,7 @@ def get_asset_object_metadata(asset_id):
         # Create an instance of the S3 storage
         storage = S3Storage()
         # Get the storage
-        asset.storage_metadata = storage.get_object_metadata(object_name=asset.asset.name)
+        asset.storage_metadata = storage.get_object_metadata(object_name=asset.storage_key)
         # Save the asset
         asset.save(update_fields=["storage_metadata"])
         return

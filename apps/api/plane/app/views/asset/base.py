@@ -17,6 +17,20 @@ from plane.db.models import FileAsset, Workspace, File
 from plane.app.serializers import FileAssetSerializer
 
 
+def _resolve_asset_by_key(asset_key: str, *, workspace_id=None, created_by=None):
+    """按完整 storage_key 反查 FileAsset。
+
+    storage_key 现在由 ``FilePath`` 树 + ``FileAsset.filename`` 派生，无法直接做
+    ``asset=`` 等值过滤。该旧接口仅供少量历史调用方使用，做一次性反查即可。
+    """
+    qs = FileAsset.objects.all()
+    if workspace_id is not None:
+        qs = qs.filter(workspace_id=workspace_id)
+    if created_by is not None:
+        qs = qs.filter(created_by=created_by)
+    return [fa for fa in qs if fa.storage_key == asset_key]
+
+
 class FileAssetEndpoint(BaseAPIView):
     parser_classes = (MultiPartParser, FormParser, JSONParser)
 
@@ -26,8 +40,8 @@ class FileAssetEndpoint(BaseAPIView):
 
     def get(self, request, workspace_id, asset_key):
         asset_key = str(workspace_id) + "/" + asset_key
-        files = FileAsset.objects.filter(asset=asset_key)
-        if files.exists():
+        files = _resolve_asset_by_key(asset_key, workspace_id=workspace_id)
+        if files:
             serializer = FileAssetSerializer(files, context={"request": request}, many=True)
             return Response({"data": serializer.data, "status": True}, status=status.HTTP_200_OK)
         else:
@@ -47,7 +61,10 @@ class FileAssetEndpoint(BaseAPIView):
 
     def delete(self, request, workspace_id, asset_key):
         asset_key = str(workspace_id) + "/" + asset_key
-        file_asset = FileAsset.objects.get(asset=asset_key)
+        files = _resolve_asset_by_key(asset_key, workspace_id=workspace_id)
+        if not files:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        file_asset = files[0]
         file_asset.is_deleted = True
         file_asset.save(update_fields=["is_deleted"])
         return Response(status=status.HTTP_204_NO_CONTENT)
@@ -56,7 +73,10 @@ class FileAssetEndpoint(BaseAPIView):
 class FileAssetViewSet(BaseViewSet):
     def restore(self, request, workspace_id, asset_key):
         asset_key = str(workspace_id) + "/" + asset_key
-        file_asset = FileAsset.objects.get(asset=asset_key)
+        files = _resolve_asset_by_key(asset_key, workspace_id=workspace_id)
+        if not files:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        file_asset = files[0]
         file_asset.is_deleted = False
         file_asset.save(update_fields=["is_deleted"])
         return Response(status=status.HTTP_204_NO_CONTENT)
@@ -66,8 +86,8 @@ class UserAssetsEndpoint(BaseAPIView):
     parser_classes = (MultiPartParser, FormParser)
 
     def get(self, request, asset_key):
-        files = FileAsset.objects.filter(asset=asset_key, created_by=request.user)
-        if files.exists():
+        files = _resolve_asset_by_key(asset_key, created_by=request.user)
+        if files:
             serializer = FileAssetSerializer(files, context={"request": request})
             return Response({"data": serializer.data, "status": True}, status=status.HTTP_200_OK)
         else:
@@ -84,7 +104,10 @@ class UserAssetsEndpoint(BaseAPIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     def delete(self, request, asset_key):
-        file_asset = FileAsset.objects.get(asset=asset_key, created_by=request.user)
+        files = _resolve_asset_by_key(asset_key, created_by=request.user)
+        if not files:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        file_asset = files[0]
         file_asset.is_deleted = True
         file_asset.save(update_fields=["is_deleted"])
         return Response(status=status.HTTP_204_NO_CONTENT)

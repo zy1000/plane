@@ -389,16 +389,20 @@ class IssueLink(ProjectBaseModel):
 
 
 def get_upload_path(instance, filename):
-    from plane.utils.asset_path import build_asset_key
+    """旧 IssueAttachment FileField 上传路径（已不再被新代码使用，仅保留兼容）。
 
-    return build_asset_key(
-        entity_type="ISSUE_ATTACHMENT",
-        filename=filename,
-        workspace_id=str(instance.workspace_id) if getattr(instance, "workspace_id", None) else None,
-        project_id=str(instance.project_id) if getattr(instance, "project_id", None) else None,
-        issue_id=str(instance.issue_id) if getattr(instance, "issue_id", None) else None,
-        asset_id=str(instance.id) if getattr(instance, "id", None) else None,
-    )
+    新数据全部走 ``FileAsset`` + ``FilePath`` 派生，请勿在新代码中创建 IssueAttachment 行。
+    """
+    from plane.utils.asset_path import _sanitize_filename
+
+    parts = [
+        str(getattr(instance, "workspace_id", "") or ""),
+        str(getattr(instance, "project_id", "") or ""),
+        "issues",
+        str(getattr(instance, "issue_id", "") or ""),
+        _sanitize_filename(filename),
+    ]
+    return "/".join(p for p in parts if p)
 
 
 def file_size(value):

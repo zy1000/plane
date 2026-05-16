@@ -15,7 +15,7 @@ from rest_framework.response import Response
 from plane.bgtasks.storage_metadata_task import get_asset_object_metadata
 from plane.db.models import DeployBoard, FileAsset
 from plane.settings.storage import S3Storage
-from plane.utils.asset_path import build_asset_key, scope_kwargs_from_identifier
+from plane.utils.asset_upload import presigned_post_for_asset
 
 # Module imports
 from .base import BaseAPIView
@@ -59,7 +59,7 @@ class EntityAssetEndpoint(BaseAPIView):
         # Get the presigned URL
         storage = S3Storage(request=request)
         # Generate a presigned URL to share an S3 object
-        signed_url = storage.generate_presigned_url(object_name=asset.asset.name)
+        signed_url = storage.generate_presigned_url(object_name=asset.storage_key)
         # Redirect to the signed URL
         return HttpResponseRedirect(signed_url)
 
@@ -101,19 +101,9 @@ class EntityAssetEndpoint(BaseAPIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # asset key
-        asset_key = build_asset_key(
-            entity_type=entity_type,
-            filename=name,
-            workspace_id=str(deploy_board.workspace_id),
-            project_id=str(deploy_board.project_id) if deploy_board.project_id else None,
-            **scope_kwargs_from_identifier(entity_type, entity_identifier),
-        )
-
-        # Create a File Asset
+        # Create a File Asset（save() 钩子按 entity_type+FK 自动 resolve path 与 filename）
         asset = FileAsset.objects.create(
             attributes={"name": name, "type": type, "size": size},
-            asset=asset_key,
             size=size,
             workspace=deploy_board.workspace,
             created_by=request.user,
@@ -122,10 +112,9 @@ class EntityAssetEndpoint(BaseAPIView):
             comment_id=entity_identifier,
         )
 
-        # Get the presigned URL
-        storage = S3Storage(request=request)
-        # Generate a presigned URL to share an S3 object
-        presigned_url = storage.generate_presigned_post(object_name=asset_key, file_type=type, file_size=size)
+        presigned_url = presigned_post_for_asset(
+            request=request, asset=asset, file_type=type, file_size=size
+        )
         # Return the presigned URL
         return Response(
             {
@@ -227,8 +216,8 @@ class EntityBulkAssetEndpoint(BaseAPIView):
         if asset.entity_type == FileAsset.EntityTypeContext.COMMENT_DESCRIPTION:
             # update the attributes
             assets.update(comment_id=entity_id)
-            # 与 ProjectBulkAssetEndpoint 保持一致：把 temp/ 中的对象搬到正式路径
-            from plane.app.views.asset.v2 import _migrate_temp_assets_to_final_path
+            # 与 ProjectBulkAssetEndpoint 保持一致：把 _temp 节点下的对象搬到正式路径
+            from plane.app.views.asset.v2 import _rebind_assets_to_final_path
 
             refreshed_assets = list(
                 FileAsset.objects.filter(
@@ -237,10 +226,5 @@ class EntityBulkAssetEndpoint(BaseAPIView):
                     project_id=deploy_board.project_id,
                 )
             )
-            _migrate_temp_assets_to_final_path(
-                refreshed_assets,
-                request=request,
-                comment_id=str(entity_id),
-                project_id=str(deploy_board.project_id) if deploy_board.project_id else None,
-            )
+            _rebind_assets_to_final_path(refreshed_assets, request=request)
         return Response(status=status.HTTP_204_NO_CONTENT)

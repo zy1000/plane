@@ -7,7 +7,6 @@
 import type { FC } from "react";
 import { useState } from "react";
 import { observer } from "mobx-react";
-import Link from "next/link";
 import { AlertCircle } from "lucide-react";
 import { CloseIcon } from "@plane/propel/icons";
 // ui
@@ -16,7 +15,6 @@ import {
   convertBytesToSize,
   getFileExtension,
   getFileName,
-  getFileURL,
   renderFormattedDate,
   truncateText,
 } from "@plane/utils";
@@ -56,7 +54,6 @@ export const IssueAttachmentsDetail = observer(function IssueAttachmentsDetail(p
   const fileName = getFileName(attachment?.attributes.name ?? "");
   const fileExtension = getFileExtension(attachment?.asset_url ?? "");
   const fileIcon = getFileIcon(fileExtension, 28);
-  const fileURL = getFileURL(attachment?.asset_url ?? "");
   // hooks
   const { isMobile } = usePlatformOS();
 
@@ -73,7 +70,13 @@ export const IssueAttachmentsDetail = observer(function IssueAttachmentsDetail(p
         />
       )}
       <div className="flex h-[60px] items-center justify-between gap-1 rounded-md border-[2px] border-subtle bg-surface-1 px-4 py-2 text-13">
-        <Link href={fileURL ?? ""} target="_blank" rel="noopener noreferrer">
+        <button
+          type="button"
+          className="text-left"
+          onClick={() => {
+            void attachmentHelpers.operations.download(attachmentId);
+          }}
+        >
           <div className="flex items-center gap-3">
             <div className="h-7 w-7">{fileIcon}</div>
             <div className="flex flex-col gap-1">
@@ -99,7 +102,7 @@ export const IssueAttachmentsDetail = observer(function IssueAttachmentsDetail(p
               </div>
             </div>
           </div>
-        </Link>
+        </button>
 
         {!disabled && (
           <button type="button" onClick={() => setIsDeleteIssueAttachmentModalOpen(true)}>

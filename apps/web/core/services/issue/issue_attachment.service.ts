@@ -78,6 +78,21 @@ export class IssueAttachmentService extends APIService {
       });
   }
 
+  async downloadIssueAttachment(
+    workspaceSlug: string,
+    projectId: string,
+    issueId: string,
+    attachmentId: string
+  ): Promise<string> {
+    return this.get(
+      `/api/assets/v2/workspaces/${workspaceSlug}/projects/${projectId}/${this.serviceType}/${issueId}/attachments/${attachmentId}/`
+    )
+      .then((response) => response?.data?.download_url as string)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
   async deleteIssueAttachment(
     workspaceSlug: string,
     projectId: string,

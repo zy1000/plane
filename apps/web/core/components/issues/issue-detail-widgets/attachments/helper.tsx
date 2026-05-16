@@ -18,6 +18,7 @@ import type { TAttachmentUploadStatus } from "@/store/issue/issue-details/attach
 export type TAttachmentOperations = {
   create: (file: File) => Promise<void>;
   remove: (attachmentId: string) => Promise<void>;
+  download: (attachmentId: string) => Promise<void>;
 };
 
 export type TAttachmentSnapshot = {
@@ -80,7 +81,7 @@ export const useAttachmentOperations = (
 ): TAttachmentHelpers => {
   const { t } = useTranslation();
   const {
-    attachment: { createAttachment, removeAttachment, getAttachmentsUploadStatusByIssueId },
+    attachment: { createAttachment, removeAttachment, downloadAttachment, getAttachmentsUploadStatusByIssueId },
   } = useIssueDetail(issueServiceType);
 
   const attachmentOperations: TAttachmentOperations = useMemo(
@@ -112,8 +113,22 @@ export const useAttachmentOperations = (
           });
         }
       },
+      download: async (attachmentId) => {
+        try {
+          if (!workspaceSlug || !projectId || !issueId) throw new Error("Missing required fields");
+          const downloadUrl = await downloadAttachment(workspaceSlug, projectId, issueId, attachmentId);
+          if (!downloadUrl) throw new Error("Missing download URL");
+          window.open(downloadUrl, "_blank", "noopener,noreferrer");
+        } catch (error) {
+          setToast({
+            message: t("attachment.error"),
+            type: TOAST_TYPE.ERROR,
+            title: t("toast.error"),
+          });
+        }
+      },
     }),
-    [workspaceSlug, projectId, issueId, createAttachment, removeAttachment, t]
+    [workspaceSlug, projectId, issueId, createAttachment, removeAttachment, downloadAttachment, t]
   );
   const attachmentsUploadStatus = getAttachmentsUploadStatusByIssueId(issueId);
 

@@ -28,7 +28,7 @@ from plane.app.serializers import TestPlanCreateUpdateSerializer, TestCaseReposi
     TestCaseRepositoryDetailSerializer, CycleSerializer
 from plane.app.permissions import allow_permission, ROLE, allow_fine_permission, PermissionKey
 from plane.settings.storage import S3Storage
-from plane.utils.asset_path import build_asset_key
+from plane.utils.asset_upload import presigned_post_for_asset
 from plane.bgtasks.storage_metadata_task import get_asset_object_metadata
 from django.conf import settings
 from django.http import HttpResponseRedirect, FileResponse, StreamingHttpResponse
@@ -1094,22 +1094,10 @@ class CaseAttachmentV2Endpoint(BaseAPIView):
         # 注：测试用例附件不再限制 MIME 类型。
 
         workspace = Workspace.objects.get(slug=slug)
-        case_repository_id = (
-            TestCase.objects.filter(pk=case_id).values_list("repository_id", flat=True).first()
-        )
-        asset_key = build_asset_key(
-            entity_type=FileAsset.EntityTypeContext.CASE_ATTACHMENT,
-            filename=name,
-            workspace_id=str(workspace.id),
-            project_id=str(project_id),
-            case_id=str(case_id),
-            case_repository_id=str(case_repository_id) if case_repository_id else None,
-        )
         size_limit = min(size, settings.FILE_SIZE_LIMIT)
 
         asset = FileAsset.objects.create(
             attributes={"name": name, "type": type, "size": size_limit},
-            asset=asset_key,
             size=size_limit,
             workspace_id=workspace.id,
             created_by=request.user,
@@ -1118,8 +1106,9 @@ class CaseAttachmentV2Endpoint(BaseAPIView):
             entity_type=FileAsset.EntityTypeContext.CASE_ATTACHMENT,
         )
 
-        storage = S3Storage(request=request)
-        presigned_url = storage.generate_presigned_post(object_name=asset_key, file_type=type, file_size=size_limit)
+        presigned_url = presigned_post_for_asset(
+            request=request, asset=asset, file_type=type, file_size=size_limit
+        )
 
         return Response(
             {
@@ -1147,7 +1136,7 @@ class CaseAttachmentV2Endpoint(BaseAPIView):
                                 status=status.HTTP_400_BAD_REQUEST)
 
             storage = S3Storage(request=request)
-            s3_resp = storage.s3_client.get_object(Bucket=storage.aws_storage_bucket_name, Key=str(asset.asset.name))
+            s3_resp = storage.s3_client.get_object(Bucket=storage.aws_storage_bucket_name, Key=asset.storage_key)
             body = s3_resp.get("Body")
             content_type = s3_resp.get("ContentType") or asset.attributes.get("type") or "application/octet-stream"
             resp = StreamingHttpResponse(body, content_type=content_type)

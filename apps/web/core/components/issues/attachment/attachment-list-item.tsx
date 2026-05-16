@@ -14,7 +14,7 @@ import type { TIssueServiceType } from "@plane/types";
 import { EIssueServiceType } from "@plane/types";
 // ui
 import { CustomMenu } from "@plane/ui";
-import { convertBytesToSize, getFileExtension, getFileName, getFileURL, renderFormattedDate } from "@plane/utils";
+import { convertBytesToSize, getFileExtension, getFileName, renderFormattedDate } from "@plane/utils";
 // components
 //
 import { ButtonAvatars } from "@/components/dropdowns/member/avatar";
@@ -29,12 +29,13 @@ type TIssueAttachmentsListItem = {
   attachmentId: string;
   disabled?: boolean;
   issueServiceType?: TIssueServiceType;
+  onDownload: (attachmentId: string) => Promise<void>;
 };
 
 export const IssueAttachmentsListItem = observer(function IssueAttachmentsListItem(props: TIssueAttachmentsListItem) {
   const { t } = useTranslation();
   // props
-  const { attachmentId, disabled, issueServiceType = EIssueServiceType.ISSUES } = props;
+  const { attachmentId, disabled, issueServiceType = EIssueServiceType.ISSUES, onDownload } = props;
   // store hooks
   const { getUserDetails } = useMember();
   const {
@@ -46,7 +47,6 @@ export const IssueAttachmentsListItem = observer(function IssueAttachmentsListIt
   const fileName = getFileName(attachment?.attributes.name ?? "");
   const fileExtension = getFileExtension(attachment?.attributes.name ?? "");
   const fileIcon = getFileIcon(fileExtension, 18);
-  const fileURL = getFileURL(attachment?.asset_url ?? "");
   // hooks
   const { isMobile } = usePlatformOS();
 
@@ -58,7 +58,7 @@ export const IssueAttachmentsListItem = observer(function IssueAttachmentsListIt
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
-          window.open(fileURL, "_blank");
+          void onDownload(attachmentId);
         }}
       >
         <div className="group flex h-11 items-center justify-between gap-3 pr-2 pl-9 hover:bg-surface-2">

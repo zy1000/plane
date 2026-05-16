@@ -750,7 +750,7 @@ class IssueAttachmentLiteSerializer(DynamicBaseSerializer):
         model = FileAsset
         fields = [
             "id",
-            "asset",
+            "filename",
             "attributes",
             # "issue_id",
             "created_by",

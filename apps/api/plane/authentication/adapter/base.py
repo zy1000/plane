@@ -26,7 +26,7 @@ from plane.bgtasks.user_activation_email_task import user_activation_email
 from plane.db.models import FileAsset, Profile, User, WorkspaceMemberInvite
 from plane.license.utils.instance_value import get_configuration_value
 from plane.settings.storage import S3Storage
-from plane.utils.asset_path import build_asset_key
+from plane.utils.asset_upload import build_asset_metadata
 from plane.utils.exception_logger import log_exception
 from plane.utils.host import base_host
 from plane.utils.ip_address import get_client_ip
@@ -188,44 +188,48 @@ class Adapter:
             content = b"".join(chunks)
             file_size = len(content)
 
-            # 用统一的 asset key 生成器，落到 user/<id>/avatar/ 目录
-            filename = build_asset_key(
-                entity_type=FileAsset.EntityTypeContext.USER_AVATAR,
-                filename=f"{self.provider}-avatar.{extension}",
-                user_id=str(user.id),
-            )
-
             storage = S3Storage(request=self.request)
 
             # Create file-like object
             file_obj = BytesIO(response.content)
             file_obj.seek(0)
 
-            # Upload using boto3 directly
-            upload_success = storage.upload_file(
-                file_obj=file_obj, object_name=filename, content_type=content_type
-            )
-            if not upload_success:
-                return None
-
-            # Get storage metadata
-            storage_metadata = storage.get_object_metadata(object_name=filename)
-
-            # Create FileAsset record
+            # 先创建 FileAsset：save() 钩子按 USER_AVATAR + user 自动 resolve user/<id> 路径
+            display_name = f"{self.provider}-avatar.{extension}"
             file_asset = FileAsset.objects.create(
                 attributes={
-                    "name": f"{self.provider}-avatar.{extension}",
+                    "name": display_name,
                     "type": content_type,
                     "size": file_size,
                 },
-                asset=filename,
                 size=file_size,
                 user=user,
                 created_by=user,
                 entity_type=FileAsset.EntityTypeContext.USER_AVATAR,
-                is_uploaded=True,
-                storage_metadata=storage_metadata,
             )
+
+            object_name = file_asset.storage_key
+            metadata = build_asset_metadata(file_asset, original_name=display_name)
+            extra_args = {}
+            if metadata:
+                extra_args["Metadata"] = metadata
+
+            upload_success = storage.upload_file(
+                file_obj=file_obj,
+                object_name=object_name,
+                content_type=content_type,
+                extra_args=extra_args,
+            )
+            if not upload_success:
+                file_asset.delete()
+                return None
+
+            # Get storage metadata
+            storage_metadata = storage.get_object_metadata(object_name=object_name)
+
+            file_asset.is_uploaded = True
+            file_asset.storage_metadata = storage_metadata
+            file_asset.save(update_fields=["is_uploaded", "storage_metadata", "updated_at"])
 
             return file_asset
 
@@ -256,7 +260,7 @@ class Adapter:
             if user.avatar_asset:
                 asset = FileAsset.objects.get(pk=user.avatar_asset_id)
                 storage = S3Storage(request=self.request)
-                storage.delete_files(object_names=[asset.asset.name])
+                storage.delete_files(object_names=[asset.storage_key])
 
                 # Delete the user avatar
                 asset.delete()

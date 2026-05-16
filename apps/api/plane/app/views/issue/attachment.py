@@ -29,7 +29,7 @@ from plane.app.permissions import (
 from plane.settings.storage import S3Storage
 from plane.bgtasks.storage_metadata_task import get_asset_object_metadata
 from plane.utils.host import base_host
-from plane.utils.asset_path import build_asset_key
+from plane.utils.asset_upload import presigned_post_for_asset
 
 
 class IssueAttachmentEndpoint(BaseAPIView):
@@ -69,7 +69,13 @@ class IssueAttachmentEndpoint(BaseAPIView):
         ).first()
         if not issue_attachment:
             return Response(status=status.HTTP_404_NOT_FOUND)
-        issue_attachment.asset.delete(save=False)
+        # 物理删除对象存储里的文件，避免 MinIO 累积孤儿
+        try:
+            object_key = issue_attachment.storage_key
+            if object_key:
+                S3Storage(request=request).delete_files(object_names=[object_key])
+        except Exception:
+            pass
         issue_attachment.delete()
         issue_activity.delay(
             type="attachment.activity.deleted",
@@ -107,22 +113,12 @@ class IssueAttachmentV2Endpoint(BaseAPIView):
         # Get the workspace
         workspace = Workspace.objects.get(slug=slug)
 
-        # asset key
-        asset_key = build_asset_key(
-            entity_type=FileAsset.EntityTypeContext.ISSUE_ATTACHMENT,
-            filename=name,
-            workspace_id=str(workspace.id),
-            project_id=str(project_id),
-            issue_id=str(issue_id),
-        )
-
         # Get the size limit
         size_limit = min(size, settings.FILE_SIZE_LIMIT)
 
-        # Create a File Asset
+        # Create a File Asset（save() 钩子自动生成 path/filename / storage_key）
         asset = FileAsset.objects.create(
             attributes={"name": name, "type": type, "size": size_limit},
-            asset=asset_key,
             size=size_limit,
             workspace_id=workspace.id,
             created_by=request.user,
@@ -131,12 +127,8 @@ class IssueAttachmentV2Endpoint(BaseAPIView):
             entity_type=FileAsset.EntityTypeContext.ISSUE_ATTACHMENT,
         )
 
-        # Get the presigned URL
-        storage = S3Storage(request=request)
-
-        # Generate a presigned URL to share an S3 object
-        presigned_url = storage.generate_presigned_post(
-            object_name=asset_key, file_type=type, file_size=size_limit
+        presigned_url = presigned_post_for_asset(
+            request=request, asset=asset, file_type=type, file_size=size_limit
         )
 
         # Return the presigned URL
@@ -192,7 +184,7 @@ class IssueAttachmentV2Endpoint(BaseAPIView):
 
             storage = S3Storage(request=request)
             presigned_url = storage.generate_presigned_url(
-                object_name=asset.asset.name,
+                object_name=asset.storage_key,
                 disposition="attachment",
                 filename=asset.attributes.get("name"),
             )

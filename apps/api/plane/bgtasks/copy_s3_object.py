@@ -12,7 +12,7 @@ from django.conf import settings
 
 # Module imports
 from plane.db.models import FileAsset, Page, Issue
-from plane.utils.asset_path import build_asset_key, scope_kwargs_from_identifier
+from plane.utils.asset_upload import build_asset_metadata
 from plane.utils.exception_logger import log_exception
 from plane.settings.storage import S3Storage
 from celery import shared_task
@@ -92,20 +92,13 @@ def copy_assets(entity, entity_identifier, project_id, asset_ids, user_id):
     original_assets = FileAsset.objects.filter(workspace=workspace, project_id=project_id, id__in=asset_ids)
 
     for original_asset in original_assets:
-        destination_key = build_asset_key(
-            entity_type=original_asset.entity_type,
-            filename=original_asset.attributes.get("name") or "file",
-            workspace_id=str(workspace.id),
-            project_id=str(project_id) if project_id else None,
-            **scope_kwargs_from_identifier(original_asset.entity_type, entity_identifier),
-        )
+        # save() 钩子按 entity_type + 新 entity_identifier 自动落 path/filename
         duplicated_asset = FileAsset.objects.create(
             attributes={
                 "name": original_asset.attributes.get("name"),
                 "type": original_asset.attributes.get("type"),
                 "size": original_asset.attributes.get("size"),
             },
-            asset=destination_key,
             size=original_asset.size,
             workspace=workspace,
             created_by_id=user_id,
@@ -114,7 +107,12 @@ def copy_assets(entity, entity_identifier, project_id, asset_ids, user_id):
             storage_metadata=original_asset.storage_metadata,
             **get_entity_id_field(original_asset.entity_type, entity_identifier),
         )
-        storage.copy_object(original_asset.asset, destination_key)
+        storage.copy_object(
+            original_asset.storage_key,
+            duplicated_asset.storage_key,
+            metadata=build_asset_metadata(duplicated_asset),
+            content_type=original_asset.attributes.get("type"),
+        )
         duplicated_assets.append(
             {
                 "new_asset_id": str(duplicated_asset.id),

@@ -22,10 +22,10 @@ from plane.utils.paginator import CustomPaginator
 from plane.utils.response import list_response
 from plane.utils.host import base_host
 from plane.utils.asset_path import (
-    build_asset_key,
     build_filestore_version_key,
     filestore_version_prefix,
 )
+from plane.utils.asset_upload import presigned_post_for_asset
 
 FILESTORE_ENTITY_TYPE = FileAsset.EntityTypeContext.PROJECT_FILESTORE
 
@@ -199,18 +199,11 @@ class FilestoreAssetAPIView(BaseAPIView):
             return Response({"error": "name is required"}, status=status.HTTP_400_BAD_REQUEST)
 
         workspace = Workspace.objects.get(slug=slug)
-        asset_key = build_asset_key(
-            entity_type=FILESTORE_ENTITY_TYPE,
-            filename=name,
-            workspace_id=str(workspace.id),
-            project_id=str(project_id),
-        )
         # size_limit = min(size, settings.FILE_SIZE_LIMIT)
         size_limit = size
 
         asset = FileAsset.objects.create(
             attributes={"name": name, "type": file_type, "size": size_limit},
-            asset=asset_key,
             size=size_limit,
             workspace_id=workspace.id,
             created_by=request.user,
@@ -218,9 +211,8 @@ class FilestoreAssetAPIView(BaseAPIView):
             entity_type=FILESTORE_ENTITY_TYPE,
         )
 
-        storage = S3Storage(request=request)
-        presigned_url = storage.generate_presigned_post(
-            object_name=asset_key, file_type=file_type, file_size=size_limit
+        presigned_url = presigned_post_for_asset(
+            request=request, asset=asset, file_type=file_type, file_size=size_limit
         )
 
         return Response(
@@ -296,7 +288,7 @@ class FilestoreAssetDownloadAPIView(BaseAPIView):
 
         storage = S3Storage(request=request)
         signed_url = storage.generate_presigned_url(
-            object_name=asset.asset.name,
+            object_name=asset.storage_key,
             disposition=disposition,
             filename=asset.attributes.get("name") if asset.attributes else None,
         )
@@ -405,7 +397,7 @@ class FilestoreAssetOnlyOfficeDownloadProxyAPIView(BaseAPIView):
         )
 
         storage = S3Storage()
-        obj = storage.get_object(object_name=asset.asset.name)
+        obj = storage.get_object(object_name=asset.storage_key)
         if not obj or "Body" not in obj:
             return Response({"error": "file not found"}, status=status.HTTP_404_NOT_FOUND)
 
@@ -478,7 +470,7 @@ class FilestoreAssetOnlyOfficeCallbackAPIView(BaseAPIView):
             version_record = None
             try:
                 new_version_key = _version_key(asset)
-                storage.copy_object(object_name=asset.asset.name, new_object_name=new_version_key)
+                storage.copy_object(object_name=asset.storage_key, new_object_name=new_version_key)
                 version_record = {
                     "id": hashlib.sha256(new_version_key.encode("utf-8")).hexdigest()[:16],
                     "key": new_version_key,
@@ -504,13 +496,13 @@ class FilestoreAssetOnlyOfficeCallbackAPIView(BaseAPIView):
                     )
                     ok = storage.upload_file(
                         file_obj=response.raw,
-                        object_name=asset.asset.name,
+                        object_name=asset.storage_key,
                         content_type=content_type,
                     )
                     if not ok:
                         raise RuntimeError("upload to storage failed")
 
-                    storage_metadata = storage.get_object_metadata(object_name=asset.asset.name)
+                    storage_metadata = storage.get_object_metadata(object_name=asset.storage_key)
                     if storage_metadata:
                         asset.storage_metadata = storage_metadata
                         asset.size = float(storage_metadata.get("ContentLength") or asset.size or 0)
@@ -614,10 +606,10 @@ class FilestoreAssetOnlyOfficeRestoreVersionAPIView(BaseAPIView):
         storage = S3Storage()
         try:
             snapshot_key = _version_key(asset)
-            storage.copy_object(object_name=asset.asset.name, new_object_name=snapshot_key)
-            storage.copy_object(object_name=version_key, new_object_name=asset.asset.name)
+            storage.copy_object(object_name=asset.storage_key, new_object_name=snapshot_key)
+            storage.copy_object(object_name=version_key, new_object_name=asset.storage_key)
 
-            storage_metadata = storage.get_object_metadata(object_name=asset.asset.name)
+            storage_metadata = storage.get_object_metadata(object_name=asset.storage_key)
             if storage_metadata:
                 asset.storage_metadata = storage_metadata
                 asset.size = float(storage_metadata.get("ContentLength") or asset.size or 0)

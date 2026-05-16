@@ -55,7 +55,7 @@ export const IssueAttachmentItemList = observer(function IssueAttachmentItemList
     fetchActivities,
   } = useIssueDetail(issueServiceType);
   const { operations: attachmentOperations, snapshot: attachmentSnapshot } = attachmentHelpers;
-  const { create: createAttachment } = attachmentOperations;
+  const { create: createAttachment, download: downloadAttachment } = attachmentOperations;
   const { uploadStatus } = attachmentSnapshot;
   // file size
   const { maxFileSize } = useFileSize();
@@ -149,6 +149,7 @@ export const IssueAttachmentItemList = observer(function IssueAttachmentItemList
                 attachmentId={attachmentId}
                 disabled={disabled}
                 issueServiceType={issueServiceType}
+                onDownload={downloadAttachment}
               />
             ))}
           </div>

@@ -27,6 +27,12 @@ export interface IIssueAttachmentStoreActions {
   // actions
   addAttachments: (issueId: string, attachments: TIssueAttachment[]) => void;
   fetchAttachments: (workspaceSlug: string, projectId: string, issueId: string) => Promise<TIssueAttachment[]>;
+  downloadAttachment: (
+    workspaceSlug: string,
+    projectId: string,
+    issueId: string,
+    attachmentId: string
+  ) => Promise<string>;
   createAttachment: (
     workspaceSlug: string,
     projectId: string,
@@ -77,6 +83,7 @@ export class IssueAttachmentStore implements IIssueAttachmentStore {
       // actions
       addAttachments: action.bound,
       fetchAttachments: action,
+      downloadAttachment: action,
       createAttachment: action,
       removeAttachment: action,
     });
@@ -132,6 +139,13 @@ export class IssueAttachmentStore implements IIssueAttachmentStore {
     this.addAttachments(issueId, response);
     return response;
   };
+
+  downloadAttachment = async (
+    workspaceSlug: string,
+    projectId: string,
+    issueId: string,
+    attachmentId: string
+  ) => this.issueAttachmentService.downloadIssueAttachment(workspaceSlug, projectId, issueId, attachmentId);
 
   private debouncedUpdateProgress = debounce((issueId: string, tempId: string, progress: number) => {
     runInAction(() => {

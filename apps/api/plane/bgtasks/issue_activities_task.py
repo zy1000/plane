@@ -1307,7 +1307,7 @@ def create_attachment_activity(
             verb="created",
             actor_id=actor_id,
             field="attachment",
-            new_value=current_instance.get("asset", ""),
+            new_value=current_instance.get("filename") or current_instance.get("attributes", {}).get("name", ""),
             new_identifier=current_instance.get("id", None),
             epoch=epoch,
         )
