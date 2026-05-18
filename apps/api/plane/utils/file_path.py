@@ -21,8 +21,9 @@ bulk 绑定接口会通过 :func:`rebind_asset_to_path` 把对象 copy 到正式
 
 - ``USER_AVATAR`` / ``USER_COVER``  → ``UserRoot('用户') -> User``
 - ``WORKSPACE_LOGO``                → ``Workspace`` 节点本身
-- ``PROJECT_COVER`` / ``PROJECT_DESCRIPTION`` / ``PROJECT_FILESTORE`` / ``CASE_MINDMAP``
+- ``PROJECT_COVER`` / ``PROJECT_DESCRIPTION`` / ``CASE_MINDMAP``
                                     → ``Workspace -> Project``（无中间分类层）
+- ``PROJECT_FILESTORE``             → ``Workspace -> Project -> filestore``（固定根目录）
 - ``ISSUE_ATTACHMENT`` / ``ISSUE_DESCRIPTION`` / ``COMMENT_DESCRIPTION``
                                     → ``Workspace -> Project -> 工作项 -> Issue``
 - ``PAGE_DESCRIPTION``              → ``Workspace -> Project -> 页面 -> Page``
@@ -41,12 +42,13 @@ from typing import List, Optional
 
 from django.db import IntegrityError, transaction
 
-from plane.utils.asset_path import CATEGORY_SLUG_MAP, ENTITY_TO_CATEGORY
+from plane.utils.asset_path import CATEGORY_SLUG_MAP, ENTITY_TO_CATEGORY, _sanitize_filename
 
 
 USER_ROOT_NAME = "用户"
 USER_ROOT_SLUG = "user"
 TEMP_CATEGORY_NAME = "_temp"
+FILESTORE_ROOT_NAME = "filestore"
 
 
 class _Resolver:
@@ -193,10 +195,19 @@ class _Resolver:
         if et in (
             "PROJECT_COVER",
             "PROJECT_DESCRIPTION",
-            "PROJECT_FILESTORE",
             "CASE_MINDMAP",
         ):
             return proj_node
+
+        # 项目文件库：固定挂在 ``Workspace -> Project -> FILESTORE_ROOT`` 下；
+        # 该层在 MinIO key 中映射为固定段 ``filestore``，便于页面限制可见根路径。
+        if et == "PROJECT_FILESTORE":
+            return self._get_or_create_node(
+                parent=proj_node,
+                entity_type="FILESTORE_ROOT",
+                entity_id=project.pk,
+                display_name=FILESTORE_ROOT_NAME,
+            )
 
         # 业务实体节点：先挂分类节点，再挂业务节点
         cat_node = self._category_node(parent=proj_node, entity_type=et)
@@ -407,6 +418,11 @@ def _key_segment_for(node) -> str:
 
     if et == "USER_ROOT":
         return USER_ROOT_SLUG
+    if et == "FILESTORE_ROOT":
+        return FILESTORE_ROOT_NAME
+    if et == "USER_FOLDER":
+        folder_name = _sanitize_filename(getattr(node, "name", "") or "")
+        return folder_name or "folder"
     if et in CATEGORY_SLUG_MAP:
         return CATEGORY_SLUG_MAP[et][1]
     # WORKSPACE / PROJECT / ISSUE / PAGE / CYCLE / RELEASE / DRAFT_ISSUE /

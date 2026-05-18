@@ -12,6 +12,7 @@ from plane.app.views.filestore import (
     FilestoreAssetOnlyOfficeStatusAPIView,
     FilestoreAssetOnlyOfficeVersionsAPIView,
 )
+from plane.app.views.filestore_explorer import FilestoreExplorerViewSet
 
 urlpatterns = [
     path(
@@ -63,5 +64,72 @@ urlpatterns = [
         "workspaces/<str:slug>/projects/<uuid:project_id>/filestore/assets/<uuid:pk>/onlyoffice/forcesave/",
         FilestoreAssetOnlyOfficeForceSaveAPIView.as_view(),
         name="project-filestore-asset-onlyoffice-forcesave",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/filestore/explorer/ensure-root/",
+        FilestoreExplorerViewSet.as_view({"post": "ensure_root"}),
+        name="project-filestore-explorer-ensure-root",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/filestore/explorer/list/",
+        FilestoreExplorerViewSet.as_view({"get": "list_folder"}),
+        name="project-filestore-explorer-list",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/filestore/explorer/tree/",
+        FilestoreExplorerViewSet.as_view({"get": "folder_tree"}),
+        name="project-filestore-explorer-tree",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/filestore/explorer/breadcrumb/",
+        FilestoreExplorerViewSet.as_view({"get": "breadcrumb"}),
+        name="project-filestore-explorer-breadcrumb",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/filestore/explorer/folder-stats/",
+        FilestoreExplorerViewSet.as_view({"get": "folder_stats"}),
+        name="project-filestore-explorer-folder-stats",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/filestore/explorer/folder/",
+        FilestoreExplorerViewSet.as_view({"post": "create_folder"}),
+        name="project-filestore-explorer-folder-create",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/filestore/explorer/folder/<int:folder_id>/",
+        FilestoreExplorerViewSet.as_view(
+            {"patch": "rename_folder", "delete": "delete_folder"}
+        ),
+        name="project-filestore-explorer-folder-detail",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/filestore/explorer/upload/",
+        FilestoreExplorerViewSet.as_view({"post": "upload"}),
+        name="project-filestore-explorer-upload",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/filestore/explorer/<uuid:asset_id>/uploaded/",
+        FilestoreExplorerViewSet.as_view({"patch": "mark_uploaded"}),
+        name="project-filestore-explorer-mark-uploaded",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/filestore/explorer/batch-delete/",
+        FilestoreExplorerViewSet.as_view({"post": "batch_delete"}),
+        name="project-filestore-explorer-batch-delete",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/filestore/explorer/batch-copy/",
+        FilestoreExplorerViewSet.as_view({"post": "batch_copy"}),
+        name="project-filestore-explorer-batch-copy",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/filestore/explorer/batch-move/",
+        FilestoreExplorerViewSet.as_view({"post": "batch_move"}),
+        name="project-filestore-explorer-batch-move",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/filestore/explorer/batch-download/",
+        FilestoreExplorerViewSet.as_view({"get": "batch_download"}),
+        name="project-filestore-explorer-batch-download",
     ),
 ]

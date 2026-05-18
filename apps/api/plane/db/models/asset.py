@@ -76,6 +76,8 @@ class FilePath(MPTTModel):
         # 业务实体节点：name 取业务对象的可读名（workspace.name、project.name、issue.name 等）
         WORKSPACE = "WORKSPACE"
         PROJECT = "PROJECT"
+        FILESTORE_ROOT = "FILESTORE_ROOT"
+        USER_FOLDER = "USER_FOLDER"
         ISSUE = "ISSUE"
         DRAFT_ISSUE = "DRAFT_ISSUE"
         PAGE = "PAGE"

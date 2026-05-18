@@ -22,7 +22,7 @@ from rest_framework.response import Response
 # Module imports
 from plane.app.permissions import ROLE, ProjectMemberPermission, allow_permission, allow_fine_permission, \
     PermissionKey
-from plane.app.permissions.base import _get_user_project_permission_keys
+from plane.app.permissions.base import _is_instance_admin
 from plane.app.serializers import (
     DeployBoardSerializer,
     ProjectListSerializer,
@@ -39,12 +39,15 @@ from plane.db.models import (
     Cycle,
     ProjectIdentifier,
     ProjectMember,
+    ProjectMemberRole,
     ProjectNetwork,
+    ProjectRole,
     ProjectUserProperty,
     Workspace,
     WorkspaceMember,
     IssueActivity,
     Issue,
+    IssueType,
     Module,
     Release,
     ReleaseIssue,
@@ -56,6 +59,10 @@ from plane.db.models import (
     User,
 )
 from plane.db.models.intake import IntakeIssueStatus
+from plane.db.models.issue_type import (
+    ISSUE_TYPE_PERMISSION_ACTIONS,
+    build_issue_type_permission_key,
+)
 from plane.utils.host import base_host
 from plane.utils.paginator import CustomPaginator
 from plane.utils.project.defaults import (
@@ -119,6 +126,102 @@ class ProjectViewSet(BaseViewSet):
             )
             .distinct()
         )
+
+    def _get_permission_keys_by_project(self, slug, project_rows):
+        if not project_rows:
+            return {}
+
+        project_ids = [row["id"] for row in project_rows]
+        permission_keys_by_project = {project_id: set() for project_id in project_ids}
+        user_id = self.request.user.id
+
+        is_instance_admin = _is_instance_admin(self.request.user)
+        if is_instance_admin:
+            privileged_project_ids = set(project_ids)
+        else:
+            privileged_project_ids = {
+                row["id"]
+                for row in project_rows
+                if row.get("project_lead") == user_id or row.get("created_by") == user_id
+            }
+
+        if privileged_project_ids:
+            issue_type_permission_keys = {}
+            issue_type_rows = IssueType.objects.filter(
+                project_id__in=privileged_project_ids, deleted_at__isnull=True
+            ).values_list("project_id", "id")
+
+            for project_id, issue_type_id in issue_type_rows:
+                issue_type_keys = issue_type_permission_keys.setdefault(project_id, set())
+                for action, _ in ISSUE_TYPE_PERMISSION_ACTIONS:
+                    issue_type_keys.add(build_issue_type_permission_key(issue_type_id, action))
+
+            static_permission_keys = set(PermissionKey.values())
+            for project_id in privileged_project_ids:
+                permission_keys_by_project[project_id] = static_permission_keys | issue_type_permission_keys.get(
+                    project_id, set()
+                )
+
+        member_scoped_project_ids = [
+            project_id for project_id in project_ids if project_id not in privileged_project_ids
+        ]
+        if not member_scoped_project_ids:
+            return permission_keys_by_project
+
+        project_members = list(
+            ProjectMember.objects.filter(
+                member_id=user_id,
+                workspace__slug=slug,
+                project_id__in=member_scoped_project_ids,
+                is_active=True,
+            ).values("id", "project_id")
+        )
+        if not project_members:
+            return permission_keys_by_project
+
+        member_project_map = {member["id"]: member["project_id"] for member in project_members}
+
+        member_role_rows = list(
+            ProjectMemberRole.objects.filter(
+                member_id__in=member_project_map.keys(),
+                deleted_at__isnull=True,
+                role__deleted_at__isnull=True,
+            ).values_list("member_id", "role_id")
+        )
+        if not member_role_rows:
+            return permission_keys_by_project
+
+        role_ids = {role_id for _, role_id in member_role_rows}
+        role_permissions = {
+            role["id"]: role["permissions"]
+            for role in ProjectRole.objects.filter(
+                pk__in=role_ids,
+                deleted_at__isnull=True,
+            ).values("id", "permissions")
+        }
+
+        member_permission_keys = {}
+        for member_id, role_id in member_role_rows:
+            permissions = role_permissions.get(role_id)
+            if not isinstance(permissions, dict):
+                continue
+
+            valid_keys = [
+                key
+                for key in permissions.get("permission_keys", [])
+                if isinstance(key, str)
+            ]
+            if not valid_keys:
+                continue
+
+            if member_id not in member_permission_keys:
+                member_permission_keys[member_id] = set()
+            member_permission_keys[member_id].update(valid_keys)
+
+        for member_id, project_id in member_project_map.items():
+            permission_keys_by_project[project_id] = member_permission_keys.get(member_id, set())
+
+        return permission_keys_by_project
 
     @allow_permission(allowed_roles=[ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
     def list_detail(self, request, slug):
@@ -335,9 +438,10 @@ class ProjectViewSet(BaseViewSet):
                 | Q(network=2)
             )
         project_rows = list(projects)
+        permission_keys_by_project = self._get_permission_keys_by_project(slug, project_rows)
         for row in project_rows:
             row["permission_keys"] = list(
-                _get_user_project_permission_keys(request.user, slug, str(row["id"]))
+                permission_keys_by_project.get(row["id"], set())
             )
         return Response(project_rows, status=status.HTTP_200_OK)
 
