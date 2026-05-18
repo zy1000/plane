@@ -1,4 +1,4 @@
-import { ChevronRight, Download, Eye, Pencil, Trash2, X } from "lucide-react";
+import { Download, Eye, Pencil, Trash2, X } from "lucide-react";
 import type { TAssetExplorerFile } from "@/services/asset-explorer.service";
 import type { TAssetExplorerPermissions } from "../types";
 import { confirmDeleteFiles } from "./confirm-delete";
@@ -29,27 +29,24 @@ const ActionRow = ({ icon, label, onClick, danger }: TActionRowProps) => (
     onClick={onClick}
     className={`group flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left text-[13px] font-medium transition ${
       danger
-        ? "text-secondary hover:bg-rose-500/[0.08] hover:text-rose-500"
+        ? "text-secondary hover:bg-danger-subtle hover:text-danger-primary"
         : "text-secondary hover:bg-accent-primary/[0.08] hover:text-accent-primary"
     }`}
   >
     <span
-      className={`flex h-7 w-7 items-center justify-center rounded-md border transition ${
-        danger
-          ? "border-subtle group-hover:border-rose-400/40 group-hover:bg-rose-500/10"
-          : "border-subtle group-hover:border-accent-strong/40 group-hover:bg-accent-primary/10"
+      className={`shrink-0 ${
+        danger ? "text-tertiary group-hover:text-danger-primary" : "text-tertiary group-hover:text-accent-primary"
       }`}
     >
       {icon}
     </span>
     <span className="flex-1 truncate">{label}</span>
-    <ChevronRight className="size-3.5 shrink-0 text-tertiary opacity-0 transition-opacity group-hover:opacity-100" />
   </button>
 );
 
 const InfoRow = ({ label, value, mono }: { label: string; value: React.ReactNode; mono?: boolean }) => (
   <div className="flex flex-col gap-1 py-2.5">
-    <span className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-tertiary">{label}</span>
+    <span className="text-[13px] font-medium text-tertiary">{label}</span>
     <span
       className={`break-words text-[12.5px] text-primary ${mono ? "font-mono tabular-nums" : ""}`}
     >
@@ -110,31 +107,31 @@ export const DetailsPanel = ({
           <div className="flex-1 overflow-y-auto">
             {/* Actions — vertical list, MinIO-style */}
             <section className="px-2 pb-3 pt-3">
-              <h4 className="mb-1.5 px-2 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-tertiary">
-                Actions
+              <h4 className="mb-1.5 px-2 text-[13px] font-medium text-tertiary">
+                操作
               </h4>
               <div className="flex flex-col gap-0.5">
                 <ActionRow
                   icon={<Eye className="size-4" strokeWidth={1.75} />}
-                  label="Preview"
+                  label="预览"
                   onClick={() => void onPreviewFile(file)}
                 />
                 {hasEditCapability && (
                   <ActionRow
                     icon={<Pencil className="size-4" strokeWidth={1.75} />}
-                    label="Edit"
+                    label="编辑"
                     onClick={() => void onEditFile(file)}
                   />
                 )}
                 <ActionRow
                   icon={<Download className="size-4" strokeWidth={1.75} />}
-                  label="Download"
+                  label="下载"
                   onClick={() => void onDownloadFile(file)}
                 />
                 {permissions.canDelete && (
                   <ActionRow
                     icon={<Trash2 className="size-4" strokeWidth={1.75} />}
-                    label="Delete"
+                    label="删除"
                     danger
                     onClick={() =>
                       confirmDeleteFiles(1, () => {
@@ -148,17 +145,16 @@ export const DetailsPanel = ({
 
             <div className="mx-4 h-px bg-subtle" />
 
-            {/* Object Info */}
+            {/* 文件信息 */}
             <section className="px-4 pb-6 pt-3">
-              <h4 className="mb-1 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-tertiary">
-                Object Info
+              <h4 className="mb-1 text-[13px] font-medium text-tertiary">
+                文件信息
               </h4>
               <div className="divide-y divide-subtle/60">
-                <InfoRow label="Name" value={displayName} />
-                <InfoRow label="Type" value={mime} mono />
-                <InfoRow label="Size" value={formatBytes(file.size)} mono />
-                <InfoRow label="Last Modified" value={formatMinIODate(file.created_at)} mono />
-                <InfoRow label="Object ID" value={<span className="break-all">{file.id}</span>} mono />
+                <InfoRow label="名称" value={displayName} />
+                <InfoRow label="类型" value={mime} mono />
+                <InfoRow label="大小" value={formatBytes(file.size)} mono />
+                <InfoRow label="最后修改" value={formatMinIODate(file.created_at)} mono />
               </div>
             </section>
           </div>

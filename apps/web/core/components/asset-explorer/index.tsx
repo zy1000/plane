@@ -184,25 +184,25 @@ export const AssetExplorer = (props: TAssetExplorerProps) => {
         uploading={explorer.uploading}
         onRefresh={() => void explorer.refresh()}
         onUpload={triggerUpload}
+        pathBar={
+          <BreadcrumbBar
+            breadcrumbs={explorer.breadcrumbs}
+            onNavigate={(folderId) => {
+              setActiveFile(null);
+              void explorer.navigateFolder(folderId);
+            }}
+          />
+        }
+        secondaryActions={
+          <Toolbar
+            permissions={props.permissions}
+            keyword={explorer.keyword}
+            onKeywordChange={explorer.setKeyword}
+            onSearch={() => void handleSearch()}
+            onCreateFolder={() => explorer.setCreateFolderOpen(true)}
+          />
+        }
       />
-
-      {/* Row 2: Path bar — slash-separated MinIO path + search + create-folder */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-subtle px-5 py-2.5">
-        <BreadcrumbBar
-          breadcrumbs={explorer.breadcrumbs}
-          onNavigate={(folderId) => {
-            setActiveFile(null);
-            void explorer.navigateFolder(folderId);
-          }}
-        />
-        <Toolbar
-          permissions={props.permissions}
-          keyword={explorer.keyword}
-          onKeywordChange={explorer.setKeyword}
-          onSearch={() => void handleSearch()}
-          onCreateFolder={() => explorer.setCreateFolderOpen(true)}
-        />
-      </div>
 
       {/* Body: list (flexible) + details panel (animated width) */}
       <div className="relative flex flex-1 overflow-hidden">

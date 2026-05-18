@@ -45,7 +45,7 @@ export const EmptyState = ({
       <div className="relative flex h-20 w-20 items-center justify-center">
         <div className="absolute inset-0 rounded-3xl bg-accent-primary/[0.06]" />
         <div className="absolute inset-2 rounded-2xl bg-accent-primary/[0.08]" />
-        <FolderOpen className="relative size-8 text-accent-primary" strokeWidth={1.5} />
+        <FolderOpen className="relative size-8 text-amber-500" strokeWidth={1.5} />
       </div>
       <h3 className="mt-5 text-[15px] font-semibold tracking-tight text-primary">这个目录是空的</h3>
       <p className="mt-1 max-w-sm text-[13px] text-secondary">

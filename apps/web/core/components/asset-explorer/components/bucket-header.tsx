@@ -5,6 +5,8 @@ import { formatBytes } from "../utils/format";
 type TBucketHeaderProps = {
   /** Title shown at the top; pass the current folder name. */
   title: string;
+  pathBar?: React.ReactNode;
+  secondaryActions?: React.ReactNode;
   /** Direct child folder count (current level only). */
   directFolderCount?: number;
   /** Direct child file count (current level only). */
@@ -63,6 +65,8 @@ const StatsValue = ({ value, loading }: { value: React.ReactNode; loading?: bool
 
 export const BucketHeader = ({
   title,
+  pathBar,
+  secondaryActions,
   directFolderCount,
   directFileCount,
   recursiveSize,
@@ -80,18 +84,20 @@ export const BucketHeader = ({
       : `${directTotal} ${directTotal === 1 ? "Object" : "Objects"}`;
 
   return (
-    <div className="flex items-start justify-between gap-4 border-b border-subtle px-5 py-4">
+    <div className="flex flex-wrap items-start justify-between gap-4 border-b border-subtle px-5 py-4">
       <div className="flex min-w-0 items-start gap-3">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent-primary/10 text-accent-primary">
           <Database className="size-5" strokeWidth={1.75} />
         </div>
         <div className="min-w-0 flex-1">
-          <h1
-            className="truncate text-[18px] font-semibold leading-tight tracking-tight text-primary"
-            title={title}
-          >
-            {title}
-          </h1>
+          {pathBar ?? (
+            <h1
+              className="truncate text-[18px] font-semibold leading-tight tracking-tight text-primary"
+              title={title}
+            >
+              {title}
+            </h1>
+          )}
           <div className="mt-1.5 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-[12.5px] text-secondary">
             <MetaPiece
               label="Size"
@@ -110,7 +116,8 @@ export const BucketHeader = ({
           </div>
         </div>
       </div>
-      <div className="flex shrink-0 items-center gap-2 pt-1">
+      <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 pt-1">
+        {secondaryActions}
         <HeaderButton
           icon={<RefreshCw className="size-4" />}
           label="刷新"
