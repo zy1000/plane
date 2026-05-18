@@ -121,11 +121,13 @@ export const useTimesheetOverview = ({ workspaceSlug, memberId }: TUseTimesheetO
   const [weekTimesheets, setWeekTimesheets] = useState<TTimeSheet[]>([]);
   const [monthTimesheets, setMonthTimesheets] = useState<TTimeSheet[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isRefetching, setIsRefetching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<TOverviewMode>("week");
+  const [weekStart, setWeekStart] = useState<Date>(() => getWeekStart(new Date()));
   const requestIdRef = useRef(0);
+  const initialLoadDone = useRef(false);
 
-  const weekStart = useMemo(() => getWeekStart(new Date()), []);
   const weekDays = useMemo(() => getWeekDays(weekStart), [weekStart]);
   const weekEnd = useMemo(() => {
     const d = new Date(weekStart);
@@ -133,7 +135,7 @@ export const useTimesheetOverview = ({ workspaceSlug, memberId }: TUseTimesheetO
     return d;
   }, [weekStart]);
 
-  const monthRange = useMemo(() => getMonthRange(new Date()), []);
+  const monthRange = useMemo(() => getMonthRange(weekStart), [weekStart]);
 
   const monthDays = useMemo(() => {
     const days: Date[] = [];
@@ -145,10 +147,62 @@ export const useTimesheetOverview = ({ workspaceSlug, memberId }: TUseTimesheetO
     return days;
   }, [monthRange]);
 
+  const isCurrentWeek = formatDateKey(weekStart) === formatDateKey(getWeekStart(new Date()));
+
+  const goToPrevWeek = useCallback(() => {
+    setWeekStart((prev) => {
+      const d = new Date(prev);
+      d.setDate(d.getDate() - 7);
+      return d;
+    });
+  }, []);
+
+  const goToNextWeek = useCallback(() => {
+    setWeekStart((prev) => {
+      const d = new Date(prev);
+      d.setDate(d.getDate() + 7);
+      return d;
+    });
+  }, []);
+
+  const goToCurrentWeek = useCallback(() => {
+    setWeekStart(getWeekStart(new Date()));
+  }, []);
+
+  const goToWeek = useCallback((date: Date) => {
+    setWeekStart(getWeekStart(date));
+  }, []);
+
+  const goToPrevMonth = useCallback(() => {
+    setWeekStart((prev) => {
+      const d = new Date(prev);
+      d.setMonth(d.getMonth() - 1);
+      return getWeekStart(d);
+    });
+  }, []);
+
+  const goToNextMonth = useCallback(() => {
+    setWeekStart((prev) => {
+      const d = new Date(prev);
+      d.setMonth(d.getMonth() + 1);
+      return getWeekStart(d);
+    });
+  }, []);
+
+  const isCurrentMonth = useMemo(() => {
+    const now = new Date();
+    return monthRange.start.getFullYear() === now.getFullYear() && monthRange.start.getMonth() === now.getMonth();
+  }, [monthRange]);
+
   const fetchData = useCallback(async () => {
     if (!workspaceSlug) return;
     const reqId = ++requestIdRef.current;
-    setIsLoading(true);
+    const isInitial = !initialLoadDone.current;
+    if (isInitial) {
+      setIsLoading(true);
+    } else {
+      setIsRefetching(true);
+    }
     setError(null);
 
     try {
@@ -172,7 +226,11 @@ export const useTimesheetOverview = ({ workspaceSlug, memberId }: TUseTimesheetO
       if (reqId !== requestIdRef.current) return;
       setError("获取工时数据失败");
     } finally {
-      if (reqId === requestIdRef.current) setIsLoading(false);
+      if (reqId === requestIdRef.current) {
+        setIsLoading(false);
+        setIsRefetching(false);
+        initialLoadDone.current = true;
+      }
     }
   }, [workspaceSlug, memberId, weekStart, weekEnd, monthRange]);
 
@@ -260,6 +318,7 @@ export const useTimesheetOverview = ({ workspaceSlug, memberId }: TUseTimesheetO
     mode,
     setMode,
     isLoading,
+    isRefetching,
     error,
     kpis,
     dailyHours,
@@ -267,6 +326,17 @@ export const useTimesheetOverview = ({ workspaceSlug, memberId }: TUseTimesheetO
     alertDays,
     recentEntries,
     periodLabel,
+    weekStart,
+    weekEnd,
+    monthRange,
+    isCurrentWeek,
+    isCurrentMonth,
+    goToPrevWeek,
+    goToNextWeek,
+    goToCurrentWeek,
+    goToWeek,
+    goToPrevMonth,
+    goToNextMonth,
     refresh: fetchData,
   };
 };

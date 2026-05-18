@@ -1,5 +1,7 @@
-import { useEffect } from "react";
-import { Calendar, CalendarDays } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Calendar, CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
+import { DatePicker } from "antd";
+import dayjs from "dayjs";
 import { Loader } from "@plane/ui";
 import { cn } from "@plane/utils";
 import { useProject } from "@/hooks/store/use-project";
@@ -16,9 +18,20 @@ type Props = {
 };
 
 const MODE_OPTIONS: { key: TOverviewMode; label: string; icon: typeof Calendar }[] = [
-  { key: "week", label: "本周", icon: Calendar },
-  { key: "month", label: "本月", icon: CalendarDays },
+  { key: "week", label: "按周", icon: Calendar },
+  { key: "month", label: "按月", icon: CalendarDays },
 ];
+
+const MONTH_LABELS = ["1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月"];
+
+function formatWeekRange(weekStart: Date, weekEnd: Date): string {
+  const startMonth = MONTH_LABELS[weekStart.getMonth()];
+  const endMonth = MONTH_LABELS[weekEnd.getMonth()];
+  if (weekStart.getMonth() === weekEnd.getMonth()) {
+    return `${weekStart.getFullYear()} ${startMonth} ${weekStart.getDate()} – ${weekEnd.getDate()}`;
+  }
+  return `${startMonth} ${weekStart.getDate()} – ${endMonth} ${weekEnd.getDate()}`;
+}
 
 function OverviewSkeleton() {
   return (
@@ -57,14 +70,27 @@ export function TimesheetOverview({ workspaceSlug, memberId }: Props) {
     mode,
     setMode,
     isLoading,
+    isRefetching,
     error,
     kpis,
     dailyHours,
     projectDistribution,
     alertDays,
     recentEntries,
-    periodLabel,
+    weekStart,
+    weekEnd,
+    monthRange,
+    isCurrentWeek,
+    isCurrentMonth,
+    goToPrevWeek,
+    goToNextWeek,
+    goToCurrentWeek,
+    goToWeek,
+    goToPrevMonth,
+    goToNextMonth,
   } = useTimesheetOverview({ workspaceSlug, memberId });
+
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   if (isLoading) return <OverviewSkeleton />;
 
@@ -76,15 +102,88 @@ export function TimesheetOverview({ workspaceSlug, memberId }: Props) {
     );
   }
 
-  const modeLabel = mode === "week" ? "本周" : "本月";
+  const modeLabel = mode === "week" ? "周" : "月";
+  const isCurrentPeriod = mode === "week" ? isCurrentWeek : isCurrentMonth;
+
+  const handlePrev = () => {
+    if (mode === "week") goToPrevWeek();
+    else goToPrevMonth();
+  };
+
+  const handleNext = () => {
+    if (mode === "week") goToNextWeek();
+    else goToNextMonth();
+  };
+
+  const handleCurrentPeriod = () => {
+    goToCurrentWeek();
+  };
+
+  const navDisplayText =
+    mode === "week"
+      ? formatWeekRange(weekStart, weekEnd)
+      : `${monthRange.start.getFullYear()} ${MONTH_LABELS[monthRange.start.getMonth()]}`;
+
+  const currentPeriodLabel = mode === "week" ? "本周" : "本月";
 
   return (
     <div className="h-full w-full overflow-y-auto vertical-scrollbar scrollbar-sm">
-      <div className="flex flex-col gap-6 px-6 py-4">
+      <div className={cn("flex flex-col gap-6 px-6 py-4 transition-opacity", isRefetching && "opacity-60")}>
         <div className="flex items-center justify-between">
-          <div>
+          <div className="flex items-center gap-3">
             <h1 className="text-lg font-semibold text-primary">工时概览</h1>
-            <p className="mt-0.5 text-sm text-placeholder">{periodLabel}</p>
+            <div className="flex items-center rounded-md border border-subtle overflow-hidden">
+              <button
+                onClick={handlePrev}
+                className="inline-flex h-[26px] w-[26px] items-center justify-center text-secondary transition-colors hover:bg-layer-1 hover:text-primary"
+                title={mode === "week" ? "上一周" : "上一月"}
+              >
+                <ChevronLeft className="h-3.5 w-3.5" />
+              </button>
+              <div
+                className="relative flex h-[26px] items-center border-x border-subtle cursor-pointer hover:bg-layer-1 transition-colors"
+                onClick={() => setPickerOpen(true)}
+              >
+                <span className="px-3 text-sm font-medium text-primary tabular-nums select-none">
+                  {navDisplayText}
+                </span>
+                <DatePicker
+                  open={pickerOpen}
+                  onOpenChange={setPickerOpen}
+                  value={dayjs(weekStart)}
+                  onChange={(date) => {
+                    if (date) goToWeek(date.toDate());
+                    setPickerOpen(false);
+                  }}
+                  allowClear={false}
+                  suffixIcon={null}
+                  variant="borderless"
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    width: "100%",
+                    height: "100%",
+                    opacity: 0,
+                    pointerEvents: "none",
+                  }}
+                />
+              </div>
+              <button
+                onClick={handleNext}
+                className="inline-flex h-[26px] w-[26px] items-center justify-center text-secondary transition-colors hover:bg-layer-1 hover:text-primary"
+                title={mode === "week" ? "下一周" : "下一月"}
+              >
+                <ChevronRight className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            {!isCurrentPeriod && (
+              <button
+                onClick={handleCurrentPeriod}
+                className="inline-flex h-[26px] items-center justify-center rounded-md border border-subtle px-2.5 text-secondary transition-colors hover:bg-layer-1 hover:text-primary"
+              >
+                {currentPeriodLabel}
+              </button>
+            )}
           </div>
           <div className="flex items-center rounded-lg border border-subtle bg-surface-1 p-0.5">
             {MODE_OPTIONS.map((opt) => {
