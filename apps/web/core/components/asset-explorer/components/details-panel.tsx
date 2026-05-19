@@ -152,6 +152,7 @@ export const DetailsPanel = ({
               </h4>
               <div className="divide-y divide-subtle/60">
                 <InfoRow label="名称" value={displayName} />
+                <InfoRow label="上传者" value={file.created_by_name || "—"} />
                 <InfoRow label="类型" value={mime} mono />
                 <InfoRow label="大小" value={formatBytes(file.size)} mono />
                 <InfoRow label="最后修改" value={formatMinIODate(file.created_at)} mono />

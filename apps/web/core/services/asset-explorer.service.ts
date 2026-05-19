@@ -27,6 +27,8 @@ export type TAssetExplorerFile = {
   };
   created_at?: string;
   created_by_id?: string | null;
+  created_by_name?: string | null;
+  created_by_avatar?: string | null;
   is_uploaded?: boolean;
   parent_folder_id?: number;
 };

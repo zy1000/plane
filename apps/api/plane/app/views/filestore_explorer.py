@@ -49,6 +49,7 @@ from plane.utils.paginator import CustomPaginator
 
 def _serialize_asset(asset: FileAsset) -> dict:
     attrs = asset.attributes or {}
+    created_by = asset.created_by
     return {
         "id": str(asset.id),
         "name": attrs.get("name") or asset.filename or "",
@@ -59,6 +60,8 @@ def _serialize_asset(asset: FileAsset) -> dict:
         "is_uploaded": bool(asset.is_uploaded),
         "created_at": asset.created_at,
         "created_by_id": str(asset.created_by_id) if asset.created_by_id else None,
+        "created_by_name": created_by.display_name if created_by else None,
+        "created_by_avatar": created_by.avatar_url if created_by else None,
         "parent_folder_id": asset.path_id,
     }
 
