@@ -141,12 +141,10 @@ export const useAssetExplorer = (props: TUseAssetExplorer) => {
       folderId,
       page,
       size,
-      search,
     }: {
       folderId: number;
       page: number;
       size: number;
-      search?: string;
     }) => {
       if (!workspaceSlug || !projectId) return;
       setLoading(true);
@@ -155,7 +153,6 @@ export const useAssetExplorer = (props: TUseAssetExplorer) => {
           folder_id: folderId,
           page,
           page_size: size,
-          ...(search ? { name__icontains: search } : {}),
         });
         setCurrentFolder(res?.current_folder ?? null);
         setFolders(Array.isArray(res?.folders) ? res.folders : []);
@@ -177,6 +174,60 @@ export const useAssetExplorer = (props: TUseAssetExplorer) => {
     [clearSelection, loadBreadcrumb, loadFolderStats, projectId, service, workspaceSlug]
   );
 
+  /**
+   * 走 `/explorer/search/` 递归搜索：搜索作用域取自 `folderId`（当前所在目录），
+   * 后端把命中的文件夹和文件合并成一个分页列表，每项带 `path` 字段。
+   * 这里把合并结果按 kind 拆回 folders/files 以复用现有的表格渲染逻辑，
+   * 顺序保持后端返回顺序（后端是“文件夹在前、文件在后”）。
+   */
+  const loadSearch = useCallback(
+    async ({
+      folderId,
+      page,
+      size,
+      keyword: searchKeyword,
+    }: {
+      folderId: number;
+      page: number;
+      size: number;
+      keyword: string;
+    }) => {
+      if (!workspaceSlug || !projectId) return;
+      setLoading(true);
+      try {
+        const res = await service.searchFilestore(workspaceSlug, projectId, {
+          folder_id: folderId,
+          name__icontains: searchKeyword,
+          page,
+          page_size: size,
+        });
+        const results = Array.isArray(res?.results) ? res.results : [];
+        const folderItems: TAssetFolder[] = [];
+        const fileItems: TAssetExplorerFile[] = [];
+        for (const item of results) {
+          if (item.kind === "folder") {
+            const { kind: _kind, ...folder } = item;
+            folderItems.push(folder);
+          } else {
+            const { kind: _kind, ...file } = item;
+            fileItems.push(file);
+          }
+        }
+        setFolders(folderItems);
+        setFiles(fileItems);
+        setTotal(Number(res?.count ?? 0));
+        setCurrentPage(page);
+        setPageSize(size);
+        clearSelection();
+      } catch (error: any) {
+        message.error(error?.detail || error?.error || error?.message || "搜索失败");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [clearSelection, projectId, service, workspaceSlug]
+  );
+
   const initialize = useCallback(async () => {
     if (!workspaceSlug || !projectId) return;
     setLoading(true);
@@ -188,13 +239,13 @@ export const useAssetExplorer = (props: TUseAssetExplorer) => {
         return;
       }
       setRootFolder(root);
-      await loadFolder({ folderId: root.id, page: 1, size: pageSize, search: keyword });
+      await loadFolder({ folderId: root.id, page: 1, size: pageSize });
     } catch (error: any) {
       message.error(error?.detail || error?.error || error?.message || "初始化文件目录失败");
     } finally {
       setLoading(false);
     }
-  }, [keyword, loadFolder, pageSize, projectId, service, workspaceSlug]);
+  }, [loadFolder, pageSize, projectId, service, workspaceSlug]);
 
   useEffect(() => {
     void initialize();
@@ -203,14 +254,23 @@ export const useAssetExplorer = (props: TUseAssetExplorer) => {
   const refresh = useCallback(async () => {
     const folderId = currentFolder?.id ?? rootFolder?.id;
     if (!folderId) return;
-    await loadFolder({ folderId, page: currentPage, size: pageSize, search: keyword });
-  }, [currentFolder?.id, currentPage, keyword, loadFolder, pageSize, rootFolder?.id]);
+    const trimmed = keyword.trim();
+    if (trimmed) {
+      await loadSearch({ folderId, page: currentPage, size: pageSize, keyword: trimmed });
+    } else {
+      await loadFolder({ folderId, page: currentPage, size: pageSize });
+    }
+  }, [currentFolder?.id, currentPage, keyword, loadFolder, loadSearch, pageSize, rootFolder?.id]);
 
+  /**
+   * 点击文件夹进入下一层时主动清掉搜索词，避免新目录里残留旧搜索状态。
+   */
   const navigateFolder = useCallback(
     async (folderId: number) => {
-      await loadFolder({ folderId, page: 1, size: pageSize, search: keyword });
+      setKeyword("");
+      await loadFolder({ folderId, page: 1, size: pageSize });
     },
-    [keyword, loadFolder, pageSize]
+    [loadFolder, pageSize]
   );
 
   const onUploadFiles = useCallback(
@@ -452,6 +512,7 @@ export const useAssetExplorer = (props: TUseAssetExplorer) => {
     navigateFolder,
     refresh,
     loadFolder,
+    loadSearch,
     initialize,
     setCurrentPage,
     setPageSize,

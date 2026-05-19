@@ -1,6 +1,6 @@
 from django.urls import path
 
-from plane.app.views.filestore import (
+from plane.app.views.asset.file import (
     FilestoreAssetAPIView,
     FilestoreAssetDetailAPIView,
     FilestoreAssetDownloadAPIView,
@@ -12,7 +12,7 @@ from plane.app.views.filestore import (
     FilestoreAssetOnlyOfficeStatusAPIView,
     FilestoreAssetOnlyOfficeVersionsAPIView,
 )
-from plane.app.views.filestore_explorer import FilestoreExplorerViewSet
+from plane.app.views.asset.file_explorer import FilestoreExplorerViewSet
 
 urlpatterns = [
     path(
@@ -131,5 +131,10 @@ urlpatterns = [
         "workspaces/<str:slug>/projects/<uuid:project_id>/filestore/explorer/batch-download/",
         FilestoreExplorerViewSet.as_view({"get": "batch_download"}),
         name="project-filestore-explorer-batch-download",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/filestore/explorer/search/",
+        FilestoreExplorerViewSet.as_view({"get": "search"}),
+        name="project-filestore-explorer-search",
     ),
 ]

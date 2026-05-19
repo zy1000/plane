@@ -61,3 +61,10 @@ class BatchMoveSerializer(BatchCopySerializer):
         required=False,
         default="rename",
     )
+
+
+class FilestoreSearchQuerySerializer(serializers.Serializer):
+    folder_id = serializers.IntegerField(required=False)
+    name__icontains = serializers.CharField(required=False, allow_blank=False)
+    page = serializers.IntegerField(required=False, min_value=1)
+    page_size = serializers.IntegerField(required=False, min_value=1, max_value=200)

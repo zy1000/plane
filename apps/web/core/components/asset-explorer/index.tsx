@@ -36,24 +36,30 @@ export const AssetExplorer = (props: TAssetExplorerProps) => {
   const handleSearch = useCallback(async () => {
     const folderId = explorer.currentFolder?.id ?? explorer.rootFolder?.id;
     if (!folderId) return;
-    await explorer.loadFolder({
-      folderId,
-      page: 1,
-      size: explorer.pageSize,
-      search: explorer.keyword.trim(),
-    });
+    const trimmed = explorer.keyword.trim();
+    if (trimmed) {
+      await explorer.loadSearch({
+        folderId,
+        page: 1,
+        size: explorer.pageSize,
+        keyword: trimmed,
+      });
+    } else {
+      await explorer.loadFolder({ folderId, page: 1, size: explorer.pageSize });
+    }
   }, [explorer]);
 
   const handlePageChange = useCallback(
     (page: number, size?: number) => {
       const folderId = explorer.currentFolder?.id ?? explorer.rootFolder?.id;
       if (!folderId) return;
-      void explorer.loadFolder({
-        folderId,
-        page,
-        size: size || explorer.pageSize,
-        search: explorer.keyword.trim(),
-      });
+      const nextSize = size || explorer.pageSize;
+      const trimmed = explorer.keyword.trim();
+      if (trimmed) {
+        void explorer.loadSearch({ folderId, page, size: nextSize, keyword: trimmed });
+      } else {
+        void explorer.loadFolder({ folderId, page, size: nextSize });
+      }
     },
     [explorer]
   );
@@ -216,8 +222,11 @@ export const AssetExplorer = (props: TAssetExplorerProps) => {
               onUpload={triggerUpload}
               onCreateFolder={() => explorer.setCreateFolderOpen(true)}
               onClearSearch={() => {
+                const folderId = explorer.currentFolder?.id ?? explorer.rootFolder?.id;
                 explorer.setKeyword("");
-                void handleSearch();
+                if (folderId) {
+                  void explorer.loadFolder({ folderId, page: 1, size: explorer.pageSize });
+                }
               }}
             />
           ) : (

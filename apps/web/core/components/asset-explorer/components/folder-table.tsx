@@ -176,20 +176,36 @@ export const FolderTable = ({
                   ) : (
                     <FileTypeIcon filename={row.file.name || row.file.filename} size="sm" />
                   )}
-                  <span
-                    className={`truncate font-medium ${
-                      active ? "text-accent-primary" : "text-primary"
-                    }`}
-                    title={
-                      row.kind === "folder"
+                  <div className="flex min-w-0 flex-col">
+                    <span
+                      className={`truncate font-medium ${
+                        active ? "text-accent-primary" : "text-primary"
+                      }`}
+                      title={
+                        row.kind === "folder"
+                          ? row.folder.name
+                          : row.file.name || row.file.filename || ""
+                      }
+                    >
+                      {row.kind === "folder"
                         ? row.folder.name
-                        : row.file.name || row.file.filename || ""
-                    }
-                  >
-                    {row.kind === "folder"
-                      ? row.folder.name
-                      : row.file.name || row.file.filename || "未命名"}
-                  </span>
+                        : row.file.name || row.file.filename || "未命名"}
+                    </span>
+                    {/* 搜索模式下后端返回了相对 filestore 的父级路径，给一行 muted 副标题展示 */}
+                    {(() => {
+                      const path = row.kind === "folder" ? row.folder.path : row.file.path;
+                      if (path === undefined) return null;
+                      const display = path ? `filestore/${path}` : "filestore";
+                      return (
+                        <span
+                          className="truncate text-[11px] text-tertiary"
+                          title={display}
+                        >
+                          {display}
+                        </span>
+                      );
+                    })()}
+                  </div>
                   {row.kind === "folder" && (
                     <ChevronRight className="size-3 shrink-0 text-tertiary opacity-0 transition-opacity group-hover:opacity-100" />
                   )}

@@ -11,6 +11,8 @@ export type TAssetFolder = {
   parent_id: number | null;
   updated_at: string | null;
   is_root: boolean;
+  // 搜索结果中携带：相对 filestore 的父级路径（不含 filestore 与自身名），形如 "A/B"
+  path?: string;
 };
 
 export type TAssetExplorerFile = {
@@ -31,6 +33,8 @@ export type TAssetExplorerFile = {
   created_by_avatar?: string | null;
   is_uploaded?: boolean;
   parent_folder_id?: number;
+  // 搜索结果中携带：相对 filestore 的所在目录路径，形如 "A/B"
+  path?: string;
 };
 
 export type TAssetListResponse = {
@@ -62,6 +66,17 @@ export type TFolderStatsResponse = {
   recursive_file_count: number;
   direct_folder_count: number;
   direct_file_count: number;
+};
+
+export type TAssetSearchItem =
+  | ({ kind: "folder" } & TAssetFolder)
+  | ({ kind: "file" } & TAssetExplorerFile);
+
+export type TAssetSearchResponse = {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: TAssetSearchItem[];
 };
 
 export class AssetExplorerService extends APIService {
@@ -130,6 +145,28 @@ export class AssetExplorerService extends APIService {
             recursive_file_count: 0,
             direct_folder_count: 0,
             direct_file_count: 0,
+          }
+      )
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async searchFilestore(
+    workspaceSlug: string,
+    projectId: string,
+    params: { folder_id?: number; name__icontains?: string; page?: number; page_size?: number }
+  ): Promise<TAssetSearchResponse> {
+    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/filestore/explorer/search/`, {
+      params: params ?? {},
+    })
+      .then(
+        (response) =>
+          (response?.data as TAssetSearchResponse | undefined) ?? {
+            count: 0,
+            next: null,
+            previous: null,
+            results: [],
           }
       )
       .catch((error) => {

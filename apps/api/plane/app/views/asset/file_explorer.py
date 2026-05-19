@@ -18,6 +18,7 @@ from plane.app.serializers.filestore_explorer import (
     BatchCopySerializer,
     BatchDeleteSerializer,
     BatchMoveSerializer,
+    FilestoreSearchQuerySerializer,
     FolderBreadcrumbQuerySerializer,
     FolderCreateSerializer,
     FolderListQuerySerializer,
@@ -52,7 +53,7 @@ def _serialize_asset(asset: FileAsset) -> dict:
     created_by = asset.created_by
     return {
         "id": str(asset.id),
-        "name": attrs.get("name") or asset.filename or "",
+        "name": asset.filename or attrs.get("name") or "",
         "filename": asset.filename or "",
         "size": int(asset.size or attrs.get("size") or 0),
         "type": attrs.get("type") or "",
@@ -75,6 +76,30 @@ def _serialize_folder(folder: FilePath) -> dict:
         "updated_at": None,
         "is_root": folder.entity_type == FILESTORE_ROOT_ENTITY_TYPE,
     }
+
+
+def _build_relative_path(
+    folder_id: int | None,
+    node_map: dict[int, tuple[str, int | None, str]],
+) -> str:
+    """从 ``folder_id`` 沿 parent 链上溯到 FILESTORE_ROOT（不含），返回 ``A/B`` 形态。
+
+    ``node_map`` 形如 ``{id: (name, parent_id, entity_type)}``，已在调用前一次性预热。
+    """
+    segments: list[str] = []
+    cur = folder_id
+    while cur is not None:
+        item = node_map.get(cur)
+        if item is None:
+            break
+        name, parent_id, etype = item
+        if etype == FILESTORE_ROOT_ENTITY_TYPE:
+            break
+        if name:
+            segments.append(name)
+        cur = parent_id
+    segments.reverse()
+    return "/".join(segments)
 
 
 class FilestoreExplorerViewSet(BaseViewSet):
@@ -121,7 +146,9 @@ class FilestoreExplorerViewSet(BaseViewSet):
     def _serialize_tree(self, root: FilePath) -> dict:
         nodes = (
             root.get_descendants(include_self=True)
-            .filter(entity_type__in=[FILESTORE_ROOT_ENTITY_TYPE, USER_FOLDER_ENTITY_TYPE])
+            .filter(
+                entity_type__in=[FILESTORE_ROOT_ENTITY_TYPE, USER_FOLDER_ENTITY_TYPE]
+            )
             .order_by("lft")
         )
         payload_by_id = {}
@@ -134,7 +161,9 @@ class FilestoreExplorerViewSet(BaseViewSet):
             if node.parent_id and node.parent_id in payload_by_id:
                 payload_by_id[node.parent_id]["children"].append(payload_by_id[node.pk])
 
-        root_payload = payload_by_id.get(root.pk) or (_serialize_folder(root) | {"children": []})
+        root_payload = payload_by_id.get(root.pk) or (
+            _serialize_folder(root) | {"children": []}
+        )
         return root_payload
 
     @staticmethod
@@ -170,7 +199,9 @@ class FilestoreExplorerViewSet(BaseViewSet):
         )
 
     @staticmethod
-    def _build_zip_asset_name(asset: FileAsset, root: FilePath, used_names: set[str]) -> str:
+    def _build_zip_asset_name(
+        asset: FileAsset, root: FilePath, used_names: set[str]
+    ) -> str:
         filename = (asset.attributes or {}).get("name") or asset.filename or "file"
         filename = _sanitize_filename(filename)
         segments: list[str] = []
@@ -220,9 +251,11 @@ class FilestoreExplorerViewSet(BaseViewSet):
             slug=slug, project_id=project_id, folder_id=folder_id
         )
 
-        folders = FilePath.objects.filter(
-            parent=folder, entity_type=USER_FOLDER_ENTITY_TYPE
-        ).order_by("name")
+        folders = (
+            FilePath.objects.filter(parent=folder, entity_type=USER_FOLDER_ENTITY_TYPE)
+            .prefetch_related("files")
+            .order_by("name")
+        )
         if name_filter:
             folders = folders.filter(name__icontains=name_filter)
 
@@ -235,9 +268,7 @@ class FilestoreExplorerViewSet(BaseViewSet):
             is_uploaded=True,
         ).select_related("created_by", "path")
         if name_filter:
-            file_assets = file_assets.filter(
-                attributes__name__icontains=name_filter
-            )
+            file_assets = file_assets.filter(attributes__name__icontains=name_filter)
         file_assets = file_assets.order_by("-created_at")
 
         paginator = self.pagination_class()
@@ -274,13 +305,19 @@ class FilestoreExplorerViewSet(BaseViewSet):
         breadcrumbs = []
         node = folder
         while node is not None:
-            if node.entity_type in [FILESTORE_ROOT_ENTITY_TYPE, USER_FOLDER_ENTITY_TYPE]:
+            if node.entity_type in [
+                FILESTORE_ROOT_ENTITY_TYPE,
+                USER_FOLDER_ENTITY_TYPE,
+            ]:
                 breadcrumbs.append(_serialize_folder(node))
             if node.entity_type == FILESTORE_ROOT_ENTITY_TYPE:
                 break
             node = node.parent
 
-        if not breadcrumbs or breadcrumbs[-1]["entity_type"] != FILESTORE_ROOT_ENTITY_TYPE:
+        if (
+            not breadcrumbs
+            or breadcrumbs[-1]["entity_type"] != FILESTORE_ROOT_ENTITY_TYPE
+        ):
             return Response(
                 {"error": "Folder is out of filestore scope"},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -392,7 +429,9 @@ class FilestoreExplorerViewSet(BaseViewSet):
 
         folder = FilePath.objects.filter(pk=folder_id).first()
         if folder is None:
-            return Response({"error": "Folder not found"}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"error": "Folder not found"}, status=status.HTTP_404_NOT_FOUND
+            )
         if folder.entity_type != USER_FOLDER_ENTITY_TYPE:
             return Response(
                 {"error": "Only user folder can be renamed"},
@@ -412,15 +451,21 @@ class FilestoreExplorerViewSet(BaseViewSet):
         except ValueError as exc:
             return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         except RuntimeError as exc:
-            return Response({"error": str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response(
+                {"error": str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
-        return Response({"folder": _serialize_folder(folder)}, status=status.HTTP_200_OK)
+        return Response(
+            {"folder": _serialize_folder(folder)}, status=status.HTTP_200_OK
+        )
 
     @allow_fine_permission(PermissionKey.PROJECT_ASSET_DELETE)
     def delete_folder(self, request, slug, project_id, folder_id):
         folder = FilePath.objects.filter(pk=folder_id).first()
         if folder is None:
-            return Response({"error": "Folder not found"}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"error": "Folder not found"}, status=status.HTTP_404_NOT_FOUND
+            )
         if folder.entity_type != USER_FOLDER_ENTITY_TYPE:
             return Response(
                 {"error": "Only user folder can be deleted"},
@@ -455,7 +500,9 @@ class FilestoreExplorerViewSet(BaseViewSet):
 
         file_name = serializer.validated_data["name"]
         file_type = serializer.validated_data.get("type") or "application/octet-stream"
-        file_size = int(serializer.validated_data.get("size") or settings.FILE_SIZE_LIMIT)
+        file_size = int(
+            serializer.validated_data.get("size") or settings.FILE_SIZE_LIMIT
+        )
         size_limit = min(file_size, settings.FILE_SIZE_LIMIT)
 
         asset = FileAsset.objects.create(
@@ -490,21 +537,30 @@ class FilestoreExplorerViewSet(BaseViewSet):
         serializer.is_valid(raise_exception=True)
 
         project = self._project_for_scope(slug=slug, project_id=project_id)
-        asset = FileAsset.objects.filter(
-            pk=asset_id,
-            workspace_id=project.workspace_id,
-            project_id=project.id,
-            entity_type=FILESTORE_ENTITY_TYPE,
-            is_deleted=False,
-        ).select_related("path").first()
+        asset = (
+            FileAsset.objects.filter(
+                pk=asset_id,
+                workspace_id=project.workspace_id,
+                project_id=project.id,
+                entity_type=FILESTORE_ENTITY_TYPE,
+                is_deleted=False,
+            )
+            .select_related("path")
+            .first()
+        )
         if asset is None:
-            return Response({"error": "Asset not found"}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"error": "Asset not found"}, status=status.HTTP_404_NOT_FOUND
+            )
         if not self._asset_in_scope(
             asset,
             workspace_id=str(project.workspace_id),
             project_id=str(project.id),
         ):
-            return Response({"error": "Asset is out of filestore scope"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "Asset is out of filestore scope"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         asset.is_uploaded = True
         if not asset.storage_metadata:
@@ -653,9 +709,14 @@ class FilestoreExplorerViewSet(BaseViewSet):
 
         try:
             asset_ids = self._parse_uuid_list(request.query_params.get("asset_ids", ""))
-            folder_ids = self._parse_int_list(request.query_params.get("folder_ids", ""))
+            folder_ids = self._parse_int_list(
+                request.query_params.get("folder_ids", "")
+            )
         except ValueError:
-            return Response({"error": "Invalid asset_ids/folder_ids"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "Invalid asset_ids/folder_ids"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         selected_assets: dict[str, FileAsset] = {}
         if asset_ids:
@@ -685,7 +746,9 @@ class FilestoreExplorerViewSet(BaseViewSet):
 
             for folder in folders:
                 node_ids = list(
-                    folder.get_descendants(include_self=True).values_list("id", flat=True)
+                    folder.get_descendants(include_self=True).values_list(
+                        "id", flat=True
+                    )
                 )
                 assets = FileAsset.objects.filter(
                     path_id__in=node_ids,
@@ -704,7 +767,10 @@ class FilestoreExplorerViewSet(BaseViewSet):
                         selected_assets[str(asset.id)] = asset
 
         if not selected_assets:
-            return Response({"error": "No downloadable assets found"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "No downloadable assets found"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         storage = S3Storage(request=request)
         zip_buffer = io.BytesIO()
@@ -737,3 +803,73 @@ class FilestoreExplorerViewSet(BaseViewSet):
         response = StreamingHttpResponse(zip_buffer, content_type="application/zip")
         response["Content-Disposition"] = 'attachment; filename="filestore-assets.zip"'
         return response
+
+    @action(detail=False, methods=["get"], url_path="../search")
+    @allow_fine_permission(PermissionKey.PROJECT_ASSET_VIEW)
+    def search(self, request, slug, project_id):
+        query_serializer = FilestoreSearchQuerySerializer(data=request.query_params)
+        query_serializer.is_valid(raise_exception=True)
+        folder_id = query_serializer.validated_data.get("folder_id")
+        name_filter = query_serializer.validated_data.get("name__icontains")
+
+        project, scope_folder = self._resolve_folder(
+            slug=slug, project_id=project_id, folder_id=folder_id
+        )
+
+        descendant_nodes = list(
+            scope_folder.get_descendants(include_self=True)
+            .filter(
+                entity_type__in=[
+                    FILESTORE_ROOT_ENTITY_TYPE,
+                    USER_FOLDER_ENTITY_TYPE,
+                ]
+            )
+            .only("id", "name", "parent_id", "entity_type")
+        )
+        node_map: dict[int, tuple[str, int | None, str]] = {
+            node.pk: (node.name, node.parent_id, node.entity_type)
+            for node in descendant_nodes
+        }
+        descendant_ids = list(node_map.keys())
+
+        folder_items = [
+            node
+            for node in descendant_nodes
+            if node.entity_type == USER_FOLDER_ENTITY_TYPE
+            and node.pk != scope_folder.pk
+        ]
+        if name_filter:
+            folder_items = [
+                node
+                for node in folder_items
+                if name_filter.lower() in (node.name or "").lower()
+            ]
+        folder_items.sort(key=lambda node: (node.name or "").lower())
+
+        file_assets = FileAsset.objects.filter(
+            workspace_id=project.workspace_id,
+            project_id=project.id,
+            entity_type=FILESTORE_ENTITY_TYPE,
+            is_deleted=False,
+            is_uploaded=True,
+            path_id__in=descendant_ids,
+        ).select_related("created_by", "path")
+        if name_filter:
+            file_assets = file_assets.filter(attributes__name__icontains=name_filter)
+        file_assets = file_assets.order_by("-created_at")
+
+        combined: list[dict] = []
+        for folder in folder_items:
+            payload = _serialize_folder(folder)
+            payload["kind"] = "folder"
+            payload["path"] = _build_relative_path(folder.parent_id, node_map)
+            combined.append(payload)
+        for asset in file_assets:
+            payload = _serialize_asset(asset)
+            payload["kind"] = "file"
+            payload["path"] = _build_relative_path(asset.path_id, node_map)
+            combined.append(payload)
+
+        paginator = self.pagination_class()
+        page = paginator.paginate_queryset(combined, request)
+        return paginator.get_paginated_response(page)
