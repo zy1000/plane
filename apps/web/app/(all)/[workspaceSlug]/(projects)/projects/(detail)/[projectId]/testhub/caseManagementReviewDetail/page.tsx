@@ -157,15 +157,32 @@ export default function CaseManagementReviewDetailPage() {
       // setLoading(true);
       setError(null);
       const effectiveOrdering = orderingParam === undefined ? ordering : orderingParam ?? undefined;
-      const res = await reviewService.getReviewCaseList(workspaceSlug as string, reviewId as string, {
+      const listParams = {
         page,
         page_size: size,
         module_id: typeof moduleId === "undefined" ? selectedModuleId : moduleId,
         ...(effectiveOrdering ? { ordering: effectiveOrdering } : {}),
-      });
-      setReviewCases(Array.isArray(res?.data) ? (res.data as ReviewCaseRow[]) : []);
-      setTotal(Number(res?.count || 0));
-      setCurrentPage(page);
+      };
+      let res = await reviewService.getReviewCaseList(workspaceSlug as string, reviewId as string, listParams);
+      let data = Array.isArray(res?.data) ? (res.data as ReviewCaseRow[]) : [];
+      const count = Number(res?.count || 0);
+      let pageToUse = page;
+
+      if (data.length === 0 && count > 0 && page > 1) {
+        const maxPage = Math.max(1, Math.ceil(count / size));
+        pageToUse = Math.min(page, maxPage);
+        if (pageToUse !== page) {
+          res = await reviewService.getReviewCaseList(workspaceSlug as string, reviewId as string, {
+            ...listParams,
+            page: pageToUse,
+          });
+          data = Array.isArray(res?.data) ? (res.data as ReviewCaseRow[]) : [];
+        }
+      }
+
+      setReviewCases(data);
+      setTotal(count);
+      setCurrentPage(pageToUse);
       setPageSize(size);
     } catch (e: unknown) {
       const fallback = "获取评审用例列表失败";
@@ -687,7 +704,7 @@ export default function CaseManagementReviewDetailPage() {
                                   qaCaseSetToastSuccess("已批量通过用例");
                                   setSelectedCaseIds([]);
                                   setSelectedCaseMap({});
-                                  fetchReviewCaseList(1, pageSize);
+                                  fetchReviewCaseList(currentPage, pageSize);
                                 } catch (e: unknown) {
                                   qaCaseSetToastError(e, t, "操作失败");
                                 }
@@ -711,7 +728,7 @@ export default function CaseManagementReviewDetailPage() {
                                   qaCaseSetToastSuccess("已批量取消关联");
                                   setSelectedCaseIds([]);
                                   setSelectedCaseMap({});
-                                  fetchReviewCaseList(1, pageSize);
+                                  fetchReviewCaseList(currentPage, pageSize);
                                 } catch (e: unknown) {
                                   qaCaseSetToastError(e, t, "操作失败");
                                 }

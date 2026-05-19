@@ -8,25 +8,79 @@ from yaml import serialize
 from collections import defaultdict
 
 from django.db import connection, transaction
-from django.db.models import Case, CharField, Count, F, Func, IntegerField, OuterRef, Prefetch, Q, Subquery, Value, When
+from django.db.models import (
+    Case,
+    CharField,
+    Count,
+    F,
+    Func,
+    IntegerField,
+    OuterRef,
+    Prefetch,
+    Q,
+    Subquery,
+    Value,
+    When,
+)
 from django.db.models.functions import Cast
 from django.shortcuts import get_object_or_404
-from plane.app.serializers.qa import TestPlanDetailSerializer, TestPlanListSerializer, CaseModuleCreateUpdateSerializer, \
-    CaseModuleListSerializer, CaseLabelListSerializer, CaseLabelCreateSerializer, CaseCreateUpdateSerializer, \
-    CaseListSerializer, CaseAttachmentSerializer, ReviewCaseRecordsSerializer, PlanListSerializer, \
-    build_plan_stats_map
-from plane.app.serializers.qa.plan import PlanModuleCreateUpdateSerializer, PlanModuleListSerializer, \
-    PlanCaseListSerializer, PlanCaseCardSerializer, PlanCaseRecordSerializer
+from plane.app.serializers.qa import (
+    TestPlanDetailSerializer,
+    TestPlanListSerializer,
+    CaseModuleCreateUpdateSerializer,
+    CaseModuleListSerializer,
+    CaseLabelListSerializer,
+    CaseLabelCreateSerializer,
+    CaseCreateUpdateSerializer,
+    CaseListSerializer,
+    CaseAttachmentSerializer,
+    ReviewCaseRecordsSerializer,
+    PlanListSerializer,
+    build_plan_stats_map,
+)
+from plane.app.serializers.qa.plan import (
+    PlanModuleCreateUpdateSerializer,
+    PlanModuleListSerializer,
+    PlanCaseListSerializer,
+    PlanCaseCardSerializer,
+    PlanCaseRecordSerializer,
+)
 from plane.app.views.qa.filters import TestPlanFilter
-from plane.db.models import TestPlan, TestCaseRepository, TestCase, CaseModule, CaseLabel, FileAsset, Workspace, \
-    PlanModule, PlanCase, PlanCaseRecord, Issue, Cycle, CycleIssue, WorkspaceMember, ModuleIssue, ReleaseIssue, \
-    CaseReviewRecord, CaseReviewThrough
+from plane.db.models import (
+    TestPlan,
+    TestCaseRepository,
+    TestCase,
+    CaseModule,
+    CaseLabel,
+    FileAsset,
+    Workspace,
+    PlanModule,
+    PlanCase,
+    PlanCaseRecord,
+    Issue,
+    Cycle,
+    CycleIssue,
+    WorkspaceMember,
+    ModuleIssue,
+    ReleaseIssue,
+    CaseReviewRecord,
+    CaseReviewThrough,
+)
 from plane.utils.paginator import CustomPaginator
 from plane.utils.response import list_response
 from plane.app.views import BaseAPIView, BaseViewSet
-from plane.app.serializers import TestPlanCreateUpdateSerializer, TestCaseRepositorySerializer, \
-    TestCaseRepositoryDetailSerializer, CycleSerializer
-from plane.app.permissions import allow_permission, ROLE, allow_fine_permission, PermissionKey
+from plane.app.serializers import (
+    TestPlanCreateUpdateSerializer,
+    TestCaseRepositorySerializer,
+    TestCaseRepositoryDetailSerializer,
+    CycleSerializer,
+)
+from plane.app.permissions import (
+    allow_permission,
+    ROLE,
+    allow_fine_permission,
+    PermissionKey,
+)
 from plane.settings.storage import S3Storage
 from plane.utils.asset_upload import presigned_post_for_asset
 from plane.bgtasks.storage_metadata_task import get_asset_object_metadata
@@ -46,40 +100,46 @@ class NumericSuffixCodeOrderingFilter(OrderingFilter):
         if not ordering:
             return queryset
 
-        if connection.vendor != 'postgresql':
+        if connection.vendor != "postgresql":
             return queryset.order_by(*ordering)
 
-        needs_code = any(field.lstrip('-') in ('code', 'case__code') for field in ordering)
+        needs_code = any(
+            field.lstrip("-") in ("code", "case__code") for field in ordering
+        )
         if not needs_code:
             return queryset.order_by(*ordering)
 
-        code_field = 'case__code' if any(field.lstrip('-') == 'case__code' for field in ordering) else 'code'
+        code_field = (
+            "case__code"
+            if any(field.lstrip("-") == "case__code" for field in ordering)
+            else "code"
+        )
 
         queryset = queryset.annotate(
             _code_sort_group=Case(
-                When(**{f"{code_field}__regex": r'.*-[0-9]+$'}, then=Value(0)),
+                When(**{f"{code_field}__regex": r".*-[0-9]+$"}, then=Value(0)),
                 default=Value(1),
                 output_field=IntegerField(),
             ),
             _code_prefix=Case(
                 When(
-                    **{f"{code_field}__regex": r'.*-[0-9]+$'},
+                    **{f"{code_field}__regex": r".*-[0-9]+$"},
                     then=Func(
                         F(code_field),
-                        function='regexp_replace',
+                        function="regexp_replace",
                         template="regexp_replace(%(expressions)s, '-[0-9]+$', '')",
                     ),
                 ),
-                default=Value(''),
+                default=Value(""),
                 output_field=CharField(),
             ),
             _code_num=Case(
                 When(
-                    **{f"{code_field}__regex": r'.*-[0-9]+$'},
+                    **{f"{code_field}__regex": r".*-[0-9]+$"},
                     then=Cast(
                         Func(
                             F(code_field),
-                            function='substring',
+                            function="substring",
                             template="substring(%(expressions)s from '-([0-9]+)$')",
                         ),
                         IntegerField(),
@@ -92,14 +152,14 @@ class NumericSuffixCodeOrderingFilter(OrderingFilter):
 
         new_ordering = []
         for field in ordering:
-            if field.lstrip('-') not in ('code', 'case__code'):
+            if field.lstrip("-") not in ("code", "case__code"):
                 new_ordering.append(field)
                 continue
 
-            desc = field.startswith('-')
-            new_ordering.append('_code_sort_group')
-            new_ordering.append('-_code_prefix' if desc else '_code_prefix')
-            new_ordering.append('-_code_num' if desc else '_code_num')
+            desc = field.startswith("-")
+            new_ordering.append("_code_sort_group")
+            new_ordering.append("-_code_prefix" if desc else "_code_prefix")
+            new_ordering.append("-_code_num" if desc else "_code_num")
             new_ordering.append(f"-{code_field}" if desc else code_field)
 
         return queryset.order_by(*new_ordering)
@@ -110,11 +170,11 @@ class RepositoryAPIView(BaseAPIView):
     queryset = TestCaseRepository.objects.all()
     serializer_class = TestCaseRepositorySerializer
     filterset_fields = {
-        'project_id': ['exact', 'in'],
-        'project__name': ['exact', 'icontains', 'in'],
-        'id': ['exact', 'in'],
-        'workspace__slug': ['exact', 'icontains', 'in'],
-        'name': ['exact', 'icontains', 'in'],
+        "project_id": ["exact", "in"],
+        "project__name": ["exact", "icontains", "in"],
+        "id": ["exact", "in"],
+        "workspace__slug": ["exact", "icontains", "in"],
+        "name": ["exact", "icontains", "in"],
     }
     pagination_class = CustomPaginator
 
@@ -127,9 +187,11 @@ class RepositoryAPIView(BaseAPIView):
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     def put(self, request, slug):
-        repository_id = request.data.pop('id')
+        repository_id = request.data.pop("id")
         repository = self.queryset.get(id=repository_id)
-        update_serializer = self.serializer_class(instance=repository, data=request.data, partial=True)
+        update_serializer = self.serializer_class(
+            instance=repository, data=request.data, partial=True
+        )
         update_serializer.is_valid(raise_exception=True)
         updated_plan = update_serializer.save()
         serializer = TestCaseRepositoryDetailSerializer(instance=repository)
@@ -139,11 +201,13 @@ class RepositoryAPIView(BaseAPIView):
         repositories = self.filter_queryset(self.queryset)
         paginator = self.pagination_class()
         paginated_queryset = paginator.paginate_queryset(repositories, request)
-        serializer = TestCaseRepositoryDetailSerializer(instance=paginated_queryset, many=True)
+        serializer = TestCaseRepositoryDetailSerializer(
+            instance=paginated_queryset, many=True
+        )
         return list_response(data=serializer.data, count=repositories.count())
 
     def delete(self, request, slug):
-        plan_ids = request.data.pop('ids')
+        plan_ids = request.data.pop("ids")
         self.queryset.filter(id__in=plan_ids).delete(soft=False)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -156,7 +220,7 @@ class PlanAPIView(BaseAPIView):
     filterset_class = TestPlanFilter
 
     def get_queryset(self):
-        return TestPlan.objects.all().prefetch_related('assignees')
+        return TestPlan.objects.all().prefetch_related("assignees")
 
     @allow_fine_permission(PermissionKey.QA_PLAN_CREATE)
     def post(self, request, slug, project_id):
@@ -179,13 +243,17 @@ class PlanAPIView(BaseAPIView):
         )
         paginator_count = getattr(getattr(paginator, "page", None), "paginator", None)
         count = getattr(paginator_count, "count", None)
-        return list_response(data=serializer.data, count=count if count is not None else planes.count())
+        return list_response(
+            data=serializer.data, count=count if count is not None else planes.count()
+        )
 
     @allow_fine_permission(PermissionKey.QA_PLAN_EDIT)
     def put(self, request, slug, project_id):
-        plan_id = request.data.pop('id')
+        plan_id = request.data.pop("id")
         plan = self.queryset.get(id=plan_id)
-        update_serializer = self.serializer_class(instance=plan, data=request.data, partial=True)
+        update_serializer = self.serializer_class(
+            instance=plan, data=request.data, partial=True
+        )
         update_serializer.is_valid(raise_exception=True)
         updated_plan = update_serializer.save()
         serializer = TestPlanDetailSerializer(instance=plan)
@@ -193,7 +261,7 @@ class PlanAPIView(BaseAPIView):
 
     @allow_fine_permission(PermissionKey.QA_PLAN_DELETE)
     def delete(self, request, slug, project_id):
-        plan_ids = request.data.pop('ids')
+        plan_ids = request.data.pop("ids")
         self.queryset.filter(id__in=plan_ids).delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -203,11 +271,13 @@ class PlanListAPIView(BaseAPIView):
     queryset = TestPlan.objects.all()
     serializer_class = PlanListSerializer
     filterset_fields = {
-        'project_id': ['exact', 'in'],
+        "project_id": ["exact", "in"],
     }
 
     def get(self, request, slug):
-        queryset = self.filter_queryset(self.queryset.filter(project__workspace__slug=slug)).distinct()
+        queryset = self.filter_queryset(
+            self.queryset.filter(project__workspace__slug=slug)
+        ).distinct()
         serializer = self.serializer_class(queryset, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -216,32 +286,34 @@ class PlanCaseAPIView(BaseAPIView):
     queryset = PlanCase.objects.all()
     pagination_class = CustomPaginator
     filterset_fields = {
-        'plan_id': ['exact', 'in'],
-        'case__repository_id': ['exact', 'in'],
-        'case__module_id': ['exact', 'in'],
-        'result': ['exact', 'in'],
+        "plan_id": ["exact", "in"],
+        "case__repository_id": ["exact", "in"],
+        "case__module_id": ["exact", "in"],
+        "result": ["exact", "in"],
     }
     serializer_class = PlanCaseListSerializer
-    filter_backends = (DjangoFilterBackend, SearchFilter, NumericSuffixCodeOrderingFilter)
-    ordering_fields = ['case__updated_at', 'case__code']
+    filter_backends = (
+        DjangoFilterBackend,
+        SearchFilter,
+        NumericSuffixCodeOrderingFilter,
+    )
+    ordering_fields = ["case__updated_at", "case__code"]
 
     def get_queryset(self):
-        return (
-            PlanCase.objects.select_related("case").only(
-                "id",
-                "plan_id",
-                "case_id",
-                "result",
-                "created_at",
-                "updated_at",
-                "case__id",
-                "case__code",
-                "case__name",
-                "case__type",
-                "case__priority",
-                "case__updated_at",
-                "case__repository_id",
-            )
+        return PlanCase.objects.select_related("case").only(
+            "id",
+            "plan_id",
+            "case_id",
+            "result",
+            "created_at",
+            "updated_at",
+            "case__id",
+            "case__code",
+            "case__name",
+            "case__type",
+            "case__priority",
+            "case__updated_at",
+            "case__repository_id",
         )
 
     def get(self, request, slug):
@@ -250,20 +322,26 @@ class PlanCaseAPIView(BaseAPIView):
         paginated_queryset = paginator.paginate_queryset(plans, request)
         serializer = self.serializer_class(instance=paginated_queryset, many=True)
         count = (
-            getattr(getattr(getattr(paginator, "page", None), "paginator", None), "count", None)
+            getattr(
+                getattr(getattr(paginator, "page", None), "paginator", None),
+                "count",
+                None,
+            )
             if paginated_queryset is not None
             else None
         )
-        return list_response(data=serializer.data, count=count if count is not None else plans.count())
+        return list_response(
+            data=serializer.data, count=count if count is not None else plans.count()
+        )
 
 
 class PlanModuleAPIView(BaseAPIView):
     model = PlanModule
     serializer_class = PlanModuleListSerializer
     filterset_fields = {
-        'name': ['exact', 'icontains', 'in'],
-        'project_id': ['exact', 'in'],
-        'id': ['exact']
+        "name": ["exact", "icontains", "in"],
+        "project_id": ["exact", "in"],
+        "id": ["exact"],
     }
 
     def get_queryset(self):
@@ -277,13 +355,15 @@ class PlanModuleAPIView(BaseAPIView):
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     def get(self, request, slug):
-        query = self.filter_queryset(self.get_queryset().filter(parent=None)).order_by('created_at')
+        query = self.filter_queryset(self.get_queryset().filter(parent=None)).order_by(
+            "created_at"
+        )
         serializer = self.serializer_class(instance=query, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     def delete(self, request, slug):
-        module_ids = request.data.pop('ids')
-        self.queryset.filter(id__in=module_ids).delete(soft=False)
+        module_ids = request.data.pop("ids")
+        self.get_queryset().filter(id__in=module_ids).delete(soft=False)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -299,31 +379,43 @@ class PlanModuleDetailAPIView(BaseAPIView):
             deleted_at__isnull=True,
             project__workspace__slug=slug,
         )
-        serializer = self.serializer_class(instance=module, data=request.data, partial=True)
+        serializer = self.serializer_class(
+            instance=module, data=request.data, partial=True
+        )
         serializer.is_valid(raise_exception=True)
         serializer.save()
         module.refresh_from_db()
-        return Response(PlanModuleListSerializer(instance=module).data, status=status.HTTP_200_OK)
+        return Response(
+            PlanModuleListSerializer(instance=module).data, status=status.HTTP_200_OK
+        )
 
 
 class PlanModuleCountAPIView(BaseAPIView):
     model = PlanModule
     queryset = PlanModule.objects.all()
     filterset_fields = {
-        'name': ['exact', 'icontains', 'in'],
-        'project_id': ['exact', 'in'],
+        "name": ["exact", "icontains", "in"],
+        "project_id": ["exact", "in"],
     }
 
     def get(self, request, slug):
-        project_id = request.query_params['project_id']
+        project_id = request.query_params["project_id"]
 
-        modules = self.filter_queryset(self.queryset).annotate(
-            plan_count=Count('plans', filter=Q(plans__deleted_at__isnull=True))
-        ).values('id', 'plan_count')
+        modules = (
+            self.filter_queryset(self.queryset)
+            .annotate(
+                plan_count=Count("plans", filter=Q(plans__deleted_at__isnull=True))
+            )
+            .values("id", "plan_count")
+        )
 
-        result = dict(total=TestPlan.objects.filter(project_id=project_id, deleted_at__isnull=True).count())
+        result = dict(
+            total=TestPlan.objects.filter(
+                project_id=project_id, deleted_at__isnull=True
+            ).count()
+        )
         for module in modules:
-            result[str(module['id'])] = module['plan_count']
+            result[str(module["id"])] = module["plan_count"]
 
         return Response(data=result)
 
@@ -331,42 +423,48 @@ class PlanModuleCountAPIView(BaseAPIView):
 class PlanView(BaseViewSet):
     pagination_class = CustomPaginator
 
-    @action(detail=False, methods=['post'], url_path='cancel')
+    @action(detail=False, methods=["post"], url_path="cancel")
     @allow_fine_permission(PermissionKey.QA_PLAN_EDIT)
     def cancel(self, request, slug):
-        project_id = request.query_params.get('project_id')
-        qs = PlanCase.objects.filter(id__in=request.data['id'])
+        project_id = request.query_params.get("project_id")
+        qs = PlanCase.objects.filter(id__in=request.data["id"])
         if project_id:
             qs = qs.filter(plan__project_id=project_id)
         qs.delete(soft=False)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-    @action(detail=False, methods=['get'], url_path='case-list')
+    @action(detail=False, methods=["get"], url_path="case-list")
     def case_list(self, request, slug):
-        query = PlanCase.objects.filter(plan_id=request.query_params['plan_id'])
-        if name := request.query_params.get('name__icontains'):
+        query = PlanCase.objects.filter(plan_id=request.query_params["plan_id"])
+        if name := request.query_params.get("name__icontains"):
             query = query.filter(case__name__icontains=name)
 
         repository_ids = (
-                request.query_params.getlist('repository_id')
-                or request.query_params.getlist('repository_ids')
-                or request.query_params.getlist('case__repository_id')
+            request.query_params.getlist("repository_id")
+            or request.query_params.getlist("repository_ids")
+            or request.query_params.getlist("case__repository_id")
         )
         if repository_ids:
             query = query.filter(case__repository_id__in=repository_ids)
         else:
-            repository_id = request.query_params.get('repository_id') or request.query_params.get('case__repository_id')
+            repository_id = request.query_params.get(
+                "repository_id"
+            ) or request.query_params.get("case__repository_id")
             if repository_id:
                 query = query.filter(case__repository_id=repository_id)
 
-        module_ids = request.query_params.getlist('module_id') or request.query_params.getlist('module_ids')
+        module_ids = request.query_params.getlist(
+            "module_id"
+        ) or request.query_params.getlist("module_ids")
         if module_ids:
             expanded = set(module_ids)
             frontier = list(module_ids)
             while frontier:
                 children = list(
-                    CaseModule.objects.filter(parent_id__in=frontier, deleted_at__isnull=True).values_list('id',
-                                                                                                           flat=True))
+                    CaseModule.objects.filter(
+                        parent_id__in=frontier, deleted_at__isnull=True
+                    ).values_list("id", flat=True)
+                )
                 new_children = [c for c in children if c not in expanded]
                 if not new_children:
                     break
@@ -374,14 +472,16 @@ class PlanView(BaseViewSet):
                 frontier = new_children
             query = query.filter(case__module_id__in=list(expanded))
         else:
-            module_id = request.query_params.get('module_id')
+            module_id = request.query_params.get("module_id")
             if module_id:
                 expanded = {module_id}
                 frontier = [module_id]
                 while frontier:
                     children = list(
-                        CaseModule.objects.filter(parent_id__in=frontier, deleted_at__isnull=True).values_list('id',
-                                                                                                               flat=True))
+                        CaseModule.objects.filter(
+                            parent_id__in=frontier, deleted_at__isnull=True
+                        ).values_list("id", flat=True)
+                    )
                     new_children = [c for c in children if c not in expanded]
                     if not new_children:
                         break
@@ -393,17 +493,17 @@ class PlanView(BaseViewSet):
         serializer = PlanCaseCardSerializer(instance=paginated_queryset, many=True)
         return list_response(data=serializer.data, count=query.count())
 
-    @action(detail=False, methods=['post'], url_path='execute')
+    @action(detail=False, methods=["post"], url_path="execute")
     def execute(self, request, slug):
-        plan_id = request.data['plan_id']
-        case_ids = request.data['case_id']
-        result = request.data['result']
-        reason = request.data.get('reason')
-        steps = request.data.get('steps')
-        assignee = request.data['assignee']
+        plan_id = request.data["plan_id"]
+        case_ids = request.data["case_id"]
+        result = request.data["result"]
+        reason = request.data.get("reason")
+        steps = request.data.get("steps")
+        assignee = request.data["assignee"]
 
         query = TestPlan.objects.get(id=plan_id).assignees.all()
-        plan_executor = query.values_list('id', flat=True)
+        plan_executor = query.values_list("id", flat=True)
 
         if isinstance(case_ids, str):
             case_ids = [case_ids]
@@ -411,38 +511,51 @@ class PlanView(BaseViewSet):
 
             plan_case = PlanCase.objects.get(plan_id=plan_id, case_id=case_id)
             if query.exists() and request.user.id not in plan_executor:
-                return Response(status=status.HTTP_403_FORBIDDEN,
-                                data={'msg': f'你没有权限执行"{plan_case.case.name}"'})
+                return Response(
+                    status=status.HTTP_403_FORBIDDEN,
+                    data={"msg": f'你没有权限执行"{plan_case.case.name}"'},
+                )
 
             # 创建执行记录
-            pcr = PlanCaseRecord.objects.create(result=result, reason=reason,
-                                                steps=steps if steps else plan_case.case.steps, assignee_id=assignee,
-                                                plan_case=plan_case)
+            pcr = PlanCaseRecord.objects.create(
+                result=result,
+                reason=reason,
+                steps=steps if steps else plan_case.case.steps,
+                assignee_id=assignee,
+                plan_case=plan_case,
+            )
             plan_case.result = result
             plan_case.save()
 
             plan = TestPlan.objects.get(id=plan_id)
             # 修改计划状态
-            if not PlanCase.objects.filter(plan_id=plan_id, result=PlanCase.Result.NOT_START).exists():
+            if not PlanCase.objects.filter(
+                plan_id=plan_id, result=PlanCase.Result.NOT_START
+            ).exists():
                 plan.state = TestPlan.State.COMPLETED
             else:
                 plan.state = TestPlan.State.PROGRESS
             plan.save()
         return Response(status=status.HTTP_201_CREATED)
 
-    @action(detail=False, methods=['post'], url_path='export')
+    @action(detail=False, methods=["post"], url_path="export")
     def export(self, request, slug):
-        plan_id = request.data.get('plan_id')
+        plan_id = request.data.get("plan_id")
         if not plan_id:
-            return Response({"error": "plan_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "plan_id is required"}, status=status.HTTP_400_BAD_REQUEST
+            )
 
-        fields = request.data.get('fields') or []
+        fields = request.data.get("fields") or []
         if not isinstance(fields, list) or not fields:
-            return Response({"error": "fields must be a non-empty list"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "fields must be a non-empty list"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        ids = request.data.get('ids') or []
-        repository_id = request.data.get('repository_id')
-        module_id = request.data.get('module_id')
+        ids = request.data.get("ids") or []
+        repository_id = request.data.get("repository_id")
+        module_id = request.data.get("module_id")
 
         allowed = {
             "code": "用例编号",
@@ -467,7 +580,10 @@ class PlanView(BaseViewSet):
         }
         fields = [f for f in fields if f in allowed.keys()]
         if not fields:
-            return Response({"error": "no valid fields selected"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "no valid fields selected"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         qs = (
             PlanCase.objects.select_related(
@@ -488,8 +604,9 @@ class PlanView(BaseViewSet):
             frontier = [str(module_id)]
             while frontier:
                 children = list(
-                    CaseModule.objects.filter(parent_id__in=frontier, deleted_at__isnull=True).values_list("id",
-                                                                                                           flat=True)
+                    CaseModule.objects.filter(
+                        parent_id__in=frontier, deleted_at__isnull=True
+                    ).values_list("id", flat=True)
                 )
                 new_children = [str(c) for c in children if str(c) not in expanded]
                 if not new_children:
@@ -516,9 +633,17 @@ class PlanView(BaseViewSet):
             if key == "type":
                 return c.get_type_display() if hasattr(c, "get_type_display") else ""
             if key == "priority":
-                return c.get_priority_display() if hasattr(c, "get_priority_display") else ""
+                return (
+                    c.get_priority_display()
+                    if hasattr(c, "get_priority_display")
+                    else ""
+                )
             if key == "test_type":
-                return c.get_test_type_display() if hasattr(c, "get_test_type_display") else ""
+                return (
+                    c.get_test_type_display()
+                    if hasattr(c, "get_test_type_display")
+                    else ""
+                )
             if key == "state":
                 return c.get_state_display() if hasattr(c, "get_state_display") else ""
             if key == "precondition":
@@ -532,15 +657,31 @@ class PlanView(BaseViewSet):
             if key == "remark":
                 return c.remark or ""
             if key == "labels":
-                return ",".join([l.name for l in c.labels.all()]) if hasattr(c, "labels") else ""
+                return (
+                    ",".join([l.name for l in c.labels.all()])
+                    if hasattr(c, "labels")
+                    else ""
+                )
             if key == "issues":
-                return ",".join([str(i.id) for i in c.issues.all()]) if hasattr(c, "issues") else ""
+                return (
+                    ",".join([str(i.id) for i in c.issues.all()])
+                    if hasattr(c, "issues")
+                    else ""
+                )
             if key == "assignee":
                 return getattr(getattr(c, "assignee", None), "display_name", "") or ""
             if key == "created_at":
-                return timezone.localtime(c.created_at).strftime("%Y-%m-%d %H:%M:%S") if c.created_at else ""
+                return (
+                    timezone.localtime(c.created_at).strftime("%Y-%m-%d %H:%M:%S")
+                    if c.created_at
+                    else ""
+                )
             if key == "updated_at":
-                return timezone.localtime(c.updated_at).strftime("%Y-%m-%d %H:%M:%S") if c.updated_at else ""
+                return (
+                    timezone.localtime(c.updated_at).strftime("%Y-%m-%d %H:%M:%S")
+                    if c.updated_at
+                    else ""
+                )
             if key == "result":
                 return pc.result or ""
             return ""
@@ -550,46 +691,51 @@ class PlanView(BaseViewSet):
             writer.writerow(row)
 
         content = "\ufeff" + buffer.getvalue()
-        resp = FileResponse(io.BytesIO(content.encode("utf-8")), content_type="text/csv; charset=utf-8")
+        resp = FileResponse(
+            io.BytesIO(content.encode("utf-8")), content_type="text/csv; charset=utf-8"
+        )
         filename = f"plan-cases-export-{timezone.now().strftime('%Y%m%d%H%M%S')}.csv"
         resp["Content-Disposition"] = f"attachment; filename*=UTF-8''{quote(filename)}"
         return resp
 
-    @action(detail=False, methods=['get'], url_path='case-detail')
+    @action(detail=False, methods=["get"], url_path="case-detail")
     def case_detail(self, request, slug):
-        plan_id = request.query_params['plan_id']
-        case_id = request.query_params['case_id']
+        plan_id = request.query_params["plan_id"]
+        case_id = request.query_params["case_id"]
 
         plan_case = PlanCase.objects.get(plan_id=plan_id, case_id=case_id)
         case = TestCase.objects.get(pk=case_id)
         case_data = CaseListSerializer(case).data
 
-        case_data[
-            'execute_steps'] = plan_case.plan_case_records.first().steps if plan_case.plan_case_records.first() else None
+        case_data["execute_steps"] = (
+            plan_case.plan_case_records.first().steps
+            if plan_case.plan_case_records.first()
+            else None
+        )
         return Response(case_data, status=status.HTTP_200_OK)
 
-    @action(detail=False, methods=['post'], url_path='add-bug')
+    @action(detail=False, methods=["post"], url_path="add-bug")
     def add_bug(self, request, slug):
-        case_id = request.data['case_id']
-        issue_id = request.data['issue_id']
+        case_id = request.data["case_id"]
+        issue_id = request.data["issue_id"]
         case = TestCase.objects.get(pk=case_id)
         issue = Issue.objects.get(pk=issue_id)
         case.issues.add(issue)
         return Response(status=status.HTTP_201_CREATED)
 
-    @action(detail=False, methods=['get'], url_path='records')
+    @action(detail=False, methods=["get"], url_path="records")
     def get_records(self, request, slug):
-        plan_id = request.query_params['plan_id']
-        case_id = request.query_params['case_id']
+        plan_id = request.query_params["plan_id"]
+        case_id = request.query_params["case_id"]
         plan_case = PlanCase.objects.get(plan_id=plan_id, case_id=case_id)
         records = PlanCaseRecord.objects.filter(plan_case=plan_case)
         serializer = PlanCaseRecordSerializer(instance=records, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    @action(detail=False, methods=['post'], url_path='associate-cycle')
+    @action(detail=False, methods=["post"], url_path="associate-cycle")
     def associate_cycle(self, request, slug):
-        plan_id = request.data['plan_id']
-        cycle_ids: list = request.data['cycle_id']
+        plan_id = request.data["plan_id"]
+        cycle_ids: list = request.data["cycle_id"]
 
         # 1. 获取 Plan 对象
         plan = TestPlan.objects.get(pk=plan_id)
@@ -607,9 +753,11 @@ class PlanView(BaseViewSet):
         # 3. 批量导入关联的用例
         # 获取所有选中 Cycle 下 Issue 关联的 Case ID
         # 通过连表查询一次性获取所有相关的 case_id
-        related_case_ids = CycleIssue.objects.filter(
-            cycle_id__in=cycle_ids
-        ).values_list('issue__cases__id', flat=True).distinct()
+        related_case_ids = (
+            CycleIssue.objects.filter(cycle_id__in=cycle_ids)
+            .values_list("issue__cases__id", flat=True)
+            .distinct()
+        )
 
         # 排除无效的 None 值（如果某些 Issue 没有关联 Case）
         valid_case_ids = [cid for cid in related_case_ids if cid]
@@ -620,10 +768,9 @@ class PlanView(BaseViewSet):
         # 4. 批量创建 PlanCase
         # 获取该 Plan 已存在的 case_id，避免重复创建
         existing_plan_case_ids = set(
-            PlanCase.objects.filter(
-                plan=plan,
-                case_id__in=valid_case_ids
-            ).values_list('case_id', flat=True)
+            PlanCase.objects.filter(plan=plan, case_id__in=valid_case_ids).values_list(
+                "case_id", flat=True
+            )
         )
 
         # 计算需要新创建的 case_id
@@ -631,92 +778,126 @@ class PlanView(BaseViewSet):
 
         if new_case_ids:
             new_plan_cases = [
-                PlanCase(plan=plan, case_id=case_id)
-                for case_id in new_case_ids
+                PlanCase(plan=plan, case_id=case_id) for case_id in new_case_ids
             ]
             PlanCase.objects.bulk_create(new_plan_cases, batch_size=1000)
 
         return Response(status=status.HTTP_200_OK)
 
     @transaction.atomic
-    @action(detail=False, methods=['post'], url_path='add-cases')
+    @action(detail=False, methods=["post"], url_path="add-cases")
     @allow_fine_permission(PermissionKey.QA_PLAN_EDIT)
     def add_cases(self, request, slug):
-        plan_id = request.data.get('plan_id')
-        raw_case_ids = request.data.get('case_ids')
+        plan_id = request.data.get("plan_id")
+        raw_case_ids = request.data.get("case_ids")
 
         if not plan_id:
-            return Response({"error": "plan_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "plan_id is required"}, status=status.HTTP_400_BAD_REQUEST
+            )
 
         if not isinstance(raw_case_ids, list) or len(raw_case_ids) == 0:
-            return Response({"error": "case_ids must be a non-empty list"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "case_ids must be a non-empty list"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         try:
             case_ids = [uuid.UUID(str(i)) for i in raw_case_ids if i]
         except Exception:
-            return Response({"error": "Invalid case_ids"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "Invalid case_ids"}, status=status.HTTP_400_BAD_REQUEST
+            )
 
         if not case_ids:
-            return Response({"error": "case_ids must be a non-empty list"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "case_ids must be a non-empty list"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        project_id = request.query_params.get('project_id')
-        plan_lookup = {"id": plan_id, "deleted_at__isnull": True, "project__workspace__slug": slug}
+        project_id = request.query_params.get("project_id")
+        plan_lookup = {
+            "id": plan_id,
+            "deleted_at__isnull": True,
+            "project__workspace__slug": slug,
+        }
         if project_id:
             plan_lookup["project_id"] = project_id
         plan = get_object_or_404(TestPlan, **plan_lookup)
 
         repo_ids = list(
             TestCaseRepository.objects.filter(
-                project_id=plan.project_id, workspace__slug=slug, deleted_at__isnull=True
-            ).values_list('id', flat=True)
+                project_id=plan.project_id,
+                workspace__slug=slug,
+                deleted_at__isnull=True,
+            ).values_list("id", flat=True)
         )
 
         found_case_ids = set(
-            TestCase.objects.filter(id__in=case_ids, repository_id__in=repo_ids, deleted_at__isnull=True).values_list(
-                'id', flat=True
-            )
+            TestCase.objects.filter(
+                id__in=case_ids, repository_id__in=repo_ids, deleted_at__isnull=True
+            ).values_list("id", flat=True)
         )
         missing_case_ids = set(case_ids) - found_case_ids
         if missing_case_ids:
             missing_str = ",".join(sorted([str(i) for i in missing_case_ids]))
-            return Response({"error": f"TestCase not found: {missing_str}"}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"error": f"TestCase not found: {missing_str}"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
 
         existing_case_ids = set(
-            PlanCase.objects.filter(plan=plan, case_id__in=list(found_case_ids)).values_list('case_id', flat=True)
+            PlanCase.objects.filter(
+                plan=plan, case_id__in=list(found_case_ids)
+            ).values_list("case_id", flat=True)
         )
 
-        soft_deleted_qs = PlanCase.all_objects.filter(plan=plan, case_id__in=list(found_case_ids)).exclude(
-            deleted_at__isnull=True
-        )
-        soft_deleted_case_ids = set(soft_deleted_qs.values_list('case_id', flat=True))
+        soft_deleted_qs = PlanCase.all_objects.filter(
+            plan=plan, case_id__in=list(found_case_ids)
+        ).exclude(deleted_at__isnull=True)
+        soft_deleted_case_ids = set(soft_deleted_qs.values_list("case_id", flat=True))
         if soft_deleted_case_ids:
             soft_deleted_qs.update(deleted_at=None)
 
         to_create_case_ids = found_case_ids - existing_case_ids - soft_deleted_case_ids
         if to_create_case_ids:
             PlanCase.objects.bulk_create(
-                [PlanCase(plan=plan, case_id=case_id) for case_id in to_create_case_ids],
+                [
+                    PlanCase(plan=plan, case_id=case_id)
+                    for case_id in to_create_case_ids
+                ],
                 batch_size=1000,
             )
 
         return Response(status=status.HTTP_200_OK)
 
-    @action(detail=False, methods=['post'], url_path='associate-modules')
+    @action(detail=False, methods=["post"], url_path="associate-modules")
     def associate_modules(self, request, slug):
-        plan_id = request.data.get('plan_id')
-        module_ids = request.data.get('module_ids', [])
+        plan_id = request.data.get("plan_id")
+        module_ids = request.data.get("module_ids", [])
 
         if not plan_id:
-            return Response({"error": "plan_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "plan_id is required"}, status=status.HTTP_400_BAD_REQUEST
+            )
         if not isinstance(module_ids, list) or len(module_ids) == 0:
-            return Response({"error": "module_ids must be a non-empty list"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "module_ids must be a non-empty list"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        plan = get_object_or_404(TestPlan, pk=plan_id, deleted_at__isnull=True, project__workspace__slug=slug)
+        plan = get_object_or_404(
+            TestPlan, pk=plan_id, deleted_at__isnull=True, project__workspace__slug=slug
+        )
 
-        related_case_ids = ModuleIssue.objects.filter(
-            module_id__in=module_ids,
-            deleted_at__isnull=True,
-        ).values_list('issue__cases__id', flat=True).distinct()
+        related_case_ids = (
+            ModuleIssue.objects.filter(
+                module_id__in=module_ids,
+                deleted_at__isnull=True,
+            )
+            .values_list("issue__cases__id", flat=True)
+            .distinct()
+        )
 
         valid_case_ids = [cid for cid in related_case_ids if cid]
 
@@ -728,17 +909,20 @@ class PlanView(BaseViewSet):
             PlanCase.objects.filter(
                 plan=plan,
                 case_id__in=valid_case_ids,
-            ).values_list('case_id', flat=True)
+            ).values_list("case_id", flat=True)
         )
 
         soft_deleted_qs = PlanCase.all_objects.filter(
-            plan=plan, case_id__in=valid_case_ids,
+            plan=plan,
+            case_id__in=valid_case_ids,
         ).exclude(deleted_at__isnull=True)
-        soft_deleted_case_ids = set(soft_deleted_qs.values_list('case_id', flat=True))
+        soft_deleted_case_ids = set(soft_deleted_qs.values_list("case_id", flat=True))
         if soft_deleted_case_ids:
             soft_deleted_qs.update(deleted_at=None)
 
-        new_case_ids = set(valid_case_ids) - existing_plan_case_ids - soft_deleted_case_ids
+        new_case_ids = (
+            set(valid_case_ids) - existing_plan_case_ids - soft_deleted_case_ids
+        )
         if new_case_ids:
             PlanCase.objects.bulk_create(
                 [PlanCase(plan=plan, case_id=case_id) for case_id in new_case_ids],
@@ -749,24 +933,35 @@ class PlanView(BaseViewSet):
         return Response(status=status.HTTP_200_OK)
 
     @transaction.atomic
-    @action(detail=False, methods=['post'], url_path='associate-releases')
+    @action(detail=False, methods=["post"], url_path="associate-releases")
     @allow_fine_permission(PermissionKey.QA_PLAN_EDIT)
     def associate_releases(self, request, slug):
-        plan_id = request.data.get('plan_id')
-        release_ids = request.data.get('release_ids', [])
+        plan_id = request.data.get("plan_id")
+        release_ids = request.data.get("release_ids", [])
 
         if not plan_id:
-            return Response({"error": "plan_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "plan_id is required"}, status=status.HTTP_400_BAD_REQUEST
+            )
         if not isinstance(release_ids, list) or len(release_ids) == 0:
-            return Response({"error": "release_ids must be a non-empty list"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "release_ids must be a non-empty list"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        plan = get_object_or_404(TestPlan, pk=plan_id, deleted_at__isnull=True, project__workspace__slug=slug)
+        plan = get_object_or_404(
+            TestPlan, pk=plan_id, deleted_at__isnull=True, project__workspace__slug=slug
+        )
 
-        related_case_ids = ReleaseIssue.objects.filter(
-            release_id__in=release_ids,
-            project_id=plan.project_id,
-            deleted_at__isnull=True,
-        ).values_list('issue__cases__id', flat=True).distinct()
+        related_case_ids = (
+            ReleaseIssue.objects.filter(
+                release_id__in=release_ids,
+                project_id=plan.project_id,
+                deleted_at__isnull=True,
+            )
+            .values_list("issue__cases__id", flat=True)
+            .distinct()
+        )
 
         valid_case_ids = [cid for cid in related_case_ids if cid]
 
@@ -778,17 +973,20 @@ class PlanView(BaseViewSet):
             PlanCase.objects.filter(
                 plan=plan,
                 case_id__in=valid_case_ids,
-            ).values_list('case_id', flat=True)
+            ).values_list("case_id", flat=True)
         )
 
         soft_deleted_qs = PlanCase.all_objects.filter(
-            plan=plan, case_id__in=valid_case_ids,
+            plan=plan,
+            case_id__in=valid_case_ids,
         ).exclude(deleted_at__isnull=True)
-        soft_deleted_case_ids = set(soft_deleted_qs.values_list('case_id', flat=True))
+        soft_deleted_case_ids = set(soft_deleted_qs.values_list("case_id", flat=True))
         if soft_deleted_case_ids:
             soft_deleted_qs.update(deleted_at=None)
 
-        new_case_ids = set(valid_case_ids) - existing_plan_case_ids - soft_deleted_case_ids
+        new_case_ids = (
+            set(valid_case_ids) - existing_plan_case_ids - soft_deleted_case_ids
+        )
         if new_case_ids:
             PlanCase.objects.bulk_create(
                 [PlanCase(plan=plan, case_id=case_id) for case_id in new_case_ids],
@@ -802,25 +1000,27 @@ class PlanView(BaseViewSet):
 class CaseAPIView(BaseAPIView):
     model = TestCase
     queryset = TestCase.objects.select_related(
-        'repository', 'module', 'assignee'
-    ).prefetch_related(
-        'labels', 'issues'
-    )
+        "repository", "module", "assignee"
+    ).prefetch_related("labels", "issues")
     pagination_class = CustomPaginator
     serializer_class = CaseListSerializer
-    filter_backends = (DjangoFilterBackend, SearchFilter, NumericSuffixCodeOrderingFilter)
+    filter_backends = (
+        DjangoFilterBackend,
+        SearchFilter,
+        NumericSuffixCodeOrderingFilter,
+    )
     filterset_fields = {
-        'name': ['exact', 'icontains', 'in'],
-        'code': ['exact', 'icontains', 'in'],
-        'labels__name': ['exact', 'icontains'],
-        'repository_id': ['exact'],
-        'type': ['exact', 'in'],
-        'priority': ['exact', 'in'],
-        'module_id': ['exact', 'in'],
-        'id': ['exact', 'in'],
-        'plan_cases__plan__id': ['exact', 'in'],
+        "name": ["exact", "icontains", "in"],
+        "code": ["exact", "icontains", "in"],
+        "labels__name": ["exact", "icontains"],
+        "repository_id": ["exact"],
+        "type": ["exact", "in"],
+        "priority": ["exact", "in"],
+        "module_id": ["exact", "in"],
+        "id": ["exact", "in"],
+        "plan_cases__plan__id": ["exact", "in"],
     }
-    ordering_fields = ['updated_at', 'code']
+    ordering_fields = ["updated_at", "code"]
 
     @allow_fine_permission(PermissionKey.QA_CASE_VIEW)
     def get(self, request, slug, project_id):
@@ -843,9 +1043,11 @@ class CaseAPIView(BaseAPIView):
 
     @allow_fine_permission(PermissionKey.QA_CASE_EDIT)
     def put(self, request, slug, project_id):
-        case_id = request.data.pop('id')
+        case_id = request.data.pop("id")
         case = self.queryset.get(id=case_id)
-        update_serializer = CaseCreateUpdateSerializer(instance=case, data=request.data, partial=True)
+        update_serializer = CaseCreateUpdateSerializer(
+            instance=case, data=request.data, partial=True
+        )
         update_serializer.is_valid(raise_exception=True)
         update_serializer.save()
         serializer = self.serializer_class(instance=case)
@@ -874,16 +1076,25 @@ class CaseMindmapAPIView(BaseAPIView):
     def get(self, request, slug):
         repository_id = request.query_params.get("repository_id")
         module_ids_raw = (
-                request.query_params.getlist("module_id")
-                or request.query_params.getlist("module_id[]")
-                or ([] if request.query_params.get("module_id") is None else [request.query_params.get("module_id")])
+            request.query_params.getlist("module_id")
+            or request.query_params.getlist("module_id[]")
+            or (
+                []
+                if request.query_params.get("module_id") is None
+                else [request.query_params.get("module_id")]
+            )
         )
 
         if not repository_id:
-            return Response({"error": "repository_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "repository_id is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         modules = list(
-            CaseModule.objects.filter(repository_id=repository_id, deleted_at__isnull=True)
+            CaseModule.objects.filter(
+                repository_id=repository_id, deleted_at__isnull=True
+            )
             .values("id", "name", "parent_id", "sort_order")
             .order_by("sort_order", "created_at")
         )
@@ -923,7 +1134,9 @@ class CaseMindmapAPIView(BaseAPIView):
 
         for mid in selected_module_ids:
             if mid not in module_map:
-                return Response({"error": "module not found"}, status=status.HTTP_404_NOT_FOUND)
+                return Response(
+                    {"error": "module not found"}, status=status.HTTP_404_NOT_FOUND
+                )
 
         allowed_module_ids: set[str] | None = None
         if selected_module_ids:
@@ -931,7 +1144,9 @@ class CaseMindmapAPIView(BaseAPIView):
             for mid in selected_module_ids:
                 allowed_module_ids |= collect_descendants(mid)
 
-        cases_qs = TestCase.objects.filter(repository_id=repository_id, deleted_at__isnull=True)
+        cases_qs = TestCase.objects.filter(
+            repository_id=repository_id, deleted_at__isnull=True
+        )
         if allowed_module_ids is not None:
             cases_qs = cases_qs.filter(module_id__in=list(allowed_module_ids))
 
@@ -961,8 +1176,13 @@ class CaseMindmapAPIView(BaseAPIView):
         def build_module_node(mid: str) -> dict:
             meta = module_map[mid]
             child_ids = children_map.get(mid, [])
-            child_ids = sorted(child_ids,
-                               key=lambda x: (module_map[x].get("sort_order") or 0, module_map[x].get("name") or ""))
+            child_ids = sorted(
+                child_ids,
+                key=lambda x: (
+                    module_map[x].get("sort_order") or 0,
+                    module_map[x].get("name") or "",
+                ),
+            )
             return {
                 "id": mid,
                 "name": meta.get("name") or "",
@@ -973,13 +1193,19 @@ class CaseMindmapAPIView(BaseAPIView):
         if selected_module_ids:
             selected_children = sorted(
                 selected_module_ids,
-                key=lambda x: (module_map[x].get("sort_order") or 0, module_map[x].get("name") or ""),
+                key=lambda x: (
+                    module_map[x].get("sort_order") or 0,
+                    module_map[x].get("name") or "",
+                ),
             )
             root_children_nodes = [build_module_node(mid) for mid in selected_children]
         else:
             root_children = sorted(
                 roots,
-                key=lambda x: (module_map[x].get("sort_order") or 0, module_map[x].get("name") or ""),
+                key=lambda x: (
+                    module_map[x].get("sort_order") or 0,
+                    module_map[x].get("name") or "",
+                ),
             )
             root_children_nodes = [build_module_node(mid) for mid in root_children]
 
@@ -998,15 +1224,15 @@ class CaseModuleAPIView(BaseAPIView):
     queryset = CaseModule.objects.all()
     serializer_class = CaseModuleCreateUpdateSerializer
     filterset_fields = {
-        'name': ['exact', 'icontains', 'in'],
-        'repository_id': ['exact'],
-        'id': ['exact'],
+        "name": ["exact", "icontains", "in"],
+        "repository_id": ["exact"],
+        "id": ["exact"],
     }
 
     def get(self, request, slug):
-        repository_ids_raw = request.query_params.get('repository_id__in')
+        repository_ids_raw = request.query_params.get("repository_id__in")
         if repository_ids_raw:
-            ids = [r.strip() for r in repository_ids_raw.split(',') if r.strip()]
+            ids = [r.strip() for r in repository_ids_raw.split(",") if r.strip()]
             modules = self.queryset.filter(parent=None, repository_id__in=ids)
         else:
             modules = self.filter_queryset(self.queryset.filter(parent=None))
@@ -1030,8 +1256,8 @@ class LabelAPIView(BaseAPIView):
     queryset = CaseLabel.objects.all()
     serializer_class = CaseLabelListSerializer
     filterset_fields = {
-        'name': ['exact', 'icontains', 'in'],
-        'repository_id': ['exact']
+        "name": ["exact", "icontains", "in"],
+        "repository_id": ["exact"],
     }
 
     def get(self, request, slug):
@@ -1040,10 +1266,12 @@ class LabelAPIView(BaseAPIView):
         return Response(data=serializer.data)
 
     def post(self, request, slug):
-        name = request.data['name']
-        case_id = request.data.get('case_id')
-        repository_id = request.data['repository_id']
-        label, _ = CaseLabel.objects.get_or_create(name=name, repository_id=repository_id)
+        name = request.data["name"]
+        case_id = request.data.get("case_id")
+        repository_id = request.data["repository_id"]
+        label, _ = CaseLabel.objects.get_or_create(
+            name=name, repository_id=repository_id
+        )
         if case_id:
             case = TestCase.objects.get(id=case_id)
             case.labels.add(label)
@@ -1052,8 +1280,8 @@ class LabelAPIView(BaseAPIView):
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     def delete(self, request, slug):
-        case_id = request.data.get('case_id')
-        label_id = request.data['id']
+        case_id = request.data.get("case_id")
+        label_id = request.data["id"]
         label = self.queryset.get(id=label_id)
         if case_id:
             case = TestCase.objects.get(id=case_id)
@@ -1074,10 +1302,16 @@ class EnumDataAPIView(BaseAPIView):
         case_priority = dict(TestCase.Priority.choices)
         case_test_type = dict(TestCase.TestType.choices)
         plan_case_result = dict(PlanCase.Result.choices)
-        return Response(dict(
-            plan_state=plan_state, case_state=case_state, case_type=case_type, case_priority=case_priority,
-            case_test_type=case_test_type, plan_case_result=plan_case_result
-        ))
+        return Response(
+            dict(
+                plan_state=plan_state,
+                case_state=case_state,
+                case_type=case_type,
+                case_priority=case_priority,
+                case_test_type=case_test_type,
+                plan_case_result=plan_case_result,
+            )
+        )
 
 
 # 新增：测试用例附件 V2 端点，复用 Issue 附件逻辑
@@ -1122,7 +1356,9 @@ class CaseAttachmentV2Endpoint(BaseAPIView):
 
     @allow_permission([ROLE.ADMIN], creator=True, model=FileAsset)
     def delete(self, request, slug, project_id, case_id, pk):
-        case_attachment = FileAsset.objects.get(pk=pk, workspace__slug=slug, project_id=project_id)
+        case_attachment = FileAsset.objects.get(
+            pk=pk, workspace__slug=slug, project_id=project_id
+        )
         case_attachment.is_deleted = True
         case_attachment.deleted_at = timezone.now()
         case_attachment.save()
@@ -1132,17 +1368,27 @@ class CaseAttachmentV2Endpoint(BaseAPIView):
         if pk:
             asset = FileAsset.objects.get(id=pk, workspace__slug=slug)
             if not asset.is_uploaded:
-                return Response({"error": "The asset is not uploaded.", "status": False},
-                                status=status.HTTP_400_BAD_REQUEST)
+                return Response(
+                    {"error": "The asset is not uploaded.", "status": False},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
             storage = S3Storage(request=request)
-            s3_resp = storage.s3_client.get_object(Bucket=storage.aws_storage_bucket_name, Key=asset.storage_key)
+            s3_resp = storage.s3_client.get_object(
+                Bucket=storage.aws_storage_bucket_name, Key=asset.storage_key
+            )
             body = s3_resp.get("Body")
-            content_type = s3_resp.get("ContentType") or asset.attributes.get("type") or "application/octet-stream"
+            content_type = (
+                s3_resp.get("ContentType")
+                or asset.attributes.get("type")
+                or "application/octet-stream"
+            )
             resp = StreamingHttpResponse(body, content_type=content_type)
             filename = asset.attributes.get("name")
             if filename:
-                resp["Content-Disposition"] = f"attachment; filename*=UTF-8''{quote(filename)}"
+                resp["Content-Disposition"] = (
+                    f"attachment; filename*=UTF-8''{quote(filename)}"
+                )
             content_length = s3_resp.get("ContentLength")
             if content_length:
                 resp["Content-Length"] = str(content_length)
@@ -1159,7 +1405,9 @@ class CaseAttachmentV2Endpoint(BaseAPIView):
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
     def patch(self, request, slug, project_id, case_id, pk):
-        case_attachment = FileAsset.objects.get(pk=pk, workspace__slug=slug, project_id=project_id)
+        case_attachment = FileAsset.objects.get(
+            pk=pk, workspace__slug=slug, project_id=project_id
+        )
         # 首次标记为已上传
         if not case_attachment.is_uploaded:
             case_attachment.is_uploaded = True
@@ -1169,7 +1417,9 @@ class CaseAttachmentV2Endpoint(BaseAPIView):
             get_asset_object_metadata.delay(str(case_attachment.id))
 
         # 可选：更新 attributes（与 UserAssetsV2Endpoint 同步风格）
-        case_attachment.attributes = request.data.get("attributes", case_attachment.attributes)
+        case_attachment.attributes = request.data.get(
+            "attributes", case_attachment.attributes
+        )
         case_attachment.save(update_fields=["is_uploaded", "attributes"])
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -1240,7 +1490,9 @@ class UserCaseModuleTreeAPIView(BaseAPIView):
                 "name": module.name,
                 "sort_order": module.sort_order,
                 "repository": str(module.repository_id),
-                "children": [_build_node(c) for c in children_map.get(str(module.id), [])],
+                "children": [
+                    _build_node(c) for c in children_map.get(str(module.id), [])
+                ],
             }
 
         # 5. 按工作区 → 项目 → 用例库 三层分组
@@ -1266,11 +1518,15 @@ class UserCaseModuleTreeAPIView(BaseAPIView):
                     "name": proj.name if proj else "未关联项目",
                     "repositories": [],
                 }
-            proj_map[proj_key]["repositories"].append({
-                "id": str(repo.id),
-                "name": repo.name,
-                "modules": [_build_node(m) for m in repo_roots_map.get(str(repo.id), [])],
-            })
+            proj_map[proj_key]["repositories"].append(
+                {
+                    "id": str(repo.id),
+                    "name": repo.name,
+                    "modules": [
+                        _build_node(m) for m in repo_roots_map.get(str(repo.id), [])
+                    ],
+                }
+            )
 
         # 6. 整理最终结构（去掉内部 _project_map 辅助键）
         result = []

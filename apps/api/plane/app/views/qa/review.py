@@ -205,7 +205,11 @@ class CaseReviewView(BaseViewSet):
 
     @action(detail=False, methods=['get'], url_path='case-list')
     def case_list(self, request, slug):
-        query = CaseReviewThrough.objects.filter(review_id=request.query_params['review_id'])
+        query = (
+            CaseReviewThrough.objects.filter(review_id=request.query_params['review_id'])
+            .select_related('case', 'case__repository', 'case__module', 'review')
+            .prefetch_related('review__assignees')
+        )
         if project_id := request.query_params.get('project_id'):
             query = query.filter(case__repository__project_id=project_id)
         if repository_id := request.query_params.get('repository_id'):
