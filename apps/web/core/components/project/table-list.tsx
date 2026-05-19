@@ -371,12 +371,6 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
                   <th className="px-4 py-3 text-left font-medium text-secondary hidden md:table-cell">
                     进度
                   </th>
-                  <th className="px-4 py-3 text-left font-medium text-secondary hidden md:table-cell">
-                    缺陷数量
-                  </th>
-                  <th className="px-4 py-3 text-left font-medium text-secondary hidden md:table-cell">
-                    迭代数量
-                  </th>
                   <th className="px-4 py-3 text-left font-medium text-secondary hidden lg:table-cell">
                     <button
                       type="button"
@@ -557,12 +551,6 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
                     ) : (
                       <span className="text-secondary">-</span>
                     )}
-                  </td>
-                  <td className="px-4 py-3 text-secondary hidden md:table-cell tabular-nums">
-                    {project.bug_count ?? "-"}
-                  </td>
-                  <td className="px-4 py-3 text-secondary hidden md:table-cell tabular-nums">
-                    {project.cycle_count ?? "-"}
                   </td>
                   <td className="px-4 py-3 text-secondary hidden lg:table-cell">
                     {project.created_at ? renderFormattedDate(project.created_at) : "-"}

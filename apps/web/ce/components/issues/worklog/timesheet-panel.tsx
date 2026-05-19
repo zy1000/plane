@@ -4,14 +4,19 @@
  * See the LICENSE file for details.
  */
 
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { observer } from "mobx-react";
 import { Listbox, Transition } from "@headlessui/react";
 import { Check, ChevronDown, Clock, Trash2, FileText } from "lucide-react";
 import { Avatar } from "@plane/ui";
 import { cn, getFileURL } from "@plane/utils";
 import { TIMESHEET_CATEGORY_KEY } from "@/constants/timesheet-category";
-import { addWorkHoursToStart, getWorkHours } from "@/helpers/timesheet-break.helper";
+import {
+  addWorkHoursToStart,
+  getSuggestedStartTime,
+  getWorkHours,
+  getWorkTimeRangeError,
+} from "@/helpers/timesheet-break.helper";
 import { useUser } from "@/hooks/store/user";
 import { useTimesheetCategories } from "@/hooks/store/use-timesheet-categories";
 import {
@@ -199,9 +204,22 @@ export const TimesheetPanel = observer(function TimesheetPanel(props: TTimesheet
   const today = new Date();
   const todayStr = today.toISOString().split("T")[0];
 
+  const getSuggestedForDate = (date: string) => {
+    const dateEntries = timesheets.filter((t) => t.date === date);
+    return getSuggestedStartTime(dateEntries);
+  };
+
   const [selectedDate, setSelectedDate] = useState(todayStr);
-  const [startTime, setStartTime] = useState(DEFAULT_START_TIME);
-  const [endTime, setEndTime] = useState(DEFAULT_START_TIME);
+  const [startTime, setStartTime] = useState(() => getSuggestedForDate(todayStr));
+  const [endTime, setEndTime] = useState(() => getSuggestedForDate(todayStr));
+
+  useEffect(() => {
+    const suggested = getSuggestedForDate(selectedDate);
+    setStartTime(suggested);
+    setEndTime(suggested);
+    setTimeInput("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDate]);
 
   const aggregated = useMemo(() => aggregateByUser(timesheets), [timesheets]);
   const derivedHours = getWorkHours(startTime, endTime);
@@ -233,8 +251,9 @@ export const TimesheetPanel = observer(function TimesheetPanel(props: TTimesheet
       return;
     }
 
-    if (endTime && getWorkHours(value, endTime) === null) {
-      setTimeError("结束时间必须晚于开始时间");
+    if (endTime && endTime !== value) {
+      const error = getWorkTimeRangeError(value, endTime);
+      if (error) setTimeError(error);
     }
   };
 
@@ -248,13 +267,16 @@ export const TimesheetPanel = observer(function TimesheetPanel(props: TTimesheet
       return;
     }
 
-    setTimeError("结束时间必须晚于开始时间");
+    if (startTime !== value) {
+      const error = getWorkTimeRangeError(startTime, value);
+      if (error) setTimeError(error);
+    }
   };
 
   const handleSave = async () => {
     const hours = getWorkHours(startTime, endTime);
     if (!hours) {
-      setTimeError("请选择有效的开始时间和结束时间");
+      setTimeError(getWorkTimeRangeError(startTime, endTime) ?? "请选择有效的开始时间和结束时间");
       return;
     }
     if (!timeInput.trim()) {
@@ -292,8 +314,8 @@ export const TimesheetPanel = observer(function TimesheetPanel(props: TTimesheet
       setTimeInput("");
       setDescription("");
       setSelectedDate(todayStr);
-      setStartTime(DEFAULT_START_TIME);
-      setEndTime(DEFAULT_START_TIME);
+      setStartTime(getSuggestedForDate(todayStr));
+      setEndTime(getSuggestedForDate(todayStr));
       setTimeError("");
     } catch (err) {
       setTimeError(getTimesheetErrorMessage(err));

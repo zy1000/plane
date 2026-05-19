@@ -6,7 +6,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { observer } from "mobx-react";
-import { message, Modal } from "antd";
+import { Input, message, Modal } from "antd";
 import { Beaker, ClipboardCheck, FolderOpen, Layers, Plus, Trash2 } from "lucide-react";
 import { Logo } from "@plane/propel/emoji-icon-picker";
 import { cn } from "@plane/utils";
@@ -281,6 +281,7 @@ type TDragInfo = {
   originalDate: string;
   originalStartMins: number;
   originalEndMins: number;
+  isCopy: boolean;
 };
 
 type TDragPreview = {
@@ -291,15 +292,18 @@ type TDragPreview = {
   date: string;
   startTime: string;
   endTime: string;
+  isCopy: boolean;
 };
 
 function useTimelineBlockDrag({
   timesheets,
   updateTimesheet,
+  createTimesheet,
   scrollContainerRef,
 }: {
   timesheets: TTimeSheet[];
   updateTimesheet: (id: string, data: Partial<TTimeSheetCreatePayload>) => Promise<TTimeSheet | undefined>;
+  createTimesheet: (projectId: string, data: TTimeSheetCreatePayload) => Promise<TTimeSheet | undefined>;
   scrollContainerRef: React.RefObject<HTMLDivElement | null>;
 }) {
   const [dragPreview, setDragPreview] = useState<TDragPreview | null>(null);
@@ -314,6 +318,8 @@ function useTimelineBlockDrag({
   timesheetsRef.current = timesheets;
   const updateRef = useRef(updateTimesheet);
   updateRef.current = updateTimesheet;
+  const createRef = useRef(createTimesheet);
+  createRef.current = createTimesheet;
 
   useEffect(() => () => { cleanupRef.current?.(); }, []);
 
@@ -325,9 +331,12 @@ function useTimelineBlockDrag({
   ) => {
     e.preventDefault();
     e.stopPropagation();
+    // 双击第二下会再次触发 mousedown，避免误进入拖拽
+    if (e.detail >= 2) return;
 
     const startMins = parseTimeToMinutes(block.start_time);
     const endMins = parseTimeToMinutes(block.end_time);
+    const isCopy = type === "move" && (e.ctrlKey || e.metaKey);
 
     dragRef.current = {
       blockId: block.id,
@@ -338,6 +347,7 @@ function useTimelineBlockDrag({
       originalDate: date,
       originalStartMins: startMins,
       originalEndMins: endMins,
+      isCopy,
     };
 
     const initial: TDragPreview = {
@@ -348,11 +358,12 @@ function useTimelineBlockDrag({
       date,
       startTime: block.start_time.slice(0, 5),
       endTime: block.end_time.slice(0, 5),
+      isCopy,
     };
     previewRef.current = initial;
     setDragPreview(initial);
 
-    const cursorValue = type === "move" ? "grabbing" : "ns-resize";
+    const cursorValue = type === "move" ? (isCopy ? "copy" : "grabbing") : "ns-resize";
     const dragCursorStyle = document.createElement("style");
     dragCursorStyle.setAttribute("data-timeline-drag", "true");
     dragCursorStyle.textContent = `* { cursor: ${cursorValue} !important; }`;
@@ -382,6 +393,7 @@ function useTimelineBlockDrag({
           date: drag.originalDate,
           startTime: minutesToTimeStr(start),
           endTime: minutesToTimeStr(drag.originalEndMins),
+          isCopy: drag.isCopy,
         };
       } else if (drag.type === "resize-bottom") {
         const raw = snapToInterval(drag.originalEndMins + deltaMins);
@@ -394,6 +406,7 @@ function useTimelineBlockDrag({
           date: drag.originalDate,
           startTime: minutesToTimeStr(drag.originalStartMins),
           endTime: minutesToTimeStr(end),
+          isCopy: drag.isCopy,
         };
       } else {
         const dur = drag.originalEndMins - drag.originalStartMins;
@@ -418,6 +431,7 @@ function useTimelineBlockDrag({
           date: targetDate,
           startTime: minutesToTimeStr(start),
           endTime: minutesToTimeStr(end),
+          isCopy: drag.isCopy,
         };
       }
 
@@ -498,7 +512,8 @@ function useTimelineBlockDrag({
 
       const newStart = parseTimeToMinutes(preview.startTime);
       const newEnd = parseTimeToMinutes(preview.endTime);
-      if (hasTimeOverlap(timesheetsRef.current, preview.date, newStart, newEnd, drag.blockId)) {
+      const overlapExcludeId = drag.isCopy ? "" : drag.blockId;
+      if (hasTimeOverlap(timesheetsRef.current, preview.date, newStart, newEnd, overlapExcludeId)) {
         message.warning("该时间段与已有工时记录冲突，操作已取消");
         setDragPreview(null);
         return;
@@ -511,15 +526,27 @@ function useTimelineBlockDrag({
         return;
       }
       const hours = String(Math.round((workMinutes / 60) * 100) / 100);
+      const payload = {
+        date: preview.date,
+        start_time: preview.startTime + ":00",
+        end_time: preview.endTime + ":00",
+        hours,
+      };
       try {
-        await updateRef.current(drag.blockId, {
-          date: preview.date,
-          start_time: preview.startTime + ":00",
-          end_time: preview.endTime + ":00",
-          hours,
-        });
+        if (drag.isCopy) {
+          await createRef.current(String(drag.block.project), {
+            ...payload,
+            description: drag.block.description,
+            issue: drag.block.issue ?? undefined,
+            test_case: drag.block.test_case ?? undefined,
+            category: drag.block.category,
+          });
+          message.success("已复制工时记录");
+        } else {
+          await updateRef.current(drag.blockId, payload);
+        }
       } catch (err: any) {
-        message.error(err?.detail || err?.error || "更新工时失败");
+        message.error(err?.detail || err?.error || (drag.isCopy ? "复制工时失败" : "更新工时失败"));
       } finally {
         setDragPreview(null);
       }
@@ -563,6 +590,7 @@ export const TimesheetTimelineView = observer(function TimesheetTimelineView({
   const { dragPreview, startDrag, dayColumnRefs, dragEndTimeRef } = useTimelineBlockDrag({
     timesheets,
     updateTimesheet,
+    createTimesheet,
     scrollContainerRef,
   });
 
@@ -602,6 +630,32 @@ export const TimesheetTimelineView = observer(function TimesheetTimelineView({
 
   const [addModalOpen, setAddModalOpen] = useState(false);
   const pendingCreateRef = useRef<{ date: string; startTime: string; endTime: string } | null>(null);
+
+  const [descriptionEditBlock, setDescriptionEditBlock] = useState<TTimesheetBlock | null>(null);
+  const [descriptionDraft, setDescriptionDraft] = useState("");
+  const [isSavingDescription, setIsSavingDescription] = useState(false);
+
+  const openDescriptionEdit = (block: TTimesheetBlock, dateKey: string) => {
+    if (!isDateEditable(dateKey)) {
+      message.warning("该日期已超出可填报范围");
+      return;
+    }
+    setDescriptionEditBlock(block);
+    setDescriptionDraft(block.description ?? "");
+  };
+
+  const handleSaveDescription = async () => {
+    if (!descriptionEditBlock) return;
+    setIsSavingDescription(true);
+    try {
+      await updateTimesheet(descriptionEditBlock.id, { description: descriptionDraft.trim() });
+      setDescriptionEditBlock(null);
+    } catch (err: any) {
+      message.error(err?.detail || err?.error || "更新备注失败");
+    } finally {
+      setIsSavingDescription(false);
+    }
+  };
 
   const handleColumnClick = (e: React.MouseEvent, dateKey: string) => {
     if (Date.now() - dragEndTimeRef.current < 300) return;
@@ -800,13 +854,17 @@ export const TimesheetTimelineView = observer(function TimesheetTimelineView({
                         "border border-subtle/90 shadow-sm",
                         "border-l-[3px] transition-[opacity] hover:bg-layer-1",
                         getBlockStyleClasses(block),
-                        isDragged && "invisible"
+                        isDragged && !dragPreview?.isCopy && "invisible"
                       )}
                       style={{ top: CONTENT_PADDING_TOP + block.topPx, height: block.heightPx }}
-                      title={`${block.kindLabel} · ${block.label}\n${timeRange}（${hoursStr}）`}
+                      title={`${block.kindLabel} · ${block.label}\n${timeRange}（${hoursStr}）\nCtrl/⌘ + 拖拽可复制`}
                       aria-label={`${block.kindLabel}，${block.label}，${timeRange}，${hoursStr}`}
                       onMouseDown={(e) => startDrag(e, block, "move", key)}
                       onClick={(e) => e.stopPropagation()}
+                      onDoubleClick={(e) => {
+                        e.stopPropagation();
+                        openDescriptionEdit(block, key);
+                      }}
                     >
                       {/* 删除按钮 */}
                       <button
@@ -893,6 +951,7 @@ export const TimesheetTimelineView = observer(function TimesheetTimelineView({
                         "absolute left-1 right-1 rounded-md overflow-hidden pointer-events-none z-20",
                         "border border-subtle/90 shadow-lg",
                         "border-l-[3px] ring-2 ring-accent-primary/30",
+                        dragPreview.isCopy && "ring-dashed opacity-90",
                         getBlockStyleClasses(gb),
                       )}
                       style={{ top: CONTENT_PADDING_TOP + dragPreview.topPx, height: dragPreview.heightPx }}
@@ -933,6 +992,39 @@ export const TimesheetTimelineView = observer(function TimesheetTimelineView({
         onAdd={handleAddFromTimeline}
         onClose={() => { setAddModalOpen(false); pendingCreateRef.current = null; }}
       />
+      <Modal
+        title="编辑备注"
+        open={!!descriptionEditBlock}
+        onCancel={() => setDescriptionEditBlock(null)}
+        onOk={handleSaveDescription}
+        okText="保存"
+        cancelText="取消"
+        confirmLoading={isSavingDescription}
+        destroyOnClose
+      >
+        {descriptionEditBlock && (
+          <div className="space-y-3">
+            <p className="text-sm text-tertiary">
+              {descriptionEditBlock.label}
+              <span className="text-subtle"> · </span>
+              {descriptionEditBlock.start_time.slice(0, 5)}–{descriptionEditBlock.end_time.slice(0, 5)}
+            </p>
+            <Input.TextArea
+              value={descriptionDraft}
+              onChange={(e) => setDescriptionDraft(e.target.value)}
+              placeholder="备注（可选）"
+              autoFocus
+              rows={3}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                  e.preventDefault();
+                  handleSaveDescription();
+                }
+              }}
+            />
+          </div>
+        )}
+      </Modal>
     </div>
   );
 });

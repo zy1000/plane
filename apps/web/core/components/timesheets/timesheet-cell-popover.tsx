@@ -4,14 +4,19 @@
  * See the LICENSE file for details.
  */
 
-import { Fragment, useRef, useState } from "react";
+import { Fragment, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Listbox, Transition } from "@headlessui/react";
 import { Check, ChevronDown, Clock, FileText, Plus, Trash2 } from "lucide-react";
 import { usePopper } from "react-popper";
 import { useOutsideClickDetector } from "@plane/hooks";
 import { cn } from "@plane/utils";
-import { addWorkHoursToStart, getWorkHours } from "@/helpers/timesheet-break.helper";
+import {
+  addWorkHoursToStart,
+  getSuggestedStartTime,
+  getWorkHours,
+  getWorkTimeRangeError,
+} from "@/helpers/timesheet-break.helper";
 import {
   getTimesheetErrorMessage,
   hasDuplicateTimesheetEntry,
@@ -149,8 +154,9 @@ export function TimesheetCellPopover({
   });
 
   const resetFormState = () => {
-    setStartTime(DEFAULT_START_TIME);
-    setEndTime(DEFAULT_START_TIME);
+    const suggested = getSuggestedStartTime(existingTimesheets);
+    setStartTime(suggested);
+    setEndTime(suggested);
     setTimeInput("");
     setDescription("");
     setTimeError("");
@@ -166,6 +172,10 @@ export function TimesheetCellPopover({
 
   const derivedHours = getWorkHours(startTime, endTime);
   const canSave = !!derivedHours && !timeError;
+  const sortedExistingTimesheets = useMemo(
+    () => [...existingTimesheets].sort((a, b) => a.start_time.localeCompare(b.start_time)),
+    [existingTimesheets]
+  );
 
   const handleStartTimeChange = (v: string) => {
     setStartTime(v);
@@ -175,8 +185,9 @@ export function TimesheetCellPopover({
       setEndTime(addWorkHoursToStart(v, parsedHours));
       return;
     }
-    if (getWorkHours(v, endTime) === null && endTime !== v) {
-      setTimeError("结束时间必须晚于开始时间");
+    if (endTime !== v) {
+      const error = getWorkTimeRangeError(v, endTime);
+      if (error) setTimeError(error);
     }
   };
 
@@ -189,7 +200,8 @@ export function TimesheetCellPopover({
       return;
     }
     if (startTime !== v) {
-      setTimeError("结束时间必须晚于开始时间");
+      const error = getWorkTimeRangeError(startTime, v);
+      if (error) setTimeError(error);
     }
   };
 
@@ -214,7 +226,7 @@ export function TimesheetCellPopover({
   const handleSave = async (close: () => void) => {
     const h = getWorkHours(startTime, endTime);
     if (!h) {
-      setTimeError("请选择有效的开始和结束时间");
+      setTimeError(getWorkTimeRangeError(startTime, endTime) ?? "请选择有效的开始和结束时间");
       return;
     }
     if (
@@ -279,10 +291,10 @@ export function TimesheetCellPopover({
             className="z-[2000] w-72 rounded-lg border border-subtle bg-surface-1 shadow-raised-300 overflow-visible"
           >
               {/* 已有记录 */}
-              {existingTimesheets.length > 0 && (
+              {sortedExistingTimesheets.length > 0 && (
                 <div className="border-b border-subtle px-3 py-2.5 space-y-1">
                   <p className="text-sm text-tertiary font-semibold mb-1.5">已记录工时</p>
-                  {existingTimesheets.map((t) => {
+                  {sortedExistingTimesheets.map((t) => {
                     const isOwn = t.member === currentUserId;
                     return (
                       <div
