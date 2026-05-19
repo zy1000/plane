@@ -132,6 +132,16 @@ export function TimesheetOverview({ workspaceSlug, memberId }: Props) {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <h1 className="text-lg font-semibold text-primary">工时概览</h1>
+          </div>
+          <div className="flex items-center gap-3">
+            {!isCurrentPeriod && (
+              <button
+                onClick={handleCurrentPeriod}
+                className="inline-flex h-[28px] items-center justify-center rounded-md border border-subtle px-2.5 text-sm text-secondary transition-colors hover:bg-layer-1 hover:text-primary"
+              >
+                {currentPeriodLabel}
+              </button>
+            )}
             <div className="flex items-center rounded-md border border-subtle overflow-hidden">
               <button
                 onClick={handlePrev}
@@ -176,36 +186,28 @@ export function TimesheetOverview({ workspaceSlug, memberId }: Props) {
                 <ChevronRight className="h-3.5 w-3.5" />
               </button>
             </div>
-            {!isCurrentPeriod && (
-              <button
-                onClick={handleCurrentPeriod}
-                className="inline-flex h-[26px] items-center justify-center rounded-md border border-subtle px-2.5 text-secondary transition-colors hover:bg-layer-1 hover:text-primary"
-              >
-                {currentPeriodLabel}
-              </button>
-            )}
-          </div>
-          <div className="flex items-center rounded-lg border border-subtle bg-surface-1 p-0.5">
-            {MODE_OPTIONS.map((opt) => {
-              const Icon = opt.icon;
-              const isActive = mode === opt.key;
-              return (
-                <button
-                  key={opt.key}
-                  type="button"
-                  onClick={() => setMode(opt.key)}
-                  className={cn(
-                    "flex cursor-pointer items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-                    isActive
-                      ? "bg-accent-primary/10 text-accent-primary"
-                      : "text-secondary hover:text-primary hover:bg-layer-1"
-                  )}
-                >
-                  <Icon className="h-3.5 w-3.5" />
-                  {opt.label}
-                </button>
-              );
-            })}
+            <div className="flex items-center rounded-md border border-subtle bg-surface-1 p-0.5">
+              {MODE_OPTIONS.map((opt) => {
+                const Icon = opt.icon;
+                const isActive = mode === opt.key;
+                return (
+                  <button
+                    key={opt.key}
+                    type="button"
+                    onClick={() => setMode(opt.key)}
+                    className={cn(
+                      "flex h-[22px] cursor-pointer items-center gap-1.5 rounded-[3px] px-2.5 text-sm font-medium transition-colors",
+                      isActive
+                        ? "bg-accent-primary/10 text-accent-primary"
+                        : "text-secondary hover:text-primary hover:bg-layer-1"
+                    )}
+                  >
+                    <Icon className="h-3.5 w-3.5" />
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
 
