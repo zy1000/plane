@@ -4,7 +4,7 @@ import { usePathname, useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import React from "react";
 import { cn } from "@plane/utils";
-import { isTMMindmapMenuActive, isTMOverviewActive, isTMOverviewMenuActive, isTMPlansActive, isTMPlansMenuActive, isTMReviewsActive, isTMReviewsMenuActive } from "./route-helpers";
+import { isTMOverviewActive, isTMOverviewMenuActive, isTMPlansActive, isTMPlansMenuActive, isTMReviewsActive, isTMReviewsMenuActive } from "./route-helpers";
 import { useTestHub } from "./testhub-context";
 
 type TMenuItem = {
@@ -33,12 +33,6 @@ const MENU_ITEMS: TMenuItem[] = [
     href: (ws, pid) => `/${ws}/projects/${pid}/testhub/reviews`,
     isActive: (pathname, ws, pid) => isTMReviewsMenuActive(pathname, ws, pid),
   },
-  // {
-  //   key: "mindmap",
-  //   label: "文件存储",
-  //   href: (ws, pid) => `/${ws}/projects/${pid}/testhub/mindmap`,
-  //   isActive: (pathname, ws, pid) => isTMMindmapMenuActive(pathname, ws, pid),
-  // },
 ];
 
 export const TestManagementMenuBar = () => {

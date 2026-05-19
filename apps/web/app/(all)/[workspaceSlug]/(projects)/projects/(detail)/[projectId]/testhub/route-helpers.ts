@@ -27,9 +27,3 @@ export const isTMReviewsMenuActive = (pathname: string, workspaceSlug: string, p
   const current = normalizePath(pathname);
   return current.startsWith(`${base}/reviews`) || current.startsWith(`${base}/caseManagementReviewDetail`) || current.startsWith(`${base}/case-review`);
 };
-
-export const isTMMindmapMenuActive = (pathname: string, workspaceSlug: string, projectId: string) => {
-  const base = normalizePath(tmProjectBasePath(workspaceSlug, projectId));
-  const current = normalizePath(pathname);
-  return current.startsWith(`${base}/mindmap`);
-};
