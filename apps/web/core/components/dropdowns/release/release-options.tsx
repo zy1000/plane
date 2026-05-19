@@ -5,6 +5,7 @@ import { usePopper } from "react-popper";
 import { Combobox } from "@headlessui/react";
 import { useTranslation } from "@plane/i18n";
 import { CheckIcon, SearchIcon } from "@plane/propel/icons";
+import { Tooltip } from "@plane/propel/tooltip";
 import type { IRelease } from "@plane/types";
 import { cn, sortBySelectedFirst } from "@plane/utils";
 import { usePlatformOS } from "@/hooks/use-platform-os";
@@ -64,9 +65,11 @@ export const ReleaseOptions = observer(function ReleaseOptions(props: Props) {
       value: releaseId,
       query: `${releaseDetails?.name}`,
       content: (
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 items-center gap-2">
           <Rocket className="h-3 w-3 flex-shrink-0" />
-          <span className="flex-grow truncate">{releaseDetails?.name}</span>
+          <Tooltip tooltipContent={releaseDetails?.name} isMobile={isMobile}>
+            <span className="flex-grow truncate">{releaseDetails?.name}</span>
+          </Tooltip>
         </div>
       ),
     };

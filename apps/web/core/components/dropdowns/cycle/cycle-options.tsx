@@ -15,6 +15,7 @@ import { Combobox } from "@headlessui/react";
 import { useTranslation } from "@plane/i18n";
 // icon
 import { CheckIcon, CycleGroupIcon, CycleIcon, SearchIcon } from "@plane/propel/icons";
+import { Tooltip } from "@plane/propel/tooltip";
 // ui
 // store hooks
 import { useCycle } from "@/hooks/store/use-cycle";
@@ -98,9 +99,11 @@ export const CycleOptions = observer(function CycleOptions(props: CycleOptionsPr
       value: cycleId,
       query: `${cycleDetails?.name}`,
       content: (
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 items-center gap-2">
           <CycleGroupIcon cycleGroup={cycleStatus} className="h-3.5 w-3.5 flex-shrink-0" />
-          <span className="flex-grow truncate">{cycleDetails?.name}</span>
+          <Tooltip tooltipContent={cycleDetails?.name} isMobile={isMobile}>
+            <span className="flex-grow truncate">{cycleDetails?.name}</span>
+          </Tooltip>
         </div>
       ),
     };
