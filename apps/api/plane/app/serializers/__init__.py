@@ -153,5 +153,9 @@ from .draft import (
     DraftIssueDetailSerializer,
 )
 
-from .qa import TestPlanCreateUpdateSerializer,TestCaseRepositorySerializer,TestCaseRepositoryDetailSerializer
+from .qa import (
+    TestPlanCreateUpdateSerializer,
+    TestCaseRepositorySerializer,
+    TestCaseRepositoryDetailSerializer,
+)
 from .changelog import ChangeLogSerializer, ChangeLogReadRequestSerializer

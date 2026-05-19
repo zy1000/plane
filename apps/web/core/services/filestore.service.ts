@@ -117,8 +117,15 @@ export class FilestoreService extends APIService {
       });
   }
 
-  async getOnlyOfficeConfig(workspaceSlug: string, projectId: string, assetId: string): Promise<TOnlyOfficeConfigResponse> {
-    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/filestore/assets/${assetId}/onlyoffice/config/`)
+  async getOnlyOfficeConfig(
+    workspaceSlug: string,
+    projectId: string,
+    assetId: string,
+    mode?: "view" | "edit"
+  ): Promise<TOnlyOfficeConfigResponse> {
+    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/filestore/assets/${assetId}/onlyoffice/config/`, {
+      params: mode ? { mode } : undefined,
+    })
       .then((response) => response?.data ?? { document_server_url: "", config: {} })
       .catch((error) => {
         throw error?.response?.data;

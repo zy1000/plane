@@ -7,10 +7,7 @@ import {
   PROJECT_ASSET_DELETE_PERMISSION_KEY,
   PROJECT_ASSET_UPLOAD_PERMISSION_KEY,
   PROJECT_ASSET_VIEW_PERMISSION_KEY,
-  PROJECT_ERROR_MESSAGES,
-  isProjectPermissionError,
 } from "@plane/constants";
-import { useTranslation } from "@plane/i18n";
 import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
 import { ContentWrapper } from "@/components/core/content-wrapper";
 import { PageHead } from "@/components/core/page-title";
@@ -21,17 +18,10 @@ import { AssetExplorer } from "@/components/asset-explorer";
 import { useUserPermissions } from "@/hooks/store/user";
 import { FilestoreService, type TFilestoreAsset } from "@/services/filestore.service";
 
-const FILE_PREVIEW_BASE_URL = process.env.VITE_FILEVIEW_URL || "http://localhost:8012";
 const ONLYOFFICE_SUPPORTED_EXTS = ["doc", "docx", "odt", "rtf", "txt", "xls", "xlsx", "ods", "csv", "ppt", "pptx", "odp", "pdf"];
 
 type TFilestoreAssetLike = Pick<TFilestoreAsset, "id" | "attributes">;
-
-const base64Encode = (input: string): string => {
-  const bytes = new TextEncoder().encode(input);
-  let binary = "";
-  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-  return window.btoa(binary);
-};
+type TOnlyOfficeMode = "edit" | "view";
 
 const isOnlyOfficeSupported = (filename?: string): boolean => {
   const ext = String(filename ?? "").split(".").pop()?.toLowerCase() ?? "";
@@ -42,7 +32,6 @@ function FilestorePage() {
   const { workspaceSlug, projectId } = useParams<{ workspaceSlug: string; projectId: string }>();
   const searchParams = useSearchParams();
   const onlyofficeAssetId = searchParams.get("onlyofficeAssetId");
-  const { t } = useTranslation();
   const { workspaceUserInfo, allowProjectPermissionKeys } = useUserPermissions();
   const service = useMemo(() => new FilestoreService(), []);
 
@@ -51,6 +40,7 @@ function FilestorePage() {
   const canDelete = allowProjectPermissionKeys([PROJECT_ASSET_DELETE_PERMISSION_KEY], workspaceSlug, projectId);
 
   const [editorOpen, setEditorOpen] = useState(false);
+  const [editorMode, setEditorMode] = useState<TOnlyOfficeMode>("edit");
   const [editorAsset, setEditorAsset] = useState<TFilestoreAssetLike | null>(null);
   const [editorLoading, setEditorLoading] = useState(false);
   const [editorError, setEditorError] = useState("");
@@ -73,21 +63,6 @@ function FilestorePage() {
     return `filestore-onlyoffice-editor-${editorAsset.id}`;
   }, [editorAsset?.id]);
 
-  const getPermissionErrorMessage = useCallback(
-    (error: unknown, fallback: string) => {
-      if (isProjectPermissionError(error)) {
-        return PROJECT_ERROR_MESSAGES.permissionError.i18n_message
-          ? t(PROJECT_ERROR_MESSAGES.permissionError.i18n_message)
-          : t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title);
-      }
-      if (typeof error === "object" && error && "error" in error) return String((error as any).error);
-      if (typeof error === "object" && error && "detail" in error) return String((error as any).detail);
-      if (typeof error === "object" && error && "message" in error) return String((error as any).message);
-      return fallback;
-    },
-    [t]
-  );
-
   const closeEditor = useCallback(() => {
     try {
       editorRef.current?.destroyEditor?.();
@@ -98,6 +73,7 @@ function FilestorePage() {
     latestDirtyRef.current = false;
     forceSavingRef.current = false;
     setEditorOpen(false);
+    setEditorMode("edit");
     setEditorAsset(null);
     setEditorConfig(null);
     setEditorServerUrl("");
@@ -160,7 +136,7 @@ function FilestorePage() {
   }, []);
 
   const initEditor = useCallback(
-    async (serverUrl: string, config: Record<string, any>, containerId: string) => {
+    async (serverUrl: string, config: Record<string, any>, containerId: string, mode: TOnlyOfficeMode) => {
       await loadOnlyOfficeScript(serverUrl);
       const w = window as any;
       if (!w.DocsAPI?.DocEditor) throw new Error("DocsAPI 未加载");
@@ -172,23 +148,26 @@ function FilestorePage() {
         editorRef.current?.destroyEditor?.();
       } catch {
       }
+      const isViewMode = mode === "view";
       editorRef.current = new w.DocsAPI.DocEditor(containerId, {
         ...config,
         events: {
           ...(config.events ?? {}),
           onDocumentReady: () => setEditorError(""),
-          onDocumentStateChange: (event: any) => {
-            const dirty = Boolean(event?.data);
-            const wasDirty = latestDirtyRef.current;
-            latestDirtyRef.current = dirty;
-            if (dirty) setSaveStatus("未保存");
-            if (wasDirty && !dirty) void triggerForceSave("saved");
-          },
-          onRequestSave: () => void triggerForceSave("request"),
+          onDocumentStateChange: isViewMode
+            ? undefined
+            : (event: any) => {
+                const dirty = Boolean(event?.data);
+                const wasDirty = latestDirtyRef.current;
+                latestDirtyRef.current = dirty;
+                if (dirty) setSaveStatus("未保存");
+                if (wasDirty && !dirty) void triggerForceSave("saved");
+              },
+          onRequestSave: isViewMode ? undefined : () => void triggerForceSave("request"),
           onError: (event: any) => {
             const code = event?.data?.errorCode;
             const desc = event?.data?.errorDescription;
-            setEditorError(`编辑器错误: ${code ?? ""}${desc ? ` ${desc}` : ""}`.trim());
+            setEditorError(`${isViewMode ? "预览" : "编辑器"}错误: ${code ?? ""}${desc ? ` ${desc}` : ""}`.trim());
           },
         },
       });
@@ -197,14 +176,20 @@ function FilestorePage() {
   );
 
   const openEditor = useCallback(
-    async (asset: TFilestoreAssetLike) => {
+    async (asset: TFilestoreAssetLike, mode: TOnlyOfficeMode = "edit") => {
       if (!workspaceSlug || !projectId || !asset?.id) return;
       setEditorAsset(asset);
+      setEditorMode(mode);
       setEditorOpen(true);
       setEditorLoading(true);
       setEditorError("");
       try {
-        const res = await service.getOnlyOfficeConfig(String(workspaceSlug), String(projectId), String(asset.id));
+        const res = await service.getOnlyOfficeConfig(
+          String(workspaceSlug),
+          String(projectId),
+          String(asset.id),
+          mode
+        );
         const config = (res?.config ?? {}) as Record<string, any>;
         const serverUrl = String(res?.document_server_url ?? "");
         const currentDocKey = String(config?.document?.key ?? "");
@@ -213,9 +198,9 @@ function FilestorePage() {
         setDocKey(currentDocKey);
         latestDocKeyRef.current = currentDocKey;
         const containerId = `filestore-onlyoffice-editor-${asset.id}`;
-        await initEditor(serverUrl, config, containerId);
+        await initEditor(serverUrl, config, containerId, mode);
       } catch (error: any) {
-        setEditorError(error?.detail || error?.message || "加载编辑器失败");
+        setEditorError(error?.detail || error?.message || (mode === "view" ? "加载预览失败" : "加载编辑器失败"));
       } finally {
         setEditorLoading(false);
       }
@@ -225,29 +210,25 @@ function FilestorePage() {
 
   const handlePreview = useCallback(
     async (asset: TFilestoreAssetLike) => {
-      if (!workspaceSlug || !projectId || !asset?.id) return;
-      try {
-        const signedUrl = await service.getFilestoreAssetPresignedURL(String(workspaceSlug), String(projectId), String(asset.id), "inline");
-        if (!signedUrl) return;
-        const fullfilename = String(asset?.attributes?.name || "file");
-        const previewUrl = `${FILE_PREVIEW_BASE_URL}/onlinePreview?url=${encodeURIComponent(base64Encode(signedUrl))}&fullfilename=${encodeURIComponent(fullfilename)}`;
-        window.open(previewUrl, "_blank", "noopener,noreferrer");
-      } catch (error) {
-        message.error(getPermissionErrorMessage(error, "获取预览地址失败"));
+      if (!asset?.id) return;
+      if (isOnlyOfficeSupported(asset?.attributes?.name)) {
+        await openEditor(asset, "view");
+        return;
       }
+      message.warning("暂不支持预览此文件类型");
     },
-    [getPermissionErrorMessage, projectId, service, workspaceSlug]
+    [openEditor]
   );
 
   const handleEdit = useCallback(
     async (asset: TFilestoreAssetLike) => {
       if (isOnlyOfficeSupported(asset?.attributes?.name)) {
-        await openEditor(asset);
+        await openEditor(asset, "edit");
         return;
       }
-      await handlePreview(asset);
+      message.warning("暂不支持在线编辑此文件类型");
     },
-    [handlePreview, openEditor]
+    [openEditor]
   );
 
   const fetchVersions = useCallback(async () => {
@@ -271,7 +252,7 @@ function FilestorePage() {
   }, [docKey]);
 
   useEffect(() => {
-    if (!editorOpen || !workspaceSlug || !projectId || !editorAsset?.id) return;
+    if (!editorOpen || editorMode !== "edit" || !workspaceSlug || !projectId || !editorAsset?.id) return;
     const statusTimer = window.setInterval(async () => {
       try {
         const res = await service.getOnlyOfficeStatus(String(workspaceSlug), String(projectId), String(editorAsset.id));
@@ -289,7 +270,7 @@ function FilestorePage() {
       window.clearInterval(statusTimer);
       window.clearInterval(saveTimer);
     };
-  }, [editorAsset?.id, editorOpen, projectId, service, triggerForceSave, workspaceSlug]);
+  }, [editorAsset?.id, editorMode, editorOpen, projectId, service, triggerForceSave, workspaceSlug]);
 
   const openEditorInNewTab = useCallback(() => {
     if (!workspaceSlug || !projectId || !editorAsset?.id) return;
@@ -307,7 +288,12 @@ function FilestorePage() {
     <div className="relative" style={{ height: "calc(100vh - 56px)" }}>
       {editorError && (
         <div className="absolute left-0 right-0 top-0 z-20 p-3">
-          <Alert type="error" showIcon message="编辑器异常" description={editorError} />
+          <Alert
+            type="error"
+            showIcon
+            message={editorMode === "view" ? "预览异常" : "编辑器异常"}
+            description={editorError}
+          />
         </div>
       )}
       {editorLoading && <div className="absolute inset-0 z-10 bg-white/60" />}
@@ -349,19 +335,27 @@ function FilestorePage() {
         title={
           <div className="flex items-center justify-between gap-2 pr-12" style={{ marginTop: -16, marginBottom: -16, height: 56 }}>
             <div className="flex items-center gap-2">
-              <Typography.Text strong>{String(editorAsset?.attributes?.name ?? "在线编辑")}</Typography.Text>
-              <Tag color={saveStatus === "已保存" ? "green" : saveStatus === "保存中" ? "processing" : saveStatus === "保存失败" ? "red" : "default"}>
-                {saveStatus}
-              </Tag>
+              <Typography.Text strong>
+                {editorMode === "view"
+                  ? `预览：${String(editorAsset?.attributes?.name ?? "文件")}`
+                  : String(editorAsset?.attributes?.name ?? "在线编辑")}
+              </Typography.Text>
+              {editorMode === "edit" && (
+                <Tag color={saveStatus === "已保存" ? "green" : saveStatus === "保存中" ? "processing" : saveStatus === "保存失败" ? "red" : "default"}>
+                  {saveStatus}
+                </Tag>
+              )}
             </div>
-            <Space>
-              <Button type="text" onClick={async () => { setVersionsOpen(true); await fetchVersions(); }}>
-                版本
-              </Button>
-              <Tooltip title="新标签页打开">
-                <Button type="text" icon={<ExportOutlined />} onClick={() => { openEditorInNewTab(); closeEditor(); }} />
-              </Tooltip>
-            </Space>
+            {editorMode === "edit" && (
+              <Space>
+                <Button type="text" onClick={async () => { setVersionsOpen(true); await fetchVersions(); }}>
+                  版本
+                </Button>
+                <Tooltip title="新标签页打开">
+                  <Button type="text" icon={<ExportOutlined />} onClick={() => { openEditorInNewTab(); closeEditor(); }} />
+                </Tooltip>
+              </Space>
+            )}
           </div>
         }
       >

@@ -332,7 +332,12 @@ class FilestoreAssetOnlyOfficeConfigAPIView(BaseAPIView):
         )
 
         document_type = _onlyoffice_document_type(ext)
-        mode = "view" if document_type == "pdf" else "edit"
+        requested_mode = (request.query_params.get("mode") or "").strip().lower()
+        view_only = requested_mode == "view"
+        if view_only or document_type == "pdf":
+            mode = "view"
+        else:
+            mode = "edit"
 
         config = {
             "type": "desktop",
@@ -349,7 +354,7 @@ class FilestoreAssetOnlyOfficeConfigAPIView(BaseAPIView):
                 "lang": "zh-CN",
                 "callbackUrl": callback_url,
                 "user": {"id": str(request.user.id), "name": request.user.display_name or request.user.email},
-                "customization": {"autosave": True, "forcesave": True},
+                "customization": {"autosave": mode == "edit", "forcesave": mode == "edit"},
             },
         }
 
