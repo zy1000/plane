@@ -19,13 +19,13 @@ function getEntryLabel(entry: TTimeSheet): string {
 
 export function OverviewRecentEntries({ entries, title = "最近填报（本月）" }: Props) {
   return (
-    <Card className="flex flex-col border border-subtle p-4">
+    <Card className="flex h-full max-h-[466px] min-h-0 flex-col border border-subtle p-4">
       <div className="mb-4 flex flex-shrink-0 items-center gap-2">
         <FileText className="h-4 w-4 text-placeholder" />
         <span className="text-sm font-medium text-primary">{title}</span>
       </div>
       {entries.length > 0 ? (
-        <div className="space-y-1 overflow-y-auto vertical-scrollbar scrollbar-sm">
+        <div className="min-h-0 flex-1 space-y-1 overflow-y-auto vertical-scrollbar scrollbar-sm">
           {entries.map((entry) => (
             <div
               key={entry.id}
@@ -45,7 +45,7 @@ export function OverviewRecentEntries({ entries, title = "最近填报（本月�
           ))}
         </div>
       ) : (
-        <div className="flex h-[200px] items-center justify-center text-sm text-placeholder">
+        <div className="flex min-h-0 flex-1 items-center justify-center text-sm text-placeholder">
           暂无工时记录
         </div>
       )}

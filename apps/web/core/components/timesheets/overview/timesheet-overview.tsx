@@ -231,10 +231,10 @@ export function TimesheetOverview({ workspaceSlug, memberId }: Props) {
         </div>
 
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
-          <div className="xl:col-span-7 [&>*]:h-full">
+          <div className="max-h-[466px] xl:col-span-7 [&>*]:h-full">
             <OverviewRecentEntries entries={recentEntries} title={`最近填报（${modeLabel}）`} />
           </div>
-          <div className="xl:col-span-5 [&>*]:h-full">
+          <div className="max-h-[466px] xl:col-span-5 [&>*]:h-full">
             <OverviewMissingDaysAlert alertDays={alertDays} workspaceSlug={workspaceSlug} />
           </div>
         </div>

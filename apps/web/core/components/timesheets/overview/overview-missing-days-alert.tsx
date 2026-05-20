@@ -26,38 +26,52 @@ export function OverviewMissingDaysAlert({ alertDays, workspaceSlug }: Props) {
     router.push(`/${workspaceSlug}/timesheets`);
   };
 
-  const missingCount = alertDays.filter((d) => d.type === "missing").length;
-  const insufficientCount = alertDays.filter((d) => d.type === "insufficient").length;
+  const missingCount = alertDays.filter((d) => d.type === "missing" && !d.isFuture).length;
+  const insufficientCount = alertDays.filter((d) => d.type === "insufficient" && !d.isFuture).length;
+  const upcomingCount = alertDays.filter((d) => d.isFuture).length;
 
   return (
-    <Card className="flex flex-col border border-subtle p-4">
+    <Card className="flex h-full max-h-[466px] min-h-0 flex-col border border-subtle p-4">
       <div className="mb-4 flex flex-shrink-0 items-center gap-2">
         <AlertTriangle className="h-4 w-4 text-amber-500" />
         <span className="text-sm font-medium text-primary">填报提醒</span>
       </div>
       {alertDays.length > 0 ? (
-        <div className="min-h-0 flex-1 space-y-2 overflow-y-auto vertical-scrollbar scrollbar-sm">
-          <div className="flex flex-wrap gap-x-3 gap-y-1 text-sm text-placeholder">
+        <>
+          <div className="flex flex-shrink-0 flex-wrap gap-x-3 gap-y-1 text-sm text-placeholder">
             {missingCount > 0 && <span>{missingCount} 天未填报</span>}
             {insufficientCount > 0 && <span>{insufficientCount} 天不足 8h</span>}
+            {upcomingCount > 0 && <span>{upcomingCount} 天待填报</span>}
           </div>
-          <div className="max-h-[200px] space-y-1.5 overflow-y-auto vertical-scrollbar scrollbar-sm">
+          <div className="mt-2 min-h-0 flex-1 space-y-1.5 overflow-y-auto vertical-scrollbar scrollbar-sm">
             {alertDays.map((item) => (
               <div
                 key={item.date}
                 className={`flex items-center justify-between rounded-md px-3 py-2 text-sm ${
-                  item.type === "missing" ? "bg-amber-500/5" : "bg-orange-500/5"
+                  item.isFuture
+                    ? "bg-blue-500/5"
+                    : item.type === "missing"
+                      ? "bg-amber-500/5"
+                      : "bg-orange-500/5"
                 }`}
               >
                 <div className="flex items-center gap-2">
                   <div
-                    className={`h-1.5 w-1.5 rounded-full ${item.type === "missing" ? "bg-amber-500" : "bg-orange-500"}`}
+                    className={`h-1.5 w-1.5 rounded-full ${
+                      item.isFuture ? "bg-blue-500" : item.type === "missing" ? "bg-amber-500" : "bg-orange-500"
+                    }`}
                   />
                   <span className="text-primary">
                     {item.date} ({getWeekdayLabel(item.date)})
                   </span>
                 </div>
-                {item.type === "missing" ? (
+                {item.isFuture ? (
+                  item.type === "missing" ? (
+                    <span className="text-blue-600">待填报</span>
+                  ) : (
+                    <span className="text-blue-600">{item.hours}h / 8h</span>
+                  )
+                ) : item.type === "missing" ? (
                   <span className="text-amber-600">未填报</span>
                 ) : (
                   <span className="text-orange-600">{item.hours}h / 8h</span>
@@ -68,14 +82,14 @@ export function OverviewMissingDaysAlert({ alertDays, workspaceSlug }: Props) {
           <button
             type="button"
             onClick={handleGoToFill}
-            className="mt-3 flex w-full cursor-pointer items-center justify-center gap-2 rounded-md bg-accent-primary/10 px-3 py-2 text-sm font-medium text-accent-primary transition-colors hover:bg-accent-primary/20"
+            className="mt-3 flex w-full flex-shrink-0 cursor-pointer items-center justify-center gap-2 rounded-md bg-accent-primary/10 px-3 py-2 text-sm font-medium text-accent-primary transition-colors hover:bg-accent-primary/20"
           >
             去填报工时
             <ArrowRight className="h-3.5 w-3.5" />
           </button>
-        </div>
+        </>
       ) : (
-        <div className="flex flex-col items-center justify-center gap-2 py-6">
+        <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 py-6">
           <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/10">
             <svg className="h-5 w-5 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <polyline points="20 6 9 17 4 12" />

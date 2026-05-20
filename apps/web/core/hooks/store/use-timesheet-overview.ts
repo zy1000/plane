@@ -84,19 +84,20 @@ export type TAlertDay = {
   date: string;
   type: "missing" | "insufficient";
   hours: number;
+  isFuture: boolean;
 };
 
 function buildAlertDays(dates: Date[], hoursMap: Map<string, number>): TAlertDay[] {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   return dates
-    .filter((d) => d <= today)
     .map((d) => {
       const dateKey = formatDateKey(d);
       if (!isChinaWorkday(d, dateKey)) return null;
       const hours = hoursMap.get(dateKey) ?? 0;
-      if (hours === 0) return { date: dateKey, type: "missing" as const, hours: 0 };
-      if (hours < 8) return { date: dateKey, type: "insufficient" as const, hours: Math.round(hours * 100) / 100 };
+      const isFuture = d > today;
+      if (hours === 0) return { date: dateKey, type: "missing" as const, hours: 0, isFuture };
+      if (hours < 8) return { date: dateKey, type: "insufficient" as const, hours: Math.round(hours * 100) / 100, isFuture };
       return null;
     })
     .filter((item): item is TAlertDay => item !== null);
