@@ -383,14 +383,12 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
                 </button>
               </div>
               <div className="min-h-0 flex-1 overflow-hidden">
-                <div className="h-full overflow-y-auto vertical-scrollbar scrollbar-sm">
-                  <OverviewMemberStats
-                    workspaceSlug={workspaceSlug}
-                    projectId={project.id}
-                    analyticsData={analyticsData}
-                    isAnalyticsLoading={isLoadingAnalytics}
-                  />
-                </div>
+                <OverviewMemberStats
+                  workspaceSlug={workspaceSlug}
+                  projectId={project.id}
+                  analyticsData={analyticsData}
+                  isAnalyticsLoading={isLoadingAnalytics}
+                />
               </div>
             </div>
           </div>
@@ -572,7 +570,7 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
         getContainer={() => document.body}
       >
         <div className="flex h-full min-h-0 flex-1 flex-col bg-surface-1">
-          <div className="min-h-0 flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm px-4 pb-3">
+          <div className="min-h-0 flex-1 overflow-hidden px-4 pb-3">
             <OverviewMemberStats
               workspaceSlug={workspaceSlug}
               projectId={project.id}
