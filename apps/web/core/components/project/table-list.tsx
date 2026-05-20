@@ -368,9 +368,6 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
                       {renderSortIcon("status")}
                     </button>
                   </th>
-                  <th className="px-4 py-3 text-left font-medium text-secondary hidden md:table-cell">
-                    进度
-                  </th>
                   <th className="px-4 py-3 text-left font-medium text-secondary hidden lg:table-cell">
                     <button
                       type="button"
@@ -410,17 +407,6 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
                     typeof project.project_lead === "string"
                       ? getUserDetails(project.project_lead)
                       : project.project_lead ?? undefined;
-
-                  const completedWorkItems = Number(project.completed_work_items ?? 0);
-                  const totalWorkItems = Number(project.total_work_items ?? 0);
-                  const completionPercentage =
-                    totalWorkItems > 0
-                      ? Math.min(100, Math.max(0, Math.round((completedWorkItems / totalWorkItems) * 100)))
-                      : 0;
-                  const startedCount = Number(project.started_work_items ?? 0);
-                  const backlogCount = Number(project.backlog_work_items ?? 0);
-                  const unstartedCount = Number(project.un_started_work_items ?? 0);
-                  const cancelledCount = Number(project.cancelled_work_items ?? 0);
 
                   return (
                     <tr
@@ -509,48 +495,6 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
                     >
                       {isArchived ? "已归档" : "进行中"}
                     </span>
-                  </td>
-                  <td className="px-4 py-3 hidden md:table-cell">
-                    {totalWorkItems > 0 ? (
-                      <Tooltip
-                        tooltipContent={
-                          <div className="flex flex-col gap-1 text-xs">
-                            <div className="flex items-center justify-between gap-6">
-                              <span className="text-primary">Backlog</span>
-                              <span className="text-secondary tabular-nums">{backlogCount}</span>
-                            </div>
-                            <div className="flex items-center justify-between gap-6">
-                              <span className="text-primary">Unstarted</span>
-                              <span className="text-secondary tabular-nums">{unstartedCount}</span>
-                            </div>
-                            <div className="flex items-center justify-between gap-6">
-                              <span className="text-primary">Started</span>
-                              <span className="text-secondary tabular-nums">{startedCount}</span>
-                            </div>
-                            <div className="flex items-center justify-between gap-6">
-                              <span className="text-primary">Completed</span>
-                              <span className="text-secondary tabular-nums">{completedWorkItems}</span>
-                            </div>
-                            <div className="flex items-center justify-between gap-6">
-                              <span className="text-primary">Cancelled</span>
-                              <span className="text-secondary tabular-nums">{cancelledCount}</span>
-                            </div>
-                            <div className="h-px w-full bg-[var(--border-subtle)] my-1" />
-                            <div className="flex items-center justify-between gap-6">
-                              <span className="text-primary">Total</span>
-                              <span className="text-secondary tabular-nums">{totalWorkItems}</span>
-                            </div>
-                          </div>
-                        }
-                        position="top"
-                      >
-                        <span className="text-xs text-secondary tabular-nums">
-                          {completionPercentage}%
-                        </span>
-                      </Tooltip>
-                    ) : (
-                      <span className="text-secondary">-</span>
-                    )}
                   </td>
                   <td className="px-4 py-3 text-secondary hidden lg:table-cell">
                     {project.created_at ? renderFormattedDate(project.created_at) : "-"}

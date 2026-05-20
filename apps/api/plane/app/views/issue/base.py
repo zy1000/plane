@@ -895,21 +895,21 @@ class IssueViewSet(BaseViewSet):
                     actor=request.user,
                     project_id=str(project_id),
                 )
-            # # Check if the update is a migration description update
-            # is_migration_description_update = skip_activity and is_description_update
-            # # Log all the updates
-            # if not is_migration_description_update:
-            issue_activity.delay(
-                type="issue.activity.updated",
-                requested_data=requested_data,
-                actor_id=str(request.user.id),
-                issue_id=str(pk),
-                project_id=str(project_id),
-                current_instance=current_instance,
-                epoch=int(timezone.now().timestamp()),
-                notification=True,
-                origin=base_host(request=request, is_app=True),
-            )
+            # 仅当本次 PATCH 是描述迁移（编辑器补全 unique-id / 追加空段落等
+            # 非用户语义修改）时跳过活动记录，避免误报 "updated the description"
+            is_migration_description_update = skip_activity and is_description_update
+            if not is_migration_description_update:
+                issue_activity.delay(
+                    type="issue.activity.updated",
+                    requested_data=requested_data,
+                    actor_id=str(request.user.id),
+                    issue_id=str(pk),
+                    project_id=str(project_id),
+                    current_instance=current_instance,
+                    epoch=int(timezone.now().timestamp()),
+                    notification=True,
+                    origin=base_host(request=request, is_app=True),
+                )
             model_activity.delay(
                 model_name="issue",
                 model_id=str(serializer.data.get("id", None)),

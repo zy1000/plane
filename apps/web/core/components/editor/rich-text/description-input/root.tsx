@@ -244,6 +244,12 @@ export const DescriptionInput = observer(function DescriptionInput(props: Props)
           dragDropEnabled
           onChange={(description_json, description_html, options) => {
             if (description_html === lastSavedContent.current) return;
+            // 编辑器迁移产物（UniqueID 补 data-id 等非用户语义变更）
+            // 仅同步本地基线，不更新 form 状态、不触发自动保存
+            if (options?.isMigrationUpdate) {
+              lastSavedContent.current = description_html;
+              return;
+            }
             setIsSubmitting("submitting");
             onChange(description_html);
             setValue("isMigrationUpdate", !!options?.isMigrationUpdate);

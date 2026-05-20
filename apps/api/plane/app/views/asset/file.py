@@ -33,6 +33,21 @@ from plane.utils.asset_path import (
 from plane.utils.asset_upload import presigned_post_for_asset
 
 FILESTORE_ENTITY_TYPE = FileAsset.EntityTypeContext.PROJECT_FILESTORE
+ONLYOFFICE_ENTITY_TYPES = (
+    FILESTORE_ENTITY_TYPE,
+    FileAsset.EntityTypeContext.ISSUE_ATTACHMENT,
+)
+
+
+def _get_onlyoffice_asset(pk, slug, project_id):
+    return FileAsset.objects.get(
+        id=pk,
+        workspace__slug=slug,
+        project_id=project_id,
+        entity_type__in=ONLYOFFICE_ENTITY_TYPES,
+        is_uploaded=True,
+        is_deleted=False,
+    )
 
 
 def _onlyoffice_jwt_secret() -> str:
@@ -316,14 +331,7 @@ class FilestoreAssetDownloadAPIView(BaseAPIView):
 class FilestoreAssetOnlyOfficeConfigAPIView(BaseAPIView):
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER], level="PROJECT")
     def get(self, request, slug, project_id, pk):
-        asset = FileAsset.objects.get(
-            id=pk,
-            workspace__slug=slug,
-            project_id=project_id,
-            entity_type=FILESTORE_ENTITY_TYPE,
-            is_uploaded=True,
-            is_deleted=False,
-        )
+        asset = _get_onlyoffice_asset(pk, slug, project_id)
 
         filename = (asset.attributes or {}).get("name") or "file"
         ext = _file_extension(filename)
@@ -363,7 +371,10 @@ class FilestoreAssetOnlyOfficeConfigAPIView(BaseAPIView):
 
         document_type = _onlyoffice_document_type(ext)
         requested_mode = (request.query_params.get("mode") or "").strip().lower()
-        view_only = requested_mode == "view"
+        view_only = (
+            requested_mode == "view"
+            or asset.entity_type == FileAsset.EntityTypeContext.ISSUE_ATTACHMENT
+        )
         if view_only or document_type == "pdf":
             mode = "view"
         else:
@@ -434,14 +445,7 @@ class FilestoreAssetOnlyOfficeDownloadProxyAPIView(BaseAPIView):
         if decoded is None:
             pass
 
-        asset = FileAsset.objects.get(
-            id=pk,
-            workspace__slug=slug,
-            project_id=project_id,
-            entity_type=FILESTORE_ENTITY_TYPE,
-            is_uploaded=True,
-            is_deleted=False,
-        )
+        asset = _get_onlyoffice_asset(pk, slug, project_id)
 
         storage = S3Storage()
         obj = storage.get_object(object_name=asset.storage_key)
@@ -505,14 +509,7 @@ class FilestoreAssetOnlyOfficeCallbackAPIView(BaseAPIView):
                 else decoded
             )
 
-        asset = FileAsset.objects.get(
-            id=pk,
-            workspace__slug=slug,
-            project_id=project_id,
-            entity_type=FILESTORE_ENTITY_TYPE,
-            is_uploaded=True,
-            is_deleted=False,
-        )
+        asset = _get_onlyoffice_asset(pk, slug, project_id)
 
         payload = request.data if isinstance(request.data, dict) else {}
         status_code = int(payload.get("status") or 0)
