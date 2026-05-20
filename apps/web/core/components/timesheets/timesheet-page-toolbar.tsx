@@ -12,6 +12,7 @@ import { ChevronLeft, ChevronRight, LayoutList, CalendarDays, Copy } from "lucid
 import { cn } from "@plane/utils";
 import { formatDateKey, getWeekStart } from "@/hooks/store/use-timesheet-page";
 import type { useTimesheetPage } from "@/hooks/store/use-timesheet-page";
+import { TimesheetTimelineHelp } from "./timesheet-timeline-help";
 
 const MONTH_LABELS = ["1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月"];
 const TOOLBAR_BUTTON_CLASS =
@@ -166,35 +167,38 @@ export const TimesheetPageToolbar = observer(function TimesheetPageToolbar({
         </button>
       </div>
 
-      {/* 右：视图切换 */}
-      <div className="flex items-center rounded-md border border-subtle overflow-hidden">
-        <button
-          onClick={() => setViewType("table")}
-          title="表格视图"
-          className={cn(
-            TOOLBAR_SEGMENT_BUTTON_CLASS,
-            viewType === "table"
-              ? "bg-accent-primary/10 text-accent-primary"
-              : "text-secondary hover:bg-layer-1 hover:text-primary"
-          )}
-        >
-          <LayoutList className="h-3.5 w-3.5" />
-          <span>表格</span>
-        </button>
-        <div className="h-[26px] w-px bg-subtle" />
-        <button
-          onClick={() => setViewType("timeline")}
-          title="时间线视图"
-          className={cn(
-            TOOLBAR_SEGMENT_BUTTON_CLASS,
-            viewType === "timeline"
-              ? "bg-accent-primary/10 text-accent-primary"
-              : "text-secondary hover:bg-layer-1 hover:text-primary"
-          )}
-        >
-          <CalendarDays className="h-3.5 w-3.5" />
-          <span>时间线</span>
-        </button>
+      {/* 右：操作技巧 + 视图切换 */}
+      <div className="flex items-center gap-2">
+        {viewType === "timeline" && <TimesheetTimelineHelp className={TOOLBAR_BUTTON_CLASS} />}
+        <div className="flex items-center rounded-md border border-subtle overflow-hidden">
+          <button
+            onClick={() => setViewType("table")}
+            title="表格视图"
+            className={cn(
+              TOOLBAR_SEGMENT_BUTTON_CLASS,
+              viewType === "table"
+                ? "bg-accent-primary/10 text-accent-primary"
+                : "text-secondary hover:bg-layer-1 hover:text-primary"
+            )}
+          >
+            <LayoutList className="h-3.5 w-3.5" />
+            <span>表格</span>
+          </button>
+          <div className="h-[26px] w-px bg-subtle" />
+          <button
+            onClick={() => setViewType("timeline")}
+            title="时间线视图"
+            className={cn(
+              TOOLBAR_SEGMENT_BUTTON_CLASS,
+              viewType === "timeline"
+                ? "bg-accent-primary/10 text-accent-primary"
+                : "text-secondary hover:bg-layer-1 hover:text-primary"
+            )}
+          >
+            <CalendarDays className="h-3.5 w-3.5" />
+            <span>时间线</span>
+          </button>
+        </div>
       </div>
     </div>
   );
