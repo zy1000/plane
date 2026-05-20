@@ -342,7 +342,7 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
         <div className="w-full h-full rounded border border-subtle bg-surface-1 m-0 flex flex-col overflow-hidden">
           <div className="flex-1 min-h-0 overflow-auto vertical-scrollbar scrollbar-lg">
             <table className="min-w-[980px] w-full text-sm">
-              <thead className="border-b border-subtle bg-surface-1">
+              <thead className="border-b border-subtle bg-layer-1">
                 <tr>
                   <th className="px-4 py-3 text-left font-medium text-secondary">
                     <button
@@ -425,7 +425,7 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
                   return (
                     <tr
                       key={project.id}
-                      className={cn("border-b border-subtle last:border-b-0 hover:bg-layer-1-hover", {
+                      className={cn("hover:bg-layer-1-hover", {
                         "bg-layer-1": isArchived,
                         "opacity-70": isArchived,
                       })}

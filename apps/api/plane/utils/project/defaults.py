@@ -1,3 +1,5 @@
+from django.db.models import Model
+
 from plane.db.models import (
     ApprovalType,
     DEFAULT_BUG_STATES,
@@ -9,9 +11,10 @@ from plane.db.models import (
     Workflow,
     WorkflowTransition,
     WorkflowTransitionRequiredField,
-    IssueTypeCategory,
+    IssueTypeCategory, WorkflowTransitionApproval, User,
 )
 from plane.utils.data_model import IssueTypeModel
+from plane.utils.project.member import add_user_to_project
 
 
 def init_issue_type() -> list[IssueTypeModel]:
@@ -307,11 +310,29 @@ def create_default_bug_workflow(issue_types: list[IssueType], **kwargs):
         from_state = state_map.get(from_name)
         to_state = state_map.get(to_name)
         if (
-            from_state is None
-            or to_state is None
-            or (from_name, to_name) in existing_transitions
+                from_state is None
+                or to_state is None
+                or (from_name, to_name) in existing_transitions
         ):
             continue
+        if from_name == 'Pending-Reject' and to_name == 'Rejected':
+            obj = WorkflowTransition.objects.create(
+                workflow=workflow,
+                project=project,
+                workspace=kwargs["workspace"],
+                from_state=from_state,
+                to_state=to_state,
+                approval_type=ApprovalType.ANY,
+                created_by=kwargs["created_by"],
+            )
+            approver_users = User.objects.filter(display_name__in=['欧秋洁', '何洽', '钟长会'])
+            # 将三人添加进项目里面
+            add_user_to_project(approver_users,project)
+
+            for approver_user in approver_users:
+                WorkflowTransitionApproval.objects.create(transition=obj, approver=approver_user)
+            continue
+
         transitions.append(
             WorkflowTransition(
                 workflow=workflow,
