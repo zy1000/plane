@@ -167,7 +167,7 @@ class ProjectListSerializer(DynamicBaseSerializer):
     members = serializers.SerializerMethodField()
     cover_image_url = serializers.CharField(read_only=True)
     inbox_view = serializers.BooleanField(read_only=True, source="intake_view")
-    next_work_item_sequence = serializers.SerializerMethodField()
+    next_work_item_sequence = serializers.IntegerField(read_only=True)
 
     def get_members(self, obj):
         project_members = getattr(obj, "members_list", None)
@@ -180,12 +180,6 @@ class ProjectListSerializer(DynamicBaseSerializer):
             ]
         return []
 
-    def get_next_work_item_sequence(self, obj):
-        """Get the next sequence ID that will be assigned to a new issue"""
-        max_sequence = IssueSequence.objects.filter(project_id=obj.id).aggregate(
-            max_seq=Max("sequence")
-        )["max_seq"]
-        return (max_sequence + 1) if max_sequence else 1
 
     class Meta:
         model = Project
