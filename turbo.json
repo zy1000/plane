@@ -30,6 +30,8 @@
     "VITE_SUPPORT_EMAIL",
     "VITE_WEB_BASE_PATH",
     "VITE_WEB_BASE_URL",
+    "VITE_DOCS_BASE_PATH",
+    "VITE_DOCS_BASE_URL",
     "VITE_WEBSITE_URL"
   ],
   "remoteCache": {

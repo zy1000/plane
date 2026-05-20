@@ -25,6 +25,13 @@ export const WEB_BASE_PATH = process.env.VITE_WEB_BASE_PATH || "";
 export const WEB_URL = encodeURI(`${WEB_BASE_URL}${WEB_BASE_PATH}`);
 // plane website url
 export const WEBSITE_URL = process.env.VITE_WEBSITE_URL || "https://plane.so";
+// docs site url (self-hosted /docs via proxy, or VitePress dev server)
+const docsBaseUrl = process.env.VITE_DOCS_BASE_URL || process.env.VITE_WEBSITE_URL || WEBSITE_URL;
+const docsBasePath = process.env.VITE_DOCS_BASE_PATH || "/docs";
+const normalizedDocsPath = docsBasePath.startsWith("/") ? docsBasePath : `/${docsBasePath}`;
+export const DOCS_URL = encodeURI(
+  `${docsBaseUrl.replace(/\/+$/, "")}${normalizedDocsPath.endsWith("/") ? normalizedDocsPath : `${normalizedDocsPath}/`}`
+);
 // support email
 export const SUPPORT_EMAIL = process.env.VITE_SUPPORT_EMAIL || "support@plane.so";
 // marketing links

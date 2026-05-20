@@ -165,3 +165,5 @@ AGENTS.md
 AGENTS.md
 图标
 .gitignore
+
+**/docs-site/**

@@ -13,6 +13,15 @@ server {
         return 301 /spaces/;
     }
 
+    location = /docs {
+        return 301 /docs/;
+    }
+
+    location ^~ /docs/ {
+        proxy_pass http://docs:80/;
+        include /etc/nginx/proxy_params.plane;
+    }
+
     location ^~ /spaces/ {
         proxy_pass http://space:3000;
         include /etc/nginx/proxy_params.plane;

@@ -62,6 +62,8 @@ x-web-build-args: &web-build-args
   VITE_LIVE_BASE_URL: ${LIVE_BASE_URL:-http://10.32.190.212}
   VITE_LIVE_BASE_PATH: ${LIVE_BASE_PATH:-/live}
   VITE_WEBSITE_URL: ${VITE_WEBSITE_URL:-http://10.32.190.212}
+  VITE_DOCS_BASE_URL: ${DOCS_BASE_URL:-${VITE_WEBSITE_URL:-http://10.32.190.212}}
+  VITE_DOCS_BASE_PATH: ${DOCS_BASE_PATH:-/docs}
   VITE_SUPPORT_EMAIL: ${VITE_SUPPORT_EMAIL:-support@example.com}
 
 services:
@@ -323,7 +325,16 @@ services:
         condition: service_started
       live:
         condition: service_started
-
+      docs:
+        condition: service_started
+  docs:
+    container_name: plane-docs
+    image: plane-docs
+    build:
+      context: ./docs-site
+      dockerfile: Dockerfile
+    restart: always
+  
 volumes:
   pgdata:
     driver: local

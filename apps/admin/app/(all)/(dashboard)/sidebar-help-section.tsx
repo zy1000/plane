@@ -9,7 +9,7 @@ import { observer } from "mobx-react";
 import Link from "next/link";
 import { HelpCircle, MessageSquare, MoveLeft } from "lucide-react";
 import { Transition } from "@headlessui/react";
-import { WEB_BASE_URL } from "@plane/constants";
+import { DOCS_URL, WEB_BASE_URL } from "@plane/constants";
 // plane internal packages
 import { GithubIcon, NewTabIcon, PageIcon } from "@plane/propel/icons";
 import { Tooltip } from "@plane/propel/tooltip";
@@ -21,7 +21,7 @@ import { useInstance, useTheme } from "@/hooks/store";
 const helpOptions = [
   {
     name: "Documentation",
-    href: "https://docs.plane.so/",
+    href: DOCS_URL,
     Icon: PageIcon,
   },
   {

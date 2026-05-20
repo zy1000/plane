@@ -5,6 +5,7 @@
  */
 
 import { FileText, GithubIcon, MessageSquare, Rocket } from "lucide-react";
+import { DOCS_URL } from "@plane/constants";
 // components
 import type { TPowerKCommandConfig } from "@/components/power-k/core/types";
 // hooks
@@ -39,7 +40,7 @@ export const usePowerKHelpCommands = (): TPowerKCommandConfig[] => {
       i18n_title: "power_k.help_actions.open_plane_documentation",
       icon: FileText,
       action: () => {
-        window.open("https://docs.plane.so/", "_blank", "noopener,noreferrer");
+        window.open(DOCS_URL, "_blank", "noopener,noreferrer");
       },
       isEnabled: () => true,
       isVisible: () => true,

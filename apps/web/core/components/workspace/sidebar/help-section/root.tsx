@@ -11,6 +11,7 @@ import { BookText, HelpCircle, MessagesSquare, Sparkles } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { PageIcon } from "@plane/propel/icons";
 import { cn } from "@plane/utils";
+import { DOCS_URL } from "@plane/constants";
 // ui
 import { CustomMenu } from "@plane/ui";
 // hooks
@@ -66,7 +67,7 @@ export const HelpMenuRoot = observer(function HelpMenuRoot({ showLabel = false }
         maxHeight="lg"
         closeOnSelect
       >
-        <CustomMenu.MenuItem onClick={() => window.open("https://go.plane.so/p-docs", "_blank")}>
+        <CustomMenu.MenuItem onClick={() => window.open(DOCS_URL, "_blank", "noopener,noreferrer")}>
           <div className="flex items-center gap-x-2 rounded-sm text-11">
             <PageIcon className="h-3.5 w-3.5 text-secondary" height={14} width={14} />
             <span className="text-11">用户手册</span>

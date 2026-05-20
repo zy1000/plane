@@ -7,6 +7,7 @@
 import { useState } from "react";
 import { observer } from "mobx-react";
 import useSWR from "swr";
+import { DOCS_URL } from "@plane/constants";
 // plane imports
 import { useTranslation } from "@plane/i18n";
 // components
@@ -111,7 +112,7 @@ export const EstimateRoot = observer(function EstimateRoot(props: TEstimateRoot)
                     Estimates have gone through a change, these are the estimates you had in your older versions which
                     were not in use. Read more about them&nbsp;
                     <a
-                      href={"https://docs.plane.so/core-concepts/projects/run-project#estimate"}
+                      href={`${DOCS_URL}core-concepts/projects/run-project#estimate`}
                       target="_blank"
                       className="text-accent-primary/80 hover:text-accent-primary"
                       rel="noreferrer"

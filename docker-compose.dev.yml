@@ -77,6 +77,8 @@ x-vite-browser-env: &vite-browser-env
   VITE_LIVE_BASE_URL: ${VITE_LIVE_BASE_URL:-http://${DEV_PUBLIC_HOST:-127.0.0.1}:${DEV_LIVE_PORT:-3003}}
   VITE_LIVE_BASE_PATH: ${VITE_LIVE_BASE_PATH:-/live}
   VITE_WEBSITE_URL: ${VITE_WEBSITE_URL:-http://${DEV_PUBLIC_HOST:-127.0.0.1}:${DEV_WEB_PORT:-3000}}
+  VITE_DOCS_BASE_URL: ${DOCS_BASE_URL:-http://${DEV_PUBLIC_HOST:-127.0.0.1}}
+  VITE_DOCS_BASE_PATH: ${DOCS_BASE_PATH:-/docs}
   VITE_SUPPORT_EMAIL: ${VITE_SUPPORT_EMAIL:-support@example.com}
 
 x-dev-backend-env: &dev-backend-env
