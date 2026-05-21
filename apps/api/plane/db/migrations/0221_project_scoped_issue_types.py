@@ -29,7 +29,9 @@ def _remap_filter_value(value, mapping):
     if isinstance(value, tuple):
         return [_remap_filter_value(item, mapping) for item in value]
     if isinstance(value, str) and "," in value:
-        return ",".join(str(_remap_scalar(item.strip(), mapping)) for item in value.split(","))
+        return ",".join(
+            str(_remap_scalar(item.strip(), mapping)) for item in value.split(",")
+        )
     return _remap_scalar(value, mapping)
 
 
@@ -56,13 +58,19 @@ def _rewrite_filter_json(value, mapping, parent_key=None):
 
 
 def _update_json_fields(model, mapping_by_project, global_mapping):
-    fields = [field for field in ("filters", "display_filters", "rich_filters") if hasattr(model, field)]
+    fields = [
+        field
+        for field in ("filters", "display_filters", "rich_filters")
+        if hasattr(model, field)
+    ]
     if not fields:
         return
 
     for obj in model._base_manager.all():
         project_id = _as_str(getattr(obj, "project_id", None))
-        mapping = mapping_by_project.get(project_id, {}) if project_id else global_mapping
+        mapping = (
+            mapping_by_project.get(project_id, {}) if project_id else global_mapping
+        )
         if not mapping:
             continue
 
@@ -81,26 +89,32 @@ def _update_json_fields(model, mapping_by_project, global_mapping):
 
 
 def _merge_duplicate_state(models_by_name, duplicate_state, keeper_state):
-    models_by_name["Issue"]._base_manager.filter(state_id=duplicate_state.id).update(state_id=keeper_state.id)
-    models_by_name["DraftIssue"]._base_manager.filter(state_id=duplicate_state.id).update(state_id=keeper_state.id)
-    models_by_name["WorkflowTransition"]._base_manager.filter(from_state_id=duplicate_state.id).update(
-        from_state_id=keeper_state.id
+    models_by_name["Issue"]._base_manager.filter(state_id=duplicate_state.id).update(
+        state_id=keeper_state.id
     )
-    models_by_name["WorkflowTransition"]._base_manager.filter(to_state_id=duplicate_state.id).update(
-        to_state_id=keeper_state.id
-    )
-    models_by_name["IssueTransitionRecord"]._base_manager.filter(from_state_id=duplicate_state.id).update(
-        from_state_id=keeper_state.id
-    )
-    models_by_name["IssueTransitionRecord"]._base_manager.filter(to_state_id=duplicate_state.id).update(
-        to_state_id=keeper_state.id
-    )
+    models_by_name["DraftIssue"]._base_manager.filter(
+        state_id=duplicate_state.id
+    ).update(state_id=keeper_state.id)
+    models_by_name["WorkflowTransition"]._base_manager.filter(
+        from_state_id=duplicate_state.id
+    ).update(from_state_id=keeper_state.id)
+    models_by_name["WorkflowTransition"]._base_manager.filter(
+        to_state_id=duplicate_state.id
+    ).update(to_state_id=keeper_state.id)
+    models_by_name["IssueTransitionRecord"]._base_manager.filter(
+        from_state_id=duplicate_state.id
+    ).update(from_state_id=keeper_state.id)
+    models_by_name["IssueTransitionRecord"]._base_manager.filter(
+        to_state_id=duplicate_state.id
+    ).update(to_state_id=keeper_state.id)
     models_by_name["State"]._base_manager.filter(id=duplicate_state.id).delete()
 
 
 def _merge_duplicate_property(models_by_name, duplicate_property, keeper_property):
     IssuePropertyValue = models_by_name["IssuePropertyValue"]
-    for value in IssuePropertyValue._base_manager.filter(property_id=duplicate_property.id):
+    for value in IssuePropertyValue._base_manager.filter(
+        property_id=duplicate_property.id
+    ):
         existing_value = IssuePropertyValue._base_manager.filter(
             issue_id=value.issue_id,
             property_id=keeper_property.id,
@@ -109,20 +123,28 @@ def _merge_duplicate_property(models_by_name, duplicate_property, keeper_propert
         if existing_value:
             IssuePropertyValue._base_manager.filter(id=value.id).delete()
         else:
-            IssuePropertyValue._base_manager.filter(id=value.id).update(property_id=keeper_property.id)
-    models_by_name["IssueTypeProperty"]._base_manager.filter(id=duplicate_property.id).delete()
+            IssuePropertyValue._base_manager.filter(id=value.id).update(
+                property_id=keeper_property.id
+            )
+    models_by_name["IssueTypeProperty"]._base_manager.filter(
+        id=duplicate_property.id
+    ).delete()
 
 
 def _merge_issue_type_into(models_by_name, ProjectIssueType, duplicate, keeper):
     project_id = duplicate.project_id
 
-    models_by_name["Issue"]._base_manager.filter(project_id=project_id, type_id=duplicate.id).update(type_id=keeper.id)
-    models_by_name["DraftIssue"]._base_manager.filter(project_id=project_id, type_id=duplicate.id).update(
-        type_id=keeper.id
-    )
+    models_by_name["Issue"]._base_manager.filter(
+        project_id=project_id, type_id=duplicate.id
+    ).update(type_id=keeper.id)
+    models_by_name["DraftIssue"]._base_manager.filter(
+        project_id=project_id, type_id=duplicate.id
+    ).update(type_id=keeper.id)
 
     State = models_by_name["State"]
-    for state in State._base_manager.filter(project_id=project_id, issue_type_id=duplicate.id):
+    for state in State._base_manager.filter(
+        project_id=project_id, issue_type_id=duplicate.id
+    ):
         keeper_state = State._base_manager.filter(
             project_id=project_id,
             issue_type_id=keeper.id,
@@ -135,7 +157,9 @@ def _merge_issue_type_into(models_by_name, ProjectIssueType, duplicate, keeper):
             State._base_manager.filter(id=state.id).update(issue_type_id=keeper.id)
 
     IssueTypeProperty = models_by_name["IssueTypeProperty"]
-    for prop in IssueTypeProperty._base_manager.filter(project_id=project_id, issue_type_id=duplicate.id):
+    for prop in IssueTypeProperty._base_manager.filter(
+        project_id=project_id, issue_type_id=duplicate.id
+    ):
         keeper_prop = IssueTypeProperty._base_manager.filter(
             project_id=project_id,
             issue_type_id=keeper.id,
@@ -145,7 +169,9 @@ def _merge_issue_type_into(models_by_name, ProjectIssueType, duplicate, keeper):
         if keeper_prop:
             _merge_duplicate_property(models_by_name, prop, keeper_prop)
         else:
-            IssueTypeProperty._base_manager.filter(id=prop.id).update(issue_type_id=keeper.id)
+            IssueTypeProperty._base_manager.filter(id=prop.id).update(
+                issue_type_id=keeper.id
+            )
 
     Workflow = models_by_name["Workflow"]
     keeper_active_workflow = Workflow._base_manager.filter(
@@ -154,14 +180,26 @@ def _merge_issue_type_into(models_by_name, ProjectIssueType, duplicate, keeper):
         is_active=True,
         deleted_at__isnull=True,
     ).first()
-    for workflow in Workflow._base_manager.filter(project_id=project_id, issue_type_id=duplicate.id):
-        if workflow.is_active and workflow.deleted_at is None and keeper_active_workflow:
+    for workflow in Workflow._base_manager.filter(
+        project_id=project_id, issue_type_id=duplicate.id
+    ):
+        if (
+            workflow.is_active
+            and workflow.deleted_at is None
+            and keeper_active_workflow
+        ):
             Workflow._base_manager.filter(id=workflow.id).delete()
         else:
-            Workflow._base_manager.filter(id=workflow.id).update(issue_type_id=keeper.id)
+            Workflow._base_manager.filter(id=workflow.id).update(
+                issue_type_id=keeper.id
+            )
 
-    ProjectIssueType._base_manager.filter(project_id=project_id, issue_type_id=duplicate.id).delete()
-    ProjectIssueType._base_manager.filter(project_id=project_id, issue_type_id=keeper.id).update(
+    ProjectIssueType._base_manager.filter(
+        project_id=project_id, issue_type_id=duplicate.id
+    ).delete()
+    ProjectIssueType._base_manager.filter(
+        project_id=project_id, issue_type_id=keeper.id
+    ).update(
         is_default=keeper.is_default,
         level=keeper.level,
     )
@@ -172,14 +210,18 @@ def _merge_issue_type_into(models_by_name, ProjectIssueType, duplicate, keeper):
 
 def _merge_duplicate_issue_type_names(IssueType, ProjectIssueType, models_by_name):
     names_by_project = defaultdict(list)
-    for issue_type in IssueType._base_manager.filter(project_id__isnull=False, deleted_at__isnull=True).order_by(
+    for issue_type in IssueType._base_manager.filter(
+        project_id__isnull=False, deleted_at__isnull=True
+    ).order_by(
         "project_id",
         "name",
         "-is_default",
         "created_at",
         "id",
     ):
-        names_by_project[(_as_str(issue_type.project_id), issue_type.name)].append(issue_type)
+        names_by_project[(_as_str(issue_type.project_id), issue_type.name)].append(
+            issue_type
+        )
 
     for _, issue_types in names_by_project.items():
         if len(issue_types) <= 1:
@@ -216,6 +258,24 @@ def _infer_projects_for_issue_type(issue_type_id, models_by_name):
     return [project_id for project_id in project_ids if project_id]
 
 
+def _fallback_project_for_issue_type(Project, issue_type):
+    active_project = (
+        Project._base_manager.filter(
+            workspace_id=issue_type.workspace_id, deleted_at__isnull=True
+        )
+        .order_by("created_at", "id")
+        .first()
+    )
+    if active_project is not None:
+        return active_project
+
+    return (
+        Project._base_manager.filter(workspace_id=issue_type.workspace_id)
+        .order_by("created_at", "id")
+        .first()
+    )
+
+
 def _copy_issue_type(IssueType, source, project, is_default, level):
     return IssueType._base_manager.create(
         workspace_id=project.workspace_id,
@@ -248,7 +308,9 @@ def _rewire_project_references(models_by_name, old_type_id, new_type_id, project
 
     for model_name, field_name in update_specs:
         model = models_by_name[model_name]
-        model._base_manager.filter(project_id=project_id, **{field_name: old_type_id}).update(**{field_name: new_type_id})
+        model._base_manager.filter(
+            project_id=project_id, **{field_name: old_type_id}
+        ).update(**{field_name: new_type_id})
 
 
 def project_scope_issue_types(apps, schema_editor):
@@ -284,14 +346,15 @@ def project_scope_issue_types(apps, schema_editor):
         )
 
         if not links:
-            inferred_project_ids = _infer_projects_for_issue_type(issue_type_id, models_by_name)
+            inferred_project_ids = _infer_projects_for_issue_type(
+                issue_type_id, models_by_name
+            )
             if not inferred_project_ids:
-                fallback_project = (
-                    Project._base_manager.filter(workspace_id=issue_type.workspace_id, deleted_at__isnull=True)
-                    .order_by("created_at", "id")
-                    .first()
-                )
+                fallback_project = _fallback_project_for_issue_type(Project, issue_type)
                 if fallback_project is None:
+                    # No project-scoped references and no project remains in the workspace,
+                    # so this legacy workspace-scoped type cannot be made project-scoped.
+                    IssueType._base_manager.filter(id=issue_type.id).delete()
                     continue
                 inferred_project_ids = [_as_str(fallback_project.id)]
 
@@ -310,9 +373,13 @@ def project_scope_issue_types(apps, schema_editor):
                         issue_type.is_default,
                         issue_type.level,
                     )
-                mapping_by_project[_as_str(project.id)][_as_str(issue_type_id)] = _as_str(new_issue_type.id)
+                mapping_by_project[_as_str(project.id)][_as_str(issue_type_id)] = (
+                    _as_str(new_issue_type.id)
+                )
                 new_ids_by_old[_as_str(issue_type_id)].add(_as_str(new_issue_type.id))
-                _rewire_project_references(models_by_name, issue_type_id, new_issue_type.id, project.id)
+                _rewire_project_references(
+                    models_by_name, issue_type_id, new_issue_type.id, project.id
+                )
             continue
 
         for index, link in enumerate(links):
@@ -322,7 +389,9 @@ def project_scope_issue_types(apps, schema_editor):
                 issue_type.workspace_id = project.workspace_id
                 issue_type.is_default = link.is_default
                 issue_type.level = link.level
-                issue_type.save(update_fields=["project", "workspace", "is_default", "level"])
+                issue_type.save(
+                    update_fields=["project", "workspace", "is_default", "level"]
+                )
                 new_issue_type = issue_type
             else:
                 new_issue_type = _copy_issue_type(
@@ -335,9 +404,13 @@ def project_scope_issue_types(apps, schema_editor):
                 link.issue_type_id = new_issue_type.id
                 link.save(update_fields=["issue_type"])
 
-            mapping_by_project[_as_str(project.id)][_as_str(issue_type_id)] = _as_str(new_issue_type.id)
+            mapping_by_project[_as_str(project.id)][_as_str(issue_type_id)] = _as_str(
+                new_issue_type.id
+            )
             new_ids_by_old[_as_str(issue_type_id)].add(_as_str(new_issue_type.id))
-            _rewire_project_references(models_by_name, issue_type_id, new_issue_type.id, project.id)
+            _rewire_project_references(
+                models_by_name, issue_type_id, new_issue_type.id, project.id
+            )
 
     global_mapping = {
         old_id: next(iter(new_ids))
@@ -397,7 +470,9 @@ class Migration(migrations.Migration):
                 to="db.workspace",
             ),
         ),
-        migrations.RunPython(project_scope_issue_types, reverse_project_scope_issue_types),
+        migrations.RunPython(
+            project_scope_issue_types, reverse_project_scope_issue_types
+        ),
         migrations.AlterField(
             model_name="issuetype",
             name="project",
