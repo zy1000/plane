@@ -15,17 +15,30 @@ import { Alert, Button, Modal, Space, Table, Tag, Tooltip, Typography, message }
 import { ExportOutlined } from "@ant-design/icons";
 import { formatCNDateTime } from "@/components/qa/cases/util";
 import { AssetExplorer } from "@/components/asset-explorer";
+import { XmindPreviewModal, type TXmindPreviewAsset } from "@/components/filestore/xmind-preview-modal";
 import { useUserPermissions } from "@/hooks/store/user";
 import { FilestoreService, type TFilestoreAsset } from "@/services/filestore.service";
 
 const ONLYOFFICE_SUPPORTED_EXTS = ["doc", "docx", "odt", "rtf", "txt", "xls", "xlsx", "ods", "csv", "ppt", "pptx", "odp", "pdf"];
+const XMIND_SUPPORTED_EXTS = ["xmind"];
 
-type TFilestoreAssetLike = Pick<TFilestoreAsset, "id" | "attributes">;
+type TFilestoreAssetLike = Pick<TFilestoreAsset, "id" | "attributes"> & {
+  name?: string;
+  filename?: string;
+};
 type TOnlyOfficeMode = "edit" | "view";
+
+const getAssetFilename = (asset: TFilestoreAssetLike): string =>
+  String(asset.attributes?.name ?? asset.name ?? asset.filename ?? "");
 
 const isOnlyOfficeSupported = (filename?: string): boolean => {
   const ext = String(filename ?? "").split(".").pop()?.toLowerCase() ?? "";
   return ONLYOFFICE_SUPPORTED_EXTS.includes(ext);
+};
+
+const isXmindSupported = (filename?: string): boolean => {
+  const ext = String(filename ?? "").split(".").pop()?.toLowerCase() ?? "";
+  return XMIND_SUPPORTED_EXTS.includes(ext);
 };
 
 function FilestorePage() {
@@ -51,6 +64,8 @@ function FilestorePage() {
   const [versionsOpen, setVersionsOpen] = useState(false);
   const [versionsLoading, setVersionsLoading] = useState(false);
   const [versions, setVersions] = useState<Array<Record<string, any>>>([]);
+  const [xmindPreviewOpen, setXmindPreviewOpen] = useState(false);
+  const [xmindAsset, setXmindAsset] = useState<TXmindPreviewAsset | null>(null);
 
   const editorRef = useRef<any>(null);
   const forceSavingRef = useRef(false);
@@ -211,7 +226,13 @@ function FilestorePage() {
   const handlePreview = useCallback(
     async (asset: TFilestoreAssetLike) => {
       if (!asset?.id) return;
-      if (isOnlyOfficeSupported(asset?.attributes?.name)) {
+      const filename = getAssetFilename(asset);
+      if (isXmindSupported(filename)) {
+        setXmindAsset(asset);
+        setXmindPreviewOpen(true);
+        return;
+      }
+      if (isOnlyOfficeSupported(filename)) {
         await openEditor(asset, "view");
         return;
       }
@@ -222,7 +243,7 @@ function FilestorePage() {
 
   const handleEdit = useCallback(
     async (asset: TFilestoreAssetLike) => {
-      if (isOnlyOfficeSupported(asset?.attributes?.name)) {
+      if (isOnlyOfficeSupported(getAssetFilename(asset))) {
         await openEditor(asset, "edit");
         return;
       }
@@ -361,6 +382,17 @@ function FilestorePage() {
       >
         {renderEditorPanel}
       </Modal>
+
+      <XmindPreviewModal
+        open={xmindPreviewOpen}
+        asset={xmindAsset}
+        workspaceSlug={String(workspaceSlug ?? "")}
+        projectId={String(projectId ?? "")}
+        onClose={() => {
+          setXmindPreviewOpen(false);
+          setXmindAsset(null);
+        }}
+      />
 
       <Modal open={versionsOpen} onCancel={() => setVersionsOpen(false)} footer={null} width={860} title="历史版本" destroyOnClose>
         <Table
