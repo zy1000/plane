@@ -201,12 +201,11 @@ export const useNavigationItems = ({
     [project]
   );
 
-  // Combine, filter, and sort navigation items
-  const navigationItems = useMemo(() => {
-    const navItems = baseNavigation(workspaceSlug, projectId);
-
-    // Filter by permissions and shouldRender
-    const filteredItems = navItems.filter((item) => {
+  // Filter/sort 必须在 render 阶段执行，避免 useMemo 屏蔽 MobX 对
+  // permission_keys、project.cycle_view / module_view / page_view / inbox_view 等 observable 的订阅。
+  // 否则接口返回后 store 已更新，但 useMemo 依赖未变，会一直返回"残缺菜单"。
+  const filteredItems = baseNavigation(workspaceSlug, projectId)
+    .filter((item) => {
       if (!item.shouldRender) return false;
       const hasAccess = allowPermissions(item.access, EUserPermissionsLevel.PROJECT, workspaceSlug, project?.id ?? "");
       if (!hasAccess) return false;
@@ -214,11 +213,14 @@ export const useNavigationItems = ({
         return allowProjectPermissionKeys(item.permissionKeys, workspaceSlug, project?.id ?? "");
       }
       return true;
-    });
+    })
+    .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
 
-    // Sort by sortOrder
-    return filteredItems.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
-  }, [workspaceSlug, projectId, baseNavigation, allowPermissions, allowProjectPermissionKeys, project?.id]);
+  // 用 key 列表做内容指纹，只在 tab 集合实际变化时换引用，
+  // 避免下游 useEffect / useMemo（如默认 tab 跳转）因为新数组引用无谓抖动。
+  const stableKey = filteredItems.map((i) => i.key).join("|");
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const navigationItems = useMemo(() => filteredItems, [stableKey]);
 
   return navigationItems;
 };
