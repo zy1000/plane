@@ -66,6 +66,8 @@ class PermissionKey(str, Enum):
     ISSUE_ATTACHMENT_DOWNLOAD = "issue.attachment.download"
     ISSUE_ATTACHMENT_UPLOAD = "issue.attachment.upload"
     ISSUE_ATTACHMENT_DELETE = "issue.attachment.delete"
+    # 工作项 Excel 导入（含模板下载/预校验/批量导入三端点）
+    WORK_ITEM_IMPORT_EXPORT = "issue.import_export"
     SPRINTS_VIEW = "sprints.view"
     SPRINTS_CREATE = "sprints.create"
     SPRINTS_EDIT = "sprints.edit"

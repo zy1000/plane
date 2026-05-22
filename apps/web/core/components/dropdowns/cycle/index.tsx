@@ -9,23 +9,24 @@ import { useRef, useState } from "react";
 import { observer } from "mobx-react";
 import { useTranslation } from "@plane/i18n";
 // ui
-import { CycleIcon, ChevronDownIcon } from "@plane/propel/icons";
 import { ComboDropDown } from "@plane/ui";
 // helpers
 import { cn } from "@plane/utils";
 // hooks
-import { useCycle } from "@/hooks/store/use-cycle";
 import { useDropdown } from "@/hooks/use-dropdown";
+import { useCycle } from "@/hooks/store/use-cycle";
 // local components and constants
 import { DropdownButton } from "../buttons";
-import { BUTTON_VARIANTS_WITH_TEXT } from "../constants";
+import { BUTTON_VARIANTS_WITHOUT_TEXT } from "../constants";
 import type { TDropdownProps } from "../types";
+import { CycleButtonContent } from "./button-content";
 import { CycleOptions } from "./cycle-options";
 
 type Props = TDropdownProps & {
   button?: ReactNode;
   dropdownArrow?: boolean;
   dropdownArrowClassName?: string;
+  itemClassName?: string;
   onChange: (val: string | null) => void;
   onClose?: () => void;
   projectId: string | undefined;
@@ -33,6 +34,7 @@ type Props = TDropdownProps & {
   canRemoveCycle?: boolean;
   renderByDefault?: boolean;
   currentCycleId?: string;
+  showCount?: boolean;
 };
 
 export const CycleDropdown = observer(function CycleDropdown(props: Props) {
@@ -46,11 +48,13 @@ export const CycleDropdown = observer(function CycleDropdown(props: Props) {
     dropdownArrow = false,
     dropdownArrowClassName = "",
     hideIcon = false,
+    itemClassName = "",
     onChange,
     onClose,
     placeholder = "",
     placement,
     projectId,
+    showCount = false,
     showTooltip = false,
     tabIndex,
     value,
@@ -121,13 +125,20 @@ export const CycleDropdown = observer(function CycleDropdown(props: Props) {
             variant={buttonVariant}
             renderToolTipByDefault={renderByDefault}
           >
-            {!hideIcon && <CycleIcon className="h-3 w-3 flex-shrink-0" />}
-            {BUTTON_VARIANTS_WITH_TEXT.includes(buttonVariant) && (!!selectedName || !!placeholder) && (
-              <span className="min-w-0 flex-1 truncate text-left">{selectedName ?? placeholder}</span>
-            )}
-            {dropdownArrow && (
-              <ChevronDownIcon className={cn("h-2.5 w-2.5 flex-shrink-0", dropdownArrowClassName)} aria-hidden="true" />
-            )}
+            <CycleButtonContent
+              canRemoveCycle={canRemoveCycle}
+              className={itemClassName}
+              disabled={disabled}
+              dropdownArrow={dropdownArrow}
+              dropdownArrowClassName={dropdownArrowClassName}
+              hideIcon={hideIcon}
+              hideText={BUTTON_VARIANTS_WITHOUT_TEXT.includes(buttonVariant)}
+              onChange={onChange}
+              placeholder={placeholder}
+              showCount={showCount}
+              showTooltip={showTooltip}
+              value={value}
+            />
           </DropdownButton>
         </button>
       )}

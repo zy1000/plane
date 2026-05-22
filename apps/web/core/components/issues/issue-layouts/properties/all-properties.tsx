@@ -470,6 +470,7 @@ export const IssueProperties = observer(function IssueProperties(props: IIssuePr
                     disabled={isReadOnly}
                     buttonVariant="border-with-text"
                     renderByDefault={isMobile}
+                    showCount
                     showTooltip
                   />
                 </div>

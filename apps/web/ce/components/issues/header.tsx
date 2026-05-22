@@ -30,9 +30,8 @@ import { HeaderFilters } from "@/components/issues/filters";
 import { WorkflowApprovalModal } from "@/components/issues/workflow-approval-modal";
 import { IssueExportModal } from "@/components/issues/export/export-modal";
 import { stringifyAppliedFilters } from "@/components/issues/export/utils";
-import { IssueService } from "@/services/issue";
-import { message } from "antd";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { ImportIssuesModal } from "@/components/issues/import";
+import { useEffect, useMemo, useState } from "react";
 // helpers
 // hooks
 import { useCommandPalette } from "@/hooks/store/use-command-palette";
@@ -60,6 +59,18 @@ export const IssuesHeader = observer(function IssuesHeader() {
   // i18n
   const { t } = useTranslation();
 
+  const refreshAfterImport = async () => {
+    if (workspaceSlug && projectId) {
+      await fetchProjectLabels(workspaceSlug.toString(), projectId.toString());
+    }
+    await issues.fetchIssuesWithExistingPagination(
+      workspaceSlug?.toString(),
+      projectId?.toString(),
+      "mutation",
+      scope
+    );
+  };
+
   const { currentProjectDetails, loader } = useProject();
 
   const { toggleCreateIssueModal } = useCommandPalette();
@@ -68,6 +79,7 @@ export const IssuesHeader = observer(function IssuesHeader() {
 
   const [isApprovalModalOpen, setIsApprovalModalOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
   const { pendingCount, fetchPendingCount } = useWorkflowApprovals(
     workspaceSlug?.toString(),
@@ -80,67 +92,6 @@ export const IssuesHeader = observer(function IssuesHeader() {
       fetchPendingCount();
     }
   }, [workspaceSlug, projectId, fetchPendingCount]);
-
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const issueService = new IssueService();
-
-  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const formData = new FormData();
-    formData.append("file", file);
-
-    try {
-      const res = await issueService.importIssue(workspaceSlug, projectId, formData);
-
-      // 如果有失败的记录，生成CSV并下载
-      if (res.data?.fail && res.data.fail.length > 0) {
-        message.warning(`导入完成，有 ${res.data.fail.length} 条数据导入失败，详情请查看下载的文件`);
-
-        // 创建CSV内容
-        const headers = ["用例名称", "失败原因"];
-        const csvContent = [
-          headers.join(","),
-          ...res.data.fail.map(
-            (item: any) =>
-              // 处理字段中可能包含的逗号，用引号包裹
-              `"${item.name || ""}","${item.error || ""}"`
-          ),
-        ].join("\n");
-
-        // 创建Blob并下载
-        const blob = new Blob(["\ufeff" + csvContent], { type: "text/csv;charset=utf-8;" });
-        const link = document.createElement("a");
-        const url = URL.createObjectURL(blob);
-
-        link.setAttribute("href", url);
-        link.setAttribute("download", `导入失败记录_${new Date().getTime()}.csv`);
-        link.style.visibility = "hidden";
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      } else {
-        message.success("导入成功");
-      }
-      if (workspaceSlug && projectId) {
-        await fetchProjectLabels(workspaceSlug.toString(), projectId.toString());
-      }
-      await issues.fetchIssuesWithExistingPagination(
-        workspaceSlug?.toString(),
-        projectId?.toString(),
-        "mutation",
-        scope
-      );
-    } catch (err: any) {
-      console.error(err);
-      message.error(err?.error || "导入失败");
-    } finally {
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
-    }
-  };
 
   const filteredQueryString = useMemo(() => {
     if (!projectId) return "";
@@ -222,19 +173,12 @@ export const IssuesHeader = observer(function IssuesHeader() {
               <div className="block sm:hidden">{t("issue.label", { count: 1 })}</div>
               <div className="hidden sm:block">{t("issue.add.label")}</div>
             </Button>
-            <Button size="lg" onClick={() => fileInputRef.current?.click()} variant="secondary">
+            <Button size="lg" onClick={() => setIsImportModalOpen(true)} variant="secondary">
               导入
             </Button>
             <Button size="lg" variant="secondary" onClick={() => setIsExportModalOpen(true)}>
               导出
             </Button>
-            <input
-              type="file"
-              ref={fileInputRef}
-              style={{ display: "none" }}
-              accept=".xlsx,.xls"
-              onChange={handleImport}
-            />
             <div className="relative hidden md:block">
               <Button
                 variant="secondary"
@@ -273,6 +217,15 @@ export const IssuesHeader = observer(function IssuesHeader() {
             projectId={projectId.toString()}
             selectedIds={selectedEntityIds}
             filteredQueryString={filteredQueryString}
+          />
+        )}
+        {workspaceSlug && projectId && (
+          <ImportIssuesModal
+            isOpen={isImportModalOpen}
+            onClose={() => setIsImportModalOpen(false)}
+            workspaceSlug={workspaceSlug.toString()}
+            projectId={projectId.toString()}
+            onSuccess={refreshAfterImport}
           />
         )}
       </Header.RightItem>

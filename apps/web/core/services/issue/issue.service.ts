@@ -549,13 +549,51 @@ export class IssueService extends APIService {
         throw error?.response?.data;
       });
   }
-  async importIssue(workspaceSlug: string, projectId: string, formData: FormData): Promise<any> {
-    return this.post(`/api/workspaces/${workspaceSlug}/projects/${projectId}/issue/issue-import/`, formData, {
-      headers: {
-        "Content-Type": "multipart/form-data",
-      },
-    })
+  async downloadImportTemplate(workspaceSlug: string, projectId: string): Promise<any> {
+    return this.get(
+      `/api/workspaces/${workspaceSlug}/projects/${projectId}/issue/import-template/`,
+      {},
+      { responseType: "blob" }
+    )
       .then((response) => response)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async listImportFields(workspaceSlug: string, projectId: string): Promise<any> {
+    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/issue/import-fields/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async inspectImportFile(workspaceSlug: string, projectId: string, formData: FormData): Promise<any> {
+    return this.post(`/api/workspaces/${workspaceSlug}/projects/${projectId}/issue/inspect-import-file/`, formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async validateImport(workspaceSlug: string, projectId: string, formData: FormData): Promise<any> {
+    return this.post(`/api/workspaces/${workspaceSlug}/projects/${projectId}/issue/validate-import/`, formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async bulkImport(workspaceSlug: string, projectId: string, formData: FormData): Promise<any> {
+    return this.post(`/api/workspaces/${workspaceSlug}/projects/${projectId}/issue/bulk-import/`, formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    })
+      .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
       });

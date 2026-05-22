@@ -62,6 +62,7 @@ export const IssueCycleSelect = observer(function IssueCycleSelect(props: TIssue
         hideIcon
         dropdownArrow
         dropdownArrowClassName="h-3.5 w-3.5 hidden group-hover:inline"
+        itemClassName="px-2"
       />
     </div>
   );

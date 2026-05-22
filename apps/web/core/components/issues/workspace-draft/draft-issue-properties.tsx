@@ -253,6 +253,7 @@ export const DraftIssueProperties = observer(function DraftIssueProperties(props
             onChange={handleCycle}
             buttonVariant="border-with-text"
             renderByDefault={isMobile}
+            showCount
             showTooltip
           />
         </div>

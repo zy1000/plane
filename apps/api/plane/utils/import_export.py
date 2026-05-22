@@ -115,10 +115,6 @@ def parser_excel_case(file_path, sheet_name='case'):
     return parser_excel(file_path, mapping, sheet_name)
 
 
-def parser_excel_issue(file_path, sheet_name='需求') -> list[dict]:
-    return parser_excel(file_path, sheet_name=sheet_name)
-
-
 def get_extension_without_dot(filename):
     """获取不带点号的扩展名"""
     _, extension = os.path.splitext(filename)
@@ -163,63 +159,3 @@ def parser_case_file(files: list[InMemoryUploadedFile]) -> list:
         else:
             raise Exception('不是支持的文件类型')
     return result
-
-
-def issue_data_build(excel_data) -> list[dict]:
-    result = []
-    for data in excel_data:
-        data['name'] = data.pop('Description')
-        requirement = {key.replace('Type:', ''): str(value).split('\n') for key, value in data.items() if
-                       (key and key.startswith('Type:') and value != '')}
-        note = data.get('Note')
-        table_html = build_html_table(requirement)
-        if table_html:
-            FORMAT = REQUIREMENT_FORMAT + TABLE_FORMAT
-        else:
-            FORMAT = TABLE_FORMAT
-        # 插入到主模板中
-        final_html = FORMAT.format(table_rows=table_html, description=note, uuid_1=str(uuid.uuid4()),
-                                         uuid_2=str(uuid.uuid4()), uuid_3=str(uuid.uuid4()), uuid_4=str(uuid.uuid4()),
-                                         uuid_5=str(uuid.uuid4()))
-        data['description_html'] = final_html
-        data['labels'] = data.get('Tag', '').split(',') if data.get('Tag', '') else []
-
-        result.append(data)
-    return result
-
-
-def parser_issue_file(files: list[InMemoryUploadedFile]) -> list:
-    result = list()
-    for file in files:
-        if (suffix := get_extension_without_dot(file.name)) in ['json']:
-            result.extend(json.load(file))
-        elif suffix in ['xlsx']:
-            data = parser_issue_excel(BytesIO(file.read()),sheet_name='需求')
-            result.extend(issue_data_build(data))
-        else:
-            raise Exception('不是支持的文件类型')
-    return result
-
-
-def parser_issue_excel(file_path, mapping: dict = None, sheet_name='case') -> list[dict]:
-    mapping = mapping or {}
-    workbook = load_workbook(file_path)
-
-    # 选择工作表
-    if sheet_name:
-        worksheet = workbook[sheet_name]
-    else:
-        worksheet = workbook.active  # 默认活动工作表
-
-    # 获取第一行作为列标题
-    headers = [(mapping.get(cell.value) or cell.value) for cell in worksheet[1]]
-
-    # 读取数据行
-    data = []
-    for row in worksheet.iter_rows(min_row=2, values_only=True):
-        # 创建字典，跳过空行
-        if any(cell is not None for cell in row):
-            row_dict = dict(zip(headers, row))
-            data.append({key: value for key, value in row_dict.items() if (not mapping or (key in mapping.values()))})
-
-    return data
