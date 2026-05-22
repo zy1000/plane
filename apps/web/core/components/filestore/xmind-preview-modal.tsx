@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Button, Input, Modal, Select, Spin, Tooltip, Typography } from "antd";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Alert, Button, Input, Modal, Select, Spin, Typography } from "antd";
 import { AssetExplorerService } from "@/services/asset-explorer.service";
 
 export type TXmindPreviewAsset = {
@@ -70,33 +70,11 @@ type TSearchIndexItem = {
   searchText: string;
 };
 
-type TExpandProgress = {
-  active: boolean;
-  done: number;
-  total: number;
-};
-
-const DEFAULT_EXPAND_DEPTH = 2;
+const DEFAULT_EXPAND_DEPTH = -1;
 const FULL_EXPAND_DEPTH = -1;
 const RICH_TEXT_SMM_VERSION = "0.14.0";
-const EXPAND_ALL_BATCH_SIZE = 80;
 const EXPAND_DEPTH_DEBOUNCE_MS = 150;
 const MAX_SEARCH_RESULT_COUNT = 50;
-
-const scheduleIdleWork = (work: () => void): number => {
-  if (typeof window !== "undefined" && typeof window.requestIdleCallback === "function") {
-    return window.requestIdleCallback(() => work(), { timeout: 120 });
-  }
-  return window.setTimeout(work, 16);
-};
-
-const cancelIdleWork = (jobId: number) => {
-  if (typeof window !== "undefined" && typeof window.cancelIdleCallback === "function") {
-    window.cancelIdleCallback(jobId);
-    return;
-  }
-  window.clearTimeout(jobId);
-};
 
 const getAssetDisplayName = (asset: TXmindPreviewAsset | null): string => {
   if (!asset) return "文件";
@@ -115,6 +93,40 @@ const stripHtmlTag = (value: string): string =>
 
 const SEARCH_HIGHLIGHT_STYLE =
   "background-color: #fff3a0; color: inherit; border-radius: 2px; padding: 0 1px;";
+
+const highlightKeywordInPlainText = (text: string, keyword: string): ReactNode => {
+  const trimmedKeyword = keyword.trim();
+  if (!trimmedKeyword) return text;
+
+  const lowerText = text.toLowerCase();
+  const lowerKeyword = trimmedKeyword.toLowerCase();
+  if (!lowerText.includes(lowerKeyword)) return text;
+
+  const parts: ReactNode[] = [];
+  let cursor = 0;
+  let matchIndex = lowerText.indexOf(lowerKeyword, cursor);
+  let partIndex = 0;
+
+  while (matchIndex !== -1) {
+    if (matchIndex > cursor) {
+      parts.push(text.slice(cursor, matchIndex));
+    }
+    parts.push(
+      <mark key={`${matchIndex}-${partIndex}`} className="xmind-search-highlight">
+        {text.slice(matchIndex, matchIndex + lowerKeyword.length)}
+      </mark>
+    );
+    cursor = matchIndex + lowerKeyword.length;
+    matchIndex = lowerText.indexOf(lowerKeyword, cursor);
+    partIndex += 1;
+  }
+
+  if (cursor < text.length) {
+    parts.push(text.slice(cursor));
+  }
+
+  return parts;
+};
 
 const highlightKeywordInHtml = (html: string, keyword: string): string => {
   const lowerKeyword = keyword.toLowerCase();
@@ -237,16 +249,6 @@ const setAllNodesExpandInPlace = (root: TMindMapNode, expand: boolean) => {
   visit(root);
 };
 
-const collectNodes = (root: TMindMapNode): TMindMapNode[] => {
-  const nodeList: TMindMapNode[] = [];
-  const traverse = (node: TMindMapNode) => {
-    nodeList.push(node);
-    node.children?.forEach(traverse);
-  };
-  traverse(root);
-  return nodeList;
-};
-
 const buildSearchIndex = (root: TMindMapNode): TSearchIndexItem[] => {
   const indexItems: TSearchIndexItem[] = [];
   const traverse = (node: TMindMapNode, parentTexts: string[]) => {
@@ -299,8 +301,6 @@ export const XmindPreviewModal = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const mindMapRef = useRef<TMindMapInstance | null>(null);
   const fullDataRef = useRef<TMindMapNode | null>(null);
-  const expandAllJobRef = useRef<number | null>(null);
-  const expandAllCancelledRef = useRef(false);
   const pendingDepthRef = useRef<number | null>(null);
   const debounceTimerRef = useRef<number | null>(null);
   const currentExpandDepthRef = useRef(FULL_EXPAND_DEPTH);
@@ -315,11 +315,15 @@ export const XmindPreviewModal = ({
   const [error, setError] = useState("");
   const [nodeStats, setNodeStats] = useState<TNodeStats>({ totalNodes: 0, maxDepth: 0 });
   const [currentExpandDepth, setCurrentExpandDepth] = useState(FULL_EXPAND_DEPTH);
-  const [expandProgress, setExpandProgress] = useState<TExpandProgress>({ active: false, done: 0, total: 0 });
   const [searchKeyword, setSearchKeyword] = useState("");
   const [selectedSearchUid, setSelectedSearchUid] = useState<string | undefined>(undefined);
   const [searchCursor, setSearchCursor] = useState<number | null>(null);
   const [searchIndex, setSearchIndex] = useState<TSearchIndexItem[]>([]);
+  const [isModalReady, setIsModalReady] = useState(false);
+
+  const handleModalOpenChange = useCallback((visible: boolean) => {
+    setIsModalReady(visible);
+  }, []);
 
   const handleDownload = useCallback(async () => {
     if (!asset?.id) return;
@@ -336,17 +340,11 @@ export const XmindPreviewModal = ({
   }, [asset?.id, projectId, service, workspaceSlug]);
 
   const cancelExpandAll = useCallback(() => {
-    expandAllCancelledRef.current = true;
-    if (expandAllJobRef.current !== null) {
-      cancelIdleWork(expandAllJobRef.current);
-      expandAllJobRef.current = null;
-    }
     pendingDepthRef.current = null;
     if (debounceTimerRef.current !== null) {
       window.clearTimeout(debounceTimerRef.current);
       debounceTimerRef.current = null;
     }
-    setExpandProgress((prev) => (prev.active ? { ...prev, active: false } : prev));
   }, []);
 
   const detachRenderEndListener = useCallback(() => {
@@ -370,48 +368,79 @@ export const XmindPreviewModal = ({
     [detachRenderEndListener]
   );
 
-  const applySearchHighlight = useCallback((keyword: string) => {
-    const mindMap = mindMapRef.current;
-    const renderTree = mindMap?.renderer?.renderTree;
-    if (!mindMap || !renderTree) return;
-
-    const lowerKeyword = keyword.toLowerCase();
-    if (highlightedKeywordRef.current === lowerKeyword) return;
-
+  const markSearchHighlightNodesForUpdate = useCallback((root: TMindMapNode) => {
     let mutated = false;
-
-    if (originalNodeTextsRef.current.size > 0) {
-      const restore = (node: TMindMapNode) => {
-        const uid = node.data?.uid;
-        if (uid && originalNodeTextsRef.current.has(uid) && node.data) {
-          node.data.text = originalNodeTextsRef.current.get(uid);
-          mutated = true;
-        }
-        node.children?.forEach(restore);
-      };
-      restore(renderTree);
-      originalNodeTextsRef.current.clear();
-    }
-
-    if (lowerKeyword) {
-      const apply = (node: TMindMapNode) => {
-        const uid = node.data?.uid;
-        const text = node.data?.text;
-        if (uid && typeof text === "string" && node.data) {
-          if (stripHtmlTag(text).toLowerCase().includes(lowerKeyword)) {
-            originalNodeTextsRef.current.set(uid, text);
-            node.data.text = highlightKeywordInHtml(text, keyword);
-            mutated = true;
-          }
-        }
-        node.children?.forEach(apply);
-      };
-      apply(renderTree);
-    }
-
-    highlightedKeywordRef.current = lowerKeyword;
-    if (mutated) mindMap.render();
+    const visit = (node: TMindMapNode) => {
+      const uid = node.data?.uid;
+      if (uid && originalNodeTextsRef.current.has(uid) && node.data) {
+        node.data.needUpdate = true;
+        mutated = true;
+      }
+      node.children?.forEach(visit);
+    };
+    visit(root);
+    return mutated;
   }, []);
+
+  const applySearchHighlight = useCallback(
+    (keyword: string, options?: { force?: boolean }) => {
+      const mindMap = mindMapRef.current;
+      const renderTree = mindMap?.renderer?.renderTree;
+      if (!mindMap || !renderTree) return;
+
+      const lowerKeyword = keyword.toLowerCase();
+      const force = options?.force ?? false;
+
+      if (!force && highlightedKeywordRef.current === lowerKeyword) return;
+
+      if (force && lowerKeyword && highlightedKeywordRef.current === lowerKeyword) {
+        if (markSearchHighlightNodesForUpdate(renderTree)) {
+          mindMap.render();
+        }
+        return;
+      }
+
+      let mutated = false;
+      const markNeedUpdate = (node: TMindMapNode) => {
+        if (!node.data) node.data = {};
+        node.data.needUpdate = true;
+        mutated = true;
+      };
+
+      if (originalNodeTextsRef.current.size > 0) {
+        const restore = (node: TMindMapNode) => {
+          const uid = node.data?.uid;
+          if (uid && originalNodeTextsRef.current.has(uid) && node.data) {
+            node.data.text = originalNodeTextsRef.current.get(uid);
+            markNeedUpdate(node);
+          }
+          node.children?.forEach(restore);
+        };
+        restore(renderTree);
+        originalNodeTextsRef.current.clear();
+      }
+
+      if (lowerKeyword) {
+        const apply = (node: TMindMapNode) => {
+          const uid = node.data?.uid;
+          const text = node.data?.text;
+          if (uid && typeof text === "string" && node.data) {
+            if (stripHtmlTag(text).toLowerCase().includes(lowerKeyword)) {
+              originalNodeTextsRef.current.set(uid, text);
+              node.data.text = highlightKeywordInHtml(text, keyword);
+              markNeedUpdate(node);
+            }
+          }
+          node.children?.forEach(apply);
+        };
+        apply(renderTree);
+      }
+
+      highlightedKeywordRef.current = lowerKeyword;
+      if (mutated) mindMap.render();
+    },
+    [markSearchHighlightNodesForUpdate]
+  );
 
   const locateNodeByUid = useCallback((uid: string) => {
     if (!uid) return;
@@ -422,8 +451,11 @@ export const XmindPreviewModal = ({
       if (targetNode) {
         renderer.moveNodeToCenter(targetNode, false);
       }
+      if (normalizedSearchKeywordRef.current) {
+        applySearchHighlight(normalizedSearchKeywordRef.current, { force: true });
+      }
     });
-  }, []);
+  }, [applySearchHighlight]);
 
   const handleLocateCenterNode = useCallback(() => {
     const renderer = mindMapRef.current?.renderer;
@@ -464,11 +496,14 @@ export const XmindPreviewModal = ({
             if (isShrinking) {
               mindMap.renderer?.setRootNodeCenter();
             }
+            if (normalizedSearchKeywordRef.current) {
+              applySearchHighlight(normalizedSearchKeywordRef.current, { force: true });
+            }
           });
         });
       });
     },
-    [cancelExpandAll]
+    [applySearchHighlight, cancelExpandAll]
   );
 
   const scheduleExpandDepth = useCallback(
@@ -486,48 +521,6 @@ export const XmindPreviewModal = ({
     },
     [handleSetExpandDepth]
   );
-
-  const handleExpandAllProgressively = useCallback(() => {
-    const mindMap = mindMapRef.current;
-    const renderTree = mindMap?.renderer?.renderTree;
-    if (!mindMap || !renderTree) return;
-    if (currentExpandDepthRef.current === FULL_EXPAND_DEPTH) return;
-
-    cancelExpandAll();
-    const allNodes = collectNodes(renderTree);
-    const total = allNodes.length;
-    if (total <= 0) return;
-
-    expandAllCancelledRef.current = false;
-    let cursor = 0;
-    setExpandProgress({ active: true, done: 0, total });
-
-    const runBatch = () => {
-      if (expandAllCancelledRef.current) return;
-
-      const batchEnd = Math.min(total, cursor + EXPAND_ALL_BATCH_SIZE);
-      for (; cursor < batchEnd; cursor += 1) {
-        const node = allNodes[cursor];
-        if (!node.data) node.data = {};
-        node.data.expand = true;
-      }
-
-      setExpandProgress({ active: true, done: cursor, total });
-      if (cursor < total) {
-        expandAllJobRef.current = scheduleIdleWork(runBatch);
-        return;
-      }
-
-      setIsRendering(true);
-      currentExpandDepthRef.current = FULL_EXPAND_DEPTH;
-      setCurrentExpandDepth(FULL_EXPAND_DEPTH);
-      setExpandProgress({ active: false, done: total, total });
-      expandAllJobRef.current = null;
-      mindMap.render();
-    };
-
-    runBatch();
-  }, [cancelExpandAll]);
 
   const normalizedSearchKeyword = searchKeyword.trim().toLowerCase();
   const searchResults = useMemo(() => {
@@ -578,7 +571,7 @@ export const XmindPreviewModal = ({
   }, [currentExpandDepth]);
 
   useEffect(() => {
-    if (!open || !asset?.id) return;
+    if (!open || !isModalReady || !asset?.id) return;
 
     const abortController = new AbortController();
     let disposed = false;
@@ -593,7 +586,6 @@ export const XmindPreviewModal = ({
       setError("");
       setNodeStats({ totalNodes: 0, maxDepth: 0 });
       setCurrentExpandDepth(FULL_EXPAND_DEPTH);
-      setExpandProgress({ active: false, done: 0, total: 0 });
       setSearchKeyword("");
       setSelectedSearchUid(undefined);
       setSearchCursor(null);
@@ -685,6 +677,7 @@ export const XmindPreviewModal = ({
           el: containerRef.current,
           data: initialRenderData,
           readonly: true,
+          enableDragModifyNodeWidth: false,
           useLeftKeySelectionRightKeyDrag: true,
           mousewheelAction: "move",
           // 节点较多（数百以上）时开启性能模式，仅渲染可视区域内的节点，
@@ -782,6 +775,7 @@ export const XmindPreviewModal = ({
     attachRenderEndListener,
     cancelExpandAll,
     detachRenderEndListener,
+    isModalReady,
     open,
     projectId,
     service,
@@ -796,6 +790,7 @@ export const XmindPreviewModal = ({
     <Modal
       open={open}
       onCancel={onClose}
+      afterOpenChange={handleModalOpenChange}
       footer={null}
       width="100vw"
       style={{ top: 0, paddingBottom: 0 }}
@@ -811,37 +806,19 @@ export const XmindPreviewModal = ({
                 {`共 ${nodeStats.totalNodes} 个节点，最大深度 ${nodeStats.maxDepth}`}
               </Typography.Text>
               {expandDepthOptions.length > 0 && (
-                <Tooltip
-                  title={
-                    nodeStats.totalNodes > 300 ? "节点较多，切换到深层时可能需要数秒，请耐心等待" : ""
-                  }
-                >
-                  <Select
-                    size="small"
-                    style={{ width: 120 }}
-                    value={currentExpandDepth === FULL_EXPAND_DEPTH ? undefined : currentExpandDepth}
-                    disabled={!canOperateMindMap || expandProgress.active || isRendering}
-                    options={expandDepthOptions}
-                    placeholder="选择层级"
-                    onChange={(depth) => scheduleExpandDepth(Number(depth))}
-                  />
-                </Tooltip>
+                <Select
+                  size="small"
+                  style={{ width: 120 }}
+                  value={currentExpandDepth === FULL_EXPAND_DEPTH ? undefined : currentExpandDepth}
+                  disabled={!canOperateMindMap || isRendering}
+                  options={expandDepthOptions}
+                  placeholder="选择层级"
+                  onChange={(depth) => scheduleExpandDepth(Number(depth))}
+                />
               )}
-              <Button
-                size="small"
-                type={currentExpandDepth === FULL_EXPAND_DEPTH ? "primary" : "default"}
-                loading={expandProgress.active}
-                disabled={!canOperateMindMap || isRendering}
-                onClick={handleExpandAllProgressively}
-              >
-                全部展开
-              </Button>
               <Button size="small" disabled={!canOperateMindMap} onClick={handleLocateCenterNode}>
                 定位中心节点
               </Button>
-              {expandProgress.active && (
-                <Typography.Text type="secondary">{`正在展开 ${expandProgress.done}/${expandProgress.total}`}</Typography.Text>
-              )}
               <div className="ml-auto flex flex-wrap items-center gap-2">
                 <Input
                   size="small"
@@ -861,6 +838,9 @@ export const XmindPreviewModal = ({
                   disabled={!searchKeyword.trim() || searchOptions.length === 0}
                   options={searchOptions}
                   placeholder={searchKeyword.trim() ? `匹配 ${searchOptions.length} 个节点` : "先输入关键词"}
+                  optionRender={(option) => (
+                    <span>{highlightKeywordInPlainText(String(option.label ?? ""), searchKeyword)}</span>
+                  )}
                   onClear={() => setSelectedSearchUid(undefined)}
                   onChange={(value) => handleSearchResultSelect(String(value))}
                 />
@@ -897,7 +877,21 @@ export const XmindPreviewModal = ({
               <Spin size="large" tip={loading ? "加载中..." : "正在展开节点，请稍候..."} />
             </div>
           )}
-          <div ref={containerRef} className="h-full w-full" />
+          <div ref={containerRef} className="xmind-preview-container h-full w-full" />
+          <style>{`
+            .xmind-preview-container [data-smm-search-highlight="1"] {
+              background-color: #fff3a0;
+              color: inherit;
+              border-radius: 2px;
+              padding: 0 1px;
+            }
+            .xmind-search-highlight {
+              background-color: #fff3a0;
+              color: inherit;
+              border-radius: 2px;
+              padding: 0 1px;
+            }
+          `}</style>
         </div>
       </div>
     </Modal>
