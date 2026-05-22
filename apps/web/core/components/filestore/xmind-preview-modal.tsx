@@ -47,6 +47,7 @@ type TMindMapInstance = {
   destroy: () => void;
   setData: (data: TMindMapNode) => void;
   render: (callback?: () => void) => void;
+  resize: () => void;
   on: (event: string, listener: (...args: unknown[]) => void) => void;
   off: (event: string, listener: (...args: unknown[]) => void) => void;
   renderer?: TMindMapRenderer;
@@ -680,13 +681,18 @@ export const XmindPreviewModal = ({
           enableDragModifyNodeWidth: false,
           useLeftKeySelectionRightKeyDrag: true,
           mousewheelAction: "move",
-          // 节点较多（数百以上）时开启性能模式，仅渲染可视区域内的节点，
-          // 显著降低拖动/缩放时的重渲染开销
+          // 节点较多（数百以上）时开启性能模式，仅对可视区域外的节点跳过内容更新，
+          // 显著降低拖动/缩放时的重渲染开销。
+          // 注意：这里保留 SVG group 在 DOM 中（removeNodeWhenOutCanvas: false），
+          // 因为 mindMap.width/height 由初次 getBoundingClientRect 决定，
+          // 在 Modal 全屏动画/容器尺寸变化时容易偏小，叠加移除策略会导致
+          // 拖动后视口边缘附近的节点被误判为"出视口"而直接被 removeSelf，
+          // 表现为"节点本来可见，往右拖一点就消失"。
           openPerformance: true,
           performanceConfig: {
             time: 250,
-            padding: 200,
-            removeNodeWhenOutCanvas: true,
+            padding: 500,
+            removeNodeWhenOutCanvas: false,
           },
           customNoteContentShow: {
             show: (note: string, left: number, top: number) => {
@@ -713,6 +719,25 @@ export const XmindPreviewModal = ({
         }
 
         const container = containerRef.current;
+
+        let resizeObserver: ResizeObserver | null = null;
+        if (typeof ResizeObserver !== "undefined") {
+          let resizeRaf = 0;
+          resizeObserver = new ResizeObserver(() => {
+            if (resizeRaf) cancelAnimationFrame(resizeRaf);
+            resizeRaf = requestAnimationFrame(() => {
+              resizeRaf = 0;
+              if (mindMapRef.current !== mindMap) return;
+              try {
+                mindMap.resize();
+              } catch {
+                // ignore resize errors on stale instances
+              }
+            });
+          });
+          resizeObserver.observe(container);
+        }
+
         const resetDragCursor = () => {
           if (container) container.style.cursor = "";
         };
@@ -736,6 +761,8 @@ export const XmindPreviewModal = ({
           container.removeEventListener("mouseleave", handleRightMouseUp);
           window.removeEventListener("mouseup", handleRightMouseUp);
           container.removeEventListener("contextmenu", handleContextMenu);
+          resizeObserver?.disconnect();
+          resizeObserver = null;
           resetDragCursor();
         };
       } catch (err: any) {
