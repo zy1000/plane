@@ -281,8 +281,8 @@ export const BulkOperationsActionBar = observer(function BulkOperationsActionBar
             buttonClassName={actionPillClassName}
             maxRender={1}
             placeholderText="Select labels"
+            hideDropdownArrow
             noLabelBorder
-            fullWidth
             fullHeight={false}
           />
           <CycleDropdown

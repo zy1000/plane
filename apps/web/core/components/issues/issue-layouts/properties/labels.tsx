@@ -62,8 +62,10 @@ const NoLabel = observer(function NoLabel({ isMobile, noLabelBorder, fullWidth, 
     >
       <div
         className={cn(
-          "flex h-full items-center justify-center gap-2 rounded-sm px-2.5 py-1 text-caption-md-medium text-primary hover:bg-layer-1",
-          noLabelBorder ? "rounded-none" : "border-[0.5px] border-strong",
+          "flex h-full items-center text-caption-md-medium text-primary",
+          noLabelBorder
+            ? "justify-start gap-1.5"
+            : "justify-center gap-2 rounded-sm px-2.5 py-1 hover:bg-layer-1 border-[0.5px] border-strong",
           fullWidth && "w-full"
         )}
       >
@@ -88,9 +90,11 @@ function LabelSummary({ isMobile, fullWidth, noLabelBorder, disabled, projectLab
   return (
     <div
       className={cn(
-        "flex h-5 flex-shrink-0 items-center justify-center rounded-sm px-2.5 text-caption-sm-regular",
+        "flex flex-shrink-0 items-center text-caption-sm-regular",
+        noLabelBorder
+          ? "h-full justify-start"
+          : "h-5 justify-center rounded-sm px-2.5 border-[0.5px] border-strong",
         fullWidth && "w-full",
-        noLabelBorder ? "rounded-none" : "border-[0.5px] border-strong",
         disabled ? "cursor-not-allowed" : "cursor-pointer"
       )}
     >
@@ -142,10 +146,12 @@ const LabelItem = observer(function LabelItem({
     >
       <div
         className={cn(
-          "flex h-full max-w-full flex-shrink-0 items-center justify-center overflow-hidden rounded-sm px-2.5 text-caption-sm-regular hover:bg-layer-1",
+          "flex h-full max-w-full flex-shrink-0 items-center overflow-hidden text-caption-sm-regular",
+          noLabelBorder
+            ? "justify-start"
+            : "justify-center rounded-sm px-2.5 hover:bg-layer-1 border-[0.5px] border-strong",
           !disabled && "cursor-pointer",
-          fullWidth && "w-full",
-          noLabelBorder ? "rounded-none" : "border-[0.5px] border-strong"
+          fullWidth && "w-full"
         )}
       >
         <div className="flex max-w-full items-center gap-1.5 overflow-hidden text-secondary">
