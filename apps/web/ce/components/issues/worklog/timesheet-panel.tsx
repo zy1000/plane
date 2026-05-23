@@ -19,6 +19,7 @@ import {
 } from "@/helpers/timesheet-break.helper";
 import { useUser } from "@/hooks/store/user";
 import { useTimesheetCategories } from "@/hooks/store/use-timesheet-categories";
+import { useUserDayTimesheets } from "@/hooks/store/use-user-day-timesheets";
 import {
   getTimesheetErrorMessage,
   hasDuplicateTimesheetEntry,
@@ -27,6 +28,7 @@ import {
 } from "@/services/issue/timesheet.service";
 
 type TTimesheetPanelProps = {
+  workspaceSlug?: string;
   issueId?: string;
   testCaseId?: string;
   timesheets: TTimeSheet[];
@@ -173,6 +175,7 @@ function TimeSelect(props: TTimeSelectProps) {
 
 export const TimesheetPanel = observer(function TimesheetPanel(props: TTimesheetPanelProps) {
   const {
+    workspaceSlug,
     issueId,
     testCaseId,
     timesheets,
@@ -186,6 +189,7 @@ export const TimesheetPanel = observer(function TimesheetPanel(props: TTimesheet
 
   const { data: currentUser } = useUser();
   const { getCategoryByKey } = useTimesheetCategories();
+  const { getDayTimesheets, ensureLoaded } = useUserDayTimesheets(workspaceSlug, currentUser?.id);
 
   // 测试用例面板固定走 TEST_CASE 类别；
   // 工作项（issue）面板不再硬编码 ISSUE 类别 —— 通用 ISSUE 已在工时类别拆分后停用，
@@ -204,9 +208,17 @@ export const TimesheetPanel = observer(function TimesheetPanel(props: TTimesheet
   const today = new Date();
   const todayStr = today.toISOString().split("T")[0];
 
+  const mergeDayTimesheets = (date: string, dayRecords: TTimeSheet[] = getDayTimesheets(date)) => {
+    const localRecords = timesheets.filter((t) => t.date === date);
+    const mergedById = new Map<string, TTimeSheet>();
+    for (const t of dayRecords) mergedById.set(t.id, t);
+    for (const t of localRecords) mergedById.set(t.id, t);
+    return Array.from(mergedById.values());
+  };
+
   const getSuggestedForDate = (date: string) => {
-    const dateEntries = timesheets.filter((t) => t.date === date);
-    return getSuggestedStartTime(dateEntries);
+    const merged = mergeDayTimesheets(date);
+    return getSuggestedStartTime(merged);
   };
 
   const [selectedDate, setSelectedDate] = useState(todayStr);
@@ -214,10 +226,24 @@ export const TimesheetPanel = observer(function TimesheetPanel(props: TTimesheet
   const [endTime, setEndTime] = useState(() => getSuggestedForDate(todayStr));
 
   useEffect(() => {
-    const suggested = getSuggestedForDate(selectedDate);
-    setStartTime(suggested);
-    setEndTime(suggested);
-    setTimeInput("");
+    let cancelled = false;
+
+    const applySuggested = (dayRecords: TTimeSheet[]) => {
+      const suggested = getSuggestedStartTime(mergeDayTimesheets(selectedDate, dayRecords));
+      setStartTime(suggested);
+      setEndTime(suggested);
+      setTimeInput("");
+    };
+
+    applySuggested(getDayTimesheets(selectedDate));
+
+    ensureLoaded(selectedDate).then((dayRecords) => {
+      if (!cancelled) applySuggested(dayRecords);
+    });
+
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDate]);
 

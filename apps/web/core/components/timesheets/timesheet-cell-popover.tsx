@@ -107,6 +107,8 @@ function TimeSelect({ value, onChange, className, options }: TTimeSelectProps) {
 type TTimesheetCellPopoverProps = {
   date: string;
   existingTimesheets: TTimeSheet[];
+  /** 当前用户当天所有任务的工时，用于跨任务推算建议开始时间 */
+  dayTimesheets?: TTimeSheet[];
   currentUserId?: string;
   issueId?: string;
   testCaseId?: string;
@@ -122,6 +124,7 @@ type TTimesheetCellPopoverProps = {
 export function TimesheetCellPopover({
   date,
   existingTimesheets,
+  dayTimesheets,
   currentUserId,
   issueId,
   testCaseId,
@@ -154,7 +157,7 @@ export function TimesheetCellPopover({
   });
 
   const resetFormState = () => {
-    const suggested = getSuggestedStartTime(existingTimesheets);
+    const suggested = getSuggestedStartTime(dayTimesheets ?? existingTimesheets);
     setStartTime(suggested);
     setEndTime(suggested);
     setTimeInput("");

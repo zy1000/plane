@@ -85,6 +85,7 @@ export function TestCaseTimesheetField(props: TTestCaseTimesheetFieldProps) {
             className="z-[2000] rounded-md border border-subtle bg-surface-1 shadow-lg overflow-visible"
           >
             <TimesheetPanel
+              workspaceSlug={workspaceSlug}
               testCaseId={caseId}
               timesheets={timesheets}
               isLoading={isLoading}

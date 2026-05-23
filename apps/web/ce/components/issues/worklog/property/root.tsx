@@ -101,6 +101,7 @@ export const IssueWorklogProperty = observer(function IssueWorklogProperty(props
                 className="z-[2000] rounded-lg border border-subtle bg-surface-1 shadow-raised-300 overflow-hidden"
               >
                 <TimesheetPanel
+                  workspaceSlug={workspaceSlug}
                   issueId={issueId}
                   timesheets={timesheets}
                   isLoading={isLoading}

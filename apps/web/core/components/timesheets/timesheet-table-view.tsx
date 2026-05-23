@@ -105,6 +105,7 @@ export const TimesheetTableView = observer(function TimesheetTableView({
     getCellHours,
     getDayTotalHours,
     getTimesheetsForCell,
+    getTimesheetsForDate,
     createTimesheet,
     deleteTimesheet,
     addRow,
@@ -253,6 +254,7 @@ export const TimesheetTableView = observer(function TimesheetTableView({
                     const key = formatDateKey(date);
                     const cellHours = getCellHours(row, key);
                     const cellTimesheets = getTimesheetsForCell(row, key);
+                    const dayTimesheets = getTimesheetsForDate(key);
                     const isToday = key === today;
                     const isWeekend = date.getDay() === 0 || date.getDay() === 6;
                     const editable = isDateEditable(key);
@@ -267,6 +269,7 @@ export const TimesheetTableView = observer(function TimesheetTableView({
                         <TimesheetCellPopover
                           date={key}
                           existingTimesheets={cellTimesheets}
+                          dayTimesheets={dayTimesheets}
                           currentUserId={currentUserId}
                           issueId={row.type === "issue" ? row.issueId : undefined}
                           testCaseId={row.type === "test_case" ? row.testCaseId : undefined}

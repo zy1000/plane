@@ -407,6 +407,11 @@ export const useTimesheetPage = ({ workspaceSlug, memberId, projectId, projectNa
     setRows((prev) => prev.filter((r) => r.id !== rowId));
   }, []);
 
+  const getTimesheetsForDate = useCallback(
+    (dateKey: string): TTimeSheet[] => timesheets.filter((t) => t.date === dateKey),
+    [timesheets]
+  );
+
   const getTimesheetsForCell = useCallback(
     (row: TTimesheetRow, dateKey: string): TTimeSheet[] => {
       return timesheets.filter((t) => {
@@ -468,6 +473,7 @@ export const useTimesheetPage = ({ workspaceSlug, memberId, projectId, projectNa
     isWeekFullyReadOnly,
     addRow,
     removeRow,
+    getTimesheetsForDate,
     getTimesheetsForCell,
     getCellHours,
     getDayTotalHours,
