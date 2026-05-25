@@ -15,7 +15,6 @@ def remove_pending_reject_fix_version_required_field(apps, schema_editor):
 
     num = WorkflowTransition.objects.filter(from_state__name='Pending-Reject', to_state__name="Rejected").update(
         approval_type='n_of_m', required_count=2, dynamic_approver_types=["assignees", "created_by"])
-    print(num)
 
 class Migration(migrations.Migration):
     dependencies = [
