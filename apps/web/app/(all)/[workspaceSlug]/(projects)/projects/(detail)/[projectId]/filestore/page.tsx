@@ -18,6 +18,7 @@ import { AssetExplorer } from "@/components/asset-explorer";
 import { XmindPreviewModal, type TXmindPreviewAsset } from "@/components/filestore/xmind-preview-modal";
 import { useUserPermissions } from "@/hooks/store/user";
 import { FilestoreService, type TFilestoreAsset } from "@/services/filestore.service";
+import { isImageSupported } from "@/utils/onlyoffice";
 
 const ONLYOFFICE_SUPPORTED_EXTS = ["doc", "docx", "odt", "rtf", "txt", "xls", "xlsx", "ods", "csv", "ppt", "pptx", "odp", "pdf"];
 const XMIND_SUPPORTED_EXTS = ["xmind"];
@@ -66,28 +67,46 @@ function FilestorePage() {
   const [versions, setVersions] = useState<Array<Record<string, any>>>([]);
   const [xmindPreviewOpen, setXmindPreviewOpen] = useState(false);
   const [xmindAsset, setXmindAsset] = useState<TXmindPreviewAsset | null>(null);
+  const [imagePreview, setImagePreview] = useState<{ src: string; name: string } | null>(null);
 
   const editorRef = useRef<any>(null);
   const forceSavingRef = useRef(false);
   const latestDocKeyRef = useRef("");
   const latestDirtyRef = useRef(false);
   const lastForceSaveAtRef = useRef(0);
+  const editorContainerHostRef = useRef<HTMLDivElement>(null);
+  const editorRunIdRef = useRef(0);
 
-  const editorContainerId = useMemo(() => {
-    if (!editorAsset?.id) return "filestore-onlyoffice-editor";
-    return `filestore-onlyoffice-editor-${editorAsset.id}`;
-  }, [editorAsset?.id]);
-
-  const closeEditor = useCallback(() => {
+  const destroyEditor = useCallback(() => {
     try {
       editorRef.current?.destroyEditor?.();
     } catch {
+    } finally {
+      editorRef.current = null;
+      editorContainerHostRef.current?.replaceChildren();
     }
-    editorRef.current = null;
+  }, []);
+
+  const createEditorContainer = useCallback((containerId: string) => {
+    const host = editorContainerHostRef.current;
+    if (!host) return null;
+
+    host.replaceChildren();
+    const container = document.createElement("div");
+    container.id = containerId;
+    container.className = "h-full w-full";
+    host.appendChild(container);
+    return container;
+  }, []);
+
+  const closeEditor = useCallback(() => {
+    editorRunIdRef.current += 1;
+    destroyEditor();
     latestDocKeyRef.current = "";
     latestDirtyRef.current = false;
     forceSavingRef.current = false;
     setEditorOpen(false);
+    setEditorLoading(false);
     setEditorMode("edit");
     setEditorAsset(null);
     setEditorConfig(null);
@@ -95,7 +114,7 @@ function FilestorePage() {
     setDocKey("");
     setEditorError("");
     setSaveStatus("已保存");
-  }, []);
+  }, [destroyEditor]);
 
   const loadOnlyOfficeScript = useCallback(async (serverUrl: string) => {
     const cleanUrl = String(serverUrl || "").replace(/\/+$/, "");
@@ -105,7 +124,10 @@ function FilestorePage() {
 
     const scriptId = `onlyoffice-docsapi-${encodeURIComponent(cleanUrl)}`;
     const existing = document.getElementById(scriptId) as HTMLScriptElement | null;
-    await new Promise<void>((resolve, reject) => {
+    const existingPromise = w.__onlyofficeScriptPromises?.[scriptId];
+    if (existingPromise) return existingPromise;
+
+    const p: Promise<void> = new Promise<void>((resolve, reject) => {
       const script = existing ?? document.createElement("script");
       script.id = scriptId;
       script.src = `${cleanUrl}/web-apps/apps/api/documents/api.js`;
@@ -114,6 +136,10 @@ function FilestorePage() {
       script.onerror = () => reject(new Error("OnlyOffice 脚本加载失败"));
       if (!existing) document.body.appendChild(script);
     });
+
+    w.__onlyofficeScriptPromises = w.__onlyofficeScriptPromises ?? {};
+    w.__onlyofficeScriptPromises[scriptId] = p;
+    return p;
   }, []);
 
   const triggerForceSave = useCallback(
@@ -140,29 +166,30 @@ function FilestorePage() {
     [editorAsset?.id, projectId, service, workspaceSlug]
   );
 
-  const waitForElement = useCallback(async (id: string, timeoutMs = 3000) => {
+  const waitForEditorHost = useCallback(async (timeoutMs = 3000) => {
     const start = Date.now();
     while (Date.now() - start < timeoutMs) {
-      const el = document.getElementById(id);
-      if (el) return el;
+      if (editorContainerHostRef.current) return editorContainerHostRef.current;
       await new Promise((r) => requestAnimationFrame(() => r(null)));
     }
-    return document.getElementById(id);
+    return editorContainerHostRef.current;
   }, []);
 
   const initEditor = useCallback(
-    async (serverUrl: string, config: Record<string, any>, containerId: string, mode: TOnlyOfficeMode) => {
+    async (serverUrl: string, config: Record<string, any>, containerId: string, mode: TOnlyOfficeMode, runId: number) => {
       await loadOnlyOfficeScript(serverUrl);
+      if (editorRunIdRef.current !== runId) return;
+
       const w = window as any;
       if (!w.DocsAPI?.DocEditor) throw new Error("DocsAPI 未加载");
 
-      const mountEl = await waitForElement(containerId);
-      if (!mountEl) throw new Error(`编辑器挂载节点未就绪: #${containerId}`);
+      const hostEl = await waitForEditorHost();
+      if (editorRunIdRef.current !== runId) return;
+      if (!hostEl) throw new Error(`编辑器挂载节点未就绪: #${containerId}`);
 
-      try {
-        editorRef.current?.destroyEditor?.();
-      } catch {
-      }
+      destroyEditor();
+      const mountEl = createEditorContainer(containerId);
+      if (!mountEl) throw new Error(`编辑器挂载节点未就绪: #${containerId}`);
       const isViewMode = mode === "view";
       editorRef.current = new w.DocsAPI.DocEditor(containerId, {
         ...config,
@@ -187,12 +214,14 @@ function FilestorePage() {
         },
       });
     },
-    [loadOnlyOfficeScript, triggerForceSave, waitForElement]
+    [createEditorContainer, destroyEditor, loadOnlyOfficeScript, triggerForceSave, waitForEditorHost]
   );
 
   const openEditor = useCallback(
     async (asset: TFilestoreAssetLike, mode: TOnlyOfficeMode = "edit") => {
       if (!workspaceSlug || !projectId || !asset?.id) return;
+      const runId = editorRunIdRef.current + 1;
+      editorRunIdRef.current = runId;
       setEditorAsset(asset);
       setEditorMode(mode);
       setEditorOpen(true);
@@ -213,11 +242,12 @@ function FilestorePage() {
         setDocKey(currentDocKey);
         latestDocKeyRef.current = currentDocKey;
         const containerId = `filestore-onlyoffice-editor-${asset.id}`;
-        await initEditor(serverUrl, config, containerId, mode);
+        await initEditor(serverUrl, config, containerId, mode, runId);
       } catch (error: any) {
+        if (editorRunIdRef.current !== runId) return;
         setEditorError(error?.detail || error?.message || (mode === "view" ? "加载预览失败" : "加载编辑器失败"));
       } finally {
-        setEditorLoading(false);
+        if (editorRunIdRef.current === runId) setEditorLoading(false);
       }
     },
     [initEditor, projectId, service, workspaceSlug]
@@ -225,7 +255,7 @@ function FilestorePage() {
 
   const handlePreview = useCallback(
     async (asset: TFilestoreAssetLike) => {
-      if (!asset?.id) return;
+      if (!asset?.id || !workspaceSlug || !projectId) return;
       const filename = getAssetFilename(asset);
       if (isXmindSupported(filename)) {
         setXmindAsset(asset);
@@ -236,9 +266,24 @@ function FilestorePage() {
         await openEditor(asset, "view");
         return;
       }
+      if (isImageSupported(filename)) {
+        try {
+          const url = await service.getFilestoreAssetPresignedURL(
+            String(workspaceSlug),
+            String(projectId),
+            String(asset.id),
+            "inline"
+          );
+          if (!url) throw new Error("获取文件地址失败");
+          setImagePreview({ src: url, name: filename || "图片" });
+        } catch (error: any) {
+          message.error(error?.detail || error?.message || "图片预览失败");
+        }
+        return;
+      }
       message.warning("暂不支持预览此文件类型");
     },
-    [openEditor]
+    [openEditor, projectId, service, workspaceSlug]
   );
 
   const handleEdit = useCallback(
@@ -297,7 +342,7 @@ function FilestorePage() {
     if (!workspaceSlug || !projectId || !editorAsset?.id) return;
     const url = `/${encodeURIComponent(String(workspaceSlug))}/projects/${encodeURIComponent(
       String(projectId)
-    )}/filestore?onlyofficeAssetId=${encodeURIComponent(String(editorAsset.id))}`;
+    )}/filestore/onlyoffice/${encodeURIComponent(String(editorAsset.id))}`;
     window.open(url, "_blank", "noopener,noreferrer");
   }, [editorAsset?.id, projectId, workspaceSlug]);
 
@@ -318,7 +363,7 @@ function FilestorePage() {
         </div>
       )}
       {editorLoading && <div className="absolute inset-0 z-10 bg-white/60" />}
-      <div id={editorContainerId} className="h-full w-full" />
+      <div ref={editorContainerHostRef} className="h-full w-full" />
     </div>
   );
 
@@ -393,6 +438,34 @@ function FilestorePage() {
           setXmindAsset(null);
         }}
       />
+
+      <Modal
+        open={Boolean(imagePreview)}
+        onCancel={() => setImagePreview(null)}
+        afterOpenChange={(visible) => {
+          if (!visible) setImagePreview(null);
+        }}
+        footer={null}
+        modalRender={(modal) => <div data-prevent-outside-click>{modal}</div>}
+        width="100vw"
+        style={{ top: 0, paddingBottom: 0 }}
+        styles={{ body: { padding: 0 } }}
+        destroyOnClose
+        title={
+          <Typography.Text strong style={{ marginTop: -16, marginBottom: -16 }}>
+            {`预览：${imagePreview?.name ?? "图片"}`}
+          </Typography.Text>
+        }
+      >
+        <div
+          className="flex items-center justify-center overflow-auto bg-surface-2 p-4"
+          style={{ height: "calc(100vh - 56px)" }}
+        >
+          {imagePreview?.src && (
+            <img src={imagePreview.src} alt="filestore-preview" className="max-h-full max-w-full object-contain" />
+          )}
+        </div>
+      </Modal>
 
       <Modal open={versionsOpen} onCancel={() => setVersionsOpen(false)} footer={null} width={860} title="历史版本" destroyOnClose>
         <Table

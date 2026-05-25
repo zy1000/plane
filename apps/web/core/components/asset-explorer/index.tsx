@@ -133,6 +133,13 @@ export const AssetExplorer = (props: TAssetExplorerProps) => {
     [onEdit, onPreview]
   );
 
+  const handleActivateFile = useCallback(
+    (file: TAssetExplorerFile) => {
+      setActiveFile(file);
+    },
+    []
+  );
+
   const handleDeleteFile = useCallback(
     async (assetId: string) => {
       await explorer.onDeleteFiles([assetId]);
@@ -238,7 +245,7 @@ export const AssetExplorer = (props: TAssetExplorerProps) => {
               isRowSelected={explorer.isRowSelected}
               onToggleRow={explorer.toggleRow}
               onToggleAll={explorer.toggleAllRows}
-              onActivateFile={setActiveFile}
+              onActivateFile={handleActivateFile}
               onOpenFolder={handleOpenFolder}
               onRenameFolder={(folder) => {
                 explorer.setRenamingFolder(folder);

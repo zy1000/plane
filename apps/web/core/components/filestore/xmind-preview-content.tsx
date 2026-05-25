@@ -17,6 +17,9 @@ type TXmindPreviewContentProps = {
   projectId: string;
   // Modal 模式由 afterOpenChange 控制为 true；独立页直接传 true。
   ready: boolean;
+  // 可选：自定义获取文件 URL（如 issue 附件场景下走 issue 附件下载接口）；
+  // 未传时回退到 filestore 的 AssetExplorerService.getAssetPresignedURL。
+  getFileURL?: () => Promise<string>;
 };
 
 type TMindMapNodeData = {
@@ -309,7 +312,13 @@ const buildExpandDepthOptions = (maxDepth: number) => {
   });
 };
 
-export const XmindPreviewContent = ({ asset, workspaceSlug, projectId, ready }: TXmindPreviewContentProps) => {
+export const XmindPreviewContent = ({
+  asset,
+  workspaceSlug,
+  projectId,
+  ready,
+  getFileURL,
+}: TXmindPreviewContentProps) => {
   const service = useMemo(() => new AssetExplorerService(), []);
   const containerRef = useRef<HTMLDivElement>(null);
   const mindMapRef = useRef<TMindMapInstance | null>(null);
@@ -616,7 +625,9 @@ export const XmindPreviewContent = ({ asset, workspaceSlug, projectId, ready }: 
       }
 
       try {
-        const url = await service.getAssetPresignedURL(workspaceSlug, projectId, asset.id, "inline");
+        const url = getFileURL
+          ? await getFileURL()
+          : await service.getAssetPresignedURL(workspaceSlug, projectId, asset.id, "inline");
         if (!url) throw new Error("获取文件地址失败");
 
         const res = await fetch(url, { signal: abortController.signal });
@@ -815,6 +826,7 @@ export const XmindPreviewContent = ({ asset, workspaceSlug, projectId, ready }: 
     attachRenderEndListener,
     cancelExpandAll,
     detachRenderEndListener,
+    getFileURL,
     ready,
     projectId,
     service,
@@ -840,6 +852,7 @@ export const XmindPreviewContent = ({ asset, workspaceSlug, projectId, ready }: 
                 disabled={!canOperateMindMap || isRendering}
                 options={expandDepthOptions}
                 placeholder="选择层级"
+                popupRender={(menu) => <div data-prevent-outside-click>{menu}</div>}
                 onChange={(depth) => scheduleExpandDepth(Number(depth))}
               />
             )}
@@ -865,6 +878,7 @@ export const XmindPreviewContent = ({ asset, workspaceSlug, projectId, ready }: 
                 disabled={!searchKeyword.trim() || searchOptions.length === 0}
                 options={searchOptions}
                 placeholder={searchKeyword.trim() ? `匹配 ${searchOptions.length} 个节点` : "先输入关键词"}
+                popupRender={(menu) => <div data-prevent-outside-click>{menu}</div>}
                 optionRender={(option) => (
                   <span>{highlightKeywordInPlainText(String(option.label ?? ""), searchKeyword)}</span>
                 )}

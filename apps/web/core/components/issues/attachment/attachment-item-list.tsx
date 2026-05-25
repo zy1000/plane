@@ -4,21 +4,17 @@
  * See the LICENSE file for details.
  */
 
-import type { FC } from "react";
 import { useCallback, useState } from "react";
 import { observer } from "mobx-react";
 import type { FileRejection } from "react-dropzone";
 import { useDropzone } from "react-dropzone";
 import { UploadCloud } from "lucide-react";
-import { message } from "antd";
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TIssueServiceType } from "@plane/types";
 import { EIssueServiceType } from "@plane/types";
 // hooks
-import { OnlyOfficePreviewModal } from "@/components/onlyoffice/onlyoffice-preview-modal";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
-import { isOnlyOfficeSupported } from "@/utils/onlyoffice";
 // plane web hooks
 import { useFileSize } from "@/plane-web/hooks/use-file-size";
 // types
@@ -26,8 +22,8 @@ import { getAttachmentUploadErrorToast, type TAttachmentHelpers } from "../issue
 // components
 import { IssueAttachmentsListItem } from "./attachment-list-item";
 import { IssueAttachmentsUploadItem } from "./attachment-list-upload-item";
-// types
 import { IssueAttachmentDeleteModal } from "./delete-attachment-modal";
+import { useIssueAttachmentPreview } from "./use-issue-attachment-preview";
 
 type TIssueAttachmentItemList = {
   workspaceSlug: string;
@@ -50,10 +46,9 @@ export const IssueAttachmentItemList = observer(function IssueAttachmentItemList
   const { t } = useTranslation();
   // states
   const [isUploading, setIsUploading] = useState(false);
-  const [previewAttachmentId, setPreviewAttachmentId] = useState<string | null>(null);
   // store hooks
   const {
-    attachment: { getAttachmentsByIssueId, getAttachmentById },
+    attachment: { getAttachmentsByIssueId },
     attachmentDeleteModalId,
     toggleDeleteAttachmentModal,
     fetchActivities,
@@ -65,20 +60,13 @@ export const IssueAttachmentItemList = observer(function IssueAttachmentItemList
   const { maxFileSize } = useFileSize();
   // derived values
   const issueAttachments = getAttachmentsByIssueId(issueId);
-  const previewAttachment = previewAttachmentId ? getAttachmentById(previewAttachmentId) : undefined;
 
-  const handlePreview = useCallback(
-    (attachmentId: string) => {
-      const attachment = getAttachmentById(attachmentId);
-      if (!attachment) return;
-      if (!isOnlyOfficeSupported(attachment.attributes?.name)) {
-        message.warning("暂不支持预览此文件类型");
-        return;
-      }
-      setPreviewAttachmentId(attachmentId);
-    },
-    [getAttachmentById]
-  );
+  const { requestPreview, previewModals } = useIssueAttachmentPreview({
+    workspaceSlug,
+    projectId,
+    issueId,
+    issueServiceType,
+  });
 
   // handlers
   const handleFetchPropertyActivities = useCallback(() => {
@@ -132,16 +120,7 @@ export const IssueAttachmentItemList = observer(function IssueAttachmentItemList
 
   return (
     <>
-      {previewAttachmentId && previewAttachment && (
-        <OnlyOfficePreviewModal
-          open={Boolean(previewAttachmentId)}
-          onClose={() => setPreviewAttachmentId(null)}
-          workspaceSlug={workspaceSlug}
-          projectId={projectId}
-          assetId={previewAttachmentId}
-          fileName={previewAttachment.attributes?.name}
-        />
-      )}
+      {previewModals}
       {uploadStatus?.map((uploadStatus) => (
         <IssueAttachmentsUploadItem key={uploadStatus.id} uploadStatus={uploadStatus} />
       ))}
@@ -178,7 +157,7 @@ export const IssueAttachmentItemList = observer(function IssueAttachmentItemList
                 disabled={disabled}
                 issueServiceType={issueServiceType}
                 onDownload={downloadAttachment}
-                onPreview={handlePreview}
+                onPreview={requestPreview}
               />
             ))}
           </div>

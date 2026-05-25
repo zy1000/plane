@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import { Button, Modal, Typography } from "antd";
-import { ExportOutlined } from "@ant-design/icons";
+import { CloseOutlined, ExportOutlined } from "@ant-design/icons";
 import {
   XmindPreviewContent,
   getAssetDisplayName,
@@ -15,11 +15,21 @@ type TXmindPreviewModalProps = {
   workspaceSlug: string;
   projectId: string;
   onClose: () => void;
+  // 可选：自定义获取文件 URL（issue 附件等非 filestore 场景透传到内容组件）
+  getFileURL?: () => Promise<string>;
+  // 可选：隐藏「在新标签页打开」入口（非 filestore 场景没有对应的独立预览页）
+  hideOpenInNewTab?: boolean;
 };
 
-const MODAL_HEIGHT = "90vh";
-
-export const XmindPreviewModal = ({ open, asset, workspaceSlug, projectId, onClose }: TXmindPreviewModalProps) => {
+export const XmindPreviewModal = ({
+  open,
+  asset,
+  workspaceSlug,
+  projectId,
+  onClose,
+  getFileURL,
+  hideOpenInNewTab = false,
+}: TXmindPreviewModalProps) => {
   const [isModalReady, setIsModalReady] = useState(false);
 
   const handleModalOpenChange = useCallback((visible: boolean) => {
@@ -45,53 +55,52 @@ export const XmindPreviewModal = ({ open, asset, workspaceSlug, projectId, onClo
       onCancel={onClose}
       afterOpenChange={handleModalOpenChange}
       footer={null}
-      width="90vw"
-      style={{
-        top: "5vh",
-        paddingBottom: 0,
-        height: MODAL_HEIGHT,
-      }}
+      modalRender={(modal) => <div data-prevent-outside-click>{modal}</div>}
+      width="100vw"
+      style={{ top: 0, paddingBottom: 0 }}
       styles={{
-        content: {
-          height: MODAL_HEIGHT,
-          maxHeight: MODAL_HEIGHT,
-          padding: 0,
-          display: "flex",
-          flexDirection: "column",
-        },
-        header: { padding: "16px 24px", marginBottom: 0, flexShrink: 0 },
-        body: {
-          flex: 1,
-          minHeight: 0,
-          padding: 0,
-          overflow: "hidden",
-          display: "flex",
-          flexDirection: "column",
-        },
+        body: { padding: 0 },
+        content: { padding: 0 },
+        header: { padding: "8px 12px", margin: 0 },
       }}
       destroyOnClose
+      closable={false}
       title={
-        <div className="flex items-center" style={{ paddingRight: 36 }}>
-          <Typography.Text strong>{`预览：${displayName}`}</Typography.Text>
-          <Button
-            type="text"
-            size="small"
-            className="ml-auto"
-            title="在新标签页打开"
-            aria-label="在新标签页打开"
-            icon={<ExportOutlined />}
-            disabled={!asset?.id}
-            onClick={handleOpenInNewTab}
-          />
+        <div className="flex min-w-0 items-center gap-2">
+          <Typography.Text strong ellipsis>{`预览：${displayName}`}</Typography.Text>
+          <div className="ml-auto flex items-center gap-1">
+            {!hideOpenInNewTab && (
+              <Button
+                type="text"
+                size="small"
+                title="在新标签页打开"
+                aria-label="在新标签页打开"
+                icon={<ExportOutlined />}
+                disabled={!asset?.id}
+                onClick={handleOpenInNewTab}
+              />
+            )}
+            <Button
+              type="text"
+              size="small"
+              title="关闭"
+              aria-label="关闭"
+              icon={<CloseOutlined />}
+              onClick={onClose}
+            />
+          </div>
         </div>
       }
     >
-      <XmindPreviewContent
-        asset={asset}
-        workspaceSlug={workspaceSlug}
-        projectId={projectId}
-        ready={isModalReady && open}
-      />
+      <div className="flex min-h-0 flex-col overflow-hidden" style={{ height: "calc(100vh - 40px)" }}>
+        <XmindPreviewContent
+          asset={asset}
+          workspaceSlug={workspaceSlug}
+          projectId={projectId}
+          ready={isModalReady && open}
+          getFileURL={getFileURL}
+        />
+      </div>
     </Modal>
   );
 };

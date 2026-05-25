@@ -12,6 +12,7 @@ import { FilestoreService } from "@/services/filestore.service";
 type TOnlyOfficePreviewModalProps = {
   open: boolean;
   onClose: () => void;
+  afterOpenChange?: (open: boolean) => void;
   workspaceSlug: string;
   projectId: string;
   assetId: string;
@@ -19,9 +20,11 @@ type TOnlyOfficePreviewModalProps = {
 };
 
 export const OnlyOfficePreviewModal = observer(function OnlyOfficePreviewModal(props: TOnlyOfficePreviewModalProps) {
-  const { open, onClose, workspaceSlug, projectId, assetId, fileName } = props;
+  const { open, onClose, afterOpenChange, workspaceSlug, projectId, assetId, fileName } = props;
   const service = useMemo(() => new FilestoreService(), []);
   const editorRef = useRef<any>(null);
+  const containerHostRef = useRef<HTMLDivElement>(null);
+  const previewRunIdRef = useRef(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -54,16 +57,6 @@ export const OnlyOfficePreviewModal = observer(function OnlyOfficePreviewModal(p
     return p;
   }, []);
 
-  const waitForElement = useCallback(async (id: string, timeoutMs = 4000) => {
-    const start = Date.now();
-    while (Date.now() - start < timeoutMs) {
-      const el = document.getElementById(id);
-      if (el) return el;
-      await new Promise((r) => requestAnimationFrame(() => r(null)));
-    }
-    return document.getElementById(id);
-  }, []);
-
   const destroyEditor = useCallback(() => {
     try {
       editorRef.current?.destroyEditor?.();
@@ -71,10 +64,23 @@ export const OnlyOfficePreviewModal = observer(function OnlyOfficePreviewModal(p
       // ignore
     } finally {
       editorRef.current = null;
+      containerHostRef.current?.replaceChildren();
     }
   }, []);
 
-  const initPreview = useCallback(async () => {
+  const createEditorContainer = useCallback(() => {
+    const host = containerHostRef.current;
+    if (!host) return null;
+
+    host.replaceChildren();
+    const container = document.createElement("div");
+    container.id = containerId;
+    container.className = "h-full w-full";
+    host.appendChild(container);
+    return container;
+  }, [containerId]);
+
+  const initPreview = useCallback(async (runId: number) => {
     if (!workspaceSlug || !projectId || !assetId) return;
     setLoading(true);
     setError("");
@@ -84,10 +90,12 @@ export const OnlyOfficePreviewModal = observer(function OnlyOfficePreviewModal(p
       const config = (res?.config ?? {}) as Record<string, any>;
       await loadOnlyOfficeScript(serverUrl);
 
-      const mountEl = await waitForElement(containerId);
-      if (!mountEl) throw new Error(`编辑器挂载节点未就绪: #${containerId}`);
+      if (previewRunIdRef.current !== runId) return;
 
       destroyEditor();
+      const mountEl = createEditorContainer();
+      if (!mountEl) throw new Error(`编辑器挂载节点未就绪: #${containerId}`);
+
       const w = window as any;
       if (!w.DocsAPI?.DocEditor) throw new Error("DocsAPI 未加载");
 
@@ -104,20 +112,26 @@ export const OnlyOfficePreviewModal = observer(function OnlyOfficePreviewModal(p
         },
       });
     } catch (e: any) {
+      if (previewRunIdRef.current !== runId) return;
       setError(e?.detail || e?.message || e?.error || "加载预览失败");
     } finally {
-      setLoading(false);
+      if (previewRunIdRef.current === runId) setLoading(false);
     }
-  }, [assetId, containerId, destroyEditor, loadOnlyOfficeScript, projectId, service, waitForElement, workspaceSlug]);
+  }, [assetId, containerId, createEditorContainer, destroyEditor, loadOnlyOfficeScript, projectId, service, workspaceSlug]);
 
   useEffect(() => {
     if (!open) {
+      previewRunIdRef.current += 1;
       destroyEditor();
+      setLoading(false);
       setError("");
       return;
     }
-    void initPreview();
+    const runId = previewRunIdRef.current + 1;
+    previewRunIdRef.current = runId;
+    void initPreview(runId);
     return () => {
+      previewRunIdRef.current += 1;
       destroyEditor();
     };
   }, [destroyEditor, initPreview, open]);
@@ -126,7 +140,9 @@ export const OnlyOfficePreviewModal = observer(function OnlyOfficePreviewModal(p
     <Modal
       open={open}
       onCancel={onClose}
+      afterOpenChange={afterOpenChange}
       footer={null}
+      modalRender={(modal) => <div data-prevent-outside-click>{modal}</div>}
       width="100vw"
       style={{ top: 0, paddingBottom: 0 }}
       styles={{ body: { padding: 0 } }}
@@ -144,7 +160,7 @@ export const OnlyOfficePreviewModal = observer(function OnlyOfficePreviewModal(p
           </div>
         )}
         {loading && <div className="absolute inset-0 z-10 bg-white/60" />}
-        <div id={containerId} className="h-full w-full" />
+        <div ref={containerHostRef} className="h-full w-full" />
       </div>
     </Modal>
   );

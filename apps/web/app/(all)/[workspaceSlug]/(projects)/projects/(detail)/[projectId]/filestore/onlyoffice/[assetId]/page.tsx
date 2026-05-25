@@ -25,6 +25,8 @@ function FilestoreOnlyOfficePage() {
   const [dirty, setDirty] = useState(false);
 
   const editorRef = useRef<any>(null);
+  const containerHostRef = useRef<HTMLDivElement>(null);
+  const editorRunIdRef = useRef(0);
   const docKeyRef = useRef<string>("");
   const dirtyRef = useRef<boolean>(false);
   const forceSaveInFlightRef = useRef<boolean>(false);
@@ -34,6 +36,28 @@ function FilestoreOnlyOfficePage() {
     const id = String(assetId ?? "").trim();
     return id ? `onlyoffice-editor-${id}` : "onlyoffice-editor";
   }, [assetId]);
+
+  const destroyEditor = useCallback(() => {
+    try {
+      editorRef.current?.destroyEditor?.();
+    } catch {
+    } finally {
+      editorRef.current = null;
+      containerHostRef.current?.replaceChildren();
+    }
+  }, []);
+
+  const createEditorContainer = useCallback(() => {
+    const host = containerHostRef.current;
+    if (!host) return null;
+
+    host.replaceChildren();
+    const container = document.createElement("div");
+    container.id = containerId;
+    container.className = "h-full w-full";
+    host.appendChild(container);
+    return container;
+  }, [containerId]);
 
   useEffect(() => {
     docKeyRef.current = docKey;
@@ -94,17 +118,16 @@ function FilestoreOnlyOfficePage() {
   );
 
   const initEditor = useCallback(
-    async (serverUrl: string, config: Record<string, any>) => {
+    async (serverUrl: string, config: Record<string, any>, runId: number) => {
       await loadOnlyOfficeScript(serverUrl);
+      if (editorRunIdRef.current !== runId) return;
+
       const w = window as any;
       if (!w.DocsAPI?.DocEditor) throw new Error("DocsAPI 未加载");
 
-      try {
-        editorRef.current?.destroyEditor?.();
-      } catch {
-      } finally {
-        editorRef.current = null;
-      }
+      destroyEditor();
+      const mountEl = createEditorContainer();
+      if (!mountEl) throw new Error(`编辑器挂载节点未就绪: #${containerId}`);
 
       const enrichedConfig: Record<string, any> = {
         ...config,
@@ -133,11 +156,13 @@ function FilestoreOnlyOfficePage() {
 
       editorRef.current = new w.DocsAPI.DocEditor(containerId, enrichedConfig);
     },
-    [containerId, loadOnlyOfficeScript, triggerForceSave]
+    [containerId, createEditorContainer, destroyEditor, loadOnlyOfficeScript, triggerForceSave]
   );
 
   const refresh = useCallback(async () => {
     if (!workspaceSlug || !projectId || !assetId) return;
+    const runId = editorRunIdRef.current + 1;
+    editorRunIdRef.current = runId;
     setLoading(true);
     setError("");
     try {
@@ -147,29 +172,26 @@ function FilestoreOnlyOfficePage() {
       const key = String(config?.document?.key ?? "");
       setDocKey(key);
       docKeyRef.current = key;
-      await initEditor(serverUrl, config);
+      await initEditor(serverUrl, config, runId);
     } catch (e: any) {
+      if (editorRunIdRef.current !== runId) return;
       setError(e?.detail || e?.message || "加载编辑器失败");
     } finally {
-      setLoading(false);
+      if (editorRunIdRef.current === runId) setLoading(false);
     }
   }, [assetId, initEditor, projectId, service, workspaceSlug]);
 
   useEffect(() => {
     void refresh();
     return () => {
-      try {
-        editorRef.current?.destroyEditor?.();
-      } catch {
-      } finally {
-        editorRef.current = null;
-      }
+      editorRunIdRef.current += 1;
+      destroyEditor();
       docKeyRef.current = "";
       dirtyRef.current = false;
       forceSaveInFlightRef.current = false;
       lastForceSaveAtRef.current = 0;
     };
-  }, [refresh]);
+  }, [destroyEditor, refresh]);
 
   useEffect(() => {
     const t = window.setInterval(() => {
@@ -204,7 +226,7 @@ function FilestoreOnlyOfficePage() {
       )}
       <div className="absolute inset-0">
         {loading && <div className="absolute inset-0 z-10 bg-white/60" />}
-        <div id={containerId} className="h-full w-full" />
+        <div ref={containerHostRef} className="h-full w-full" />
       </div>
     </div>
   );
