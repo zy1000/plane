@@ -22,9 +22,9 @@ const TABS: TTab[] = [
   { key: EActivityTab.ALL, label: "全部" },
   { key: EActivityTab.ACTIVITY, label: "活动" },
   { key: EActivityTab.COMMENT, label: "评论" },
-  { key: EActivityTab.TIMESHEET, label: "工时记录" },
   { key: EActivityTab.TRANSITION, label: "转换" },
   { key: EActivityTab.HISTORY, label: "历史" },
+  { key: EActivityTab.TIMESHEET, label: "工时记录" },
 ];
 
 export const ActivityTabs = memo(function ActivityTabs(props: TActivityTabsProps) {
