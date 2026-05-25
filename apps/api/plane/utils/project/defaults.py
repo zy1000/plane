@@ -360,7 +360,10 @@ def create_default_bug_workflow(issue_types: list[IssueType], **kwargs):
         deleted_at__isnull=True,
     )
     for obj in query:
-        required_field_names = ["修复版本", "技术原因及解决方案"]
+        if obj.to_state and obj.to_state.name == "Pending-Reject":
+            required_field_names = ["技术原因及解决方案"]
+        else:
+            required_field_names = ["修复版本", "技术原因及解决方案"]
         extra_fields = TypeExtraField.objects.filter(
             issue_type=defect_issue_type,
             name__in=required_field_names,

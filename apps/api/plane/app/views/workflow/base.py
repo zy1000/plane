@@ -1,7 +1,12 @@
 from rest_framework import status
 from rest_framework.response import Response
 
-from plane.app.permissions import ROLE, allow_permission, allow_fine_permission, PermissionKey
+from plane.app.permissions import (
+    ROLE,
+    allow_permission,
+    allow_fine_permission,
+    PermissionKey,
+)
 from plane.app.serializers.workflow import (
     IssueTransitionActionSerializer,
     IssueTransitionRecordListSerializer,
@@ -32,8 +37,8 @@ class WorkflowAPIView(BaseAPIView):
     model = Workflow
     serializer_class = WorkflowSerializer
     filterset_fields = {
-        'issue_type_id': ['exact'],
-        'id': ['exact'],
+        "issue_type_id": ["exact"],
+        "id": ["exact"],
     }
 
     def get_project_queryset(self, project_id):
@@ -47,7 +52,9 @@ class WorkflowAPIView(BaseAPIView):
 
     @allow_fine_permission(PermissionKey.WORKFLOW_CREATE)
     def post(self, request, slug, project_id):
-        serializer = self.serializer_class(data=request.data, context={"project_id": project_id})
+        serializer = self.serializer_class(
+            data=request.data, context={"project_id": project_id}
+        )
         if serializer.is_valid():
             serializer.save(project_id=project_id)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
@@ -61,10 +68,14 @@ class WorkflowAPIView(BaseAPIView):
     @allow_fine_permission(PermissionKey.WORKFLOW_EDIT)
     def put(self, request, slug, project_id):
         data = request.data.copy()
-        workflow_id = data.pop('id')
+        workflow_id = data.pop("id")
         workflow = self.get_project_queryset(project_id).get(id=workflow_id)
-        update_serializer = self.serializer_class(instance=workflow, data=data, partial=True,
-                                                  context={"project_id": project_id})
+        update_serializer = self.serializer_class(
+            instance=workflow,
+            data=data,
+            partial=True,
+            context={"project_id": project_id},
+        )
         update_serializer.is_valid(raise_exception=True)
         update_serializer.save()
         return Response(update_serializer.data, status=status.HTTP_200_OK)
@@ -83,7 +94,9 @@ class WorkflowTransitionAPIView(BaseAPIView):
         """批量创建审批人记录，忽略已存在的重复项。"""
         WorkflowTransitionApproval.objects.bulk_create(
             [
-                WorkflowTransitionApproval(transition=transition, approver_id=approver_id)
+                WorkflowTransitionApproval(
+                    transition=transition, approver_id=approver_id
+                )
                 for approver_id in approver_ids
             ],
             ignore_conflicts=True,
@@ -106,7 +119,9 @@ class WorkflowTransitionAPIView(BaseAPIView):
     def _with_approvers(self, serializer_data, transition):
         """在序列化数据中附加当前审批人 ID 列表。"""
         approver_ids = list(
-            transition.approvals.filter(deleted_at__isnull=True).values_list("approver_id", flat=True)
+            transition.approvals.filter(deleted_at__isnull=True).values_list(
+                "approver_id", flat=True
+            )
         )
         approver_ids.extend(
             f"{SPECIAL_APPROVER_PREFIX}{approver_type}"
@@ -117,8 +132,9 @@ class WorkflowTransitionAPIView(BaseAPIView):
     def _with_required_field_ids(self, serializer_data, transition):
         """在序列化数据中附加当前必填字段 ID 列表。"""
         ids = list(
-            transition.required_fields.filter(deleted_at__isnull=True)
-            .values_list("extra_field_id", flat=True)
+            transition.required_fields.filter(deleted_at__isnull=True).values_list(
+                "extra_field_id", flat=True
+            )
         )
         return {**serializer_data, "extra_field_ids": [str(i) for i in ids]}
 
@@ -130,21 +146,28 @@ class WorkflowTransitionAPIView(BaseAPIView):
 
     @allow_fine_permission(PermissionKey.WORKFLOW_VIEW)
     def get(self, request, slug, project_id, workflow_id):
-        transitions = self.get_workflow_queryset(project_id, workflow_id).prefetch_related(
-            "approvals", "required_fields"
-        )
+        transitions = self.get_workflow_queryset(
+            project_id, workflow_id
+        ).prefetch_related("approvals", "required_fields")
         serializer = self.serializer_class(instance=transitions, many=True)
-        data = [self._enrich(item, transition) for item, transition in zip(serializer.data, transitions)]
+        data = [
+            self._enrich(item, transition)
+            for item, transition in zip(serializer.data, transitions)
+        ]
         return Response(data)
 
     @allow_fine_permission(PermissionKey.WORKFLOW_CONFIG)
     def post(self, request, slug, project_id, workflow_id):
         data = {**request.data, "workflow_id": str(workflow_id)}
-        serializer = self.serializer_class(data=data, context={"project_id": project_id})
+        serializer = self.serializer_class(
+            data=data, context={"project_id": project_id}
+        )
         if serializer.is_valid():
             transition = serializer.save(project_id=project_id)
             approver_ids = request.data.get("approver_ids") or []
-            static_approver_ids, dynamic_approver_types = self._parse_approver_selections(approver_ids)
+            static_approver_ids, dynamic_approver_types = (
+                self._parse_approver_selections(approver_ids)
+            )
             if static_approver_ids:
                 self._build_approvals(transition, static_approver_ids)
             if transition.dynamic_approver_types != dynamic_approver_types:
@@ -152,11 +175,18 @@ class WorkflowTransitionAPIView(BaseAPIView):
                 transition.save(update_fields=["dynamic_approver_types", "updated_at"])
             # 判断是否有绑定自定义字段
             if extra_field_ids := request.data.get("extra_field_ids"):
-                bulk_object = [WorkflowTransitionRequiredField(workflow=transition, extra_field_id=extra_field_id) for
-                               extra_field_id in extra_field_ids]
+                bulk_object = [
+                    WorkflowTransitionRequiredField(
+                        workflow=transition, extra_field_id=extra_field_id
+                    )
+                    for extra_field_id in extra_field_ids
+                ]
                 WorkflowTransitionRequiredField.objects.bulk_create(bulk_object)
 
-            return Response(self._enrich(serializer.data, transition), status=status.HTTP_201_CREATED)
+            return Response(
+                self._enrich(serializer.data, transition),
+                status=status.HTTP_201_CREATED,
+            )
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     @allow_fine_permission(PermissionKey.WORKFLOW_CONFIG)
@@ -164,29 +194,45 @@ class WorkflowTransitionAPIView(BaseAPIView):
         data = request.data.copy()
         transition_id = data.pop("id")
         extra_field_ids = data.pop("extra_field_ids", [])
-        transition = self.get_workflow_queryset(project_id, workflow_id).get(id=transition_id)
-        serializer = self.serializer_class(instance=transition, data=data, partial=True,
-                                           context={"project_id": project_id})
+        transition = self.get_workflow_queryset(project_id, workflow_id).get(
+            id=transition_id
+        )
+        serializer = self.serializer_class(
+            instance=transition,
+            data=data,
+            partial=True,
+            context={"project_id": project_id},
+        )
         serializer.is_valid(raise_exception=True)
         serializer.save()
         # 若请求中包含 approver_ids，则全量替换审批人
         if "approver_ids" in request.data:
             transition.approvals.all().delete()
             approver_ids = request.data["approver_ids"] or []
-            static_approver_ids, dynamic_approver_types = self._parse_approver_selections(approver_ids)
+            static_approver_ids, dynamic_approver_types = (
+                self._parse_approver_selections(approver_ids)
+            )
             if static_approver_ids:
                 self._build_approvals(transition, static_approver_ids)
             transition.dynamic_approver_types = dynamic_approver_types
             transition.save(update_fields=["dynamic_approver_types", "updated_at"])
 
         # 先清空之前的必须字段
-        WorkflowTransitionRequiredField.objects.filter(workflow=transition).delete(soft=False)
+        WorkflowTransitionRequiredField.objects.filter(workflow=transition).delete(
+            soft=False
+        )
         # 创建新的必须字段
-        bulk_object = [WorkflowTransitionRequiredField(workflow=transition, extra_field_id=extra_field_id) for
-                       extra_field_id in extra_field_ids]
+        bulk_object = [
+            WorkflowTransitionRequiredField(
+                workflow=transition, extra_field_id=extra_field_id
+            )
+            for extra_field_id in extra_field_ids
+        ]
         WorkflowTransitionRequiredField.objects.bulk_create(bulk_object)
 
-        return Response(self._enrich(serializer.data, transition), status=status.HTTP_200_OK)
+        return Response(
+            self._enrich(serializer.data, transition), status=status.HTTP_200_OK
+        )
 
     @allow_fine_permission(PermissionKey.WORKFLOW_CONFIG)
     def delete(self, request, slug, project_id, workflow_id):
@@ -254,7 +300,9 @@ class MyApprovalsAPIView(BaseAPIView):
         ).count()
 
         serializer = IssueTransitionRecordListSerializer(records, many=True)
-        response = Response({"results": serializer.data, "pending_count": pending_count})
+        response = Response(
+            {"results": serializer.data, "pending_count": pending_count}
+        )
         response["X-Pending-Count"] = str(pending_count)
         return response
 
@@ -368,8 +416,12 @@ class TransitionRecordActionAPIView(BaseAPIView):
                 .get()
             )
         except IssueTransitionRecord.DoesNotExist:
-            return Response({"error": "审批记录不存在"}, status=status.HTTP_404_NOT_FOUND)
-        return Response(IssueTransitionRecordListSerializer(record).data, status=status.HTTP_200_OK)
+            return Response(
+                {"error": "审批记录不存在"}, status=status.HTTP_404_NOT_FOUND
+            )
+        return Response(
+            IssueTransitionRecordListSerializer(record).data, status=status.HTTP_200_OK
+        )
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
     def post(self, request, slug, project_id, record_id):

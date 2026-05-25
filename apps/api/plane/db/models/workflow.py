@@ -429,4 +429,4 @@ class WorkflowTransitionRequiredField(BaseModel):
         ]
 
     def __str__(self):
-        return f"{self.workflow.name} - {self.extra_field.name}"
+        return f"{self.extra_field.name}"
