@@ -16,6 +16,7 @@ from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
+from plane.app.permissions import ROLE, allow_permission
 from plane.app.views import BaseViewSet
 from plane.db.models import Project
 from plane.utils.issue_import import (
@@ -36,6 +37,7 @@ TEMPLATE_FILENAME = "工作项导入模板.xlsx"
 
 class IssueAPI(BaseViewSet):
 
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
     @action(detail=False, methods=["get"], url_path="import-template")
     def download_import_template(self, request, slug, project_id):
         if not TEMPLATE_PATH.exists():
@@ -50,6 +52,7 @@ class IssueAPI(BaseViewSet):
             content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
 
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
     @action(detail=False, methods=["get"], url_path="import-fields")
     def import_fields(self, request, slug, project_id):
         """前端在字段映射阶段读取可选属性列表。"""
@@ -58,6 +61,7 @@ class IssueAPI(BaseViewSet):
             status=status.HTTP_200_OK,
         )
 
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
     @action(detail=False, methods=["post"], url_path="inspect-import-file")
     def inspect_import_file(self, request, slug, project_id):
         """读取上传文件的列名，并基于模板默认列名给出推荐映射。"""
@@ -75,6 +79,7 @@ class IssueAPI(BaseViewSet):
             )
         return Response(data, status=status.HTTP_200_OK)
 
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
     @action(detail=False, methods=["post"], url_path="validate-import")
     def validate_import(self, request, slug, project_id):
         file_obj, error = _extract_file(request)
@@ -108,6 +113,7 @@ class IssueAPI(BaseViewSet):
         result = validate_rows(rows, mapping, project=project, user=request.user)
         return Response(result, status=status.HTTP_200_OK)
 
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
     @action(detail=False, methods=["post"], url_path="bulk-import")
     def bulk_import(self, request, slug, project_id):
         file_obj, error = _extract_file(request)
