@@ -131,6 +131,7 @@ export const SidebarProjectsListItem = observer(function SidebarProjectsListItem
     workspaceSlug.toString(),
     project?.id
   );
+  const isAccordionMode = projectPreferences.navigationMode === "ACCORDION";
 
   const handleLeaveProject = () => {
     setLeaveProjectModal(true);
@@ -236,7 +237,9 @@ export const SidebarProjectsListItem = observer(function SidebarProjectsListItem
   useEffect(() => {
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
-    if (URLProjectId === project?.id) {
+    if (!URLProjectId || !project?.id) return;
+
+    if (URLProjectId === project.id) {
       setIsProjectListOpen(true);
       // Scroll to active project
       if (projectRef.current) {
@@ -250,6 +253,8 @@ export const SidebarProjectsListItem = observer(function SidebarProjectsListItem
           }
         }, 200);
       }
+    } else if (isAccordionMode) {
+      setIsProjectListOpen(false);
     }
 
     return () => {
@@ -257,11 +262,9 @@ export const SidebarProjectsListItem = observer(function SidebarProjectsListItem
         clearTimeout(timeoutId);
       }
     };
-  }, [URLProjectId, project?.id, setIsProjectListOpen]);
+  }, [URLProjectId, project?.id, isAccordionMode, setIsProjectListOpen]);
 
   if (!project) return null;
-
-  const isAccordionMode = projectPreferences.navigationMode === "ACCORDION";
 
   const handleItemClick = () => {
     if (projectPreferences.navigationMode === "ACCORDION") {

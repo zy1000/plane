@@ -216,9 +216,10 @@ export const useNavigationItems = ({
     })
     .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
 
-  // 用 key 列表做内容指纹，只在 tab 集合实际变化时换引用，
+  // 用 workspace + project + tab key 列表做内容指纹，只在菜单实际变化时换引用，
   // 避免下游 useEffect / useMemo（如默认 tab 跳转）因为新数组引用无谓抖动。
-  const stableKey = filteredItems.map((i) => i.key).join("|");
+  // 必须包含 projectId：否则切换项目后 stableKey 不变，href 仍指向上一项目（如缺陷页跳错项目）。
+  const stableKey = `${workspaceSlug}:${projectId}:${filteredItems.map((i) => i.key).join("|")}`;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const navigationItems = useMemo(() => filteredItems, [stableKey]);
 

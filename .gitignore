@@ -167,3 +167,4 @@ AGENTS.md
 .gitignore
 
 **/docs-site/**
+docs/release-requirements.md
