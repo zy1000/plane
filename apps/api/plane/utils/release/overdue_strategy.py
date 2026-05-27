@@ -155,7 +155,13 @@ def sync_overdue_on_status_change(
         *,
         now=None,
 ) -> None:
-    """状态变化时关闭对应阶段未结束的逾期记录（§8.4）。"""
+    """状态变化时关闭对应阶段未结束的逾期记录（§8.4）。
+
+    特殊规则：从 待测试/测试中 转入 已驳回 时，若当前时间已晚于转测日期
+    （test_handoff_date），意味着此次驳回使研发阶段实际已逾期，需要补登
+    一条研发逾期记录。下一次扫描会因 REJECTED 属于终止状态而关闭它，
+    最终沉淀为历史逾期记录。
+    """
     if not new_status or old_status == new_status:
         return
 
@@ -165,6 +171,14 @@ def sync_overdue_on_status_change(
         close_active_overdue(release.id, ReleaseOverduePhase.DEV, now=now)
     if new_status in _TEST_PHASE_CLOSE_STATUSES:
         close_active_overdue(release.id, ReleaseOverduePhase.TEST, now=now)
+
+    if (
+        new_status == ReleaseStatus.REJECTED
+        and old_status in {ReleaseStatus.PENDING_TEST, ReleaseStatus.TESTING}
+    ):
+        handoff = _to_datetime(release.test_handoff_date)
+        if handoff is not None and now > handoff:
+            open_overdue(release, ReleaseOverduePhase.DEV, started_at=now)
 
 
 @transaction.atomic
