@@ -20,15 +20,14 @@ type Props = {
  */
 export function ReleaseOverdueRecordRow({ record }: Props) {
   const phaseLabel = getReleaseOverduePhaseLabel(record.phase) ?? record.phase;
-  const isActive = !record.ended_at;
   return (
     <div className="flex items-center justify-between rounded-sm border border-subtle px-2 py-1.5">
       <div className="flex items-center gap-2">
         <span
           className={
-            isActive
-              ? "rounded bg-warning-subtle px-1.5 py-0.5 text-11 font-medium text-[#F59E0B]"
-              : "rounded bg-danger-subtle px-1.5 py-0.5 text-11 font-medium text-danger-primary"
+            record.phase === "dev"
+              ? "rounded bg-danger-subtle px-1.5 py-0.5 text-11 font-medium text-danger-primary"
+              : "rounded bg-warning-subtle px-1.5 py-0.5 text-11 font-medium text-[#F59E0B]"
           }
         >
           {phaseLabel}

@@ -73,7 +73,10 @@ from plane.db.models import (
     TestPlan,
     PlanCase,
 )
-from plane.utils.release.overdue_strategy import sync_overdue_on_status_change
+from plane.utils.release.overdue_strategy import (
+    sync_overdue_on_status_change,
+    sync_overdue_on_date_change,
+)
 from plane.utils.analytics_plot import burndown_plot
 from plane.utils.paginator import CustomPaginator
 from plane.utils.response import list_response
@@ -748,6 +751,8 @@ class ReleaseViewSet(BaseViewSet):
             )
         current_instance = json.dumps(ReleaseSerializer(current_release).data, cls=DjangoJSONEncoder)
         previous_status = current_release.status
+        previous_test_handoff_date = current_release.test_handoff_date
+        previous_target_date = current_release.target_date
         serializer = ReleaseWriteSerializer(current_release, data=request.data, partial=True,context={'user': request.user})
 
 
@@ -757,6 +762,11 @@ class ReleaseViewSet(BaseViewSet):
             new_status = updated_release.status
             if new_status and new_status != previous_status:
                 sync_overdue_on_status_change(updated_release, previous_status, new_status)
+            sync_overdue_on_date_change(
+                updated_release,
+                prev_handoff=previous_test_handoff_date,
+                prev_target=previous_target_date,
+            )
 
             release = release_queryset.values(
                 "id",

@@ -167,6 +167,36 @@ def sync_overdue_on_status_change(
         close_active_overdue(release.id, ReleaseOverduePhase.TEST, now=now)
 
 
+@transaction.atomic
+def sync_overdue_on_date_change(
+        release: Release,
+        *,
+        prev_handoff,
+        prev_target,
+        now=None,
+) -> None:
+    """转测/结束日期变更时，关闭当前进行中的对应阶段逾期记录，实现多次延期。
+
+    仅在「新日期不再过期」时关闭：
+    - 新值为空，或当前时间尚未超过新日期 → 关闭未结束记录，等下次扫描再开
+    - 新日期仍已过期 → 保持原记录继续累计，避免无意义的记录分裂
+
+    后续是否再次开启新记录由 scan_releases_for_overdue 决定，DB 唯一约束保证每个
+    phase 同时只存在一条未结束记录。
+    """
+    now = now or timezone.now()
+
+    if release.test_handoff_date != prev_handoff:
+        handoff = _to_datetime(release.test_handoff_date)
+        if handoff is None or now <= handoff:
+            close_active_overdue(release.id, ReleaseOverduePhase.DEV, now=now)
+
+    if release.target_date != prev_target:
+        target = _to_datetime(release.target_date)
+        if target is None or now <= target:
+            close_active_overdue(release.id, ReleaseOverduePhase.TEST, now=now)
+
+
 def scan_releases_for_overdue(releases: Optional[Iterable[Release]] = None) -> int:
     """扫描所有非终止状态的发布，按需开/关逾期记录。返回处理的发布数。"""
     if releases is None:

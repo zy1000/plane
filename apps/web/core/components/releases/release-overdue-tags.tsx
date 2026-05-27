@@ -27,13 +27,13 @@ type Props = {
 
 type TPhaseTag = {
   phase: TReleaseOverduePhase;
-  isActive: boolean;
 };
 
 /**
  * 发布行/卡片上的逾期标签集合。
  * - 任意阶段「曾经发生过」逾期就会展示该阶段的标签，最多同时显示研发逾期 + 测试逾期两个。
- * - 当前未结束的标签为黄色，已结束的历史标签为红色（与 sidebar 一致）。
+ * - 颜色按阶段固定：研发逾期始终为红色（danger），测试逾期始终为橙色（warning），
+ *   不随「进行中 / 已完成」状态变化。
  * - 标签点击后弹出 ReleaseOverdueRecordsModal，展示该发布的全部逾期记录。
  * 详见 docs/release-requirements.md §11。
  */
@@ -59,15 +59,15 @@ export function ReleaseOverdueTags(props: Props) {
 
   return (
     <span className="flex items-center gap-2" onClick={stopBubble}>
-      {phaseTags.map(({ phase, isActive }) => (
+      {phaseTags.map(({ phase }) => (
         <button
           key={phase}
           type="button"
           onClick={openModal}
           className={
-            isActive
-              ? "rounded bg-warning-subtle px-1.5 py-0.5 text-11 font-medium text-[#F59E0B] hover:opacity-80"
-              : "rounded bg-danger-subtle px-1.5 py-0.5 text-11 font-medium text-danger-primary hover:opacity-80"
+            phase === "dev"
+              ? "inline-flex flex-shrink-0 items-center rounded-full border border-danger-subtle bg-danger-subtle px-1.5 py-0.5 text-[10px] font-medium text-danger-primary transition-opacity hover:opacity-80"
+              : "inline-flex flex-shrink-0 items-center rounded-full border border-warning-subtle bg-warning-subtle px-1.5 py-0.5 text-[10px] font-medium text-[#F59E0B] transition-opacity hover:opacity-80"
           }
         >
           {getReleaseOverduePhaseLabel(phase)}
@@ -85,9 +85,8 @@ export function ReleaseOverdueTags(props: Props) {
 }
 
 /**
- * 计算 dev / test 各阶段的标签状态。
- * - active：has_active_<phase>_overdue 为 true
- * - history：has_<phase>_overdue_history 为 true 但未活跃
+ * 计算 dev / test 各阶段是否需要展示标签。
+ * - 只要 has_active_<phase>_overdue 或 has_<phase>_overdue_history 任一为 true 就展示
  * - 都为 false：不渲染该阶段
  *
  * 同时保留对旧字段 active_overdue_phase 的回退兼容，
@@ -105,18 +104,15 @@ function getOverduePhaseTags(
 ): TPhaseTag[] {
   const tags: TPhaseTag[] = [];
 
-  const devActive = !!release.has_active_dev_overdue;
-  const devHistory = !!release.has_dev_overdue_history;
-  if (devActive) tags.push({ phase: "dev", isActive: true });
-  else if (devHistory) tags.push({ phase: "dev", isActive: false });
-
-  const testActive = !!release.has_active_test_overdue;
-  const testHistory = !!release.has_test_overdue_history;
-  if (testActive) tags.push({ phase: "test", isActive: true });
-  else if (testHistory) tags.push({ phase: "test", isActive: false });
+  if (release.has_active_dev_overdue || release.has_dev_overdue_history) {
+    tags.push({ phase: "dev" });
+  }
+  if (release.has_active_test_overdue || release.has_test_overdue_history) {
+    tags.push({ phase: "test" });
+  }
 
   if (tags.length === 0 && release.active_overdue_phase) {
-    tags.push({ phase: release.active_overdue_phase, isActive: true });
+    tags.push({ phase: release.active_overdue_phase });
   }
   return tags;
 }
