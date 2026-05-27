@@ -7,11 +7,10 @@
 import React from "react";
 import type { FieldError, Control } from "react-hook-form";
 import { Controller } from "react-hook-form";
-import { MODULE_STATUS } from "@plane/constants";
-import { useTranslation } from "@plane/i18n";
-import { StatePropertyIcon, ModuleStatusIcon } from "@plane/propel/icons";
+import { StatePropertyIcon } from "@plane/propel/icons";
 import type { IRelease } from "@plane/types";
 import { CustomSelect } from "@plane/ui";
+import { getAllowedReleaseStatusOptions, getReleaseStatusDetails } from "./release-status-config";
 
 type Props = {
   control: Control<IRelease, unknown>;
@@ -20,14 +19,15 @@ type Props = {
 };
 
 export function ReleaseStatusSelect({ control, error, tabIndex }: Props) {
-  const { t } = useTranslation();
   return (
     <Controller
       control={control}
       rules={{ required: true }}
       name="status"
       render={({ field: { value, onChange } }) => {
-        const selectedValue = MODULE_STATUS.find((s) => s.value === value);
+        const selectedValue = getReleaseStatusDetails(value);
+        const allowedStatusOptions = getAllowedReleaseStatusOptions(value);
+        const SelectedStatusIcon = selectedValue.icon;
         return (
           <CustomSelect
             value={value}
@@ -38,27 +38,30 @@ export function ReleaseStatusSelect({ control, error, tabIndex }: Props) {
                 className={`flex items-center justify-center gap-2 py-0.5 text-11 ${error ? "text-danger-primary" : ""}`}
               >
                 {value ? (
-                  <ModuleStatusIcon status={value} />
+                  <SelectedStatusIcon className="h-3.5 w-3.5" style={{ color: selectedValue.color }} />
                 ) : (
                   <StatePropertyIcon className={`h-3 w-3 ${error ? "text-danger-primary" : "text-secondary"}`} />
                 )}
-                {(selectedValue && t(selectedValue?.i18n_label)) ?? (
-                  <span className={`${error ? "text-danger-primary" : "text-secondary"}`}>Status</span>
-                )}
+                <span className={`${error ? "text-danger-primary" : "text-secondary"}`}>
+                  {value ? selectedValue.label : "Status"}
+                </span>
               </div>
             }
             onChange={onChange}
             tabIndex={tabIndex}
             noChevron
           >
-            {MODULE_STATUS.map((status) => (
-              <CustomSelect.Option key={status.value} value={status.value}>
-                <div className="flex items-center gap-2">
-                  <ModuleStatusIcon status={status.value} />
-                  {t(status.i18n_label)}
-                </div>
-              </CustomSelect.Option>
-            ))}
+            {allowedStatusOptions.map((status) => {
+              const StatusIcon = status.icon;
+              return (
+                <CustomSelect.Option key={status.value} value={status.value}>
+                  <div className="flex items-center gap-2">
+                    <StatusIcon className="h-3.5 w-3.5" style={{ color: status.color }} />
+                    {status.label}
+                  </div>
+                </CustomSelect.Option>
+              );
+            })}
           </CustomSelect>
         );
       }}

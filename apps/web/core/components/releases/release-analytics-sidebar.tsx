@@ -10,13 +10,12 @@ import { useParams } from "next/navigation";
 import { Controller, useForm } from "react-hook-form";
 import { Info, SquareUser } from "lucide-react";
 import { Disclosure, Transition } from "@headlessui/react";
-import { MODULE_STATUS, EUserPermissions, EUserPermissionsLevel, EEstimateSystem } from "@plane/constants";
+import { EUserPermissions, EUserPermissionsLevel, EEstimateSystem } from "@plane/constants";
 // plane types
 import { useTranslation } from "@plane/i18n";
 import {
   PlusIcon,
   MembersPropertyIcon,
-  ModuleStatusIcon,
   WorkItemsIcon,
   StartDatePropertyIcon,
   ChevronDownIcon,
@@ -33,6 +32,9 @@ import { DateRangeDropdown } from "@/components/dropdowns/date-range";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { CreateUpdateReleaseLinkModal, ReleaseLinksList } from "@/components/releases/links";
 import { ReleaseAnalyticsProgress } from "@/components/releases/analytics-sidebar/issue-progress";
+import { ReleaseOverdueRecordsSection } from "@/components/releases/release-overdue-records-section";
+import { getAllowedReleaseStatusOptions, getReleaseStatusDetails } from "@/components/releases/release-status-config";
+import { formatReleaseUpdateError } from "@/components/releases/use-release-error-message";
 // hooks
 import { useProjectEstimates } from "@/hooks/store/estimates";
 import { useRelease } from "@/hooks/store/use-release";
@@ -43,7 +45,7 @@ const defaultValues: Partial<IRelease> = {
   member_ids: [],
   start_date: null,
   target_date: null,
-  status: "backlog",
+  status: "not-started",
 };
 
 type Props = {
@@ -80,7 +82,16 @@ export const ReleaseAnalyticsSidebar = observer(function ReleaseAnalyticsSidebar
 
   const submitChanges = async (data: Partial<IRelease>) => {
     if (!workspaceSlug || !projectId || !releaseId) return;
-    await updateReleaseDetails(workspaceSlug.toString(), projectId.toString(), releaseId.toString(), data);
+    try {
+      await updateReleaseDetails(workspaceSlug.toString(), projectId.toString(), releaseId.toString(), data);
+    } catch (err) {
+      const { title, message } = formatReleaseUpdateError(err);
+      setToast({
+        type: TOAST_TYPE.ERROR,
+        title,
+        message,
+      });
+    }
   };
 
   const handleCreateLink = async (formData: ModuleLink) => {
@@ -152,7 +163,8 @@ export const ReleaseAnalyticsSidebar = observer(function ReleaseAnalyticsSidebar
       </Loader>
     );
 
-  const moduleStatus = MODULE_STATUS.find((status) => status.value === releaseDetails.status);
+  const releaseStatusMeta = getReleaseStatusDetails(releaseDetails.status);
+  const allowedStatusOptions = getAllowedReleaseStatusOptions(releaseDetails.status);
 
   const issueCount =
     releaseDetails.total_issues === 0
@@ -208,11 +220,11 @@ export const ReleaseAnalyticsSidebar = observer(function ReleaseAnalyticsSidebar
                         isEditingAllowed && !isArchived ? "cursor-pointer" : "cursor-not-allowed"
                       }`}
                       style={{
-                        color: moduleStatus ? moduleStatus.color : "#a3a3a2",
-                        backgroundColor: moduleStatus ? `${moduleStatus.color}20` : "#a3a3a220",
+                        color: releaseStatusMeta.color,
+                        backgroundColor: `${releaseStatusMeta.color}20`,
                       }}
                     >
-                      {(moduleStatus && t(moduleStatus?.i18n_label)) ?? t("project_modules.status.backlog")}
+                      {releaseStatusMeta.label}
                     </span>
                   }
                   value={value}
@@ -221,14 +233,17 @@ export const ReleaseAnalyticsSidebar = observer(function ReleaseAnalyticsSidebar
                   }}
                   disabled={!isEditingAllowed || isArchived}
                 >
-                  {MODULE_STATUS.map((status) => (
+                  {allowedStatusOptions.map((status) => {
+                    const StatusIcon = status.icon;
+                    return (
                     <CustomSelect.Option key={status.value} value={status.value}>
                       <div className="flex items-center gap-2">
-                        <ModuleStatusIcon status={status.value} />
-                        {t(status.i18n_label)}
+                        <StatusIcon className="h-4 w-4" style={{ color: status.color }} />
+                        {status.label}
                       </div>
                     </CustomSelect.Option>
-                  ))}
+                    );
+                  })}
                 </CustomSelect>
               )}
             />
@@ -369,6 +384,14 @@ export const ReleaseAnalyticsSidebar = observer(function ReleaseAnalyticsSidebar
             workspaceSlug={workspaceSlug.toString()}
             projectId={projectId.toString()}
             releaseId={releaseDetails?.id}
+          />
+        )}
+
+        {workspaceSlug && projectId && releaseDetails?.id && (
+          <ReleaseOverdueRecordsSection
+            workspaceSlug={workspaceSlug.toString()}
+            projectId={projectId.toString()}
+            releaseId={releaseDetails.id}
           />
         )}
 

@@ -2,7 +2,29 @@ import type { ILinkDetails } from "../issues";
 import type { TIssue } from "../issues/issue";
 import type { IIssueFilterOptions } from "../view-props";
 
-export type TReleaseStatus = "backlog" | "planned" | "in-progress" | "paused" | "completed" | "cancelled";
+export type TReleaseStatus =
+  | "not-started"
+  | "in-progress"
+  | "pending-test"
+  | "testing"
+  | "rejected"
+  | "completed"
+  | "cancelled";
+
+export type TReleaseOverduePhase = "dev" | "test";
+
+export type TReleaseOverdueTrigger = "system" | "user";
+
+export interface IReleaseOverdueRecord {
+  id: string;
+  release: string;
+  phase: TReleaseOverduePhase;
+  started_at: string;
+  ended_at: string | null;
+  triggered_by: TReleaseOverdueTrigger;
+  created_at: string;
+  updated_at: string;
+}
 
 export type TReleaseCompletionChartDistribution = {
   [key: string]: number | null;
@@ -82,11 +104,19 @@ export interface IRelease {
   archived_at: string | null;
   start_date: string | null;
   target_date: string | null;
+  test_handoff_date: string | null;
   created_at: string;
   updated_at: string;
   created_by?: string;
   updated_by?: string;
   note?: string;
+  has_active_overdue?: boolean;
+  has_overdue_history?: boolean;
+  active_overdue_phase?: TReleaseOverduePhase | null;
+  has_active_dev_overdue?: boolean;
+  has_active_test_overdue?: boolean;
+  has_dev_overdue_history?: boolean;
+  has_test_overdue_history?: boolean;
 }
 
 export interface ReleaseIssueResponse {

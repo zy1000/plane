@@ -1330,8 +1330,8 @@ class ProjectAPI(BaseViewSet):
                 project_id=project_id,
                 deleted_at__isnull=True,
                 archived_at__isnull=True,
-                status__in=["planned", "in-progress"],
             )
+            .exclude(status__in=["completed", "cancelled"])
             .select_related("lead")
             .annotate(
                 work_item_count=Count(

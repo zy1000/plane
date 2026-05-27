@@ -7,6 +7,7 @@ from plane.db.models import (
     IssueType,
     Project,
     State,
+    StateGroup,
     TypeExtraField,
     Workflow,
     WorkflowTransition,
@@ -128,6 +129,9 @@ def bulk_create_issue_state(issue_types: list[IssueType], **kwargs):
             else DEFAULT_STATES
         )
         for state in default_states:
+            # Triage 不绑 issue_type，统一在函数末尾按项目维度幂等创建一条。
+            if state["group"] == StateGroup.TRIAGE.value:
+                continue
             create_list.append(
                 State(
                     name=state["name"],
@@ -143,6 +147,20 @@ def bulk_create_issue_state(issue_types: list[IssueType], **kwargs):
             )
 
     State.objects.bulk_create(create_list)
+
+    project = kwargs["project"]
+    if not State.triage_objects.filter(project=project).exists():
+        State.objects.create(
+            name="Triage",
+            color="#4E5355",
+            project=project,
+            sequence=65000,
+            workspace=kwargs["workspace"],
+            group=StateGroup.TRIAGE.value,
+            default=False,
+            created_by=kwargs["created_by"],
+            issue_type=None,
+        )
 
 
 def create_default_bug_extra_field(issue_types: list[IssueType]):

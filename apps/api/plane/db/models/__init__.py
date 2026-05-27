@@ -54,6 +54,10 @@ from .release import (
     ReleaseLink,
     ReleaseMember,
     ReleaseUserProperties,
+    ReleaseStatus,
+    ReleaseOverdueRecord,
+    ReleaseOverduePhase,
+    ReleaseOverdueTrigger,
 )
 from .notification import EmailNotificationLog, Notification, UserNotificationPreference
 from .page import Page, PageLabel, PageLog, ProjectPage, PageVersion

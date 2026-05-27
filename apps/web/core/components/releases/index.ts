@@ -23,5 +23,6 @@ export * from "./release-peek-overview";
 export * from "./release-quick-actions";
 export * from "./release-status-dropdown";
 export * from "./release-status-select";
+export * from "./use-release-error-message";
 export * from "./release-view-header";
 export * from "./releases-list-view";

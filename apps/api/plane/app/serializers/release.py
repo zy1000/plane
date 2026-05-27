@@ -16,7 +16,10 @@ from plane.db.models import (
     ReleaseIssue,
     ReleaseLink,
     ReleaseUserProperties,
+    ReleaseOverdueRecord,
 )
+from plane.db.models.release import ReleaseStatus
+from ...utils.release.rules import check_release_state
 
 
 class ReleaseWriteSerializer(BaseSerializer):
@@ -49,12 +52,45 @@ class ReleaseWriteSerializer(BaseSerializer):
         return data
 
     def validate(self, data):
+        status = data.get("status")
+        user = self.context.get("user")
+        target_date = data.get(
+            "target_date", self.instance.target_date if self.instance else None
+        )
+        test_handoff_date = data.get(
+            "test_handoff_date", self.instance.test_handoff_date if self.instance else None
+        )
+
         if (
-            data.get("start_date", None) is not None
-            and data.get("target_date", None) is not None
-            and data.get("start_date", None) > data.get("target_date", None)
+                data.get("start_date", None) is not None
+                and data.get("target_date", None) is not None
+                and data.get("start_date", None) > data.get("target_date", None)
         ):
             raise serializers.ValidationError("Start date cannot exceed target date")
+
+        if test_handoff_date:
+            if not target_date:
+                raise serializers.ValidationError('请先设置发布结束日期')
+            if test_handoff_date > target_date:
+                raise serializers.ValidationError('转测日期不能晚于发布结束日期')
+        # 检查状态变更是否符合规则
+        if status and self.instance:
+            if status != self.instance.status and self.instance.lead != user:
+                raise serializers.ValidationError(
+                    {
+                        "error": "不符合状态流转规则",
+                        "reasons": ["状态只能由负责人修改"],
+                    }
+                )
+            result = check_release_state(self.instance, ReleaseStatus(status))
+            if not result.allowed:
+                raise serializers.ValidationError(
+                    {
+                        "error": "不符合状态流转规则",
+                        "reasons": result.reasons,
+                    }
+                )
+
         return data
 
     def create(self, validated_data):
@@ -64,7 +100,9 @@ class ReleaseWriteSerializer(BaseSerializer):
         release_name = validated_data.get("name")
         if release_name:
             if Release.objects.filter(name=release_name, project=project).exists():
-                raise serializers.ValidationError({"error": "Release with this name already exists"})
+                raise serializers.ValidationError(
+                    {"error": "Release with this name already exists"}
+                )
 
         release = Release.objects.create(**validated_data, project=project)
         if members is not None:
@@ -89,9 +127,16 @@ class ReleaseWriteSerializer(BaseSerializer):
     def update(self, instance, validated_data):
         members = validated_data.pop("member_ids", None)
         release_name = validated_data.get("name")
+
         if release_name:
-            if Release.objects.filter(name=release_name, project=instance.project).exclude(id=instance.id).exists():
-                raise serializers.ValidationError({"error": "Release with this name already exists"})
+            if (
+                    Release.objects.filter(name=release_name, project=instance.project)
+                            .exclude(id=instance.id)
+                            .exists()
+            ):
+                raise serializers.ValidationError(
+                    {"error": "Release with this name already exists"}
+                )
 
         if members is not None:
             ReleaseMember.objects.filter(release=instance).delete()
@@ -179,24 +224,32 @@ class ReleaseLinkSerializer(BaseSerializer):
 
     def create(self, validated_data):
         validated_data["url"] = self.validate_url(validated_data.get("url"))
-        if ReleaseLink.objects.filter(url=validated_data.get("url"), release_id=validated_data.get("release_id")).exists():
+        if ReleaseLink.objects.filter(
+                url=validated_data.get("url"), release_id=validated_data.get("release_id")
+        ).exists():
             raise serializers.ValidationError({"error": "URL already exists."})
         return super().create(validated_data)
 
     def update(self, instance, validated_data):
         validated_data["url"] = self.validate_url(validated_data.get("url"))
         if (
-            ReleaseLink.objects.filter(url=validated_data.get("url"), release_id=instance.release_id)
-            .exclude(pk=instance.id)
-            .exists()
+                ReleaseLink.objects.filter(
+                    url=validated_data.get("url"), release_id=instance.release_id
+                )
+                        .exclude(pk=instance.id)
+                        .exists()
         ):
-            raise serializers.ValidationError({"error": "URL already exists for this Release"})
+            raise serializers.ValidationError(
+                {"error": "URL already exists for this Release"}
+            )
 
         return super().update(instance, validated_data)
 
 
 class ReleaseSerializer(DynamicBaseSerializer):
-    member_ids = serializers.ListField(child=serializers.UUIDField(), required=False, allow_null=True)
+    member_ids = serializers.ListField(
+        child=serializers.UUIDField(), required=False, allow_null=True
+    )
     is_favorite = serializers.BooleanField(read_only=True)
     total_issues = serializers.IntegerField(read_only=True)
     cancelled_issues = serializers.IntegerField(read_only=True)
@@ -206,6 +259,13 @@ class ReleaseSerializer(DynamicBaseSerializer):
     backlog_issues = serializers.IntegerField(read_only=True)
     total_estimate_points = serializers.FloatField(read_only=True)
     completed_estimate_points = serializers.FloatField(read_only=True)
+    has_active_overdue = serializers.BooleanField(read_only=True)
+    has_overdue_history = serializers.BooleanField(read_only=True)
+    active_overdue_phase = serializers.CharField(read_only=True, allow_null=True)
+    has_active_dev_overdue = serializers.BooleanField(read_only=True)
+    has_active_test_overdue = serializers.BooleanField(read_only=True)
+    has_dev_overdue_history = serializers.BooleanField(read_only=True)
+    has_test_overdue_history = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = Release
@@ -221,6 +281,7 @@ class ReleaseSerializer(DynamicBaseSerializer):
             "description_html",
             "start_date",
             "target_date",
+            "test_handoff_date",
             "status",
             "lead_id",
             "member_ids",
@@ -243,6 +304,14 @@ class ReleaseSerializer(DynamicBaseSerializer):
             "updated_at",
             "archived_at",
             "note",
+            # overdue fields
+            "has_active_overdue",
+            "has_overdue_history",
+            "active_overdue_phase",
+            "has_active_dev_overdue",
+            "has_active_test_overdue",
+            "has_dev_overdue_history",
+            "has_test_overdue_history",
         ]
         read_only_fields = fields
 
@@ -271,3 +340,19 @@ class ReleaseUserPropertiesSerializer(BaseSerializer):
         model = ReleaseUserProperties
         fields = "__all__"
         read_only_fields = ["workspace", "project", "release", "user"]
+
+
+class ReleaseOverdueRecordSerializer(BaseSerializer):
+    class Meta:
+        model = ReleaseOverdueRecord
+        fields = [
+            "id",
+            "release",
+            "phase",
+            "started_at",
+            "ended_at",
+            "triggered_by",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = fields

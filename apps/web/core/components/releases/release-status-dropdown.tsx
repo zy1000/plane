@@ -6,12 +6,9 @@
 
 import React from "react";
 import { observer } from "mobx-react";
-import { MODULE_STATUS } from "@plane/constants";
-import { useTranslation } from "@plane/i18n";
-import type { TModuleStatus } from "@plane/propel/icons";
-import { ModuleStatusIcon } from "@plane/propel/icons";
-import type { IRelease } from "@plane/types";
+import type { IRelease, TReleaseStatus } from "@plane/types";
 import { CustomSelect } from "@plane/ui";
+import { getAllowedReleaseStatusOptions, getReleaseStatusDetails } from "./release-status-config";
 
 type Props = {
   isDisabled: boolean;
@@ -21,10 +18,9 @@ type Props = {
 
 export const ReleaseStatusDropdown = observer(function ReleaseStatusDropdown(props: Props) {
   const { isDisabled, releaseDetails, handleReleaseDetailsChange } = props;
-  const { t } = useTranslation();
-  const releaseStatus = MODULE_STATUS.find((status) => status.value === releaseDetails.status);
-
-  if (!releaseStatus) return <></>;
+  const releaseStatus = getReleaseStatusDetails(releaseDetails.status);
+  const allowedStatusOptions = getAllowedReleaseStatusOptions(releaseDetails.status);
+  const CurrentStatusIcon = releaseStatus.icon;
 
   return (
     <CustomSelect
@@ -34,27 +30,33 @@ export const ReleaseStatusDropdown = observer(function ReleaseStatusDropdown(pro
             isDisabled ? "cursor-not-allowed" : "cursor-pointer"
           }`}
           style={{
-            color: releaseStatus ? releaseStatus.color : "#a3a3a2",
-            backgroundColor: releaseStatus ? `${releaseStatus.color}20` : "#a3a3a220",
+            color: releaseStatus.color,
+            backgroundColor: `${releaseStatus.color}20`,
           }}
         >
-          {(releaseStatus && t(releaseStatus?.i18n_label)) ?? t("project_modules.status.backlog")}
+          <span className="flex items-center gap-1.5">
+            <CurrentStatusIcon className="h-3.5 w-3.5" />
+            {releaseStatus.label}
+          </span>
         </span>
       }
       value={releaseStatus?.value}
-      onChange={(val: TModuleStatus) => {
+      onChange={(val: TReleaseStatus) => {
         handleReleaseDetailsChange({ status: val });
       }}
       disabled={isDisabled}
     >
-      {MODULE_STATUS.map((status) => (
-        <CustomSelect.Option key={status.value} value={status.value}>
-          <div className="flex items-center gap-2">
-            <ModuleStatusIcon status={status.value} />
-            {t(status.i18n_label)}
-          </div>
-        </CustomSelect.Option>
-      ))}
+      {allowedStatusOptions.map((status) => {
+        const StatusIcon = status.icon;
+        return (
+          <CustomSelect.Option key={status.value} value={status.value}>
+            <div className="flex items-center gap-2">
+              <StatusIcon className="h-3.5 w-3.5" style={{ color: status.color }} />
+              {status.label}
+            </div>
+          </CustomSelect.Option>
+        );
+      })}
     </CustomSelect>
   );
 });

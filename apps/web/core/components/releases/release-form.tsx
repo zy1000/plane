@@ -12,6 +12,7 @@ import { Button } from "@plane/propel/button";
 import type { IRelease } from "@plane/types";
 import { Input, TextArea } from "@plane/ui";
 import { getDate, renderFormattedPayloadDate, getTabIndex } from "@plane/utils";
+import { DateDropdown } from "@/components/dropdowns/date";
 import { DateRangeDropdown } from "@/components/dropdowns/date-range";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { ReleaseStatusSelect } from "@/components/releases/release-status-select";
@@ -28,9 +29,10 @@ type Props = {
 const defaultValues: Partial<IRelease> = {
   name: "",
   description: "",
-  status: "backlog",
+  status: "not-started",
   lead_id: null,
   member_ids: [],
+  test_handoff_date: null,
 };
 
 export function ReleaseForm(props: Props) {
@@ -44,11 +46,12 @@ export function ReleaseForm(props: Props) {
     defaultValues: {
       name: data?.name || "",
       description: data?.description || "",
-      status: data?.status || "backlog",
+      status: data?.status || "not-started",
       lead_id: data?.lead_id ?? null,
       member_ids: data?.member_ids || [],
       start_date: data?.start_date ?? null,
       target_date: data?.target_date ?? null,
+      test_handoff_date: data?.test_handoff_date ?? null,
     },
   });
 
@@ -56,7 +59,8 @@ export function ReleaseForm(props: Props) {
   const { t } = useTranslation();
 
   const handleCreateUpdate = async (formData: Partial<IRelease>) => {
-    await handleFormSubmit(formData, dirtyFields);
+    const status = formData.status ?? data?.status ?? "not-started";
+    await handleFormSubmit({ ...formData, status }, dirtyFields);
     reset({ ...defaultValues });
   };
 
@@ -124,6 +128,11 @@ export function ReleaseForm(props: Props) {
             />
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            {isUpdate && (
+              <div className="h-7">
+                <ReleaseStatusSelect control={control} error={errors?.status} tabIndex={getIndex("status")} />
+              </div>
+            )}
             <Controller
               control={control}
               name="start_date"
@@ -156,9 +165,22 @@ export function ReleaseForm(props: Props) {
                 />
               )}
             />
-            <div className="h-7">
-              <ReleaseStatusSelect control={control} error={errors.status} tabIndex={getIndex("status")} />
-            </div>
+            <Controller
+              control={control}
+              name="test_handoff_date"
+              render={({ field: { value, onChange } }) => (
+                <div className="h-7">
+                  <DateDropdown
+                    buttonVariant="border-with-text"
+                    value={getDate(value)}
+                    onChange={(val) => onChange(val ? renderFormattedPayloadDate(val) : null)}
+                    placeholder={t("test_handoff_date")}
+                    hideIcon
+                    tabIndex={getIndex("test_handoff_date")}
+                  />
+                </div>
+              )}
+            />
             <Controller
               control={control}
               name="lead_id"

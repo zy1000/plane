@@ -5,20 +5,22 @@ import json
 from django.contrib.postgres.aggregates import ArrayAgg
 from django.contrib.postgres.fields import ArrayField
 from django.db.models import (
+    BooleanField,
+    Case,
+    CharField,
     Count,
     Exists,
     F,
+    FloatField,
     Func,
     IntegerField,
     OuterRef,
     Prefetch,
     Q,
     Subquery,
+    Sum,
     UUIDField,
     Value,
-    Sum,
-    FloatField,
-    Case,
     When,
 )
 from django.db import models, transaction
@@ -47,6 +49,7 @@ from plane.app.serializers import (
     ReleaseSerializer,
     ReleaseUserPropertiesSerializer,
     ReleaseWriteSerializer,
+    ReleaseOverdueRecordSerializer,
     CycleSerializer,
 )
 from plane.app.serializers.qa import TestPlanDetailSerializer
@@ -59,6 +62,8 @@ from plane.db.models import (
     ReleaseIssue,
     ReleaseLink,
     ReleaseUserProperties,
+    ReleaseOverdueRecord,
+    ReleaseOverduePhase,
     Project,
     ProjectMember,
     User,
@@ -68,6 +73,7 @@ from plane.db.models import (
     TestPlan,
     PlanCase,
 )
+from plane.utils.release.overdue_strategy import sync_overdue_on_status_change
 from plane.utils.analytics_plot import burndown_plot
 from plane.utils.paginator import CustomPaginator
 from plane.utils.response import list_response
@@ -222,12 +228,64 @@ class ReleaseViewSet(BaseViewSet):
             .annotate(cancelled_estimate_point=Sum(Cast("estimate_point__value", FloatField())))
             .values("cancelled_estimate_point")[:1]
         )
+        active_overdue_subquery = ReleaseOverdueRecord.objects.filter(
+            release_id=OuterRef("pk"),
+            ended_at__isnull=True,
+            deleted_at__isnull=True,
+        )
+        any_overdue_subquery = ReleaseOverdueRecord.objects.filter(
+            release_id=OuterRef("pk"),
+            deleted_at__isnull=True,
+        )
+        active_overdue_phase_subquery = (
+            ReleaseOverdueRecord.objects.filter(
+                release_id=OuterRef("pk"),
+                ended_at__isnull=True,
+                deleted_at__isnull=True,
+            )
+            .order_by("-started_at")
+            .values("phase")[:1]
+        )
+        active_dev_overdue_subquery = ReleaseOverdueRecord.objects.filter(
+            release_id=OuterRef("pk"),
+            phase=ReleaseOverduePhase.DEV,
+            ended_at__isnull=True,
+            deleted_at__isnull=True,
+        )
+        active_test_overdue_subquery = ReleaseOverdueRecord.objects.filter(
+            release_id=OuterRef("pk"),
+            phase=ReleaseOverduePhase.TEST,
+            ended_at__isnull=True,
+            deleted_at__isnull=True,
+        )
+        any_dev_overdue_subquery = ReleaseOverdueRecord.objects.filter(
+            release_id=OuterRef("pk"),
+            phase=ReleaseOverduePhase.DEV,
+            deleted_at__isnull=True,
+        )
+        any_test_overdue_subquery = ReleaseOverdueRecord.objects.filter(
+            release_id=OuterRef("pk"),
+            phase=ReleaseOverduePhase.TEST,
+            deleted_at__isnull=True,
+        )
         return (
             super()
             .get_queryset()
             .filter(project_id=self.kwargs.get("project_id"))
             .filter(workspace__slug=self.kwargs.get("slug"))
             .annotate(is_favorite=Exists(favorite_subquery))
+            .annotate(has_active_overdue=Exists(active_overdue_subquery))
+            .annotate(has_overdue_history=Exists(any_overdue_subquery))
+            .annotate(has_active_dev_overdue=Exists(active_dev_overdue_subquery))
+            .annotate(has_active_test_overdue=Exists(active_test_overdue_subquery))
+            .annotate(has_dev_overdue_history=Exists(any_dev_overdue_subquery))
+            .annotate(has_test_overdue_history=Exists(any_test_overdue_subquery))
+            .annotate(
+                active_overdue_phase=Coalesce(
+                    Subquery(active_overdue_phase_subquery, output_field=CharField()),
+                    Value(None, output_field=CharField()),
+                )
+            )
             .prefetch_related("members")
             .prefetch_related(
                 Prefetch(
@@ -326,6 +384,7 @@ class ReleaseViewSet(BaseViewSet):
                     "description_html",
                     "start_date",
                     "target_date",
+                    "test_handoff_date",
                     "status",
                     "lead_id",
                     "member_ids",
@@ -345,6 +404,13 @@ class ReleaseViewSet(BaseViewSet):
                     "backlog_issues",
                     "created_at",
                     "updated_at",
+                    "has_active_overdue",
+                    "has_overdue_history",
+                    "active_overdue_phase",
+                    "has_active_dev_overdue",
+                    "has_active_test_overdue",
+                    "has_dev_overdue_history",
+                    "has_test_overdue_history",
                 )
             ).first()
             model_activity.delay(
@@ -364,6 +430,8 @@ class ReleaseViewSet(BaseViewSet):
     @allow_fine_permission(PermissionKey.RELEASES_VIEW)
     def list(self, request, slug, project_id):
         queryset = self.get_queryset().filter(archived_at__isnull=True)
+        from plane.utils.release.overdue_strategy import scan_releases_for_overdue
+        scan_releases_for_overdue(queryset)
         if self.fields:
             releases = ReleaseSerializer(queryset, many=True, fields=self.fields).data
         else:
@@ -396,6 +464,14 @@ class ReleaseViewSet(BaseViewSet):
                 "backlog_issues",
                 "created_at",
                 "updated_at",
+                "test_handoff_date",
+                "has_active_overdue",
+                "has_overdue_history",
+                "active_overdue_phase",
+                "has_active_dev_overdue",
+                "has_active_test_overdue",
+                "has_dev_overdue_history",
+                "has_test_overdue_history",
             )
             datetime_fields = ["created_at", "updated_at"]
             releases = user_timezone_converter(releases, datetime_fields, request.user.user_timezone)
@@ -672,10 +748,16 @@ class ReleaseViewSet(BaseViewSet):
             )
         current_instance = json.dumps(ReleaseSerializer(current_release).data, cls=DjangoJSONEncoder)
         previous_status = current_release.status
-        serializer = ReleaseWriteSerializer(current_release, data=request.data, partial=True)
+        serializer = ReleaseWriteSerializer(current_release, data=request.data, partial=True,context={'user': request.user})
+
 
         if serializer.is_valid():
-            serializer.save()
+            updated_release = serializer.save()
+
+            new_status = updated_release.status
+            if new_status and new_status != previous_status:
+                sync_overdue_on_status_change(updated_release, previous_status, new_status)
+
             release = release_queryset.values(
                 "id",
                 "workspace_id",
@@ -686,6 +768,7 @@ class ReleaseViewSet(BaseViewSet):
                 "description_html",
                 "start_date",
                 "target_date",
+                "test_handoff_date",
                 "status",
                 "lead_id",
                 "member_ids",
@@ -705,6 +788,13 @@ class ReleaseViewSet(BaseViewSet):
                 "backlog_issues",
                 "created_at",
                 "updated_at",
+                "has_active_overdue",
+                "has_overdue_history",
+                "active_overdue_phase",
+                "has_active_dev_overdue",
+                "has_active_test_overdue",
+                "has_dev_overdue_history",
+                "has_test_overdue_history",
             ).first()
 
             model_activity.delay(
@@ -717,7 +807,6 @@ class ReleaseViewSet(BaseViewSet):
                 origin=base_host(request=request, is_app=True),
             )
 
-            new_status = release.get("status")
             if (
                 new_status
                 and new_status != previous_status
@@ -735,6 +824,23 @@ class ReleaseViewSet(BaseViewSet):
             release = user_timezone_converter(release, datetime_fields, request.user.user_timezone)
             return Response(release, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    @allow_fine_permission(PermissionKey.RELEASES_VIEW)
+    def overdues(self, request, slug, project_id, pk):
+        """返回该发布的逾期记录列表（含已结束记录），最新优先。"""
+        if not Release.objects.filter(
+            workspace__slug=slug, project_id=project_id, pk=pk
+        ).exists():
+            return Response({"error": "Release not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        records = ReleaseOverdueRecord.objects.filter(
+            release_id=pk,
+            project_id=project_id,
+            workspace__slug=slug,
+            deleted_at__isnull=True,
+        ).order_by("-started_at")
+        serializer = ReleaseOverdueRecordSerializer(records, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
     @allow_fine_permission(PermissionKey.RELEASES_DELETE)
     def destroy(self, request, slug, project_id, pk):

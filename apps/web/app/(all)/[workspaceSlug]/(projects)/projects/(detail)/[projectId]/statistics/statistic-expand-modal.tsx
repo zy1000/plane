@@ -12,10 +12,11 @@ import {
   Package,
   Repeat,
 } from "lucide-react";
-import { CYCLE_STATUS, MODULE_STATUS } from "@plane/constants";
+import { CYCLE_STATUS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
 import { getDate, renderFormattedDate } from "@plane/utils";
+import { getReleaseStatusDetails as getReleaseStatusMeta } from "@/components/releases/release-status-config";
 import { ProjectStatisticService, type TProjectStatisticResponse } from "@/services/project";
 
 const projectStatisticService = new ProjectStatisticService();
@@ -151,9 +152,8 @@ function getCycleStatusDetails(status?: string) {
 }
 
 function getModuleStatusDetails(status?: string) {
-  const normalizedStatus = status?.toLowerCase() ?? "planned";
-  const statusDetails = MODULE_STATUS.find((item) => item.value === normalizedStatus) ?? MODULE_STATUS[0];
-  if (normalizedStatus === "in-progress") return { ...statusDetails, textColor: "text-[#F59E0B]" };
+  const statusDetails = getReleaseStatusMeta(status);
+  if (statusDetails.value === "in-progress") return { ...statusDetails, textColor: "text-[#F59E0B]" };
   return statusDetails;
 }
 
@@ -222,7 +222,7 @@ export function StatisticExpandModal({ isOpen, onClose, section, workspaceSlug, 
       const details = getModuleStatusDetails(item.status);
       return (
         <span className={getStatisticStatusTagClassName(details.textColor)}>
-          {t(details.i18n_label)}
+          {details.label}
         </span>
       );
     }

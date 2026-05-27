@@ -6,26 +6,16 @@
 
 import { useMemo } from "react";
 import type { ComponentType, ReactNode, SVGProps } from "react";
-import { Ban, CircleAlert, CircleCheck, CircleDashed, CirclePause, PlayCircle } from "lucide-react";
-import { MODULE_STATUS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import type { IRelease, TReleaseGroupByOption, TReleaseStatus } from "@plane/types";
 import { Avatar } from "@plane/ui";
+import { getReleaseStatusDetails, RELEASE_STATUS_ORDER } from "@/components/releases/release-status-config";
 import { getFileURL } from "@plane/utils";
 import type { TReleaseSidebarGroup } from "@/components/releases/list/release-group-sidebar";
 import { useMember } from "@/hooks/store/use-member";
 import { useRelease } from "@/hooks/store/use-release";
 
-const STATUS_ORDER: TReleaseStatus[] = ["in-progress", "planned", "backlog", "paused", "completed", "cancelled"];
-
-const statusIconByValue: Record<TReleaseStatus, ComponentType<SVGProps<SVGSVGElement>>> = {
-  "in-progress": PlayCircle,
-  planned: CircleDashed,
-  backlog: CircleAlert,
-  paused: CirclePause,
-  completed: CircleCheck,
-  cancelled: Ban,
-};
+const STATUS_ORDER: TReleaseStatus[] = RELEASE_STATUS_ORDER;
 
 type TReleaseGroupsResult = {
   groups: TReleaseSidebarGroup[];
@@ -58,25 +48,25 @@ export const useReleaseGroups = (
         statusMap[status] = [];
       });
       releases.forEach((release) => {
-        const statusKey: TReleaseStatus = (release.status as TReleaseStatus) ?? "backlog";
-        const bucket = statusMap[statusKey] ?? statusMap.backlog ?? [];
+        const statusKey = getReleaseStatusDetails(release.status).value;
+        const bucket = statusMap[statusKey] ?? statusMap["not-started"] ?? [];
         bucket.push(release.id);
         statusMap[statusKey] = bucket;
       });
 
       const groups: TReleaseSidebarGroup[] = STATUS_ORDER.map((statusValue) => {
-        const statusInfo = MODULE_STATUS.find((s) => s.value === statusValue);
-        const IconComponent = statusIconByValue[statusValue] ?? CircleDashed;
+        const statusInfo = getReleaseStatusDetails(statusValue);
+        const IconComponent: ComponentType<SVGProps<SVGSVGElement>> = statusInfo.icon;
         const iconNode: ReactNode = (
           <IconComponent
             className="size-4"
             strokeWidth={2}
-            style={statusInfo?.color ? { color: statusInfo.color } : undefined}
+            style={{ color: statusInfo.color }}
           />
         );
         return {
           id: statusValue,
-          name: statusInfo ? t(statusInfo.i18n_label) : statusValue,
+          name: statusInfo.label,
           count: statusMap[statusValue]?.length ?? 0,
           icon: iconNode,
         };

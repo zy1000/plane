@@ -104,6 +104,11 @@ urlpatterns = [
         name="project-release-overdue-by-assignee",
     ),
     path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/releases/<uuid:pk>/overdues/",
+        ReleaseViewSet.as_view({"get": "overdues"}),
+        name="project-release-overdues",
+    ),
+    path(
         "workspaces/<str:slug>/projects/<uuid:project_id>/releases/<uuid:release_id>/user-properties/",
         ReleaseUserPropertiesEndpoint.as_view(),
         name="release-user-filters",

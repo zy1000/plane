@@ -15,7 +15,12 @@ import { CircularProgressIndicator } from "@plane/ui";
 import { generateQueryParams } from "@plane/utils";
 import { ListItem } from "@/components/core/list";
 import { ReleaseListItemAction } from "@/components/releases/release-list-item-action";
+import { ReleaseOverdueTags } from "@/components/releases/release-overdue-tags";
 import { ReleaseQuickActions } from "@/components/releases/release-quick-actions";
+import {
+  getReleaseOverdueToneTextClass,
+  getReleaseRowTone,
+} from "@/components/releases/release-status-config";
 import { useRelease } from "@/hooks/store/use-release";
 import { useAppRouter } from "@/hooks/use-app-router";
 import { usePlatformOS } from "@/hooks/use-platform-os";
@@ -60,9 +65,12 @@ export const ReleaseListItem = observer(function ReleaseListItem(props: Props) {
 
   const handleItemClick = releaseDetails.archived_at ? handleArchivedClick : undefined;
 
+  const overdueTone = getReleaseRowTone(releaseDetails);
+
   return (
     <ListItem
       title={releaseDetails?.name ?? ""}
+      titleClassName={getReleaseOverdueToneTextClass(overdueTone)}
       itemLink={`/${workspaceSlug?.toString()}/projects/${releaseDetails.project_id}/releases/${releaseDetails.id}/overview`}
       onItemClick={handleItemClick}
       prependTitleElement={
@@ -81,13 +89,20 @@ export const ReleaseListItem = observer(function ReleaseListItem(props: Props) {
         </CircularProgressIndicator>
       }
       appendTitleElement={
-        <button
-          type="button"
-          onClick={openPeek}
-          className={`z-[5] flex-shrink-0 ${isMobile ? "flex" : "hidden group-hover:flex"}`}
-        >
-          <Info className="h-4 w-4 text-placeholder" />
-        </button>
+        <span className="flex items-center gap-2">
+          <ReleaseOverdueTags
+            releaseDetails={releaseDetails}
+            workspaceSlug={workspaceSlug.toString()}
+            projectId={releaseDetails.project_id}
+          />
+          <button
+            type="button"
+            onClick={openPeek}
+            className={`z-[5] flex-shrink-0 ${isMobile ? "flex" : "hidden group-hover:flex"}`}
+          >
+            <Info className="h-4 w-4 text-placeholder" />
+          </button>
+        </span>
       }
       actionableItems={
         <ReleaseListItemAction releaseId={releaseId} releaseDetails={releaseDetails} parentRef={parentRef} />

@@ -48,7 +48,10 @@ CYCLE_STATUS_EMAIL_WHITELIST = {
     Cycle.Status.CANCELLED,
 }
 
-RELEASE_STATUS_EMAIL_WHITELIST = {"paused", "completed", "cancelled"}
+RELEASE_STATUS_EMAIL_WHITELIST = {
+    "completed",
+    "cancelled",
+}
 
 # Maps raw stored statuses to human-friendly Chinese labels used in emails.
 CYCLE_STATUS_LABELS = {
@@ -60,10 +63,11 @@ CYCLE_STATUS_LABELS = {
 }
 
 RELEASE_STATUS_LABELS = {
-    "backlog": "待规划",
-    "planned": "已规划",
+    "not-started": "未开始",
     "in-progress": "进行中",
-    "paused": "已暂停",
+    "pending-test": "待测试",
+    "testing": "测试中",
+    "rejected": "已驳回",
     "completed": "已完成",
     "cancelled": "已取消",
 }

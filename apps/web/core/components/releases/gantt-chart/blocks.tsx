@@ -7,11 +7,10 @@
 import { observer } from "mobx-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { MODULE_STATUS } from "@plane/constants";
-import { ModuleStatusIcon } from "@plane/propel/icons";
 import { Tooltip } from "@plane/propel/tooltip";
 import { SIDEBAR_WIDTH } from "@/components/gantt-chart/constants";
 import { getBlockViewDetails } from "@/components/issues/issue-layouts/utils";
+import { getReleaseStatusDetails } from "@/components/releases/release-status-config";
 import { useRelease } from "@/hooks/store/use-release";
 import { useAppRouter } from "@/hooks/use-app-router";
 import { usePlatformOS } from "@/hooks/use-platform-os";
@@ -27,10 +26,11 @@ export const ReleaseGanttBlock = observer(function ReleaseGanttBlock(props: Prop
   const { getReleaseById } = useRelease();
   const releaseDetails = getReleaseById(releaseId);
   const { isMobile } = usePlatformOS();
+  const releaseStatus = getReleaseStatusDetails(releaseDetails?.status);
 
   const { message, blockStyle } = getBlockViewDetails(
     releaseDetails,
-    MODULE_STATUS.find((s) => s.value === releaseDetails?.status)?.color ?? ""
+    releaseStatus.color
   );
 
   return (
@@ -71,6 +71,8 @@ export const ReleaseGanttSidebarBlock = observer(function ReleaseGanttSidebarBlo
   const { workspaceSlug } = useParams();
   const { getReleaseById } = useRelease();
   const releaseDetails = getReleaseById(releaseId);
+  const releaseStatus = getReleaseStatusDetails(releaseDetails?.status);
+  const ReleaseStatusIcon = releaseStatus.icon;
 
   return (
     <Link
@@ -78,7 +80,7 @@ export const ReleaseGanttSidebarBlock = observer(function ReleaseGanttSidebarBlo
       href={`/${workspaceSlug?.toString()}/projects/${releaseDetails?.project_id}/releases/${releaseDetails?.id}/overview`}
       draggable={false}
     >
-      <ModuleStatusIcon status={releaseDetails?.status ?? "backlog"} height="16px" width="16px" />
+      <ReleaseStatusIcon className="h-4 w-4" style={{ color: releaseStatus.color }} />
       <h6 className="flex-grow truncate text-13 font-medium">{releaseDetails?.name}</h6>
     </Link>
   );

@@ -20,7 +20,7 @@ import {
   Repeat,
   Timer,
 } from "lucide-react";
-import { CYCLE_STATUS, MODULE_STATUS, PROJECT_ANALYTICS_VIEW_PERMISSION_KEY } from "@plane/constants";
+import { CYCLE_STATUS, PROJECT_ANALYTICS_VIEW_PERMISSION_KEY } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { BarChart } from "@plane/propel/charts/bar-chart";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
@@ -30,6 +30,7 @@ import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view
 import { OverdueByAssigneeCard } from "@/components/common/overdue-by-assignee-card";
 import { PageHead } from "@/components/core/page-title";
 import { CycleOverviewFullscreenModal } from "@/components/cycles/cycle-overview-fullscreen-modal";
+import { getReleaseStatusDetails as getReleaseStatusMeta } from "@/components/releases/release-status-config";
 import { useProject } from "@/hooks/store/use-project";
 import { useUserPermissions } from "@/hooks/store/user";
 import { ProjectStatisticService, type TProjectStatisticResponse } from "@/services/project";
@@ -250,10 +251,8 @@ function ProjectStatisticsPage() {
   };
 
   const getModuleStatusDetails = (status?: string) => {
-    const normalizedStatus = status?.toLowerCase() ?? "planned";
-    const statusDetails = MODULE_STATUS.find((item) => item.value === normalizedStatus) ?? MODULE_STATUS[0];
-
-    if (normalizedStatus === "in-progress") {
+    const statusDetails = getReleaseStatusMeta(status);
+    if (statusDetails.value === "in-progress") {
       return {
         ...statusDetails,
         textColor: "text-[#F59E0B]",
@@ -553,7 +552,7 @@ function ProjectStatisticsPage() {
                                       <span
                                         className={getStatisticStatusTagClassName(statusDetails.textColor)}
                                       >
-                                        {t(statusDetails.i18n_label)}
+                                        {statusDetails.label}
                                       </span>
                                     );
                                   })()}

@@ -9,7 +9,6 @@ import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 import { SquareUser } from "lucide-react";
 import {
-  MODULE_STATUS,
   EUserPermissions,
   EUserPermissionsLevel,
   IS_FAVORITE_MENU_OPEN,
@@ -23,11 +22,13 @@ import { Tooltip } from "@plane/propel/tooltip";
 import type { IRelease } from "@plane/types";
 import { FavoriteStar } from "@plane/ui";
 import { renderFormattedPayloadDate, getDate } from "@plane/utils";
+import { DateDropdown } from "@/components/dropdowns/date";
 import { DateRangeDropdown } from "@/components/dropdowns/date-range";
 import { ButtonAvatars } from "@/components/dropdowns/member/avatar";
+import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { ReleaseQuickActions } from "@/components/releases/release-quick-actions";
 import { ReleaseStatusDropdown } from "@/components/releases/release-status-dropdown";
-import { useMember } from "@/hooks/store/use-member";
+import { formatReleaseUpdateError } from "@/components/releases/use-release-error-message";
 import { useRelease } from "@/hooks/store/use-release";
 import { useReleaseFilter } from "@/hooks/store/use-release-filter";
 import { useUserPermissions } from "@/hooks/store/user";
@@ -43,7 +44,6 @@ export const ReleaseListItemAction = observer(function ReleaseListItemAction(pro
   const { workspaceSlug, projectId } = useParams();
   const { allowPermissions } = useUserPermissions();
   const { addReleaseToFavorites, removeReleaseFromFavorites, updateReleaseDetails } = useRelease();
-  const { getUserDetails } = useMember();
   const { currentProjectDisplayFilters } = useReleaseFilter();
   const { t } = useTranslation();
 
@@ -52,16 +52,25 @@ export const ReleaseListItemAction = observer(function ReleaseListItemAction(pro
   const showStartDateProperty = displayProperties.start_date !== false;
   const showEndDateProperty = displayProperties.end_date !== false;
   const showDateRange = showStartDateProperty || showEndDateProperty;
+  const showTestHandoffDateProperty = displayProperties.test_handoff_date !== false;
   const showMembersProperty = displayProperties.members !== false;
   const { setValue: toggleFavoriteMenu, storedValue } = useLocalStorage<boolean>(IS_FAVORITE_MENU_OPEN, false);
 
-  const releaseStatus = MODULE_STATUS.find((status) => status.value === releaseDetails.status);
   const isEditingAllowed = allowPermissions(
     [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
     EUserPermissionsLevel.PROJECT
   );
   const isDisabled = !isEditingAllowed || !!releaseDetails?.archived_at;
   const renderIcon = Boolean(releaseDetails.start_date) || Boolean(releaseDetails.target_date);
+  const dateButtonContainerClassName = `h-6 w-full flex ${isDisabled ? "cursor-not-allowed" : "cursor-pointer"} items-center gap-1.5 text-tertiary border-[0.5px] border-strong rounded-sm text-11`;
+  const startEndDateButtonClassName = "bg-[#f0fdf4] hover:bg-[#ecfdf3] focus:bg-[#ecfdf3] active:bg-[#ecfdf3]";
+  const testHandoffDateButtonClassName = "bg-[#fefce8] hover:bg-[#fef9c3] focus:bg-[#fef9c3] active:bg-[#fef9c3]";
+  const dateRangeTooltipHeading =
+    showStartDateProperty && showEndDateProperty
+      ? `${t("start_date")}/${t("end_date")}`
+      : showStartDateProperty
+        ? t("start_date")
+        : t("end_date");
 
   const handleAddToFavorites = (e: React.MouseEvent<HTMLButtonElement>) => {
     e.stopPropagation();
@@ -126,27 +135,27 @@ export const ReleaseListItemAction = observer(function ReleaseListItemAction(pro
               : undefined,
           });
         } else {
+          const { title, message } = formatReleaseUpdateError(err);
           setToast({
             type: TOAST_TYPE.ERROR,
-            title: "Error!",
-            message: err?.detail ?? err?.error ?? "Release could not be updated. Please try again.",
+            title,
+            message,
           });
         }
       });
   };
 
-  const leadDetails = releaseDetails.lead_id ? getUserDetails(releaseDetails.lead_id) : undefined;
-
   return (
     <>
       {showDateRange && (
         <DateRangeDropdown
-          buttonContainerClassName={`h-6 w-full flex ${isDisabled ? "cursor-not-allowed" : "cursor-pointer"} items-center gap-1.5 text-tertiary border-[0.5px] border-strong rounded-sm text-11`}
+          buttonContainerClassName={dateButtonContainerClassName}
+          buttonClassName={startEndDateButtonClassName}
           buttonVariant="transparent-with-text"
           className="h-7"
           value={{
-            from: getDate(releaseDetails.start_date),
-            to: getDate(releaseDetails.target_date),
+            from: showStartDateProperty ? getDate(releaseDetails.start_date) : undefined,
+            to: showEndDateProperty ? getDate(releaseDetails.target_date) : undefined,
           }}
           onSelect={(val) => {
             handleReleaseDetailsChange({
@@ -161,10 +170,32 @@ export const ReleaseListItemAction = observer(function ReleaseListItemAction(pro
           }}
           disabled={isDisabled}
           hideIcon={{ from: renderIcon ?? true, to: renderIcon }}
+          showTooltip
+          customTooltipHeading={dateRangeTooltipHeading}
         />
       )}
 
-      {showStatusProperty && releaseStatus && (
+      {showTestHandoffDateProperty && (
+        <DateDropdown
+          buttonContainerClassName={dateButtonContainerClassName}
+          buttonClassName={testHandoffDateButtonClassName}
+          buttonVariant="transparent-with-text"
+          className="h-7"
+          value={getDate(releaseDetails.test_handoff_date)}
+          onChange={(val) => {
+            handleReleaseDetailsChange({
+              test_handoff_date: val ? renderFormattedPayloadDate(val) : null,
+            });
+          }}
+          placeholder={t("test_handoff_date")}
+          disabled={isDisabled}
+          hideIcon
+          labelClassName="text-11"
+          showTooltip
+        />
+      )}
+
+      {showStatusProperty && (
         <ReleaseStatusDropdown
           isDisabled={isDisabled}
           releaseDetails={releaseDetails}
@@ -172,16 +203,32 @@ export const ReleaseListItemAction = observer(function ReleaseListItemAction(pro
         />
       )}
 
-      {showMembersProperty &&
-        (leadDetails ? (
-          <span className="cursor-default">
-            <ButtonAvatars showTooltip={false} userIds={leadDetails?.id} />
-          </span>
-        ) : (
-          <Tooltip tooltipContent="No lead">
-            <SquareUser className="h-4 w-4 text-tertiary" />
-          </Tooltip>
-        ))}
+      {showMembersProperty && (
+        <div className="h-6">
+          <MemberDropdown
+            value={releaseDetails.lead_id ?? null}
+            onChange={(val) => {
+              if (val === releaseDetails.lead_id) return;
+              handleReleaseDetailsChange({ lead_id: val });
+            }}
+            projectId={projectId?.toString() ?? ""}
+            multiple={false}
+            buttonVariant="transparent-without-text"
+            buttonContainerClassName={isDisabled ? "cursor-not-allowed" : "cursor-pointer"}
+            disabled={isDisabled}
+            placeholder={t("lead")}
+            button={
+              releaseDetails.lead_id ? (
+                <ButtonAvatars showTooltip={false} userIds={releaseDetails.lead_id} />
+              ) : (
+                <Tooltip tooltipContent="No lead">
+                  <SquareUser className="h-4 w-4 text-tertiary" />
+                </Tooltip>
+              )
+            }
+          />
+        </div>
+      )}
 
       {isEditingAllowed && !releaseDetails.archived_at && (
         <FavoriteStar

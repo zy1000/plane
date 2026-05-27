@@ -306,6 +306,7 @@ export default {
   labels: "Labels",
   create_new_label: "Create new label",
   start_date: "Start date",
+  test_handoff_date: "QA handoff date",
   end_date: "End date",
   due_date: "Due date",
   estimate: "Estimate",

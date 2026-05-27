@@ -468,6 +468,7 @@ export default {
   labels: "标签",
   create_new_label: "创建新标签",
   start_date: "开始日期",
+  test_handoff_date: "转测日期",
   end_date: "结束日期",
   due_date: "截止日期",
   estimate: "估算",

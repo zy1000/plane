@@ -11,6 +11,7 @@ import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { IRelease } from "@plane/types";
 import { EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
 import { ReleaseForm } from "@/components/releases/release-form";
+import { formatReleaseUpdateError } from "@/components/releases/use-release-error-message";
 import { useRelease } from "@/hooks/store/use-release";
 import useKeypress from "@/hooks/use-keypress";
 import { usePlatformOS } from "@/hooks/use-platform-os";
@@ -84,10 +85,11 @@ export const CreateUpdateReleaseModal = observer(function CreateUpdateReleaseMod
               : undefined,
           });
         } else {
+          const { title, message } = formatReleaseUpdateError(err);
           setToast({
             type: TOAST_TYPE.ERROR,
-            title: "Error!",
-            message: err?.detail ?? err?.error ?? "Release could not be updated. Please try again.",
+            title,
+            message,
           });
         }
       });

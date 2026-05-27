@@ -77,6 +77,10 @@ app.conf.beat_schedule = {
         "task": "plane.bgtasks.exporter_expired_task.delete_old_s3_link",
         "schedule": crontab(hour=3, minute=45),  # UTC 03:45
     },
+    "check-every-day-to-scan-release-overdues": {
+        "task": "plane.bgtasks.release_overdue_task.scan_release_overdues",
+        "schedule": crontab(hour=0, minute=0),  # UTC 04:00
+    },
 }
 
 

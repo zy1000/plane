@@ -26,6 +26,7 @@ interface IListItemProps {
   disableLink?: boolean;
   className?: string;
   itemClassName?: string;
+  titleClassName?: string;
   actionItemContainerClassName?: string;
   isSidebarOpen?: boolean;
   quickActionElement?: React.ReactNode;
@@ -51,6 +52,7 @@ export function ListItem(props: IListItemProps) {
     isSidebarOpen = false,
     quickActionElement,
     itemClassName = "",
+    titleClassName = "",
     preventDefaultProgress = false,
     leftElementClassName = "",
     rightElementClassName = "",
@@ -87,7 +89,14 @@ export function ListItem(props: IListItemProps) {
             <div className={cn("flex items-center gap-4 min-w-0 truncate", leftElementClassName)}>
               {prependTitleElement && <span className="flex items-center flex-shrink-0">{prependTitleElement}</span>}
               <Tooltip tooltipContent={title} position="top" isMobile={isMobile}>
-                <span className="truncate text-sm max-w-full md:max-w-[30rem] lg:max-w-[42rem]">{title}</span>
+                <span
+                  className={cn(
+                    "truncate text-sm max-w-full md:max-w-[30rem] lg:max-w-[42rem]",
+                    titleClassName
+                  )}
+                >
+                  {title}
+                </span>
               </Tooltip>
             </div>
             {appendTitleElement && (

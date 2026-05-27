@@ -1,4 +1,4 @@
-import type { IRelease, ILinkDetails, ReleaseLink, TIssuesResponse } from "@plane/types";
+import type { IRelease, ILinkDetails, IReleaseOverdueRecord, ReleaseLink, TIssuesResponse } from "@plane/types";
 import { APIService } from "../api.service";
 
 export class ReleaseService extends APIService {
@@ -186,6 +186,14 @@ export class ReleaseService extends APIService {
 
   async removeReleaseFromFavorites(workspaceSlug: string, projectId: string, releaseId: string): Promise<any> {
     return this.delete(`/api/workspaces/${workspaceSlug}/projects/${projectId}/user-favorite-releases/${releaseId}/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async listOverdues(workspaceSlug: string, projectId: string, releaseId: string): Promise<IReleaseOverdueRecord[]> {
+    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/releases/${releaseId}/overdues/`)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;

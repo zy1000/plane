@@ -30,7 +30,6 @@ import { Tab } from "@headlessui/react";
 import { Button } from "@plane/propel/button";
 import {
   CYCLE_STATUS,
-  MODULE_STATUS,
   PROJECT_ERROR_MESSAGES,
   isProjectPermissionError,
 } from "@plane/constants";
@@ -53,6 +52,7 @@ import useLocalStorage from "@/hooks/use-local-storage";
 import { RichTextEditor } from "@/components/editor/rich-text";
 import { OverdueByAssigneeCard } from "@/components/common/overdue-by-assignee-card";
 import { CycleOverviewFullscreenModal } from "@/components/cycles/cycle-overview-fullscreen-modal";
+import { getReleaseStatusDetails } from "@/components/releases/release-status-config";
 
 type Props = {
   releaseId: string;
@@ -233,7 +233,7 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
   const daysLeft = typeof rawDays === "number" ? Math.max(0, rawDays) : undefined;
 
   const status = releaseDetails?.status;
-  const statusInfo = MODULE_STATUS.find((s) => s.value === status);
+  const statusInfo = getReleaseStatusDetails(status);
 
   const releaseLead = releaseDetails?.lead_id ? getUserDetails(releaseDetails.lead_id) : undefined;
   const releaseStartDate = getDate(releaseDetails?.start_date);
@@ -303,6 +303,28 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
       )
   );
 
+  const resolveReleaseFileApiErrorMessage = (error: unknown, fallbackMessage: string): string => {
+    if (typeof error === "string" && error.trim()) return error;
+    if (!error || typeof error !== "object") return fallbackMessage;
+
+    const err = error as {
+      error?: unknown;
+      detail?: unknown;
+      message?: unknown;
+    };
+
+    const raw = [err.error, err.detail, err.message];
+    for (const candidate of raw) {
+      if (typeof candidate === "string" && candidate.trim()) return candidate;
+      if (Array.isArray(candidate)) {
+        const firstText = candidate.find((item) => typeof item === "string" && item.trim());
+        if (typeof firstText === "string") return firstText;
+      }
+    }
+
+    return fallbackMessage;
+  };
+
   const showReleaseFileApiError = (error: unknown, genericTitle: string, genericMessage: string) => {
     if (isProjectPermissionError(error)) {
       setToast({
@@ -313,7 +335,11 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
           : undefined,
       });
     } else {
-      setToast({ type: TOAST_TYPE.ERROR, title: genericTitle, message: genericMessage });
+      setToast({
+        type: TOAST_TYPE.ERROR,
+        title: genericTitle,
+        message: resolveReleaseFileApiErrorMessage(error, genericMessage),
+      });
     }
   };
 
@@ -711,7 +737,7 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
                 className="inline-flex items-center rounded-md px-2.5 py-1 text-xs font-medium"
                 style={{ color: statusInfo.color, backgroundColor: `${statusInfo.color}20` }}
               >
-                {t(statusInfo.i18n_label)}
+                {statusInfo.label}
               </span>
             )}
             {releaseStartDate && releaseTargetDate && (

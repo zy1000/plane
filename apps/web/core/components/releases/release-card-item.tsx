@@ -11,7 +11,6 @@ import Link from "next/link";
 import { useParams, usePathname, useSearchParams } from "next/navigation";
 import { Info, SquareUser } from "lucide-react";
 import {
-  MODULE_STATUS,
   PROGRESS_STATE_GROUPS_DETAILS,
   EUserPermissions,
   EUserPermissionsLevel,
@@ -23,11 +22,17 @@ import { TOAST_TYPE, setPromiseToast, setToast } from "@plane/propel/toast";
 import { Tooltip } from "@plane/propel/tooltip";
 import type { IRelease } from "@plane/types";
 import { Card, FavoriteStar, LinearProgressIndicator } from "@plane/ui";
-import { getDate, renderFormattedPayloadDate, generateQueryParams } from "@plane/utils";
+import { cn, getDate, renderFormattedPayloadDate, generateQueryParams } from "@plane/utils";
 import { DateRangeDropdown } from "@/components/dropdowns/date-range";
 import { ButtonAvatars } from "@/components/dropdowns/member/avatar";
+import { ReleaseOverdueTags } from "@/components/releases/release-overdue-tags";
 import { ReleaseQuickActions } from "@/components/releases/release-quick-actions";
+import {
+  getReleaseOverdueToneTextClass,
+  getReleaseRowTone,
+} from "@/components/releases/release-status-config";
 import { ReleaseStatusDropdown } from "@/components/releases/release-status-dropdown";
+import { formatReleaseUpdateError } from "@/components/releases/use-release-error-message";
 import { useMember } from "@/hooks/store/use-member";
 import { useRelease } from "@/hooks/store/use-release";
 import { useUserPermissions } from "@/hooks/store/user";
@@ -117,10 +122,11 @@ export const ReleaseCardItem = observer(function ReleaseCardItem(props: Props) {
         });
       })
       .catch((err) => {
+        const { title, message } = formatReleaseUpdateError(err);
         setToast({
           type: TOAST_TYPE.ERROR,
-          title: "Error!",
-          message: err?.detail ?? "Release could not be updated. Please try again.",
+          title,
+          message,
         });
       });
   };
@@ -146,8 +152,6 @@ export const ReleaseCardItem = observer(function ReleaseCardItem(props: Props) {
     releaseDetails.cancelled_issues;
 
   const completedIssues = releaseDetails.completed_issues;
-  const statusMeta = MODULE_STATUS.find((status) => status.value === releaseDetails.status);
-
   const issueCount = !totalIssues || totalIssues === 0
     ? `0 work items`
     : totalIssues === completedIssues
@@ -163,23 +167,33 @@ export const ReleaseCardItem = observer(function ReleaseCardItem(props: Props) {
     color: group.color,
   }));
 
+  const overdueTone = getReleaseRowTone(releaseDetails);
+  const overdueToneClass = getReleaseOverdueToneTextClass(overdueTone);
+
   return (
     <div className="relative" data-prevent-progress>
       <Link ref={parentRef} href={`/${workspaceSlug}/projects/${releaseDetails.project_id}/releases/${releaseDetails.id}/overview`}>
         <Card>
           <div>
             <div className="flex items-center justify-between gap-2">
-              <Tooltip tooltipContent={releaseDetails.name} position="top" isMobile={isMobile}>
-                <span className="truncate text-14 font-medium">{releaseDetails.name}</span>
-              </Tooltip>
+              <div className="flex items-center gap-2 min-w-0">
+                <Tooltip tooltipContent={releaseDetails.name} position="top" isMobile={isMobile}>
+                  <span className={cn("truncate text-14 font-medium", overdueToneClass)}>
+                    {releaseDetails.name}
+                  </span>
+                </Tooltip>
+                <ReleaseOverdueTags
+                  releaseDetails={releaseDetails}
+                  workspaceSlug={workspaceSlug.toString()}
+                  projectId={releaseDetails.project_id}
+                />
+              </div>
               <div className="flex items-center gap-2" onClick={handleEventPropagation}>
-                {statusMeta && (
-                  <ReleaseStatusDropdown
-                    isDisabled={isDisabled}
-                    releaseDetails={releaseDetails}
-                    handleReleaseDetailsChange={handleReleaseDetailsChange}
-                  />
-                )}
+                <ReleaseStatusDropdown
+                  isDisabled={isDisabled}
+                  releaseDetails={releaseDetails}
+                  handleReleaseDetailsChange={handleReleaseDetailsChange}
+                />
                 <button type="button" onClick={openPeek}>
                   <Info className="h-4 w-4 text-placeholder" />
                 </button>

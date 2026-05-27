@@ -39,6 +39,7 @@ const DISPLAY_PROPERTY_OPTIONS: { key: TReleaseDisplayPropertyKey; labelKey: str
   { key: "issue_count", labelKey: "cycle.display.properties.issue_count" },
   { key: "start_date", labelKey: "cycle.display.properties.start_date" },
   { key: "end_date", labelKey: "cycle.display.properties.end_date" },
+  { key: "test_handoff_date", labelKey: "test_handoff_date" },
   { key: "created_by", labelKey: "cycle.display.properties.created_by" },
   { key: "members", labelKey: "cycle.display.properties.members" },
 ];

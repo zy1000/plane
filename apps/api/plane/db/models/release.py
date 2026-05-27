@@ -2,6 +2,7 @@
 from django.conf import settings
 from django.db import models
 from django.db.models import Q
+from django.utils import timezone
 
 # Module imports
 from .project import ProjectBaseModel
@@ -52,12 +53,13 @@ def get_default_display_properties():
 
 
 class ReleaseStatus(models.TextChoices):
-    BACKLOG = "backlog"
-    PLANNED = "planned"
-    IN_PROGRESS = "in-progress"
-    PAUSED = "paused"
-    COMPLETED = "completed"
-    CANCELLED = "cancelled"
+    NOT_STARTED = "not-started", "未开始"
+    IN_PROGRESS = "in-progress", "进行中"
+    PENDING_TEST = "pending-test", "待测试"
+    TESTING = "testing", "测试中"
+    REJECTED = "rejected", "已驳回"
+    COMPLETED = "completed", "已完成"
+    CANCELLED = "cancelled", "已取消"
 
 
 class Release(ProjectBaseModel):
@@ -68,16 +70,10 @@ class Release(ProjectBaseModel):
     description_html = models.JSONField(verbose_name="Release Description HTML", blank=True, null=True)
     start_date = models.DateField(null=True)
     target_date = models.DateField(null=True)
+    test_handoff_date = models.DateField(null=True)
     status = models.CharField(
-        choices=(
-            ("backlog", "Backlog"),
-            ("planned", "Planned"),
-            ("in-progress", "In Progress"),
-            ("paused", "Paused"),
-            ("completed", "Completed"),
-            ("cancelled", "Cancelled"),
-        ),
-        default="planned",
+        choices=ReleaseStatus.choices,
+        default=ReleaseStatus.NOT_STARTED,
         max_length=20,
     )
     lead = models.ForeignKey("db.User", on_delete=models.SET_NULL, related_name="release_leads", null=True)
@@ -213,3 +209,45 @@ class ReleaseUserProperties(ProjectBaseModel):
 
     def __str__(self):
         return f"{self.release.name} {self.user.email}"
+
+
+class ReleaseOverduePhase(models.TextChoices):
+    DEV = "dev", "研发逾期"
+    TEST = "test", "测试逾期"
+
+
+class ReleaseOverdueTrigger(models.TextChoices):
+    SYSTEM = "system", "系统自动"
+    USER = "user", "人工标记"
+
+
+class ReleaseOverdueRecord(ProjectBaseModel):
+    release = models.ForeignKey(
+        Release,
+        on_delete=models.CASCADE,
+        related_name="overdue_records",
+    )
+    phase = models.CharField(max_length=8, choices=ReleaseOverduePhase.choices)
+    started_at = models.DateTimeField(default=timezone.now)
+    ended_at = models.DateTimeField(null=True, blank=True)
+    triggered_by = models.CharField(
+        max_length=8,
+        choices=ReleaseOverdueTrigger.choices,
+        default=ReleaseOverdueTrigger.SYSTEM,
+    )
+
+    class Meta:
+        verbose_name = "Release Overdue Record"
+        verbose_name_plural = "Release Overdue Records"
+        db_table = "release_overdue_records"
+        ordering = ("-started_at",)
+        constraints = [
+            models.UniqueConstraint(
+                fields=["release", "phase"],
+                condition=Q(ended_at__isnull=True, deleted_at__isnull=True),
+                name="release_overdue_record_unique_active_per_phase",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.release_id} {self.phase} {self.started_at}"

@@ -42,6 +42,7 @@ const DEFAULT_RELEASE_DISPLAY_PROPERTIES = {
   issue_count: true,
   start_date: true,
   end_date: true,
+  test_handoff_date: true,
   created_by: true,
   members: true,
 };

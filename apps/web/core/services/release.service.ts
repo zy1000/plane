@@ -1,6 +1,13 @@
 import { API_BASE_URL } from "@plane/constants";
 import { FileUploadService, generateFileUploadPayload, getFileMetaDataForUpload } from "@plane/services";
-import type { IRelease, ILinkDetails, ReleaseLink, TIssuesResponse, TFileSignedURLResponse } from "@plane/types";
+import type {
+  IRelease,
+  ILinkDetails,
+  IReleaseOverdueRecord,
+  ReleaseLink,
+  TIssuesResponse,
+  TFileSignedURLResponse,
+} from "@plane/types";
 import type { TCycleOverdueByAssigneeResponse } from "@/services/cycle.service";
 import { APIService } from "@/services/api.service";
 
@@ -458,6 +465,19 @@ export class ReleaseService extends APIService {
       `/api/workspaces/${workspaceSlug}/projects/${projectId}/release/file/${fileId}/download/`
     )
       .then((response) => response?.data?.download_url as string)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 获取发布的逾期记录列表（按 started_at 降序，详见 docs/release-requirements.md §8） */
+  async getReleaseOverdues(
+    workspaceSlug: string,
+    projectId: string,
+    releaseId: string
+  ): Promise<IReleaseOverdueRecord[]> {
+    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/releases/${releaseId}/overdues/`)
+      .then((response) => response?.data ?? [])
       .catch((error) => {
         throw error?.response?.data;
       });

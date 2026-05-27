@@ -9,12 +9,11 @@ from rest_framework.response import Response
 from plane.app.permissions import allow_fine_permission, PermissionKey
 from plane.app.views.base import BaseViewSet
 from plane.bgtasks.storage_metadata_task import get_asset_object_metadata
-from plane.db.models import Release, FileAsset, Workspace
+from plane.db.models import Release, FileAsset, Workspace, ReleaseStatus
 from plane.settings.storage import S3Storage
 from plane.utils.asset_upload import presigned_post_for_asset
 from plane.utils.paginator import CustomPaginator
 from plane.utils.response import list_response
-
 
 RELEASE_FILE_ENTITY_TYPE = FileAsset.EntityTypeContext.RELEASE_FILE
 
@@ -127,6 +126,10 @@ class ReleaseFileAPI(BaseViewSet):
         ).first()
         if not asset:
             return Response({"error": "File not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        # 状态为未开始、进行中的附件才可以删除
+        if asset.release.status not in [ReleaseStatus.NOT_STARTED, ReleaseStatus.IN_PROGRESS]:
+            return Response({"error": "当前状态下不可以删除附件"}, status=status.HTTP_404_NOT_FOUND)
 
         asset.is_deleted = True
         asset.deleted_at = timezone.now()
