@@ -171,6 +171,7 @@ export type TProjectIssuesSearchParams = {
   parent?: boolean;
   issue_relation?: boolean;
   cycle?: boolean;
+  release?: boolean;
   module?: string;
   sub_issue?: boolean;
   issue_id?: string;

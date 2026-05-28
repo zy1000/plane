@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
+from uuid import UUID
+
 # Third party imports
 from rest_framework import status
 from rest_framework.response import Response
@@ -14,7 +16,16 @@ from plane.app.serializers import (
     WorkspaceRoleSerializer,
 )
 from plane.app.views.base import BaseAPIView, BaseViewSet
-from plane.db.models import Permission, Workspace, WorkspaceRole
+from plane.db.models import IssueType, Permission, Workspace, WorkspaceRole
+from plane.db.models.issue_type import (
+    ISSUE_TYPE_PERMISSION_ACTIONS,
+    ISSUE_TYPE_PERMISSION_KEY_PREFIX,
+    ISSUE_TYPE_TEMPLATE_PERMISSION_KEY_PREFIX,
+    build_issue_type_permission_key,
+    build_issue_type_template_permission_descriptors,
+    build_issue_type_template_permission_key,
+    parse_issue_type_permission_key,
+)
 
 
 class WorkspaceRoleViewSet(BaseViewSet):
@@ -129,7 +140,12 @@ class WorkspaceRolePermissionAPIView(BaseAPIView):
 
         permission_keys = role.permissions.get("permission_keys", [])
         if isinstance(permission_keys, list):
-            return list(dict.fromkeys([key for key in permission_keys if isinstance(key, str)]))
+            keys = list(
+                dict.fromkeys([key for key in permission_keys if isinstance(key, str)])
+            )
+            if role.type == WorkspaceRole.RoleType.PROJECT_TEMPLATE:
+                return self.normalize_project_template_permission_keys(keys)
+            return keys
 
         legacy_permission_keys = [
             key
@@ -144,20 +160,111 @@ class WorkspaceRolePermissionAPIView(BaseAPIView):
         if role.type == WorkspaceRole.RoleType.WORKSPACE:
             qs = qs.filter(scope="workspace")
         elif role.type == WorkspaceRole.RoleType.PROJECT_TEMPLATE:
-            qs = qs.filter(scope="project")
+            qs = qs.filter(scope="project").exclude(
+                key__startswith=ISSUE_TYPE_PERMISSION_KEY_PREFIX
+            )
         return qs.order_by("module", "sort_order", "key")
+
+    def normalize_project_template_permission_keys(self, permission_keys):
+        issue_type_key_map = self.get_issue_type_key_to_template_key(permission_keys)
+        return list(
+            dict.fromkeys(
+                [issue_type_key_map.get(key, key) for key in permission_keys]
+            )
+        )
+
+    def get_issue_type_key_to_template_key(self, permission_keys):
+        issue_type_keys = {}
+        for key in permission_keys:
+            parsed_key = parse_issue_type_permission_key(key)
+            if not parsed_key:
+                continue
+
+            issue_type_id_hex, action = parsed_key
+            try:
+                issue_type_id = UUID(hex=issue_type_id_hex)
+            except ValueError:
+                continue
+            issue_type_keys[key] = (issue_type_id, action)
+
+        if not issue_type_keys:
+            return {}
+
+        issue_types = IssueType.objects.filter(
+            id__in=[issue_type_id for issue_type_id, _ in issue_type_keys.values()]
+        ).only("id", "name")
+        issue_types_by_id = {issue_type.id: issue_type for issue_type in issue_types}
+
+        key_map = {}
+        for key, (issue_type_id, action) in issue_type_keys.items():
+            issue_type = issue_types_by_id.get(issue_type_id)
+            if not issue_type:
+                continue
+            key_map[key] = build_issue_type_template_permission_key(
+                issue_type.name, action
+            )
+        return key_map
+
+    def get_issue_type_template_permissions(self, role, bound_permission_keys):
+        issue_type_names = (
+            IssueType.objects.filter(
+                project__workspace=role.workspace,
+                deleted_at__isnull=True,
+                is_active=True,
+            )
+            .order_by("name")
+            .values_list("name", flat=True)
+            .distinct()
+        )
+        descriptors = build_issue_type_template_permission_descriptors(issue_type_names)
+        bound_key_set = set(bound_permission_keys)
+        action_labels = dict(ISSUE_TYPE_PERMISSION_ACTIONS)
+
+        permissions = []
+        for key, descriptor in descriptors.items():
+            name = descriptor["name"]
+            action = descriptor["action"]
+            name_digest = key[len(ISSUE_TYPE_TEMPLATE_PERMISSION_KEY_PREFIX):].rsplit(
+                ".", 1
+            )[0]
+            safe_name_for_label = name[:240]
+            safe_name_for_category = name[:80]
+            label = action_labels[action].format(safe_name_for_label)
+            permissions.append(
+                {
+                    "id": key,
+                    "key": key,
+                    "name": label,
+                    "description": label,
+                    "scope": "project",
+                    "module": f"issue.type_template.{name_digest}",
+                    "action": action,
+                    "category": f"工作项类型 - {safe_name_for_category}",
+                    "sort_order": 100,
+                    "is_active": True,
+                    "is_bound": key in bound_key_set,
+                }
+            )
+
+        return permissions
 
     def build_response_data(self, role):
         bound_permission_keys = self.get_bound_permission_keys(role)
-        permission_serializer = PermissionSerializer(
-            self.get_permission_queryset(role),
-            many=True,
-            context={"bound_permission_keys": bound_permission_keys},
+        permissions = list(
+            PermissionSerializer(
+                self.get_permission_queryset(role),
+                many=True,
+                context={"bound_permission_keys": bound_permission_keys},
+            ).data
         )
+        if role.type == WorkspaceRole.RoleType.PROJECT_TEMPLATE:
+            permissions.extend(
+                self.get_issue_type_template_permissions(role, bound_permission_keys)
+            )
         return {
             "role": WorkspaceRoleSerializer(role).data,
             "permission_keys": bound_permission_keys,
-            "permissions": permission_serializer.data,
+            "permissions": permissions,
         }
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")

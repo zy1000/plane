@@ -25,6 +25,7 @@ import { Card, FavoriteStar, LinearProgressIndicator } from "@plane/ui";
 import { cn, getDate, renderFormattedPayloadDate, generateQueryParams } from "@plane/utils";
 import { DateRangeDropdown } from "@/components/dropdowns/date-range";
 import { ButtonAvatars } from "@/components/dropdowns/member/avatar";
+import { DEFAULT_RELEASE_DETAIL_TAB, getReleaseDetailTabStorageKey } from "@/components/releases/release-overview";
 import { ReleaseOverdueTags } from "@/components/releases/release-overdue-tags";
 import { ReleaseQuickActions } from "@/components/releases/release-quick-actions";
 import {
@@ -37,6 +38,7 @@ import { useMember } from "@/hooks/store/use-member";
 import { useRelease } from "@/hooks/store/use-release";
 import { useUserPermissions } from "@/hooks/store/user";
 import { useAppRouter } from "@/hooks/use-app-router";
+import { setValueIntoLocalStorage } from "@/hooks/use-local-storage";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 
 type Props = {
@@ -169,10 +171,15 @@ export const ReleaseCardItem = observer(function ReleaseCardItem(props: Props) {
 
   const overdueTone = getReleaseRowTone(releaseDetails);
   const overdueToneClass = getReleaseOverdueToneTextClass(overdueTone);
+  const releaseOverviewPath = `/${workspaceSlug}/projects/${releaseDetails.project_id}/releases/${releaseDetails.id}/overview`;
+
+  const handleNavigateToOverview = () => {
+    setValueIntoLocalStorage(getReleaseDetailTabStorageKey(releaseId), DEFAULT_RELEASE_DETAIL_TAB);
+  };
 
   return (
     <div className="relative" data-prevent-progress>
-      <Link ref={parentRef} href={`/${workspaceSlug}/projects/${releaseDetails.project_id}/releases/${releaseDetails.id}/overview`}>
+      <Link ref={parentRef} href={releaseOverviewPath} onClick={handleNavigateToOverview}>
         <Card>
           <div>
             <div className="flex items-center justify-between gap-2">

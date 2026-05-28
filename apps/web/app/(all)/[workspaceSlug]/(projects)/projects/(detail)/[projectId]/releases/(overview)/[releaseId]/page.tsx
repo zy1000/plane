@@ -30,7 +30,7 @@ function ReleaseOverviewPage({ params }: Route.ComponentProps) {
   return (
     <>
       <PageHead title="Release Overview" />
-      {releaseId ? <ReleaseDetailContent releaseId={releaseId.toString()} isOpen /> : null}
+      {releaseId ? <ReleaseDetailContent releaseId={releaseId.toString()} isOpen showTabs={false} /> : null}
     </>
   );
 }

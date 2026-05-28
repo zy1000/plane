@@ -83,7 +83,11 @@ from .workspace.module import WorkspaceModulesEndpoint
 from .workspace.cycle import WorkspaceCyclesEndpoint
 from .workspace.quick_link import QuickLinkViewSet
 from .workspace.sticky import WorkspaceStickyViewSet
-from .workspace.role import PermissionViewSet, WorkspaceRolePermissionAPIView, WorkspaceRoleViewSet
+from .workspace.role import (
+    PermissionViewSet,
+    WorkspaceRolePermissionAPIView,
+    WorkspaceRoleViewSet,
+)
 from .workspace.group import (
     WorkspaceGroupViewSet,
     WorkspaceGroupMemberViewSet,

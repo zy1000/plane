@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
+import hashlib
+
 # Django imports
 from django.core.exceptions import ValidationError
 from django.db import models
@@ -19,6 +21,8 @@ from .project import ProjectBaseModel
 #   - 所有 IssueType 都会衍生 5 条权限，由 IssueType.id 唯一确定，
 #     运行时鉴权也直接基于 issue_type_id 推导 key（见 plane.app.permissions.base）。
 ISSUE_TYPE_PERMISSION_KEY_PREFIX = "project.issue_type."
+ISSUE_TYPE_TEMPLATE_PERMISSION_KEY_PREFIX = "project.issue_type_template."
+ISSUE_TYPE_TEMPLATE_PERMISSION_DESCRIPTOR_KEY = "issue_type_permission_templates"
 ISSUE_TYPE_PERMISSION_ACTIONS = (
     ("create", "创建{}类型工作项"),
     ("edit", "编辑{}类型工作项"),
@@ -26,6 +30,9 @@ ISSUE_TYPE_PERMISSION_ACTIONS = (
     ("archive", "归档{}类型工作项"),
     ("unarchive", "恢复{}类型工作项"),
 )
+ISSUE_TYPE_PERMISSION_ACTION_SET = {
+    action for action, _ in ISSUE_TYPE_PERMISSION_ACTIONS
+}
 
 
 def build_issue_type_permission_key(issue_type_id, action: str) -> str:
@@ -34,6 +41,58 @@ def build_issue_type_permission_key(issue_type_id, action: str) -> str:
     else:
         id_hex = str(issue_type_id).replace("-", "")
     return f"{ISSUE_TYPE_PERMISSION_KEY_PREFIX}{id_hex}.{action}"
+
+
+def parse_issue_type_permission_key(key: str):
+    if not isinstance(key, str) or not key.startswith(ISSUE_TYPE_PERMISSION_KEY_PREFIX):
+        return None
+
+    rest = key[len(ISSUE_TYPE_PERMISSION_KEY_PREFIX):]
+    if "." not in rest:
+        return None
+
+    issue_type_id_hex, action = rest.rsplit(".", 1)
+    if action not in ISSUE_TYPE_PERMISSION_ACTION_SET or not issue_type_id_hex:
+        return None
+
+    return issue_type_id_hex, action
+
+
+def build_issue_type_template_permission_key(issue_type_name: str, action: str) -> str:
+    name = (issue_type_name or "").strip()
+    name_digest = hashlib.sha1(name.encode("utf-8")).hexdigest()
+    return f"{ISSUE_TYPE_TEMPLATE_PERMISSION_KEY_PREFIX}{name_digest}.{action}"
+
+
+def parse_issue_type_template_permission_key(key: str):
+    if not isinstance(key, str) or not key.startswith(
+        ISSUE_TYPE_TEMPLATE_PERMISSION_KEY_PREFIX
+    ):
+        return None
+
+    rest = key[len(ISSUE_TYPE_TEMPLATE_PERMISSION_KEY_PREFIX):]
+    if "." not in rest:
+        return None
+
+    name_digest, action = rest.rsplit(".", 1)
+    if action not in ISSUE_TYPE_PERMISSION_ACTION_SET or not name_digest:
+        return None
+
+    return name_digest, action
+
+
+def build_issue_type_template_permission_descriptors(issue_type_names):
+    descriptors = {}
+    for issue_type_name in issue_type_names:
+        name = (issue_type_name or "").strip()
+        if not name:
+            continue
+
+        for action, _ in ISSUE_TYPE_PERMISSION_ACTIONS:
+            key = build_issue_type_template_permission_key(name, action)
+            descriptors[key] = {"name": name, "action": action}
+
+    return descriptors
 
 
 def sync_issue_type_permissions(issue_type, *, deactivate: bool = False) -> None:

@@ -30,7 +30,12 @@ from plane.utils.grouper import (
 from plane.utils.issue_filters import issue_filters
 from plane.utils.order_queryset import order_issue_queryset
 from plane.utils.paginator import GroupedOffsetPaginator, SubGroupedOffsetPaginator
-from plane.app.permissions import allow_permission, ROLE, allow_fine_permission, PermissionKey
+from plane.app.permissions import (
+    allow_permission,
+    ROLE,
+    allow_fine_permission,
+    PermissionKey,
+)
 from plane.utils.host import base_host
 from plane.utils.filters import ComplexFilterBackend
 from plane.utils.filters import IssueFilterSet
@@ -77,7 +82,9 @@ class CycleIssueViewSet(BaseViewSet):
         return (
             issues.annotate(
                 cycle_id=Subquery(
-                    CycleIssue.objects.filter(issue=OuterRef("id"), deleted_at__isnull=True).values("cycle_id")[:1]
+                    CycleIssue.objects.filter(
+                        issue=OuterRef("id"), deleted_at__isnull=True
+                    ).values("cycle_id")[:1]
                 )
             )
             .annotate(
@@ -101,7 +108,9 @@ class CycleIssueViewSet(BaseViewSet):
                 .annotate(count=Func(F("id"), function="Count"))
                 .values("count")
             )
-            .prefetch_related("assignees", "labels", "issue_module__module", "issue_cycle__cycle")
+            .prefetch_related(
+                "assignees", "labels", "issue_module__module", "issue_cycle__cycle"
+            )
         )
 
     @method_decorator(gzip_page)
@@ -109,7 +118,9 @@ class CycleIssueViewSet(BaseViewSet):
     def list(self, request, slug, project_id, cycle_id):
         filters = issue_filters(request.query_params, "GET")
         issue_queryset = (
-            Issue.issue_objects.filter(issue_cycle__cycle_id=cycle_id, issue_cycle__deleted_at__isnull=True)
+            Issue.issue_objects.filter(
+                issue_cycle__cycle_id=cycle_id, issue_cycle__deleted_at__isnull=True
+            )
             .filter(project_id=project_id)
             .filter(workspace__slug=slug)
         )
@@ -137,14 +148,18 @@ class CycleIssueViewSet(BaseViewSet):
         sub_group_by = request.GET.get("sub_group_by", False)
 
         # issue queryset
-        issue_queryset = issue_queryset_grouper(queryset=issue_queryset, group_by=group_by, sub_group_by=sub_group_by)
+        issue_queryset = issue_queryset_grouper(
+            queryset=issue_queryset, group_by=group_by, sub_group_by=sub_group_by
+        )
 
         if group_by:
             # Check group and sub group value paginate
             if sub_group_by:
                 if group_by == sub_group_by:
                     return Response(
-                        {"error": "Group by and sub group by cannot have same parameters"},
+                        {
+                            "error": "Group by and sub group by cannot have same parameters"
+                        },
                         status=status.HTTP_400_BAD_REQUEST,
                     )
                 else:
@@ -216,25 +231,35 @@ class CycleIssueViewSet(BaseViewSet):
                 request=request,
                 queryset=issue_queryset,
                 total_count_queryset=total_issue_queryset,
-                on_results=lambda issues: issue_on_results(group_by=group_by, issues=issues, sub_group_by=sub_group_by),
+                on_results=lambda issues: issue_on_results(
+                    group_by=group_by, issues=issues, sub_group_by=sub_group_by
+                ),
             )
 
     @allow_fine_permission(PermissionKey.SPRINTS_ISSUE_MANAGE)
     def create(self, request, slug, project_id, cycle_id):
         issues = request.data.get("issues", [])
         if not issues:
-            return Response({"error": "Issues are required"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "Issues are required"}, status=status.HTTP_400_BAD_REQUEST
+            )
 
-        cycle = Cycle.objects.get(workspace__slug=slug, project_id=project_id, pk=cycle_id)
+        cycle = Cycle.objects.get(
+            workspace__slug=slug, project_id=project_id, pk=cycle_id
+        )
 
         if cycle.end_date is not None and cycle.end_date < timezone.now():
             return Response(
-                {"error": "The Cycle has already been completed so no new issues can be added"},
+                {
+                    "error": "The Cycle has already been completed so no new issues can be added"
+                },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
         # Get all CycleIssues already created
-        cycle_issues = list(CycleIssue.objects.filter(~Q(cycle_id=cycle_id), issue_id__in=issues))
+        cycle_issues = list(
+            CycleIssue.objects.filter(~Q(cycle_id=cycle_id), issue_id__in=issues)
+        )
         existing_issues = [str(cycle_issue.issue_id) for cycle_issue in cycle_issues]
         new_issues = list(set(issues) - set(existing_issues))
 
@@ -285,7 +310,9 @@ class CycleIssueViewSet(BaseViewSet):
             current_instance=json.dumps(
                 {
                     "updated_cycle_issues": update_cycle_issue_activity,
-                    "created_cycle_issues": serializers.serialize("json", created_records),
+                    "created_cycle_issues": serializers.serialize(
+                        "json", created_records
+                    ),
                 }
             ),
             epoch=int(timezone.now().timestamp()),
@@ -295,8 +322,12 @@ class CycleIssueViewSet(BaseViewSet):
         # 对应模块添加工作项
         if cycle.module:
             for issue_id in issues:
-                ModuleIssue.objects.get_or_create(module=cycle.module, issue_id=issue_id, workspace=cycle.workspace,
-                                           project=cycle.project)
+                ModuleIssue.objects.get_or_create(
+                    module=cycle.module,
+                    issue_id=issue_id,
+                    workspace=cycle.workspace,
+                    project=cycle.project,
+                )
         return Response({"message": "success"}, status=status.HTTP_201_CREATED)
 
     @allow_fine_permission(PermissionKey.SPRINTS_ISSUE_MANAGE)
@@ -309,7 +340,9 @@ class CycleIssueViewSet(BaseViewSet):
         )
         cycle = cycle_issue.first()
         if cycle.cycle.module:
-            ModuleIssue.objects.filter(module=cycle.cycle.module, issue_id=issue_id).delete(soft=False)
+            ModuleIssue.objects.filter(
+                module=cycle.cycle.module, issue_id=issue_id
+            ).delete(soft=False)
         issue_activity.delay(
             type="cycle.activity.deleted",
             requested_data=json.dumps(
@@ -327,6 +360,5 @@ class CycleIssueViewSet(BaseViewSet):
             origin=base_host(request=request, is_app=True),
         )
         cycle_issue.delete()
-
 
         return Response(status=status.HTTP_204_NO_CONTENT)

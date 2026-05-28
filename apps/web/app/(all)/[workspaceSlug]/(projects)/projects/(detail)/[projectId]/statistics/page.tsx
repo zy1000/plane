@@ -537,7 +537,7 @@ function ProjectStatisticsPage() {
                                   <button
                                     type="button"
                                     className="truncate hover:underline text-left"
-                                    onClick={() => router.push(`/${effectiveWorkspaceSlug}/projects/${effectiveProjectId}/releases/${release.id}`)}
+                                    onClick={() => router.push(`/${effectiveWorkspaceSlug}/projects/${effectiveProjectId}/releases/${release.id}/overview`)}
                                   >
                                     {release.name}
                                   </button>

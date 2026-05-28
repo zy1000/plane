@@ -37,6 +37,8 @@ type Props = {
   projectId: string;
   releaseId: string;
   emptyHint?: string;
+  /** 仅展示最近 N 条动态。未传时显示全部。 */
+  limit?: number;
 };
 
 const iconForActivity = (activity: TReleaseActivity): React.ReactNode => {
@@ -115,7 +117,7 @@ const ReleaseActivityRow = observer(function ReleaseActivityRow(props: {
               </Link>
             )}
             <Tooltip tooltipContent={message} position="top">
-              <span className="min-w-0 max-w-lg truncate">{message}</span>
+              <span className="min-w-0 flex-1 truncate">{message}</span>
             </Tooltip>
             <span className="flex-shrink-0 whitespace-nowrap text-tertiary">{calculateTimeAgo(activity.created_at)}</span>
           </div>
@@ -135,9 +137,11 @@ const ReleaseActivityRow = observer(function ReleaseActivityRow(props: {
 });
 
 export const ReleaseActivityFeed = observer(function ReleaseActivityFeed(props: Props) {
-  const { workspaceSlug, projectId, releaseId, emptyHint = "暂无动态" } = props;
+  const { workspaceSlug, projectId, releaseId, emptyHint = "暂无动态", limit } = props;
   const { getActivitiesByReleaseId, isLoadingByReleaseId, fetchActivities } = useReleaseActivity();
-  const activities = getActivitiesByReleaseId(releaseId);
+  const allActivities = getActivitiesByReleaseId(releaseId);
+  const activities =
+    typeof limit === "number" && limit >= 0 ? allActivities.slice(0, limit) : allActivities;
   const isLoading = isLoadingByReleaseId(releaseId);
 
   const [reasonModal, setReasonModal] = useState<{

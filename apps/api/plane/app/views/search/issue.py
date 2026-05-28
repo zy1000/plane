@@ -104,6 +104,15 @@ class IssueSearchEndpoint(BaseAPIView):
 
         return issues
 
+    def exclude_issues_in_releases(self, issues: QuerySet) -> QuerySet:
+        """
+        Exclude issues already linked to releases
+        """
+        issues = issues.exclude(
+            Q(issue_release__isnull=False) & Q(issue_release__deleted_at__isnull=True))
+
+        return issues
+
     def exclude_issues_in_module(self, issues: QuerySet, module: str) -> QuerySet:
         """
         Exclude issues in a module
@@ -146,6 +155,7 @@ class IssueSearchEndpoint(BaseAPIView):
         parent = request.query_params.get("parent", "false")
         issue_relation = request.query_params.get("issue_relation", "false")
         cycle = request.query_params.get("cycle", "false")
+        release = request.query_params.get("release", "false")
         module = request.query_params.get("module", False)
         sub_issue = request.query_params.get("sub_issue", "false")
         target_date = request.query_params.get("target_date", True)
@@ -185,6 +195,9 @@ class IssueSearchEndpoint(BaseAPIView):
 
         if cycle == "true":
             issues = self.exclude_issues_in_cycles(issues)
+
+        if release == "true":
+            issues = self.exclude_issues_in_releases(issues)
 
         if module:
             issues = self.exclude_issues_in_module(issues, module)

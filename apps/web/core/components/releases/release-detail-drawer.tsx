@@ -3,8 +3,10 @@ import { observer } from "mobx-react";
 import { Drawer } from "antd";
 import { useAppRouter } from "@/hooks/use-app-router";
 import { useParams } from "next/navigation";
+import { DEFAULT_RELEASE_DETAIL_TAB, getReleaseDetailTabStorageKey } from "@/components/releases/release-overview";
 import { ReleaseDetailContent } from "./release-detail-content";
 import { useRelease } from "@/hooks/store/use-release";
+import { setValueIntoLocalStorage } from "@/hooks/use-local-storage";
 
 type Props = {
   releaseId: string;
@@ -21,6 +23,7 @@ export const ReleaseDetailDrawer: React.FC<Props> = observer((props) => {
 
   const handleFullscreen = () => {
     if (workspaceSlug && projectId && releaseId) {
+      setValueIntoLocalStorage(getReleaseDetailTabStorageKey(releaseId.toString()), DEFAULT_RELEASE_DETAIL_TAB);
       router.push(`/${workspaceSlug}/projects/${projectId}/releases/${releaseId}/overview`);
     }
   };

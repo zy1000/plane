@@ -14,10 +14,17 @@ from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from plane.app.permissions import allow_permission, ROLE, allow_fine_permission, PermissionKey
+from plane.app.permissions import (
+    allow_permission,
+    ROLE,
+    allow_fine_permission,
+    PermissionKey,
+)
 from plane.app.serializers import ReleaseIssueSerializer
 from plane.bgtasks.issue_activities_task import issue_activity
-from plane.bgtasks.release_activities_task import release_activity as release_activity_task
+from plane.bgtasks.release_activities_task import (
+    release_activity as release_activity_task,
+)
 from plane.db.models import (
     Issue,
     FileAsset,
@@ -33,7 +40,11 @@ from plane.utils.grouper import (
 )
 from plane.utils.issue_filters import issue_filters
 from plane.utils.order_queryset import order_issue_queryset
-from plane.utils.paginator import GroupedOffsetPaginator, SubGroupedOffsetPaginator, CustomPaginator
+from plane.utils.paginator import (
+    GroupedOffsetPaginator,
+    SubGroupedOffsetPaginator,
+    CustomPaginator,
+)
 from plane.utils.filters import ComplexFilterBackend
 from plane.utils.filters import IssueFilterSet
 from .. import BaseViewSet
@@ -52,7 +63,9 @@ class ReleaseIssueViewSet(BaseViewSet):
         return (
             issues.annotate(
                 cycle_id=Subquery(
-                    CycleIssue.objects.filter(issue=OuterRef("id"), deleted_at__isnull=True).values("cycle_id")[:1]
+                    CycleIssue.objects.filter(
+                        issue=OuterRef("id"), deleted_at__isnull=True
+                    ).values("cycle_id")[:1]
                 )
             )
             .annotate(
@@ -109,13 +122,17 @@ class ReleaseIssueViewSet(BaseViewSet):
         group_by = request.GET.get("group_by", False)
         sub_group_by = request.GET.get("sub_group_by", False)
 
-        issue_queryset = issue_queryset_grouper(queryset=issue_queryset, group_by=group_by, sub_group_by=sub_group_by)
+        issue_queryset = issue_queryset_grouper(
+            queryset=issue_queryset, group_by=group_by, sub_group_by=sub_group_by
+        )
 
         if group_by:
             if sub_group_by:
                 if group_by == sub_group_by:
                     return Response(
-                        {"error": "Group by and sub group by cannot have same parameters"},
+                        {
+                            "error": "Group by and sub group by cannot have same parameters"
+                        },
                         status=status.HTTP_400_BAD_REQUEST,
                     )
                 else:
@@ -186,14 +203,18 @@ class ReleaseIssueViewSet(BaseViewSet):
                 request=request,
                 queryset=issue_queryset,
                 total_count_queryset=total_issue_queryset,
-                on_results=lambda issues: issue_on_results(group_by=group_by, issues=issues, sub_group_by=sub_group_by),
+                on_results=lambda issues: issue_on_results(
+                    group_by=group_by, issues=issues, sub_group_by=sub_group_by
+                ),
             )
 
     @allow_fine_permission(PermissionKey.RELEASES_ISSUE_MANAGE)
     def create_release_issues(self, request, slug, project_id, release_id):
         issues = request.data.get("issues", [])
         if not issues:
-            return Response({"error": "Issues are required"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "Issues are required"}, status=status.HTTP_400_BAD_REQUEST
+            )
         project = Project.objects.get(pk=project_id)
         _ = ReleaseIssue.objects.bulk_create(
             [
@@ -229,7 +250,9 @@ class ReleaseIssueViewSet(BaseViewSet):
         )
         release_activity_task.delay(
             type="release_issue.activity.created",
-            requested_data=json.dumps({"issue_names": issue_names, "count": len(issues)}),
+            requested_data=json.dumps(
+                {"issue_names": issue_names, "count": len(issues)}
+            ),
             current_instance=None,
             release_id=str(release_id),
             actor_id=str(request.user.id),
@@ -260,7 +283,10 @@ class ReleaseIssueViewSet(BaseViewSet):
                 batch_size=10,
                 ignore_conflicts=True,
             )
-            issue_name = Issue.objects.filter(pk=issue_id).values_list("name", flat=True).first() or ""
+            issue_name = (
+                Issue.objects.filter(pk=issue_id).values_list("name", flat=True).first()
+                or ""
+            )
             _ = [
                 issue_activity.delay(
                     type="release.activity.created",
@@ -278,7 +304,9 @@ class ReleaseIssueViewSet(BaseViewSet):
             _ = [
                 release_activity_task.delay(
                     type="release_issue.activity.created",
-                    requested_data=json.dumps({"issue_names": [issue_name], "count": 1}),
+                    requested_data=json.dumps(
+                        {"issue_names": [issue_name], "count": 1}
+                    ),
                     current_instance=None,
                     release_id=str(release),
                     actor_id=str(request.user.id),
@@ -300,7 +328,10 @@ class ReleaseIssueViewSet(BaseViewSet):
                 if (release_issue.first() and release_issue.first().release)
                 else None
             )
-            issue_name = Issue.objects.filter(pk=issue_id).values_list("name", flat=True).first() or ""
+            issue_name = (
+                Issue.objects.filter(pk=issue_id).values_list("name", flat=True).first()
+                or ""
+            )
             issue_activity.delay(
                 type="release.activity.deleted",
                 requested_data=json.dumps({"release_id": str(release_id)}),
@@ -334,8 +365,13 @@ class ReleaseIssueViewSet(BaseViewSet):
             issue_id=issue_id,
         )
         first_link = release_issue.first()
-        release_name = first_link.release.name if (first_link and first_link.release) else ""
-        issue_name = Issue.objects.filter(pk=issue_id).values_list("name", flat=True).first() or ""
+        release_name = (
+            first_link.release.name if (first_link and first_link.release) else ""
+        )
+        issue_name = (
+            Issue.objects.filter(pk=issue_id).values_list("name", flat=True).first()
+            or ""
+        )
         issue_activity.delay(
             type="release.activity.deleted",
             requested_data=json.dumps({"release_id": str(release_id)}),
@@ -357,5 +393,7 @@ class ReleaseIssueViewSet(BaseViewSet):
             epoch=int(timezone.now().timestamp()),
         )
         release_issue.delete()
-        CycleIssue.objects.filter(issue_id=issue_id, workspace__slug=slug, project_id=project_id).delete(soft=False)
+        CycleIssue.objects.filter(
+            issue_id=issue_id, workspace__slug=slug, project_id=project_id
+        ).delete(soft=False)
         return Response(status=status.HTTP_204_NO_CONTENT)

@@ -57,21 +57,8 @@ export const ReleaseCommentsSection = observer(function ReleaseCommentsSection(p
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3">
-      {!disabled && (
-        <div className="shrink-0">
-          <ReleaseCommentCreate
-            workspaceSlug={workspaceSlug}
-            workspaceId={workspaceId}
-            projectId={projectId}
-            releaseId={releaseId}
-            placeholder="发表评论..."
-            onSubmit={handleCreate}
-          />
-        </div>
-      )}
-
-      <div className="vertical-scrollbar scrollbar-sm min-h-0 flex-1 overflow-y-auto pr-1">
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="vertical-scrollbar scrollbar-sm min-h-0 flex-1 overflow-y-auto px-6 py-5">
         {isLoading && comments.length === 0 ? (
           <Loader className="space-y-3">
             <Loader.Item height="60px" />
@@ -101,6 +88,19 @@ export const ReleaseCommentsSection = observer(function ReleaseCommentsSection(p
           </div>
         )}
       </div>
+
+      {!disabled && (
+        <div className="relative z-[2] shrink-0 border-t border-subtle bg-surface-1 px-6 py-3">
+          <ReleaseCommentCreate
+            workspaceSlug={workspaceSlug}
+            workspaceId={workspaceId}
+            projectId={projectId}
+            releaseId={releaseId}
+            placeholder="发表评论..."
+            onSubmit={handleCreate}
+          />
+        </div>
+      )}
     </div>
   );
 });

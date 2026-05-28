@@ -15,8 +15,8 @@ from plane.app.views.release.base import ReleaseAPI, ReleaseOverdueByAssigneeEnd
 from plane.app.views.release.file import ReleaseFileAPI
 
 router = SimpleRouter()
-router.register('release', ReleaseAPI, basename='release')
-router.register('release/file', ReleaseFileAPI, basename='release-file')
+router.register("release", ReleaseAPI, basename="release")
+router.register("release/file", ReleaseFileAPI, basename="release-file")
 
 urlpatterns = [
     path(
@@ -151,5 +151,5 @@ urlpatterns = [
         ReleaseArchiveUnarchiveEndpoint.as_view(),
         name="release-archive-unarchive",
     ),
-    path('workspaces/<str:slug>/projects/<uuid:project_id>/', include(router.urls)),
+    path("workspaces/<str:slug>/projects/<uuid:project_id>/", include(router.urls)),
 ]

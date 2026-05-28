@@ -24,12 +24,18 @@ from plane.db.models import (
     WorkspaceUserLink,
     UserRecentVisit,
     Issue,
+    IssueType,
     Page,
     Project,
     ProjectMember,
     WorkspaceHomePreference,
     Sticky,
     WorkspaceUserPreference,
+)
+from plane.db.models.issue_type import (
+    ISSUE_TYPE_PERMISSION_KEY_PREFIX,
+    ISSUE_TYPE_TEMPLATE_PERMISSION_DESCRIPTOR_KEY,
+    build_issue_type_template_permission_descriptors,
 )
 from plane.utils.constants import RESTRICTED_WORKSPACE_SLUGS
 from plane.utils.url import contains_url
@@ -237,8 +243,24 @@ class WorkspaceRolePermissionBindingSerializer(serializers.Serializer):
         query = Permission.objects.filter(key__in=normalized_keys, is_active=True)
         if allowed_scope:
             query = query.filter(scope=allowed_scope)
+        if role and role.type == WorkspaceRole.RoleType.PROJECT_TEMPLATE:
+            query = query.exclude(key__startswith=ISSUE_TYPE_PERMISSION_KEY_PREFIX)
 
         existing_keys = set(query.values_list("key", flat=True))
+        issue_type_template_permissions = {}
+        if role and role.type == WorkspaceRole.RoleType.PROJECT_TEMPLATE:
+            available_template_permissions = (
+                self._get_workspace_issue_type_template_permissions(role.workspace)
+            )
+            selected_template_keys = {
+                key for key in normalized_keys if key in available_template_permissions
+            }
+            existing_keys.update(selected_template_keys)
+            issue_type_template_permissions = {
+                key: available_template_permissions[key] for key in selected_template_keys
+            }
+        self._issue_type_template_permissions = issue_type_template_permissions
+
         invalid_keys = [key for key in normalized_keys if key not in existing_keys]
 
         if invalid_keys:
@@ -251,12 +273,31 @@ class WorkspaceRolePermissionBindingSerializer(serializers.Serializer):
 
         return normalized_keys
 
+    def _get_workspace_issue_type_template_permissions(self, workspace):
+        issue_type_names = (
+            IssueType.objects.filter(
+                project__workspace=workspace,
+                deleted_at__isnull=True,
+                is_active=True,
+            )
+            .order_by("name")
+            .values_list("name", flat=True)
+            .distinct()
+        )
+        return build_issue_type_template_permission_descriptors(issue_type_names)
+
     def save(self, **kwargs):
         role = self.context["role"]
         permissions_payload = (
             role.permissions if isinstance(role.permissions, dict) else {}
         )
         permissions_payload["permission_keys"] = self.validated_data["permission_keys"]
+        if role.type == WorkspaceRole.RoleType.PROJECT_TEMPLATE:
+            permissions_payload[ISSUE_TYPE_TEMPLATE_PERMISSION_DESCRIPTOR_KEY] = getattr(
+                self, "_issue_type_template_permissions", {}
+            )
+        else:
+            permissions_payload.pop(ISSUE_TYPE_TEMPLATE_PERMISSION_DESCRIPTOR_KEY, None)
         role.permissions = permissions_payload
         role.save()
         return role

@@ -9,30 +9,40 @@
 import { useCallback, useRef, useState } from "react";
 import { observer } from "mobx-react";
 import { useParams, usePathname } from "next/navigation";
-import { ChartNoAxesColumn, PanelRight, Rocket, SlidersHorizontal } from "lucide-react";
+import { ChartNoAxesColumn, ChevronDown, PanelRight, Rocket, SlidersHorizontal } from "lucide-react";
 import {
   EIssueFilterType,
   ISSUE_DISPLAY_FILTERS_BY_PAGE,
   EUserPermissions,
   EUserPermissionsLevel,
   WORK_ITEM_TRACKER_ELEMENTS,
+  PROJECT_ERROR_MESSAGES,
+  isProjectPermissionError,
 } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
-import { Button } from "@plane/propel/button";
-import { Tooltip } from "@plane/propel/tooltip";
-import type { ICustomSearchSelectOption, IIssueDisplayFilterOptions, IIssueDisplayProperties } from "@plane/types";
+import { Button, getButtonStyling } from "@plane/propel/button";
+import { TOAST_TYPE, setToast } from "@plane/propel/toast";
+import type {
+  ICustomSearchSelectOption,
+  IIssueDisplayFilterOptions,
+  IIssueDisplayProperties,
+  ISearchIssueResponse,
+} from "@plane/types";
 import { EIssuesStoreType, EIssueLayoutTypes } from "@plane/types";
-import { Breadcrumbs, Header, BreadcrumbNavigationSearchDropdown } from "@plane/ui";
+import { Breadcrumbs, CustomMenu, Header, BreadcrumbNavigationSearchDropdown } from "@plane/ui";
 import { cn } from "@plane/utils";
 import { WorkItemsModal } from "@/components/analytics/work-items/modal";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { SwitcherLabel } from "@/components/common/switcher-label";
+import { ExistingIssuesListModal } from "@/components/core/modals/existing-issues-list-modal";
 import {
   DisplayFiltersSelection,
   FiltersDropdown,
   LayoutSelection,
   MobileLayoutSelection,
 } from "@/components/issues/issue-layouts/filters";
+import { RELEASE_DETAIL_TABS, DEFAULT_RELEASE_DETAIL_TAB, getReleaseDetailTabStorageKey } from "@/components/releases/release-overview";
+import type { ReleaseDetailTabKey } from "@/components/releases/release-overview";
 import { ReleaseQuickActions } from "@/components/releases/release-quick-actions";
 import { WorkItemFiltersToggle } from "@/components/work-item-filters/filters-toggle";
 import { useCommandPalette } from "@/hooks/store/use-command-palette";
@@ -41,15 +51,18 @@ import { useProject } from "@/hooks/store/use-project";
 import { useRelease } from "@/hooks/store/use-release";
 import { useUserPermissions } from "@/hooks/store/user";
 import { useAppRouter } from "@/hooks/use-app-router";
+import { setValueIntoLocalStorage } from "@/hooks/use-local-storage";
 import { useIssuesActions } from "@/hooks/use-issues-actions";
 import useLocalStorage from "@/hooks/use-local-storage";
-import { usePlatformOS } from "@/hooks/use-platform-os";
 import { CommonProjectBreadcrumbs } from "@/plane-web/components/breadcrumbs/common";
 import { IconButton } from "@plane/propel/icon-button";
+
+const DEFAULT_RELEASE_DETAIL_TAB_KEY = DEFAULT_RELEASE_DETAIL_TAB;
 
 export const ReleaseIssuesHeader = observer(function ReleaseIssuesHeader() {
   const parentRef = useRef<HTMLDivElement>(null);
   const [analyticsModal, setAnalyticsModal] = useState(false);
+  const [openExistingIssueListModal, setOpenExistingIssueListModal] = useState(false);
   const { t } = useTranslation();
   const router = useAppRouter();
   const { workspaceSlug, projectId, releaseId: routerReleaseId } = useParams();
@@ -57,10 +70,9 @@ export const ReleaseIssuesHeader = observer(function ReleaseIssuesHeader() {
   const workspaceSlugValue = workspaceSlug?.toString();
   const projectIdValue = projectId?.toString();
   const releaseId = routerReleaseId ? routerReleaseId.toString() : undefined;
-  const { isMobile } = usePlatformOS();
   const {
     issuesFilter: { issueFilters },
-    issues: { getGroupIssueCount },
+    issues: { addIssuesToRelease },
   } = useIssues(EIssuesStoreType.RELEASE);
   const { updateFilters } = useIssuesActions(EIssuesStoreType.RELEASE);
   const { getProjectReleaseIds, getReleaseById } = useRelease();
@@ -71,11 +83,19 @@ export const ReleaseIssuesHeader = observer(function ReleaseIssuesHeader() {
   const isSidebarCollapsed = storedValue ? storedValue === "true" : false;
   const activeLayout = issueFilters?.displayFilters?.layout;
   const releaseDetails = releaseId ? getReleaseById(releaseId) : undefined;
+  const { setValue: setStoredReleaseDetailTab, storedValue: storedReleaseDetailTab } =
+    useLocalStorage<ReleaseDetailTabKey | "scope" | "note">(
+      getReleaseDetailTabStorageKey(releaseId ?? "unknown"),
+      DEFAULT_RELEASE_DETAIL_TAB_KEY
+    );
+  const activeReleaseDetailTab: ReleaseDetailTabKey =
+    storedReleaseDetailTab === "scope" || storedReleaseDetailTab === "note"
+      ? "materials"
+      : (storedReleaseDetailTab ?? DEFAULT_RELEASE_DETAIL_TAB_KEY);
   const canUserCreateIssue = allowPermissions(
     [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
     EUserPermissionsLevel.PROJECT
   );
-  const workItemsCount = getGroupIssueCount(undefined, undefined, false);
   const projectReleaseIds = projectIdValue ? getProjectReleaseIds(projectIdValue) : undefined;
 
   const releaseOverviewPath =
@@ -87,19 +107,28 @@ export const ReleaseIssuesHeader = observer(function ReleaseIssuesHeader() {
       ? `/${workspaceSlugValue}/projects/${projectIdValue}/releases/${releaseId}`
       : "";
   const isOverviewActive = /\/overview\/?$/.test(pathname ?? "");
+  const releaseScopeTab = {
+    key: "release-scope",
+    label: t("project_release.tab_release_scope"),
+    isActive: !isOverviewActive,
+    onClick: () => {
+      if (releaseScopePath) router.push(releaseScopePath);
+    },
+  };
   const releaseTabs = [
-    {
-      key: "overview",
-      label: t("sidebar.overview"),
-      isActive: !!isOverviewActive,
-      path: releaseOverviewPath,
-    },
-    {
-      key: "release-scope",
-      label: t("project_release.tab_release_scope"),
-      isActive: !isOverviewActive,
-      path: releaseScopePath,
-    },
+    ...RELEASE_DETAIL_TABS.flatMap((tab) => {
+      const detailTab = {
+        key: tab.key,
+        label: tab.label,
+        isActive: !!isOverviewActive && activeReleaseDetailTab === tab.key,
+        onClick: () => {
+          setStoredReleaseDetailTab(tab.key);
+          if (!isOverviewActive && releaseOverviewPath) router.push(releaseOverviewPath);
+        },
+      };
+
+      return tab.key === "overview" ? [detailTab, releaseScopeTab] : [detailTab];
+    }),
   ];
 
   const toggleSidebar = () => {
@@ -142,12 +171,51 @@ export const ReleaseIssuesHeader = observer(function ReleaseIssuesHeader() {
     })
     .filter((option) => option !== undefined) as ICustomSearchSelectOption[];
 
+  const handleAddExistingIssuesToRelease = async (data: ISearchIssueResponse[]) => {
+    if (!workspaceSlugValue || !projectIdValue || !releaseId) return;
+
+    const issueIds = data.map((i) => i.id);
+
+    try {
+      await addIssuesToRelease(workspaceSlugValue, projectIdValue, releaseId, issueIds);
+      setToast({
+        type: TOAST_TYPE.SUCCESS,
+        title: "Success!",
+        message: "Work items added to the release successfully.",
+      });
+    } catch (error) {
+      if (isProjectPermissionError(error)) {
+        setToast({
+          type: TOAST_TYPE.ERROR,
+          title: t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title),
+          message: PROJECT_ERROR_MESSAGES.permissionError.i18n_message
+            ? t(PROJECT_ERROR_MESSAGES.permissionError.i18n_message)
+            : undefined,
+        });
+      } else {
+        setToast({
+          type: TOAST_TYPE.ERROR,
+          title: "Error!",
+          message: "Selected work items could not be added to the release. Please try again.",
+        });
+      }
+    }
+  };
+
   return (
     <>
       <WorkItemsModal
         isOpen={analyticsModal}
         onClose={() => setAnalyticsModal(false)}
         projectDetails={currentProjectDetails}
+      />
+      <ExistingIssuesListModal
+        workspaceSlug={workspaceSlugValue}
+        projectId={projectIdValue}
+        isOpen={openExistingIssueListModal}
+        handleClose={() => setOpenExistingIssueListModal(false)}
+        searchParams={{ search: "", release: true }}
+        handleOnSubmit={handleAddExistingIssuesToRelease}
       />
       <Header>
         <Header.LeftItem>
@@ -169,6 +237,7 @@ export const ReleaseIssuesHeader = observer(function ReleaseIssuesHeader() {
                     selectedItem={releaseId?.toString() ?? ""}
                     navigationItems={switcherOptions}
                     onChange={(value: string) => {
+                      setValueIntoLocalStorage(getReleaseDetailTabStorageKey(value), DEFAULT_RELEASE_DETAIL_TAB);
                       router.push(`/${workspaceSlug}/projects/${projectId}/releases/${value}/overview`);
                     }}
                     title={releaseDetails?.name}
@@ -190,7 +259,7 @@ export const ReleaseIssuesHeader = observer(function ReleaseIssuesHeader() {
                     <button
                       type="button"
                       className="cursor-pointer outline-none"
-                      onClick={() => tab.path && router.push(tab.path)}
+                      onClick={tab.onClick}
                     >
                       <div
                         className={cn(
@@ -206,19 +275,6 @@ export const ReleaseIssuesHeader = observer(function ReleaseIssuesHeader() {
                 ))}
               </div>
             )}
-            {!isOverviewActive && workItemsCount && workItemsCount > 0 ? (
-              <Tooltip
-                isMobile={isMobile}
-                tooltipContent={`There are ${workItemsCount} ${
-                  workItemsCount > 1 ? "work items" : "work item"
-                } in this release`}
-                position="bottom"
-              >
-                <span className="flex flex-shrink-0 cursor-default items-center justify-center rounded-xl bg-accent-primary/20 px-2 text-center text-11 font-semibold text-accent-primary">
-                  {workItemsCount}
-                </span>
-              </Tooltip>
-            ) : null}
           </div>
         </Header.LeftItem>
         {!isOverviewActive && (
@@ -284,17 +340,33 @@ export const ReleaseIssuesHeader = observer(function ReleaseIssuesHeader() {
                     <ChartNoAxesColumn className="size-3.5" />
                   </span>
                 </Button>
-                <Button
-                  variant="primary"
-                  size="lg"
-                  className="hidden sm:flex"
-                  onClick={() => {
-                    toggleCreateIssueModal(true, EIssuesStoreType.RELEASE);
-                  }}
-                  data-ph-element={WORK_ITEM_TRACKER_ELEMENTS.HEADER_ADD_BUTTON.RELEASE}
+                <CustomMenu
+                  placement="bottom-end"
+                  customButton={
+                    <span
+                      className={cn(getButtonStyling("primary", "lg"), "cursor-pointer hidden sm:inline-flex")}
+                      data-ph-element={WORK_ITEM_TRACKER_ELEMENTS.HEADER_ADD_BUTTON.RELEASE}
+                    >
+                      {t("issue.add.label")}
+                      <ChevronDown className="size-4 shrink-0" strokeWidth={2} />
+                    </span>
+                  }
                 >
-                  {t("issue.add.label")}
-                </Button>
+                  <CustomMenu.MenuItem
+                    onClick={() => {
+                      toggleCreateIssueModal(true, EIssuesStoreType.RELEASE);
+                    }}
+                  >
+                    <span className="flex items-center justify-start gap-2">{t("create_work_item")}</span>
+                  </CustomMenu.MenuItem>
+                  <CustomMenu.MenuItem
+                    onClick={() => {
+                      setOpenExistingIssueListModal(true);
+                    }}
+                  >
+                    <span className="flex items-center justify-start gap-2">{t("issue.add.existing")}</span>
+                  </CustomMenu.MenuItem>
+                </CustomMenu>
               </>
             ) : (
               <></>

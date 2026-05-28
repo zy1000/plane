@@ -21,8 +21,11 @@ import {
   getReleaseOverdueToneTextClass,
   getReleaseRowTone,
 } from "@/components/releases/release-status-config";
+import type { ReleaseDetailTabKey } from "@/components/releases/release-overview";
+import { DEFAULT_RELEASE_DETAIL_TAB, getReleaseDetailTabStorageKey } from "@/components/releases/release-overview";
 import { useRelease } from "@/hooks/store/use-release";
 import { useAppRouter } from "@/hooks/use-app-router";
+import useLocalStorage from "@/hooks/use-local-storage";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 
 type Props = {
@@ -38,6 +41,10 @@ export const ReleaseListItem = observer(function ReleaseListItem(props: Props) {
   const pathname = usePathname();
   const { getReleaseById } = useRelease();
   const { isMobile } = usePlatformOS();
+  const { setValue: setReleaseDetailTab } = useLocalStorage<ReleaseDetailTabKey>(
+    getReleaseDetailTabStorageKey(releaseId),
+    DEFAULT_RELEASE_DETAIL_TAB
+  );
 
   const releaseDetails = getReleaseById(releaseId);
 
@@ -59,11 +66,17 @@ export const ReleaseListItem = observer(function ReleaseListItem(props: Props) {
     }
   };
 
-  const handleArchivedClick = (e: React.MouseEvent<HTMLButtonElement | HTMLAnchorElement>) => {
-    openPeek(e);
-  };
+  const releaseOverviewPath = `/${workspaceSlug?.toString()}/projects/${releaseDetails.project_id}/releases/${releaseDetails.id}/overview`;
 
-  const handleItemClick = releaseDetails.archived_at ? handleArchivedClick : undefined;
+  const handleItemClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    e.preventDefault();
+    if (releaseDetails.archived_at) {
+      openPeek(e);
+      return;
+    }
+    setReleaseDetailTab(DEFAULT_RELEASE_DETAIL_TAB);
+    router.push(releaseOverviewPath);
+  };
 
   const overdueTone = getReleaseRowTone(releaseDetails);
 
@@ -71,7 +84,7 @@ export const ReleaseListItem = observer(function ReleaseListItem(props: Props) {
     <ListItem
       title={releaseDetails?.name ?? ""}
       titleClassName={getReleaseOverdueToneTextClass(overdueTone)}
-      itemLink={`/${workspaceSlug?.toString()}/projects/${releaseDetails.project_id}/releases/${releaseDetails.id}/overview`}
+      itemLink={releaseOverviewPath}
       onItemClick={handleItemClick}
       prependTitleElement={
         <CircularProgressIndicator size={32} percentage={progress} strokeWidth={4}>

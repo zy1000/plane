@@ -174,7 +174,7 @@ function getNavigateUrl(
     case "cycle":
       return `${base}/cycles/${itemId}`;
     case "release":
-      return `${base}/releases/${itemId}`;
+      return `${base}/releases/${itemId}/overview`;
     case "plan":
       return `${base}/testhub/plan-cases?planId=${itemId}`;
     case "review":

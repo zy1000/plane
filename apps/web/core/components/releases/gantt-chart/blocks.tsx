@@ -11,8 +11,10 @@ import { Tooltip } from "@plane/propel/tooltip";
 import { SIDEBAR_WIDTH } from "@/components/gantt-chart/constants";
 import { getBlockViewDetails } from "@/components/issues/issue-layouts/utils";
 import { getReleaseStatusDetails } from "@/components/releases/release-status-config";
+import { DEFAULT_RELEASE_DETAIL_TAB, getReleaseDetailTabStorageKey } from "@/components/releases/release-overview";
 import { useRelease } from "@/hooks/store/use-release";
 import { useAppRouter } from "@/hooks/use-app-router";
+import { setValueIntoLocalStorage } from "@/hooks/use-local-storage";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 
 type Props = {
@@ -33,6 +35,14 @@ export const ReleaseGanttBlock = observer(function ReleaseGanttBlock(props: Prop
     releaseStatus.color
   );
 
+  const releaseOverviewPath = `/${workspaceSlug?.toString()}/projects/${releaseDetails?.project_id}/releases/${releaseDetails?.id}/overview`;
+
+  const navigateToReleaseOverview = () => {
+    if (!releaseDetails?.id) return;
+    setValueIntoLocalStorage(getReleaseDetailTabStorageKey(releaseDetails.id), DEFAULT_RELEASE_DETAIL_TAB);
+    router.push(releaseOverviewPath);
+  };
+
   return (
     <Tooltip
       isMobile={isMobile}
@@ -48,11 +58,7 @@ export const ReleaseGanttBlock = observer(function ReleaseGanttBlock(props: Prop
         className="relative flex h-full w-full cursor-pointer items-center rounded-sm"
         style={blockStyle}
         role="presentation"
-        onClick={() =>
-          router.push(
-            `/${workspaceSlug?.toString()}/projects/${releaseDetails?.project_id}/releases/${releaseDetails?.id}/overview`
-          )
-        }
+        onClick={navigateToReleaseOverview}
       >
         <div className="absolute top-0 left-0 h-full w-full bg-surface-1/50" />
         <div
@@ -74,10 +80,18 @@ export const ReleaseGanttSidebarBlock = observer(function ReleaseGanttSidebarBlo
   const releaseStatus = getReleaseStatusDetails(releaseDetails?.status);
   const ReleaseStatusIcon = releaseStatus.icon;
 
+  const releaseOverviewPath = `/${workspaceSlug?.toString()}/projects/${releaseDetails?.project_id}/releases/${releaseDetails?.id}/overview`;
+
+  const handleNavigateToOverview = () => {
+    if (!releaseDetails?.id) return;
+    setValueIntoLocalStorage(getReleaseDetailTabStorageKey(releaseDetails.id), DEFAULT_RELEASE_DETAIL_TAB);
+  };
+
   return (
     <Link
       className="relative flex h-full w-full items-center gap-2"
-      href={`/${workspaceSlug?.toString()}/projects/${releaseDetails?.project_id}/releases/${releaseDetails?.id}/overview`}
+      href={releaseOverviewPath}
+      onClick={handleNavigateToOverview}
       draggable={false}
     >
       <ReleaseStatusIcon className="h-4 w-4" style={{ color: releaseStatus.color }} />
