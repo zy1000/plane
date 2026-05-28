@@ -10,7 +10,7 @@ import { HashPropertyIcon } from "@plane/propel/icons";
 // hooks
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 // components
-import { ActivityChangeFooter, IssueActivityBlockComponent, IssueLink } from "./";
+import { ActivityChangeFooter, ActivityInlineText, IssueActivityBlockComponent, IssueLink } from "./";
 
 type TIssueExtraFieldActivity = { activityId: string; showIssue?: boolean; ends: "top" | "bottom" | undefined };
 
@@ -36,23 +36,22 @@ export const IssueExtraFieldActivity = observer(function IssueExtraFieldActivity
   if (!hasOld && hasNew) {
     actionPhrase = (
       <>
-        set <span className="font-medium text-primary">{fieldName}</span> to{" "}
-        <span className="font-medium text-primary">{newLabel}</span>
+        set <ActivityInlineText>{fieldName}</ActivityInlineText> to <ActivityInlineText>{newLabel}</ActivityInlineText>
       </>
     );
   } else if (hasOld && !hasNew) {
     actionPhrase = (
       <>
-        cleared <span className="font-medium text-primary">{fieldName}</span> (was{" "}
-        <span className="font-medium text-secondary">{oldLabel}</span>)
+        cleared <ActivityInlineText>{fieldName}</ActivityInlineText> (was{" "}
+        <ActivityInlineText className="font-medium text-secondary">{oldLabel}</ActivityInlineText>)
       </>
     );
   } else {
     actionPhrase = (
       <>
-        updated <span className="font-medium text-primary">{fieldName}</span> from{" "}
-        <span className="font-medium text-secondary">{oldLabel}</span> to{" "}
-        <span className="font-medium text-primary">{newLabel}</span>
+        updated <ActivityInlineText>{fieldName}</ActivityInlineText> from{" "}
+        <ActivityInlineText className="font-medium text-secondary">{oldLabel}</ActivityInlineText> to{" "}
+        <ActivityInlineText>{newLabel}</ActivityInlineText>
       </>
     );
   }

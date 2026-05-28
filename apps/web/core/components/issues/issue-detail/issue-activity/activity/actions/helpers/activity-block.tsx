@@ -26,6 +26,21 @@ type TIssueActivityBlockComponent = {
   footer?: ReactNode;
 };
 
+type TActivityInlineText = {
+  children: ReactNode;
+  className?: string;
+};
+
+export function ActivityInlineText(props: TActivityInlineText) {
+  const { children, className = "font-medium text-primary" } = props;
+
+  return (
+    <Tooltip tooltipContent={children} position="top">
+      <span className={`inline-block max-w-[min(24rem,60vw)] truncate align-bottom ${className}`}>{children}</span>
+    </Tooltip>
+  );
+}
+
 export function IssueActivityBlockComponent(props: TIssueActivityBlockComponent) {
   const { icon, activityId, ends, children, customUserName, footer } = props;
   // hooks
