@@ -109,7 +109,7 @@ function RecordDetail({
   const statusLabel = { pending: "待审批", approved: "已通过", rejected: "已拒绝", cancelled: "已取消" }[record.status] ?? "待审批";
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-1 flex-col gap-4 min-h-0">
       {/* 状态 + 流转 */}
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2 flex-wrap">
@@ -159,7 +159,7 @@ function RecordDetail({
 
       {/* 操作区 */}
       {canAct && (
-        <div className="pt-2 border-t" style={{ borderColor: "rgba(0,0,0,0.08)" }}>
+        <div className="mt-auto pt-2 border-t" style={{ borderColor: "rgba(0,0,0,0.08)" }}>
           <div className="flex gap-2 mb-2">
             <button
               type="button"
@@ -206,7 +206,7 @@ function RecordDetail({
       )}
 
       {alreadyActed && myRec && (
-        <div className="pt-2 border-t" style={{ borderColor: "rgba(0,0,0,0.08)" }}>
+        <div className="mt-auto pt-2 border-t" style={{ borderColor: "rgba(0,0,0,0.08)" }}>
           <div className="flex items-center gap-2 text-sm font-medium rounded-md p-2.5" style={tagStyle(myRec.action === "approved" ? STATUS_COLOR.approved : STATUS_COLOR.rejected)}>
             {myRec.action === "approved" ? <CheckCircle2 className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
             你已{myRec.action === "approved" ? "通过" : "拒绝"}此审批
@@ -215,7 +215,7 @@ function RecordDetail({
       )}
 
       {!canAct && !alreadyActed && record.status === "pending" && (
-        <div className="pt-2 border-t" style={{ borderColor: "rgba(0,0,0,0.08)" }}>
+        <div className="mt-auto pt-2 border-t" style={{ borderColor: "rgba(0,0,0,0.08)" }}>
           <p className="text-sm" style={{ color: "#9ca3af" }}>你不是该审批申请的审批人，仅可查看</p>
         </div>
       )}
@@ -293,7 +293,7 @@ export function IssueApprovalTag({ workspaceSlug, projectId, issueId }: IssueApp
                 leaveFrom="opacity-100 scale-100"
                 leaveTo="opacity-0 scale-95"
               >
-                <Dialog.Panel className="relative w-full max-w-md rounded-xl shadow-2xl overflow-hidden" style={{ backgroundColor: "var(--color-bg-surface-1, #fff)" }}>
+                <Dialog.Panel className="relative w-full max-w-4xl rounded-xl shadow-2xl overflow-hidden" style={{ backgroundColor: "var(--color-bg-surface-1, #fff)" }}>
                   {/* 头部 */}
                   <div className="flex items-start justify-between gap-3 px-5 py-4 border-b" style={{ borderColor: "rgba(0,0,0,0.08)" }}>
                     <div className="min-w-0">
@@ -312,7 +312,7 @@ export function IssueApprovalTag({ workspaceSlug, projectId, issueId }: IssueApp
                   </div>
 
                   {/* 内容 */}
-                  <div className="px-5 py-4 overflow-y-auto" style={{ maxHeight: "60vh" }}>
+                  <div className="px-8 py-6 overflow-y-auto flex flex-col" style={{ maxHeight: "85vh", minHeight: "60vh" }}>
                     {isLoading ? (
                       <div className="flex items-center justify-center py-8">
                         <Loader2 className="h-5 w-5 animate-spin" style={{ color: "#9ca3af" }} />
