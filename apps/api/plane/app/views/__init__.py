@@ -189,6 +189,8 @@ from .release.issue import ReleaseIssueViewSet
 
 from .release.archive import ReleaseArchiveUnarchiveEndpoint
 
+from .release.comment import ReleaseCommentViewSet
+
 from .api import ApiTokenEndpoint, ServiceApiTokenEndpoint
 
 from .page.base import (

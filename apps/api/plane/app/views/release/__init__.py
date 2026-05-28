@@ -11,3 +11,5 @@ from .issue import ReleaseIssueViewSet
 from .archive import ReleaseArchiveUnarchiveEndpoint
 
 from .file import ReleaseFileAPI
+
+from .comment import ReleaseCommentViewSet

@@ -5,6 +5,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 # Module imports
+from plane.utils.html_processor import strip_tags
 from .project import ProjectBaseModel
 
 
@@ -251,3 +252,37 @@ class ReleaseOverdueRecord(ProjectBaseModel):
 
     def __str__(self):
         return f"{self.release_id} {self.phase} {self.started_at}"
+
+
+class ReleaseComment(ProjectBaseModel):
+    release = models.ForeignKey(Release, on_delete=models.CASCADE, related_name="release_comments")
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="release_comments",
+        null=True,
+    )
+    comment_stripped = models.TextField(verbose_name="Comment", blank=True)
+    comment_json = models.JSONField(blank=True, default=dict)
+    comment_html = models.TextField(blank=True, default="<p></p>")
+    parent = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="child_release_comments",
+    )
+    edited_at = models.DateTimeField(null=True, blank=True)
+
+    def save(self, *args, **kwargs):
+        self.comment_stripped = strip_tags(self.comment_html) if self.comment_html else ""
+        super().save(*args, **kwargs)
+
+    class Meta:
+        verbose_name = "Release Comment"
+        verbose_name_plural = "Release Comments"
+        db_table = "release_comments"
+        ordering = ("-created_at",)
+
+    def __str__(self):
+        return f"{self.release_id} {self.actor_id}"

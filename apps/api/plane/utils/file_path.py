@@ -30,7 +30,8 @@ bulk 绑定接口会通过 :func:`rebind_asset_to_path` 把对象 copy 到正式
 - ``DRAFT_ISSUE_*``                 → ``Workspace -> Project -> 草稿 -> DraftIssue``
 - ``CASE_ATTACHMENT``               → ``Workspace -> Project -> 测试用例 -> TestCase``
 - ``CYCLE_FILE``                    → ``Workspace -> Project -> 迭代 -> Cycle``
-- ``RELEASE_FILE``                  → ``Workspace -> Project -> 发布 -> Release``
+- ``RELEASE_FILE`` / ``RELEASE_COMMENT_DESCRIPTION``
+                                    → ``Workspace -> Project -> 发布 -> Release``
 - ``PLAN_CASE_RECORD_FILE``         → ``Workspace -> Project -> 用例执行 -> PlanCaseRecord``
                                       （展示名取 ``plan_case.case.name``）
 """
@@ -279,6 +280,23 @@ class _Resolver:
                 return self._temp_node(parent_for_category=proj_node, asset=asset)
             return self._get_or_create_node(
                 parent=cat_node,
+                entity_type="RELEASE",
+                entity_id=release.pk,
+                display_name=getattr(release, "name", "") or "",
+            )
+
+        # 发布评论中的内联图片：复用与 RELEASE_FILE 相同的目录节点（Workspace -> Project ->
+        # 发布 -> Release），上传期靠 release_id 定位父级，与具体 release_comment 解耦，
+        # 避免评论尚未创建时无法定路径。
+        if et == "RELEASE_COMMENT_DESCRIPTION":
+            release = self._get_related(asset, "release")
+            if release is None:
+                return self._temp_node(parent_for_category=proj_node, asset=asset)
+            release_category = self._category_node(
+                parent=proj_node, entity_type="RELEASE_FILE"
+            )
+            return self._get_or_create_node(
+                parent=release_category,
                 entity_type="RELEASE",
                 entity_id=release.pk,
                 display_name=getattr(release, "name", "") or "",

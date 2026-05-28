@@ -8,6 +8,7 @@ from plane.app.views import (
     ReleaseFavoriteViewSet,
     ReleaseUserPropertiesEndpoint,
     ReleaseArchiveUnarchiveEndpoint,
+    ReleaseCommentViewSet,
 )
 from plane.app.views.release.base import ReleaseAPI, ReleaseOverdueByAssigneeEndpoint
 from plane.app.views.release.file import ReleaseFileAPI
@@ -87,6 +88,22 @@ urlpatterns = [
             }
         ),
         name="project-issue-release-links",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/releases/<uuid:release_id>/comments/",
+        ReleaseCommentViewSet.as_view({"get": "list", "post": "create"}),
+        name="project-release-comments",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/releases/<uuid:release_id>/comments/<uuid:pk>/",
+        ReleaseCommentViewSet.as_view(
+            {
+                "get": "retrieve",
+                "patch": "partial_update",
+                "delete": "destroy",
+            }
+        ),
+        name="project-release-comments",
     ),
     path(
         "workspaces/<str:slug>/projects/<uuid:project_id>/user-favorite-releases/",

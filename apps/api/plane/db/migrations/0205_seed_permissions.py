@@ -92,6 +92,7 @@ releases.file.upload|发布文件上传|project|releases.file|upload|发布|6|1
 releases.file.delete|发布文件删除|project|releases.file|delete|发布|7|1
 releases.file.download|发布文件下载|project|releases.file|download|发布|8|1
 releases.archive|归档/恢复发布|project|releases|archive|发布|9|1
+releases.comment.create|创建发布评论|project|releases.comment|create|发布|10|1
 view.view|查看视图列表与详情|project|view|view|视图|1|1
 view.create|创建视图|project|view|create|视图|2|1
 view.edit|编辑视图|project|view|edit|视图|3|1

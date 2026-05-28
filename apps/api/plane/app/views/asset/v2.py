@@ -18,7 +18,7 @@ from rest_framework.permissions import AllowAny
 
 # Module imports
 from ..base import BaseAPIView
-from plane.db.models import FileAsset, Workspace, Project, User
+from plane.db.models import FileAsset, Workspace, Project, User, Release
 from plane.settings.storage import S3Storage
 from plane.app.permissions import allow_permission, ROLE
 from plane.utils.cache import invalidate_cache_directly
@@ -585,6 +585,22 @@ class AssetRestoreEndpoint(BaseAPIView):
 class ProjectAssetEndpoint(BaseAPIView):
     """This endpoint is used to upload cover images/logos etc for workspace, projects and users."""
 
+    def infer_entity_type(self, entity_type, entity_id, slug, project_id):
+        if entity_type:
+            return entity_type
+
+        try:
+            release_id = uuid.UUID(str(entity_id))
+        except (TypeError, ValueError, AttributeError):
+            return entity_type
+
+        if Release.objects.filter(
+            id=release_id, workspace__slug=slug, project_id=project_id
+        ).exists():
+            return FileAsset.EntityTypeContext.RELEASE_COMMENT_DESCRIPTION
+
+        return entity_type
+
     def get_entity_id_field(self, entity_type, entity_id):
         if entity_type == FileAsset.EntityTypeContext.WORKSPACE_LOGO:
             return {"workspace_id": entity_id}
@@ -614,6 +630,12 @@ class ProjectAssetEndpoint(BaseAPIView):
 
         if entity_type == FileAsset.EntityTypeContext.DRAFT_ISSUE_DESCRIPTION:
             return {"draft_issue_id": entity_id}
+
+        # 上传阶段 ReleaseComment 尚未创建，entity_identifier 是 release_id，先以 release
+        # 作为 path 父级；bulk 阶段再回填 release_comment_id（不需要再 rebind path）。
+        if entity_type == FileAsset.EntityTypeContext.RELEASE_COMMENT_DESCRIPTION:
+            return {"release_id": entity_id}
+
         return {}
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
@@ -623,6 +645,12 @@ class ProjectAssetEndpoint(BaseAPIView):
         size = int(request.data.get("size", settings.FILE_SIZE_LIMIT))
         entity_type = request.data.get("entity_type", "")
         entity_identifier = request.data.get("entity_identifier")
+        entity_type = self.infer_entity_type(
+            entity_type=entity_type,
+            entity_id=entity_identifier,
+            slug=slug,
+            project_id=project_id,
+        )
 
         # Check if the entity type is allowed
         if entity_type not in FileAsset.EntityTypeContext.values:
@@ -787,6 +815,14 @@ class ProjectBulkAssetEndpoint(BaseAPIView):
                 pass
             needs_rebind = True
 
+        # ReleaseComment 创建完成后回填 release_comment_id；path 在上传时已挂到 release
+        # 节点下，这里不需要再 rebind（与 RELEASE_FILE 共享同一存储目录）。
+        if asset.entity_type == FileAsset.EntityTypeContext.RELEASE_COMMENT_DESCRIPTION:
+            try:
+                assets.update(release_comment_id=entity_id)
+            except IntegrityError:
+                pass
+
         if needs_rebind:
             refreshed_assets = list(
                 FileAsset.objects.filter(id__in=asset_ids, workspace__slug=slug)
@@ -840,6 +876,9 @@ class DuplicateAssetEndpoint(BaseAPIView):
         # Comment Description
         if entity_type == FileAsset.EntityTypeContext.COMMENT_DESCRIPTION:
             return {"comment_id": entity_id}
+
+        if entity_type == FileAsset.EntityTypeContext.RELEASE_COMMENT_DESCRIPTION:
+            return {"release_id": entity_id}
 
         return {}
 

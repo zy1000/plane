@@ -12,6 +12,7 @@ from django.core.exceptions import ValidationError
 from plane.db.models import (
     User,
     Release,
+    ReleaseComment,
     ReleaseMember,
     ReleaseIssue,
     ReleaseLink,
@@ -19,6 +20,7 @@ from plane.db.models import (
     ReleaseOverdueRecord,
 )
 from plane.db.models.release import ReleaseStatus
+from .user import UserLiteSerializer
 from ...utils.release.rules import check_release_state
 
 
@@ -356,3 +358,39 @@ class ReleaseOverdueRecordSerializer(BaseSerializer):
             "updated_at",
         ]
         read_only_fields = fields
+
+
+class ReleaseCommentSerializer(BaseSerializer):
+    actor_detail = UserLiteSerializer(read_only=True, source="actor")
+
+    class Meta:
+        model = ReleaseComment
+        fields = [
+            "id",
+            "workspace",
+            "project",
+            "release",
+            "actor",
+            "actor_detail",
+            "comment_stripped",
+            "comment_json",
+            "comment_html",
+            "parent",
+            "edited_at",
+            "created_at",
+            "updated_at",
+            "created_by",
+            "updated_by",
+        ]
+        read_only_fields = [
+            "workspace",
+            "project",
+            "release",
+            "actor",
+            "comment_stripped",
+            "edited_at",
+            "created_by",
+            "updated_by",
+            "created_at",
+            "updated_at",
+        ]

@@ -153,6 +153,7 @@ class FileAsset(BaseModel):
         PROJECT_FILESTORE = "PROJECT_FILESTORE"
         CYCLE_FILE = "CYCLE_FILE"
         RELEASE_FILE = "RELEASE_FILE"
+        RELEASE_COMMENT_DESCRIPTION = "RELEASE_COMMENT_DESCRIPTION"
         PLAN_CASE_RECORD_FILE = "PLAN_CASE_RECORD_FILE"
 
     attributes = models.JSONField(default=dict)
@@ -188,6 +189,9 @@ class FileAsset(BaseModel):
     )
     release = models.ForeignKey(
         "db.Release", on_delete=models.CASCADE, null=True, related_name="assets"
+    )
+    release_comment = models.ForeignKey(
+        "db.ReleaseComment", on_delete=models.CASCADE, null=True, related_name="assets"
     )
     plan_case_record = models.ForeignKey(
         "db.PlanCaseRecord", on_delete=models.CASCADE, null=True, related_name="assets"
@@ -333,6 +337,7 @@ class FileAsset(BaseModel):
             self.EntityTypeContext.PAGE_DESCRIPTION,
             self.EntityTypeContext.PROJECT_DESCRIPTION,
             self.EntityTypeContext.DRAFT_ISSUE_DESCRIPTION,
+            self.EntityTypeContext.RELEASE_COMMENT_DESCRIPTION,
         ]:
             return f"/api/assets/v2/workspaces/{self.workspace.slug}/projects/{self.project_id}/{self.id}/"
 

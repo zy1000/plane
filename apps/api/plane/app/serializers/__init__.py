@@ -109,6 +109,7 @@ from .release import (
     ReleaseLinkSerializer,
     ReleaseUserPropertiesSerializer,
     ReleaseOverdueRecordSerializer,
+    ReleaseCommentSerializer,
 )
 
 from .api import APITokenSerializer, APITokenReadSerializer

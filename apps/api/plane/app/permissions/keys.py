@@ -86,6 +86,7 @@ class PermissionKey(str, Enum):
     RELEASES_FILE_DELETE = "releases.file.delete"
     RELEASES_FILE_DOWNLOAD = "releases.file.download"
     RELEASES_ARCHIVE = "releases.archive"
+    RELEASES_COMMENT_CREATE = "releases.comment.create"
     MODULES_VIEW = "modules.view"
     MODULES_CREATE = "modules.create"
     MODULES_EDIT = "modules.edit"

@@ -53,6 +53,7 @@ import { RichTextEditor } from "@/components/editor/rich-text";
 import { OverdueByAssigneeCard } from "@/components/common/overdue-by-assignee-card";
 import { CycleOverviewFullscreenModal } from "@/components/cycles/cycle-overview-fullscreen-modal";
 import { getReleaseStatusDetails } from "@/components/releases/release-status-config";
+import { ReleaseCommentsSection } from "@/components/releases/release-comments";
 
 type Props = {
   releaseId: string;
@@ -856,7 +857,7 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
             <div className="flex items-center justify-between">
               <div className="flex min-w-0 items-center gap-2">
                 <Activity className="h-4 w-4 shrink-0 text-placeholder" aria-hidden />
-                <div className="text-sm font-medium text-primary">发布动态</div>
+                <div className="text-sm font-medium text-primary">发布评论</div>
               </div>
               <button
                 type="button"
@@ -867,8 +868,14 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
                 <Maximize2 className="h-3.5 w-3.5 text-placeholder" />
               </button>
             </div>
-            <div className="mt-3 grid min-h-0 flex-1 place-items-center text-sm text-placeholder">
-              {t("no_data_yet")}
+            <div className="mt-3 min-h-0 flex-1 overflow-hidden">
+              {workspaceSlug && projectId && (
+                <ReleaseCommentsSection
+                  workspaceSlug={workspaceSlug.toString()}
+                  projectId={projectId.toString()}
+                  releaseId={releaseId}
+                />
+              )}
             </div>
           </div>
         </div>
@@ -1553,13 +1560,17 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
       <CycleOverviewFullscreenModal
         isOpen={activityExpandOpen}
         onClose={() => setActivityExpandOpen(false)}
-        title="发布动态"
+        title="发布评论"
         icon={Activity}
       >
-        <div className="flex min-h-0 flex-1 flex-col bg-surface-1">
-          <div className="grid min-h-0 flex-1 place-items-center text-sm text-placeholder">
-            {t("no_data_yet")}
-          </div>
+        <div className="flex min-h-0 flex-1 flex-col bg-surface-1 px-4 pb-4">
+          {workspaceSlug && projectId && (
+            <ReleaseCommentsSection
+              workspaceSlug={workspaceSlug.toString()}
+              projectId={projectId.toString()}
+              releaseId={releaseId}
+            />
+          )}
         </div>
       </CycleOverviewFullscreenModal>
 
