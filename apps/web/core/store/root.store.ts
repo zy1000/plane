@@ -51,6 +51,8 @@ import type { IReleaseStore } from "./release.store";
 import { ReleaseStore } from "./release.store";
 import type { IReleaseCommentStore } from "./release-comment.store";
 import { ReleaseCommentStore } from "./release-comment.store";
+import type { IReleaseActivityStore } from "./release-activity.store";
+import { ReleaseActivityStore } from "./release-activity.store";
 import type { IModuleFilterStore } from "./module_filter.store";
 import { ModuleFilterStore } from "./module_filter.store";
 import type { IReleaseFilterStore } from "./release_filter.store";
@@ -88,6 +90,7 @@ export class CoreRootStore {
   releaseFilter: IReleaseFilterStore;
   release: IReleaseStore;
   releaseComment: IReleaseCommentStore;
+  releaseActivity: IReleaseActivityStore;
   projectView: IProjectViewStore;
   globalView: IGlobalViewStore;
   issue: IIssueRootStore;
@@ -127,6 +130,7 @@ export class CoreRootStore {
     this.releaseFilter = new ReleaseFilterStore(this);
     this.release = new ReleaseStore(this);
     this.releaseComment = new ReleaseCommentStore(this);
+    this.releaseActivity = new ReleaseActivityStore(this);
     this.projectView = new ProjectViewStore(this);
     this.globalView = new GlobalViewStore(this);
     this.issue = new IssueRootStore(this as unknown as RootStore);
@@ -164,6 +168,7 @@ export class CoreRootStore {
     this.releaseFilter = new ReleaseFilterStore(this);
     this.release = new ReleaseStore(this);
     this.releaseComment = new ReleaseCommentStore(this);
+    this.releaseActivity = new ReleaseActivityStore(this);
     this.projectView = new ProjectViewStore(this);
     this.globalView = new GlobalViewStore(this);
     this.issue = new IssueRootStore(this as unknown as RootStore);

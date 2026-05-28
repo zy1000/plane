@@ -119,7 +119,7 @@ class TestPlanCreateUpdateSerializer(ModelSerializer):
 class PlanListSerializer(ModelSerializer):
     class Meta:
         model = TestPlan
-        fields = ["name", "id"]
+        fields = ["name", "id","begin_time","end_time",]
 
 
 class CaseDetailSerializer(ModelSerializer):

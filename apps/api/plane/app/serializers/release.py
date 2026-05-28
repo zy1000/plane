@@ -12,6 +12,7 @@ from django.core.exceptions import ValidationError
 from plane.db.models import (
     User,
     Release,
+    ReleaseActivity,
     ReleaseComment,
     ReleaseMember,
     ReleaseIssue,
@@ -32,6 +33,13 @@ class ReleaseWriteSerializer(BaseSerializer):
         child=serializers.PrimaryKeyRelatedField(queryset=User.objects.all()),
         write_only=True,
         required=False,
+    )
+    status_change_reason = serializers.CharField(
+        write_only=True,
+        required=False,
+        allow_blank=True,
+        allow_null=True,
+        max_length=1000,
     )
 
     class Meta:
@@ -93,6 +101,15 @@ class ReleaseWriteSerializer(BaseSerializer):
                     }
                 )
 
+            # 改为 已驳回 / 已取消 时必须填写原因
+            if (
+                status != self.instance.status
+                and status in (ReleaseStatus.REJECTED, ReleaseStatus.CANCELLED)
+            ):
+                reason = data.get("status_change_reason")
+                if not reason or not str(reason).strip():
+                    raise serializers.ValidationError({"error": "请填写原因"})
+
         return data
 
     def create(self, validated_data):
@@ -128,6 +145,7 @@ class ReleaseWriteSerializer(BaseSerializer):
 
     def update(self, instance, validated_data):
         members = validated_data.pop("member_ids", None)
+        validated_data.pop("status_change_reason", None)
         release_name = validated_data.get("name")
 
         if release_name:
@@ -354,6 +372,34 @@ class ReleaseOverdueRecordSerializer(BaseSerializer):
             "started_at",
             "ended_at",
             "triggered_by",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = fields
+
+
+class ReleaseActivitySerializer(BaseSerializer):
+    actor_detail = UserLiteSerializer(read_only=True, source="actor")
+
+    class Meta:
+        model = ReleaseActivity
+        fields = [
+            "id",
+            "workspace",
+            "project",
+            "release",
+            "actor",
+            "actor_detail",
+            "verb",
+            "field",
+            "old_value",
+            "new_value",
+            "old_identifier",
+            "new_identifier",
+            "comment",
+            "release_comment",
+            "epoch",
+            "extra",
             "created_at",
             "updated_at",
         ]

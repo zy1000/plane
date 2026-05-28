@@ -52,7 +52,7 @@ export class ReleaseService extends APIService {
     workspaceSlug: string,
     projectId: string,
     releaseId: string,
-    data: Partial<IRelease>
+    data: Partial<IRelease> & { status_change_reason?: string }
   ): Promise<IRelease> {
     return this.patch(`/api/workspaces/${workspaceSlug}/projects/${projectId}/releases/${releaseId}/`, data)
       .then((response) => response?.data)

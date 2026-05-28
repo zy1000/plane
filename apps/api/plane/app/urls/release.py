@@ -9,6 +9,7 @@ from plane.app.views import (
     ReleaseUserPropertiesEndpoint,
     ReleaseArchiveUnarchiveEndpoint,
     ReleaseCommentViewSet,
+    ReleaseActivityEndpoint,
 )
 from plane.app.views.release.base import ReleaseAPI, ReleaseOverdueByAssigneeEndpoint
 from plane.app.views.release.file import ReleaseFileAPI
@@ -104,6 +105,11 @@ urlpatterns = [
             }
         ),
         name="project-release-comments",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/releases/<uuid:release_id>/activities/",
+        ReleaseActivityEndpoint.as_view(),
+        name="project-release-activities",
     ),
     path(
         "workspaces/<str:slug>/projects/<uuid:project_id>/user-favorite-releases/",

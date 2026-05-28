@@ -17,6 +17,7 @@ from rest_framework.response import Response
 from plane.app.permissions import allow_permission, ROLE, allow_fine_permission, PermissionKey
 from plane.app.serializers import ReleaseIssueSerializer
 from plane.bgtasks.issue_activities_task import issue_activity
+from plane.bgtasks.release_activities_task import release_activity as release_activity_task
 from plane.db.models import (
     Issue,
     FileAsset,
@@ -223,6 +224,18 @@ class ReleaseIssueViewSet(BaseViewSet):
             )
             for issue in issues
         ]
+        issue_names = list(
+            Issue.objects.filter(pk__in=issues).values_list("name", flat=True)
+        )
+        release_activity_task.delay(
+            type="release_issue.activity.created",
+            requested_data=json.dumps({"issue_names": issue_names, "count": len(issues)}),
+            current_instance=None,
+            release_id=str(release_id),
+            actor_id=str(request.user.id),
+            project_id=str(project_id),
+            epoch=int(timezone.now().timestamp()),
+        )
         return Response({"message": "success"}, status=status.HTTP_201_CREATED)
 
     @allow_fine_permission(PermissionKey.RELEASES_ISSUE_MANAGE)
@@ -247,6 +260,7 @@ class ReleaseIssueViewSet(BaseViewSet):
                 batch_size=10,
                 ignore_conflicts=True,
             )
+            issue_name = Issue.objects.filter(pk=issue_id).values_list("name", flat=True).first() or ""
             _ = [
                 issue_activity.delay(
                     type="release.activity.created",
@@ -261,6 +275,18 @@ class ReleaseIssueViewSet(BaseViewSet):
                 )
                 for release in releases
             ]
+            _ = [
+                release_activity_task.delay(
+                    type="release_issue.activity.created",
+                    requested_data=json.dumps({"issue_names": [issue_name], "count": 1}),
+                    current_instance=None,
+                    release_id=str(release),
+                    actor_id=str(request.user.id),
+                    project_id=str(project_id),
+                    epoch=int(timezone.now().timestamp()),
+                )
+                for release in releases
+            ]
 
         for release_id in removed_releases:
             release_issue = ReleaseIssue.objects.filter(
@@ -269,24 +295,31 @@ class ReleaseIssueViewSet(BaseViewSet):
                 release_id=release_id,
                 issue_id=issue_id,
             )
+            release_name = (
+                release_issue.first().release.name
+                if (release_issue.first() and release_issue.first().release)
+                else None
+            )
+            issue_name = Issue.objects.filter(pk=issue_id).values_list("name", flat=True).first() or ""
             issue_activity.delay(
                 type="release.activity.deleted",
                 requested_data=json.dumps({"release_id": str(release_id)}),
                 actor_id=str(request.user.id),
                 issue_id=str(issue_id),
                 project_id=str(project_id),
-                current_instance=json.dumps(
-                    {
-                        "release_name": (
-                            release_issue.first().release.name
-                            if (release_issue.first() and release_issue.first().release)
-                            else None
-                        )
-                    }
-                ),
+                current_instance=json.dumps({"release_name": release_name}),
                 epoch=int(timezone.now().timestamp()),
                 notification=True,
                 origin=base_host(request=request, is_app=True),
+            )
+            release_activity_task.delay(
+                type="release_issue.activity.deleted",
+                requested_data=None,
+                current_instance=json.dumps({"issue_names": [issue_name], "count": 1}),
+                release_id=str(release_id),
+                actor_id=str(request.user.id),
+                project_id=str(project_id),
+                epoch=int(timezone.now().timestamp()),
             )
             release_issue.delete()
 
@@ -300,16 +333,28 @@ class ReleaseIssueViewSet(BaseViewSet):
             release_id=release_id,
             issue_id=issue_id,
         )
+        first_link = release_issue.first()
+        release_name = first_link.release.name if (first_link and first_link.release) else ""
+        issue_name = Issue.objects.filter(pk=issue_id).values_list("name", flat=True).first() or ""
         issue_activity.delay(
             type="release.activity.deleted",
             requested_data=json.dumps({"release_id": str(release_id)}),
             actor_id=str(request.user.id),
             issue_id=str(issue_id),
             project_id=str(project_id),
-            current_instance=json.dumps({"release_name": release_issue.first().release.name}),
+            current_instance=json.dumps({"release_name": release_name}),
             epoch=int(timezone.now().timestamp()),
             notification=True,
             origin=base_host(request=request, is_app=True),
+        )
+        release_activity_task.delay(
+            type="release_issue.activity.deleted",
+            requested_data=None,
+            current_instance=json.dumps({"issue_names": [issue_name], "count": 1}),
+            release_id=str(release_id),
+            actor_id=str(request.user.id),
+            project_id=str(project_id),
+            epoch=int(timezone.now().timestamp()),
         )
         release_issue.delete()
         CycleIssue.objects.filter(issue_id=issue_id, workspace__slug=slug, project_id=project_id).delete(soft=False)

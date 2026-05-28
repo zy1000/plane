@@ -89,6 +89,10 @@ class CycleSerializer(BaseSerializer):
         ]
         read_only_fields = fields
 
+class CycleSimpleFieldSerializer(BaseSerializer):
+    class Meta:
+        model = Cycle
+        fields = ['id','name','start_date','end_date']
 
 class CycleIssueSerializer(BaseSerializer):
     issue_detail = IssueStateSerializer(read_only=True, source="issue")

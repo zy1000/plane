@@ -5,7 +5,6 @@ import json
 from django.contrib.postgres.aggregates import ArrayAgg
 from django.contrib.postgres.fields import ArrayField
 from django.db.models import (
-    BooleanField,
     Case,
     CharField,
     Count,
@@ -52,7 +51,7 @@ from plane.app.serializers import (
     ReleaseOverdueRecordSerializer,
     CycleSerializer,
 )
-from plane.app.serializers.qa import TestPlanDetailSerializer
+from plane.app.serializers.qa import  PlanListSerializer
 from plane.bgtasks.issue_activities_task import issue_activity
 from plane.db.models import (
     Issue,
@@ -73,6 +72,7 @@ from plane.db.models import (
     TestPlan,
     PlanCase,
 )
+from plane.bgtasks.release_activities_task import release_activity as release_activity_task
 from plane.utils.release.overdue_strategy import (
     sync_overdue_on_status_change,
     sync_overdue_on_date_change,
@@ -89,6 +89,7 @@ from plane.bgtasks.entity_status_email_task import (
 from .. import BaseAPIView, BaseViewSet
 from plane.bgtasks.recent_visited_task import recent_visited_task
 from plane.utils.host import base_host
+from ...serializers.cycle import CycleSimpleFieldSerializer
 
 
 class ReleaseViewSet(BaseViewSet):
@@ -424,6 +425,17 @@ class ReleaseViewSet(BaseViewSet):
                 actor_id=request.user.id,
                 slug=slug,
                 origin=base_host(request=request, is_app=True),
+            )
+            transaction.on_commit(
+                lambda: release_activity_task.delay(
+                    type="release.activity.created",
+                    requested_data=json.dumps(request.data, cls=DjangoJSONEncoder),
+                    current_instance=None,
+                    release_id=str(release["id"]),
+                    actor_id=str(request.user.id),
+                    project_id=str(project_id),
+                    epoch=int(timezone.now().timestamp()),
+                )
             )
             datetime_fields = ["created_at", "updated_at"]
             release = user_timezone_converter(release, datetime_fields, request.user.user_timezone)
@@ -816,6 +828,17 @@ class ReleaseViewSet(BaseViewSet):
                 slug=slug,
                 origin=base_host(request=request, is_app=True),
             )
+            transaction.on_commit(
+                lambda: release_activity_task.delay(
+                    type="release.activity.updated",
+                    requested_data=json.dumps(request.data, cls=DjangoJSONEncoder),
+                    current_instance=current_instance,
+                    release_id=str(release["id"]),
+                    actor_id=str(request.user.id),
+                    project_id=str(project_id),
+                    epoch=int(timezone.now().timestamp()),
+                )
+            )
 
             if (
                 new_status
@@ -871,6 +894,15 @@ class ReleaseViewSet(BaseViewSet):
             )
             for issue in release_issues
         ]
+        release_activity_task.delay(
+            type="release.activity.deleted",
+            requested_data=None,
+            current_instance=json.dumps({"name": release.name}),
+            release_id=str(pk),
+            actor_id=str(request.user.id),
+            project_id=str(project_id),
+            epoch=int(timezone.now().timestamp()),
+        )
         release.delete()
         ReleaseIssue.objects.filter(release=pk, project_id=project_id).delete()
         UserFavorite.objects.filter(
@@ -997,7 +1029,7 @@ class ReleaseAPI(BaseViewSet):
             return Response({"error": "release_id and cycle_id are required"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            cycle_info = Cycle.objects.values("project_id", "workspace_id").get(id=cycle_id)
+            cycle_info = Cycle.objects.values("project_id", "workspace_id", "name").get(id=cycle_id)
         except Cycle.DoesNotExist:
             return Response({"error": "Cycle not found"}, status=status.HTTP_404_NOT_FOUND)
 
@@ -1005,6 +1037,7 @@ class ReleaseAPI(BaseViewSet):
             return Response({"error": "Release not found in cycle's project"}, status=status.HTTP_404_NOT_FOUND)
 
         with transaction.atomic():
+            cycle_already_linked = Cycle.objects.filter(id=cycle_id, release_id=release_id).exists()
             Cycle.objects.filter(id=cycle_id).update(release_id=release_id)
 
             issue_rows = list(
@@ -1037,6 +1070,34 @@ class ReleaseAPI(BaseViewSet):
             if to_create:
                 ReleaseIssue.objects.bulk_create(to_create, batch_size=1000)
 
+        if to_create:
+            created_issue_ids = [str(item.issue_id) for item in to_create]
+            issue_names = list(
+                Issue.objects.filter(pk__in=created_issue_ids).values_list("name", flat=True)
+            )
+            release_activity_task.delay(
+                type="release_issue.activity.created",
+                requested_data=json.dumps({"issue_names": issue_names, "count": len(to_create)}),
+                current_instance=None,
+                release_id=str(release_id),
+                actor_id=str(request.user.id),
+                project_id=str(project_id),
+                epoch=int(timezone.now().timestamp()),
+            )
+
+        if not cycle_already_linked:
+            release_activity_task.delay(
+                type="release_cycle.activity.created",
+                requested_data=json.dumps(
+                    {"cycle_names": [cycle_info.get("name") or ""], "count": 1}
+                ),
+                current_instance=None,
+                release_id=str(release_id),
+                actor_id=str(request.user.id),
+                project_id=str(project_id),
+                epoch=int(timezone.now().timestamp()),
+            )
+
         return Response(
             {"release_id": release_id, "cycle_id": cycle_id, "created": len(to_create)},
             status=status.HTTP_201_CREATED,
@@ -1048,7 +1109,7 @@ class ReleaseAPI(BaseViewSet):
         query = Cycle.objects.filter(workspace__slug=slug, project=project_id, release__isnull=True)
         paginator = self.pagination_class()
         paginated_queryset = paginator.paginate_queryset(query, request)
-        serializer = CycleSerializer(paginated_queryset, many=True)
+        serializer = CycleSimpleFieldSerializer(paginated_queryset, many=True)
         return list_response(data=serializer.data, count=query.count())
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
@@ -1065,10 +1126,46 @@ class ReleaseAPI(BaseViewSet):
         release_id = request.data.get("release_id")
         cycle_id = request.data.get("cycle_id")
 
+        cycle_row = Cycle.objects.filter(id=cycle_id, release_id=release_id).values("name").first()
         Cycle.objects.filter(id=cycle_id).update(release_id=None)
 
         cycle_issue_query = CycleIssue.objects.filter(cycle_id=cycle_id).values_list('issue_id', flat=True)
+        removed_issue_ids = list(
+            ReleaseIssue.objects.filter(
+                release_id=release_id, issue_id__in=cycle_issue_query
+            ).values_list("issue_id", flat=True)
+        )
         ReleaseIssue.objects.filter(release_id=release_id, issue_id__in=cycle_issue_query).delete(soft=False)
+
+        if cycle_row:
+            release_activity_task.delay(
+                type="release_cycle.activity.deleted",
+                requested_data=None,
+                current_instance=json.dumps(
+                    {"cycle_names": [cycle_row.get("name") or ""], "count": 1}
+                ),
+                release_id=str(release_id),
+                actor_id=str(request.user.id),
+                project_id=str(project_id),
+                epoch=int(timezone.now().timestamp()),
+            )
+
+        if removed_issue_ids:
+            issue_names = list(
+                Issue.objects.filter(pk__in=removed_issue_ids).values_list("name", flat=True)
+            )
+            release_activity_task.delay(
+                type="release_issue.activity.deleted",
+                requested_data=None,
+                current_instance=json.dumps(
+                    {"issue_names": issue_names, "count": len(removed_issue_ids)}
+                ),
+                release_id=str(release_id),
+                actor_id=str(request.user.id),
+                project_id=str(project_id),
+                epoch=int(timezone.now().timestamp()),
+            )
+
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
@@ -1173,7 +1270,7 @@ class ReleaseAPI(BaseViewSet):
             deleted_at__isnull=True,
         ).exclude(releases__id=release_id)
 
-        serializer = TestPlanDetailSerializer(plans, many=True)
+        serializer = PlanListSerializer(plans, many=True)
         return Response({"data": serializer.data, "count": plans.count()}, status=status.HTTP_200_OK)
 
     @allow_fine_permission(PermissionKey.RELEASES_EDIT)
@@ -1202,6 +1299,16 @@ class ReleaseAPI(BaseViewSet):
         )
         if plans:
             release.plans.add(*plans)
+            plan_names = [p.name for p in plans if getattr(p, "name", None)]
+            release_activity_task.delay(
+                type="release_plan.activity.created",
+                requested_data=json.dumps({"plan_names": plan_names, "count": len(plans)}),
+                current_instance=None,
+                release_id=str(release_id),
+                actor_id=str(request.user.id),
+                project_id=str(project_id),
+                epoch=int(timezone.now().timestamp()),
+            )
 
         return Response({"release_id": str(release_id), "updated": len(plans)}, status=status.HTTP_200_OK)
 
@@ -1224,7 +1331,17 @@ class ReleaseAPI(BaseViewSet):
 
         plans = list(TestPlan.objects.filter(id__in=plan_ids))
         if plans:
+            plan_names = [p.name for p in plans if getattr(p, "name", None)]
             release.plans.remove(*plans)
+            release_activity_task.delay(
+                type="release_plan.activity.deleted",
+                requested_data=None,
+                current_instance=json.dumps({"plan_names": plan_names, "count": len(plans)}),
+                release_id=str(release_id),
+                actor_id=str(request.user.id),
+                project_id=str(project_id),
+                epoch=int(timezone.now().timestamp()),
+            )
 
         return Response({"release_id": str(release_id), "updated": len(plans)}, status=status.HTTP_200_OK)
 

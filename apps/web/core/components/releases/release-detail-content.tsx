@@ -23,6 +23,7 @@ import {
   ScrollText,
   Activity,
   AlertTriangle,
+  MessageSquare,
 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import useSWR from "swr";
@@ -54,6 +55,7 @@ import { OverdueByAssigneeCard } from "@/components/common/overdue-by-assignee-c
 import { CycleOverviewFullscreenModal } from "@/components/cycles/cycle-overview-fullscreen-modal";
 import { getReleaseStatusDetails } from "@/components/releases/release-status-config";
 import { ReleaseCommentsSection } from "@/components/releases/release-comments";
+import { ReleaseActivityFeed } from "@/components/releases/release-activity";
 
 type Props = {
   releaseId: string;
@@ -854,29 +856,68 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
           </div>
 
           <div className={`${sectionCard} flex h-[420px] flex-col p-4`}>
-            <div className="flex items-center justify-between">
-              <div className="flex min-w-0 items-center gap-2">
-                <Activity className="h-4 w-4 shrink-0 text-placeholder" aria-hidden />
-                <div className="text-sm font-medium text-primary">发布评论</div>
+            <Tab.Group>
+              <div className="flex w-full flex-shrink-0 items-center gap-1">
+                <Tab.List
+                  as="div"
+                  className="flex min-w-0 flex-1 items-center justify-between gap-2 rounded-md bg-layer-2 p-1 text-sm font-medium"
+                >
+                  {[
+                    { key: "activity", label: "动态", Icon: Activity },
+                    { key: "comment", label: "评论", Icon: MessageSquare },
+                  ].map((tab) => {
+                    const TabIcon = tab.Icon;
+                    return (
+                      <Tab
+                        key={tab.key}
+                        className={({ selected }) =>
+                          cn(
+                            "w-full cursor-pointer rounded-sm p-1 text-primary transition-all outline-none focus:outline-none",
+                            "flex items-center justify-center gap-1.5",
+                            selected
+                              ? "bg-layer-transparent-active text-secondary"
+                              : "text-placeholder hover:text-secondary"
+                          )
+                        }
+                      >
+                        <TabIcon className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                        <span className="min-w-0 truncate">{tab.label}</span>
+                      </Tab>
+                    );
+                  })}
+                </Tab.List>
+                <button
+                  type="button"
+                  className="grid h-6 w-6 shrink-0 place-items-center rounded transition-colors hover:bg-surface-2"
+                  onClick={() => setActivityExpandOpen(true)}
+                  aria-label="放大"
+                >
+                  <Maximize2 className="h-3.5 w-3.5 text-placeholder" />
+                </button>
               </div>
-              <button
-                type="button"
-                className="grid h-6 w-6 shrink-0 place-items-center rounded transition-colors hover:bg-surface-2"
-                onClick={() => setActivityExpandOpen(true)}
-                aria-label="放大"
-              >
-                <Maximize2 className="h-3.5 w-3.5 text-placeholder" />
-              </button>
-            </div>
-            <div className="mt-3 min-h-0 flex-1 overflow-hidden">
-              {workspaceSlug && projectId && (
-                <ReleaseCommentsSection
-                  workspaceSlug={workspaceSlug.toString()}
-                  projectId={projectId.toString()}
-                  releaseId={releaseId}
-                />
-              )}
-            </div>
+              <Tab.Panels className="min-h-0 flex-1 py-3">
+                <Tab.Panel key="activity" className="flex h-full min-h-0 flex-col">
+                  <div className="vertical-scrollbar scrollbar-sm min-h-0 flex-1 overflow-y-auto pr-1">
+                    {workspaceSlug && projectId && (
+                      <ReleaseActivityFeed
+                        workspaceSlug={workspaceSlug.toString()}
+                        projectId={projectId.toString()}
+                        releaseId={releaseId}
+                      />
+                    )}
+                  </div>
+                </Tab.Panel>
+                <Tab.Panel key="comment" className="flex h-full min-h-0 flex-col">
+                  {workspaceSlug && projectId && (
+                    <ReleaseCommentsSection
+                      workspaceSlug={workspaceSlug.toString()}
+                      projectId={projectId.toString()}
+                      releaseId={releaseId}
+                    />
+                  )}
+                </Tab.Panel>
+              </Tab.Panels>
+            </Tab.Group>
           </div>
         </div>
 
@@ -1560,17 +1601,58 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
       <CycleOverviewFullscreenModal
         isOpen={activityExpandOpen}
         onClose={() => setActivityExpandOpen(false)}
-        title="发布评论"
+        title="发布动态与评论"
         icon={Activity}
       >
         <div className="flex min-h-0 flex-1 flex-col bg-surface-1 px-4 pb-4">
-          {workspaceSlug && projectId && (
-            <ReleaseCommentsSection
-              workspaceSlug={workspaceSlug.toString()}
-              projectId={projectId.toString()}
-              releaseId={releaseId}
-            />
-          )}
+          <Tab.Group>
+            <Tab.List
+              as="div"
+              className="flex w-full items-center justify-start gap-2 rounded-md bg-layer-2 p-1 text-sm font-medium"
+            >
+              {[
+                { key: "activity", label: "动态" },
+                { key: "comment", label: "评论" },
+              ].map((tab) => (
+                <Tab
+                  key={tab.key}
+                  className={({ selected }) =>
+                    cn(
+                      "min-w-[120px] cursor-pointer rounded-sm p-1 text-primary transition-all outline-none focus:outline-none",
+                      "flex items-center justify-center gap-1.5",
+                      selected
+                        ? "bg-layer-transparent-active text-secondary"
+                        : "text-placeholder hover:text-secondary"
+                    )
+                  }
+                >
+                  <span className="min-w-0 truncate">{tab.label}</span>
+                </Tab>
+              ))}
+            </Tab.List>
+            <Tab.Panels className="min-h-0 flex-1 py-3">
+              <Tab.Panel key="activity" className="flex h-full min-h-0 flex-col">
+                <div className="vertical-scrollbar scrollbar-sm min-h-0 flex-1 overflow-y-auto pr-1">
+                  {workspaceSlug && projectId && (
+                    <ReleaseActivityFeed
+                      workspaceSlug={workspaceSlug.toString()}
+                      projectId={projectId.toString()}
+                      releaseId={releaseId}
+                    />
+                  )}
+                </div>
+              </Tab.Panel>
+              <Tab.Panel key="comment" className="flex h-full min-h-0 flex-col">
+                {workspaceSlug && projectId && (
+                  <ReleaseCommentsSection
+                    workspaceSlug={workspaceSlug.toString()}
+                    projectId={projectId.toString()}
+                    releaseId={releaseId}
+                  />
+                )}
+              </Tab.Panel>
+            </Tab.Panels>
+          </Tab.Group>
         </div>
       </CycleOverviewFullscreenModal>
 
@@ -1816,7 +1898,7 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isOp
               {selectablePlansError}
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="max-h-[min(480px,60vh)] overflow-y-auto overflow-x-auto vertical-scrollbar scrollbar-sm">
               <table className="min-w-full table-fixed">
                 <thead>
                   <tr className="text-left text-xs text-secondary [&>th]:sticky [&>th]:top-0 [&>th]:z-10 [&>th]:bg-surface-1 [&>th]:shadow-[inset_0_-1px_0_var(--border-subtle)]">

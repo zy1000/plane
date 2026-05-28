@@ -114,7 +114,7 @@ export const ReleaseListItemAction = observer(function ReleaseListItemAction(pro
     });
   };
 
-  const handleReleaseDetailsChange = async (payload: Partial<IRelease>) => {
+  const handleReleaseDetailsChange = async (payload: Partial<IRelease> & { status_change_reason?: string }) => {
     if (!workspaceSlug || !projectId) return;
 
     await updateReleaseDetails(workspaceSlug.toString(), projectId.toString(), releaseId, payload)

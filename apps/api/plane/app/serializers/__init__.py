@@ -110,6 +110,7 @@ from .release import (
     ReleaseUserPropertiesSerializer,
     ReleaseOverdueRecordSerializer,
     ReleaseCommentSerializer,
+    ReleaseActivitySerializer,
 )
 
 from .api import APITokenSerializer, APITokenReadSerializer

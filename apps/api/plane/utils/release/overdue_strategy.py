@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import Iterable, Optional
 
@@ -23,6 +24,36 @@ from plane.db.models import (
 )
 
 logger = logging.getLogger("plane")
+
+
+def _emit_overdue_activity(activity_type: str, *, release: Release, record: ReleaseOverdueRecord) -> None:
+    """把延期记录的开启/关闭事件投递到发布活动表。
+
+    系统触发时 actor_id 为 None，前端可据此显示为 “系统” 操作。
+    """
+    try:
+        from plane.bgtasks.release_activities_task import release_activity as release_activity_task
+
+        actor_id = None
+        if record.triggered_by == ReleaseOverdueTrigger.USER:
+            updater = getattr(record, "updated_by_id", None) or getattr(record, "created_by_id", None)
+            if updater:
+                actor_id = str(updater)
+
+        release_activity_task.delay(
+            type=activity_type,
+            requested_data=json.dumps({"phase": record.phase, "record_id": str(record.id)}),
+            current_instance=None,
+            release_id=str(release.id),
+            actor_id=actor_id,
+            project_id=str(release.project_id),
+            epoch=int(timezone.now().timestamp()),
+        )
+    except Exception:  # noqa: BLE001
+        logger.exception(
+            "emit release overdue activity failed",
+            extra={"release_id": str(release.id), "phase": record.phase, "type": activity_type},
+        )
 
 # 进入这些状态意味着对应阶段彻底结束，应当关闭未结束的逾期记录
 _DEV_PHASE_CLOSE_STATUSES = {
@@ -88,6 +119,7 @@ def open_overdue(
         "release overdue opened",
         extra={"release_id": str(release.id), "phase": phase, "triggered_by": triggered_by},
     )
+    _emit_overdue_activity("release_overdue.activity.opened", release=release, record=record)
     return record
 
 
@@ -107,6 +139,12 @@ def close_active_overdue(
         "release overdue closed",
         extra={"release_id": str(release_id), "phase": phase},
     )
+    if record.release_id:
+        _emit_overdue_activity(
+            "release_overdue.activity.closed",
+            release=record.release,
+            record=record,
+        )
     return record
 
 

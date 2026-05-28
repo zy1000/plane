@@ -286,3 +286,51 @@ class ReleaseComment(ProjectBaseModel):
 
     def __str__(self):
         return f"{self.release_id} {self.actor_id}"
+
+
+class ReleaseActivity(ProjectBaseModel):
+    """发布维度的活动记录（动态），结构对齐 IssueActivity，但主体是 release。
+
+    每条记录代表 release 上的一次属性变更、状态变更、关联变更或评论事件，
+    供前端时间线展示。系统触发（例如自动开关延期记录）时 actor 允许为空。
+    """
+
+    release = models.ForeignKey(
+        Release,
+        on_delete=models.CASCADE,
+        related_name="release_activities",
+    )
+    verb = models.CharField(max_length=255, verbose_name="Action", default="created")
+    field = models.CharField(max_length=255, verbose_name="Field Name", blank=True, null=True)
+    old_value = models.TextField(verbose_name="Old Value", blank=True, null=True)
+    new_value = models.TextField(verbose_name="New Value", blank=True, null=True)
+    comment = models.TextField(verbose_name="Comment", blank=True)
+    release_comment = models.ForeignKey(
+        "db.ReleaseComment",
+        on_delete=models.SET_NULL,
+        related_name="release_comment_activities",
+        null=True,
+        blank=True,
+    )
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="release_activities",
+    )
+    old_identifier = models.UUIDField(null=True)
+    new_identifier = models.UUIDField(null=True)
+    epoch = models.FloatField(null=True)
+    extra = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        verbose_name = "Release Activity"
+        verbose_name_plural = "Release Activities"
+        db_table = "release_activities"
+        ordering = ("-created_at",)
+        indexes = [
+            models.Index(fields=["release", "created_at"], name="release_activity_release_ts"),
+        ]
+
+    def __str__(self):
+        return f"{self.release_id} {self.field} {self.verb}"

@@ -50,6 +50,7 @@ from .issue import (
 from .module import Module, ModuleIssue, ModuleLink, ModuleMember, ModuleUserProperties
 from .release import (
     Release,
+    ReleaseActivity,
     ReleaseComment,
     ReleaseIssue,
     ReleaseLink,

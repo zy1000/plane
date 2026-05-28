@@ -53,7 +53,7 @@ export interface IReleaseStore {
     workspaceSlug: string,
     projectId: string,
     releaseId: string,
-    data: Partial<IRelease>
+    data: Partial<IRelease> & { status_change_reason?: string }
   ) => Promise<IRelease>;
   deleteRelease: (workspaceSlug: string, projectId: string, releaseId: string) => Promise<void>;
   createReleaseLink: (
@@ -430,11 +430,17 @@ export class ReleaseStore implements IReleaseStore {
    * @param data
    * @returns IRelease
    */
-  updateReleaseDetails = async (workspaceSlug: string, projectId: string, releaseId: string, data: Partial<IRelease>) => {
+  updateReleaseDetails = async (
+    workspaceSlug: string,
+    projectId: string,
+    releaseId: string,
+    data: Partial<IRelease> & { status_change_reason?: string }
+  ) => {
     const originalReleaseDetails = this.getReleaseById(releaseId);
+    const { status_change_reason: _statusChangeReason, ...optimisticData } = data;
     try {
       runInAction(() => {
-        set(this.releaseMap, [releaseId], { ...(originalReleaseDetails ?? {}), ...data });
+        set(this.releaseMap, [releaseId], { ...(originalReleaseDetails ?? {}), ...optimisticData });
       });
       const response = await this.releaseService.patchRelease(workspaceSlug, projectId, releaseId, data);
       return response;

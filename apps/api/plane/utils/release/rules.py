@@ -64,6 +64,8 @@ def _is_whitelisted_no_check(current: str, next_status: str) -> bool:
     # 任意非已取消 -> 已取消
     if next_status == ReleaseStatus.CANCELLED and current != ReleaseStatus.CANCELLED:
         return True
+    if current == ReleaseStatus.CANCELLED or current == ReleaseStatus.REJECTED:
+        return True
     return (current, next_status) in _WHITELISTED_TRANSITIONS
 
 
