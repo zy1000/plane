@@ -85,11 +85,16 @@ export type TTimesheetReportParams = {
   member_id?: string | string[];
   category_id?: string | string[];
   category_key?: string | string[];
+  /** 项目编号筛选；特殊值 "__empty__" 代表项目编号为空。 */
+  pms_project_name?: string | string[];
   start_time?: string;
   end_time?: string;
   cursor?: string;
   per_page?: number;
 };
+
+/** 项目编号筛选中代表「空值」的特殊标记，前后端约定一致。 */
+export const EMPTY_PMS_PROJECT_NAME = "__empty__";
 
 export type TTimesheetReportResponse = {
   total_count: number;
@@ -298,6 +303,7 @@ export class TimesheetService extends APIService {
     assignMultiValueParam(queryParams, "member_id", params.member_id);
     assignMultiValueParam(queryParams, "category_id", params.category_id);
     assignMultiValueParam(queryParams, "category_key", params.category_key);
+    assignMultiValueParam(queryParams, "pms_project_name", params.pms_project_name);
     if (params.start_time) queryParams.start_time = params.start_time;
     if (params.end_time) queryParams.end_time = params.end_time;
     if (params.cursor) queryParams.cursor = params.cursor;
@@ -321,6 +327,7 @@ export class TimesheetService extends APIService {
     assignMultiValueParam(queryParams, "member_id", params.member_id);
     assignMultiValueParam(queryParams, "category_id", params.category_id);
     assignMultiValueParam(queryParams, "category_key", params.category_key);
+    assignMultiValueParam(queryParams, "pms_project_name", params.pms_project_name);
     if (params.start_time) queryParams.start_time = params.start_time;
     if (params.end_time) queryParams.end_time = params.end_time;
     if (ids && ids.length > 0) queryParams.ids = ids.join(",");

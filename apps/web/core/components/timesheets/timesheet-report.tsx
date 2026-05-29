@@ -25,6 +25,7 @@ import {
   Download,
   FileBarChart2,
   FolderOpen,
+  Hash,
   ListFilter,
   ListFilterPlus,
   SlidersHorizontal,
@@ -39,7 +40,7 @@ import { useMember } from "@/hooks/store/use-member";
 import { useProject } from "@/hooks/store/use-project";
 import { useTimesheetCategories } from "@/hooks/store/use-timesheet-categories";
 import { useTimesheetReport } from "@/hooks/store/use-timesheet-report";
-import type { TTimesheetReportRow } from "@/services/issue/timesheet.service";
+import { EMPTY_PMS_PROJECT_NAME, type TTimesheetReportRow } from "@/services/issue/timesheet.service";
 import { FiltersDropdown } from "@/components/issues/issue-layouts/filters";
 
 type TTimesheetReportProps = {
@@ -92,7 +93,7 @@ const DATE_PRESETS: TDatePreset[] = [
   },
 ];
 
-type TFilterKey = "project" | "date" | "member" | "category";
+type TFilterKey = "project" | "pmsProject" | "date" | "member" | "category";
 
 type TPropertyConfig = {
   key: TFilterKey;
@@ -102,10 +103,14 @@ type TPropertyConfig = {
 
 const PROPERTY_CONFIGS: TPropertyConfig[] = [
   { key: "project", label: "项目", icon: FolderOpen },
+  { key: "pmsProject", label: "项目编号", icon: Hash },
   { key: "date", label: "日期", icon: Calendar },
   { key: "member", label: "成员", icon: User },
   { key: "category", label: "类别", icon: Tag },
 ];
+
+// 项目编号筛选中「空值」选项的展示文案
+const EMPTY_PMS_PROJECT_LABEL = "（项目编号为空）";
 
 // ---------- 列（显示）配置 ----------
 type TReportColumnKey =
@@ -226,6 +231,20 @@ export const TimesheetReport = observer(function TimesheetReport({
       .filter(Boolean) as { value: string; label: string }[];
   }, [workspaceProjectIds, getProjectById]);
 
+  // 项目编号选项：去重已配置的 pms_project_name，并把「空值」固定置顶
+  const pmsProjectOptions = useMemo(() => {
+    const ids = workspaceProjectIds ?? [];
+    const names = new Set<string>();
+    for (const id of ids) {
+      const name = getProjectById(id)?.pms_project_name?.trim();
+      if (name) names.add(name);
+    }
+    const realOptions = Array.from(names)
+      .sort((a, b) => a.localeCompare(b))
+      .map((name) => ({ value: name, label: name }));
+    return [{ value: EMPTY_PMS_PROJECT_NAME, label: EMPTY_PMS_PROJECT_LABEL }, ...realOptions];
+  }, [workspaceProjectIds, getProjectById]);
+
   const memberOptions = useMemo(() => {
     const ids = workspaceMemberStore.getWorkspaceMemberIds(workspaceSlug) ?? [];
     return ids
@@ -254,6 +273,7 @@ export const TimesheetReport = observer(function TimesheetReport({
   );
 
   const hasProjectFilter = (filters.projectIds?.length ?? 0) > 0;
+  const hasPmsProjectFilter = (filters.pmsProjectNames?.length ?? 0) > 0;
   const hasMemberFilter = (filters.memberIds?.length ?? 0) > 0;
   const hasCategoryFilter = (filters.categoryKeys?.length ?? 0) > 0;
   const hasDateFilter = !!filters.startDate || !!filters.endDate;
@@ -262,6 +282,7 @@ export const TimesheetReport = observer(function TimesheetReport({
   const [activeKeys, setActiveKeys] = useState<TFilterKey[]>(() => {
     const keys: TFilterKey[] = [];
     if (hasProjectFilter) keys.push("project");
+    if (hasPmsProjectFilter) keys.push("pmsProject");
     if (hasDateFilter) keys.push("date");
     if (hasMemberFilter) keys.push("member");
     if (hasCategoryFilter) keys.push("category");
@@ -273,15 +294,16 @@ export const TimesheetReport = observer(function TimesheetReport({
     setActiveKeys((prev) => {
       const next = new Set(prev);
       if (hasProjectFilter) next.add("project");
+      if (hasPmsProjectFilter) next.add("pmsProject");
       if (hasDateFilter) next.add("date");
       if (hasMemberFilter) next.add("member");
       if (hasCategoryFilter) next.add("category");
       return Array.from(next);
     });
-  }, [hasProjectFilter, hasDateFilter, hasMemberFilter, hasCategoryFilter]);
+  }, [hasProjectFilter, hasPmsProjectFilter, hasDateFilter, hasMemberFilter, hasCategoryFilter]);
 
   const hasAppliedConditions =
-    hasProjectFilter || hasMemberFilter || hasCategoryFilter || hasDateFilter;
+    hasProjectFilter || hasPmsProjectFilter || hasMemberFilter || hasCategoryFilter || hasDateFilter;
   const hasAnyConditions = activeKeys.length > 0 || hasAppliedConditions;
 
   const visibleColumnDefs = useMemo(
@@ -332,6 +354,7 @@ export const TimesheetReport = observer(function TimesheetReport({
   const removeChip = (key: TFilterKey) => {
     setActiveKeys((prev) => prev.filter((k) => k !== key));
     if (key === "project") patchFilters({ projectIds: undefined });
+    if (key === "pmsProject") patchFilters({ pmsProjectNames: undefined });
     if (key === "date") patchFilters({ startDate: undefined, endDate: undefined });
     if (key === "member") patchFilters({ memberIds: undefined });
     if (key === "category") patchFilters({ categoryKeys: undefined });
@@ -530,6 +553,36 @@ export const TimesheetReport = observer(function TimesheetReport({
                               patchFilters({ projectIds: value.length > 0 ? value : undefined })
                             }
                             options={projectOptions}
+                          />
+                        </div>
+                      }
+                    />
+                  );
+                }
+                if (key === "pmsProject") {
+                  return (
+                    <FilterChip
+                      key={key}
+                      config={cfg}
+                      valueLabel={formatMultiValueLabel(filters.pmsProjectNames, pmsProjectOptions)}
+                      onRemove={() => removeChip(key)}
+                      valuePopover={
+                        <div className="p-2">
+                          <Select
+                            autoFocus
+                            defaultOpen
+                            mode="multiple"
+                            showSearch
+                            allowClear
+                            maxTagCount="responsive"
+                            style={{ width: 260 }}
+                            optionFilterProp="label"
+                            placeholder="选择项目编号"
+                            value={filters.pmsProjectNames ?? []}
+                            onChange={(value: string[]) =>
+                              patchFilters({ pmsProjectNames: value.length > 0 ? value : undefined })
+                            }
+                            options={pmsProjectOptions}
                           />
                         </div>
                       }

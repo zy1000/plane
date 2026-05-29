@@ -15,9 +15,18 @@ class PlanModuleListSerializer(ModelSerializer):
     children = serializers.SerializerMethodField()
 
     def get_count(self, obj: PlanModule):
+        # 列表场景下由视图预先聚合好 count，避免逐节点 COUNT 查询（N+1）
+        count_map = self.context.get("count_map")
+        if count_map is not None:
+            return count_map.get(obj.id, 0)
         return obj.plans.filter(deleted_at__isnull=True).count()
 
     def get_children(self, obj: PlanModule):
+        # 列表场景下由视图预先构建好父子关系，避免逐节点查询子节点（N+1）
+        children_map = self.context.get("children_map")
+        if children_map is not None:
+            qs = children_map.get(obj.id, [])
+            return PlanModuleListSerializer(qs, many=True, context=self.context).data
         qs = obj.children.filter(deleted_at__isnull=True).order_by("created_at")
         return PlanModuleListSerializer(qs, many=True).data
 

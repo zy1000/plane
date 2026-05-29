@@ -5,9 +5,28 @@ from django.db.models.expressions import result
 from rest_framework import serializers
 from rest_framework.serializers import ModelSerializer
 
-from plane.app.serializers import UserLiteSerializer, BaseSerializer, IssueAssigneeSerializer, ProjectDetailSerializer
-from plane.db.models import TestPlan, TestCaseRepository, User, TestCase, CaseLabel, CaseModule, FileAsset, Issue, \
-    CaseReviewModule, CaseReview, CaseReviewThrough, TestCaseComment, CaseReviewRecord, PlanModule
+from plane.app.serializers import (
+    UserLiteSerializer,
+    BaseSerializer,
+    IssueAssigneeSerializer,
+    ProjectDetailSerializer,
+)
+from plane.db.models import (
+    TestPlan,
+    TestCaseRepository,
+    User,
+    TestCase,
+    CaseLabel,
+    CaseModule,
+    FileAsset,
+    Issue,
+    CaseReviewModule,
+    CaseReview,
+    CaseReviewThrough,
+    TestCaseComment,
+    CaseReviewRecord,
+    PlanModule,
+)
 from plane.utils.qa import re_approval_case
 
 
@@ -15,28 +34,44 @@ class TestPlanCreateUpdateSerializer(ModelSerializer):
     """
     Serializer for creating a TestPlan.
     """
-    cases = serializers.PrimaryKeyRelatedField(queryset=TestCase.objects.all(), many=True, required=False)
+
+    cases = serializers.PrimaryKeyRelatedField(
+        queryset=TestCase.objects.all(), many=True, required=False
+    )
 
     class Meta:
         model = TestPlan
-        fields = ['name', 'description', 'module', 'begin_time', 'end_time', 'repository', 'threshold', 'cases']
+        fields = [
+            "name",
+            "description",
+            "module",
+            "begin_time",
+            "end_time",
+            "repository",
+            "threshold",
+            "cases",
+        ]
 
 
 class CaseDetailSerializer(ModelSerializer):
     """
     Serializer for creating a TestPlan.
     """
+
     review = serializers.SerializerMethodField()
 
     def get_review(self, obj):
-        if hasattr(obj, '_review_result'):
-            return obj._review_result if obj._review_result is not None else CaseReviewThrough.Result.NOT_START
+        if hasattr(obj, "_review_result"):
+            return (
+                obj._review_result
+                if obj._review_result is not None
+                else CaseReviewThrough.Result.NOT_START
+            )
         return obj.review
 
     class Meta:
         model = TestCase
-        fields = '__all__'
-
+        fields = "__all__"
 
 
 class TestCaseRepositorySerializer(ModelSerializer):
@@ -46,7 +81,7 @@ class TestCaseRepositorySerializer(ModelSerializer):
 
     class Meta:
         model = TestCaseRepository
-        fields = ['name', 'description', 'project', 'workspace']
+        fields = ["name", "description", "project", "workspace"]
 
 
 class TestCaseRepositoryDetailSerializer(ModelSerializer):
@@ -58,7 +93,7 @@ class TestCaseRepositoryDetailSerializer(ModelSerializer):
 
     class Meta:
         model = TestCaseRepository
-        fields = '__all__'
+        fields = "__all__"
         depth = 1
 
 
@@ -69,12 +104,16 @@ class CaseLabelSerializer(ModelSerializer):
 
     class Meta:
         model = CaseLabel
-        fields = '__all__'
+        fields = "__all__"
 
 
 class CaseCreateUpdateSerializer(ModelSerializer):
-    labels = serializers.PrimaryKeyRelatedField(queryset=CaseLabel.objects.all(), many=True, required=False)
-    issues = serializers.PrimaryKeyRelatedField(queryset=Issue.objects.all(), many=True, required=False)
+    labels = serializers.PrimaryKeyRelatedField(
+        queryset=CaseLabel.objects.all(), many=True, required=False
+    )
+    issues = serializers.PrimaryKeyRelatedField(
+        queryset=Issue.objects.all(), many=True, required=False
+    )
 
     review = serializers.SerializerMethodField()
 
@@ -83,12 +122,26 @@ class CaseCreateUpdateSerializer(ModelSerializer):
 
     class Meta:
         model = TestCase
-        fields = ['code', 'name', 'precondition', 'steps', 'remark', 'state', 'type', 'priority', 'repository',
-                  'labels', 'module', 'assignee', 'issues', 'test_type']
+        fields = [
+            "code",
+            "name",
+            "precondition",
+            "steps",
+            "remark",
+            "state",
+            "type",
+            "priority",
+            "repository",
+            "labels",
+            "module",
+            "assignee",
+            "issues",
+            "test_type",
+        ]
 
     def create(self, validated_data):
-        labels = validated_data.pop('labels', [])
-        issues = validated_data.pop('issues', [])
+        labels = validated_data.pop("labels", [])
+        issues = validated_data.pop("issues", [])
         instance = super().create(validated_data)
         if labels:
             instance.labels.set(labels)
@@ -97,13 +150,17 @@ class CaseCreateUpdateSerializer(ModelSerializer):
         return instance
 
     def update(self, instance, validated_data):
-        labels = validated_data.pop('labels', None)
-        issues = validated_data.pop('issues', None)
-        if any([
-            validated_data.get('name') and validated_data['name'] != instance.name,
-            validated_data.get('precondition') and validated_data['precondition'] != instance.precondition,
-            validated_data.get('steps') and validated_data['steps'] != instance.steps,
-        ]):
+        labels = validated_data.pop("labels", None)
+        issues = validated_data.pop("issues", None)
+        if any(
+            [
+                validated_data.get("name") and validated_data["name"] != instance.name,
+                validated_data.get("precondition")
+                and validated_data["precondition"] != instance.precondition,
+                validated_data.get("steps")
+                and validated_data["steps"] != instance.steps,
+            ]
+        ):
             re_approval_case(instance)
         instance = super().update(instance, validated_data)
         if labels is not None:
@@ -115,6 +172,7 @@ class CaseCreateUpdateSerializer(ModelSerializer):
 
 class CaseListSerializer(ModelSerializer):
     """用例查询"""
+
     issues = ...
 
     review = serializers.SerializerMethodField()
@@ -124,7 +182,7 @@ class CaseListSerializer(ModelSerializer):
 
     class Meta:
         model = TestCase
-        fields = '__all__'
+        fields = "__all__"
         depth = 1
 
 
@@ -133,7 +191,7 @@ class CaseModuleCreateUpdateSerializer(ModelSerializer):
 
     class Meta:
         model = CaseModule
-        fields = ['name', 'sort_order', 'parent', 'repository']
+        fields = ["name", "sort_order", "parent", "repository"]
 
 
 class CaseModuleListSerializer(serializers.ModelSerializer):
@@ -142,13 +200,13 @@ class CaseModuleListSerializer(serializers.ModelSerializer):
     class Meta:
         model = CaseModule
         fields = [
-            'id',
-            'name',
-            'sort_order',
-            'created_at',
-            'updated_at',
-            'children',  # 递归显示所有子节点
-            'repository'
+            "id",
+            "name",
+            "sort_order",
+            "created_at",
+            "updated_at",
+            "children",  # 递归显示所有子节点
+            "repository",
         ]
 
     def get_children(self, obj):
@@ -156,10 +214,14 @@ class CaseModuleListSerializer(serializers.ModelSerializer):
         递归获取所有子节点
         """
         # 获取直接子节点（未删除的）
-        direct_children = obj.children.filter(deleted_at__isnull=True).order_by('sort_order')
+        direct_children = obj.children.filter(deleted_at__isnull=True).order_by(
+            "sort_order"
+        )
 
         # 使用相同的序列化器递归序列化子节点
-        serializer = CaseModuleListSerializer(direct_children, many=True, context=self.context)
+        serializer = CaseModuleListSerializer(
+            direct_children, many=True, context=self.context
+        )
         return serializer.data
 
 
@@ -168,13 +230,13 @@ class CaseLabelCreateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = CaseLabel
-        fields = ['name', 'repository']
+        fields = ["name", "repository"]
 
 
 class CaseLabelListSerializer(serializers.ModelSerializer):
     class Meta:
         model = CaseLabel
-        fields = '__all__'
+        fields = "__all__"
 
 
 # 新增：测试用例附件序列化器（复用 FileAsset）
@@ -192,9 +254,9 @@ class CaseAttachmentSerializer(BaseSerializer):
             "workspace",
             "project",
             "case",
-            'size',
-            'storage_metadata',
-            'attributesz',
+            "size",
+            "storage_metadata",
+            "attributesz",
         ]
 
 
@@ -211,7 +273,7 @@ class CaseIssueSerializer(ModelSerializer):
 
     class Meta:
         model = TestCase
-        fields = ['id', 'issues']
+        fields = ["id", "issues"]
 
 
 class TestCaseCommentSerializer(ModelSerializer):
@@ -228,8 +290,11 @@ class TestCaseCommentSerializer(ModelSerializer):
         if current_depth >= max_depth:
             return []
         qs = obj.children.filter(deleted_at__isnull=True).order_by("created_at")
-        serializer = TestCaseCommentSerializer(qs, many=True,
-                                               context={"current_depth": current_depth + 1, "max_depth": max_depth})
+        serializer = TestCaseCommentSerializer(
+            qs,
+            many=True,
+            context={"current_depth": current_depth + 1, "max_depth": max_depth},
+        )
         return serializer.data
 
 
@@ -237,13 +302,13 @@ class TestCaseCommentSerializer(ModelSerializer):
 class ReviewModuleCreateUpdateSerializer(ModelSerializer):
     class Meta:
         model = CaseReviewModule
-        fields = ['name', 'repository']
+        fields = ["name", "repository"]
 
 
 class ReviewModuleDetailSerializer(ModelSerializer):
     class Meta:
         model = CaseReviewModule
-        fields = '__all__'
+        fields = "__all__"
 
 
 class ReviewModuleListSerializer(ModelSerializer):
@@ -254,28 +319,34 @@ class ReviewModuleListSerializer(ModelSerializer):
 
     class Meta:
         model = CaseReviewModule
-        fields = '__all__'
-        read_only_fields = ['review_count']
+        fields = "__all__"
+        read_only_fields = ["review_count"]
 
 
 class ReviewCreateUpdateSerializer(ModelSerializer):
-    cases = serializers.PrimaryKeyRelatedField(queryset=TestCase.objects.all(), many=True, required=False)
+    cases = serializers.PrimaryKeyRelatedField(
+        queryset=TestCase.objects.all(), many=True, required=False
+    )
     module = serializers.PrimaryKeyRelatedField(
         queryset=CaseReviewModule.objects.all(), required=False, allow_null=True
     )
 
     def create(self, validated_data):
-        cases = validated_data.pop('cases', [])
+        cases = validated_data.pop("cases", [])
         instance = super().create(validated_data)
         for case in cases:
             CaseReviewThrough.objects.get_or_create(review=instance, case=case)
         return instance
 
     def update(self, instance, validated_data):
-        cases = validated_data.pop('cases', None)
+        cases = validated_data.pop("cases", None)
         instance = super().update(instance, validated_data)
         if cases is not None:
-            current_ids = set(CaseReviewThrough.objects.filter(review=instance).values_list('case_id', flat=True))
+            current_ids = set(
+                CaseReviewThrough.objects.filter(review=instance).values_list(
+                    "case_id", flat=True
+                )
+            )
             new_ids = set([c.id for c in cases])
             add_ids = new_ids - current_ids
             remove_ids = current_ids - new_ids
@@ -283,12 +354,14 @@ class ReviewCreateUpdateSerializer(ModelSerializer):
                 for case in TestCase.objects.filter(id__in=add_ids):
                     CaseReviewThrough.objects.get_or_create(review=instance, case=case)
             if remove_ids:
-                CaseReviewThrough.objects.filter(review=instance, case_id__in=remove_ids).delete()
+                CaseReviewThrough.objects.filter(
+                    review=instance, case_id__in=remove_ids
+                ).delete()
         return instance
 
     class Meta:
         model = CaseReview
-        fields = '__all__'
+        fields = "__all__"
 
 
 class ReviewListSerializer(ModelSerializer):
@@ -300,11 +373,15 @@ class ReviewListSerializer(ModelSerializer):
         return obj.cases.count()
 
     def get_pass_rate(self, obj: CaseReview):
-        queryset = CaseReviewThrough.objects.filter(review=obj).values('result').annotate(count=Count('result'))
+        queryset = (
+            CaseReviewThrough.objects.filter(review=obj)
+            .values("result")
+            .annotate(count=Count("result"))
+        )
         statis = {label: 0 for label in CaseReviewThrough.Result.values}
 
         for annotate_result in queryset:
-            statis[annotate_result['result']] = annotate_result['count']
+            statis[annotate_result["result"]] = annotate_result["count"]
         return statis
 
     def get_module_name(self, obj: CaseReview):
@@ -312,7 +389,7 @@ class ReviewListSerializer(ModelSerializer):
 
     class Meta:
         model = CaseReview
-        exclude = ['cases']
+        exclude = ["cases"]
 
 
 class ReviewCaseListSerializer(ModelSerializer):
@@ -327,14 +404,22 @@ class ReviewCaseListSerializer(ModelSerializer):
         return obj.case.priority
 
     def get_assignees(self, obj: CaseReviewThrough):
-        return obj.review.assignees.values_list('id', flat=True)
+        return obj.review.assignees.values_list("id", flat=True)
 
     class Meta:
         model = CaseReviewThrough
-        fields = ['id', 'name', 'priority', 'assignees', 'result', 'created_by', 'case_id']
+        fields = [
+            "id",
+            "name",
+            "priority",
+            "assignees",
+            "result",
+            "created_by",
+            "case_id",
+        ]
 
 
 class ReviewCaseRecordsSerializer(ModelSerializer):
     class Meta:
         model = CaseReviewRecord
-        fields = '__all__'
+        fields = "__all__"

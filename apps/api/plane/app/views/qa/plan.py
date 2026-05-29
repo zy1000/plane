@@ -358,7 +358,30 @@ class PlanModuleAPIView(BaseAPIView):
         query = self.filter_queryset(self.get_queryset().filter(parent=None)).order_by(
             "created_at"
         )
-        serializer = self.serializer_class(instance=query, many=True)
+
+        # 一次性取出全部未删除模块，在内存中构建父子关系，避免序列化时逐节点查询子节点
+        all_modules = list(
+            PlanModule.objects.filter(deleted_at__isnull=True).order_by("created_at")
+        )
+        children_map = defaultdict(list)
+        for module in all_modules:
+            if module.parent_id:
+                children_map[module.parent_id].append(module)
+
+        # 一次聚合查出每个模块的计划数量，避免逐节点 COUNT 查询
+        count_map = dict(
+            PlanModule.objects.filter(deleted_at__isnull=True)
+            .annotate(
+                plan_count=Count("plans", filter=Q(plans__deleted_at__isnull=True))
+            )
+            .values_list("id", "plan_count")
+        )
+
+        serializer = self.serializer_class(
+            instance=query,
+            many=True,
+            context={"children_map": children_map, "count_map": count_map},
+        )
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     def delete(self, request, slug):
@@ -406,16 +429,38 @@ class PlanModuleCountAPIView(BaseAPIView):
             .annotate(
                 plan_count=Count("plans", filter=Q(plans__deleted_at__isnull=True))
             )
-            .values("id", "plan_count")
+            .values("id", "parent_id", "plan_count")
         )
+
+        # 每个模块的直属计划数，以及父子关系，用于把子模块的计划数累加到父模块上，
+        # 与计划列表按模块过滤（递归包含子模块）的口径保持一致。
+        direct_counts = {}
+        children_map = defaultdict(list)
+        for module in modules:
+            mid = str(module["id"])
+            direct_counts[mid] = int(module["plan_count"] or 0)
+            pid = str(module["parent_id"]) if module["parent_id"] else None
+            if pid:
+                children_map[pid].append(mid)
+
+        memo = {}
+
+        def subtree_count(mid):
+            if mid in memo:
+                return memo[mid]
+            total = direct_counts.get(mid, 0)
+            for child in children_map.get(mid, []):
+                total += subtree_count(child)
+            memo[mid] = total
+            return total
 
         result = dict(
             total=TestPlan.objects.filter(
                 project_id=project_id, deleted_at__isnull=True
             ).count()
         )
-        for module in modules:
-            result[str(module["id"])] = module["plan_count"]
+        for mid in direct_counts:
+            result[mid] = subtree_count(mid)
 
         return Response(data=result)
 
@@ -1016,7 +1061,6 @@ class CaseAPIView(BaseAPIView):
         "repository_id": ["exact"],
         "type": ["exact", "in"],
         "priority": ["exact", "in"],
-        "module_id": ["exact", "in"],
         "id": ["exact", "in"],
         "plan_cases__plan__id": ["exact", "in"],
     }
@@ -1024,7 +1068,25 @@ class CaseAPIView(BaseAPIView):
 
     @allow_fine_permission(PermissionKey.QA_CASE_VIEW)
     def get(self, request, slug, project_id):
-        cases = self.filter_queryset(self.queryset)
+        queryset = self.queryset
+        # 按模块过滤时递归包含所有子模块，与模块树上的计数口径保持一致。
+        module_id = request.query_params.get("module_id")
+        if module_id:
+            expanded = {str(module_id)}
+            frontier = [str(module_id)]
+            while frontier:
+                children = list(
+                    CaseModule.objects.filter(
+                        parent_id__in=frontier, deleted_at__isnull=True
+                    ).values_list("id", flat=True)
+                )
+                new_children = [str(c) for c in children if str(c) not in expanded]
+                if not new_children:
+                    break
+                expanded.update(new_children)
+                frontier = new_children
+            queryset = queryset.filter(module_id__in=list(expanded))
+        cases = self.filter_queryset(queryset)
         paginator = self.pagination_class()
         paginated_queryset = paginator.paginate_queryset(cases, request)
         serializer = self.serializer_class(instance=paginated_queryset, many=True)

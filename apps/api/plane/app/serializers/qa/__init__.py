@@ -612,6 +612,7 @@ class ReviewCaseListSerializer(ModelSerializer):
     code = serializers.CharField(source="case.code", read_only=True)
     repository = serializers.CharField(source="case.repository.name", read_only=True)
     module = serializers.CharField(source="case.module.name", read_only=True)
+    suggestion_count = serializers.IntegerField(read_only=True, default=0)
 
     def get_name(self, obj: CaseReviewThrough):
         return obj.case.name
@@ -640,6 +641,7 @@ class ReviewCaseListSerializer(ModelSerializer):
             "code",
             "repository",
             "module",
+            "suggestion_count",
         ]
 
 

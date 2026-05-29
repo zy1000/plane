@@ -5,6 +5,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import dayjs from "dayjs";
 import {
   TimesheetService,
   type TTimesheetReportParams,
@@ -13,6 +14,14 @@ import {
 
 const service = new TimesheetService();
 
+const DATE_FORMAT = "YYYY-MM-DD";
+
+// 默认筛选：本月（与 timesheet-report 顶部「本月」预设保持一致）
+const getDefaultFilters = (): TTimesheetReportFilters => ({
+  startDate: dayjs().startOf("month").format(DATE_FORMAT),
+  endDate: dayjs().endOf("month").format(DATE_FORMAT),
+});
+
 export type TTimesheetReportFilters = {
   /** 项目 id 列表，多选；空数组或 undefined 代表不过滤。 */
   projectIds?: string[];
@@ -20,6 +29,8 @@ export type TTimesheetReportFilters = {
   memberIds?: string[];
   /** 类别 key 列表，多选；空数组或 undefined 代表不过滤。 */
   categoryKeys?: string[];
+  /** 项目编号列表，多选；特殊值 EMPTY_PMS_PROJECT_NAME 代表项目编号为空。 */
+  pmsProjectNames?: string[];
   startDate?: string;
   endDate?: string;
 };
@@ -51,6 +62,8 @@ const buildParams = (
   if (filters.projectIds && filters.projectIds.length > 0) params.project_id = filters.projectIds;
   if (filters.memberIds && filters.memberIds.length > 0) params.member_id = filters.memberIds;
   if (filters.categoryKeys && filters.categoryKeys.length > 0) params.category_key = filters.categoryKeys;
+  if (filters.pmsProjectNames && filters.pmsProjectNames.length > 0)
+    params.pms_project_name = filters.pmsProjectNames;
   if (filters.startDate) params.start_time = filters.startDate;
   if (filters.endDate) params.end_time = filters.endDate;
   // OffsetPaginator 的 cursor 形式为 "<limit>:<pageIndex>:0"，pageIndex 从 0 开始
@@ -62,7 +75,7 @@ export const useTimesheetReport = ({
   workspaceSlug,
   defaultPageSize = 50,
 }: TUseTimesheetReportOptions) => {
-  const [filters, setFiltersState] = useState<TTimesheetReportFilters>({});
+  const [filters, setFiltersState] = useState<TTimesheetReportFilters>(getDefaultFilters);
   const [page, setPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(defaultPageSize);
   const [rows, setRows] = useState<TTimesheetReportRow[]>([]);
@@ -128,6 +141,8 @@ export const useTimesheetReport = ({
       if (filters.projectIds && filters.projectIds.length > 0) baseParams.project_id = filters.projectIds;
       if (filters.memberIds && filters.memberIds.length > 0) baseParams.member_id = filters.memberIds;
       if (filters.categoryKeys && filters.categoryKeys.length > 0) baseParams.category_key = filters.categoryKeys;
+      if (filters.pmsProjectNames && filters.pmsProjectNames.length > 0)
+        baseParams.pms_project_name = filters.pmsProjectNames;
       if (filters.startDate) baseParams.start_time = filters.startDate;
       if (filters.endDate) baseParams.end_time = filters.endDate;
       const { blob, filename } = await service.reportExport(

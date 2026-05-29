@@ -115,10 +115,34 @@ export class CaseService extends APIService {
       ordering?: string;
       name__icontains?: string;
     }
-  ): Promise<{ data: Array<{ id: string; name: string; priority: number; assignees: string[]; result: string; created_by: string | null }>; count: number }> {
+  ): Promise<{ data: Array<{ id: string; name: string; priority: number; assignees: string[]; result: string; created_by: string | null; suggestion_count: number }>; count: number }> {
     const params = { review_id, ...(queries || {}) } as any;
     return this.get(`/api/workspaces/${workspaceSlug}/test/review/case-list/`, { params })
       .then((response) => ({ data: response?.data.data ?? [], count: Number(response?.data.count || 0) }))
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async getReviewCasePage(
+    workspaceSlug: string,
+    review_id: string,
+    queries: {
+      case_id: string;
+      page_size?: number;
+      project_id?: string | null;
+      repository_id?: string | null;
+      module_id?: string | null;
+      name__icontains?: string;
+    }
+  ): Promise<{ page: number; index: number; page_size: number }> {
+    const params = { review_id, ...queries } as any;
+    return this.get(`/api/workspaces/${workspaceSlug}/test/review/case-locate/`, { params })
+      .then((response) => ({
+        page: Number(response?.data?.page || 1),
+        index: Number(response?.data?.index ?? -1),
+        page_size: Number(response?.data?.page_size || 10),
+      }))
       .catch((error) => {
         throw error?.response?.data;
       });

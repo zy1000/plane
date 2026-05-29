@@ -5,7 +5,7 @@ import { useParams, useSearchParams, useRouter, usePathname } from "next/navigat
 import { PageHead } from "@/components/core/page-title";
 import { Breadcrumbs } from "@plane/ui";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
-import { Row, Col, Card, Input, Pagination, Tag, Spin, Button, Table, Tooltip, Radio, Select, Modal, Badge, Tree } from "antd";
+import { Row, Col, Card, Input, Pagination, Tag, Spin, Button, Table, Tooltip, Radio, Select, Modal, Badge, Tree, Checkbox } from "antd";
 import type { TreeProps } from "antd";
 import { AppstoreOutlined, CheckCircleOutlined, CloseCircleOutlined, ExclamationCircleOutlined, DownOutlined } from "@ant-design/icons";
 import debounce from "lodash-es/debounce";
@@ -34,6 +34,7 @@ type ReviewCaseRow = {
   assignees: Array<string>;
   result: string;
   created_by: string | number | null;
+  suggestion_count?: number;
 };
 
 
@@ -77,6 +78,8 @@ export default function CaseReview() {
   const [selectedModuleId, setSelectedModuleId] = React.useState<string | null>(null);
   const [reviewTree, setReviewTree] = React.useState<any | null>(null);
   const skipNextUrlSyncedFetchRef = React.useRef(false);
+  const didInitialLocateRef = React.useRef(false);
+  const listScrollRef = React.useRef<HTMLDivElement>(null);
 
   const [detailLoading, setDetailLoading] = React.useState<boolean>(false);
   const [caseDetail, setCaseDetail] = React.useState<any>(null);
@@ -97,6 +100,7 @@ export default function CaseReview() {
   const [recordsRefreshKey, setRecordsRefreshKey] = React.useState<number>(0);
   const [isCurrentUserReviewer, setIsCurrentUserReviewer] = React.useState<boolean>(false);
   const [suggestionCounts, setSuggestionCounts] = React.useState<Record<string, number>>({});
+  const [autoNext, setAutoNext] = React.useState<boolean>(true);
 
   const { preferences: projectPreferences } = useProjectNavigationPreferences();
   const topOffset = projectPreferences.navigationMode === "horizontal" ? 180 : 130;
@@ -175,34 +179,18 @@ export default function CaseReview() {
     [workspaceSlug, reviewId, reviewService, getSuggestionCountFromRecords]
   );
 
-  const fetchSuggestionCountsForCases = React.useCallback(
-    async (rows: ReviewCaseRow[]) => {
-      if (!workspaceSlug || !reviewId) return;
-      const next: Record<string, number> = {};
-      await Promise.allSettled(
-        rows.map(async (row) => {
-          const caseId = String(row.case_id ?? row.id);
-          const data = await reviewService.getRecords(String(workspaceSlug), String(reviewId), caseId);
-          const list = Array.isArray(data) ? (data as any[]) : [];
-          next[caseId] = getSuggestionCountFromRecords(list);
-        })
-      );
-      setSuggestionCounts(next);
-    },
-    [workspaceSlug, reviewId, reviewService, getSuggestionCountFromRecords]
-  );
-
   const fetchCases = async (
     p = page,
     s = pageSize,
     kw?: string,
     moduleId: string | null = selectedModuleId,
     autoSelectFirst?: boolean,
-    repositoryId: string | null = selectedRepositoryId
+    repositoryId: string | null = selectedRepositoryId,
+    silent = false
   ) => {
     if (!workspaceSlug || !reviewId) return;
     try {
-      setListLoading(true);
+      if (!silent) setListLoading(true);
       setError(null);
       const input = (kw ?? keyword).trim();
       const effectiveProjectId = !repositoryId && !moduleId ? (projectId ? String(projectId) : null) : null;
@@ -216,7 +204,11 @@ export default function CaseReview() {
       });
       const nextCases = Array.isArray(res?.data) ? (res.data as ReviewCaseRow[]) : [];
       setCases(nextCases);
-      void fetchSuggestionCountsForCases(nextCases);
+      const counts: Record<string, number> = {};
+      nextCases.forEach((row) => {
+        counts[String(row.case_id ?? row.id)] = Number(row.suggestion_count || 0);
+      });
+      setSuggestionCounts(counts);
       setTotal(Number(res?.count || 0));
       setPage(p);
       setPageSize(s);
@@ -235,8 +227,38 @@ export default function CaseReview() {
       setError(qaCaseErrorContent(e, t, fallback));
       qaCaseSetToastError(e, t, fallback);
     } finally {
-      setListLoading(false);
+      if (!silent) setListLoading(false);
     }
+  };
+
+  // 进入页面时,如果 URL 带 case_id(从外层列表点"评审"进来),先反查它所在页码再加载对应页,
+  // 保证选中用例落在当前页 cases 中(评审人判定正确、卡片高亮、评审区可操作)。仅首次执行一次。
+  const fetchCasesMaybeLocate = async (
+    s = pageSize,
+    kw?: string,
+    moduleId: string | null = selectedModuleId,
+    repositoryId: string | null = selectedRepositoryId
+  ) => {
+    if (initialCaseId && !didInitialLocateRef.current && workspaceSlug && reviewId) {
+      didInitialLocateRef.current = true;
+      try {
+        const input = (kw ?? keyword).trim();
+        const effectiveProjectId = !repositoryId && !moduleId ? (projectId ? String(projectId) : null) : null;
+        const { page: locatedPage } = await reviewService.getReviewCasePage(String(workspaceSlug), String(reviewId), {
+          case_id: String(initialCaseId),
+          page_size: s,
+          ...(effectiveProjectId ? { project_id: effectiveProjectId } : {}),
+          ...(repositoryId ? { repository_id: repositoryId } : {}),
+          ...(moduleId ? { module_id: moduleId } : {}),
+          ...(input ? { name__icontains: input } : {}),
+        });
+        await fetchCases(locatedPage, s, kw, moduleId, false, repositoryId);
+        return;
+      } catch {
+        // 反查失败则回退到第 1 页
+      }
+    }
+    await fetchCases(1, s, kw, moduleId, false, repositoryId);
   };
 
   const fetchEnums = async () => {
@@ -362,7 +384,7 @@ export default function CaseReview() {
       setSelectedRepositoryId(null);
       setSelectedModuleId(nextModuleId);
       setSelectedTreeKey(`module:${nextModuleId}`);
-      fetchCases(1, pageSize, keyword, nextModuleId, false, null);
+      fetchCasesMaybeLocate(pageSize, keyword, nextModuleId, null);
       return;
     }
 
@@ -381,7 +403,7 @@ export default function CaseReview() {
       setSelectedRepositoryId(nextRepositoryId);
       setSelectedModuleId(null);
       setSelectedTreeKey(nextTreeKey);
-      fetchCases(1, pageSize, keyword, null, false, nextRepositoryId);
+      fetchCasesMaybeLocate(pageSize, keyword, null, nextRepositoryId);
       return;
     }
 
@@ -397,7 +419,7 @@ export default function CaseReview() {
     setSelectedRepositoryId(null);
     setSelectedModuleId(null);
     setSelectedTreeKey("root");
-    fetchCases(1, pageSize, keyword, null, false, null);
+    fetchCasesMaybeLocate(pageSize, keyword, null, null);
   }, [workspaceSlug, reviewId, projectId, searchParams.toString()]);
 
   React.useEffect(() => {
@@ -407,6 +429,16 @@ export default function CaseReview() {
   React.useEffect(() => {
     setCompareOpen(false);
   }, [selectedCaseId]);
+
+  // 选中用例变化时,将对应卡片滚动到列表可见区(自动切换模式下停在切换后的位置;
+  // 已可见时 block:nearest 不会滚动,也不会影响外层页面)
+  React.useEffect(() => {
+    if (!selectedCaseId) return;
+    const container = listScrollRef.current;
+    if (!container) return;
+    const el = container.querySelector(`[data-case-id="${selectedCaseId}"]`);
+    if (el) (el as HTMLElement).scrollIntoView({ block: "nearest" });
+  }, [selectedCaseId, cases]);
 
   React.useEffect(() => {
     const map: Record<string, string> = {
@@ -666,6 +698,53 @@ export default function CaseReview() {
     setReason("");
   }, [selectedCaseId, cases, currentUser?.id]);
 
+  // 选中某条用例:更新选中态、按评审人重置默认评审值、加载详情与建议数
+  const selectCase = (caseId: string, assignees?: Array<string>) => {
+    const reviewers = Array.isArray(assignees) ? assignees.map((id) => String(id)) : [];
+    const isReviewer = currentUser?.id ? reviewers.includes(String(currentUser.id)) : false;
+    setSelectedCaseId(caseId);
+    setReviewValue(isReviewer ? "通过" : "建议");
+    setReason("");
+    fetchCaseDetail(caseId);
+    fetchSuggestionCountForCase(caseId);
+  };
+
+  // 用 ref 持有最新值,供 debouncedSubmit 闭包内的自动切换逻辑读取,避免拿到旧 state
+  const casesRef = React.useRef(cases);
+  const selectedCaseIdRef = React.useRef(selectedCaseId);
+  const pageRef = React.useRef(page);
+  const pageSizeRef = React.useRef(pageSize);
+  const totalRef = React.useRef(total);
+  const autoNextRef = React.useRef(autoNext);
+  React.useEffect(() => {
+    casesRef.current = cases;
+    selectedCaseIdRef.current = selectedCaseId;
+    pageRef.current = page;
+    pageSizeRef.current = pageSize;
+    totalRef.current = total;
+    autoNextRef.current = autoNext;
+  });
+
+  // 评审完成后切换到下一条:页内顺移 / 跨页取下一页第一条 / 已是最后一条则提示
+  const goToNextCase = async () => {
+    const list = casesRef.current;
+    const curId = String(selectedCaseIdRef.current || "");
+    const idx = list.findIndex((item) => String(item.case_id ?? item.id) === curId);
+    if (idx >= 0 && idx < list.length - 1) {
+      const next = list[idx + 1];
+      selectCase(String(next.case_id ?? next.id), next.assignees);
+      return;
+    }
+    const totalPages = Math.max(1, Math.ceil(totalRef.current / pageSizeRef.current));
+    if (pageRef.current < totalPages) {
+      await fetchCases(pageRef.current + 1, pageSizeRef.current, keyword, selectedModuleId, true, selectedRepositoryId);
+      return;
+    }
+    qaCaseSetToastWarning("已是最后一条用例");
+  };
+  const goToNextCaseRef = React.useRef(goToNextCase);
+  goToNextCaseRef.current = goToNextCase;
+
   const buildPayload = () => {
     if (!workspaceSlug || !reviewId || !selectedCaseId || !reviewValue) return null;
     if (!isCurrentUserReviewer && reviewValue !== "建议") return null;
@@ -689,7 +768,13 @@ export default function CaseReview() {
           qaCaseSetToastSuccess("评审提交成功");
           setReasonModalOpen(false);
           setReason("");
-          fetchCases(page, pageSize, keyword, selectedModuleId);
+          if (autoNextRef.current) {
+            // 先静默刷新当前页(更新已评审用例的结果标签,不卸载列表容器),再切换到下一条
+            await fetchCases(page, pageSize, keyword, selectedModuleId, false, selectedRepositoryId, true);
+            await goToNextCaseRef.current();
+          } else {
+            fetchCases(page, pageSize, keyword, selectedModuleId, false, selectedRepositoryId, true);
+          }
           setRecordsRefreshKey((k) => k + 1);
         } catch (e: unknown) {
           qaCaseSetToastError(e, t, "提交评审失败");
@@ -833,6 +918,7 @@ export default function CaseReview() {
             ) : (
               <div className="flex flex-col gap-3">
                 <div
+                  ref={listScrollRef}
                   className="overflow-y-auto vertical-scrollbar scrollbar-sm flex flex-col gap-3 pr-5 pl-1 pt-4 pb-2 max-h-[calc(100dvh-300px)]"
                   style={{ scrollbarGutter: "stable" }}
                 >
@@ -848,18 +934,11 @@ export default function CaseReview() {
                       return (
                         <Card
                           key={item.id}
+                          data-case-id={caseId}
                           bordered
                           hoverable
                           onClick={() => {
-                            const reviewers = Array.isArray(item.assignees)
-                              ? item.assignees.map((id) => String(id))
-                              : [];
-                            const isReviewer = currentUser?.id ? reviewers.includes(String(currentUser.id)) : false;
-                            setSelectedCaseId(caseId);
-                            setReviewValue(isReviewer ? "通过" : "建议");
-                            setReason("");
-                            fetchCaseDetail(caseId);
-                            fetchSuggestionCountForCase(caseId);
+                            selectCase(caseId, item.assignees);
                           }}
                           className={`${isActive ? "ring-2 ring-accent-strong" : ""} rounded-md hover:shadow-sm transition-shadow relative !overflow-visible`}
                         >
@@ -1262,7 +1341,7 @@ export default function CaseReview() {
                         添加原因
                       </Button>
                     </div>
-                    <div>
+                    <div className="flex items-center gap-3">
                       <button
                         type="button"
                         onClick={handleSubmitReview}
@@ -1271,6 +1350,9 @@ export default function CaseReview() {
                       >
                         {submitLoading ? "提交中..." : "提交评审"}
                       </button>
+                      <Checkbox checked={autoNext} onChange={(e) => setAutoNext(e.target.checked)}>
+                        评审后自动切换下一条
+                      </Checkbox>
                     </div>
                   </div>
                 </div>

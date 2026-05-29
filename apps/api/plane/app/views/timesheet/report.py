@@ -1,6 +1,7 @@
 import io
 from urllib.parse import quote
 
+from django.db.models import Q
 from django.http import FileResponse
 from django.utils import timezone
 from rest_framework import status
@@ -53,6 +54,20 @@ class TimeSheetReportViewSet(BaseViewSet):
 
         if project_ids := _parse_ids(params.get("project_id", "")):
             query = query.filter(project_id__in=project_ids)
+
+        # 项目编号筛选：特殊值 "__empty__" 代表项目编号为空（null 或空串）
+        if pms_names := _parse_ids(params.get("pms_project_name", "")):
+            empty_sentinel = "__empty__"
+            real_names = [name for name in pms_names if name != empty_sentinel]
+            pms_query = Q()
+            if empty_sentinel in pms_names:
+                pms_query |= Q(project__pms_project_name__isnull=True) | Q(
+                    project__pms_project_name=""
+                )
+            if real_names:
+                pms_query |= Q(project__pms_project_name__in=real_names)
+            if pms_query:
+                query = query.filter(pms_query)
 
         if start_time := params.get("start_time"):
             query = query.filter(date__gte=start_time)

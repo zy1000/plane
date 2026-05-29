@@ -20,22 +20,22 @@ const ARCHIVES_TAB_LIST: {
 }[] = [
   {
     key: "issues",
-    label: "Work items",
+    label: "工作项",
     shouldRender: () => true,
   },
   {
     key: "cycles",
-    label: "Sprints",
+    label: "迭代",
     shouldRender: (projectDetails) => projectDetails.cycle_view,
   },
   {
     key: "modules",
-    label: "Modules",
+    label: "模块",
     shouldRender: (projectDetails) => projectDetails.module_view,
   },
   {
     key: "releases",
-    label: "Releases",
+    label: "发布",
     shouldRender: (projectDetails) => projectDetails.module_view,
   },
 ];
