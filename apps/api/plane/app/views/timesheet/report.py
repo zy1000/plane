@@ -37,7 +37,7 @@ class TimeSheetReportViewSet(BaseViewSet):
                 "member",
                 "member__extra_info",
             )
-            .exclude(project__pms_project_name__isnull=True)
+            .exclude()
         )
 
     def _apply_filters(self, request, slug):
