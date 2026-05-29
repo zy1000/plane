@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Modal, message } from "antd";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { FileUploadProgressList } from "@/components/common/file-upload-progress-item";
 import type { TAssetExplorerFile } from "@/services/asset-explorer.service";
 import { BreadcrumbBar } from "./components/breadcrumb-bar";
 import { BucketHeader } from "./components/bucket-header";
@@ -220,6 +221,9 @@ export const AssetExplorer = (props: TAssetExplorerProps) => {
       {/* Body: list (flexible) + details panel (animated width) */}
       <div className="relative flex flex-1 overflow-hidden">
         <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
+          {explorer.uploadStatuses.length > 0 && (
+            <FileUploadProgressList uploadStatuses={explorer.uploadStatuses} className="flex flex-col gap-1 px-3 py-2" />
+          )}
           {isEmpty ? (
             <EmptyState
               variant={searching ? "no-results" : "empty"}

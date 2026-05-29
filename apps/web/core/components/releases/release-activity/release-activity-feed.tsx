@@ -22,6 +22,7 @@ import {
   Trash2,
   UserCog,
 } from "lucide-react";
+import { E_SORT_ORDER } from "@plane/constants";
 import type { TReleaseActivity, TReleaseStatus } from "@plane/types";
 import { Loader, Tooltip } from "@plane/ui";
 import { calculateTimeAgo } from "@plane/utils";
@@ -39,6 +40,10 @@ type Props = {
   emptyHint?: string;
   /** 仅展示最近 N 条动态。未传时显示全部。 */
   limit?: number;
+  /** 过滤动态记录。返回 true 的记录会被展示。未传时展示全部。 */
+  filterFn?: (activity: TReleaseActivity) => boolean;
+  /** 排序方向。store 内按时间升序存放，desc 时倒序展示（最新在最上）。未传时升序。 */
+  sortOrder?: E_SORT_ORDER;
 };
 
 const iconForActivity = (activity: TReleaseActivity): React.ReactNode => {
@@ -99,7 +104,7 @@ const ReleaseActivityRow = observer(function ReleaseActivityRow(props: {
 
   return (
     <li>
-      <div className="relative flex items-start gap-3 py-2 text-caption-sm-regular">
+      <div className="relative flex items-center gap-3 py-2 text-caption-sm-regular">
         <div className="absolute top-0 bottom-0 left-[13px] w-px bg-layer-3" aria-hidden />
         <div className="z-[4] flex h-7 w-7 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border border-subtle bg-layer-2 text-secondary shadow-raised-100 [&_svg]:!text-secondary">
           {iconForActivity(activity)}
@@ -137,11 +142,20 @@ const ReleaseActivityRow = observer(function ReleaseActivityRow(props: {
 });
 
 export const ReleaseActivityFeed = observer(function ReleaseActivityFeed(props: Props) {
-  const { workspaceSlug, projectId, releaseId, emptyHint = "暂无动态", limit } = props;
+  const { workspaceSlug, projectId, releaseId, emptyHint = "暂无动态", limit, filterFn, sortOrder } = props;
   const { getActivitiesByReleaseId, isLoadingByReleaseId, fetchActivities } = useReleaseActivity();
-  const allActivities = getActivitiesByReleaseId(releaseId);
+  const rawActivities = getActivitiesByReleaseId(releaseId);
+  const allActivities = filterFn ? rawActivities.filter(filterFn) : rawActivities;
+  // store 内按 created_at 升序存放。概览的“最近动态”传入 limit 时，应取时间最新的 N 条
+  // （包含评论、状态、附件等所有类型），并倒序展示（最新在最上）。
   const activities =
-    typeof limit === "number" && limit >= 0 ? allActivities.slice(0, limit) : allActivities;
+    typeof limit === "number" && limit >= 0
+      ? limit > 0
+        ? allActivities.slice(-limit).reverse()
+        : []
+      : sortOrder === E_SORT_ORDER.DESC
+        ? [...allActivities].reverse()
+        : allActivities;
   const isLoading = isLoadingByReleaseId(releaseId);
 
   const [reasonModal, setReasonModal] = useState<{

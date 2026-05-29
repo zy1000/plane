@@ -24,6 +24,7 @@ import { useWorkspace } from "@/hooks/store/use-workspace";
 import { useEditorAsset } from "@/hooks/store/use-editor-asset";
 import { useUserPermissions } from "@/hooks/store/user";
 import useLocalStorage from "@/hooks/use-local-storage";
+import { useFileUploadProgress } from "@/hooks/use-file-upload-progress";
 import { RichTextEditor } from "@/components/editor/rich-text";
 import { formatReleaseUpdateError } from "@/components/releases/use-release-error-message";
 import {
@@ -122,6 +123,7 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isAr
   const [releaseFilesUploading, setReleaseFilesUploading] = useState(false);
   const [releaseFilesDeletingId, setReleaseFilesDeletingId] = useState<string | null>(null);
   const [releaseFilesDownloadingId, setReleaseFilesDownloadingId] = useState<string | null>(null);
+  const { uploadStatuses: releaseFileUploadStatuses, trackUpload } = useFileUploadProgress();
 
   // 与后端 CustomPaginator.max_page_size 一致，单次请求上限；多页时循环拉取直至全部
   const RELEASE_FILES_PAGE_SIZE = 100;
@@ -341,11 +343,14 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isAr
     if (!file) return;
     try {
       setReleaseFilesUploading(true);
-      await releaseService.uploadReleaseFile(
-        workspaceSlug.toString(),
-        projectId.toString(),
-        releaseId.toString(),
-        file
+      await trackUpload(file, (onProgress) =>
+        releaseService.uploadReleaseFile(
+          workspaceSlug.toString(),
+          projectId.toString(),
+          releaseId.toString(),
+          file,
+          onProgress
+        )
       );
       setToast({ type: TOAST_TYPE.SUCCESS, title: "上传成功", message: "文件已上传" });
       await fetchReleaseFiles();
@@ -639,6 +644,7 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isAr
               filesUploading={releaseFilesUploading}
               filesDeletingId={releaseFilesDeletingId}
               filesDownloadingId={releaseFilesDownloadingId}
+              filesUploadStatuses={releaseFileUploadStatuses}
               onOpenCycleAssociate={() => {
                 setAssociateOpen(true);
                 fetchSelectable(1, selectPageSize);

@@ -97,6 +97,7 @@ export const ReleaseCommentsSection = observer(function ReleaseCommentsSection(p
             projectId={projectId}
             releaseId={releaseId}
             placeholder="发表评论..."
+            autoFocus
             onSubmit={handleCreate}
           />
         </div>

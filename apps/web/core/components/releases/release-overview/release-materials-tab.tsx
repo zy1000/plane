@@ -7,6 +7,7 @@
 "use client";
 
 import React from "react";
+import type { TFileUploadStatus } from "@/hooks/use-file-upload-progress";
 import {
   ReleaseCyclesSection,
   ReleaseFilesSection,
@@ -53,6 +54,7 @@ type Props = {
   filesUploading: boolean;
   filesDeletingId: string | null;
   filesDownloadingId: string | null;
+  filesUploadStatuses?: TFileUploadStatus[];
   onOpenCycleAssociate: () => void;
   onCancelCycleAssociation: (cycleId: string) => Promise<void> | void;
   onOpenPlanAssociate: () => void;
@@ -78,6 +80,7 @@ export const ReleaseMaterialsTab: React.FC<Props> = ({
   filesUploading,
   filesDeletingId,
   filesDownloadingId,
+  filesUploadStatuses,
   onOpenCycleAssociate,
   onCancelCycleAssociation,
   onOpenPlanAssociate,
@@ -95,6 +98,7 @@ export const ReleaseMaterialsTab: React.FC<Props> = ({
       filesUploading={filesUploading}
       filesDeletingId={filesDeletingId}
       filesDownloadingId={filesDownloadingId}
+      uploadStatuses={filesUploadStatuses}
       onTriggerUploadFile={onTriggerUploadFile}
       onDeleteFile={onDeleteFile}
       onDownloadFile={onDownloadFile}

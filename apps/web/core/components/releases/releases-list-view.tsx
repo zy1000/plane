@@ -8,7 +8,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { observer } from "mobx-react";
-import { useParams, useSearchParams } from "next/navigation";
+import { useParams } from "next/navigation";
 import { EUserPermissionsLevel, MODULE_TRACKER_ELEMENTS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { EmptyStateDetailed } from "@plane/propel/empty-state";
@@ -32,8 +32,6 @@ import { useUserPermissions } from "@/hooks/store/user";
 
 export const ReleasesListView = observer(function ReleasesListView() {
   const { workspaceSlug, projectId } = useParams();
-  const searchParams = useSearchParams();
-  const peekRelease = searchParams.get("peekRelease");
   const { t } = useTranslation();
   const { toggleCreateReleaseModal } = useCommandPalette();
   const { getProjectReleaseIds, getFilteredReleaseIds, loader } = useRelease();
@@ -137,13 +135,7 @@ export const ReleasesListView = observer(function ReleasesListView() {
             </ListLayout>
           )}
           {displayFilters?.layout === "board" && (
-            <Row
-              className={`grid size-full grid-cols-1 gap-6 overflow-y-auto py-page-y ${
-                peekRelease
-                  ? "3xl:grid-cols-3 lg:grid-cols-1 xl:grid-cols-2"
-                  : "3xl:grid-cols-4 lg:grid-cols-2 xl:grid-cols-3"
-              } vertical-scrollbar scrollbar-lg auto-rows-max transition-all`}
-            >
+            <Row className="3xl:grid-cols-4 vertical-scrollbar scrollbar-lg grid size-full auto-rows-max grid-cols-1 gap-6 overflow-y-auto py-page-y transition-all lg:grid-cols-2 xl:grid-cols-3">
               {filteredReleaseIds.map((releaseId) => (
                 <ReleaseCardItem key={releaseId} releaseId={releaseId} />
               ))}
@@ -154,9 +146,7 @@ export const ReleasesListView = observer(function ReleasesListView() {
               <ReleasesListGanttChartView />
             </div>
           )}
-          <div className="flex-shrink-0">
-            <ReleasePeekOverview projectId={projectId?.toString() ?? ""} workspaceSlug={workspaceSlug?.toString() ?? ""} />
-          </div>
+          <ReleasePeekOverview projectId={projectId?.toString() ?? ""} workspaceSlug={workspaceSlug?.toString() ?? ""} />
         </div>
       )}
       {useGroupedListLayout && (

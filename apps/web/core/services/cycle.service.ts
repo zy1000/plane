@@ -5,8 +5,9 @@
  */
 
 // services
+import type { AxiosRequestConfig } from "axios";
 import { API_BASE_URL } from "@plane/constants";
-import { FileUploadService, generateFileUploadPayload, getFileMetaDataForUpload } from "@plane/services";
+import { generateFileUploadPayload, getFileMetaDataForUpload } from "@plane/services";
 import type {
   CycleDateCheckData,
   ICycle,
@@ -18,6 +19,7 @@ import type {
   TFileSignedURLResponse,
 } from "@plane/types";
 import { APIService } from "@/services/api.service";
+import { FileUploadService } from "@/services/file-upload.service";
 
 export class CycleService extends APIService {
   constructor() {
@@ -218,7 +220,13 @@ export class CycleService extends APIService {
       });
   }
 
-  async uploadCycleFile(workspaceSlug: string, projectId: string, cycleId: string, file: File): Promise<any> {
+  async uploadCycleFile(
+    workspaceSlug: string,
+    projectId: string,
+    cycleId: string,
+    file: File,
+    uploadProgressHandler?: AxiosRequestConfig["onUploadProgress"]
+  ): Promise<any> {
     const fileMetaData = await getFileMetaDataForUpload(file);
     const presignResponse = await this.post(
       `/api/workspaces/${workspaceSlug}/projects/${projectId}/cycles/file/upload/`,
@@ -242,7 +250,7 @@ export class CycleService extends APIService {
     );
 
     const fileUploader = new FileUploadService();
-    await fileUploader.uploadFile(presignResponse.upload_data.url, fileUploadPayload);
+    await fileUploader.uploadFile(presignResponse.upload_data.url, fileUploadPayload, uploadProgressHandler);
 
     await this.patch(
       `/api/workspaces/${workspaceSlug}/projects/${projectId}/cycles/file/${presignResponse.asset_id}/uploaded/`,

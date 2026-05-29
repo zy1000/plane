@@ -67,9 +67,9 @@ export const OverviewMemberStats: FC<Props> = observer(
 
     return (
       <div className="flex h-full min-h-0 flex-col">
-        <div className="flex-shrink-0 pr-3">
+        <div className="min-h-0 flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm">
           <Table className="table-fixed" wrapperClassName="overflow-visible">
-            <TableHeader className="border-y-0 bg-transparent py-0 [&_th]:bg-surface-1 [&_th]:shadow-[inset_0_-1px_0_var(--border-subtle)]">
+            <TableHeader className="sticky top-0 z-10 border-y-0 bg-transparent py-0 [&_th]:bg-surface-1 [&_th]:shadow-[inset_0_-1px_0_var(--border-subtle)]">
               <TableRow>
                 <TableHead className="h-8 w-1/4 text-left text-xs font-medium text-placeholder">成员</TableHead>
                 <TableHead className="h-8 text-left text-xs font-medium text-placeholder">角色</TableHead>
@@ -77,14 +77,10 @@ export const OverviewMemberStats: FC<Props> = observer(
                 <TableHead className="h-8 w-16 text-center text-xs font-medium text-placeholder">缺陷</TableHead>
               </TableRow>
             </TableHeader>
-          </Table>
-        </div>
-        <div className="min-h-0 flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm">
-          <Table className="table-fixed" wrapperClassName="overflow-visible">
             <TableBody>
               {membersWithRoles.map((m) => (
                 <TableRow key={m.member_id} className="transition-colors hover:bg-layer-1">
-                  <TableCell className="text-sm text-primary">
+                  <TableCell className="w-1/4 text-sm text-primary">
                     <div className="flex items-center gap-2">
                       <Avatar
                         name={m.display_name}
@@ -99,8 +95,8 @@ export const OverviewMemberStats: FC<Props> = observer(
                   <TableCell className="text-13 text-secondary">
                     <RoleTags roleNames={m.roleNames} />
                   </TableCell>
-                  <TableCell className="text-center text-sm font-medium text-primary">{m.work_item_count}</TableCell>
-                  <TableCell className="text-center text-sm font-medium text-red-500">{m.defect_count}</TableCell>
+                  <TableCell className="w-16 text-center text-sm font-medium text-primary">{m.work_item_count}</TableCell>
+                  <TableCell className="w-16 text-center text-sm font-medium text-red-500">{m.defect_count}</TableCell>
                 </TableRow>
               ))}
             </TableBody>

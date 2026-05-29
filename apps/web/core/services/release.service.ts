@@ -1,5 +1,6 @@
+import type { AxiosRequestConfig } from "axios";
 import { API_BASE_URL } from "@plane/constants";
-import { FileUploadService, generateFileUploadPayload, getFileMetaDataForUpload } from "@plane/services";
+import { generateFileUploadPayload, getFileMetaDataForUpload } from "@plane/services";
 import type {
   IRelease,
   ILinkDetails,
@@ -10,6 +11,7 @@ import type {
 } from "@plane/types";
 import type { TCycleOverdueByAssigneeResponse } from "@/services/cycle.service";
 import { APIService } from "@/services/api.service";
+import { FileUploadService } from "@/services/file-upload.service";
 
 export class ReleaseService extends APIService {
   constructor() {
@@ -401,7 +403,13 @@ export class ReleaseService extends APIService {
       });
   }
 
-  async uploadReleaseFile(workspaceSlug: string, projectId: string, releaseId: string, file: File): Promise<any> {
+  async uploadReleaseFile(
+    workspaceSlug: string,
+    projectId: string,
+    releaseId: string,
+    file: File,
+    uploadProgressHandler?: AxiosRequestConfig["onUploadProgress"]
+  ): Promise<any> {
     const fileMetaData = await getFileMetaDataForUpload(file);
     const presignResponse = await this.post(
       `/api/workspaces/${workspaceSlug}/projects/${projectId}/release/file/upload/`,
@@ -425,7 +433,7 @@ export class ReleaseService extends APIService {
     );
 
     const fileUploader = new FileUploadService();
-    await fileUploader.uploadFile(presignResponse.upload_data.url, fileUploadPayload);
+    await fileUploader.uploadFile(presignResponse.upload_data.url, fileUploadPayload, uploadProgressHandler);
 
     await this.patch(
       `/api/workspaces/${workspaceSlug}/projects/${projectId}/release/file/${presignResponse.asset_id}/uploaded/`,

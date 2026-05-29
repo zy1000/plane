@@ -12,7 +12,9 @@ import { ClipboardList, Download, FileText, Plus, Repeat, Trash2, Unlink, Upload
 import { Popconfirm } from "antd";
 import { Button } from "@plane/propel/button";
 import { cn } from "@plane/utils";
+import { FileUploadProgressList } from "@/components/common/file-upload-progress-item";
 import { ReadonlyDate } from "@/components/readonly/date";
+import type { TFileUploadStatus } from "@/hooks/use-file-upload-progress";
 import { formatFileSize, formatReleaseOverviewDateRange } from "./release-format";
 import { CycleStatusTag, PlanPassRate, PlanStateTag } from "./release-tags";
 
@@ -304,6 +306,7 @@ type FilesSectionProps = {
   onTriggerUploadFile: () => void;
   onDeleteFile: (fileId: string) => Promise<void> | void;
   onDownloadFile: (fileId: string, fileName: string) => Promise<void> | void;
+  uploadStatuses?: TFileUploadStatus[];
   className?: string;
 };
 
@@ -317,6 +320,7 @@ export const ReleaseFilesSection: React.FC<FilesSectionProps> = ({
   onTriggerUploadFile,
   onDeleteFile,
   onDownloadFile,
+  uploadStatuses = [],
   className,
 }) => (
   <section className={cn(SECTION_CARD, className)}>
@@ -331,11 +335,12 @@ export const ReleaseFilesSection: React.FC<FilesSectionProps> = ({
       actionDisabled={filesUploading}
     />
     <div className={SECTION_BODY}>
+      <FileUploadProgressList uploadStatuses={uploadStatuses} className="mb-2 flex flex-col gap-1" />
       {filesLoading ? (
         <TableLoading />
       ) : filesError ? (
         <p className="text-sm text-danger-primary">{filesError}</p>
-      ) : files.length === 0 ? (
+      ) : files.length === 0 && uploadStatuses.length === 0 ? (
         <TableEmpty hint="暂无附件" />
       ) : (
         <div className="min-h-0 flex-1 overflow-x-auto">

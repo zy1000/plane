@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { message } from "antd";
+import { useFileUploadProgress } from "@/hooks/use-file-upload-progress";
 import type {
   TAssetExplorerFile,
   TAssetFolder,
@@ -24,6 +25,7 @@ export const useAssetExplorer = (props: TUseAssetExplorer) => {
   const [breadcrumbs, setBreadcrumbs] = useState<TAssetFolder[]>([]);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const { uploadStatuses, trackUpload } = useFileUploadProgress();
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [total, setTotal] = useState(0);
@@ -279,7 +281,9 @@ export const useAssetExplorer = (props: TUseAssetExplorer) => {
       setUploading(true);
       try {
         for (const file of uploadFiles) {
-          await service.uploadAsset(workspaceSlug, projectId, currentFolder.id, file);
+          await trackUpload(file, (onProgress) =>
+            service.uploadAsset(workspaceSlug, projectId, currentFolder.id, file, onProgress)
+          );
         }
         message.success(uploadFiles.length > 1 ? `已上传 ${uploadFiles.length} 个文件` : "上传成功");
         await refresh();
@@ -289,7 +293,7 @@ export const useAssetExplorer = (props: TUseAssetExplorer) => {
         setUploading(false);
       }
     },
-    [currentFolder?.id, projectId, refresh, service, workspaceSlug]
+    [currentFolder?.id, projectId, refresh, service, trackUpload, workspaceSlug]
   );
 
   const onCreateFolder = useCallback(
@@ -472,6 +476,7 @@ export const useAssetExplorer = (props: TUseAssetExplorer) => {
     folderStatsLoading,
     loading,
     uploading,
+    uploadStatuses,
     selectedAssetIds,
     selectedFolderIds,
     selectedAssetIdsArray,

@@ -44,6 +44,7 @@ import { EIssuesStoreType } from "@plane/types";
 import { Loader, Avatar, AvatarGroup, Button, CircularProgressIndicator } from "@plane/ui";
 import { cn, getFileURL, calculateCycleProgress, getDate, toFilterArray } from "@plane/utils";
 import { OverdueByAssigneeCard } from "@/components/common/overdue-by-assignee-card";
+import { FileUploadProgressList } from "@/components/common/file-upload-progress-item";
 import { CycleDescriptionFullscreenModal } from "@/components/cycles/cycle-description-fullscreen-modal";
 import { CycleOverviewFullscreenModal } from "@/components/cycles/cycle-overview-fullscreen-modal";
 import useCyclesDetails from "@/components/cycles/active-cycle/use-cycles-details";
@@ -54,6 +55,7 @@ import { useCycle } from "@/hooks/store/use-cycle";
 import { useMember } from "@/hooks/store/use-member";
 import { useUserPermissions } from "@/hooks/store/user";
 import { useWorkItemFilters } from "@/hooks/store/work-item-filters/use-work-item-filters";
+import { useFileUploadProgress } from "@/hooks/use-file-upload-progress";
 import useLocalStorage from "@/hooks/use-local-storage";
 import { SidebarChartRoot } from "@/plane-web/components/cycles";
 import { CycleService } from "@/services/cycle.service";
@@ -149,6 +151,7 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
   const [files, setFiles] = useState<TCycleFile[]>([]);
   const [filesLoading, setFilesLoading] = useState(false);
   const [filesUploading, setFilesUploading] = useState(false);
+  const { uploadStatuses, trackUpload } = useFileUploadProgress();
   const [filesTotal, setFilesTotal] = useState(0);
   const [filesDownloadingId, setFilesDownloadingId] = useState<string | null>(null);
   const [filesDeletingId, setFilesDeletingId] = useState<string | null>(null);
@@ -356,7 +359,9 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
 
     try {
       setFilesUploading(true);
-      await cycleService.uploadCycleFile(workspaceSlug, projectId, cycleId, selectedFile);
+      await trackUpload(selectedFile, (onProgress) =>
+        cycleService.uploadCycleFile(workspaceSlug, projectId, cycleId, selectedFile, onProgress)
+      );
       await fetchFiles();
       setFilesError(null);
     } catch (error: any) {
@@ -834,10 +839,11 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
                     <div className="flex items-center justify-center py-8 text-sm text-secondary">加载中...</div>
                   ) : filesError ? (
                     <p className="text-sm text-danger-primary">{filesError}</p>
-                  ) : files.length === 0 ? (
+                  ) : files.length === 0 && uploadStatuses.length === 0 ? (
                     <div className="grid min-h-0 flex-1 place-items-center text-sm text-placeholder">暂无附件</div>
                   ) : (
                     <div className="flex min-h-0 flex-1 flex-col">
+                      <FileUploadProgressList uploadStatuses={uploadStatuses} className="flex flex-col gap-1 pb-2" />
                       <div className="min-h-0 max-h-[min(360px,50vh)] flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm">
                         <div className="overflow-x-auto">
                           <table className="min-w-full table-fixed">
@@ -1032,7 +1038,7 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
               <div className="flex items-center justify-center py-8 text-sm text-secondary">加载中...</div>
             ) : filesError ? (
               <p className="text-sm text-danger-primary">{filesError}</p>
-            ) : files.length === 0 ? (
+            ) : files.length === 0 && uploadStatuses.length === 0 ? (
               <div className="grid h-32 place-items-center text-sm text-placeholder">暂无附件</div>
             ) : (
               <div className="flex min-h-0 flex-1 flex-col">
@@ -1047,6 +1053,7 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
                     <Plus className="h-3.5 w-3.5" />
                   </Button>
                 </div>
+                <FileUploadProgressList uploadStatuses={uploadStatuses} className="flex flex-col gap-1 pb-2" />
                 <div className="min-h-0 flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm">
                   <div className="overflow-x-auto">
                     <table className="min-w-full table-fixed">

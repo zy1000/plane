@@ -367,7 +367,7 @@ export const ReleaseOverviewTab: React.FC<Props> = ({
         />
 
         <SummaryCard
-          title="质量与风险"
+          title="质量监控"
           actionLabel="查看质量与风险"
           onAction={() => onJumpTab("quality")}
           metrics={[
@@ -409,7 +409,7 @@ export const ReleaseOverviewTab: React.FC<Props> = ({
         {noteText ? (
           <p className="mt-3 min-h-52 line-clamp-7 text-sm leading-relaxed text-secondary">{noteText}</p>
         ) : (
-          <div className="mt-3 grid min-h-52 place-items-center rounded-md border border-dashed border-subtle text-sm text-placeholder">
+          <div className="mt-3 grid min-h-52 place-items-center text-sm text-placeholder">
             暂无发布日志，点击右上角编辑添加。
           </div>
         )}
