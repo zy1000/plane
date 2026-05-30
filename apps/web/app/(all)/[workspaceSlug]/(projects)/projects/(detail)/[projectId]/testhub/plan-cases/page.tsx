@@ -11,6 +11,7 @@ import PlanCasesModal from "@/components/qa/plans/plan-cases-modal";
 import PlanIterationModal from "@/components/qa/plans/plan-iteration-modal";
 import PlanReleaseModal from "@/components/qa/plans/plan-release-modal";
 import PlanCasesExportModal from "@/components/qa/plans/plan-cases-export-modal";
+import UpdateModal from "@/components/qa/cases/update-modal";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { Tree, Table, Space, Tag, message, Dropdown, Pagination, Popconfirm, Select } from "antd";
 import type { TableProps } from "antd";
@@ -23,7 +24,7 @@ import { formatDateTime, globalEnums } from "../util";
 import { useUser } from "@/hooks/store/user";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { useTranslation } from "@plane/i18n";
-import { qaCaseErrorContent, qaCaseSetToastError, qaCaseSetToastSuccess } from "@/utils/qa-case-error";
+import { qaCaseErrorContent, qaCaseSetToastError, qaCaseSetToastSuccess, qaCaseSetToastWarning } from "@/utils/qa-case-error";
 import { ChevronDownIcon } from "@plane/propel/icons";
 
 type TLabel = { id?: string; name?: string } | string;
@@ -85,7 +86,7 @@ export default function PlanCasesPage() {
   const [selectedResults, setSelectedResults] = useState<string[] | undefined>(undefined);
 
   const [activeCase, setActiveCase] = useState<TestCase | null>(null);
-  const [detailLoading, setDetailLoading] = useState<boolean>(false);
+  const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
   const [isPlanModalOpen, setIsPlanModalOpen] = useState(false);
   const [isIterationModalOpen, setIsIterationModalOpen] = useState(false);
   const [isReleaseModalOpen, setIsReleaseModalOpen] = useState(false);
@@ -422,6 +423,15 @@ export default function PlanCasesPage() {
     return filtered[0] ?? "通过";
   };
 
+  const handleOpenCaseDetail = (caseId?: string) => {
+    if (!caseId) {
+      qaCaseSetToastWarning("缺少用例信息，无法打开");
+      return;
+    }
+    setActiveCase({ id: caseId, name: "" });
+    setIsUpdateModalOpen(true);
+  };
+
   const onBulkExecuteSelected = async () => {
     if (!workspaceSlug || !planId) return;
     if (!currentUser?.id) {
@@ -501,11 +511,7 @@ export default function PlanCasesPage() {
             <Button
             type="text"
             className="p-0 h-auto text-primary hover:text-primary hover:bg-transparent"
-            onClick={() =>
-              router.push(
-                `/${workspaceSlug}/projects/${projectId}/testhub/test-execution?case_id=${encodeURIComponent(String(cid))}&plan_id=${encodeURIComponent(String(planId || ""))}`
-              )
-            }
+            onClick={() => handleOpenCaseDetail(cid)}
           >
             {code}
           </Button>
@@ -529,11 +535,7 @@ export default function PlanCasesPage() {
           <Button
             type="text"
             className="p-0 h-auto text-primary hover:text-primary hover:bg-transparent"
-            onClick={() =>
-              router.push(
-                `/${workspaceSlug}/projects/${projectId}/testhub/test-execution?case_id=${encodeURIComponent(String(cid))}&plan_id=${encodeURIComponent(String(planId || ""))}`
-              )
-            }
+            onClick={() => handleOpenCaseDetail(cid)}
           >
          <span className="block max-w-[220px] truncate text-inherit" title={name || ""}>
             {name || "-"}
@@ -1056,6 +1058,17 @@ export default function PlanCasesPage() {
         repositoryId={selectedRepositoryId}
         moduleId={selectedModuleId}
         selectedCaseIds={selectedCaseIds}
+      />
+      <UpdateModal
+        open={isUpdateModalOpen}
+        onClose={() => {
+          setIsUpdateModalOpen(false);
+          setActiveCase(null);
+          fetchCases(currentPage, pageSize, selectedRepositoryId || undefined, selectedModuleId || undefined);
+        }}
+        caseId={activeCase?.id}
+        workspaceSlug={String(workspaceSlug)}
+        projectId={String(projectId || "")}
       />
     </div>
   );
