@@ -60,7 +60,7 @@ from plane.utils.analytics_plot import burndown_plot
 from plane.bgtasks.recent_visited_task import recent_visited_task
 from plane.utils.host import base_host
 from plane.utils.cycle_transfer_issues import transfer_cycle_issues
-from plane.utils.cycle_status import refresh_cycle_statuses, CYCLE_STATUS_EMAIL_WHITELIST
+from plane.utils.cycle_status import CYCLE_STATUS_EMAIL_WHITELIST
 from .. import BaseAPIView, BaseViewSet
 from plane.bgtasks.webhook_task import model_activity
 from plane.bgtasks.entity_status_email_task import dispatch_cycle_status_email
@@ -200,17 +200,6 @@ class CycleViewSet(BaseViewSet):
         # Convert project local time back to UTC for comparison (start_date is stored in UTC)
         current_time_in_utc = current_time_in_project_tz.astimezone(pytz.utc)
 
-        # Refresh statuses and dispatch status-change emails for whitelisted transitions.
-        refresh_cycle_statuses(
-            slug=slug,
-            project_id=project_id,
-            project_timezone=project_timezone,
-            user_id=request.user.id,
-            origin=base_host(request=request, is_app=True),
-        )
-
-
-
         # Current Cycle
         if cycle_view == "current":
             queryset = queryset.filter(start_date__lte=current_time_in_utc, end_date__gte=current_time_in_utc)
@@ -223,6 +212,7 @@ class CycleViewSet(BaseViewSet):
                 # model fields
                 "name",
                 "description",
+                "suggested_test_scope",
                 "start_date",
                 "end_date",
                 "owned_by_id",
@@ -270,6 +260,7 @@ class CycleViewSet(BaseViewSet):
             # model fields
             "name",
             "description",
+            "suggested_test_scope",
             "start_date",
             "end_date",
             "owned_by_id",
@@ -336,6 +327,7 @@ class CycleViewSet(BaseViewSet):
                         # model fields
                         "name",
                         "description",
+                        "suggested_test_scope",
                         "start_date",
                         "end_date",
                         "owned_by_id",
@@ -409,7 +401,12 @@ class CycleViewSet(BaseViewSet):
         #             status=status.HTTP_400_BAD_REQUEST,
         #         )
 
-        serializer = CycleWriteSerializer(cycle, data=request.data, partial=True, context={"project_id": project_id})
+        serializer = CycleWriteSerializer(
+            cycle,
+            data=request.data,
+            partial=True,
+            context={"project_id": project_id, "user": request.user},
+        )
         if serializer.is_valid():
             serializer.save()
             cycle = queryset.values(
@@ -420,6 +417,7 @@ class CycleViewSet(BaseViewSet):
                 # model fields
                 "name",
                 "description",
+                "suggested_test_scope",
                 "start_date",
                 "end_date",
                 "owned_by_id",
@@ -478,19 +476,6 @@ class CycleViewSet(BaseViewSet):
     @allow_fine_permission(PermissionKey.SPRINTS_VIEW)
     def retrieve(self, request, slug, project_id, pk):
         queryset = self.get_queryset().filter(archived_at__isnull=True).filter(pk=pk)
-        project = Project.objects.get(id=self.kwargs.get("project_id"))
-
-        # Fetch project for the specific record or pass project_id dynamically
-        project_timezone = project.timezone
-
-        # Refresh this cycle's status and dispatch status-change emails if needed.
-        refresh_cycle_statuses(
-            slug=slug,
-            project_id=project_id,
-            project_timezone=project_timezone,
-            pk=pk,
-            origin=base_host(request=request, is_app=True),
-        )
 
         data = (
             self.get_queryset()
@@ -515,6 +500,7 @@ class CycleViewSet(BaseViewSet):
                 # model fields
                 "name",
                 "description",
+                "suggested_test_scope",
                 "start_date",
                 "end_date",
                 "owned_by_id",

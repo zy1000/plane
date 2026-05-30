@@ -1,0 +1,96 @@
+from dataclasses import dataclass, field
+
+from plane.db.models import Cycle, CycleIssue, FileAsset, StateGroup
+
+
+@dataclass
+class CycleStateCheckResult:
+    """状态流转校验结果，allowed 为 True 时 reasons 为空。"""
+
+    allowed: bool
+    reasons: list[str] = field(default_factory=list)
+
+    def __bool__(self) -> bool:
+        return self.allowed
+
+
+def has_issues(cycle: Cycle):
+    return CycleIssue.objects.filter(cycle=cycle).exists()
+
+
+def all_issues_done(cycle: Cycle):
+    """判断迭代下面的工作项是否全部完成（忽略已取消）。"""
+    return not CycleIssue.objects.filter(cycle=cycle).exclude(
+        issue__state__group__in=[StateGroup.COMPLETED, StateGroup.CANCELLED]
+    ).exists()
+
+
+def all_issues_cancelled(cycle: Cycle):
+    """判断迭代下的工作项是否全部取消。"""
+    return not CycleIssue.objects.filter(cycle=cycle).exclude(
+        issue__state__group=StateGroup.CANCELLED
+    ).exists()
+
+
+def has_attachment(cycle: Cycle):
+    """判断迭代下是否有已上传且未删除的迭代附件。"""
+    return FileAsset.objects.filter(
+        cycle=cycle,
+        entity_type=FileAsset.EntityTypeContext.CYCLE_FILE,
+        is_uploaded=True,
+        is_deleted=False,
+    ).exists()
+
+
+def _result(reasons: list[str]) -> CycleStateCheckResult:
+    return CycleStateCheckResult(allowed=not reasons, reasons=reasons)
+
+
+def check_cycle_state(cycle: Cycle, next_status: Cycle.Status) -> CycleStateCheckResult:
+    """校验迭代状态流转，返回是否允许及失败原因列表。"""
+    reasons: list[str] = []
+    current = cycle.status
+
+    if current == next_status:
+        return _result(reasons)
+
+    if current in (Cycle.Status.COMPLETED, Cycle.Status.CANCELLED):
+        current_label = Cycle.Status(current).label if current else current
+        next_label = Cycle.Status(next_status).label if next_status else next_status
+        return CycleStateCheckResult(
+            allowed=False,
+            reasons=[f"当前状态「{current_label}」不允许变更为「{next_label}」"],
+        )
+
+    if next_status == Cycle.Status.CANCELLED:
+        return CycleStateCheckResult(allowed=True, reasons=[])
+
+    # 未开始 -> 进行中
+    if current == Cycle.Status.NOT_STARTED and next_status == Cycle.Status.IN_PROGRESS:
+        if cycle.start_date is None:
+            reasons.append("请填写开始时间")
+        if cycle.end_date is None:
+            reasons.append("请填写结束时间")
+        if not has_issues(cycle):
+            reasons.append("请先规划工作项")
+        return _result(reasons)
+
+    # 进行中 -> 已完成
+    if current == Cycle.Status.IN_PROGRESS and next_status == Cycle.Status.COMPLETED:
+        if has_issues(cycle) and all_issues_cancelled(cycle):
+            reasons.append("迭代下工作项已全部取消，只能改为已取消")
+        else:
+            if not all_issues_done(cycle):
+                reasons.append("存在未完成的工作项")
+            if not has_attachment(cycle):
+                reasons.append("请上传迭代附件")
+            if not (cycle.suggested_test_scope and str(cycle.suggested_test_scope).strip()):
+                reasons.append("请填写建议测试范围")
+        return _result(reasons)
+
+    current_label = Cycle.Status(current).label if current else current
+    next_label = Cycle.Status(next_status).label if next_status else next_status
+    return CycleStateCheckResult(
+        allowed=False,
+        reasons=[f"当前状态「{current_label}」不允许变更为「{next_label}」"],
+    )

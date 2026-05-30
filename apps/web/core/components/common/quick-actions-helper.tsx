@@ -95,8 +95,13 @@ export const useCycleMenuItems = (props: UseCycleMenuItemsProps): MenuResult => 
   const isCompleted = cycleDetails?.status === "completed";
   const cycleStatus = cycleDetails?.status;
 
-  const canMarkCompletedOrCancelled = !isArchived && isEditingAllowed && canEditSprint && (cycleStatus === "in_progress" || cycleStatus === "delayed");
-  const canMarkInProgress = !isArchived && isEditingAllowed && canEditSprint && (cycleStatus === "completed" || cycleStatus === "cancelled");
+  const canMarkCompleted = !isArchived && isEditingAllowed && canEditSprint && cycleStatus === "in_progress";
+  const canMarkCancelled =
+    !isArchived &&
+    isEditingAllowed &&
+    canEditSprint &&
+    (cycleStatus === "not_started" || cycleStatus === "in_progress");
+  const canMarkInProgress = false;
 
   const archiveDisabled = !canArchiveSprint || !isCompleted;
   const archiveDescription = !canArchiveSprint
@@ -120,14 +125,14 @@ export const useCycleMenuItems = (props: UseCycleMenuItemsProps): MenuResult => 
       title: "标记为已完成",
       icon: CheckCircle2,
       action: handlers.handleMarkAsCompleted,
-      shouldRender: canMarkCompletedOrCancelled,
+      shouldRender: canMarkCompleted,
     },
     {
       key: "mark-as-cancelled",
       title: "标记为已取消",
       icon: XCircle,
       action: handlers.handleMarkAsCancelled,
-      shouldRender: canMarkCompletedOrCancelled,
+      shouldRender: canMarkCancelled,
     },
     {
       key: "mark-as-in-progress",

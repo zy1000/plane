@@ -5,7 +5,7 @@
  */
 
 import * as React from "react";
-import { CircleDotDashed, CircleAlert, CircleX } from "lucide-react";
+import { CircleDotDashed, CircleX } from "lucide-react";
 
 import { CycleIcon } from "../project/cycle-icon";
 import { CircleDotFullIcon } from "./circle-dot-full-icon";
@@ -15,7 +15,6 @@ import { CYCLE_GROUP_COLORS } from "./helper";
 const iconComponents = {
   in_progress: CycleIcon,
   not_started: CircleDotDashed,
-  delayed: CircleAlert,
   completed: CircleDotFullIcon,
   cancelled: CircleX,
 };

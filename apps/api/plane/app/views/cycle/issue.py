@@ -248,10 +248,10 @@ class CycleIssueViewSet(BaseViewSet):
             workspace__slug=slug, project_id=project_id, pk=cycle_id
         )
 
-        if cycle.end_date is not None and cycle.end_date < timezone.now():
+        if cycle.status == Cycle.Status.COMPLETED:
             return Response(
                 {
-                    "error": "The Cycle has already been completed so no new issues can be added"
+                    "error": "已完成的迭代不能添加工作项"
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )

@@ -24,6 +24,7 @@ import { useUserPermissions } from "@/hooks/store/user";
 import { useTimeZoneConverter } from "@/hooks/use-timezone-converter";
 // services
 import { CycleService } from "@/services/cycle.service";
+import { formatCycleUpdateError } from "../use-cycle-error-message";
 
 type Props = {
   workspaceSlug: string;
@@ -40,6 +41,7 @@ const defaultValues: Partial<ICycle> = {
 };
 
 const cycleService = new CycleService();
+type TCycleSubmitResult = { success: boolean; error?: unknown };
 
 export const CycleSidebarHeader = observer(function CycleSidebarHeader(props: Props) {
   const { workspaceSlug, projectId, cycleDetails, handleClose, isArchived = false } = props;
@@ -63,8 +65,8 @@ export const CycleSidebarHeader = observer(function CycleSidebarHeader(props: Pr
 
   const currentCycle = CYCLE_STATUS.find((status) => status.value === cycleStatus);
 
-  const submitChanges = async (data: Partial<ICycle>) => {
-    if (!workspaceSlug || !projectId || !cycleDetails.id) return false;
+  const submitChanges = async (data: Partial<ICycle>): Promise<TCycleSubmitResult> => {
+    if (!workspaceSlug || !projectId || !cycleDetails.id) return { success: false };
     const hasChanges = Object.entries(data).some(([key, value]) => {
       if (key === "status") return value !== cycleDetails.status;
       if (key === "start_date") return (value ?? null) !== (cycleDetails.start_date ?? null);
@@ -72,15 +74,14 @@ export const CycleSidebarHeader = observer(function CycleSidebarHeader(props: Pr
       return true;
     });
 
-    if (!hasChanges) return true;
+    if (!hasChanges) return { success: true };
 
-    return await updateCycleDetails(workspaceSlug.toString(), projectId.toString(), cycleDetails.id.toString(), data)
-      .then(() => {
-        return true;
-      })
-      .catch(() => {
-        return false;
-      });
+    try {
+      await updateCycleDetails(workspaceSlug.toString(), projectId.toString(), cycleDetails.id.toString(), data);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error };
+    }
   };
 
   useEffect(() => {
@@ -116,12 +117,13 @@ export const CycleSidebarHeader = observer(function CycleSidebarHeader(props: Pr
       isDateValid = true;
     }
     if (isDateValid) {
-      const didSucceed = await submitChanges(payload);
-      if (!didSucceed) {
+      const result = await submitChanges(payload);
+      if (!result.success) {
+        const { title, message } = formatCycleUpdateError(result.error);
         setToast({
           type: TOAST_TYPE.ERROR,
-          title: t("project_cycles.action.update.failed.title"),
-          message: t("something_went_wrong_please_try_again"),
+          title,
+          message,
         });
         return false;
       }
@@ -147,10 +149,10 @@ export const CycleSidebarHeader = observer(function CycleSidebarHeader(props: Pr
   );
 
   const statusOptions =
-    cycleStatus === "in_progress" || cycleStatus === "delayed"
-      ? ["completed", "cancelled"]
-      : cycleStatus === "completed" || cycleStatus === "cancelled"
-        ? ["in_progress"]
+    cycleStatus === "not_started"
+      ? ["in_progress", "cancelled"]
+      : cycleStatus === "in_progress"
+        ? ["completed", "cancelled"]
         : [];
 
   const canChangeStatus = isEditingAllowed && !isArchived && statusOptions.length > 0;
@@ -196,18 +198,19 @@ export const CycleSidebarHeader = observer(function CycleSidebarHeader(props: Pr
                         if (!nextStatus || nextStatus === cycleStatus || isUpdatingStatus) return;
                         setIsUpdatingStatus(true);
                         try {
-                          const didSucceed = await submitChanges({ status: nextStatus });
-                          if (didSucceed) {
+                          const result = await submitChanges({ status: nextStatus });
+                          if (result.success) {
                             setToast({
                               type: TOAST_TYPE.SUCCESS,
                               title: t("project_cycles.action.update.success.title"),
                               message: t("project_cycles.action.update.success.description"),
                             });
                           } else {
+                            const { title, message } = formatCycleUpdateError(result.error);
                             setToast({
                               type: TOAST_TYPE.ERROR,
-                              title: t("project_cycles.action.update.failed.title"),
-                              message: t("something_went_wrong_please_try_again"),
+                              title,
+                              message,
                             });
                           }
                         } finally {

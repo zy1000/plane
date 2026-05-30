@@ -9,11 +9,15 @@ from rest_framework import serializers
 from .base import BaseSerializer
 from .issue import IssueStateSerializer
 from plane.db.models import Cycle, CycleIssue, CycleUserProperties
+from plane.utils.cycle.rules import check_cycle_state
 from plane.utils.timezone_converter import convert_to_utc
 
 
 class CycleWriteSerializer(BaseSerializer):
     def validate(self, data):
+        status = data.get("status")
+        user = self.context.get("user")
+
         if (
             data.get("start_date", None) is not None
             and data.get("end_date", None) is not None
@@ -35,6 +39,24 @@ class CycleWriteSerializer(BaseSerializer):
                 date=str(data.get("end_date", None).date()),
                 project_id=project_id,
             )
+
+        if status and self.instance and status != self.instance.status:
+            if self.instance.owned_by_id != getattr(user, "id", None):
+                raise serializers.ValidationError(
+                    {
+                        "error": "不符合状态流转规则",
+                        "reasons": ["状态只能由负责人修改"],
+                    }
+                )
+
+            result = check_cycle_state(self.instance, Cycle.Status(status))
+            if not result.allowed:
+                raise serializers.ValidationError(
+                    {
+                        "error": "不符合状态流转规则",
+                        "reasons": result.reasons,
+                    }
+                )
         return data
 
     class Meta:
@@ -67,6 +89,7 @@ class CycleSerializer(BaseSerializer):
             # model fields
             "name",
             "description",
+            "suggested_test_scope",
             "start_date",
             "end_date",
             "owned_by_id",

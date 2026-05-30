@@ -7,7 +7,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import type { ComponentType, SVGProps } from "react";
 import { observer } from "mobx-react";
-import { Ban, CircleAlert, CircleCheck, CircleDashed } from "lucide-react";
+import { Ban, CircleCheck, CircleDashed } from "lucide-react";
 // components
 import { CYCLE_STATUS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
@@ -52,7 +52,6 @@ export const CyclesList = observer(function CyclesList(props: ICyclesList) {
     const iconByStatus: Record<TCycleGroups, ComponentType<SVGProps<SVGSVGElement>>> = {
       in_progress: ContrastIcon as unknown as ComponentType<SVGProps<SVGSVGElement>>,
       not_started: CircleDashed,
-      delayed: CircleAlert,
       completed: CircleCheck,
       cancelled: Ban,
     };
@@ -69,7 +68,6 @@ export const CyclesList = observer(function CyclesList(props: ICyclesList) {
     const groups: Record<TCycleGroups, string[]> = {
       not_started: [],
       in_progress: [],
-      delayed: [],
       completed: [],
       cancelled: [],
     };
@@ -86,22 +84,16 @@ export const CyclesList = observer(function CyclesList(props: ICyclesList) {
   const stateSidebarGroups = useMemo(
     () => [
       {
-        id: "in_progress",
-        name: getStatusTitle("in_progress"),
-        count: groupedCycleIds.in_progress.length,
-        icon: getStatusIcon("in_progress"),
-      },
-      {
         id: "not_started",
         name: getStatusTitle("not_started"),
         count: groupedCycleIds.not_started.length,
         icon: getStatusIcon("not_started"),
       },
       {
-        id: "delayed",
-        name: getStatusTitle("delayed"),
-        count: groupedCycleIds.delayed.length,
-        icon: getStatusIcon("delayed"),
+        id: "in_progress",
+        name: getStatusTitle("in_progress"),
+        count: groupedCycleIds.in_progress.length,
+        icon: getStatusIcon("in_progress"),
       },
       {
         id: "completed",

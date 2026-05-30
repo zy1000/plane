@@ -61,12 +61,16 @@ class Cycle(ProjectBaseModel):
     class Status(models.TextChoices):
         NOT_STARTED = '未开始'
         IN_PROGRESS = '进行中'
-        DELAYED = '已延期'
         COMPLETED = '已完成'
         CANCELLED = '已取消'
 
     name = models.CharField(max_length=255, verbose_name="Cycle Name")
     description = models.TextField(verbose_name="Cycle Description", blank=True)
+    suggested_test_scope = models.TextField(
+        verbose_name="Suggested Test Scope",
+        blank=True,
+        null=True,
+    )
     start_date = models.DateTimeField(verbose_name="Start Date", blank=True, null=True)
     end_date = models.DateTimeField(verbose_name="End Date", blank=True, null=True)
     owned_by = models.ForeignKey(

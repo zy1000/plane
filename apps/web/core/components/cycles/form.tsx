@@ -34,6 +34,7 @@ type Props = {
 const defaultValues: Partial<ICycle> = {
   name: "",
   description: "",
+  suggested_test_scope: "",
   start_date: null,
   end_date: null,
 };
@@ -55,6 +56,7 @@ export function CycleForm(props: Props) {
       project_id: projectId,
       name: data?.name || "",
       description: data?.description || "",
+      suggested_test_scope: data?.suggested_test_scope || "",
       start_date: data?.start_date || null,
       end_date: data?.end_date || null,
     },
@@ -142,6 +144,22 @@ export function CycleForm(props: Props) {
                   value={value}
                   onChange={onChange}
                   tabIndex={getIndex("description")}
+                />
+              )}
+            />
+          </div>
+          <div>
+            <Controller
+              name="suggested_test_scope"
+              control={control}
+              render={({ field: { value, onChange } }) => (
+                <TextArea
+                  name="suggested_test_scope"
+                  placeholder="建议测试范围"
+                  className="min-h-24 w-full resize-none text-14"
+                  value={value ?? ""}
+                  onChange={onChange}
+                  tabIndex={getIndex("suggested_test_scope")}
                 />
               )}
             />

@@ -7,7 +7,7 @@
 import type { TIssue } from "../issues/issue";
 import type { IIssueFilterOptions } from "../view-props";
 
-export type TCycleGroups = "not_started" | "in_progress" | "delayed" | "completed" | "cancelled";
+export type TCycleGroups = "not_started" | "in_progress" | "completed" | "cancelled";
 
 export type TCycleCompletionChartDistribution = {
   [key: string]: number | null;
@@ -90,6 +90,7 @@ export interface ICycle extends TProgressSnapshot {
   created_at?: string;
   created_by?: string;
   description: string;
+  suggested_test_scope?: string | null;
   end_date: string | null;
   id: string;
   is_favorite?: boolean;
