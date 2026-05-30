@@ -26,6 +26,7 @@ import { invalidateIssueApprovalStatus } from "@/services/project/issue-approval
 
 type Props = {
   className?: string;
+  isActive?: boolean;
 };
 
 // h-7 与工具条内其它药丸控件统一高度（覆盖 DropdownButton 默认 h-full）
@@ -33,7 +34,7 @@ const actionPillClassName =
   "inline-flex h-7 max-h-7 shrink-0 items-center justify-start gap-1.5 rounded-md border border-subtle bg-layer-1 px-2 text-xs text-primary hover:bg-layer-1-hover transition-colors whitespace-nowrap";
 
 export const BulkOperationsActionBar = observer(function BulkOperationsActionBar(props: Props) {
-  const { className } = props;
+  const { className, isActive = true } = props;
   const { selectedEntityIds, clearSelection } = useMultipleSelectStore();
   const selectedCount = selectedEntityIds.length;
   const { workspaceSlug, projectId } = useParams() as { workspaceSlug?: string; projectId?: string };
@@ -195,6 +196,8 @@ export const BulkOperationsActionBar = observer(function BulkOperationsActionBar
       )
       .finally(() => setIsDeleting(false));
   };
+
+  if (!isActive) return null;
 
   return (
     <div className={cn("sticky bottom-0 left-0 z-[20] flex items-center justify-center", className)}>

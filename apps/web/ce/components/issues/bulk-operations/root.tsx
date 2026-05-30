@@ -21,7 +21,10 @@ export const IssueBulkOperationsRoot = observer(function IssueBulkOperationsRoot
   // store hooks
   const { isSelectionActive } = useMultipleSelectStore();
 
-  if (!isSelectionActive || selectionHelpers.isSelectionDisabled) return null;
-
-  return <BulkOperationsActionBar className={className} />;
+  return (
+    <BulkOperationsActionBar
+      className={className}
+      isActive={isSelectionActive && !selectionHelpers.isSelectionDisabled}
+    />
+  );
 });

@@ -32,6 +32,7 @@ export type IMultipleSelectStore = {
   updateNextActiveEntity: (entityDetails: TEntityDetails | null) => void;
   updateActiveEntityDetails: (entityDetails: TEntityDetails | null) => void;
   clearSelection: () => void;
+  removeEntityById: (entityID: string) => void;
   // extended selection actions (for parent-child selection)
   isExtendedSelection: (entityID: string) => boolean;
   toggleExtendedSelection: (entityID: string) => void;
@@ -76,6 +77,7 @@ export class MultipleSelectStore implements IMultipleSelectStore {
       updateNextActiveEntity: action,
       updateActiveEntityDetails: action,
       clearSelection: action,
+      removeEntityById: action,
       toggleExtendedSelection: action,
       clearExtendedSelection: action,
     });
@@ -242,6 +244,32 @@ export class MultipleSelectStore implements IMultipleSelectStore {
       this.nextActiveEntity = null;
       this.activeEntityDetails = null;
       this.extendedSelectionEntityIds = [];
+    });
+  };
+
+  /**
+   * @description remove a single entity from selection (e.g. when issue is deleted)
+   * @param {string} entityID
+   */
+  removeEntityById = (entityID: string) => {
+    runInAction(() => {
+      const currentSelection = this.selectedEntityDetails.filter((en) => en.entityID !== entityID);
+      remove(this.selectedEntityDetails, (en) => en.entityID === entityID);
+
+      if (this.lastSelectedEntityDetails?.entityID === entityID) {
+        this.lastSelectedEntityDetails = currentSelection[currentSelection.length - 1] ?? null;
+      }
+      if (this.activeEntityDetails?.entityID === entityID) {
+        this.activeEntityDetails = null;
+      }
+      if (this.previousActiveEntity?.entityID === entityID) {
+        this.previousActiveEntity = null;
+      }
+      if (this.nextActiveEntity?.entityID === entityID) {
+        this.nextActiveEntity = null;
+      }
+
+      this.extendedSelectionEntityIds = this.extendedSelectionEntityIds.filter((id) => id !== entityID);
     });
   };
 

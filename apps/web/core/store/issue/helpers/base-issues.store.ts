@@ -638,6 +638,7 @@ export abstract class BaseIssuesStore implements IBaseIssuesStore {
     // Remove from Respective issue Id list
     runInAction(() => {
       this.removeIssueFromList(issueId);
+      this.rootIssueStore.rootStore.multipleSelect.removeEntityById(issueId);
     });
     // call fetch Parent stats
     this.fetchParentStats(workspaceSlug, projectId);

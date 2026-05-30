@@ -523,6 +523,23 @@ export const useMultipleSelect = (props: Props) => {
     if (entitiesToRemove.length > 0) bulkUpdateSelectedEntityDetails(entitiesToRemove, "remove");
   }, [bulkUpdateSelectedEntityDetails, disabled, getEntityDetailsFromEntityID, groups, selectedEntityIds]);
 
+  // when entity list changes, remove selected entities that no longer exist in the list
+  useEffect(() => {
+    if (disabled) return;
+
+    const entityIdSet = new Set(entitiesList.map((entity) => entity.entityID));
+    const entitiesToRemove: TEntityDetails[] = [];
+
+    selectedEntityIds.forEach((entityID) => {
+      if (!entityIdSet.has(entityID)) {
+        const entityDetails = getEntityDetailsFromEntityID(entityID);
+        if (entityDetails) entitiesToRemove.push(entityDetails);
+      }
+    });
+
+    if (entitiesToRemove.length > 0) bulkUpdateSelectedEntityDetails(entitiesToRemove, "remove");
+  }, [bulkUpdateSelectedEntityDetails, disabled, entitiesList, getEntityDetailsFromEntityID, selectedEntityIds]);
+
   /**
    * @description helper functions for selection
    */
