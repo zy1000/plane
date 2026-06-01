@@ -78,7 +78,7 @@ export const CycleQuickActions = observer(function CycleQuickActions(props: Prop
     });
   const handleOpenInNewTab = () => window.open(`/${cycleLink}`, "_blank");
 
-  const handleUpdateCycleStatus = async (nextStatus: "in_progress" | "completed" | "cancelled") => {
+  const handleUpdateCycleStatus = async (nextStatus: "in_progress" | "testing" | "completed" | "cancelled") => {
     if (!cycleDetails) return;
     if (cycleDetails.status === nextStatus) return;
 
@@ -140,6 +140,7 @@ export const CycleQuickActions = observer(function CycleQuickActions(props: Prop
     canDeleteSprint,
     canArchiveSprint,
     handleEdit: () => setUpdateModal(true),
+    handleMarkAsTesting: () => handleUpdateCycleStatus("testing"),
     handleMarkAsCompleted: () => handleUpdateCycleStatus("completed"),
     handleMarkAsCancelled: () => handleUpdateCycleStatus("cancelled"),
     handleMarkAsInProgress: () => handleUpdateCycleStatus("in_progress"),

@@ -165,39 +165,46 @@ export function CycleForm(props: Props) {
             />
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Controller
-              control={control}
-              name="start_date"
-              render={({ field: { value: startDateValue, onChange: onChangeStartDate } }) => (
-                <Controller
-                  control={control}
-                  name="end_date"
-                  render={({ field: { value: endDateValue, onChange: onChangeEndDate } }) => (
-                    <DateRangeDropdown
-                      buttonVariant="border-with-text"
-                      className="h-7"
-                      minDate={new Date()}
-                      value={{
-                        from: getDate(startDateValue),
-                        to: getDate(endDateValue),
-                      }}
-                      onSelect={(val) => {
-                        onChangeStartDate(val?.from ? renderFormattedPayloadDate(val.from) : null);
-                        onChangeEndDate(val?.to ? renderFormattedPayloadDate(val.to) : null);
-                      }}
-                      placeholder={{
-                        from: "Start date",
-                        to: "End date",
-                      }}
-                      hideIcon={{
-                        to: true,
-                      }}
-                      tabIndex={getIndex("date_range")}
-                    />
-                  )}
-                />
-              )}
-            />
+            <div className="space-y-1">
+              <Controller
+                control={control}
+                name="start_date"
+                render={({ field: { value: startDateValue, onChange: onChangeStartDate } }) => (
+                  <Controller
+                    control={control}
+                    name="end_date"
+                    rules={{
+                      required: t("end_date_is_required"),
+                    }}
+                    render={({ field: { value: endDateValue, onChange: onChangeEndDate } }) => (
+                      <DateRangeDropdown
+                        buttonVariant="border-with-text"
+                        className="h-7"
+                        buttonClassName={errors?.end_date ? "border-danger-strong" : ""}
+                        minDate={new Date()}
+                        value={{
+                          from: getDate(startDateValue),
+                          to: getDate(endDateValue),
+                        }}
+                        onSelect={(val) => {
+                          onChangeStartDate(val?.from ? renderFormattedPayloadDate(val.from) : null);
+                          onChangeEndDate(val?.to ? renderFormattedPayloadDate(val.to) : null);
+                        }}
+                        placeholder={{
+                          from: "Start date",
+                          to: "End date",
+                        }}
+                        hideIcon={{
+                          to: true,
+                        }}
+                        tabIndex={getIndex("date_range")}
+                      />
+                    )}
+                  />
+                )}
+              />
+              <span className="text-11 text-danger-primary">{errors?.end_date?.message}</span>
+            </div>
           </div>
         </div>
       </div>

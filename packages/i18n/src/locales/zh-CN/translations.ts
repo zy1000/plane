@@ -470,6 +470,7 @@ export default {
   start_date: "开始日期",
   test_handoff_date: "转测日期",
   end_date: "结束日期",
+  end_date_is_required: "结束日期为必填项",
   due_date: "截止日期",
   estimate: "估算",
   change_parent_issue: "更改父工作项",

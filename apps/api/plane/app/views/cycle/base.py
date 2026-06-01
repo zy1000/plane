@@ -327,13 +327,7 @@ class CycleViewSet(BaseViewSet):
 
     @allow_fine_permission(PermissionKey.SPRINTS_CREATE)
     def create(self, request, slug, project_id):
-        if (
-            request.data.get("start_date", None) is None
-            and request.data.get("end_date", None) is None
-        ) or (
-            request.data.get("start_date", None) is not None
-            and request.data.get("end_date", None) is not None
-        ):
+        if request.data.get("end_date", None) is not None:
             serializer = CycleWriteSerializer(
                 data=request.data, context={"project_id": project_id}
             )
@@ -397,7 +391,7 @@ class CycleViewSet(BaseViewSet):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         else:
             return Response(
-                {"error": "Both start date and end date are either required or are to be null"},
+                {"error": "结束时间为必填项"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 

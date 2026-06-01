@@ -42,13 +42,14 @@ import { useTranslation } from "@plane/i18n";
 import { CheckIcon, MembersPropertyIcon } from "@plane/propel/icons";
 import type { ICycle, TCyclePlotType, TProgressSnapshot, TCycleDistribution, TCycleEstimateDistribution } from "@plane/types";
 import { EIssuesStoreType } from "@plane/types";
-import { Loader, Avatar, AvatarGroup, Button, CircularProgressIndicator } from "@plane/ui";
+import { Loader, Avatar, AvatarGroup, Button, CircularProgressIndicator, CustomSelect } from "@plane/ui";
 import { cn, getFileURL, calculateCycleProgress, getDate, toFilterArray } from "@plane/utils";
 import { OverdueByAssigneeCard } from "@/components/common/overdue-by-assignee-card";
 import { FileUploadProgressList } from "@/components/common/file-upload-progress-item";
 import { CycleCommentsSection } from "@/components/cycles/cycle-comments";
 import { CycleDescriptionFullscreenModal } from "@/components/cycles/cycle-description-fullscreen-modal";
 import { CycleOverviewFullscreenModal } from "@/components/cycles/cycle-overview-fullscreen-modal";
+import { formatCycleUpdateError } from "@/components/cycles/use-cycle-error-message";
 import useCyclesDetails from "@/components/cycles/active-cycle/use-cycles-details";
 import type { TAssigneeData } from "@/components/core/sidebar/progress-stats/assignee";
 import { AssigneeStatComponent } from "@/components/core/sidebar/progress-stats/assignee";
@@ -146,7 +147,8 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
   const searchParams = useSearchParams();
   const peekCycle = searchParams.get("peekCycle") || undefined;
   const cycleService = useMemo(() => new CycleService(), []);
-  const { getPlotTypeByCycleId, getEstimateTypeByCycleId, getCycleById, fetchCycleDetails } = useCycle();
+  const { getPlotTypeByCycleId, getEstimateTypeByCycleId, getCycleById, fetchCycleDetails, updateCycleDetails } =
+    useCycle();
   const { getUserDetails } = useMember();
   const { getFilter, updateFilterValueFromSidebar } = useWorkItemFilters();
   const { allowPermissions } = useUserPermissions();
@@ -172,6 +174,7 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
   const [selectedPlanIds, setSelectedPlanIds] = useState<string[]>([]);
   const [associatingPlans, setAssociatingPlans] = useState(false);
   const [cancelingPlanId, setCancelingPlanId] = useState<string | null>(null);
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const { storedValue: currentTab, setValue: setCurrentTab } = useLocalStorage(
     `cycle-overview-tab-${cycleId}`,
     "stat-test-plans"
@@ -216,6 +219,21 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
 
   const cycleStatus = cycleDetails?.status ?? "not_started";
   const statusInfo = CYCLE_STATUS.find((s) => s.value === cycleStatus);
+  const statusOptionsByCurrentStatus: Record<NonNullable<ICycle["status"]>, NonNullable<ICycle["status"]>[]> = {
+    not_started: ["in_progress", "cancelled"],
+    in_progress: ["testing", "cancelled"],
+    testing: ["completed", "cancelled"],
+    completed: [],
+    cancelled: [],
+  };
+  const statusOptions = statusOptionsByCurrentStatus[cycleStatus as NonNullable<ICycle["status"]>] ?? [];
+  const isEditingAllowed = allowPermissions(
+    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
+    EUserPermissionsLevel.PROJECT,
+    workspaceSlug,
+    projectId
+  );
+  const canChangeStatus = isEditingAllowed && !cycleDetails?.archived_at && statusOptions.length > 0;
   const cycleOwner = cycleDetails ? getUserDetails(cycleDetails.owned_by_id) : undefined;
   const startDate = getDate(cycleDetails?.start_date);
   const endDate = getDate(cycleDetails?.end_date);
@@ -516,14 +534,65 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            {statusInfo && (
-              <span
-                className="inline-flex items-center rounded-md px-2.5 py-1 text-xs font-medium"
-                style={{ color: statusInfo.color, backgroundColor: `${statusInfo.color}20` }}
-              >
-                {t(statusInfo.i18n_title)}
-              </span>
-            )}
+            {statusInfo &&
+              (canChangeStatus ? (
+                <CustomSelect
+                  customButton={
+                    <span
+                      className="inline-flex cursor-pointer items-center rounded-md px-2.5 py-1 text-xs font-medium"
+                      style={{ color: statusInfo.color, backgroundColor: `${statusInfo.color}20` }}
+                    >
+                      {t(statusInfo.i18n_title)}
+                    </span>
+                  }
+                  value={cycleStatus}
+                  onChange={(nextStatus: string) => {
+                    void (async () => {
+                      if (!nextStatus || nextStatus === cycleStatus || isUpdatingStatus) return;
+                      setIsUpdatingStatus(true);
+                      try {
+                        await updateCycleDetails(workspaceSlug, projectId, cycleId, {
+                          status: nextStatus as ICycle["status"],
+                        });
+                        setToast({
+                          type: TOAST_TYPE.SUCCESS,
+                          title: t("project_cycles.action.update.success.title"),
+                          message: t("project_cycles.action.update.success.description"),
+                        });
+                      } catch (err) {
+                        const { title, message } = formatCycleUpdateError(err);
+                        setToast({
+                          type: TOAST_TYPE.ERROR,
+                          title,
+                          message,
+                        });
+                      } finally {
+                        setIsUpdatingStatus(false);
+                      }
+                    })();
+                  }}
+                  disabled={isUpdatingStatus}
+                >
+                  {CYCLE_STATUS.filter((status) => statusOptions.includes(status.value)).map((status) => (
+                    <CustomSelect.Option key={status.value} value={status.value}>
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="h-2 w-2 flex-shrink-0 rounded-full"
+                          style={{ backgroundColor: status.color }}
+                        />
+                        {t(status.i18n_title)}
+                      </div>
+                    </CustomSelect.Option>
+                  ))}
+                </CustomSelect>
+              ) : (
+                <span
+                  className="inline-flex items-center rounded-md px-2.5 py-1 text-xs font-medium"
+                  style={{ color: statusInfo.color, backgroundColor: `${statusInfo.color}20` }}
+                >
+                  {t(statusInfo.i18n_title)}
+                </span>
+              ))}
             {startDate && endDate && (
               <span className="inline-flex items-center gap-1.5 text-sm text-placeholder">
                 <CalendarDays className="h-3.5 w-3.5 text-placeholder" />
@@ -1149,7 +1218,7 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
               {selectablePlansError}
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="max-h-[min(480px,60vh)] overflow-y-auto overflow-x-auto vertical-scrollbar scrollbar-sm">
               <table className="min-w-full table-fixed">
                 <thead>
                   <tr className="text-left text-xs text-secondary [&>th]:sticky [&>th]:top-0 [&>th]:z-10 [&>th]:bg-surface-1 [&>th]:shadow-[inset_0_-1px_0_var(--border-subtle)]">

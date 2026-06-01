@@ -24,6 +24,10 @@ class CycleWriteSerializer(BaseSerializer):
     def validate(self, data):
         status = data.get("status")
         user = self.context.get("user")
+        has_end_date_in_payload = "end_date" in data
+
+        if self.instance and has_end_date_in_payload and data.get("end_date") is None:
+            raise serializers.ValidationError("结束时间不可清空")
 
         if (
             data.get("start_date", None) is not None
@@ -31,21 +35,23 @@ class CycleWriteSerializer(BaseSerializer):
             and data.get("start_date", None) > data.get("end_date", None)
         ):
             raise serializers.ValidationError("Start date cannot exceed end date")
-        if data.get("start_date", None) is not None and data.get("end_date", None) is not None:
+        if data.get("start_date", None) is not None or data.get("end_date", None) is not None:
             project_id = (
                 self.initial_data.get("project_id", None)
                 or (self.instance and self.instance.project_id)
                 or self.context.get("project_id", None)
             )
-            data["start_date"] = convert_to_utc(
-                date=str(data.get("start_date").date()),
-                project_id=project_id,
-                is_start_date=True,
-            )
-            data["end_date"] = convert_to_utc(
-                date=str(data.get("end_date", None).date()),
-                project_id=project_id,
-            )
+            if data.get("start_date", None) is not None:
+                data["start_date"] = convert_to_utc(
+                    date=str(data.get("start_date").date()),
+                    project_id=project_id,
+                    is_start_date=True,
+                )
+            if data.get("end_date", None) is not None:
+                data["end_date"] = convert_to_utc(
+                    date=str(data.get("end_date").date()),
+                    project_id=project_id,
+                )
 
         if status and self.instance and status != self.instance.status:
             if self.instance.owned_by_id != getattr(user, "id", None):

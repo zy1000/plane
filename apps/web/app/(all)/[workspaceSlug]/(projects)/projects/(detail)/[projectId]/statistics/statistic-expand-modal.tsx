@@ -36,9 +36,11 @@ type Props = {
 const CYCLE_STATUS_NORMALIZE_MAP: Record<string, string> = {
   未开始: "not_started",
   进行中: "in_progress",
+  测试中: "testing",
   已延期: "delayed",
   已完成: "completed",
   已取消: "cancelled",
+  testing: "testing",
   current: "in_progress",
   upcoming: "not_started",
   draft: "not_started",

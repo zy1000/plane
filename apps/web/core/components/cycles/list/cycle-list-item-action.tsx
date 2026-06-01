@@ -106,7 +106,8 @@ export const CycleListItemAction = observer(function CycleListItemAction(props: 
       currentProjectDisplayFilters?.group_by === "none");
   const statusOptionsByCurrentStatus: Record<NonNullable<ICycle["status"]>, NonNullable<ICycle["status"]>[]> = {
     not_started: ["in_progress", "cancelled"],
-    in_progress: ["completed", "cancelled"],
+    in_progress: ["testing", "cancelled"],
+    testing: ["completed", "cancelled"],
     completed: [],
     cancelled: [],
   };

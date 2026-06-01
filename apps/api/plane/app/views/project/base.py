@@ -1265,6 +1265,7 @@ class ProjectAPI(BaseViewSet):
                 status__in=[
                     Cycle.Status.NOT_STARTED,
                     Cycle.Status.IN_PROGRESS,
+                    Cycle.Status.TESTING,
                 ]
             )
             .select_related("owned_by")

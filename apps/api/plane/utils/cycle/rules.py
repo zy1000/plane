@@ -42,6 +42,11 @@ def has_attachment(cycle: Cycle):
     ).exists()
 
 
+def has_test_plan(cycle: Cycle):
+    """判断迭代下是否至少关联一个未删除的测试计划。"""
+    return cycle.plans.filter(deleted_at__isnull=True).exists()
+
+
 def _result(reasons: list[str]) -> CycleStateCheckResult:
     return CycleStateCheckResult(allowed=not reasons, reasons=reasons)
 
@@ -75,17 +80,22 @@ def check_cycle_state(cycle: Cycle, next_status: Cycle.Status) -> CycleStateChec
             reasons.append("请先规划工作项")
         return _result(reasons)
 
-    # 进行中 -> 已完成
-    if current == Cycle.Status.IN_PROGRESS and next_status == Cycle.Status.COMPLETED:
+    # 进行中 -> 测试中
+    if current == Cycle.Status.IN_PROGRESS and next_status == Cycle.Status.TESTING:
+        if not has_attachment(cycle):
+            reasons.append("请上传迭代附件")
+        if not (cycle.suggested_test_scope and str(cycle.suggested_test_scope).strip()):
+            reasons.append("请填写建议测试范围")
+        if not has_test_plan(cycle):
+            reasons.append("请先关联测试计划")
         if has_issues(cycle) and all_issues_cancelled(cycle):
             reasons.append("迭代下工作项已全部取消，只能改为已取消")
-        else:
-            if not all_issues_done(cycle):
-                reasons.append("存在未完成的工作项")
-            if not has_attachment(cycle):
-                reasons.append("请上传迭代附件")
-            if not (cycle.suggested_test_scope and str(cycle.suggested_test_scope).strip()):
-                reasons.append("请填写建议测试范围")
+        elif not all_issues_done(cycle):
+            reasons.append("存在未完成的工作项")
+        return _result(reasons)
+
+    # 测试中 -> 已完成（无额外前置条件）
+    if current == Cycle.Status.TESTING and next_status == Cycle.Status.COMPLETED:
         return _result(reasons)
 
     current_label = Cycle.Status(current).label if current else current

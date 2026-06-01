@@ -152,7 +152,9 @@ export const CycleSidebarHeader = observer(function CycleSidebarHeader(props: Pr
     cycleStatus === "not_started"
       ? ["in_progress", "cancelled"]
       : cycleStatus === "in_progress"
-        ? ["completed", "cancelled"]
+        ? ["testing", "cancelled"]
+        : cycleStatus === "testing"
+          ? ["completed", "cancelled"]
         : [];
 
   const canChangeStatus = isEditingAllowed && !isArchived && statusOptions.length > 0;

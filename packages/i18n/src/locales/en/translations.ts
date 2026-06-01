@@ -308,6 +308,7 @@ export default {
   start_date: "Start date",
   test_handoff_date: "QA handoff date",
   end_date: "End date",
+  end_date_is_required: "End date is required",
   due_date: "Due date",
   estimate: "Estimate",
   change_parent_issue: "Change parent work item",

@@ -56,6 +56,7 @@ RELEASE_STATUS_EMAIL_WHITELIST = {
 CYCLE_STATUS_LABELS = {
     Cycle.Status.NOT_STARTED: "未开始",
     Cycle.Status.IN_PROGRESS: "进行中",
+    Cycle.Status.TESTING: "测试中",
     Cycle.Status.COMPLETED: "已完成",
     Cycle.Status.CANCELLED: "已取消",
 }

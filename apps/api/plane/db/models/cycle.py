@@ -63,6 +63,7 @@ class Cycle(ProjectBaseModel):
     class Status(models.TextChoices):
         NOT_STARTED = '未开始'
         IN_PROGRESS = '进行中'
+        TESTING = '测试中'
         COMPLETED = '已完成'
         CANCELLED = '已取消'
 

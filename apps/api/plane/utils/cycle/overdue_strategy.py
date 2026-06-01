@@ -2,7 +2,7 @@
 
 延期不修改 Cycle.status，仅维护独立的 CycleOverdueRecord：
 - 同一 cycle 在 ended_at IS NULL 时只允许一条记录（DB 唯一约束保证）
-- 系统每日扫描进行中的迭代，自动开/关延期记录
+- 系统每日扫描非终止态（未开始/进行中/测试中）迭代，自动开/关延期记录
 - 状态/日期变化时 view 层主动调用 sync
 """
 
@@ -138,11 +138,12 @@ def sync_overdue_on_date_change(
 
 
 def scan_cycles_for_overdue(cycles: Optional[Iterable[Cycle]] = None) -> int:
-    """扫描进行中的迭代，按需开/关延期记录。返回处理数。"""
+    """扫描非终止态迭代，按需开/关延期记录。返回处理数。"""
     if cycles is None:
         cycles = Cycle.objects.filter(
             archived_at__isnull=True,
-            status=Cycle.Status.IN_PROGRESS,
+        ).exclude(
+            status__in=_TERMINAL_STATUSES,
         )
 
     now = timezone.now()

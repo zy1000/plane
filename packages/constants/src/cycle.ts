@@ -7,7 +7,7 @@
 // types
 export const CYCLE_STATUS: {
   i18n_label: string;
-  value: "not_started" | "in_progress" | "completed" | "cancelled";
+  value: "not_started" | "in_progress" | "testing" | "completed" | "cancelled";
   i18n_title: string;
   color: string;
   textColor: string;
@@ -20,6 +20,14 @@ export const CYCLE_STATUS: {
     color: "#F59E0B",
     textColor: "text-amber-500",
     bgColor: "bg-amber-50",
+  },
+  {
+    i18n_label: "测试中",
+    value: "testing",
+    i18n_title: "测试中",
+    color: "#8B5CF6",
+    textColor: "text-purple-500",
+    bgColor: "bg-purple-50",
   },
   {
     i18n_label: "未开始",

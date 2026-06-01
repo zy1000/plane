@@ -22,6 +22,7 @@ interface UseCycleMenuItemsProps {
   projectId: string;
   cycleId: string;
   handleEdit: () => void;
+  handleMarkAsTesting: () => void;
   handleMarkAsCompleted: () => void;
   handleMarkAsCancelled: () => void;
   handleMarkAsInProgress: () => void;
@@ -95,12 +96,13 @@ export const useCycleMenuItems = (props: UseCycleMenuItemsProps): MenuResult => 
   const isCompleted = cycleDetails?.status === "completed";
   const cycleStatus = cycleDetails?.status;
 
-  const canMarkCompleted = !isArchived && isEditingAllowed && canEditSprint && cycleStatus === "in_progress";
+  const canMarkTesting = !isArchived && isEditingAllowed && canEditSprint && cycleStatus === "in_progress";
+  const canMarkCompleted = !isArchived && isEditingAllowed && canEditSprint && cycleStatus === "testing";
   const canMarkCancelled =
     !isArchived &&
     isEditingAllowed &&
     canEditSprint &&
-    (cycleStatus === "not_started" || cycleStatus === "in_progress");
+    (cycleStatus === "not_started" || cycleStatus === "in_progress" || cycleStatus === "testing");
   const canMarkInProgress = false;
 
   const archiveDisabled = !canArchiveSprint || !isCompleted;
@@ -120,6 +122,13 @@ export const useCycleMenuItems = (props: UseCycleMenuItemsProps): MenuResult => 
     factory.createEditMenuItem(handlers.handleEdit, isEditingAllowed && !isCompleted && !isArchived, editDisabled, editDescription),
     factory.createOpenInNewTabMenuItem(handlers.handleOpenInNewTab),
     factory.createCopyLinkMenuItem(handlers.handleCopyLink),
+    {
+      key: "mark-as-testing",
+      title: "标记为测试中",
+      icon: CirclePlay,
+      action: handlers.handleMarkAsTesting,
+      shouldRender: canMarkTesting,
+    },
     {
       key: "mark-as-completed",
       title: "标记为已完成",

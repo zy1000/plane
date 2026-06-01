@@ -7,7 +7,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import type { ComponentType, SVGProps } from "react";
 import { observer } from "mobx-react";
-import { Ban, CircleCheck, CircleDashed } from "lucide-react";
+import { Ban, Circle, CircleCheck, CircleDashed } from "lucide-react";
 // components
 import { CYCLE_STATUS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
@@ -51,6 +51,7 @@ export const CyclesList = observer(function CyclesList(props: ICyclesList) {
     const color = CYCLE_STATUS.find((s) => s.value === status)?.color;
     const iconByStatus: Record<TCycleGroups, ComponentType<SVGProps<SVGSVGElement>>> = {
       in_progress: ContrastIcon as unknown as ComponentType<SVGProps<SVGSVGElement>>,
+      testing: Circle,
       not_started: CircleDashed,
       completed: CircleCheck,
       cancelled: Ban,
@@ -68,6 +69,7 @@ export const CyclesList = observer(function CyclesList(props: ICyclesList) {
     const groups: Record<TCycleGroups, string[]> = {
       not_started: [],
       in_progress: [],
+      testing: [],
       completed: [],
       cancelled: [],
     };
@@ -94,6 +96,12 @@ export const CyclesList = observer(function CyclesList(props: ICyclesList) {
         name: getStatusTitle("in_progress"),
         count: groupedCycleIds.in_progress.length,
         icon: getStatusIcon("in_progress"),
+      },
+      {
+        id: "testing",
+        name: getStatusTitle("testing"),
+        count: groupedCycleIds.testing.length,
+        icon: getStatusIcon("testing"),
       },
       {
         id: "completed",
