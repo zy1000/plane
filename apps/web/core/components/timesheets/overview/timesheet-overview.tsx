@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Calendar, CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
+import { observer } from "mobx-react";
 import { DatePicker } from "antd";
 import dayjs from "dayjs";
 import { Loader } from "@plane/ui";
@@ -59,7 +60,7 @@ function OverviewSkeleton() {
   );
 }
 
-export function TimesheetOverview({ workspaceSlug, memberId }: Props) {
+export const TimesheetOverview = observer(function TimesheetOverview({ workspaceSlug, memberId }: Props) {
   const { fetchProjects } = useProject();
 
   useEffect(() => {
@@ -75,6 +76,7 @@ export function TimesheetOverview({ workspaceSlug, memberId }: Props) {
     kpis,
     dailyHours,
     projectDistribution,
+    pmsAlerts,
     alertDays,
     recentEntries,
     weekStart,
@@ -235,10 +237,10 @@ export function TimesheetOverview({ workspaceSlug, memberId }: Props) {
             <OverviewRecentEntries entries={recentEntries} title={`最近填报（${modeLabel}）`} />
           </div>
           <div className="max-h-[466px] xl:col-span-5 [&>*]:h-full">
-            <OverviewMissingDaysAlert alertDays={alertDays} workspaceSlug={workspaceSlug} />
+            <OverviewMissingDaysAlert alertDays={alertDays} pmsAlerts={pmsAlerts} workspaceSlug={workspaceSlug} />
           </div>
         </div>
       </div>
     </div>
   );
-}
+});

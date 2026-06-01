@@ -1,10 +1,11 @@
 import { AlertTriangle, ArrowRight } from "lucide-react";
 import { Card } from "@plane/ui";
 import { useAppRouter } from "@/hooks/use-app-router";
-import type { TAlertDay } from "@/hooks/store/use-timesheet-overview";
+import type { TAlertDay, TPmsAlert } from "@/hooks/store/use-timesheet-overview";
 
 type Props = {
   alertDays: TAlertDay[];
+  pmsAlerts: TPmsAlert[];
   workspaceSlug: string;
 };
 
@@ -19,16 +20,21 @@ function getWeekdayLabel(dateStr: string): string {
   return label;
 }
 
-export function OverviewMissingDaysAlert({ alertDays, workspaceSlug }: Props) {
+export function OverviewMissingDaysAlert({ alertDays, pmsAlerts, workspaceSlug }: Props) {
   const router = useAppRouter();
 
   const handleGoToFill = () => {
     router.push(`/${workspaceSlug}/timesheets`);
   };
+  const handleGoToProjectSettings = (projectId: string) => {
+    router.push(`/${workspaceSlug}/settings/projects/${projectId}`);
+  };
 
   const missingCount = alertDays.filter((d) => d.type === "missing" && !d.isFuture).length;
   const insufficientCount = alertDays.filter((d) => d.type === "insufficient" && !d.isFuture).length;
   const upcomingCount = alertDays.filter((d) => d.isFuture).length;
+  const pmsMissingCount = pmsAlerts.length;
+  const hasAlerts = alertDays.length > 0 || pmsAlerts.length > 0;
 
   return (
     <Card className="flex h-full max-h-[466px] min-h-0 flex-col border border-subtle p-4">
@@ -36,12 +42,13 @@ export function OverviewMissingDaysAlert({ alertDays, workspaceSlug }: Props) {
         <AlertTriangle className="h-4 w-4 text-amber-500" />
         <span className="text-sm font-medium text-primary">填报提醒</span>
       </div>
-      {alertDays.length > 0 ? (
+      {hasAlerts ? (
         <>
           <div className="flex flex-shrink-0 flex-wrap gap-x-3 gap-y-1 text-sm text-placeholder">
             {missingCount > 0 && <span>{missingCount} 天未填报</span>}
             {insufficientCount > 0 && <span>{insufficientCount} 天不足 8h</span>}
             {upcomingCount > 0 && <span>{upcomingCount} 天待填报</span>}
+            {pmsMissingCount > 0 && <span>{pmsMissingCount} 个项目缺PMS项目名称</span>}
           </div>
           <div className="mt-2 min-h-0 flex-1 space-y-1.5 overflow-y-auto vertical-scrollbar scrollbar-sm">
             {alertDays.map((item) => (
@@ -77,6 +84,20 @@ export function OverviewMissingDaysAlert({ alertDays, workspaceSlug }: Props) {
                   <span className="text-orange-600">{item.hours}h / 8h</span>
                 )}
               </div>
+            ))}
+            {pmsAlerts.map((item) => (
+              <button
+                key={`pms-${item.projectId}`}
+                type="button"
+                onClick={() => handleGoToProjectSettings(item.projectId)}
+                className="flex w-full cursor-pointer items-center justify-between rounded-md bg-rose-500/5 px-3 py-2 text-left text-sm transition-colors hover:bg-rose-500/10"
+              >
+                <div className="flex min-w-0 items-center gap-2">
+                  <div className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-rose-500" />
+                  <span className="truncate text-primary">{item.projectName}</span>
+                </div>
+                <span className="flex-shrink-0 text-rose-600">未配置PMS项目名称</span>
+              </button>
             ))}
           </div>
           <button
