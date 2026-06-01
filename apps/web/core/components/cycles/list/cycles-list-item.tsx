@@ -19,6 +19,8 @@ import { useCycle } from "@/hooks/store/use-cycle";
 import { useAppRouter } from "@/hooks/use-app-router";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 // local imports
+import { CycleOverdueTag } from "../cycle-overdue-tag";
+import { getCycleOverdueToneTextClass, getCycleRowTone } from "../cycle-overdue-utils";
 import { CycleQuickActions } from "../quick-actions";
 import { CycleListItemAction } from "./cycle-list-item-action";
 
@@ -54,6 +56,7 @@ export const CyclesListItem = observer(function CyclesListItem(props: TCyclesLis
   // computed
   const cycleStatus = cycleDetails.status ?? "not_started";
   const isActive = cycleStatus === "in_progress";
+  const overdueTone = getCycleRowTone(cycleDetails);
 
   // handlers
   const openCycleOverview = (e: MouseEvent<HTMLButtonElement | HTMLAnchorElement>) => {
@@ -80,6 +83,7 @@ export const CyclesListItem = observer(function CyclesListItem(props: TCyclesLis
   return (
     <ListItem
       title={cycleDetails?.name ?? ""}
+      titleClassName={getCycleOverdueToneTextClass(overdueTone)}
       itemLink={`/${workspaceSlug}/projects/${projectId}/cycles/${cycleDetails.id}/overview`}
       onItemClick={handleItemClick}
       className={className}
@@ -91,6 +95,14 @@ export const CyclesListItem = observer(function CyclesListItem(props: TCyclesLis
             <span className="text-10 font-medium tabular-nums leading-none text-primary">{`${progress}%`}</span>
           )}
         </CircularProgressIndicator>
+      }
+      appendTitleElement={
+        <CycleOverdueTag
+          cycleDetails={cycleDetails}
+          workspaceSlug={workspaceSlug}
+          projectId={projectId}
+          cycleId={cycleDetails.id}
+        />
       }
       actionableItems={
         <CycleListItemAction

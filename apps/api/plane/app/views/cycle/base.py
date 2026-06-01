@@ -36,6 +36,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from plane.app.permissions import allow_permission, ROLE, allow_fine_permission, PermissionKey
 from plane.app.serializers import (
+    CycleOverdueRecordSerializer,
     CycleSerializer,
     CycleUserPropertiesSerializer,
     CycleWriteSerializer,
@@ -45,6 +46,7 @@ from plane.bgtasks.issue_activities_task import issue_activity
 from plane.db.models import (
     Cycle,
     CycleIssue,
+    CycleOverdueRecord,
     UserFavorite,
     CycleUserProperties,
     Issue,
@@ -64,6 +66,11 @@ from plane.utils.cycle_status import CYCLE_STATUS_EMAIL_WHITELIST
 from .. import BaseAPIView, BaseViewSet
 from plane.bgtasks.webhook_task import model_activity
 from plane.bgtasks.entity_status_email_task import dispatch_cycle_status_email
+from plane.utils.cycle.overdue_strategy import (
+    scan_cycles_for_overdue,
+    sync_overdue_on_date_change,
+    sync_overdue_on_status_change,
+)
 from plane.utils.timezone_converter import convert_to_utc, user_timezone_converter
 
 
@@ -79,6 +86,15 @@ class CycleViewSet(BaseViewSet):
             entity_type="cycle",
             project_id=self.kwargs.get("project_id"),
             workspace__slug=self.kwargs.get("slug"),
+        )
+        active_overdue_subquery = CycleOverdueRecord.objects.filter(
+            cycle_id=OuterRef("pk"),
+            ended_at__isnull=True,
+            deleted_at__isnull=True,
+        )
+        any_overdue_subquery = CycleOverdueRecord.objects.filter(
+            cycle_id=OuterRef("pk"),
+            deleted_at__isnull=True,
         )
 
         project = Project.objects.get(id=self.kwargs.get("project_id"))
@@ -118,6 +134,8 @@ class CycleViewSet(BaseViewSet):
             )
             .prefetch_related("plans")
             .annotate(is_favorite=Exists(favorite_subquery))
+            .annotate(has_active_overdue=Exists(active_overdue_subquery))
+            .annotate(has_overdue_history=Exists(any_overdue_subquery))
             .annotate(
                 total_issues=Count(
                     "issue_cycle__issue__id",
@@ -181,6 +199,7 @@ class CycleViewSet(BaseViewSet):
     def list(self, request, slug, project_id):
         cycle_status = request.query_params.getlist('status')
         queryset = self.get_queryset().filter(archived_at__isnull=True)
+        scan_cycles_for_overdue(queryset)
         if cycle_status:
             queryset = queryset.filter(status__in=cycle_status)
         cycle_view = request.GET.get("cycle_view", "all")
@@ -229,6 +248,8 @@ class CycleViewSet(BaseViewSet):
                 "cancelled_issues",
                 "assignee_ids",
                 "status",
+                "has_active_overdue",
+                "has_overdue_history",
                 "plan_ids",
                 "version",
                 "created_by",
@@ -279,6 +300,8 @@ class CycleViewSet(BaseViewSet):
             "assignee_ids",
             "plan_ids",
             "status",
+            "has_active_overdue",
+            "has_overdue_history",
             "version",
             "created_by",
         )
@@ -344,6 +367,8 @@ class CycleViewSet(BaseViewSet):
                         "completed_issues",
                         "assignee_ids",
                         "status",
+                        "has_active_overdue",
+                        "has_overdue_history",
                         "created_by",
                     )
                     .first()
@@ -388,6 +413,7 @@ class CycleViewSet(BaseViewSet):
 
         current_instance = json.dumps(CycleSerializer(cycle).data, cls=DjangoJSONEncoder)
         previous_status = cycle.status
+        previous_end_date = cycle.end_date
 
         request_data = request.data
 
@@ -408,7 +434,15 @@ class CycleViewSet(BaseViewSet):
             context={"project_id": project_id, "user": request.user},
         )
         if serializer.is_valid():
-            serializer.save()
+            updated_cycle = serializer.save()
+            new_status = updated_cycle.status
+            if new_status and new_status != previous_status:
+                sync_overdue_on_status_change(updated_cycle, previous_status, new_status)
+            sync_overdue_on_date_change(
+                updated_cycle,
+                prev_end=previous_end_date,
+            )
+
             cycle = queryset.values(
                 # necessary fields
                 "id",
@@ -435,6 +469,8 @@ class CycleViewSet(BaseViewSet):
                 "completed_issues",
                 "assignee_ids",
                 "status",
+                "has_active_overdue",
+                "has_overdue_history",
                 "created_by",
             ).first()
 
@@ -518,6 +554,8 @@ class CycleViewSet(BaseViewSet):
                 "completed_issues",
                 "assignee_ids",
                 "status",
+                "has_active_overdue",
+                "has_overdue_history",
                 "created_by",
             )
             .first()
@@ -541,6 +579,24 @@ class CycleViewSet(BaseViewSet):
             project_id=project_id,
         )
         return Response(data, status=status.HTTP_200_OK)
+
+    @allow_fine_permission(PermissionKey.SPRINTS_VIEW)
+    def overdues(self, request, slug, project_id, pk):
+        if not Cycle.objects.filter(
+            workspace__slug=slug,
+            project_id=project_id,
+            pk=pk,
+        ).exists():
+            return Response({"error": "Cycle not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        records = CycleOverdueRecord.objects.filter(
+            cycle_id=pk,
+            project_id=project_id,
+            workspace__slug=slug,
+            deleted_at__isnull=True,
+        ).order_by("-started_at")
+        serializer = CycleOverdueRecordSerializer(records, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
     @allow_fine_permission(PermissionKey.SPRINTS_DELETE)
     def destroy(self, request, slug, project_id, pk):

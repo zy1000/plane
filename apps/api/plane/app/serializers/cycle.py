@@ -8,7 +8,7 @@ from rest_framework import serializers
 # Module imports
 from .base import BaseSerializer
 from .issue import IssueStateSerializer
-from plane.db.models import Cycle, CycleIssue, CycleUserProperties
+from plane.db.models import Cycle, CycleIssue, CycleOverdueRecord, CycleUserProperties
 from plane.utils.cycle.rules import check_cycle_state
 from plane.utils.timezone_converter import convert_to_utc
 
@@ -132,3 +132,18 @@ class CycleUserPropertiesSerializer(BaseSerializer):
         model = CycleUserProperties
         fields = "__all__"
         read_only_fields = ["workspace", "project", "cycle", "user"]
+
+
+class CycleOverdueRecordSerializer(BaseSerializer):
+    class Meta:
+        model = CycleOverdueRecord
+        fields = [
+            "id",
+            "cycle",
+            "started_at",
+            "ended_at",
+            "triggered_by",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = fields

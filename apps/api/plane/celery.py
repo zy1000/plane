@@ -81,6 +81,10 @@ app.conf.beat_schedule = {
         "task": "plane.bgtasks.release_overdue_task.scan_release_overdues",
         "schedule": crontab(hour=0, minute=0),  # UTC 04:00
     },
+    "check-every-day-to-scan-cycle-overdues": {
+        "task": "plane.bgtasks.cycle_overdue_task.scan_cycle_overdues",
+        "schedule": crontab(hour=0, minute=10),  # UTC 04:10
+    },
 }
 
 

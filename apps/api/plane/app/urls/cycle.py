@@ -68,6 +68,11 @@ urlpatterns = [
         name="project-cycle",
     ),
     path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/cycles/<uuid:pk>/overdues/",
+        CycleViewSet.as_view({"get": "overdues"}),
+        name="project-cycle-overdues",
+    ),
+    path(
         "workspaces/<str:slug>/projects/<uuid:project_id>/cycles/<uuid:cycle_id>/cycle-issues/",
         CycleIssueViewSet.as_view({"get": "list", "post": "create"}),
         name="project-issue-cycle",

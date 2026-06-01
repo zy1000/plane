@@ -8,6 +8,17 @@ import type { TIssue } from "../issues/issue";
 import type { IIssueFilterOptions } from "../view-props";
 
 export type TCycleGroups = "not_started" | "in_progress" | "completed" | "cancelled";
+export type TCycleOverdueTrigger = "system" | "user";
+
+export interface ICycleOverdueRecord {
+  id: string;
+  cycle: string;
+  started_at: string;
+  ended_at: string | null;
+  triggered_by: TCycleOverdueTrigger;
+  created_at: string;
+  updated_at: string;
+}
 
 export type TCycleCompletionChartDistribution = {
   [key: string]: number | null;
@@ -94,6 +105,8 @@ export interface ICycle extends TProgressSnapshot {
   end_date: string | null;
   id: string;
   is_favorite?: boolean;
+  has_active_overdue?: boolean;
+  has_overdue_history?: boolean;
   name: string;
   owned_by_id: string;
   project_id: string;

@@ -8,6 +8,7 @@ import pytz
 # Django imports
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
 
 # Module imports
 from .project import ProjectBaseModel
@@ -117,6 +118,39 @@ class Cycle(ProjectBaseModel):
     def __str__(self):
         """Return name of the cycle"""
         return f"{self.name} <{self.project.name}>"
+
+
+class CycleOverdueTrigger(models.TextChoices):
+    SYSTEM = "system", "系统自动"
+    USER = "user", "人工标记"
+
+
+class CycleOverdueRecord(ProjectBaseModel):
+    cycle = models.ForeignKey(
+        Cycle,
+        on_delete=models.CASCADE,
+        related_name="overdue_records",
+    )
+    started_at = models.DateTimeField(default=timezone.now)
+    ended_at = models.DateTimeField(null=True, blank=True)
+    triggered_by = models.CharField(
+        max_length=8,
+        choices=CycleOverdueTrigger.choices,
+        default=CycleOverdueTrigger.SYSTEM,
+    )
+
+    class Meta:
+        verbose_name = "Cycle Overdue Record"
+        verbose_name_plural = "Cycle Overdue Records"
+        db_table = "cycle_overdue_records"
+        ordering = ("-started_at",)
+        constraints = [
+            models.UniqueConstraint(
+                fields=["cycle"],
+                condition=models.Q(ended_at__isnull=True, deleted_at__isnull=True),
+                name="cycle_overdue_record_unique_active",
+            )
+        ]
 
 
 class CycleIssue(ProjectBaseModel):

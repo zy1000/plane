@@ -58,6 +58,7 @@ from .view import IssueViewSerializer, ViewIssueListSerializer
 from .cycle import (
     CycleSerializer,
     CycleIssueSerializer,
+    CycleOverdueRecordSerializer,
     CycleWriteSerializer,
     CycleUserPropertiesSerializer,
 )

@@ -11,6 +11,7 @@ import { generateFileUploadPayload, getFileMetaDataForUpload } from "@plane/serv
 import type {
   CycleDateCheckData,
   ICycle,
+  ICycleOverdueRecord,
   TIssuesResponse,
   IWorkspaceActiveCyclesResponse,
   TCycleDistribution,
@@ -299,6 +300,18 @@ export class CycleService extends APIService {
       `/api/workspaces/${workspaceSlug}/projects/${projectId}/cycles/${cycleId}/overdue-by-assignee/`
     )
       .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async getCycleOverdues(
+    workspaceSlug: string,
+    projectId: string,
+    cycleId: string
+  ): Promise<ICycleOverdueRecord[]> {
+    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/cycles/${cycleId}/overdues/`)
+      .then((response) => response?.data ?? [])
       .catch((error) => {
         throw error?.response?.data;
       });
