@@ -8,7 +8,14 @@ from rest_framework import serializers
 # Module imports
 from .base import BaseSerializer
 from .issue import IssueStateSerializer
-from plane.db.models import Cycle, CycleIssue, CycleOverdueRecord, CycleUserProperties
+from .user import UserLiteSerializer
+from plane.db.models import (
+    Cycle,
+    CycleComment,
+    CycleIssue,
+    CycleOverdueRecord,
+    CycleUserProperties,
+)
 from plane.utils.cycle.rules import check_cycle_state
 from plane.utils.timezone_converter import convert_to_utc
 
@@ -147,3 +154,39 @@ class CycleOverdueRecordSerializer(BaseSerializer):
             "updated_at",
         ]
         read_only_fields = fields
+
+
+class CycleCommentSerializer(BaseSerializer):
+    actor_detail = UserLiteSerializer(read_only=True, source="actor")
+
+    class Meta:
+        model = CycleComment
+        fields = [
+            "id",
+            "workspace",
+            "project",
+            "cycle",
+            "actor",
+            "actor_detail",
+            "comment_stripped",
+            "comment_json",
+            "comment_html",
+            "parent",
+            "edited_at",
+            "created_at",
+            "updated_at",
+            "created_by",
+            "updated_by",
+        ]
+        read_only_fields = [
+            "workspace",
+            "project",
+            "cycle",
+            "actor",
+            "comment_stripped",
+            "edited_at",
+            "created_by",
+            "updated_by",
+            "created_at",
+            "updated_at",
+        ]

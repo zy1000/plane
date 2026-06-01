@@ -274,6 +274,23 @@ class _Resolver:
                 display_name=getattr(cycle, "name", "") or "",
             )
 
+        # 迭代评论中的内联图片：复用与 CYCLE_FILE 相同的目录节点（Workspace -> Project ->
+        # 迭代 -> Cycle），上传期靠 cycle_id 定位父级，与具体 cycle_comment 解耦，
+        # 避免评论尚未创建时无法定路径。
+        if et == "CYCLE_COMMENT_DESCRIPTION":
+            cycle = self._get_related(asset, "cycle")
+            if cycle is None:
+                return self._temp_node(parent_for_category=proj_node, asset=asset)
+            cycle_category = self._category_node(
+                parent=proj_node, entity_type="CYCLE_FILE"
+            )
+            return self._get_or_create_node(
+                parent=cycle_category,
+                entity_type="CYCLE",
+                entity_id=cycle.pk,
+                display_name=getattr(cycle, "name", "") or "",
+            )
+
         if et == "RELEASE_FILE":
             release = self._get_related(asset, "release")
             if release is None:

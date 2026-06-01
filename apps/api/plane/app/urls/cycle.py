@@ -21,6 +21,7 @@ from plane.app.views import (
     CycleUserPropertiesEndpoint,
     CycleArchiveUnarchiveEndpoint,
     CycleFileAPI,
+    CycleCommentViewSet,
 )
 
 
@@ -88,6 +89,16 @@ urlpatterns = [
             }
         ),
         name="project-issue-cycle",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/cycles/<uuid:cycle_id>/comments/",
+        CycleCommentViewSet.as_view({"get": "list", "post": "create"}),
+        name="project-cycle-comments",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/cycles/<uuid:cycle_id>/comments/<uuid:pk>/",
+        CycleCommentViewSet.as_view({"get": "retrieve", "delete": "destroy"}),
+        name="project-cycle-comments",
     ),
     path(
         "workspaces/<str:slug>/projects/<uuid:project_id>/cycles/date-check/",

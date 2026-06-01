@@ -77,6 +77,7 @@ class PermissionKey(str, Enum):
     SPRINTS_FILE_DELETE = "sprints.file.delete"
     SPRINTS_FILE_DOWNLOAD = "sprints.file.download"
     SPRINTS_ISSUE_MANAGE = "sprints.issue.manage"
+    SPRINTS_COMMENT_CREATE = "sprints.comment.create"
     RELEASES_VIEW = "releases.view"
     RELEASES_CREATE = "releases.create"
     RELEASES_EDIT = "releases.edit"

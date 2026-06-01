@@ -8,6 +8,7 @@ import pytz
 # Django imports
 from django.conf import settings
 from django.db import models
+from django.utils.html import strip_tags
 from django.utils import timezone
 
 # Module imports
@@ -151,6 +152,40 @@ class CycleOverdueRecord(ProjectBaseModel):
                 name="cycle_overdue_record_unique_active",
             )
         ]
+
+
+class CycleComment(ProjectBaseModel):
+    cycle = models.ForeignKey(Cycle, on_delete=models.CASCADE, related_name="cycle_comments")
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="cycle_comments",
+        null=True,
+    )
+    comment_stripped = models.TextField(verbose_name="Comment", blank=True)
+    comment_json = models.JSONField(blank=True, default=dict)
+    comment_html = models.TextField(blank=True, default="<p></p>")
+    parent = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="child_cycle_comments",
+    )
+    edited_at = models.DateTimeField(null=True, blank=True)
+
+    def save(self, *args, **kwargs):
+        self.comment_stripped = strip_tags(self.comment_html) if self.comment_html else ""
+        super().save(*args, **kwargs)
+
+    class Meta:
+        verbose_name = "Cycle Comment"
+        verbose_name_plural = "Cycle Comments"
+        db_table = "cycle_comments"
+        ordering = ("-created_at",)
+
+    def __str__(self):
+        return f"{self.cycle_id} {self.actor_id}"
 
 
 class CycleIssue(ProjectBaseModel):

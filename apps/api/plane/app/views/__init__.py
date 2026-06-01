@@ -118,6 +118,7 @@ from .cycle.base import (
 from .cycle.issue import CycleIssueViewSet
 from .cycle.archive import CycleArchiveUnarchiveEndpoint
 from .cycle.file import CycleFileAPI
+from .cycle.comment import CycleCommentViewSet
 
 from .asset.base import FileAssetEndpoint, UserAssetsEndpoint, FileAssetViewSet
 from .asset.v2 import (
