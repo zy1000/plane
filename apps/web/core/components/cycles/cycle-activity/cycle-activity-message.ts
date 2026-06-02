@@ -37,8 +37,14 @@ export const buildCycleActivityMessage = (activity: TCycleActivity): string => {
     return name ? `删除了迭代「${name}」` : "删除了迭代";
   }
 
-  if (field === "comment" && verb === "created") return "新增了评论";
-  if (field === "comment" && verb === "deleted") return "删除了评论";
+  if (field === "comment" && verb === "created") {
+    const text = renderText(new_value, "");
+    return text ? `评论：${text}` : "新增了评论";
+  }
+  if (field === "comment" && verb === "deleted") {
+    const text = renderText(old_value, "");
+    return text ? `删除了评论：${text}` : "删除了评论";
+  }
 
   if (field === "attachment" && verb === "created") {
     const name = renderText(new_value, "");

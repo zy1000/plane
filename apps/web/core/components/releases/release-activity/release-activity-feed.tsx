@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { observer } from "mobx-react";
 import Link from "next/link";
 import useSWR from "swr";
@@ -22,10 +22,14 @@ import {
   Trash2,
   UserCog,
 } from "lucide-react";
+import type { EditorRefApi } from "@plane/editor";
 import { E_SORT_ORDER } from "@plane/constants";
+import { CommentReplyIcon } from "@plane/propel/icons";
 import type { TReleaseActivity, TReleaseStatus } from "@plane/types";
-import { Loader, Tooltip } from "@plane/ui";
-import { calculateTimeAgo } from "@plane/utils";
+import { Avatar, Loader, Tooltip } from "@plane/ui";
+import { calculateTimeAgo, getFileURL, renderFormattedDate, renderFormattedTime } from "@plane/utils";
+import { LiteTextEditor } from "@/components/editor/lite-text";
+import { getUserAvatarFallbackBackgroundColor } from "@/helpers/user-avatar.helper";
 import { useMember } from "@/hooks/store/use-member";
 import { useReleaseActivity } from "@/hooks/store/use-release-activity";
 import { useUser } from "@/hooks/store/user";
@@ -37,6 +41,8 @@ type Props = {
   workspaceSlug: string;
   projectId: string;
   releaseId: string;
+  /** 外部传入的动态列表（如“全部”页合并评论后的数据）。未传时从 store 读取。 */
+  activities?: TReleaseActivity[];
   emptyHint?: string;
   /** 仅展示最近 N 条动态。未传时显示全部。 */
   limit?: number;
@@ -80,14 +86,98 @@ const iconForActivity = (activity: TReleaseActivity): React.ReactNode => {
   }
 };
 
+const ReleaseCommentBlock = observer(function ReleaseCommentBlock(props: {
+  activity: TReleaseActivity;
+  workspaceSlug: string;
+  projectId: string;
+}) {
+  const { activity, workspaceSlug, projectId } = props;
+  const { getUserDetails } = useMember();
+  const readOnlyEditorRef = useRef<EditorRefApi>(null);
+
+  const userDetails = activity.actor ? getUserDetails(activity.actor) : undefined;
+  const displayName =
+    userDetails?.display_name ?? activity.actor_detail?.display_name ?? (activity.actor ? "未知用户" : "系统");
+  const avatarUrl = userDetails?.avatar_url ?? activity.actor_detail?.avatar_url;
+  const commentHtml = typeof activity.extra?.comment_html === "string" ? activity.extra.comment_html : "";
+
+  const replyToActor = typeof activity.extra?.reply_to_actor === "string" ? activity.extra.reply_to_actor : null;
+  const replyToFallbackName =
+    typeof activity.extra?.reply_to_name === "string" ? activity.extra.reply_to_name : null;
+  const replyToName = replyToActor
+    ? (getUserDetails(replyToActor)?.display_name ?? replyToFallbackName ?? "未知用户")
+    : replyToFallbackName;
+
+  return (
+    <li>
+      <div className="relative flex gap-3 py-2">
+        <div className="absolute top-0 bottom-0 left-[13px] w-px bg-layer-3" aria-hidden />
+        <div className="relative z-[3] flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg border border-subtle bg-layer-2 uppercase shadow-raised-100">
+          <CommentReplyIcon width={14} height={14} className="text-secondary" aria-hidden="true" />
+        </div>
+        <div className="flex flex-grow flex-col gap-3 truncate">
+          <div className="mb-2 rounded-lg border border-subtle bg-layer-2 p-3 text-body-sm-regular shadow-raised-100">
+            <div className="relative flex flex-col gap-2">
+              <div className="relative mb-3 flex w-full items-center gap-2">
+                <Avatar
+                  size="sm"
+                  name={displayName}
+                  src={getFileURL(avatarUrl ?? "")}
+                  className="shrink-0"
+                  fallbackBackgroundColor={getUserAvatarFallbackBackgroundColor(activity.actor_detail)}
+                />
+                <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1 text-body-sm-regular">
+                  <span className="font-medium text-primary">{displayName}</span>
+                  {replyToName && (
+                    <>
+                      <span className="text-secondary">回复</span>
+                      <span className="font-medium text-primary">{replyToName}</span>
+                    </>
+                  )}
+                  <span className="text-secondary">
+                    评论于{" "}
+                    <Tooltip
+                      tooltipContent={`${renderFormattedDate(activity.created_at)} at ${renderFormattedTime(activity.created_at)}`}
+                      position="bottom"
+                    >
+                      <span className="whitespace-nowrap text-tertiary">{calculateTimeAgo(activity.created_at)}</span>
+                    </Tooltip>
+                  </span>
+                </div>
+              </div>
+              <LiteTextEditor
+                editable={false}
+                ref={readOnlyEditorRef}
+                id={`release_activity_comment_${activity.id}`}
+                initialValue={commentHtml}
+                workspaceId={activity.workspace}
+                workspaceSlug={workspaceSlug}
+                projectId={projectId}
+                containerClassName="!py-1"
+                parentClassName="border-none"
+                displayConfig={{ fontSize: "small-font" }}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+    </li>
+  );
+});
+
 const ReleaseActivityRow = observer(function ReleaseActivityRow(props: {
   activity: TReleaseActivity;
   workspaceSlug: string;
+  projectId: string;
   onViewReason: (reason: string, status: TReleaseStatus | null) => void;
 }) {
-  const { activity, workspaceSlug, onViewReason } = props;
+  const { activity, workspaceSlug, projectId, onViewReason } = props;
   const { getUserDetails } = useMember();
   const { data: currentUser } = useUser();
+
+  if (activity.field === "comment" && typeof activity.extra?.comment_html === "string") {
+    return <ReleaseCommentBlock activity={activity} workspaceSlug={workspaceSlug} projectId={projectId} />;
+  }
 
   const actorDetail = activity.actor ? getUserDetails(activity.actor) : undefined;
   const isSystem = !activity.actor;
@@ -142,9 +232,18 @@ const ReleaseActivityRow = observer(function ReleaseActivityRow(props: {
 });
 
 export const ReleaseActivityFeed = observer(function ReleaseActivityFeed(props: Props) {
-  const { workspaceSlug, projectId, releaseId, emptyHint = "暂无动态", limit, filterFn, sortOrder } = props;
+  const {
+    workspaceSlug,
+    projectId,
+    releaseId,
+    activities: providedActivities,
+    emptyHint = "暂无动态",
+    limit,
+    filterFn,
+    sortOrder,
+  } = props;
   const { getActivitiesByReleaseId, isLoadingByReleaseId, fetchActivities } = useReleaseActivity();
-  const rawActivities = getActivitiesByReleaseId(releaseId);
+  const rawActivities = providedActivities ?? getActivitiesByReleaseId(releaseId);
   const allActivities = filterFn ? rawActivities.filter(filterFn) : rawActivities;
   // store 内按 created_at 升序存放。概览的“最近动态”传入 limit 时，应取时间最新的 N 条
   // （包含评论、状态、附件等所有类型），并倒序展示（最新在最上）。
@@ -199,6 +298,7 @@ export const ReleaseActivityFeed = observer(function ReleaseActivityFeed(props: 
             key={activity.id}
             activity={activity}
             workspaceSlug={workspaceSlug}
+            projectId={projectId}
             onViewReason={(reason, status) => setReasonModal({ reason, status })}
           />
         ))}

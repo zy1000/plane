@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { observer } from "mobx-react";
 import Link from "next/link";
 import useSWR from "swr";
@@ -20,10 +20,14 @@ import {
   Trash2,
   UserCog,
 } from "lucide-react";
+import type { EditorRefApi } from "@plane/editor";
 import { E_SORT_ORDER } from "@plane/constants";
+import { CommentReplyIcon } from "@plane/propel/icons";
 import type { TCycleActivity } from "@plane/types";
-import { Loader, Tooltip } from "@plane/ui";
-import { calculateTimeAgo } from "@plane/utils";
+import { Avatar, Loader, Tooltip } from "@plane/ui";
+import { calculateTimeAgo, getFileURL, renderFormattedDate, renderFormattedTime } from "@plane/utils";
+import { LiteTextEditor } from "@/components/editor/lite-text";
+import { getUserAvatarFallbackBackgroundColor } from "@/helpers/user-avatar.helper";
 import { useMember } from "@/hooks/store/use-member";
 import { useCycleActivity } from "@/hooks/store/use-cycle-activity";
 import { useUser } from "@/hooks/store/user";
@@ -33,6 +37,7 @@ type Props = {
   workspaceSlug: string;
   projectId: string;
   cycleId: string;
+  activities?: TCycleActivity[];
   emptyHint?: string;
   limit?: number;
   filterFn?: (activity: TCycleActivity) => boolean;
@@ -68,13 +73,97 @@ const iconForActivity = (activity: TCycleActivity): React.ReactNode => {
   }
 };
 
+const CycleCommentBlock = observer(function CycleCommentBlock(props: {
+  activity: TCycleActivity;
+  workspaceSlug: string;
+  projectId: string;
+}) {
+  const { activity, workspaceSlug, projectId } = props;
+  const { getUserDetails } = useMember();
+  const readOnlyEditorRef = useRef<EditorRefApi>(null);
+
+  const userDetails = activity.actor ? getUserDetails(activity.actor) : undefined;
+  const displayName =
+    userDetails?.display_name ?? activity.actor_detail?.display_name ?? (activity.actor ? "未知用户" : "系统");
+  const avatarUrl = userDetails?.avatar_url ?? activity.actor_detail?.avatar_url;
+  const commentHtml = typeof activity.extra?.comment_html === "string" ? activity.extra.comment_html : "";
+
+  const replyToActor = typeof activity.extra?.reply_to_actor === "string" ? activity.extra.reply_to_actor : null;
+  const replyToFallbackName =
+    typeof activity.extra?.reply_to_name === "string" ? activity.extra.reply_to_name : null;
+  const replyToName = replyToActor
+    ? (getUserDetails(replyToActor)?.display_name ?? replyToFallbackName ?? "未知用户")
+    : replyToFallbackName;
+
+  return (
+    <li>
+      <div className="relative flex gap-3 py-2">
+        <div className="absolute top-0 bottom-0 left-[13px] w-px bg-layer-3" aria-hidden />
+        <div className="relative z-[3] flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg border border-subtle bg-layer-2 uppercase shadow-raised-100">
+          <CommentReplyIcon width={14} height={14} className="text-secondary" aria-hidden="true" />
+        </div>
+        <div className="flex flex-grow flex-col gap-3 truncate">
+          <div className="mb-2 rounded-lg border border-subtle bg-layer-2 p-3 text-body-sm-regular shadow-raised-100">
+            <div className="relative flex flex-col gap-2">
+              <div className="relative mb-3 flex w-full items-center gap-2">
+                <Avatar
+                  size="sm"
+                  name={displayName}
+                  src={getFileURL(avatarUrl ?? "")}
+                  className="shrink-0"
+                  fallbackBackgroundColor={getUserAvatarFallbackBackgroundColor(activity.actor_detail)}
+                />
+                <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1 text-body-sm-regular">
+                  <span className="font-medium text-primary">{displayName}</span>
+                  {replyToName && (
+                    <>
+                      <span className="text-secondary">回复</span>
+                      <span className="font-medium text-primary">{replyToName}</span>
+                    </>
+                  )}
+                  <span className="text-secondary">
+                    评论于{" "}
+                    <Tooltip
+                      tooltipContent={`${renderFormattedDate(activity.created_at)} at ${renderFormattedTime(activity.created_at)}`}
+                      position="bottom"
+                    >
+                      <span className="whitespace-nowrap text-tertiary">{calculateTimeAgo(activity.created_at)}</span>
+                    </Tooltip>
+                  </span>
+                </div>
+              </div>
+              <LiteTextEditor
+                editable={false}
+                ref={readOnlyEditorRef}
+                id={`cycle_activity_comment_${activity.id}`}
+                initialValue={commentHtml}
+                workspaceId={activity.workspace}
+                workspaceSlug={workspaceSlug}
+                projectId={projectId}
+                containerClassName="!py-1"
+                parentClassName="border-none"
+                displayConfig={{ fontSize: "small-font" }}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+    </li>
+  );
+});
+
 const CycleActivityRow = observer(function CycleActivityRow(props: {
   activity: TCycleActivity;
   workspaceSlug: string;
+  projectId: string;
 }) {
-  const { activity, workspaceSlug } = props;
+  const { activity, workspaceSlug, projectId } = props;
   const { getUserDetails } = useMember();
   const { data: currentUser } = useUser();
+
+  if (activity.field === "comment" && typeof activity.extra?.comment_html === "string") {
+    return <CycleCommentBlock activity={activity} workspaceSlug={workspaceSlug} projectId={projectId} />;
+  }
 
   const actorDetail = activity.actor ? getUserDetails(activity.actor) : undefined;
   const isSystem = !activity.actor;
@@ -89,9 +178,9 @@ const CycleActivityRow = observer(function CycleActivityRow(props: {
 
   return (
     <li>
-      <div className="relative flex items-center gap-3 py-2 text-caption-sm-regular">
+      <div className="relative flex gap-3 py-2 text-caption-sm-regular">
         <div className="absolute top-0 bottom-0 left-[13px] w-px bg-layer-3" aria-hidden />
-        <div className="z-[4] flex h-7 w-7 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border border-subtle bg-layer-2 text-secondary shadow-raised-100 [&_svg]:!text-secondary">
+        <div className="z-[4] mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border border-subtle bg-layer-2 text-secondary shadow-raised-100 [&_svg]:!text-secondary">
           {iconForActivity(activity)}
         </div>
         <div className="min-w-0 flex-1 text-secondary">
@@ -118,9 +207,9 @@ const CycleActivityRow = observer(function CycleActivityRow(props: {
 });
 
 export const CycleActivityFeed = observer(function CycleActivityFeed(props: Props) {
-  const { workspaceSlug, projectId, cycleId, emptyHint = "暂无动态", limit, filterFn, sortOrder } = props;
+  const { workspaceSlug, projectId, cycleId, activities: providedActivities, emptyHint = "暂无动态", limit, filterFn, sortOrder } = props;
   const { getActivitiesByCycleId, isLoadingByCycleId, fetchActivities } = useCycleActivity();
-  const rawActivities = getActivitiesByCycleId(cycleId);
+  const rawActivities = providedActivities ?? getActivitiesByCycleId(cycleId);
   const allActivities = filterFn ? rawActivities.filter(filterFn) : rawActivities;
   const activities =
     typeof limit === "number" && limit >= 0
@@ -167,6 +256,7 @@ export const CycleActivityFeed = observer(function CycleActivityFeed(props: Prop
           key={activity.id}
           activity={activity}
           workspaceSlug={workspaceSlug}
+          projectId={projectId}
         />
       ))}
     </ul>

@@ -23,7 +23,12 @@ export type TReleaseActivity = {
   comment: string;
   release_comment: string | null;
   epoch: number | null;
-  extra?: { reason?: string } | null;
+  extra?: {
+    reason?: string;
+    comment_html?: string;
+    reply_to_actor?: string | null;
+    reply_to_name?: string | null;
+  } | null;
   created_at: string;
   updated_at: string;
 };

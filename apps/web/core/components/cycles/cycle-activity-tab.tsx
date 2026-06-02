@@ -8,6 +8,7 @@
 
 import React, { useMemo, useState } from "react";
 import { observer } from "mobx-react";
+import useSWR from "swr";
 import { E_SORT_ORDER } from "@plane/constants";
 import type { TCycleActivity } from "@plane/types";
 import { cn } from "@plane/utils";
@@ -16,6 +17,7 @@ import { ActivitySortRoot } from "@/components/issues/issue-detail/issue-activit
 import { CycleActivityFeed } from "@/components/cycles/cycle-activity";
 import { CycleCommentsSection } from "@/components/cycles/cycle-comments";
 import { useCycleActivity } from "@/hooks/store/use-cycle-activity";
+import { useCycleComment } from "@/hooks/store/use-cycle-comment";
 
 type SubTabKey = "all" | "activity" | "comment" | "transition";
 
@@ -41,14 +43,59 @@ export const CycleActivityTab: React.FC<Props> = observer(({ workspaceSlug, proj
 
   const { getActivitiesByCycleId } = useCycleActivity();
   const allActivities = getActivitiesByCycleId(cycleId);
+  const { getCommentsByCycleId, fetchComments } = useCycleComment();
+  const comments = getCommentsByCycleId(cycleId);
+
+  useSWR(
+    workspaceSlug && projectId && cycleId
+      ? ["cycle-comments-for-activity-tab", workspaceSlug, projectId, cycleId]
+      : null,
+    () => fetchComments(workspaceSlug, projectId, cycleId)
+  );
+
+  const allTabActivities = useMemo<TCycleActivity[]>(() => {
+    const nonCommentActivities = allActivities.filter((activity) => activity.field !== "comment");
+    const commentsById = new Map(comments.map((comment) => [comment.id, comment]));
+    const commentActivities = comments.map((comment) => {
+      const parentComment = comment.parent ? commentsById.get(comment.parent) : undefined;
+      return {
+        id: `comment-${comment.id}`,
+        workspace: comment.workspace,
+        project: comment.project,
+        cycle: comment.cycle,
+        actor: comment.actor ?? null,
+        actor_detail: comment.actor_detail,
+        verb: "created",
+        field: "comment",
+        old_value: null,
+        new_value: comment.comment_stripped || null,
+        old_identifier: null,
+        new_identifier: comment.id,
+        comment: comment.comment_stripped ? `评论：${comment.comment_stripped}` : "新增了评论",
+        cycle_comment: comment.id,
+        epoch: null,
+        extra: {
+          comment_html: comment.comment_html ?? "",
+          reply_to_actor: parentComment?.actor ?? null,
+          reply_to_name: parentComment?.actor_detail?.display_name ?? null,
+        },
+        created_at: comment.created_at,
+        updated_at: comment.updated_at,
+      };
+    });
+    return [...nonCommentActivities, ...commentActivities];
+  }, [allActivities, comments]);
 
   const operatorIds = useMemo(() => {
     const set = new Set<string>();
     allActivities.forEach((activity) => {
       if (activity.actor) set.add(activity.actor);
     });
+    comments.forEach((comment) => {
+      if (comment.actor) set.add(comment.actor);
+    });
     return Array.from(set);
-  }, [allActivities]);
+  }, [allActivities, comments]);
 
   const toggleSortOrder = () =>
     setSortOrder((prev) => (prev === E_SORT_ORDER.ASC ? E_SORT_ORDER.DESC : E_SORT_ORDER.ASC));
@@ -58,7 +105,7 @@ export const CycleActivityTab: React.FC<Props> = observer(({ workspaceSlug, proj
   const filterFn = useMemo(() => {
     const fieldFilter =
       active === "activity"
-        ? (field: string | null) => field !== "comment"
+        ? (field: string | null) => field !== "comment" && field !== "status"
         : active === "transition"
           ? (field: string | null) => field === "status"
           : null;
@@ -119,6 +166,7 @@ export const CycleActivityTab: React.FC<Props> = observer(({ workspaceSlug, proj
               workspaceSlug={workspaceSlug}
               projectId={projectId}
               cycleId={cycleId}
+              activities={active === "all" ? allTabActivities : undefined}
               filterFn={filterFn}
               sortOrder={sortOrder}
               emptyHint={
