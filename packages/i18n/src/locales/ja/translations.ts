@@ -2044,6 +2044,7 @@ export default {
     add_cycle: "サイクルを追加",
     more_details: "詳細情報",
     tab_iteration_scope: "イテレーション範囲",
+    tab_display: "Display",
     cycle: "サイクル",
     update_cycle: "サイクルを更新",
     create_cycle: "サイクルを作成",

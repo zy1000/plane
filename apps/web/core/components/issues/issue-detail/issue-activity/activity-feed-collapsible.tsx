@@ -9,13 +9,14 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "re
 type TActivityFeedCollapsibleProps = {
   resetKey: string;
   listLength: number;
+  maxHeightPx?: number;
   children: ReactNode;
 };
 
 const ACTIVITY_FEED_COLLAPSED_MAX_HEIGHT_PX = 320;
 
 export function ActivityFeedCollapsible(props: TActivityFeedCollapsibleProps) {
-  const { resetKey, listLength, children } = props;
+  const { resetKey, listLength, maxHeightPx = ACTIVITY_FEED_COLLAPSED_MAX_HEIGHT_PX, children } = props;
   const [isExpanded, setIsExpanded] = useState(false);
   const [isOverflowing, setIsOverflowing] = useState(false);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
@@ -29,7 +30,7 @@ export function ActivityFeedCollapsible(props: TActivityFeedCollapsibleProps) {
     if (!el) return;
 
     const measure = () => {
-      const overflow = el.scrollHeight - ACTIVITY_FEED_COLLAPSED_MAX_HEIGHT_PX > 1;
+      const overflow = el.scrollHeight - maxHeightPx > 1;
       setIsOverflowing(overflow);
     };
 
@@ -45,7 +46,7 @@ export function ActivityFeedCollapsible(props: TActivityFeedCollapsibleProps) {
     return () => {
       observer?.disconnect();
     };
-  }, [resetKey, listLength, isExpanded]);
+  }, [resetKey, listLength, isExpanded, maxHeightPx]);
 
   const showCollapsedFade = !isExpanded && isOverflowing;
   const collapsedBottomFadeMask =
@@ -57,7 +58,7 @@ export function ActivityFeedCollapsible(props: TActivityFeedCollapsibleProps) {
         ref={wrapperRef}
         className="relative overflow-hidden transition-[max-height] duration-200 ease-in-out"
         style={{
-          maxHeight: isExpanded || !isOverflowing ? "none" : `${ACTIVITY_FEED_COLLAPSED_MAX_HEIGHT_PX}px`,
+          maxHeight: isExpanded || !isOverflowing ? "none" : `${maxHeightPx}px`,
           ...(showCollapsedFade
             ? {
                 WebkitMaskImage: collapsedBottomFadeMask,

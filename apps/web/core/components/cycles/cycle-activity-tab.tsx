@@ -14,6 +14,7 @@ import type { TCycleActivity } from "@plane/types";
 import { cn } from "@plane/utils";
 import { ActivityOperatorFilterRoot } from "@/components/issues/issue-detail/issue-activity/operator-filter-root";
 import { ActivitySortRoot } from "@/components/issues/issue-detail/issue-activity/sort-root";
+import { ActivityFeedCollapsible } from "@/components/issues/issue-detail/issue-activity/activity-feed-collapsible";
 import { CycleActivityFeed } from "@/components/cycles/cycle-activity";
 import { CycleCommentsSection } from "@/components/cycles/cycle-comments";
 import { useCycleActivity } from "@/hooks/store/use-cycle-activity";
@@ -28,6 +29,7 @@ type Props = {
 };
 
 const SECTION_CARD = "rounded-xl border border-subtle bg-surface-1";
+const CYCLE_ACTIVITY_FEED_COLLAPSED_MAX_HEIGHT_PX = 560;
 
 const SUB_TABS: { key: SubTabKey; label: string }[] = [
   { key: "all", label: "全部" },
@@ -118,6 +120,8 @@ export const CycleActivityTab: React.FC<Props> = observer(({ workspaceSlug, proj
       return true;
     };
   }, [active, selectedOperatorIds]);
+  const feedSource = active === "all" ? allTabActivities : allActivities;
+  const feedListLength = filterFn ? feedSource.filter(filterFn).length : feedSource.length;
 
   return (
     <section className={`${SECTION_CARD} flex min-h-[440px] flex-col`}>
@@ -161,18 +165,24 @@ export const CycleActivityTab: React.FC<Props> = observer(({ workspaceSlug, proj
         {active === "comment" ? (
           <CycleCommentsSection workspaceSlug={workspaceSlug} projectId={projectId} cycleId={cycleId} />
         ) : (
-          <div className="vertical-scrollbar scrollbar-sm h-full overflow-y-auto px-6 py-5">
-            <CycleActivityFeed
-              workspaceSlug={workspaceSlug}
-              projectId={projectId}
-              cycleId={cycleId}
-              activities={active === "all" ? allTabActivities : undefined}
-              filterFn={filterFn}
-              sortOrder={sortOrder}
-              emptyHint={
-                active === "activity" ? "暂无活动记录" : active === "transition" ? "暂无状态转换记录" : "暂无动态"
-              }
-            />
+          <div className="px-6 py-5">
+            <ActivityFeedCollapsible
+              resetKey={`${cycleId}:${active}:${sortOrder}`}
+              listLength={feedListLength}
+              maxHeightPx={CYCLE_ACTIVITY_FEED_COLLAPSED_MAX_HEIGHT_PX}
+            >
+              <CycleActivityFeed
+                workspaceSlug={workspaceSlug}
+                projectId={projectId}
+                cycleId={cycleId}
+                activities={active === "all" ? allTabActivities : undefined}
+                filterFn={filterFn}
+                sortOrder={sortOrder}
+                emptyHint={
+                  active === "activity" ? "暂无活动记录" : active === "transition" ? "暂无状态转换记录" : "暂无动态"
+                }
+              />
+            </ActivityFeedCollapsible>
           </div>
         )}
       </div>

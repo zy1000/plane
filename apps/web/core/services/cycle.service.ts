@@ -305,6 +305,20 @@ export class CycleService extends APIService {
       });
   }
 
+  async getCycleIssueTypeDistribution(
+    workspaceSlug: string,
+    projectId: string,
+    cycleId: string
+  ): Promise<TCycleIssueTypeDistributionResponse> {
+    return this.get(
+      `/api/workspaces/${workspaceSlug}/projects/${projectId}/cycles/${cycleId}/issue-type-distribution/`
+    )
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
   async getCycleOverdues(
     workspaceSlug: string,
     projectId: string,
@@ -390,4 +404,16 @@ export type TCycleOverdueAssigneeRow = {
 export type TCycleOverdueByAssigneeResponse = {
   total: number;
   data: TCycleOverdueAssigneeRow[];
+};
+
+export type TCycleIssueTypeRow = {
+  type_id: string | null;
+  name: string;
+  logo_props: Record<string, any>;
+  count: number;
+};
+
+export type TCycleIssueTypeDistributionResponse = {
+  total: number;
+  data: TCycleIssueTypeRow[];
 };

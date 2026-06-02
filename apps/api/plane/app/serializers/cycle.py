@@ -16,12 +16,19 @@ from plane.db.models import (
     CycleIssue,
     CycleOverdueRecord,
     CycleUserProperties,
+    User,
 )
 from plane.utils.cycle.rules import check_cycle_state
 from plane.utils.timezone_converter import convert_to_utc
 
 
 class CycleWriteSerializer(BaseSerializer):
+    owned_by_id = serializers.PrimaryKeyRelatedField(
+        source="owned_by",
+        queryset=User.objects.all(),
+        required=False,
+    )
+
     def validate(self, data):
         status = data.get("status")
         user = self.context.get("user")

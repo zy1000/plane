@@ -13,6 +13,7 @@ from plane.app.views import (
     CycleProgressEndpoint,
     CycleAnalyticsEndpoint,
     CycleOverdueByAssigneeEndpoint,
+    CycleIssueTypeDistributionEndpoint,
     CyclePlansEndpoint,
     CycleSelectablePlansEndpoint,
     CycleAssociatePlansEndpoint,
@@ -160,6 +161,11 @@ urlpatterns = [
         "workspaces/<str:slug>/projects/<uuid:project_id>/cycles/<uuid:cycle_id>/overdue-by-assignee/",
         CycleOverdueByAssigneeEndpoint.as_view(),
         name="project-cycle-overdue-by-assignee",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/cycles/<uuid:cycle_id>/issue-type-distribution/",
+        CycleIssueTypeDistributionEndpoint.as_view(),
+        name="project-cycle-issue-type-distribution",
     ),
     path(
         "workspaces/<str:slug>/projects/<uuid:project_id>/cycles/<uuid:cycle_id>/plans/",

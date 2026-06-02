@@ -59,7 +59,15 @@ def check_cycle_state(cycle: Cycle, next_status: Cycle.Status) -> CycleStateChec
     if current == next_status:
         return _result(reasons)
 
-    if current in (Cycle.Status.COMPLETED, Cycle.Status.CANCELLED):
+    if current == Cycle.Status.COMPLETED:
+        current_label = Cycle.Status(current).label if current else current
+        next_label = Cycle.Status(next_status).label if next_status else next_status
+        return CycleStateCheckResult(
+            allowed=False,
+            reasons=[f"当前状态「{current_label}」不允许变更为「{next_label}」"],
+        )
+
+    if current == Cycle.Status.CANCELLED and next_status != Cycle.Status.IN_PROGRESS:
         current_label = Cycle.Status(current).label if current else current
         next_label = Cycle.Status(next_status).label if next_status else next_status
         return CycleStateCheckResult(
@@ -70,8 +78,8 @@ def check_cycle_state(cycle: Cycle, next_status: Cycle.Status) -> CycleStateChec
     if next_status == Cycle.Status.CANCELLED:
         return CycleStateCheckResult(allowed=True, reasons=[])
 
-    # 未开始 -> 进行中
-    if current == Cycle.Status.NOT_STARTED and next_status == Cycle.Status.IN_PROGRESS:
+    # 未开始/已取消 -> 进行中
+    if current in (Cycle.Status.NOT_STARTED, Cycle.Status.CANCELLED) and next_status == Cycle.Status.IN_PROGRESS:
         if cycle.start_date is None:
             reasons.append("请填写开始时间")
         if cycle.end_date is None:

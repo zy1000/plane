@@ -2094,6 +2094,7 @@ export default {
     add_cycle: "Добавить цикл",
     more_details: "Подробнее",
     tab_iteration_scope: "Область итерации",
+    tab_display: "Display",
     cycle: "Цикл",
     update_cycle: "Обновить цикл",
     create_cycle: "Создать цикл",

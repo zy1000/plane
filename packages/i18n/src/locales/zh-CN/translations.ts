@@ -2084,6 +2084,8 @@ export default {
     add_cycle: "添加迭代",
     more_details: "更多详情",
     tab_iteration_scope: "迭代范围",
+    tab_display: "展示",
+    tab_attachments: "附件",
     cycle: "迭代",
     update_cycle: "更新迭代",
     create_cycle: "创建迭代",

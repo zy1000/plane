@@ -4,28 +4,30 @@
  * See the LICENSE file for details.
  */
 
+"use client";
+
 import { observer } from "mobx-react";
 import { PageHead } from "@/components/core/page-title";
-import { CycleDisplayContent } from "@/components/cycles/cycle-display-content";
+import { CycleAttachmentsContent } from "@/components/cycles/cycle-attachments-content";
 import { useCycle } from "@/hooks/store/use-cycle";
 import { useProject } from "@/hooks/store/use-project";
 import type { Route } from "./+types/page";
 
-function CycleOverviewPage({ params }: Route.ComponentProps) {
+function CycleAttachmentsPage({ params }: Route.ComponentProps) {
   const { workspaceSlug, projectId, cycleId } = params;
   const { getCycleById } = useCycle();
   const { getProjectById } = useProject();
 
   const cycle = getCycleById(cycleId);
   const project = getProjectById(projectId);
-  const pageTitle = project?.name && cycle?.name ? `${project.name} - ${cycle.name} - 概览` : undefined;
+  const pageTitle = project?.name && cycle?.name ? `${project.name} - ${cycle.name} - 附件` : undefined;
 
   return (
     <>
       <PageHead title={pageTitle} />
-      <CycleDisplayContent workspaceSlug={workspaceSlug} projectId={projectId} cycleId={cycleId} />
+      <CycleAttachmentsContent workspaceSlug={workspaceSlug} projectId={projectId} cycleId={cycleId} />
     </>
   );
 }
 
-export default observer(CycleOverviewPage);
+export default observer(CycleAttachmentsPage);

@@ -140,20 +140,36 @@ export const CycleIssuesHeader = observer(function CycleIssuesHeader() {
   const workItemsCount = getGroupIssueCount(undefined, undefined, false);
   const cycleOverviewPath =
     workspaceSlug && projectId && cycleId ? `/${workspaceSlug}/projects/${projectId}/cycles/${cycleId}/overview` : "";
+  const cycleAttachmentsPath =
+    workspaceSlug && projectId && cycleId
+      ? `/${workspaceSlug}/projects/${projectId}/cycles/${cycleId}/attachments`
+      : "";
   const cycleScopePath = workspaceSlug && projectId && cycleId ? `/${workspaceSlug}/projects/${projectId}/cycles/${cycleId}` : "";
   const isOverviewActive = /\/overview\/?$/.test(pathname ?? "");
+  const isAttachmentsActive = /\/attachments\/?$/.test(pathname ?? "");
+  const activeCycleTab = isOverviewActive
+    ? "overview"
+    : isAttachmentsActive
+      ? "attachments"
+      : "scope";
   const cycleTabs = [
     {
       key: "overview",
       label: t("sidebar.overview"),
-      isActive: !!isOverviewActive,
+      isActive: activeCycleTab === "overview",
       path: cycleOverviewPath,
     },
     {
-      key: "release-scope",
+      key: "scope",
       label: t("project_cycles.tab_iteration_scope"),
-      isActive: !isOverviewActive,
+      isActive: activeCycleTab === "scope",
       path: cycleScopePath,
+    },
+    {
+      key: "attachments",
+      label: t("project_cycles.tab_attachments"),
+      isActive: activeCycleTab === "attachments",
+      path: cycleAttachmentsPath,
     },
   ];
 
@@ -226,11 +242,13 @@ export const CycleIssuesHeader = observer(function CycleIssuesHeader() {
                     selectedItem={cycleId}
                     navigationItems={switcherOptions}
                     onChange={(value: string) => {
-                      router.push(
-                        isOverviewActive
+                      const nextPath =
+                        activeCycleTab === "overview"
                           ? `/${workspaceSlug}/projects/${projectId}/cycles/${value}/overview`
-                          : `/${workspaceSlug}/projects/${projectId}/cycles/${value}`
-                      );
+                          : activeCycleTab === "attachments"
+                            ? `/${workspaceSlug}/projects/${projectId}/cycles/${value}/attachments`
+                            : `/${workspaceSlug}/projects/${projectId}/cycles/${value}`;
+                      router.push(nextPath);
                     }}
                     title={cycleDetails?.name}
                     icon={<CycleIcon className="h-4 w-4 flex-shrink-0 text-tertiary" />}
@@ -265,7 +283,7 @@ export const CycleIssuesHeader = observer(function CycleIssuesHeader() {
                 </div>
               ))}
             </div>
-            {!isOverviewActive && workItemsCount && workItemsCount > 0 ? (
+            {activeCycleTab === "scope" && workItemsCount && workItemsCount > 0 ? (
               <Tooltip
                 isMobile={isMobile}
                 tooltipContent={`There are ${workItemsCount} ${
@@ -280,7 +298,7 @@ export const CycleIssuesHeader = observer(function CycleIssuesHeader() {
             ) : null}
           </div>
         </Header.LeftItem>
-        {!isOverviewActive && (
+        {activeCycleTab === "scope" && (
           <Header.RightItem className="items-center">
             <div className="hidden items-center gap-2 md:flex">
               <div className="hidden @4xl:flex">

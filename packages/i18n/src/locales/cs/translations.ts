@@ -2040,6 +2040,7 @@ export default {
     add_cycle: "Přidat cyklus",
     more_details: "Více detailů",
     tab_iteration_scope: "Rozsah iterace",
+    tab_display: "Display",
     cycle: "Cyklus",
     update_cycle: "Aktualizovat cyklus",
     create_cycle: "Vytvořit cyklus",

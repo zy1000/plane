@@ -110,6 +110,7 @@ from .cycle.base import (
     CycleAnalyticsEndpoint,
     CycleProgressEndpoint,
     CycleOverdueByAssigneeEndpoint,
+    CycleIssueTypeDistributionEndpoint,
     CyclePlansEndpoint,
     CycleSelectablePlansEndpoint,
     CycleAssociatePlansEndpoint,

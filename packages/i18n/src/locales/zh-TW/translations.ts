@@ -2022,6 +2022,7 @@ export default {
     add_cycle: "新增週期",
     more_details: "更多詳細資訊",
     tab_iteration_scope: "迭代範圍",
+    tab_display: "展示",
     cycle: "週期",
     update_cycle: "更新週期",
     create_cycle: "建立週期",

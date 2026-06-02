@@ -2055,6 +2055,7 @@ export default {
     add_cycle: "Thêm chu kỳ",
     more_details: "Thêm chi tiết",
     tab_iteration_scope: "Phạm vi lặp",
+    tab_display: "Display",
     cycle: "Chu kỳ",
     update_cycle: "Cập nhật chu kỳ",
     create_cycle: "Tạo chu kỳ",

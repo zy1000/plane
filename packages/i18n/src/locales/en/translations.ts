@@ -1981,6 +1981,8 @@ export default {
     add_cycle: "Add cycle",
     more_details: "More details",
     tab_iteration_scope: "Iteration scope",
+    tab_display: "Display",
+    tab_attachments: "Attachments",
     cycle: "Cycle",
     update_cycle: "Update cycle",
     create_cycle: "Create cycle",

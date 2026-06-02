@@ -1297,6 +1297,53 @@ class CycleOverdueByAssigneeEndpoint(BaseAPIView):
         )
 
 
+class CycleIssueTypeDistributionEndpoint(BaseAPIView):
+    """
+    返回指定迭代中按工作项类型聚合的分布数据。
+    """
+
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    def get(self, request, slug, project_id, cycle_id):
+        if not ProjectMember.objects.filter(
+            workspace__slug=slug,
+            project_id=project_id,
+            member_id=request.user.id,
+            is_active=True,
+        ).exists():
+            return Response({"error": "forbidden"}, status=status.HTTP_403_FORBIDDEN)
+
+        issue_type_rows = list(
+            Issue.issue_objects.filter(
+                workspace__slug=slug,
+                project_id=project_id,
+                issue_cycle__cycle_id=cycle_id,
+                issue_cycle__deleted_at__isnull=True,
+            )
+            .values("type_id", "type__name", "type__logo_props")
+            .annotate(count=Count("id", distinct=True))
+            .order_by("-count")
+        )
+
+        data = [
+            {
+                "type_id": str(row.get("type_id")) if row.get("type_id") else None,
+                "name": row.get("type__name") or "未指定类型",
+                "logo_props": row.get("type__logo_props") or {},
+                "count": row.get("count") or 0,
+            }
+            for row in issue_type_rows
+        ]
+        total = sum(item["count"] for item in data)
+
+        return Response(
+            {
+                "total": total,
+                "data": data,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
 class CyclePlansEndpoint(BaseAPIView):
     """返回当前迭代已关联的测试计划列表。"""
 

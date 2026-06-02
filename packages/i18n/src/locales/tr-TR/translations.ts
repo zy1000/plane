@@ -2030,6 +2030,7 @@ export default {
     add_cycle: "Döngü ekle",
     more_details: "Daha fazla detay",
     tab_iteration_scope: "Yineleme kapsamı",
+    tab_display: "Display",
     cycle: "Döngü",
     update_cycle: "Döngüyü güncelle",
     create_cycle: "Döngü oluştur",

@@ -178,9 +178,9 @@ const CycleActivityRow = observer(function CycleActivityRow(props: {
 
   return (
     <li>
-      <div className="relative flex gap-3 py-2 text-caption-sm-regular">
+      <div className="relative flex items-center gap-3 py-2 text-caption-sm-regular">
         <div className="absolute top-0 bottom-0 left-[13px] w-px bg-layer-3" aria-hidden />
-        <div className="z-[4] mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border border-subtle bg-layer-2 text-secondary shadow-raised-100 [&_svg]:!text-secondary">
+        <div className="z-[4] flex h-7 w-7 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border border-subtle bg-layer-2 text-secondary shadow-raised-100 [&_svg]:!text-secondary">
           {iconForActivity(activity)}
         </div>
         <div className="min-w-0 flex-1 text-secondary">
@@ -246,7 +246,7 @@ export const CycleActivityFeed = observer(function CycleActivityFeed(props: Prop
   }
 
   if (activities.length === 0) {
-    return <div className="grid h-full place-items-center text-sm text-placeholder">{emptyHint}</div>;
+    return <div className="py-10 text-center text-sm text-placeholder">{emptyHint}</div>;
   }
 
   return (

@@ -47,6 +47,8 @@ export const CycleIssuesMobileHeader = observer(function CycleIssuesMobileHeader
   const activeLayout = issueFilters?.displayFilters?.layout;
   const cycleDetails = cycleId ? getCycleById(cycleId.toString()) : undefined;
   const isOverviewActive = /\/overview\/?$/.test(pathname ?? "");
+  const isAttachmentsActive = /\/attachments\/?$/.test(pathname ?? "");
+  const isScopeActive = !isOverviewActive && !isAttachmentsActive;
 
   const handleLayoutChange = useCallback(
     (layout: EIssueLayoutTypes) => {
@@ -90,7 +92,7 @@ export const CycleIssuesMobileHeader = observer(function CycleIssuesMobileHeader
     [workspaceSlug, projectId, cycleId, updateFilters]
   );
 
-  if (isOverviewActive) return null;
+  if (!isScopeActive) return null;
 
   return (
     <>
