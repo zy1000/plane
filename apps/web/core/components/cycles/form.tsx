@@ -34,6 +34,7 @@ type Props = {
 const defaultValues: Partial<ICycle> = {
   name: "",
   description: "",
+  suggested_test_scope: "",
   start_date: null,
   end_date: null,
 };
@@ -55,6 +56,7 @@ export function CycleForm(props: Props) {
       project_id: projectId,
       name: data?.name || "",
       description: data?.description || "",
+      suggested_test_scope: data?.suggested_test_scope || "",
       start_date: data?.start_date || null,
       end_date: data?.end_date || null,
     },
@@ -146,40 +148,63 @@ export function CycleForm(props: Props) {
               )}
             />
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div>
             <Controller
+              name="suggested_test_scope"
               control={control}
-              name="start_date"
-              render={({ field: { value: startDateValue, onChange: onChangeStartDate } }) => (
-                <Controller
-                  control={control}
-                  name="end_date"
-                  render={({ field: { value: endDateValue, onChange: onChangeEndDate } }) => (
-                    <DateRangeDropdown
-                      buttonVariant="border-with-text"
-                      className="h-7"
-                      minDate={new Date()}
-                      value={{
-                        from: getDate(startDateValue),
-                        to: getDate(endDateValue),
-                      }}
-                      onSelect={(val) => {
-                        onChangeStartDate(val?.from ? renderFormattedPayloadDate(val.from) : null);
-                        onChangeEndDate(val?.to ? renderFormattedPayloadDate(val.to) : null);
-                      }}
-                      placeholder={{
-                        from: "Start date",
-                        to: "End date",
-                      }}
-                      hideIcon={{
-                        to: true,
-                      }}
-                      tabIndex={getIndex("date_range")}
-                    />
-                  )}
+              render={({ field: { value, onChange } }) => (
+                <TextArea
+                  name="suggested_test_scope"
+                  placeholder="建议测试范围"
+                  className="min-h-24 w-full resize-none text-14"
+                  value={value ?? ""}
+                  onChange={onChange}
+                  tabIndex={getIndex("suggested_test_scope")}
                 />
               )}
             />
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="space-y-1">
+              <Controller
+                control={control}
+                name="start_date"
+                render={({ field: { value: startDateValue, onChange: onChangeStartDate } }) => (
+                  <Controller
+                    control={control}
+                    name="end_date"
+                    rules={{
+                      required: t("end_date_is_required"),
+                    }}
+                    render={({ field: { value: endDateValue, onChange: onChangeEndDate } }) => (
+                      <DateRangeDropdown
+                        buttonVariant="border-with-text"
+                        className="h-7"
+                        buttonClassName={errors?.end_date ? "border-danger-strong" : ""}
+                        minDate={new Date()}
+                        value={{
+                          from: getDate(startDateValue),
+                          to: getDate(endDateValue),
+                        }}
+                        onSelect={(val) => {
+                          onChangeStartDate(val?.from ? renderFormattedPayloadDate(val.from) : null);
+                          onChangeEndDate(val?.to ? renderFormattedPayloadDate(val.to) : null);
+                        }}
+                        placeholder={{
+                          from: "Start date",
+                          to: "End date",
+                        }}
+                        hideIcon={{
+                          to: true,
+                        }}
+                        tabIndex={getIndex("date_range")}
+                      />
+                    )}
+                  />
+                )}
+              />
+              <span className="text-11 text-danger-primary">{errors?.end_date?.message}</span>
+            </div>
           </div>
         </div>
       </div>

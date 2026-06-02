@@ -6,7 +6,7 @@
 
 import { observer } from "mobx-react";
 import { PageHead } from "@/components/core/page-title";
-import { CycleOverviewContent } from "@/components/cycles/cycle-overview-content";
+import { CycleDisplayContent } from "@/components/cycles/cycle-display-content";
 import { useCycle } from "@/hooks/store/use-cycle";
 import { useProject } from "@/hooks/store/use-project";
 import type { Route } from "./+types/page";
@@ -23,7 +23,7 @@ function CycleOverviewPage({ params }: Route.ComponentProps) {
   return (
     <>
       <PageHead title={pageTitle} />
-      <CycleOverviewContent workspaceSlug={workspaceSlug} projectId={projectId} cycleId={cycleId} />
+      <CycleDisplayContent workspaceSlug={workspaceSlug} projectId={projectId} cycleId={cycleId} />
     </>
   );
 }

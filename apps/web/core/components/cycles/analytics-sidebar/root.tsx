@@ -10,6 +10,7 @@ import { observer } from "mobx-react";
 import { Loader } from "@plane/ui";
 // local imports
 import useCyclesDetails from "../active-cycle/use-cycles-details";
+import { CycleOverdueRecordsSection } from "../cycle-overdue-records-section";
 import { CycleAnalyticsProgress } from "./issue-progress";
 import { CycleSidebarDetails } from "./sidebar-details";
 import { CycleSidebarHeader } from "./sidebar-header";
@@ -62,6 +63,9 @@ export const CycleDetailsSidebar = observer(function CycleDetailsSidebar(props: 
 
       {workspaceSlug && projectId && cycleDetails?.id && (
         <CycleAnalyticsProgress workspaceSlug={workspaceSlug} projectId={projectId} cycleId={cycleDetails?.id} />
+      )}
+      {workspaceSlug && projectId && cycleDetails?.id && (
+        <CycleOverdueRecordsSection workspaceSlug={workspaceSlug} projectId={projectId} cycleId={cycleDetails.id} />
       )}
     </div>
   );

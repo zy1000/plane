@@ -2073,6 +2073,7 @@ export default {
     add_cycle: "Ajouter un cycle",
     more_details: "Plus de détails",
     tab_iteration_scope: "Périmètre d'itération",
+    tab_display: "Display",
     cycle: "Cycle",
     update_cycle: "Mettre à jour le cycle",
     create_cycle: "Créer un cycle",

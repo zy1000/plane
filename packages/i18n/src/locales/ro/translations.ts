@@ -2062,6 +2062,7 @@ export default {
     add_cycle: "Adaugă ciclu",
     more_details: "Mai multe detalii",
     tab_iteration_scope: "Domeniul iterației",
+    tab_display: "Display",
     cycle: "Ciclu",
     update_cycle: "Actualizează ciclul",
     create_cycle: "Creează ciclu",

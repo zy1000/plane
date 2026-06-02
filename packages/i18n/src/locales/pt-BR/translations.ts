@@ -2069,6 +2069,7 @@ export default {
     add_cycle: "Adicionar ciclo",
     more_details: "Mais detalhes",
     tab_iteration_scope: "Escopo da iteração",
+    tab_display: "Display",
     cycle: "Ciclo",
     update_cycle: "Atualizar ciclo",
     create_cycle: "Criar ciclo",

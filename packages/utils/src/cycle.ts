@@ -29,10 +29,9 @@ export const orderCycles = (
     [key: string]: number;
   } = {
     in_progress: 1,
-    delayed: 2,
-    not_started: 3,
-    completed: 4,
-    cancelled: 5,
+    not_started: 2,
+    completed: 3,
+    cancelled: 4,
   };
 
   let filteredCycles = [...cycles];

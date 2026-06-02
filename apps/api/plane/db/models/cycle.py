@@ -8,6 +8,8 @@ import pytz
 # Django imports
 from django.conf import settings
 from django.db import models
+from django.utils.html import strip_tags
+from django.utils import timezone
 
 # Module imports
 from .project import ProjectBaseModel
@@ -61,12 +63,17 @@ class Cycle(ProjectBaseModel):
     class Status(models.TextChoices):
         NOT_STARTED = '未开始'
         IN_PROGRESS = '进行中'
-        DELAYED = '已延期'
+        TESTING = '测试中'
         COMPLETED = '已完成'
         CANCELLED = '已取消'
 
     name = models.CharField(max_length=255, verbose_name="Cycle Name")
     description = models.TextField(verbose_name="Cycle Description", blank=True)
+    suggested_test_scope = models.TextField(
+        verbose_name="Suggested Test Scope",
+        blank=True,
+        null=True,
+    )
     start_date = models.DateTimeField(verbose_name="Start Date", blank=True, null=True)
     end_date = models.DateTimeField(verbose_name="End Date", blank=True, null=True)
     owned_by = models.ForeignKey(
@@ -113,6 +120,112 @@ class Cycle(ProjectBaseModel):
     def __str__(self):
         """Return name of the cycle"""
         return f"{self.name} <{self.project.name}>"
+
+
+class CycleOverdueTrigger(models.TextChoices):
+    SYSTEM = "system", "系统自动"
+    USER = "user", "人工标记"
+
+
+class CycleOverdueRecord(ProjectBaseModel):
+    cycle = models.ForeignKey(
+        Cycle,
+        on_delete=models.CASCADE,
+        related_name="overdue_records",
+    )
+    started_at = models.DateTimeField(default=timezone.now)
+    ended_at = models.DateTimeField(null=True, blank=True)
+    triggered_by = models.CharField(
+        max_length=8,
+        choices=CycleOverdueTrigger.choices,
+        default=CycleOverdueTrigger.SYSTEM,
+    )
+
+    class Meta:
+        verbose_name = "Cycle Overdue Record"
+        verbose_name_plural = "Cycle Overdue Records"
+        db_table = "cycle_overdue_records"
+        ordering = ("-started_at",)
+        constraints = [
+            models.UniqueConstraint(
+                fields=["cycle"],
+                condition=models.Q(ended_at__isnull=True, deleted_at__isnull=True),
+                name="cycle_overdue_record_unique_active",
+            )
+        ]
+
+
+class CycleComment(ProjectBaseModel):
+    cycle = models.ForeignKey(Cycle, on_delete=models.CASCADE, related_name="cycle_comments")
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="cycle_comments",
+        null=True,
+    )
+    comment_stripped = models.TextField(verbose_name="Comment", blank=True)
+    comment_json = models.JSONField(blank=True, default=dict)
+    comment_html = models.TextField(blank=True, default="<p></p>")
+    parent = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="child_cycle_comments",
+    )
+    edited_at = models.DateTimeField(null=True, blank=True)
+
+    def save(self, *args, **kwargs):
+        self.comment_stripped = strip_tags(self.comment_html) if self.comment_html else ""
+        super().save(*args, **kwargs)
+
+    class Meta:
+        verbose_name = "Cycle Comment"
+        verbose_name_plural = "Cycle Comments"
+        db_table = "cycle_comments"
+        ordering = ("-created_at",)
+
+    def __str__(self):
+        return f"{self.cycle_id} {self.actor_id}"
+
+
+class CycleActivity(ProjectBaseModel):
+    cycle = models.ForeignKey(
+        Cycle,
+        on_delete=models.CASCADE,
+        related_name="cycle_activities",
+    )
+    verb = models.CharField(max_length=255, verbose_name="Action", default="created")
+    field = models.CharField(max_length=255, verbose_name="Field Name", blank=True, null=True)
+    old_value = models.TextField(verbose_name="Old Value", blank=True, null=True)
+    new_value = models.TextField(verbose_name="New Value", blank=True, null=True)
+    comment = models.TextField(verbose_name="Comment", blank=True)
+    cycle_comment = models.ForeignKey(
+        "db.CycleComment",
+        on_delete=models.SET_NULL,
+        related_name="cycle_comment_activities",
+        null=True,
+        blank=True,
+    )
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="cycle_activities",
+    )
+    old_identifier = models.UUIDField(null=True)
+    new_identifier = models.UUIDField(null=True)
+    epoch = models.FloatField(null=True)
+    extra = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        verbose_name = "Cycle Activity"
+        verbose_name_plural = "Cycle Activities"
+        db_table = "cycle_activities"
+        ordering = ("-created_at",)
+        indexes = [
+            models.Index(fields=["cycle", "created_at"], name="cycle_activity_cycle_ts"),
+        ]
 
 
 class CycleIssue(ProjectBaseModel):

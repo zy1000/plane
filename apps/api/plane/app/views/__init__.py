@@ -110,14 +110,17 @@ from .cycle.base import (
     CycleAnalyticsEndpoint,
     CycleProgressEndpoint,
     CycleOverdueByAssigneeEndpoint,
+    CycleIssueTypeDistributionEndpoint,
     CyclePlansEndpoint,
     CycleSelectablePlansEndpoint,
     CycleAssociatePlansEndpoint,
     CycleCancelPlanAssociationEndpoint,
 )
 from .cycle.issue import CycleIssueViewSet
+from .cycle.activity import CycleActivityEndpoint
 from .cycle.archive import CycleArchiveUnarchiveEndpoint
 from .cycle.file import CycleFileAPI
+from .cycle.comment import CycleCommentViewSet
 
 from .asset.base import FileAssetEndpoint, UserAssetsEndpoint, FileAssetViewSet
 from .asset.v2 import (

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { TimesheetService, type TTimeSheet } from "@/services/issue/timesheet.service";
 import { isChinaWorkday } from "@/helpers/china-holidays.helper";
+import { useProject } from "@/hooks/store/use-project";
 import { formatDateKey, getWeekStart, getWeekDays } from "@/hooks/store/use-timesheet-page";
 
 const timesheetService = new TimesheetService();
@@ -87,6 +88,11 @@ export type TAlertDay = {
   isFuture: boolean;
 };
 
+export type TPmsAlert = {
+  projectId: string;
+  projectName: string;
+};
+
 function buildAlertDays(dates: Date[], hoursMap: Map<string, number>): TAlertDay[] {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -119,6 +125,7 @@ export type TUseTimesheetOverviewOptions = {
 };
 
 export const useTimesheetOverview = ({ workspaceSlug, memberId }: TUseTimesheetOverviewOptions) => {
+  const { getProjectById } = useProject();
   const [weekTimesheets, setWeekTimesheets] = useState<TTimeSheet[]>([]);
   const [monthTimesheets, setMonthTimesheets] = useState<TTimeSheet[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -294,6 +301,27 @@ export const useTimesheetOverview = ({ workspaceSlug, memberId }: TUseTimesheetO
     [activeTimesheets]
   );
 
+  const pmsAlerts = useMemo<TPmsAlert[]>(() => {
+    const seen = new Set<string>();
+    const alerts: TPmsAlert[] = [];
+
+    for (const timesheet of activeTimesheets) {
+      const projectId = timesheet.project;
+      if (!projectId || seen.has(projectId)) continue;
+      seen.add(projectId);
+
+      const project = getProjectById(projectId);
+      if (!project?.pms_project_name?.trim()) {
+        alerts.push({
+          projectId,
+          projectName: project?.name ?? projectId,
+        });
+      }
+    }
+
+    return alerts;
+  }, [activeTimesheets, getProjectById]);
+
   // --- Alert days ---
   const alertDays = useMemo(() => {
     const dates = mode === "week" ? weekDays : monthDays;
@@ -324,6 +352,7 @@ export const useTimesheetOverview = ({ workspaceSlug, memberId }: TUseTimesheetO
     kpis,
     dailyHours,
     projectDistribution,
+    pmsAlerts,
     alertDays,
     recentEntries,
     periodLabel,

@@ -13,6 +13,7 @@ from plane.app.views import (
     CycleProgressEndpoint,
     CycleAnalyticsEndpoint,
     CycleOverdueByAssigneeEndpoint,
+    CycleIssueTypeDistributionEndpoint,
     CyclePlansEndpoint,
     CycleSelectablePlansEndpoint,
     CycleAssociatePlansEndpoint,
@@ -20,7 +21,9 @@ from plane.app.views import (
     TransferCycleIssueEndpoint,
     CycleUserPropertiesEndpoint,
     CycleArchiveUnarchiveEndpoint,
+    CycleActivityEndpoint,
     CycleFileAPI,
+    CycleCommentViewSet,
 )
 
 
@@ -68,6 +71,11 @@ urlpatterns = [
         name="project-cycle",
     ),
     path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/cycles/<uuid:pk>/overdues/",
+        CycleViewSet.as_view({"get": "overdues"}),
+        name="project-cycle-overdues",
+    ),
+    path(
         "workspaces/<str:slug>/projects/<uuid:project_id>/cycles/<uuid:cycle_id>/cycle-issues/",
         CycleIssueViewSet.as_view({"get": "list", "post": "create"}),
         name="project-issue-cycle",
@@ -83,6 +91,21 @@ urlpatterns = [
             }
         ),
         name="project-issue-cycle",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/cycles/<uuid:cycle_id>/comments/",
+        CycleCommentViewSet.as_view({"get": "list", "post": "create"}),
+        name="project-cycle-comments",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/cycles/<uuid:cycle_id>/comments/<uuid:pk>/",
+        CycleCommentViewSet.as_view({"get": "retrieve", "delete": "destroy"}),
+        name="project-cycle-comments",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/cycles/<uuid:cycle_id>/activities/",
+        CycleActivityEndpoint.as_view(),
+        name="project-cycle-activities",
     ),
     path(
         "workspaces/<str:slug>/projects/<uuid:project_id>/cycles/date-check/",
@@ -138,6 +161,11 @@ urlpatterns = [
         "workspaces/<str:slug>/projects/<uuid:project_id>/cycles/<uuid:cycle_id>/overdue-by-assignee/",
         CycleOverdueByAssigneeEndpoint.as_view(),
         name="project-cycle-overdue-by-assignee",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/cycles/<uuid:cycle_id>/issue-type-distribution/",
+        CycleIssueTypeDistributionEndpoint.as_view(),
+        name="project-cycle-issue-type-distribution",
     ),
     path(
         "workspaces/<str:slug>/projects/<uuid:project_id>/cycles/<uuid:cycle_id>/plans/",

@@ -8,33 +8,76 @@ from rest_framework import serializers
 # Module imports
 from .base import BaseSerializer
 from .issue import IssueStateSerializer
-from plane.db.models import Cycle, CycleIssue, CycleUserProperties
+from .user import UserLiteSerializer
+from plane.db.models import (
+    Cycle,
+    CycleActivity,
+    CycleComment,
+    CycleIssue,
+    CycleOverdueRecord,
+    CycleUserProperties,
+    User,
+)
+from plane.utils.cycle.rules import check_cycle_state
 from plane.utils.timezone_converter import convert_to_utc
 
 
 class CycleWriteSerializer(BaseSerializer):
+    owned_by_id = serializers.PrimaryKeyRelatedField(
+        source="owned_by",
+        queryset=User.objects.all(),
+        required=False,
+    )
+
     def validate(self, data):
+        status = data.get("status")
+        user = self.context.get("user")
+        has_end_date_in_payload = "end_date" in data
+
+        if self.instance and has_end_date_in_payload and data.get("end_date") is None:
+            raise serializers.ValidationError("结束时间不可清空")
+
         if (
             data.get("start_date", None) is not None
             and data.get("end_date", None) is not None
             and data.get("start_date", None) > data.get("end_date", None)
         ):
             raise serializers.ValidationError("Start date cannot exceed end date")
-        if data.get("start_date", None) is not None and data.get("end_date", None) is not None:
+        if data.get("start_date", None) is not None or data.get("end_date", None) is not None:
             project_id = (
                 self.initial_data.get("project_id", None)
                 or (self.instance and self.instance.project_id)
                 or self.context.get("project_id", None)
             )
-            data["start_date"] = convert_to_utc(
-                date=str(data.get("start_date").date()),
-                project_id=project_id,
-                is_start_date=True,
-            )
-            data["end_date"] = convert_to_utc(
-                date=str(data.get("end_date", None).date()),
-                project_id=project_id,
-            )
+            if data.get("start_date", None) is not None:
+                data["start_date"] = convert_to_utc(
+                    date=str(data.get("start_date").date()),
+                    project_id=project_id,
+                    is_start_date=True,
+                )
+            if data.get("end_date", None) is not None:
+                data["end_date"] = convert_to_utc(
+                    date=str(data.get("end_date").date()),
+                    project_id=project_id,
+                )
+
+        if status and self.instance and status != self.instance.status:
+            if self.instance.owned_by_id != getattr(user, "id", None):
+                raise serializers.ValidationError(
+                    {
+                        "error": "不符合状态流转规则",
+                        "reasons": ["状态只能由负责人修改"],
+                    }
+                )
+
+            result = check_cycle_state(self.instance, Cycle.Status(status))
+            if not result.allowed:
+                raise serializers.ValidationError(
+                    {
+                        "error": "不符合状态流转规则",
+                        "reasons": result.reasons,
+                    }
+                )
         return data
 
     class Meta:
@@ -67,6 +110,7 @@ class CycleSerializer(BaseSerializer):
             # model fields
             "name",
             "description",
+            "suggested_test_scope",
             "start_date",
             "end_date",
             "owned_by_id",
@@ -109,3 +153,82 @@ class CycleUserPropertiesSerializer(BaseSerializer):
         model = CycleUserProperties
         fields = "__all__"
         read_only_fields = ["workspace", "project", "cycle", "user"]
+
+
+class CycleOverdueRecordSerializer(BaseSerializer):
+    class Meta:
+        model = CycleOverdueRecord
+        fields = [
+            "id",
+            "cycle",
+            "started_at",
+            "ended_at",
+            "triggered_by",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = fields
+
+
+class CycleCommentSerializer(BaseSerializer):
+    actor_detail = UserLiteSerializer(read_only=True, source="actor")
+
+    class Meta:
+        model = CycleComment
+        fields = [
+            "id",
+            "workspace",
+            "project",
+            "cycle",
+            "actor",
+            "actor_detail",
+            "comment_stripped",
+            "comment_json",
+            "comment_html",
+            "parent",
+            "edited_at",
+            "created_at",
+            "updated_at",
+            "created_by",
+            "updated_by",
+        ]
+        read_only_fields = [
+            "workspace",
+            "project",
+            "cycle",
+            "actor",
+            "comment_stripped",
+            "edited_at",
+            "created_by",
+            "updated_by",
+            "created_at",
+            "updated_at",
+        ]
+
+
+class CycleActivitySerializer(BaseSerializer):
+    actor_detail = UserLiteSerializer(read_only=True, source="actor")
+
+    class Meta:
+        model = CycleActivity
+        fields = [
+            "id",
+            "workspace",
+            "project",
+            "cycle",
+            "actor",
+            "actor_detail",
+            "verb",
+            "field",
+            "old_value",
+            "new_value",
+            "old_identifier",
+            "new_identifier",
+            "comment",
+            "cycle_comment",
+            "epoch",
+            "extra",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = fields

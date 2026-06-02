@@ -24,29 +24,32 @@ import {
   XCircle,
   Layers,
   Plus,
-  Download,
-  Trash2,
   FileText,
   Maximize2,
   AlertTriangle,
   ClipboardList,
   LineChart,
   Pencil,
-  Unlink,
 } from "lucide-react";
-import { Modal, Popconfirm } from "antd";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { CYCLE_STATUS, EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { CheckIcon, MembersPropertyIcon } from "@plane/propel/icons";
 import type { ICycle, TCyclePlotType, TProgressSnapshot, TCycleDistribution, TCycleEstimateDistribution } from "@plane/types";
 import { EIssuesStoreType } from "@plane/types";
-import { Loader, Avatar, AvatarGroup, Button, CircularProgressIndicator } from "@plane/ui";
+import { Loader, Avatar, AvatarGroup, Button, CircularProgressIndicator, CustomSelect } from "@plane/ui";
 import { cn, getFileURL, calculateCycleProgress, getDate, toFilterArray } from "@plane/utils";
 import { OverdueByAssigneeCard } from "@/components/common/overdue-by-assignee-card";
 import { FileUploadProgressList } from "@/components/common/file-upload-progress-item";
+import { CycleActivityTab } from "@/components/cycles/cycle-activity-tab";
 import { CycleDescriptionFullscreenModal } from "@/components/cycles/cycle-description-fullscreen-modal";
 import { CycleOverviewFullscreenModal } from "@/components/cycles/cycle-overview-fullscreen-modal";
+import { CycleFilesTable } from "@/components/cycles/cycle-overview/cycle-files-table";
+import { CyclePlanAssociateModal } from "@/components/cycles/cycle-overview/cycle-plan-associate-modal";
+import { CycleTestPlansTable } from "@/components/cycles/cycle-overview/cycle-test-plans-table";
+import { useCycleFiles } from "@/components/cycles/cycle-overview/use-cycle-files";
+import { useCyclePlans } from "@/components/cycles/cycle-overview/use-cycle-plans";
+import { formatCycleUpdateError } from "@/components/cycles/use-cycle-error-message";
 import useCyclesDetails from "@/components/cycles/active-cycle/use-cycles-details";
 import type { TAssigneeData } from "@/components/core/sidebar/progress-stats/assignee";
 import { AssigneeStatComponent } from "@/components/core/sidebar/progress-stats/assignee";
@@ -55,7 +58,6 @@ import { useCycle } from "@/hooks/store/use-cycle";
 import { useMember } from "@/hooks/store/use-member";
 import { useUserPermissions } from "@/hooks/store/user";
 import { useWorkItemFilters } from "@/hooks/store/work-item-filters/use-work-item-filters";
-import { useFileUploadProgress } from "@/hooks/use-file-upload-progress";
 import useLocalStorage from "@/hooks/use-local-storage";
 import { SidebarChartRoot } from "@/plane-web/components/cycles";
 import { CycleService } from "@/services/cycle.service";
@@ -67,21 +69,6 @@ type Props = {
 };
 
 type TOverviewExpandPanel = null | "overdue" | "stats";
-
-type TCycleFile = {
-  id: string;
-  name: string;
-  size: number;
-  created_at: string;
-};
-
-const formatFileSize = (bytes: number) => {
-  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
-  const units = ["B", "KB", "MB", "GB"];
-  const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
-  const value = bytes / 1024 ** index;
-  return `${value >= 10 || index === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[index]}`;
-};
 
 const sectionCard = "rounded-lg border border-subtle bg-surface-1";
 const kpiCardBase =
@@ -144,32 +131,33 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
   const searchParams = useSearchParams();
   const peekCycle = searchParams.get("peekCycle") || undefined;
   const cycleService = useMemo(() => new CycleService(), []);
-  const { getPlotTypeByCycleId, getEstimateTypeByCycleId, getCycleById, fetchCycleDetails } = useCycle();
+  const { getPlotTypeByCycleId, getEstimateTypeByCycleId, getCycleById, fetchCycleDetails, updateCycleDetails } =
+    useCycle();
   const { getUserDetails } = useMember();
   const { getFilter, updateFilterValueFromSidebar } = useWorkItemFilters();
   const { allowPermissions } = useUserPermissions();
-  const [files, setFiles] = useState<TCycleFile[]>([]);
-  const [filesLoading, setFilesLoading] = useState(false);
-  const [filesUploading, setFilesUploading] = useState(false);
-  const { uploadStatuses, trackUpload } = useFileUploadProgress();
-  const [filesTotal, setFilesTotal] = useState(0);
-  const [filesDownloadingId, setFilesDownloadingId] = useState<string | null>(null);
-  const [filesDeletingId, setFilesDeletingId] = useState<string | null>(null);
-  const [filesError, setFilesError] = useState<string | null>(null);
-  /** 与后端 CustomPaginator.max_page_size 一致；单次请求上限，多页循环拉取直至全部 */
-  const CYCLE_FILES_FETCH_PAGE_SIZE = 100;
+  const {
+    files,
+    filesLoading,
+    filesUploading,
+    uploadStatuses,
+    filesTotal,
+    filesDownloadingId,
+    filesDeletingId,
+    filesError,
+    uploadFile,
+    downloadFile,
+    deleteFile,
+  } = useCycleFiles({
+    workspaceSlug,
+    projectId,
+    cycleId,
+  });
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [expandPanel, setExpandPanel] = useState<TOverviewExpandPanel>(null);
   const [cycleDescriptionModalOpen, setCycleDescriptionModalOpen] = useState(false);
   const [cycleDescriptionModalInitialEdit, setCycleDescriptionModalInitialEdit] = useState(false);
-
-  const [planAssociateOpen, setPlanAssociateOpen] = useState(false);
-  const [selectablePlans, setSelectablePlans] = useState<any[]>([]);
-  const [selectablePlansLoading, setSelectablePlansLoading] = useState(false);
-  const [selectablePlansError, setSelectablePlansError] = useState<string | null>(null);
-  const [selectedPlanIds, setSelectedPlanIds] = useState<string[]>([]);
-  const [associatingPlans, setAssociatingPlans] = useState(false);
-  const [cancelingPlanId, setCancelingPlanId] = useState<string | null>(null);
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const { storedValue: currentTab, setValue: setCurrentTab } = useLocalStorage(
     `cycle-overview-tab-${cycleId}`,
     "stat-test-plans"
@@ -190,14 +178,6 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
     () => cycleService.getCycleOverdueByAssignee(workspaceSlug, projectId, cycleId)
   );
 
-  /** 当前迭代已关联的测试计划（独立拉取，便于关联/取消关联后即时刷新） */
-  const { data: cyclePlansResp, mutate: mutateCyclePlans } = useSWR(
-    workspaceSlug && projectId && cycleId
-      ? `cycle-plans-${workspaceSlug}-${projectId}-${cycleId}`
-      : null,
-    () => cycleService.getCyclePlans(workspaceSlug, projectId, cycleId)
-  );
-
   const cycleFilter = getFilter(EIssuesStoreType.CYCLE, cycleId);
   const selectedAssignees = cycleFilter?.findFirstConditionByPropertyAndOperator("assignee_id", "in");
 
@@ -214,6 +194,21 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
 
   const cycleStatus = cycleDetails?.status ?? "not_started";
   const statusInfo = CYCLE_STATUS.find((s) => s.value === cycleStatus);
+  const statusOptionsByCurrentStatus: Record<NonNullable<ICycle["status"]>, NonNullable<ICycle["status"]>[]> = {
+    not_started: ["in_progress", "cancelled"],
+    in_progress: ["testing", "cancelled"],
+    testing: ["completed", "cancelled"],
+    completed: [],
+    cancelled: [],
+  };
+  const statusOptions = statusOptionsByCurrentStatus[cycleStatus as NonNullable<ICycle["status"]>] ?? [];
+  const isEditingAllowed = allowPermissions(
+    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
+    EUserPermissionsLevel.PROJECT,
+    workspaceSlug,
+    projectId
+  );
+  const canChangeStatus = isEditingAllowed && !cycleDetails?.archived_at && statusOptions.length > 0;
   const cycleOwner = cycleDetails ? getUserDetails(cycleDetails.owned_by_id) : undefined;
   const startDate = getDate(cycleDetails?.start_date);
   const endDate = getDate(cycleDetails?.end_date);
@@ -251,13 +246,32 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
           total: assignee.total_estimates,
         }));
 
-  const cyclePlans = useMemo(() => {
-    if (cyclePlansResp && Array.isArray(cyclePlansResp.data)) return cyclePlansResp.data;
-    const plans = cycleDetails?.plans;
-    if (Array.isArray(plans)) return plans;
-    if (plans && Array.isArray((plans as any).data)) return (plans as any).data;
-    return [];
-  }, [cyclePlansResp, cycleDetails?.plans]);
+  const refreshCycleDetails = () => {
+    if (!workspaceSlug || !projectId || !cycleId) return;
+    void fetchCycleDetails(workspaceSlug, projectId, cycleId);
+  };
+
+  const {
+    cyclePlans,
+    planAssociateOpen,
+    selectablePlans,
+    selectablePlansLoading,
+    selectablePlansError,
+    selectedPlanIds,
+    associatingPlans,
+    cancelingPlanId,
+    setSelectedPlanIds,
+    openPlanAssociateModal,
+    closePlanAssociateModal,
+    handleConfirmAssociatePlans,
+    handleCancelPlanAssociation,
+  } = useCyclePlans({
+    workspaceSlug,
+    projectId,
+    cycleId,
+    fallbackPlans: cycleDetails?.plans,
+    onRefresh: refreshCycleDetails,
+  });
 
   const handleFiltersUpdate = updateFilterValueFromSidebar.bind(
     updateFilterValueFromSidebar,
@@ -276,27 +290,10 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
     return d.toLocaleDateString("zh-CN", { month: "short", day: "numeric", year: "numeric" });
   };
 
-  const formatPlanDate = (value?: string | null) => {
-    if (!value) return "-";
-    const date = getDate(value);
-    if (!date) return "-";
-    return date.toLocaleDateString("zh-CN");
-  };
-
-  const getPassRate = (passRate: any) => {
-    if (typeof passRate === "number") return `${passRate}%`;
-    if (!passRate || typeof passRate !== "object") return "0%";
-    const total = Object.values(passRate).reduce((sum, count) => sum + Number(count || 0), 0);
-    const passed = Number(passRate?.["成功"] || passRate?.success || 0);
-    const percent = total > 0 ? Math.floor((passed / total) * 100) : 0;
-    return `${percent}%`;
-  };
-
-  const getPlanStatusClassName = (state?: string) => {
-    if (state === "进行中") return "text-[#F59E0B]";
-    if (state === "已完成") return "text-success-primary";
-    if (state === "未开始") return "text-secondary";
-    return "text-placeholder";
+  const handleFileInputChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = event.target.files?.[0];
+    if (selectedFile) void uploadFile(selectedFile);
+    event.target.value = "";
   };
 
   const normalizedOverviewTab =
@@ -310,161 +307,6 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
     "stat-test-plans": cyclePlans.length,
     "stat-assignees": chartDistributionData ? distributionAssigneeData.length : 0,
     "stat-files": filesTotal,
-  };
-
-  const fetchFiles = async () => {
-    if (!workspaceSlug || !projectId || !cycleId) return;
-    try {
-      setFilesLoading(true);
-      setFilesError(null);
-      const aggregated: TCycleFile[] = [];
-      let total = 0;
-      let page = 1;
-      for (;;) {
-        const response = await cycleService.getCycleFileList(workspaceSlug, projectId, cycleId, {
-          page,
-          page_size: CYCLE_FILES_FETCH_PAGE_SIZE,
-        });
-        const list = Array.isArray(response?.data) ? response.data : [];
-        total = Number(response?.count ?? total);
-        for (const file of list as any[]) {
-          aggregated.push({
-            id: file.id,
-            name: file.name,
-            size: Number(file.size ?? 0),
-            created_at: file.created_at,
-          });
-        }
-        if (list.length === 0 || list.length < CYCLE_FILES_FETCH_PAGE_SIZE || aggregated.length >= total) {
-          break;
-        }
-        page += 1;
-      }
-      setFiles(aggregated);
-      setFilesTotal(total);
-    } catch (error: any) {
-      setFilesError(error?.error || error?.detail || "获取迭代文件失败");
-    } finally {
-      setFilesLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    void fetchFiles();
-  }, [cycleId, cycleService, projectId, workspaceSlug]);
-
-  const handleUploadCycleFile = async (event: ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = event.target.files?.[0];
-    if (!selectedFile || !workspaceSlug || !projectId || !cycleId) return;
-
-    try {
-      setFilesUploading(true);
-      await trackUpload(selectedFile, (onProgress) =>
-        cycleService.uploadCycleFile(workspaceSlug, projectId, cycleId, selectedFile, onProgress)
-      );
-      await fetchFiles();
-      setFilesError(null);
-    } catch (error: any) {
-      setFilesError(error?.error || error?.detail || "上传文件失败");
-    } finally {
-      setFilesUploading(false);
-      event.target.value = "";
-    }
-  };
-
-  const handleDownloadCycleFile = async (fileId: string, _fileName: string) => {
-    if (!workspaceSlug || !projectId) return;
-    try {
-      setFilesDownloadingId(fileId);
-      const url = await cycleService.downloadCycleFile(workspaceSlug, projectId, fileId);
-      window.open(url, "_blank", "noopener,noreferrer");
-    } catch (error: any) {
-      setFilesError(error?.error || error?.detail || "下载文件失败");
-    } finally {
-      setFilesDownloadingId(null);
-    }
-  };
-
-  const handleDeleteCycleFile = async (fileId: string) => {
-    if (!workspaceSlug || !projectId) return;
-    try {
-      setFilesDeletingId(fileId);
-      await cycleService.deleteCycleFile(workspaceSlug, projectId, fileId);
-      await fetchFiles();
-    } catch (error: any) {
-      setFilesError(error?.error || error?.detail || "删除文件失败");
-    } finally {
-      setFilesDeletingId(null);
-    }
-  };
-
-  const refreshCycleDetails = () => {
-    if (!workspaceSlug || !projectId || !cycleId) return;
-    void mutateCyclePlans();
-    void fetchCycleDetails(workspaceSlug, projectId, cycleId);
-  };
-
-  const openPlanAssociateModal = async () => {
-    if (!workspaceSlug || !projectId || !cycleId) return;
-    setPlanAssociateOpen(true);
-    setSelectedPlanIds([]);
-    setSelectablePlansLoading(true);
-    setSelectablePlansError(null);
-    try {
-      const res = await cycleService.getCycleSelectablePlans(workspaceSlug, projectId, cycleId);
-      setSelectablePlans(Array.isArray(res?.data) ? res.data : []);
-    } catch (error: any) {
-      setSelectablePlansError(error?.error || error?.detail || "获取可选测试计划失败");
-      setSelectablePlans([]);
-    } finally {
-      setSelectablePlansLoading(false);
-    }
-  };
-
-  const handleConfirmAssociatePlans = async () => {
-    if (!workspaceSlug || !projectId || !cycleId || selectedPlanIds.length === 0) return;
-    try {
-      setAssociatingPlans(true);
-      await cycleService.associateCyclePlans(workspaceSlug, projectId, cycleId, selectedPlanIds);
-      setToast({
-        type: TOAST_TYPE.SUCCESS,
-        title: "关联成功",
-        message: `已关联 ${selectedPlanIds.length} 个测试计划`,
-      });
-      setPlanAssociateOpen(false);
-      setSelectedPlanIds([]);
-      refreshCycleDetails();
-    } catch (error: any) {
-      setToast({
-        type: TOAST_TYPE.ERROR,
-        title: "关联失败",
-        message: error?.error || error?.detail || "请稍后重试",
-      });
-    } finally {
-      setAssociatingPlans(false);
-    }
-  };
-
-  const handleCancelPlanAssociation = async (planId: string) => {
-    if (!workspaceSlug || !projectId || !cycleId) return;
-    try {
-      setCancelingPlanId(planId);
-      await cycleService.cancelCyclePlanAssociation(workspaceSlug, projectId, cycleId, [planId]);
-      setToast({
-        type: TOAST_TYPE.SUCCESS,
-        title: "已取消关联",
-        message: "测试计划已取消关联",
-      });
-      refreshCycleDetails();
-    } catch (error: any) {
-      setToast({
-        type: TOAST_TYPE.ERROR,
-        title: "操作失败",
-        message: error?.error || error?.detail || "请稍后重试",
-      });
-    } finally {
-      setCancelingPlanId(null);
-    }
   };
 
   if (!cycleDetails) {
@@ -514,14 +356,65 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            {statusInfo && (
-              <span
-                className="inline-flex items-center rounded-md px-2.5 py-1 text-xs font-medium"
-                style={{ color: statusInfo.color, backgroundColor: `${statusInfo.color}20` }}
-              >
-                {t(statusInfo.i18n_title)}
-              </span>
-            )}
+            {statusInfo &&
+              (canChangeStatus ? (
+                <CustomSelect
+                  customButton={
+                    <span
+                      className="inline-flex cursor-pointer items-center rounded-md px-2.5 py-1 text-xs font-medium"
+                      style={{ color: statusInfo.color, backgroundColor: `${statusInfo.color}20` }}
+                    >
+                      {t(statusInfo.i18n_title)}
+                    </span>
+                  }
+                  value={cycleStatus}
+                  onChange={(nextStatus: string) => {
+                    void (async () => {
+                      if (!nextStatus || nextStatus === cycleStatus || isUpdatingStatus) return;
+                      setIsUpdatingStatus(true);
+                      try {
+                        await updateCycleDetails(workspaceSlug, projectId, cycleId, {
+                          status: nextStatus as ICycle["status"],
+                        });
+                        setToast({
+                          type: TOAST_TYPE.SUCCESS,
+                          title: t("project_cycles.action.update.success.title"),
+                          message: t("project_cycles.action.update.success.description"),
+                        });
+                      } catch (err) {
+                        const { title, message } = formatCycleUpdateError(err);
+                        setToast({
+                          type: TOAST_TYPE.ERROR,
+                          title,
+                          message,
+                        });
+                      } finally {
+                        setIsUpdatingStatus(false);
+                      }
+                    })();
+                  }}
+                  disabled={isUpdatingStatus}
+                >
+                  {CYCLE_STATUS.filter((status) => statusOptions.includes(status.value)).map((status) => (
+                    <CustomSelect.Option key={status.value} value={status.value}>
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="h-2 w-2 flex-shrink-0 rounded-full"
+                          style={{ backgroundColor: status.color }}
+                        />
+                        {t(status.i18n_title)}
+                      </div>
+                    </CustomSelect.Option>
+                  ))}
+                </CustomSelect>
+              ) : (
+                <span
+                  className="inline-flex items-center rounded-md px-2.5 py-1 text-xs font-medium"
+                  style={{ color: statusInfo.color, backgroundColor: `${statusInfo.color}20` }}
+                >
+                  {t(statusInfo.i18n_title)}
+                </span>
+              ))}
             {startDate && endDate && (
               <span className="inline-flex items-center gap-1.5 text-sm text-placeholder">
                 <CalendarDays className="h-3.5 w-3.5 text-placeholder" />
@@ -737,7 +630,7 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
                   >
                     <Plus className="h-4 w-4 text-placeholder" />
                   </button>
-                  <input ref={fileInputRef} type="file" className="hidden" onChange={handleUploadCycleFile} />
+                  <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileInputChange} />
                   <button
                     type="button"
                     className="grid h-6 w-6 shrink-0 place-items-center rounded transition-colors hover:bg-surface-2"
@@ -755,69 +648,14 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
                   ) : (
                     <div className="flex h-full min-h-0 flex-col">
                       <div className="min-h-0 max-h-[min(360px,50vh)] flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm">
-                        <table className="min-w-full table-fixed">
-                          <thead>
-                            <tr className="text-left text-xs text-secondary [&>th]:sticky [&>th]:top-0 [&>th]:z-10 [&>th]:bg-surface-1 [&>th]:shadow-[inset_0_-1px_0_var(--border-subtle)]">
-                              <th className="w-1/6 px-2 py-2 text-sm font-medium text-primary">测试计划</th>
-                              <th className="w-1/6 px-2 py-2 text-sm font-medium text-primary">状态</th>
-                              <th className="w-1/6 px-2 py-2 text-sm font-medium text-primary">通过率</th>
-                              <th className="w-1/6 px-2 py-2 text-sm font-medium text-primary">开始时间</th>
-                              <th className="w-1/6 px-2 py-2 text-sm font-medium text-primary">结束时间</th>
-                              <th className="w-1/6 px-2 py-2 text-left text-sm font-medium text-primary">操作</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {cyclePlans.map((plan: any) => (
-                              <tr key={plan.id ?? plan.name} className="border-b border-subtle hover:bg-layer-1">
-                                <td className="truncate px-2 py-2 text-sm text-primary" title={plan.name ?? "-"}>
-                                  {plan.id ? (
-                                    <button
-                                      type="button"
-                                      className="truncate text-left text-sm text-primary hover:underline"
-                                      onClick={() =>
-                                        router.push(
-                                          `/${workspaceSlug}/projects/${projectId}/testhub/plan-cases?planId=${plan.id}`
-                                        )
-                                      }
-                                    >
-                                      {plan.name ?? "-"}
-                                    </button>
-                                  ) : (
-                                    plan.name ?? "-"
-                                  )}
-                                </td>
-                                <td className={`px-2 py-2 text-sm ${getPlanStatusClassName(plan.state)}`}>
-                                  {plan.state ?? "-"}
-                                </td>
-                                <td className="px-2 py-2 text-sm text-primary">{getPassRate(plan.pass_rate)}</td>
-                                <td className="px-2 py-2 text-sm text-primary">
-                                  {formatPlanDate(plan.start_date ?? plan.start_at ?? null)}
-                                </td>
-                                <td className="px-2 py-2 text-sm text-primary">
-                                  {formatPlanDate(plan.end_date ?? plan.end_at ?? null)}
-                                </td>
-                                <td className="px-2 py-2 text-left">
-                                  <Popconfirm
-                                    title="确定取消该测试计划的关联吗？"
-                                    okText="取消关联"
-                                    cancelText="取消"
-                                    onConfirm={() => void handleCancelPlanAssociation(plan.id)}
-                                  >
-                                    <Button
-                                      variant="link-neutral"
-                                      className="p-0"
-                                      loading={cancelingPlanId === plan.id}
-                                      disabled={cancelingPlanId === plan.id}
-                                      aria-label="取消关联"
-                                    >
-                                      <Unlink className="h-3.5 w-3.5" />
-                                    </Button>
-                                  </Popconfirm>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
+                        <CycleTestPlansTable
+                          cyclePlans={cyclePlans}
+                          cancelingPlanId={cancelingPlanId}
+                          onOpenPlan={(planId) =>
+                            router.push(`/${workspaceSlug}/projects/${projectId}/testhub/plan-cases?planId=${planId}`)
+                          }
+                          onCancelPlanAssociation={(planId) => void handleCancelPlanAssociation(planId)}
+                        />
                       </div>
                     </div>
                   )}
@@ -846,56 +684,13 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
                       <FileUploadProgressList uploadStatuses={uploadStatuses} className="flex flex-col gap-1 pb-2" />
                       <div className="min-h-0 max-h-[min(360px,50vh)] flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm">
                         <div className="overflow-x-auto">
-                          <table className="min-w-full table-fixed">
-                            <thead>
-                              <tr className="text-left text-xs text-secondary [&>th]:sticky [&>th]:top-0 [&>th]:z-10 [&>th]:bg-surface-1 [&>th]:shadow-[inset_0_-1px_0_var(--border-subtle)]">
-                                <th className="w-1/4 px-2 py-2 text-sm font-medium text-primary">附件</th>
-                                <th className="w-1/4 px-2 py-2 text-sm font-medium text-primary">大小</th>
-                                <th className="w-1/4 px-2 py-2 text-sm font-medium text-primary">上传时间</th>
-                                <th className="w-1/4 px-2 py-2 text-left text-sm font-medium text-primary">操作</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {files.map((file) => (
-                                <tr key={file.id} className="border-b border-subtle hover:bg-layer-1">
-                                  <td className="truncate px-2 py-2 text-sm text-primary" title={file.name}>
-                                    <span className="truncate">{file.name}</span>
-                                  </td>
-                                  <td className="px-2 py-2 text-sm text-primary">{formatFileSize(file.size)}</td>
-                                  <td className="px-2 py-2 text-sm text-primary">
-                                    {file.created_at ? new Date(file.created_at).toLocaleDateString() : "-"}
-                                  </td>
-                                  <td className="px-2 py-2 text-left">
-                                    <div className="flex items-center justify-start gap-2">
-                                      <Button
-                                        variant="link-neutral"
-                                        className="p-0"
-                                        disabled={filesDownloadingId === file.id}
-                                        onClick={() => handleDownloadCycleFile(file.id, file.name)}
-                                      >
-                                        <Download className="h-3.5 w-3.5" />
-                                      </Button>
-                                      <Popconfirm
-                                        title="确认删除该附件？"
-                                        okText="删除"
-                                        cancelText="取消"
-                                        onConfirm={() => void handleDeleteCycleFile(file.id)}
-                                      >
-                                        <Button
-                                          variant="link-danger"
-                                          className="p-0"
-                                          disabled={filesDeletingId === file.id}
-                                          loading={filesDeletingId === file.id}
-                                        >
-                                          <Trash2 className="h-3.5 w-3.5" />
-                                        </Button>
-                                      </Popconfirm>
-                                    </div>
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
+                          <CycleFilesTable
+                            files={files}
+                            filesDownloadingId={filesDownloadingId}
+                            filesDeletingId={filesDeletingId}
+                            onDownloadFile={(fileId) => void downloadFile(fileId)}
+                            onDeleteFile={(fileId) => void deleteFile(fileId)}
+                          />
                         </div>
                       </div>
                     </div>
@@ -905,6 +700,8 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
             </Tab.Group>
           </div>
         </div>
+
+        <CycleActivityTab workspaceSlug={workspaceSlug} projectId={projectId} cycleId={cycleId} />
       </div>
 
       <CycleDescriptionFullscreenModal
@@ -958,69 +755,14 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
                 {cyclePlans.length === 0 ? (
                   <div className="grid h-32 place-items-center text-sm text-placeholder">暂无关联测试计划</div>
                 ) : (
-                  <table className="min-w-full table-fixed">
-                    <thead>
-                      <tr className="text-left text-xs text-secondary [&>th]:sticky [&>th]:top-0 [&>th]:z-10 [&>th]:bg-surface-1 [&>th]:shadow-[inset_0_-1px_0_var(--border-subtle)]">
-                        <th className="w-1/6 px-2 py-2 text-sm font-medium text-primary">测试计划</th>
-                        <th className="w-1/6 px-2 py-2 text-sm font-medium text-primary">状态</th>
-                        <th className="w-1/6 px-2 py-2 text-sm font-medium text-primary">通过率</th>
-                        <th className="w-1/6 px-2 py-2 text-sm font-medium text-primary">开始时间</th>
-                        <th className="w-1/6 px-2 py-2 text-sm font-medium text-primary">结束时间</th>
-                        <th className="w-1/6 px-2 py-2 text-left text-sm font-medium text-primary">操作</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {cyclePlans.map((plan: any) => (
-                        <tr key={plan.id ?? plan.name} className="border-b border-subtle hover:bg-layer-1">
-                          <td className="truncate px-2 py-2 text-sm text-primary" title={plan.name ?? "-"}>
-                            {plan.id ? (
-                              <button
-                                type="button"
-                                className="truncate text-left text-sm text-primary hover:underline"
-                                onClick={() =>
-                                  router.push(
-                                    `/${workspaceSlug}/projects/${projectId}/testhub/plan-cases?planId=${plan.id}`
-                                  )
-                                }
-                              >
-                                {plan.name ?? "-"}
-                              </button>
-                            ) : (
-                              plan.name ?? "-"
-                            )}
-                          </td>
-                          <td className={`px-2 py-2 text-sm ${getPlanStatusClassName(plan.state)}`}>
-                            {plan.state ?? "-"}
-                          </td>
-                          <td className="px-2 py-2 text-sm text-primary">{getPassRate(plan.pass_rate)}</td>
-                          <td className="px-2 py-2 text-sm text-primary">
-                            {formatPlanDate(plan.start_date ?? plan.start_at ?? null)}
-                          </td>
-                          <td className="px-2 py-2 text-sm text-primary">
-                            {formatPlanDate(plan.end_date ?? plan.end_at ?? null)}
-                          </td>
-                          <td className="px-2 py-2 text-left">
-                            <Popconfirm
-                              title="确定取消该测试计划的关联吗？"
-                              okText="取消关联"
-                              cancelText="取消"
-                              onConfirm={() => void handleCancelPlanAssociation(plan.id)}
-                            >
-                              <Button
-                                variant="link-neutral"
-                                className="p-0"
-                                loading={cancelingPlanId === plan.id}
-                                disabled={cancelingPlanId === plan.id}
-                                aria-label="取消关联"
-                              >
-                                <Unlink className="h-3.5 w-3.5" />
-                              </Button>
-                            </Popconfirm>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                  <CycleTestPlansTable
+                    cyclePlans={cyclePlans}
+                    cancelingPlanId={cancelingPlanId}
+                    onOpenPlan={(planId) =>
+                      router.push(`/${workspaceSlug}/projects/${projectId}/testhub/plan-cases?planId=${planId}`)
+                    }
+                    onCancelPlanAssociation={(planId) => void handleCancelPlanAssociation(planId)}
+                  />
                 )}
               </div>
             ) : activeOverviewTabKey === "stat-assignees" ? (
@@ -1056,56 +798,13 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
                 <FileUploadProgressList uploadStatuses={uploadStatuses} className="flex flex-col gap-1 pb-2" />
                 <div className="min-h-0 flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm">
                   <div className="overflow-x-auto">
-                    <table className="min-w-full table-fixed">
-                      <thead>
-                        <tr className="text-left text-xs text-secondary [&>th]:sticky [&>th]:top-0 [&>th]:z-10 [&>th]:bg-surface-1 [&>th]:shadow-[inset_0_-1px_0_var(--border-subtle)]">
-                          <th className="w-1/4 px-2 py-2 text-sm font-medium text-primary">附件</th>
-                          <th className="w-1/4 px-2 py-2 text-sm font-medium text-primary">大小</th>
-                          <th className="w-1/4 px-2 py-2 text-sm font-medium text-primary">上传时间</th>
-                          <th className="w-1/4 px-2 py-2 text-left text-sm font-medium text-primary">操作</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {files.map((file) => (
-                          <tr key={file.id} className="border-b border-subtle hover:bg-layer-1">
-                            <td className="truncate px-2 py-2 text-sm text-primary" title={file.name}>
-                              <span className="truncate">{file.name}</span>
-                            </td>
-                            <td className="px-2 py-2 text-sm text-primary">{formatFileSize(file.size)}</td>
-                            <td className="px-2 py-2 text-sm text-primary">
-                              {file.created_at ? new Date(file.created_at).toLocaleDateString() : "-"}
-                            </td>
-                            <td className="px-2 py-2 text-left">
-                              <div className="flex items-center justify-start gap-2">
-                                <Button
-                                  variant="link-neutral"
-                                  className="p-0"
-                                  disabled={filesDownloadingId === file.id}
-                                  onClick={() => handleDownloadCycleFile(file.id, file.name)}
-                                >
-                                  <Download className="h-3.5 w-3.5" />
-                                </Button>
-                                <Popconfirm
-                                  title="确认删除该附件？"
-                                  okText="删除"
-                                  cancelText="取消"
-                                  onConfirm={() => void handleDeleteCycleFile(file.id)}
-                                >
-                                  <Button
-                                    variant="link-danger"
-                                    className="p-0"
-                                    disabled={filesDeletingId === file.id}
-                                    loading={filesDeletingId === file.id}
-                                  >
-                                    <Trash2 className="h-3.5 w-3.5" />
-                                  </Button>
-                                </Popconfirm>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                    <CycleFilesTable
+                      files={files}
+                      filesDownloadingId={filesDownloadingId}
+                      filesDeletingId={filesDeletingId}
+                      onDownloadFile={(fileId) => void downloadFile(fileId)}
+                      onDeleteFile={(fileId) => void deleteFile(fileId)}
+                    />
                   </div>
                 </div>
               </div>
@@ -1114,100 +813,17 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
         </div>
       </CycleOverviewFullscreenModal>
 
-      <Modal
-        title="关联测试计划"
+      <CyclePlanAssociateModal
         open={planAssociateOpen}
-        onCancel={() => setPlanAssociateOpen(false)}
-        onOk={handleConfirmAssociatePlans}
-        okText="确定"
-        cancelText="取消"
-        okButtonProps={{
-          disabled: selectedPlanIds.length === 0 || selectablePlansLoading,
-          loading: associatingPlans,
-        }}
-        width={720}
-        destroyOnClose
-      >
-        <div className="mt-2">
-          {selectablePlansLoading ? (
-            <div className="flex items-center justify-center py-8 text-sm text-secondary">加载中...</div>
-          ) : selectablePlansError ? (
-            <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
-              {selectablePlansError}
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full table-fixed">
-                <thead>
-                  <tr className="text-left text-xs text-secondary [&>th]:sticky [&>th]:top-0 [&>th]:z-10 [&>th]:bg-surface-1 [&>th]:shadow-[inset_0_-1px_0_var(--border-subtle)]">
-                    <th className="w-10 px-2 py-2">
-                      <input
-                        type="checkbox"
-                        className="size-4"
-                        checked={
-                          selectablePlans.length > 0 &&
-                          selectedPlanIds.length === selectablePlans.length
-                        }
-                        onChange={(e) => {
-                          if (e.target.checked) setSelectedPlanIds(selectablePlans.map((p: any) => p.id));
-                          else setSelectedPlanIds([]);
-                        }}
-                      />
-                    </th>
-                    <th className="w-2/5 px-2 py-2 text-sm font-medium text-primary">测试计划</th>
-                    <th className="w-1/5 px-2 py-2 text-sm font-medium text-primary">状态</th>
-                    <th className="w-1/5 px-2 py-2 text-sm font-medium text-primary">开始时间</th>
-                    <th className="w-1/5 px-2 py-2 text-sm font-medium text-primary">结束时间</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {selectablePlans.length === 0 ? (
-                    <tr>
-                      <td className="px-2 py-6 text-sm text-secondary" colSpan={5}>
-                        暂无可选测试计划
-                      </td>
-                    </tr>
-                  ) : (
-                    selectablePlans.map((plan: any) => {
-                      const checked = selectedPlanIds.includes(plan.id);
-                      return (
-                        <tr key={plan.id} className="border-b border-subtle hover:bg-layer-1-hover">
-                          <td className="px-2 py-2">
-                            <input
-                              type="checkbox"
-                              className="size-4"
-                              checked={checked}
-                              onChange={(e) => {
-                                const v = e.target.checked;
-                                setSelectedPlanIds((prev) => {
-                                  if (v) return Array.from(new Set([...prev, plan.id]));
-                                  return prev.filter((x) => x !== plan.id);
-                                });
-                              }}
-                            />
-                          </td>
-                          <td className="truncate px-2 py-2 text-sm text-primary" title={plan.name ?? "-"}>
-                            {plan.name ?? "-"}
-                          </td>
-                          <td className={`px-2 py-2 text-sm ${getPlanStatusClassName(plan.state)}`}>
-                            {plan.state ?? "-"}
-                          </td>
-                          <td className="px-2 py-2 text-sm text-primary">
-                            {formatPlanDate(plan.start_date ?? plan.start_at ?? null)}
-                          </td>
-                          <td className="px-2 py-2 text-sm text-primary">
-                            {formatPlanDate(plan.end_date ?? plan.end_at ?? null)}
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      </Modal>
+        onCancel={closePlanAssociateModal}
+        onConfirm={handleConfirmAssociatePlans}
+        selectedPlanIds={selectedPlanIds}
+        setSelectedPlanIds={setSelectedPlanIds}
+        selectablePlans={selectablePlans}
+        selectablePlansLoading={selectablePlansLoading}
+        selectablePlansError={selectablePlansError}
+        associatingPlans={associatingPlans}
+      />
     </div>
   );
 });

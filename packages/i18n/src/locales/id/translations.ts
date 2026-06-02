@@ -2056,6 +2056,7 @@ export default {
     add_cycle: "Tambah siklus",
     more_details: "Detail lebih lanjut",
     tab_iteration_scope: "Ruang lingkup iterasi",
+    tab_display: "Display",
     cycle: "Siklus",
     update_cycle: "Perbarui siklus",
     create_cycle: "Buat siklus",

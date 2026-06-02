@@ -9,7 +9,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { observer } from "mobx-react";
 import { useParams, usePathname, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
-import { Eye, ArrowRight, CalendarDays } from "lucide-react";
+import { Eye, ArrowRight } from "lucide-react";
 // plane imports
 import { CYCLE_STATUS, EUserPermissions, EUserPermissionsLevel, IS_FAVORITE_MENU_OPEN } from "@plane/constants";
 import { useLocalStorage } from "@plane/hooks";
@@ -19,11 +19,10 @@ import { TOAST_TYPE, setToast, setPromiseToast } from "@plane/propel/toast";
 import { Tooltip } from "@plane/propel/tooltip";
 import type { ICycle } from "@plane/types";
 import { Avatar, AvatarGroup, CustomSelect, FavoriteStar } from "@plane/ui";
-import { getDate, getFileURL, generateQueryParams } from "@plane/utils";
+import { getDate, getFileURL, generateQueryParams, renderFormattedPayloadDate } from "@plane/utils";
 // components
 import { DateRangeDropdown } from "@/components/dropdowns/date-range";
 import { ButtonAvatars } from "@/components/dropdowns/member/avatar";
-import { MergedDateDisplay } from "@/components/dropdowns/merged-date";
 // hooks
 import { useCycle } from "@/hooks/store/use-cycle";
 import { useCycleFilter } from "@/hooks/store/use-cycle-filter";
@@ -37,6 +36,7 @@ import { CycleAdditionalActions } from "@/plane-web/components/cycles";
 // local imports
 import { CycleQuickActions } from "../quick-actions";
 import { TransferIssuesModal } from "../transfer-issues-modal";
+import { formatCycleUpdateError } from "../use-cycle-error-message";
 
 type Props = {
   workspaceSlug: string;
@@ -59,6 +59,7 @@ export const CycleListItemAction = observer(function CycleListItemAction(props: 
   //states
   const [transferIssuesModal, setTransferIssuesModal] = useState(false);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+  const [isUpdatingDateRange, setIsUpdatingDateRange] = useState(false);
   // hooks
   const { isMobile } = usePlatformOS();
   const { t } = useTranslation();
@@ -104,11 +105,11 @@ export const CycleListItemAction = observer(function CycleListItemAction(props: 
       currentProjectDisplayFilters?.group_by === "release" ||
       currentProjectDisplayFilters?.group_by === "none");
   const statusOptionsByCurrentStatus: Record<NonNullable<ICycle["status"]>, NonNullable<ICycle["status"]>[]> = {
-    not_started: ["in_progress", "completed", "cancelled"],
-    in_progress: ["completed", "cancelled"],
-    delayed: ["in_progress", "completed", "cancelled"],
-    completed: ["in_progress", "cancelled"],
-    cancelled: ["completed"],
+    not_started: ["in_progress", "cancelled"],
+    in_progress: ["testing", "cancelled"],
+    testing: ["completed", "cancelled"],
+    completed: [],
+    cancelled: [],
   };
   const statusOptions = statusOptionsByCurrentStatus[cycleStatus as NonNullable<ICycle["status"]>] ?? [];
 
@@ -131,7 +132,48 @@ export const CycleListItemAction = observer(function CycleListItemAction(props: 
     workspaceSlug,
     projectId
   );
+  const isCompleted = cycleStatus === "completed";
   const canChangeStatus = isEditingAllowed && !cycleDetails.archived_at && statusOptions.length > 0;
+  const canUpdateDateRange = isEditingAllowed && !cycleDetails.archived_at && !isCompleted;
+
+  const handleDateRangeSelect = (startDate?: Date, endDate?: Date) => {
+    void (async () => {
+      const nextStartDate = startDate ? renderFormattedPayloadDate(startDate) : null;
+      const nextEndDate = endDate ? renderFormattedPayloadDate(endDate) : null;
+      const currentStartDate = cycleDetails.start_date ?? null;
+      const currentEndDate = cycleDetails.end_date ?? null;
+
+      if (
+        isUpdatingDateRange ||
+        (nextStartDate === currentStartDate && nextEndDate === currentEndDate) ||
+        !canUpdateDateRange
+      ) {
+        return;
+      }
+
+      setIsUpdatingDateRange(true);
+      try {
+        await updateCycleDetails(workspaceSlug, projectId, cycleId, {
+          start_date: nextStartDate,
+          end_date: nextEndDate,
+        });
+        setToast({
+          type: TOAST_TYPE.SUCCESS,
+          title: t("project_cycles.action.update.success.title"),
+          message: t("project_cycles.action.update.success.description"),
+        });
+      } catch (err) {
+        const { title, message } = formatCycleUpdateError(err);
+        setToast({
+          type: TOAST_TYPE.ERROR,
+          title,
+          message,
+        });
+      } finally {
+        setIsUpdatingDateRange(false);
+      }
+    })();
+  };
 
   // handlers
   const handleAddToFavorites = (e: MouseEvent<HTMLButtonElement>) => {
@@ -236,17 +278,20 @@ export const CycleListItemAction = observer(function CycleListItemAction(props: 
                 if (!nextStatus || nextStatus === cycleStatus || isUpdatingStatus) return;
                 setIsUpdatingStatus(true);
                 try {
-                  const didSucceed = await updateCycleDetails(workspaceSlug, projectId, cycleId, { status: nextStatus as ICycle["status"] })
-                    .then(() => true)
-                    .catch(() => false);
+                  await updateCycleDetails(workspaceSlug, projectId, cycleId, {
+                    status: nextStatus as ICycle["status"],
+                  });
                   setToast({
-                    type: didSucceed ? TOAST_TYPE.SUCCESS : TOAST_TYPE.ERROR,
-                    title: didSucceed
-                      ? t("project_cycles.action.update.success.title")
-                      : t("project_cycles.action.update.failed.title"),
-                    message: didSucceed
-                      ? t("project_cycles.action.update.success.description")
-                      : t("something_went_wrong_please_try_again"),
+                    type: TOAST_TYPE.SUCCESS,
+                    title: t("project_cycles.action.update.success.title"),
+                    message: t("project_cycles.action.update.success.description"),
+                  });
+                } catch (err) {
+                  const { title, message } = formatCycleUpdateError(err);
+                  setToast({
+                    type: TOAST_TYPE.ERROR,
+                    title,
+                    message,
                   });
                 } finally {
                   setIsUpdatingStatus(false);
@@ -292,25 +337,37 @@ export const CycleListItemAction = observer(function CycleListItemAction(props: 
         <>
           <div className="flex gap-2">
             {showDateRange && (
-              <Tooltip
-                tooltipContent={
+              <DateRangeDropdown
+                buttonVariant={"transparent-with-text"}
+                buttonContainerClassName="h-6 flex items-center gap-1.5 rounded-sm text-11 text-tertiary [&>div]:hover:bg-transparent"
+                buttonClassName="p-0"
+                value={{
+                  from: showStartDateProperty ? getDate(cycleDetails.start_date) : undefined,
+                  to: showEndDateProperty ? getDate(cycleDetails.end_date) : undefined,
+                }}
+                onSelect={(val) => {
+                  handleDateRangeSelect(val?.from, val?.to);
+                }}
+                placeholder={{
+                  from: t("project_cycles.start_date"),
+                  to: t("project_cycles.end_date"),
+                }}
+                showTooltip={isProjectTimeZoneDifferent() && !!cycleDetails.start_date && !!cycleDetails.end_date}
+                customTooltipHeading={t("project_cycles.in_your_timezone")}
+                customTooltipContent={
                   <span className="flex gap-1">
                     {renderFormattedDateInUserTimezone(cycleDetails.start_date ?? "")}
                     <ArrowRight className="my-auto h-3 w-3 flex-shrink-0" />
                     {renderFormattedDateInUserTimezone(cycleDetails.end_date ?? "")}
                   </span>
                 }
-                disabled={!isProjectTimeZoneDifferent()}
-                tooltipHeading={t("project_cycles.in_your_timezone")}
-              >
-                <div className="flex items-center gap-1 text-11 font-medium text-tertiary">
-                  <CalendarDays className="my-auto h-3 w-3 flex-shrink-0" />
-                  <MergedDateDisplay
-                    startDate={showStartDateProperty ? cycleDetails.start_date : null}
-                    endDate={showEndDateProperty ? cycleDetails.end_date : null}
-                  />
-                </div>
-              </Tooltip>
+                mergeDates
+                disabled={!canUpdateDateRange || isUpdatingDateRange}
+                hideIcon={{
+                  from: false,
+                  to: false,
+                }}
+              />
             )}
             {showDateRange && projectUTCOffset && (
               <span className="cursor-default rounded-md bg-layer-1 px-2 py-1 text-11 text-tertiary">
@@ -323,22 +380,24 @@ export const CycleListItemAction = observer(function CycleListItemAction(props: 
           </div>
         </>
       ) : (
-        showDateRange && cycleDetails.start_date && (
+        showDateRange && (
           <>
             <DateRangeDropdown
               buttonVariant={"transparent-with-text"}
-              buttonContainerClassName={`h-6 w-full cursor-auto flex items-center gap-1.5 text-tertiary rounded-sm text-11 [&>div]:hover:bg-transparent`}
+              buttonContainerClassName="h-6 w-full flex items-center gap-1.5 rounded-sm text-11 text-tertiary [&>div]:hover:bg-transparent"
               buttonClassName="p-0"
-              minDate={new Date()}
               value={{
                 from: showStartDateProperty ? getDate(cycleDetails.start_date) : undefined,
                 to: showEndDateProperty ? getDate(cycleDetails.end_date) : undefined,
+              }}
+              onSelect={(val) => {
+                handleDateRangeSelect(val?.from, val?.to);
               }}
               placeholder={{
                 from: t("project_cycles.start_date"),
                 to: t("project_cycles.end_date"),
               }}
-              showTooltip={isProjectTimeZoneDifferent()}
+              showTooltip={isProjectTimeZoneDifferent() && !!cycleDetails.start_date && !!cycleDetails.end_date}
               customTooltipHeading={t("project_cycles.in_your_timezone")}
               customTooltipContent={
                 <span className="flex gap-1">
@@ -348,8 +407,7 @@ export const CycleListItemAction = observer(function CycleListItemAction(props: 
                 </span>
               }
               mergeDates
-              required={cycleStatus !== "not_started"}
-              disabled
+              disabled={!canUpdateDateRange || isUpdatingDateRange}
               hideIcon={{
                 from: false,
                 to: false,

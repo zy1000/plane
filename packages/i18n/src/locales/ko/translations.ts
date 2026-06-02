@@ -2037,6 +2037,7 @@ export default {
     add_cycle: "주기 추가",
     more_details: "자세히 보기",
     tab_iteration_scope: "반복 범위",
+    tab_display: "Display",
     cycle: "주기",
     update_cycle: "주기 업데이트",
     create_cycle: "주기 생성",

@@ -22,6 +22,7 @@ interface UseCycleMenuItemsProps {
   projectId: string;
   cycleId: string;
   handleEdit: () => void;
+  handleMarkAsTesting: () => void;
   handleMarkAsCompleted: () => void;
   handleMarkAsCancelled: () => void;
   handleMarkAsInProgress: () => void;
@@ -95,8 +96,14 @@ export const useCycleMenuItems = (props: UseCycleMenuItemsProps): MenuResult => 
   const isCompleted = cycleDetails?.status === "completed";
   const cycleStatus = cycleDetails?.status;
 
-  const canMarkCompletedOrCancelled = !isArchived && isEditingAllowed && canEditSprint && (cycleStatus === "in_progress" || cycleStatus === "delayed");
-  const canMarkInProgress = !isArchived && isEditingAllowed && canEditSprint && (cycleStatus === "completed" || cycleStatus === "cancelled");
+  const canMarkTesting = !isArchived && isEditingAllowed && canEditSprint && cycleStatus === "in_progress";
+  const canMarkCompleted = !isArchived && isEditingAllowed && canEditSprint && cycleStatus === "testing";
+  const canMarkCancelled =
+    !isArchived &&
+    isEditingAllowed &&
+    canEditSprint &&
+    (cycleStatus === "not_started" || cycleStatus === "in_progress" || cycleStatus === "testing");
+  const canMarkInProgress = false;
 
   const archiveDisabled = !canArchiveSprint || !isCompleted;
   const archiveDescription = !canArchiveSprint
@@ -116,18 +123,25 @@ export const useCycleMenuItems = (props: UseCycleMenuItemsProps): MenuResult => 
     factory.createOpenInNewTabMenuItem(handlers.handleOpenInNewTab),
     factory.createCopyLinkMenuItem(handlers.handleCopyLink),
     {
+      key: "mark-as-testing",
+      title: "标记为测试中",
+      icon: CirclePlay,
+      action: handlers.handleMarkAsTesting,
+      shouldRender: canMarkTesting,
+    },
+    {
       key: "mark-as-completed",
       title: "标记为已完成",
       icon: CheckCircle2,
       action: handlers.handleMarkAsCompleted,
-      shouldRender: canMarkCompletedOrCancelled,
+      shouldRender: canMarkCompleted,
     },
     {
       key: "mark-as-cancelled",
       title: "标记为已取消",
       icon: XCircle,
       action: handlers.handleMarkAsCancelled,
-      shouldRender: canMarkCompletedOrCancelled,
+      shouldRender: canMarkCancelled,
     },
     {
       key: "mark-as-in-progress",

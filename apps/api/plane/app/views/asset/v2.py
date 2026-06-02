@@ -18,7 +18,7 @@ from rest_framework.permissions import AllowAny
 
 # Module imports
 from ..base import BaseAPIView
-from plane.db.models import FileAsset, Workspace, Project, User, Release
+from plane.db.models import FileAsset, Workspace, Project, User, Cycle, Release
 from plane.settings.storage import S3Storage
 from plane.app.permissions import allow_permission, ROLE
 from plane.utils.cache import invalidate_cache_directly
@@ -590,12 +590,17 @@ class ProjectAssetEndpoint(BaseAPIView):
             return entity_type
 
         try:
-            release_id = uuid.UUID(str(entity_id))
+            related_entity_id = uuid.UUID(str(entity_id))
         except (TypeError, ValueError, AttributeError):
             return entity_type
 
+        if Cycle.objects.filter(
+            id=related_entity_id, workspace__slug=slug, project_id=project_id
+        ).exists():
+            return FileAsset.EntityTypeContext.CYCLE_COMMENT_DESCRIPTION
+
         if Release.objects.filter(
-            id=release_id, workspace__slug=slug, project_id=project_id
+            id=related_entity_id, workspace__slug=slug, project_id=project_id
         ).exists():
             return FileAsset.EntityTypeContext.RELEASE_COMMENT_DESCRIPTION
 
@@ -635,6 +640,11 @@ class ProjectAssetEndpoint(BaseAPIView):
         # 作为 path 父级；bulk 阶段再回填 release_comment_id（不需要再 rebind path）。
         if entity_type == FileAsset.EntityTypeContext.RELEASE_COMMENT_DESCRIPTION:
             return {"release_id": entity_id}
+
+        # 上传阶段 CycleComment 尚未创建，entity_identifier 是 cycle_id，先以 cycle
+        # 作为 path 父级；bulk 阶段再回填 cycle_comment_id（不需要再 rebind path）。
+        if entity_type == FileAsset.EntityTypeContext.CYCLE_COMMENT_DESCRIPTION:
+            return {"cycle_id": entity_id}
 
         return {}
 
@@ -823,6 +833,14 @@ class ProjectBulkAssetEndpoint(BaseAPIView):
             except IntegrityError:
                 pass
 
+        # CycleComment 创建完成后回填 cycle_comment_id；path 在上传时已挂到 cycle
+        # 节点下，这里不需要再 rebind（与 CYCLE_FILE 共享同一存储目录）。
+        if asset.entity_type == FileAsset.EntityTypeContext.CYCLE_COMMENT_DESCRIPTION:
+            try:
+                assets.update(cycle_comment_id=entity_id)
+            except IntegrityError:
+                pass
+
         if needs_rebind:
             refreshed_assets = list(
                 FileAsset.objects.filter(id__in=asset_ids, workspace__slug=slug)
@@ -876,6 +894,9 @@ class DuplicateAssetEndpoint(BaseAPIView):
         # Comment Description
         if entity_type == FileAsset.EntityTypeContext.COMMENT_DESCRIPTION:
             return {"comment_id": entity_id}
+
+        if entity_type == FileAsset.EntityTypeContext.CYCLE_COMMENT_DESCRIPTION:
+            return {"cycle_id": entity_id}
 
         if entity_type == FileAsset.EntityTypeContext.RELEASE_COMMENT_DESCRIPTION:
             return {"release_id": entity_id}

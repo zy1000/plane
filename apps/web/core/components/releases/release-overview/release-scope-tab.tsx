@@ -343,7 +343,7 @@ export const ReleaseFilesSection: React.FC<FilesSectionProps> = ({
       ) : files.length === 0 && uploadStatuses.length === 0 ? (
         <TableEmpty hint="暂无附件" />
       ) : (
-        <div className="min-h-0 flex-1 overflow-x-auto">
+        <div className="min-h-0 flex-1 overflow-x-auto overflow-y-auto vertical-scrollbar scrollbar-sm">
           <table className="min-w-full table-fixed">
             <thead>
               <tr className={TABLE_HEAD_CLASS}>

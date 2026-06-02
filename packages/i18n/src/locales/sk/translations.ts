@@ -2041,6 +2041,7 @@ export default {
     add_cycle: "Pridať cyklus",
     more_details: "Viac detailov",
     tab_iteration_scope: "Rozsah iterácie",
+    tab_display: "Display",
     cycle: "Cyklus",
     update_cycle: "Aktualizovať cyklus",
     create_cycle: "Vytvoriť cyklus",

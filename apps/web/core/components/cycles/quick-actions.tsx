@@ -32,6 +32,7 @@ import { useAppRouter } from "@/hooks/use-app-router";
 import { ArchiveCycleModal } from "./archived-cycles/modal";
 import { CycleDeleteModal } from "./delete-modal";
 import { CycleCreateUpdateModal } from "./modal";
+import { formatCycleUpdateError } from "./use-cycle-error-message";
 
 type Props = {
   parentRef: React.RefObject<HTMLElement>;
@@ -77,7 +78,7 @@ export const CycleQuickActions = observer(function CycleQuickActions(props: Prop
     });
   const handleOpenInNewTab = () => window.open(`/${cycleLink}`, "_blank");
 
-  const handleUpdateCycleStatus = async (nextStatus: "in_progress" | "completed" | "cancelled") => {
+  const handleUpdateCycleStatus = async (nextStatus: "in_progress" | "testing" | "completed" | "cancelled") => {
     if (!cycleDetails) return;
     if (cycleDetails.status === nextStatus) return;
 
@@ -95,11 +96,12 @@ export const CycleQuickActions = observer(function CycleQuickActions(props: Prop
           },
         });
       })
-      .catch(() => {
+      .catch((err) => {
+        const { title, message } = formatCycleUpdateError(err);
         setToast({
           type: TOAST_TYPE.ERROR,
-          title: t("project_cycles.action.update.failed.title"),
-          message: t("something_went_wrong_please_try_again"),
+          title,
+          message,
         });
         captureError({
           eventName: CYCLE_TRACKER_EVENTS.update,
@@ -138,6 +140,7 @@ export const CycleQuickActions = observer(function CycleQuickActions(props: Prop
     canDeleteSprint,
     canArchiveSprint,
     handleEdit: () => setUpdateModal(true),
+    handleMarkAsTesting: () => handleUpdateCycleStatus("testing"),
     handleMarkAsCompleted: () => handleUpdateCycleStatus("completed"),
     handleMarkAsCancelled: () => handleUpdateCycleStatus("cancelled"),
     handleMarkAsInProgress: () => handleUpdateCycleStatus("in_progress"),

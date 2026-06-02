@@ -36,12 +36,12 @@ const normalizeCycleStatus = (status: string | null | undefined): TCycleGroups |
   const map: Record<string, TCycleGroups> = {
     未开始: "not_started",
     进行中: "in_progress",
-    已延期: "delayed",
+    测试中: "testing",
     已完成: "completed",
     已取消: "cancelled",
     not_started: "not_started",
     in_progress: "in_progress",
-    delayed: "delayed",
+    testing: "testing",
     completed: "completed",
     cancelled: "cancelled",
     canceled: "cancelled",
@@ -65,18 +65,18 @@ const normalizeOutgoingCyclePatchForApi = (data: Partial<ICycle>): Partial<ICycl
   const map: Record<string, string> = {
     未开始: "未开始",
     进行中: "进行中",
-    已延期: "已延期",
+    测试中: "测试中",
     已完成: "已完成",
     已取消: "已取消",
     not_started: "未开始",
     in_progress: "进行中",
-    delayed: "已延期",
+    testing: "测试中",
     completed: "已完成",
     cancelled: "已取消",
     canceled: "已取消",
     NOT_STARTED: "未开始",
     IN_PROGRESS: "进行中",
-    DELAYED: "已延期",
+    TESTING: "测试中",
     COMPLETED: "已完成",
     CANCELLED: "已取消",
     CANCELED: "已取消",
@@ -671,6 +671,7 @@ export class CycleStore implements ICycleStore {
    */
   updateCycleDetails = async (workspaceSlug: string, projectId: string, cycleId: string, data: Partial<ICycle>) => {
     const normalizedPatch = normalizeIncomingCyclePatch(data);
+    const previousCycleDetails = this.cycleMap?.[cycleId] ? { ...this.cycleMap[cycleId] } : undefined;
 
     try {
       runInAction(() => {
@@ -682,8 +683,10 @@ export class CycleStore implements ICycleStore {
       return response;
     } catch (error) {
       console.log("Failed to patch cycle from cycle store");
-      void this.fetchAllCycles(workspaceSlug, projectId);
-      void this.fetchActiveCycle(workspaceSlug, projectId);
+      runInAction(() => {
+        if (previousCycleDetails) set(this.cycleMap, [cycleId], previousCycleDetails);
+      });
+      void this.fetchCycleDetails(workspaceSlug, projectId, cycleId);
       throw error;
     }
   };

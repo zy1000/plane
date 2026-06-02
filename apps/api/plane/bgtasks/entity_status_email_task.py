@@ -43,7 +43,6 @@ from plane.utils.exception_logger import log_exception
 # Only terminal/abnormal states trigger broadcasts. Keep in sync with
 # ``plane.utils.cycle_status.CYCLE_STATUS_EMAIL_WHITELIST``.
 CYCLE_STATUS_EMAIL_WHITELIST = {
-    Cycle.Status.DELAYED,
     Cycle.Status.COMPLETED,
     Cycle.Status.CANCELLED,
 }
@@ -57,7 +56,7 @@ RELEASE_STATUS_EMAIL_WHITELIST = {
 CYCLE_STATUS_LABELS = {
     Cycle.Status.NOT_STARTED: "未开始",
     Cycle.Status.IN_PROGRESS: "进行中",
-    Cycle.Status.DELAYED: "已延期",
+    Cycle.Status.TESTING: "测试中",
     Cycle.Status.COMPLETED: "已完成",
     Cycle.Status.CANCELLED: "已取消",
 }
