@@ -1,9 +1,13 @@
+import json
+
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.response import Response
 
 from .. import BaseViewSet
 from plane.app.permissions import allow_fine_permission, PermissionKey
 from plane.app.serializers import CycleCommentSerializer
+from plane.bgtasks.cycle_activities_task import cycle_activity as cycle_activity_task
 from plane.db.models import CycleComment
 
 
@@ -38,7 +42,19 @@ class CycleCommentViewSet(BaseViewSet):
                 cycle_id=cycle_id,
                 actor=request.user,
             )
-            # TODO: 阶段三接入 CycleActivity 后，在此投递 cycle_comment.activity.created
+            comment_payload = {
+                "id": str(serializer.data.get("id")),
+                "comment_html": serializer.data.get("comment_html"),
+            }
+            cycle_activity_task.delay(
+                type="cycle_comment.activity.created",
+                requested_data=json.dumps(comment_payload),
+                current_instance=None,
+                cycle_id=str(cycle_id),
+                actor_id=str(request.user.id),
+                project_id=str(project_id),
+                epoch=int(timezone.now().timestamp()),
+            )
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -59,6 +75,20 @@ class CycleCommentViewSet(BaseViewSet):
                 {"error": "Only the comment author can delete this comment."},
                 status=status.HTTP_403_FORBIDDEN,
             )
+        comment_snapshot = json.dumps(
+            {
+                "id": str(cycle_comment.id),
+                "comment_html": cycle_comment.comment_html,
+            }
+        )
         cycle_comment.delete()
-        # TODO: 阶段三接入 CycleActivity 后，在此投递 cycle_comment.activity.deleted
+        cycle_activity_task.delay(
+            type="cycle_comment.activity.deleted",
+            requested_data=None,
+            current_instance=comment_snapshot,
+            cycle_id=str(cycle_id),
+            actor_id=str(request.user.id),
+            project_id=str(project_id),
+            epoch=int(timezone.now().timestamp()),
+        )
         return Response(status=status.HTTP_204_NO_CONTENT)

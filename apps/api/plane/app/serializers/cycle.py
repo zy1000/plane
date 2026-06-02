@@ -11,6 +11,7 @@ from .issue import IssueStateSerializer
 from .user import UserLiteSerializer
 from plane.db.models import (
     Cycle,
+    CycleActivity,
     CycleComment,
     CycleIssue,
     CycleOverdueRecord,
@@ -196,3 +197,31 @@ class CycleCommentSerializer(BaseSerializer):
             "created_at",
             "updated_at",
         ]
+
+
+class CycleActivitySerializer(BaseSerializer):
+    actor_detail = UserLiteSerializer(read_only=True, source="actor")
+
+    class Meta:
+        model = CycleActivity
+        fields = [
+            "id",
+            "workspace",
+            "project",
+            "cycle",
+            "actor",
+            "actor_detail",
+            "verb",
+            "field",
+            "old_value",
+            "new_value",
+            "old_identifier",
+            "new_identifier",
+            "comment",
+            "cycle_comment",
+            "epoch",
+            "extra",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = fields

@@ -116,6 +116,7 @@ from .cycle.base import (
     CycleCancelPlanAssociationEndpoint,
 )
 from .cycle.issue import CycleIssueViewSet
+from .cycle.activity import CycleActivityEndpoint
 from .cycle.archive import CycleArchiveUnarchiveEndpoint
 from .cycle.file import CycleFileAPI
 from .cycle.comment import CycleCommentViewSet

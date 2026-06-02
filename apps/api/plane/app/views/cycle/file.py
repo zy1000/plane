@@ -4,6 +4,8 @@
 上传与统一桶下的 ``{ws}/{proj}/cycle/{cycle_id}/`` 路径。
 """
 
+import json
+
 from django.conf import settings
 from django.utils import timezone
 from rest_framework import status
@@ -12,6 +14,7 @@ from rest_framework.response import Response
 
 from plane.app.permissions import allow_fine_permission, PermissionKey
 from plane.app.views.base import BaseViewSet
+from plane.bgtasks.cycle_activities_task import cycle_activity as cycle_activity_task
 from plane.bgtasks.storage_metadata_task import get_asset_object_metadata
 from plane.db.models import Cycle, FileAsset, Workspace
 from plane.settings.storage import S3Storage
@@ -94,6 +97,19 @@ class CycleFileAPI(BaseViewSet):
         if attributes:
             asset.attributes = attributes
         asset.save(update_fields=["is_uploaded", "attributes"])
+
+        cycle_id = getattr(asset, "cycle_id", None)
+        if cycle_id:
+            file_name = (asset.attributes or {}).get("name") or ""
+            cycle_activity_task.delay(
+                type="cycle_attachment.activity.created",
+                requested_data=None,
+                current_instance=json.dumps({"id": str(asset.id), "name": file_name}),
+                cycle_id=str(cycle_id),
+                actor_id=str(request.user.id),
+                project_id=str(project_id),
+                epoch=int(timezone.now().timestamp()),
+            )
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(detail=False, methods=["get"], url_path="list")
@@ -135,6 +151,20 @@ class CycleFileAPI(BaseViewSet):
         asset.is_deleted = True
         asset.deleted_at = timezone.now()
         asset.save(update_fields=["is_deleted", "deleted_at"])
+
+        cycle_id = getattr(asset, "cycle_id", None)
+        if cycle_id:
+            file_name = (asset.attributes or {}).get("name") or ""
+            cycle_activity_task.delay(
+                type="cycle_attachment.activity.deleted",
+                requested_data=None,
+                current_instance=json.dumps({"id": str(asset.id), "name": file_name}),
+                cycle_id=str(cycle_id),
+                actor_id=str(request.user.id),
+                project_id=str(project_id),
+                epoch=int(timezone.now().timestamp()),
+            )
+
         # 物理删除对象，避免 MinIO 累积孤儿
         try:
             storage = S3Storage(request=request)

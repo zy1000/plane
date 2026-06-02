@@ -27,6 +27,8 @@ import type { ICycleFilterStore } from "./cycle_filter.store";
 import { CycleFilterStore } from "./cycle_filter.store";
 import type { ICycleCommentStore } from "./cycle-comment.store";
 import { CycleCommentStore } from "./cycle-comment.store";
+import type { ICycleActivityStore } from "./cycle-activity.store";
+import { CycleActivityStore } from "./cycle-activity.store";
 import type { IDashboardStore } from "./dashboard.store";
 import { DashboardStore } from "./dashboard.store";
 import type { IEditorAssetStore } from "./editor/asset.store";
@@ -88,6 +90,7 @@ export class CoreRootStore {
   cycle: ICycleStore;
   cycleFilter: ICycleFilterStore;
   cycleComment: ICycleCommentStore;
+  cycleActivity: ICycleActivityStore;
   module: IModuleStore;
   moduleFilter: IModuleFilterStore;
   releaseFilter: IReleaseFilterStore;
@@ -129,6 +132,7 @@ export class CoreRootStore {
     this.cycle = new CycleStore(this);
     this.cycleFilter = new CycleFilterStore(this);
     this.cycleComment = new CycleCommentStore(this);
+    this.cycleActivity = new CycleActivityStore(this);
     this.module = new ModulesStore(this);
     this.moduleFilter = new ModuleFilterStore(this);
     this.releaseFilter = new ReleaseFilterStore(this);
@@ -168,6 +172,7 @@ export class CoreRootStore {
     this.cycle = new CycleStore(this);
     this.cycleFilter = new CycleFilterStore(this);
     this.cycleComment = new CycleCommentStore(this);
+    this.cycleActivity = new CycleActivityStore(this);
     this.module = new ModulesStore(this);
     this.moduleFilter = new ModuleFilterStore(this);
     this.releaseFilter = new ReleaseFilterStore(this);

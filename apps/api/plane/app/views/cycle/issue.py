@@ -21,6 +21,7 @@ from rest_framework.response import Response
 from .. import BaseViewSet
 from plane.app.serializers import CycleIssueSerializer
 from plane.bgtasks.issue_activities_task import issue_activity
+from plane.bgtasks.cycle_activities_task import cycle_activity as cycle_activity_task
 from plane.db.models import Cycle, CycleIssue, Issue, FileAsset, IssueLink, ModuleIssue
 from plane.utils.grouper import (
     issue_group_values,
@@ -319,6 +320,20 @@ class CycleIssueViewSet(BaseViewSet):
             notification=True,
             origin=base_host(request=request, is_app=True),
         )
+        issue_names = list(
+            Issue.objects.filter(pk__in=issues).values_list("name", flat=True)
+        )
+        cycle_activity_task.delay(
+            type="cycle_issue.activity.created",
+            requested_data=json.dumps(
+                {"issue_names": issue_names, "count": len(issues)}
+            ),
+            current_instance=None,
+            cycle_id=str(cycle_id),
+            actor_id=str(request.user.id),
+            project_id=str(project_id),
+            epoch=int(timezone.now().timestamp()),
+        )
         # 对应模块添加工作项
         if cycle.module:
             for issue_id in issues:
@@ -358,6 +373,24 @@ class CycleIssueViewSet(BaseViewSet):
             epoch=int(timezone.now().timestamp()),
             notification=True,
             origin=base_host(request=request, is_app=True),
+        )
+        issue_name = (
+            Issue.objects.filter(pk=issue_id).values_list("name", flat=True).first()
+            or ""
+        )
+        cycle_activity_task.delay(
+            type="cycle_issue.activity.deleted",
+            requested_data=None,
+            current_instance=json.dumps(
+                {
+                    "issue_names": [issue_name] if issue_name else [],
+                    "count": 1,
+                }
+            ),
+            cycle_id=str(cycle_id),
+            actor_id=str(request.user.id),
+            project_id=str(project_id),
+            epoch=int(timezone.now().timestamp()),
         )
         cycle_issue.delete()
 

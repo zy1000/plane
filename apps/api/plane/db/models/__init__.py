@@ -8,6 +8,7 @@ from .asset import FileAsset, File
 from .base import BaseModel
 from .cycle import (
     Cycle,
+    CycleActivity,
     CycleComment,
     CycleIssue,
     CycleUserProperties,

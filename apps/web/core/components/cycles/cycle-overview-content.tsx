@@ -31,7 +31,6 @@ import {
   AlertTriangle,
   ClipboardList,
   LineChart,
-  MessageSquare,
   Pencil,
   Unlink,
 } from "lucide-react";
@@ -46,7 +45,7 @@ import { Loader, Avatar, AvatarGroup, Button, CircularProgressIndicator, CustomS
 import { cn, getFileURL, calculateCycleProgress, getDate, toFilterArray } from "@plane/utils";
 import { OverdueByAssigneeCard } from "@/components/common/overdue-by-assignee-card";
 import { FileUploadProgressList } from "@/components/common/file-upload-progress-item";
-import { CycleCommentsSection } from "@/components/cycles/cycle-comments";
+import { CycleActivityTab } from "@/components/cycles/cycle-activity-tab";
 import { CycleDescriptionFullscreenModal } from "@/components/cycles/cycle-description-fullscreen-modal";
 import { CycleOverviewFullscreenModal } from "@/components/cycles/cycle-overview-fullscreen-modal";
 import { formatCycleUpdateError } from "@/components/cycles/use-cycle-error-message";
@@ -977,16 +976,7 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
           </div>
         </div>
 
-        {/* Comments */}
-        <div className={`${sectionCard} flex min-h-[440px] flex-col overflow-hidden`}>
-          <div className="flex items-center gap-2 px-4 pt-4 pb-2">
-            <MessageSquare className="h-3.5 w-3.5 text-placeholder" />
-            <span className="text-sm font-medium text-primary">评论</span>
-          </div>
-          <div className="min-h-0 flex-1">
-            <CycleCommentsSection workspaceSlug={workspaceSlug} projectId={projectId} cycleId={cycleId} />
-          </div>
-        </div>
+        <CycleActivityTab workspaceSlug={workspaceSlug} projectId={projectId} cycleId={cycleId} />
       </div>
 
       <CycleDescriptionFullscreenModal

@@ -65,6 +65,7 @@ from plane.utils.cycle_transfer_issues import transfer_cycle_issues
 from plane.utils.cycle_status import CYCLE_STATUS_EMAIL_WHITELIST
 from .. import BaseAPIView, BaseViewSet
 from plane.bgtasks.webhook_task import model_activity
+from plane.bgtasks.cycle_activities_task import cycle_activity as cycle_activity_task
 from plane.bgtasks.entity_status_email_task import dispatch_cycle_status_email
 from plane.utils.cycle.overdue_strategy import (
     scan_cycles_for_overdue,
@@ -387,6 +388,15 @@ class CycleViewSet(BaseViewSet):
                     slug=slug,
                     origin=base_host(request=request, is_app=True),
                 )
+                cycle_activity_task.delay(
+                    type="cycle.activity.created",
+                    requested_data=json.dumps(request.data, cls=DjangoJSONEncoder),
+                    current_instance=None,
+                    cycle_id=str(cycle["id"]),
+                    actor_id=str(request.user.id),
+                    project_id=str(project_id),
+                    epoch=int(timezone.now().timestamp()),
+                )
                 return Response(cycle, status=status.HTTP_201_CREATED)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         else:
@@ -484,6 +494,15 @@ class CycleViewSet(BaseViewSet):
                 actor_id=request.user.id,
                 slug=slug,
                 origin=base_host(request=request, is_app=True),
+            )
+            cycle_activity_task.delay(
+                type="cycle.activity.updated",
+                requested_data=json.dumps(request.data, cls=DjangoJSONEncoder),
+                current_instance=current_instance,
+                cycle_id=str(cycle["id"]),
+                actor_id=str(request.user.id),
+                project_id=str(project_id),
+                epoch=int(timezone.now().timestamp()),
             )
 
             new_status = cycle.get("status")
@@ -614,6 +633,15 @@ class CycleViewSet(BaseViewSet):
             epoch=int(timezone.now().timestamp()),
             notification=True,
             origin=base_host(request=request, is_app=True),
+        )
+        cycle_activity_task.delay(
+            type="cycle.activity.deleted",
+            requested_data=None,
+            current_instance=json.dumps({"name": cycle.name}),
+            cycle_id=str(pk),
+            actor_id=str(request.user.id),
+            project_id=str(project_id),
+            epoch=int(timezone.now().timestamp()),
         )
         # TODO: Soft delete the cycle break the onetoone relationship with cycle issue
         cycle.delete()

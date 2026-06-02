@@ -189,6 +189,45 @@ class CycleComment(ProjectBaseModel):
         return f"{self.cycle_id} {self.actor_id}"
 
 
+class CycleActivity(ProjectBaseModel):
+    cycle = models.ForeignKey(
+        Cycle,
+        on_delete=models.CASCADE,
+        related_name="cycle_activities",
+    )
+    verb = models.CharField(max_length=255, verbose_name="Action", default="created")
+    field = models.CharField(max_length=255, verbose_name="Field Name", blank=True, null=True)
+    old_value = models.TextField(verbose_name="Old Value", blank=True, null=True)
+    new_value = models.TextField(verbose_name="New Value", blank=True, null=True)
+    comment = models.TextField(verbose_name="Comment", blank=True)
+    cycle_comment = models.ForeignKey(
+        "db.CycleComment",
+        on_delete=models.SET_NULL,
+        related_name="cycle_comment_activities",
+        null=True,
+        blank=True,
+    )
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="cycle_activities",
+    )
+    old_identifier = models.UUIDField(null=True)
+    new_identifier = models.UUIDField(null=True)
+    epoch = models.FloatField(null=True)
+    extra = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        verbose_name = "Cycle Activity"
+        verbose_name_plural = "Cycle Activities"
+        db_table = "cycle_activities"
+        ordering = ("-created_at",)
+        indexes = [
+            models.Index(fields=["cycle", "created_at"], name="cycle_activity_cycle_ts"),
+        ]
+
+
 class CycleIssue(ProjectBaseModel):
     """
     Cycle Issues

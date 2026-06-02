@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import Iterable, Optional
 
@@ -26,6 +27,36 @@ _TERMINAL_STATUSES = {
     Cycle.Status.COMPLETED,
     Cycle.Status.CANCELLED,
 }
+
+
+def _emit_overdue_activity(
+        activity_type: str,
+        *,
+        record: CycleOverdueRecord,
+) -> None:
+    try:
+        from plane.bgtasks.cycle_activities_task import cycle_activity as cycle_activity_task
+
+        actor_id = None
+        if record.triggered_by == CycleOverdueTrigger.USER:
+            updater = getattr(record, "updated_by_id", None) or getattr(record, "created_by_id", None)
+            if updater:
+                actor_id = str(updater)
+
+        cycle_activity_task.delay(
+            type=activity_type,
+            requested_data=json.dumps({"record_id": str(record.id)}),
+            current_instance=None,
+            cycle_id=str(record.cycle_id),
+            actor_id=actor_id,
+            project_id=str(record.project_id),
+            epoch=int(timezone.now().timestamp()),
+        )
+    except Exception:  # noqa: BLE001
+        logger.exception(
+            "emit cycle overdue activity failed",
+            extra={"cycle_id": str(record.cycle_id), "type": activity_type},
+        )
 
 
 def _to_datetime(value):
@@ -69,7 +100,7 @@ def open_overdue(
         "cycle overdue opened",
         extra={"cycle_id": str(cycle.id), "triggered_by": triggered_by},
     )
-    # TODO: 阶段三接入 CycleActivity 后，在此投递 cycle_overdue.activity.opened
+    _emit_overdue_activity("cycle_overdue.activity.opened", record=record)
     return record
 
 
@@ -86,7 +117,7 @@ def close_active_overdue(
     record.ended_at = now or timezone.now()
     record.save(update_fields=["ended_at", "updated_at"])
     logger.info("cycle overdue closed", extra={"cycle_id": str(cycle_id)})
-    # TODO: 阶段三接入 CycleActivity 后，在此投递 cycle_overdue.activity.closed
+    _emit_overdue_activity("cycle_overdue.activity.closed", record=record)
     return record
 
 
