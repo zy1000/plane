@@ -1,4 +1,5 @@
 from django.urls import path
+from rest_framework.permissions import AllowAny
 
 from plane.app.views.timesheet import TimeSheetViewSet, TimesheetCategoryListView, TimeSheetReportViewSet
 
@@ -45,5 +46,15 @@ urlpatterns = [
         "workspaces/<str:slug>/timesheets/reports/export/",
         TimeSheetReportViewSet.as_view({"get": "export_xlsx"}),
         name="timesheet-reports-export",
+    ),
+    # 公开接口：无需鉴权，直接按 month / user 导出工时数据（JSON）
+    path(
+        "timesheets/reports/export-json/",
+        TimeSheetReportViewSet.as_view(
+            {"get": "export_json"},
+            permission_classes=[AllowAny],
+            authentication_classes=[],
+        ),
+        name="timesheet-reports-export-json",
     ),
 ]

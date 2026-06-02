@@ -1,3 +1,4 @@
+import datetime
 import io
 from urllib.parse import quote
 
@@ -81,7 +82,9 @@ class TimeSheetReportViewSet(BaseViewSet):
         if category_ids := _parse_ids(params.get("category_id", "")):
             query = query.filter(category_id__in=category_ids)
 
-        category_key_raw = params.get("category_key") or params.get("category__key") or ""
+        category_key_raw = (
+            params.get("category_key") or params.get("category__key") or ""
+        )
         if category_keys := _parse_ids(category_key_raw):
             query = query.filter(category__key__in=category_keys)
 
@@ -200,3 +203,97 @@ class TimeSheetReportViewSet(BaseViewSet):
             f"attachment; filename*=UTF-8''{quote(filename)}"
         )
         return response
+
+    @staticmethod
+    def _resolve_month_range(month_param):
+        """把 YYYY-MM 解析为 [当月1号, 下月1号) 的左闭右开区间。
+
+        month_param 为空时回落到当前月份。解析失败抛出 ValueError，由调用方转 400。
+        """
+        if month_param:
+            year_str, month_str = month_param.split("-")
+            first_day = datetime.date(int(year_str), int(month_str), 1)
+        else:
+            today = timezone.now().date()
+            first_day = today.replace(day=1)
+
+        if first_day.month == 12:
+            next_month_first = datetime.date(first_day.year + 1, 1, 1)
+        else:
+            next_month_first = datetime.date(first_day.year, first_day.month + 1, 1)
+        return first_day, next_month_first
+
+    @staticmethod
+    def _serialize_record(record):
+        """将单条工时记录序列化为英文 key 的字典，与导出列保持一致。"""
+        member = record.member
+        employee_id = ""
+        department = ""
+        if record.member_id:
+            try:
+                extra_info = member.extra_info
+            except Exception:
+                extra_info = None
+            if extra_info is not None:
+                employee_id = getattr(extra_info, "employee_id", "") or ""
+                department = getattr(extra_info, "department", "") or ""
+
+        return {
+            "pms_project_name": record.project.pms_project_name or "",
+            "issue_name": record.issue.name if record.issue_id else "",
+            "case_name": record.test_case.name if record.test_case_id else "",
+            "member_name": (
+                getattr(member, "display_name", "")
+                or getattr(member, "email", "")
+                or ""
+            ),
+            "employee_id": employee_id,
+            "department": department,
+            "date": record.date.strftime("%Y-%m-%d") if record.date else "",
+            "start_time": (
+                record.start_time.strftime("%H:%M") if record.start_time else ""
+            ),
+            "end_time": record.end_time.strftime("%H:%M") if record.end_time else "",
+            "hours": str(record.hours) if record.hours is not None else "",
+            "category": "项目工时",
+            "description": record.description or "",
+        }
+
+    @action(detail=False, methods=["get"], url_path="export-json")
+    def export_json(self, request):
+        """公开接口（无需鉴权）：按月份与用户名导出用户填报的工时数据，返回 JSON。
+
+        查询参数：
+          - month: 形如 2026-06，控制导出哪个月的数据；不传默认当前月份。
+          - user:  用户显示名（display_name），模糊匹配；不传默认全部用户。
+        """
+        month_param = (request.query_params.get("month") or "").strip()
+        try:
+            first_day, next_month_first = self._resolve_month_range(month_param)
+        except (ValueError, TypeError):
+            return Response(
+                {"error": "month 参数格式不正确，应为 YYYY-MM，例如 2026-06。"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        queryset = self.get_queryset().filter(
+            date__gte=first_day, date__lt=next_month_first
+        )
+
+        user_param = (request.query_params.get("user") or "").strip()
+        if user_param:
+            queryset = queryset.filter(member__display_name__icontains=user_param)
+
+        queryset = queryset.order_by("-date", "-start_time", "-id")
+
+        results = [self._serialize_record(item) for item in queryset.iterator()]
+
+        return Response(
+            {
+                "month": first_day.strftime("%Y-%m"),
+                "user": user_param or None,
+                "count": len(results),
+                "results": results,
+            },
+            status=status.HTTP_200_OK,
+        )
