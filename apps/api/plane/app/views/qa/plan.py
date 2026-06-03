@@ -468,18 +468,7 @@ class PlanModuleCountAPIView(BaseAPIView):
 class PlanView(BaseViewSet):
     pagination_class = CustomPaginator
 
-    @action(detail=False, methods=["post"], url_path="cancel")
-    @allow_fine_permission(PermissionKey.QA_PLAN_EDIT)
-    def cancel(self, request, slug):
-        project_id = request.query_params.get("project_id")
-        qs = PlanCase.objects.filter(id__in=request.data["id"])
-        if project_id:
-            qs = qs.filter(plan__project_id=project_id)
-        qs.delete(soft=False)
-        return Response(status=status.HTTP_204_NO_CONTENT)
-
-    @action(detail=False, methods=["get"], url_path="case-list")
-    def case_list(self, request, slug):
+    def _filtered_plan_case_qs(self, request):
         query = PlanCase.objects.filter(plan_id=request.query_params["plan_id"])
         if name := request.query_params.get("name__icontains"):
             query = query.filter(case__name__icontains=name)
@@ -533,10 +522,58 @@ class PlanView(BaseViewSet):
                     expanded.update(new_children)
                     frontier = new_children
                 query = query.filter(case__module_id__in=list(expanded))
+        return query
+
+    @action(detail=False, methods=["post"], url_path="cancel")
+    @allow_fine_permission(PermissionKey.QA_PLAN_EDIT)
+    def cancel(self, request, slug):
+        project_id = request.query_params.get("project_id")
+        qs = PlanCase.objects.filter(id__in=request.data["id"])
+        if project_id:
+            qs = qs.filter(plan__project_id=project_id)
+        qs.delete(soft=False)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=False, methods=["get"], url_path="case-list")
+    def case_list(self, request, slug):
+        query = self._filtered_plan_case_qs(request)
         paginator = self.pagination_class()
         paginated_queryset = paginator.paginate_queryset(query, request)
         serializer = PlanCaseCardSerializer(instance=paginated_queryset, many=True)
         return list_response(data=serializer.data, count=query.count())
+
+    @action(detail=False, methods=["get"], url_path="case-locate")
+    def case_locate(self, request, slug):
+        case_id = request.query_params.get("case_id")
+        try:
+            page_size = int(
+                request.query_params.get("page_size") or self.pagination_class.page_size
+            )
+        except (TypeError, ValueError):
+            page_size = self.pagination_class.page_size
+        if page_size <= 0:
+            page_size = self.pagination_class.page_size
+
+        if not case_id:
+            return Response(
+                {"page": 1, "index": -1, "page_size": page_size},
+                status=status.HTTP_200_OK,
+            )
+
+        query = self._filtered_plan_case_qs(request)
+        case_ids = [str(cid) for cid in query.values_list("case_id", flat=True)]
+        try:
+            index = case_ids.index(str(case_id))
+        except ValueError:
+            return Response(
+                {"page": 1, "index": -1, "page_size": page_size},
+                status=status.HTTP_200_OK,
+            )
+
+        return Response(
+            {"page": index // page_size + 1, "index": index, "page_size": page_size},
+            status=status.HTTP_200_OK,
+        )
 
     @action(detail=False, methods=["post"], url_path="execute")
     def execute(self, request, slug):

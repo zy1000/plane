@@ -6,7 +6,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { PageHead } from "@/components/core/page-title";
 import { Breadcrumbs } from "@plane/ui";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
-import { Row, Col, Card, Input, Pagination, Tag, Spin, message, Button, Table, Tooltip, Radio, Select, Tree, Modal } from "antd";
+import { Row, Col, Card, Input, Pagination, Tag, Spin, message, Button, Table, Tooltip, Radio, Select, Tree, Modal, Checkbox } from "antd";
 import type { TreeProps } from "antd";
 import { AppstoreOutlined, DownOutlined } from "@ant-design/icons";
 import * as LucideIcons from "lucide-react";
@@ -95,6 +95,7 @@ export default function TestExecutionPage() {
   const [activeTab, setActiveTab] = React.useState<"basic" | "requirement" | "work" | "defect" | "history">("basic");
   const [currentCount, setCurrentCount] = React.useState<number>(0);
   const [reviewValue, setReviewValue] = React.useState<string | null>(null);
+  const [autoNext, setAutoNext] = React.useState<boolean>(true);
   const [reason, setReason] = React.useState<string>("");
   const [reasonModalOpen, setReasonModalOpen] = React.useState<boolean>(false);
   const [reasonDraft, setReasonDraft] = React.useState<string>("");
@@ -109,7 +110,7 @@ export default function TestExecutionPage() {
   const leftRef = React.useRef<HTMLDivElement | null>(null);
   const rightRef = React.useRef<HTMLDivElement | null>(null);
   const syncingRef = React.useRef<boolean>(false);
-  const restoreLeftScrollTopRef = React.useRef<number | null>(null);
+  const didInitialLocateRef = React.useRef<boolean>(false);
 
   const { preferences: projectPreferences } = useProjectNavigationPreferences();
   const topOffset = projectPreferences.navigationMode === "horizontal" ? 180 : 130;
@@ -153,16 +154,13 @@ export default function TestExecutionPage() {
     repoId: string | null = selectedRepositoryId,
     moduleId: string | null = selectedModuleId,
     autoSelectFirst?: boolean,
-    preserveScroll?: boolean
+    silent = false
   ) => {
     if (!workspaceSlug) return;
     try {
-      if (preserveScroll) {
-        restoreLeftScrollTopRef.current = leftRef.current?.scrollTop ?? 0;
-      } else {
-        restoreLeftScrollTopRef.current = null;
+      if (!silent) {
+        setListLoading(true);
       }
-      setListLoading(true);
       setError(null);
       const input = (kw ?? keyword).trim();
       const res = await planService.getPlanCaseList(String(workspaceSlug), String(planId), {
@@ -188,13 +186,45 @@ export default function TestExecutionPage() {
         }
       }
     } catch (e: any) {
-      restoreLeftScrollTopRef.current = null;
       const msg = e?.message || e?.detail || e?.error || "获取用例列表失败";
       setError(msg);
       message.error(msg);
     } finally {
-      setListLoading(false);
+      if (!silent) {
+        setListLoading(false);
+      }
     }
+  };
+
+  const fetchCasesMaybeLocate = async (
+    s = pageSize,
+    kw?: string,
+    repoId: string | null = selectedRepositoryId,
+    moduleId: string | null = selectedModuleId
+  ) => {
+    if (!workspaceSlug) return;
+    const input = (kw ?? keyword).trim();
+    if (initialCaseId && !didInitialLocateRef.current) {
+      didInitialLocateRef.current = true;
+      try {
+        const { page: locatedPage } = await planService.getPlanCasePage(
+          String(workspaceSlug),
+          String(planId),
+          {
+            case_id: String(initialCaseId),
+            page_size: s,
+            ...(repoId ? { repository_id: repoId } : {}),
+            ...(moduleId ? { module_id: moduleId } : {}),
+            ...(input ? { name__icontains: input } : {}),
+          }
+        );
+        await fetchCases(locatedPage, s, kw, repoId, moduleId);
+        return;
+      } catch {
+        // 定位失败时回退到第一页
+      }
+    }
+    await fetchCases(1, s, kw, repoId, moduleId);
   };
 
   const fetchEnums = async () => {
@@ -311,24 +341,11 @@ export default function TestExecutionPage() {
   }, [planId, workspaceSlug, projectId]);
 
   React.useEffect(() => {
-    if (listLoading) return;
-    const top = restoreLeftScrollTopRef.current;
-    if (top === null) return;
-    if (typeof window === "undefined") return;
-    const raf = window.requestAnimationFrame(() => {
-      if (leftRef.current) {
-        leftRef.current.scrollTop = top;
-      }
-      restoreLeftScrollTopRef.current = null;
-    });
-    return () => window.cancelAnimationFrame(raf);
-  }, [listLoading]);
-
-  React.useEffect(() => {
     setSelectedTreeKey("root");
     setSelectedRepositoryId(null);
     setSelectedModuleId(null);
-    fetchCases(1, pageSize, undefined, null, null);
+    didInitialLocateRef.current = false;
+    fetchCasesMaybeLocate(pageSize, undefined, null, null);
     fetchPlanTree();
     fetchEnums();
     if (workspaceSlug) {
@@ -339,11 +356,21 @@ export default function TestExecutionPage() {
         message.error(msg);
       }
     }
-  }, [workspaceSlug, planId]);
+  }, [workspaceSlug, planId, initialCaseId]);
 
   React.useEffect(() => {
     if (initialCaseId) fetchCaseDetail(initialCaseId);
   }, [initialCaseId]);
+
+  React.useEffect(() => {
+    if (!selectedCaseId) return;
+    const container = leftRef.current;
+    if (!container) return;
+    const el = container.querySelector(`[data-case-id="${selectedCaseId}"]`);
+    if (el) {
+      (el as HTMLElement).scrollIntoView({ block: "nearest" });
+    }
+  }, [selectedCaseId, cases]);
 
   const debouncedSearch = React.useMemo(
     () =>
@@ -534,6 +561,42 @@ export default function TestExecutionPage() {
     setReason("");
   }, [selectedCaseId, cases, currentUser?.id, enumsData?.plan_case_result]);
 
+  const casesRef = React.useRef(cases);
+  const selectedCaseIdRef = React.useRef(selectedCaseId);
+  const pageRef = React.useRef(page);
+  const pageSizeRef = React.useRef(pageSize);
+  const totalRef = React.useRef(total);
+  const autoNextRef = React.useRef(autoNext);
+  React.useEffect(() => {
+    casesRef.current = cases;
+    selectedCaseIdRef.current = selectedCaseId;
+    pageRef.current = page;
+    pageSizeRef.current = pageSize;
+    totalRef.current = total;
+    autoNextRef.current = autoNext;
+  });
+
+  const goToNextCase = async () => {
+    const list = casesRef.current;
+    const curId = String(selectedCaseIdRef.current || "");
+    const idx = list.findIndex((item) => String(item.case) === curId);
+    if (idx >= 0 && idx < list.length - 1) {
+      const next = list[idx + 1];
+      const nextCaseId = String(next.case);
+      setSelectedCaseId(nextCaseId);
+      await fetchCaseDetail(nextCaseId);
+      return;
+    }
+    const totalPages = Math.max(1, Math.ceil(totalRef.current / pageSizeRef.current));
+    if (pageRef.current < totalPages) {
+      await fetchCases(pageRef.current + 1, pageSizeRef.current, keyword, selectedRepositoryId, selectedModuleId, true, true);
+      return;
+    }
+    message.warning("已是最后一条用例");
+  };
+  const goToNextCaseRef = React.useRef(goToNextCase);
+  goToNextCaseRef.current = goToNextCase;
+
   const getErrorMessage = (e: any, fallback: string) => {
     if (!e) return fallback;
     if (typeof e === "string") return e;
@@ -595,8 +658,15 @@ export default function TestExecutionPage() {
           setReason("");
           setStepActualResultMap({});
           setStepExecResultMap({});
-          await fetchCases(page, pageSize, keyword, selectedRepositoryId, selectedModuleId, undefined, true);
-          await fetchCaseDetail(String(selectedCaseId));
+          await fetchCases(page, pageSize, keyword, selectedRepositoryId, selectedModuleId, false, true);
+          if (autoNextRef.current) {
+            await goToNextCaseRef.current();
+          } else {
+            const activeCaseId = String(selectedCaseIdRef.current || "");
+            if (activeCaseId) {
+              await fetchCaseDetail(activeCaseId);
+            }
+          }
         } catch (e: any) {
           const msg = getErrorMessage(e, "请稍后重试");
           message.error(msg.startsWith("执行失败") ? msg : `执行失败：${msg}`);
@@ -1012,6 +1082,7 @@ export default function TestExecutionPage() {
                         return (
                           <Card
                             key={item.id}
+                            data-case-id={caseId}
                             bordered
                             hoverable
                             onClick={() => {
@@ -1425,6 +1496,9 @@ export default function TestExecutionPage() {
                           >
                             {submitLoading ? "提交中..." : "提交结果"}
                           </button>
+                          <Checkbox checked={autoNext} onChange={(e) => setAutoNext(e.target.checked)}>
+                            执行后自动切换下一条
+                          </Checkbox>
                           <Tooltip title="为当前用例创建一个缺陷工作项">
                             <button
                               type="button"
