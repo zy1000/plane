@@ -51,7 +51,9 @@ export function CycleButtonContent(props: CycleButtonContentProps) {
         <div className="relative flex max-w-full items-center gap-1">
           {!hideIcon && <CycleIcon className="h-3 w-3 flex-shrink-0" />}
           {(selectedName || !!placeholder) && (
-            <div className="min-w-0 flex-1 truncate text-left">{selectedName ?? placeholder}</div>
+            <div className="min-w-0 flex-1 truncate text-left text-body-xs-medium leading-5">
+              {selectedName ?? placeholder}
+            </div>
           )}
         </div>
         {dropdownArrow && (
@@ -105,7 +107,9 @@ export function CycleButtonContent(props: CycleButtonContentProps) {
   return (
     <>
       {!hideIcon && <CycleIcon className="h-3 w-3 flex-shrink-0" />}
-      {!hideText && <span className="min-w-0 flex-1 truncate text-left">{placeholder}</span>}
+      {!hideText && (
+        <span className="min-w-0 flex-1 truncate text-left text-body-xs-medium leading-5">{placeholder}</span>
+      )}
       {dropdownArrow && (
         <ChevronDownIcon className={cn("h-2.5 w-2.5 flex-shrink-0", dropdownArrowClassName)} aria-hidden="true" />
       )}

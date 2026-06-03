@@ -62,7 +62,7 @@ const NoLabel = observer(function NoLabel({ isMobile, noLabelBorder, fullWidth, 
     >
       <div
         className={cn(
-          "flex h-full items-center text-caption-md-medium text-primary",
+          "flex h-full items-center text-body-xs-medium leading-5",
           noLabelBorder
             ? "justify-start gap-1.5"
             : "justify-center gap-2 rounded-sm px-2.5 py-1 hover:bg-layer-1 border-[0.5px] border-strong",

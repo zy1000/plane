@@ -29,9 +29,13 @@ type Props = {
   isActive?: boolean;
 };
 
-// h-7 与工具条内其它药丸控件统一高度（覆盖 DropdownButton 默认 h-full）
+// 批量操作栏药丸控件统一样式（覆盖 DropdownButton 默认 h-full / text-caption-md-medium）
 const actionPillClassName =
-  "inline-flex h-7 max-h-7 shrink-0 items-center justify-start gap-1.5 rounded-md border border-subtle bg-layer-1 px-2 text-xs text-primary hover:bg-layer-1-hover transition-colors whitespace-nowrap";
+  "w-full inline-flex h-7 max-h-7 shrink-0 items-center justify-start gap-1.5 rounded-md border border-subtle bg-layer-1 px-2 text-body-xs-medium text-primary hover:bg-layer-1-hover transition-colors whitespace-nowrap";
+
+const actionPillContainerClassName = "w-full h-7";
+
+const actionPillLabelClassName = "leading-5";
 
 export const BulkOperationsActionBar = observer(function BulkOperationsActionBar(props: Props) {
   const { className, isActive = true } = props;
@@ -236,7 +240,7 @@ export const BulkOperationsActionBar = observer(function BulkOperationsActionBar
                 value={selectedStateId}
                 onChange={(stateId) => !hasMultipleTypes && setSelectedStateId(stateId)}
                 buttonVariant="transparent-with-text"
-                buttonContainerClassName="h-7"
+                buttonContainerClassName={actionPillContainerClassName}
                 buttonClassName={cn(actionPillClassName, hasMultipleTypes && "opacity-50 cursor-not-allowed")}
                 disabled={hasMultipleTypes}
               />
@@ -250,8 +254,9 @@ export const BulkOperationsActionBar = observer(function BulkOperationsActionBar
             multiple
             placeholder="Assignees"
             buttonVariant={selectedAssigneeIds.length > 1 ? "transparent-without-text" : "transparent-with-text"}
-            buttonClassName="inline-flex h-7 max-h-7 shrink-0 items-center justify-start gap-1.5 text-left rounded-md border border-subtle bg-layer-1 px-2 text-xs text-primary hover:bg-layer-1-hover transition-colors whitespace-nowrap"
-            buttonContainerClassName="w-full h-7"
+            buttonClassName={actionPillClassName}
+            buttonContainerClassName={actionPillContainerClassName}
+            labelClassName={actionPillLabelClassName}
             optionsClassName="z-[20]"
           />
           <DateDropdown
@@ -262,7 +267,8 @@ export const BulkOperationsActionBar = observer(function BulkOperationsActionBar
             placeholder="Start date"
             buttonVariant="transparent-with-text"
             buttonClassName={actionPillClassName}
-            buttonContainerClassName="w-full h-7"
+            buttonContainerClassName={actionPillContainerClassName}
+            labelClassName={actionPillLabelClassName}
             optionsClassName="z-[20]"
           />
           <DateDropdown
@@ -273,7 +279,8 @@ export const BulkOperationsActionBar = observer(function BulkOperationsActionBar
             placeholder="Due date"
             buttonVariant="transparent-with-text"
             buttonClassName={actionPillClassName}
-            buttonContainerClassName="w-full h-7"
+            buttonContainerClassName={actionPillContainerClassName}
+            labelClassName={actionPillLabelClassName}
             optionsClassName="z-[20]"
           />
           <IssuePropertyLabels
@@ -295,7 +302,7 @@ export const BulkOperationsActionBar = observer(function BulkOperationsActionBar
             disabled={false}
             placeholder="Select cycle"
             buttonVariant="transparent-with-text"
-            buttonContainerClassName="w-full h-7"
+            buttonContainerClassName={actionPillContainerClassName}
             buttonClassName={actionPillClassName}
           />
           <ModuleDropdown
@@ -305,7 +312,7 @@ export const BulkOperationsActionBar = observer(function BulkOperationsActionBar
             disabled={false}
             placeholder="Select modules"
             buttonVariant="transparent-with-text"
-            buttonContainerClassName="w-full h-7"
+            buttonContainerClassName={actionPillContainerClassName}
             buttonClassName={actionPillClassName}
             multiple
             showCount
@@ -318,13 +325,13 @@ export const BulkOperationsActionBar = observer(function BulkOperationsActionBar
             disabled={false}
             placeholder="Select releases"
             buttonVariant="transparent-with-text"
-            buttonContainerClassName="w-full h-7"
+            buttonContainerClassName={actionPillContainerClassName}
             buttonClassName={actionPillClassName}
             multiple
             showCount
             showTooltip
           />
-          
+
           {hasChanges && (
             <div className="ml-auto pl-2 border-l border-subtle">
               <Button

@@ -43,7 +43,7 @@ export function ReleaseButtonContent(props: ReleaseButtonContentProps) {
           <div className="relative flex max-w-full items-center gap-1">
             {!hideIcon && <Rocket className="h-3 w-3 flex-shrink-0" />}
             {(value.length > 0 || !!placeholder) && (
-              <div className="min-w-0 flex-1 truncate text-left">
+              <div className="min-w-0 flex-1 truncate text-left text-body-xs-medium leading-5">
                 {value.length > 0
                   ? value.length === 1
                     ? `${getReleaseById(value[0])?.name || "release"}`
@@ -102,7 +102,7 @@ export function ReleaseButtonContent(props: ReleaseButtonContentProps) {
         ) : (
           <>
             {!hideIcon && <Rocket className="h-3 w-3 flex-shrink-0" />}
-            <span className="min-w-0 flex-1 truncate text-left">{placeholder}</span>
+            <span className="min-w-0 flex-1 truncate text-left text-body-xs-medium leading-5">{placeholder}</span>
           </>
         )}
         {dropdownArrow && (
@@ -115,7 +115,7 @@ export function ReleaseButtonContent(props: ReleaseButtonContentProps) {
       <>
         {!hideIcon && <Rocket className="h-3 w-3 flex-shrink-0" />}
         {!hideText && (
-          <span className="min-w-0 flex-1 truncate text-left">
+          <span className="min-w-0 flex-1 truncate text-left text-body-xs-medium leading-5">
             {value ? getReleaseById(value)?.name : placeholder}
           </span>
         )}
