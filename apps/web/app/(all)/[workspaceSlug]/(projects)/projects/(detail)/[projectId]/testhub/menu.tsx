@@ -17,7 +17,7 @@ type TMenuItem = {
 const MENU_ITEMS: TMenuItem[] = [
   {
     key: "overview",
-    label: "测试用例库",
+    label: "测试用例",
     href: (ws, pid) => `/${ws}/projects/${pid}/testhub`,
     isActive: (pathname, ws, pid) => isTMOverviewMenuActive(pathname, ws, pid),
   },

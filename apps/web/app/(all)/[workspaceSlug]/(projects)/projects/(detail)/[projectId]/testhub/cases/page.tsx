@@ -1073,11 +1073,29 @@ export default function TestCasesPage() {
       sorter: true,
       sortOrder: ordering === "code" ? "ascend" : ordering === "-code" ? "descend" : null,
       ...getColumnSearchProps("code"),
-      render: (value: string) => (
-        <span className="block  truncate" title={value || ""}>
-          {value || "-"}
-        </span>
-      ),
+      render: (value: string, record: any) => {
+        const codeColWidth = columnWidths["code"] ?? 110;
+        const textMaxWidth = Math.max(40, codeColWidth - 20);
+        return (
+          <button
+            type="button"
+            className="inline-block max-w-full"
+            onClick={() => {
+              if (!record || !record.id) return;
+              setActiveCase(record);
+              setIsUpdateModalOpen(true);
+            }}
+          >
+            <span
+              className="block truncate"
+              style={{ maxWidth: textMaxWidth }}
+              title={value || ""}
+            >
+              {value || "-"}
+            </span>
+          </button>
+        );
+      },
     },
     {
       title: "名称",

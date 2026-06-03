@@ -26,6 +26,7 @@ from rest_framework.viewsets import ModelViewSet
 
 # Module imports
 from plane.authentication.session import BaseSessionAuthentication
+from plane.api.middleware.api_authentication import APIKeyAuthentication
 from plane.utils.exception_logger import log_exception
 from plane.utils.paginator import BasePaginator
 from plane.utils.core.mixins import ReadReplicaControlMixin
@@ -52,7 +53,9 @@ class BaseViewSet(TimezoneMixin, ReadReplicaControlMixin, ModelViewSet, BasePagi
 
     filter_backends = (DjangoFilterBackend, SearchFilter)
 
-    authentication_classes = [BaseSessionAuthentication]
+    # 浏览器请求走 session（带 Cookie），第三方请求走个人令牌（带 X-Api-Key）。
+    # DRF 按顺序逐个尝试认证器，无对应凭证的认证器返回 None，两者互不冲突。
+    authentication_classes = [BaseSessionAuthentication, APIKeyAuthentication]
 
     filterset_fields = []
 
@@ -152,7 +155,9 @@ class BaseAPIView(TimezoneMixin, ReadReplicaControlMixin, APIView, BasePaginator
 
     filter_backends = (DjangoFilterBackend, SearchFilter)
 
-    authentication_classes = [BaseSessionAuthentication]
+    # 浏览器请求走 session（带 Cookie），第三方请求走个人令牌（带 X-Api-Key）。
+    # DRF 按顺序逐个尝试认证器，无对应凭证的认证器返回 None，两者互不冲突。
+    authentication_classes = [BaseSessionAuthentication, APIKeyAuthentication]
 
     filterset_fields = []
 

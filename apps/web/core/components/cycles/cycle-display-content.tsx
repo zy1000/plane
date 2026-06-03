@@ -248,6 +248,39 @@ export const CycleDisplayContent = observer(function CycleDisplayContent(props: 
           </div>
 
           <div className={`${sectionCard} flex h-[440px] min-h-0 flex-col p-4`}>
+            <CycleSuggestedTestScope
+              workspaceSlug={workspaceSlug}
+              projectId={projectId}
+              cycleId={cycleId}
+              value={cycleDetails.suggested_test_scope}
+              canEdit={canEditCycleDescription}
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+          <div className={`${sectionCard} flex h-[380px] min-h-0 flex-col p-4`}>
+            <div className="mb-3 flex items-center gap-2">
+              <Users className="h-3.5 w-3.5 text-placeholder" />
+              <span className="text-sm font-medium text-primary">负责人工作项统计</span>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm">
+              {assigneeDistribution ? (
+                <div className="overflow-x-auto">
+                  <CycleAssigneeStatsTable
+                    rows={assigneeStatsRows}
+                    onAssigneeClick={handleAssigneeFiltersUpdate}
+                    selectedAssigneeIds={selectedAssigneeIds}
+                    isEditable={isEditable}
+                  />
+                </div>
+              ) : (
+                <div className="grid h-full place-items-center text-sm text-placeholder">{t("no_data_yet")}</div>
+              )}
+            </div>
+          </div>
+
+          <div className={`${sectionCard} flex h-[380px] min-h-0 flex-col p-4`}>
             <div className="mb-3 flex items-center gap-2">
               <LayoutList className="h-3.5 w-3.5 text-placeholder" />
               <span className="text-sm font-medium text-primary">工作项</span>
@@ -278,39 +311,6 @@ export const CycleDisplayContent = observer(function CycleDisplayContent(props: 
                 <div className="grid h-full place-items-center text-sm text-placeholder">{t("no_data_yet")}</div>
               )}
             </div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.4fr_1fr]">
-          <div className={`${sectionCard} flex h-[380px] min-h-0 flex-col p-4`}>
-            <div className="mb-3 flex items-center gap-2">
-              <Users className="h-3.5 w-3.5 text-placeholder" />
-              <span className="text-sm font-medium text-primary">负责人工作项统计</span>
-            </div>
-            <div className="min-h-0 flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm">
-              {assigneeDistribution ? (
-                <div className="overflow-x-auto">
-                  <CycleAssigneeStatsTable
-                    rows={assigneeStatsRows}
-                    onAssigneeClick={handleAssigneeFiltersUpdate}
-                    selectedAssigneeIds={selectedAssigneeIds}
-                    isEditable={isEditable}
-                  />
-                </div>
-              ) : (
-                <div className="grid h-full place-items-center text-sm text-placeholder">{t("no_data_yet")}</div>
-              )}
-            </div>
-          </div>
-
-          <div className={`${sectionCard} flex h-[380px] min-h-0 flex-col p-4`}>
-            <CycleSuggestedTestScope
-              workspaceSlug={workspaceSlug}
-              projectId={projectId}
-              cycleId={cycleId}
-              value={cycleDetails.suggested_test_scope}
-              canEdit={canEditCycleDescription}
-            />
           </div>
         </div>
 
