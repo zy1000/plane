@@ -176,6 +176,7 @@ export class PlanService extends APIService {
     workspaceSlug: string,
     plan_id: string,
     queries?: {
+      all?: boolean;
       page?: number;
       page_size?: number;
       repository_id?: string | null;
@@ -186,29 +187,6 @@ export class PlanService extends APIService {
     const params = { plan_id, ...(queries || {}) } as any;
     return this.get(`/api/workspaces/${workspaceSlug}/test/plan/case-list/`, { params })
       .then((response) => ({ data: response?.data.data ?? [], count: Number(response?.data.count || 0) }))
-      .catch((error) => {
-        throw error?.response?.data;
-      });
-  }
-
-  async getPlanCasePage(
-    workspaceSlug: string,
-    plan_id: string,
-    queries: {
-      case_id: string;
-      page_size?: number;
-      repository_id?: string | null;
-      module_id?: string | null;
-      name__icontains?: string;
-    }
-  ): Promise<{ page: number; index: number; page_size: number }> {
-    const params = { plan_id, ...queries } as any;
-    return this.get(`/api/workspaces/${workspaceSlug}/test/plan/case-locate/`, { params })
-      .then((response) => ({
-        page: Number(response?.data?.page || 1),
-        index: Number(response?.data?.index ?? -1),
-        page_size: Number(response?.data?.page_size || 10),
-      }))
       .catch((error) => {
         throw error?.response?.data;
       });

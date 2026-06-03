@@ -5,7 +5,7 @@ import { useParams, useSearchParams, useRouter, usePathname } from "next/navigat
 import { PageHead } from "@/components/core/page-title";
 import { Breadcrumbs } from "@plane/ui";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
-import { Row, Col, Card, Input, Pagination, Tag, Spin, Button, Table, Tooltip, Radio, Select, Modal, Badge, Tree, Checkbox } from "antd";
+import { Row, Col, Card, Input, Tag, Spin, Button, Table, Tooltip, Radio, Select, Modal, Badge, Tree, Checkbox } from "antd";
 import type { TreeProps } from "antd";
 import { AppstoreOutlined, CheckCircleOutlined, CloseCircleOutlined, ExclamationCircleOutlined, DownOutlined } from "@ant-design/icons";
 import debounce from "lodash-es/debounce";
@@ -66,9 +66,6 @@ export default function CaseReview() {
   const [listLoading, setListLoading] = React.useState<boolean>(false);
   const [error, setError] = React.useState<string | null>(null);
   const [cases, setCases] = React.useState<ReviewCaseRow[]>([]);
-  const [total, setTotal] = React.useState<number>(0);
-  const [page, setPage] = React.useState<number>(1);
-  const [pageSize, setPageSize] = React.useState<number>(10);
   const [keyword, setKeyword] = React.useState<string>("");
   const [selectedCaseId, setSelectedCaseId] = React.useState<string | undefined>(initialCaseId ?? undefined);
   const [expandedKeys, setExpandedKeys] = React.useState<string[] | undefined>(undefined);
@@ -78,7 +75,6 @@ export default function CaseReview() {
   const [selectedModuleId, setSelectedModuleId] = React.useState<string | null>(null);
   const [reviewTree, setReviewTree] = React.useState<any | null>(null);
   const skipNextUrlSyncedFetchRef = React.useRef(false);
-  const didInitialLocateRef = React.useRef(false);
   const listScrollRef = React.useRef<HTMLDivElement>(null);
 
   const [detailLoading, setDetailLoading] = React.useState<boolean>(false);
@@ -180,8 +176,6 @@ export default function CaseReview() {
   );
 
   const fetchCases = async (
-    p = page,
-    s = pageSize,
     kw?: string,
     moduleId: string | null = selectedModuleId,
     autoSelectFirst?: boolean,
@@ -195,8 +189,7 @@ export default function CaseReview() {
       const input = (kw ?? keyword).trim();
       const effectiveProjectId = !repositoryId && !moduleId ? (projectId ? String(projectId) : null) : null;
       const res = await reviewService.getReviewCaseList(String(workspaceSlug), String(reviewId), {
-        page: p,
-        page_size: s,
+        all: true,
         ...(effectiveProjectId ? { project_id: effectiveProjectId } : {}),
         ...(repositoryId ? { repository_id: repositoryId } : {}),
         ...(moduleId ? { module_id: moduleId } : {}),
@@ -209,9 +202,6 @@ export default function CaseReview() {
         counts[String(row.case_id ?? row.id)] = Number(row.suggestion_count || 0);
       });
       setSuggestionCounts(counts);
-      setTotal(Number(res?.count || 0));
-      setPage(p);
-      setPageSize(s);
       if (autoSelectFirst) {
         const first = nextCases?.[0];
         const firstCaseId = first?.case_id ? String(first.case_id) : undefined;
@@ -229,36 +219,6 @@ export default function CaseReview() {
     } finally {
       if (!silent) setListLoading(false);
     }
-  };
-
-  // 进入页面时,如果 URL 带 case_id(从外层列表点"评审"进来),先反查它所在页码再加载对应页,
-  // 保证选中用例落在当前页 cases 中(评审人判定正确、卡片高亮、评审区可操作)。仅首次执行一次。
-  const fetchCasesMaybeLocate = async (
-    s = pageSize,
-    kw?: string,
-    moduleId: string | null = selectedModuleId,
-    repositoryId: string | null = selectedRepositoryId
-  ) => {
-    if (initialCaseId && !didInitialLocateRef.current && workspaceSlug && reviewId) {
-      didInitialLocateRef.current = true;
-      try {
-        const input = (kw ?? keyword).trim();
-        const effectiveProjectId = !repositoryId && !moduleId ? (projectId ? String(projectId) : null) : null;
-        const { page: locatedPage } = await reviewService.getReviewCasePage(String(workspaceSlug), String(reviewId), {
-          case_id: String(initialCaseId),
-          page_size: s,
-          ...(effectiveProjectId ? { project_id: effectiveProjectId } : {}),
-          ...(repositoryId ? { repository_id: repositoryId } : {}),
-          ...(moduleId ? { module_id: moduleId } : {}),
-          ...(input ? { name__icontains: input } : {}),
-        });
-        await fetchCases(locatedPage, s, kw, moduleId, false, repositoryId);
-        return;
-      } catch {
-        // 反查失败则回退到第 1 页
-      }
-    }
-    await fetchCases(1, s, kw, moduleId, false, repositoryId);
   };
 
   const fetchEnums = async () => {
@@ -384,7 +344,7 @@ export default function CaseReview() {
       setSelectedRepositoryId(null);
       setSelectedModuleId(nextModuleId);
       setSelectedTreeKey(`module:${nextModuleId}`);
-      fetchCasesMaybeLocate(pageSize, keyword, nextModuleId, null);
+      fetchCases(keyword, nextModuleId, false, null);
       return;
     }
 
@@ -403,7 +363,7 @@ export default function CaseReview() {
       setSelectedRepositoryId(nextRepositoryId);
       setSelectedModuleId(null);
       setSelectedTreeKey(nextTreeKey);
-      fetchCasesMaybeLocate(pageSize, keyword, null, nextRepositoryId);
+      fetchCases(keyword, null, false, nextRepositoryId);
       return;
     }
 
@@ -419,7 +379,7 @@ export default function CaseReview() {
     setSelectedRepositoryId(null);
     setSelectedModuleId(null);
     setSelectedTreeKey("root");
-    fetchCasesMaybeLocate(pageSize, keyword, null, null);
+    fetchCases(keyword, null, false, null);
   }, [workspaceSlug, reviewId, projectId, searchParams.toString()]);
 
   React.useEffect(() => {
@@ -468,9 +428,9 @@ export default function CaseReview() {
   const debouncedSearch = React.useMemo(
     () =>
       debounce((v: string) => {
-        fetchCases(1, pageSize, v);
+        fetchCases(v);
       }, 300),
-    [pageSize, workspaceSlug, reviewId]
+    [workspaceSlug, reviewId]
   );
 
   React.useEffect(() => {
@@ -646,12 +606,11 @@ export default function CaseReview() {
     if (!kind || kind === "root") {
       setSelectedRepositoryId(null);
       setSelectedModuleId(null);
-      setPage(1);
       setSelectedCaseId(undefined);
       setCaseDetail(null);
       skipNextUrlSyncedFetchRef.current = true;
       updateFilterQueryParams({ project_id: projectId ? String(projectId) : null });
-      fetchCases(1, pageSize, keyword, null, true, null);
+      fetchCases(keyword, null, true, null);
       return;
     }
 
@@ -659,12 +618,11 @@ export default function CaseReview() {
       const repositoryId = node?.repositoryId ? String(node.repositoryId) : null;
       setSelectedRepositoryId(repositoryId);
       setSelectedModuleId(null);
-      setPage(1);
       setSelectedCaseId(undefined);
       setCaseDetail(null);
       skipNextUrlSyncedFetchRef.current = true;
       updateFilterQueryParams({ repository_id: repositoryId });
-      fetchCases(1, pageSize, keyword, null, true, repositoryId);
+      fetchCases(keyword, null, true, repositoryId);
       return;
     }
 
@@ -673,12 +631,11 @@ export default function CaseReview() {
       const repositoryId = node?.repositoryId ? String(node.repositoryId) : null;
       setSelectedRepositoryId(repositoryId);
       setSelectedModuleId(moduleId);
-      setPage(1);
       setSelectedCaseId(undefined);
       setCaseDetail(null);
       skipNextUrlSyncedFetchRef.current = true;
       updateFilterQueryParams({ module_id: moduleId });
-      fetchCases(1, pageSize, keyword, moduleId, true, repositoryId);
+      fetchCases(keyword, moduleId, true, repositoryId);
     }
   };
 
@@ -712,20 +669,14 @@ export default function CaseReview() {
   // 用 ref 持有最新值,供 debouncedSubmit 闭包内的自动切换逻辑读取,避免拿到旧 state
   const casesRef = React.useRef(cases);
   const selectedCaseIdRef = React.useRef(selectedCaseId);
-  const pageRef = React.useRef(page);
-  const pageSizeRef = React.useRef(pageSize);
-  const totalRef = React.useRef(total);
   const autoNextRef = React.useRef(autoNext);
   React.useEffect(() => {
     casesRef.current = cases;
     selectedCaseIdRef.current = selectedCaseId;
-    pageRef.current = page;
-    pageSizeRef.current = pageSize;
-    totalRef.current = total;
     autoNextRef.current = autoNext;
   });
 
-  // 评审完成后切换到下一条:页内顺移 / 跨页取下一页第一条 / 已是最后一条则提示
+  // 评审完成后切换到下一条:列表顺移 / 已是最后一条则提示
   const goToNextCase = async () => {
     const list = casesRef.current;
     const curId = String(selectedCaseIdRef.current || "");
@@ -733,11 +684,6 @@ export default function CaseReview() {
     if (idx >= 0 && idx < list.length - 1) {
       const next = list[idx + 1];
       selectCase(String(next.case_id ?? next.id), next.assignees);
-      return;
-    }
-    const totalPages = Math.max(1, Math.ceil(totalRef.current / pageSizeRef.current));
-    if (pageRef.current < totalPages) {
-      await fetchCases(pageRef.current + 1, pageSizeRef.current, keyword, selectedModuleId, true, selectedRepositoryId);
       return;
     }
     qaCaseSetToastWarning("已是最后一条用例");
@@ -769,11 +715,11 @@ export default function CaseReview() {
           setReasonModalOpen(false);
           setReason("");
           if (autoNextRef.current) {
-            // 先静默刷新当前页(更新已评审用例的结果标签,不卸载列表容器),再切换到下一条
-            await fetchCases(page, pageSize, keyword, selectedModuleId, false, selectedRepositoryId, true);
+            // 先静默刷新当前列表(更新已评审用例的结果标签),再切换到下一条
+            await fetchCases(keyword, selectedModuleId, false, selectedRepositoryId, true);
             await goToNextCaseRef.current();
           } else {
-            fetchCases(page, pageSize, keyword, selectedModuleId, false, selectedRepositoryId, true);
+            fetchCases(keyword, selectedModuleId, false, selectedRepositoryId, true);
           }
           setRecordsRefreshKey((k) => k + 1);
         } catch (e: unknown) {
@@ -782,7 +728,7 @@ export default function CaseReview() {
           setSubmitLoading(false);
         }
       }, 500),
-    [workspaceSlug, page, pageSize, keyword, selectedModuleId, t]
+    [workspaceSlug, keyword, selectedModuleId, t]
   );
 
   React.useEffect(() => {
@@ -884,24 +830,24 @@ export default function CaseReview() {
 
         <Col
           flex="0 0 auto"
-          className="border-r border-subtle max-h-[calc(100dvh-130px)] overflow-hidden"
+          className="border-r border-subtle max-h-[calc(100dvh-130px)] overflow-hidden flex flex-col"
           style={{ width: 390, minWidth: 320, maxWidth: 520, maxHeight: `calc(100dvh - ${topOffset}px)` }}
         >
-          <div className="p-4 flex flex-col gap-3">
+          <div className="p-4 flex flex-col gap-3 flex-1 min-h-0">
             <Input.Search
               placeholder="按用例名称搜索"
               allowClear
               onSearch={(v) => {
                 setKeyword(v);
                 debouncedSearch.cancel();
-                fetchCases(1, pageSize, v);
+                fetchCases(v);
               }}
               onChange={(e) => {
                 const v = e.target.value;
                 setKeyword(v);
                 if (v.trim() === "") {
                   debouncedSearch.cancel();
-                  fetchCases(1, pageSize, "");
+                  fetchCases("");
                 } else {
                   debouncedSearch(v);
                 }
@@ -916,10 +862,10 @@ export default function CaseReview() {
                 <div className="text-danger-primary text-sm">{error}</div>
               </div>
             ) : (
-              <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-3 flex-1 min-h-0">
                 <div
                   ref={listScrollRef}
-                  className="overflow-y-auto vertical-scrollbar scrollbar-sm flex flex-col gap-3 pr-5 pl-1 pt-4 pb-2 max-h-[calc(100dvh-300px)]"
+                  className="flex-1 min-h-0 overflow-y-auto vertical-scrollbar scrollbar-sm flex flex-col gap-3 pr-5 pl-1 pt-4 pb-2"
                   style={{ scrollbarGutter: "stable" }}
                 >
                   {cases.length === 0 ? (
@@ -956,31 +902,6 @@ export default function CaseReview() {
                       );
                     })
                   )}
-                </div>
-                <div className="flex justify-between items-center w-full pt-2">
-                  <Pagination
-                    simple
-                    size="small"
-                    current={page}
-                    pageSize={pageSize}
-                    total={total}
-                    showSizeChanger={false}
-                    onChange={(p) => {
-                      setPage(p);
-                      fetchCases(p, pageSize, keyword);
-                    }}
-                  />
-                  <Select
-                    size="small"
-                    value={pageSize}
-                    style={{ width: 100 }}
-                    options={[10, 20, 50, 100].map((size) => ({ label: `${size} 条/页`, value: size }))}
-                    onChange={(s) => {
-                      setPage(1);
-                      setPageSize(s);
-                      fetchCases(1, s, keyword);
-                    }}
-                  />
                 </div>
               </div>
             )}
