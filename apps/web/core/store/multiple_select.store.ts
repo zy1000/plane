@@ -16,6 +16,7 @@ export type IMultipleSelectStore = {
   // computed functions
   isSelectionActive: boolean;
   selectedEntityIds: string[];
+  extendedSelectionChildIds: string[];
   // helper actions
   getIsEntitySelected: (entityID: string) => boolean;
   getIsEntityActive: (entityID: string) => boolean;
@@ -35,6 +36,8 @@ export type IMultipleSelectStore = {
   removeEntityById: (entityID: string) => void;
   // extended selection actions (for parent-child selection)
   isExtendedSelection: (entityID: string) => boolean;
+  addExtendedSelectionChildren: (childIds: string[]) => void;
+  removeExtendedSelectionChildren: (childIds: string[]) => void;
   toggleExtendedSelection: (entityID: string) => void;
   clearExtendedSelection: () => void;
 };
@@ -54,6 +57,7 @@ export class MultipleSelectStore implements IMultipleSelectStore {
   nextActiveEntity: TEntityDetails | null = null;
   activeEntityDetails: TEntityDetails | null = null;
   extendedSelectionEntityIds: string[] = []; // tracks which parent entities have been extended to include sub-issues
+  extendedSelectionChildIds: string[] = []; // tracks sub-issues included by extended selection
   // service
   issueService;
 
@@ -66,6 +70,7 @@ export class MultipleSelectStore implements IMultipleSelectStore {
       nextActiveEntity: observable,
       activeEntityDetails: observable,
       extendedSelectionEntityIds: observable,
+      extendedSelectionChildIds: observable,
       // computed functions
       isSelectionActive: computed,
       selectedEntityIds: computed,
@@ -78,6 +83,8 @@ export class MultipleSelectStore implements IMultipleSelectStore {
       updateActiveEntityDetails: action,
       clearSelection: action,
       removeEntityById: action,
+      addExtendedSelectionChildren: action,
+      removeExtendedSelectionChildren: action,
       toggleExtendedSelection: action,
       clearExtendedSelection: action,
     });
@@ -164,6 +171,7 @@ export class MultipleSelectStore implements IMultipleSelectStore {
       currentSelection = currentSelection.filter((en) => en.entityID !== entityDetails.entityID);
       runInAction(() => {
         remove(this.selectedEntityDetails, (en) => en.entityID === entityDetails.entityID);
+        this.extendedSelectionChildIds = this.extendedSelectionChildIds.filter((id) => id !== entityDetails.entityID);
         this.updateLastSelectedEntityDetails(currentSelection[currentSelection.length - 1] ?? null);
       });
     }
@@ -184,11 +192,13 @@ export class MultipleSelectStore implements IMultipleSelectStore {
         if (entitiesList.length > 0) this.updateLastSelectedEntityDetails(entitiesList[entitiesList.length - 1]);
       });
     } else {
+      const removedEntityIdSet = new Set(entitiesList.map((entity) => entity.entityID));
       const newEntities = differenceWith(this.selectedEntityDetails, entitiesList, (obj1, obj2) =>
         isEqual(obj1.entityID, obj2.entityID)
       );
       runInAction(() => {
         this.selectedEntityDetails = newEntities;
+        this.extendedSelectionChildIds = this.extendedSelectionChildIds.filter((id) => !removedEntityIdSet.has(id));
       });
     }
   };
@@ -244,6 +254,7 @@ export class MultipleSelectStore implements IMultipleSelectStore {
       this.nextActiveEntity = null;
       this.activeEntityDetails = null;
       this.extendedSelectionEntityIds = [];
+      this.extendedSelectionChildIds = [];
     });
   };
 
@@ -270,6 +281,7 @@ export class MultipleSelectStore implements IMultipleSelectStore {
       }
 
       this.extendedSelectionEntityIds = this.extendedSelectionEntityIds.filter((id) => id !== entityID);
+      this.extendedSelectionChildIds = this.extendedSelectionChildIds.filter((id) => id !== entityID);
     });
   };
 
@@ -281,6 +293,31 @@ export class MultipleSelectStore implements IMultipleSelectStore {
   isExtendedSelection = computedFn((entityID: string): boolean =>
     this.extendedSelectionEntityIds.includes(entityID)
   );
+
+  /**
+   * @description add extended-selection child ids to the protected set
+   * @param {string[]} childIds
+   */
+  addExtendedSelectionChildren = (childIds: string[]) => {
+    if (childIds.length === 0) return;
+
+    runInAction(() => {
+      this.extendedSelectionChildIds = Array.from(new Set([...this.extendedSelectionChildIds, ...childIds]));
+    });
+  };
+
+  /**
+   * @description remove child ids from the extended-selection protected set
+   * @param {string[]} childIds
+   */
+  removeExtendedSelectionChildren = (childIds: string[]) => {
+    if (childIds.length === 0) return;
+
+    const childIdSet = new Set(childIds);
+    runInAction(() => {
+      this.extendedSelectionChildIds = this.extendedSelectionChildIds.filter((id) => !childIdSet.has(id));
+    });
+  };
 
   /**
    * @description toggle extended selection state for an entity
@@ -302,6 +339,7 @@ export class MultipleSelectStore implements IMultipleSelectStore {
   clearExtendedSelection = () => {
     runInAction(() => {
       this.extendedSelectionEntityIds = [];
+      this.extendedSelectionChildIds = [];
     });
   };
 }

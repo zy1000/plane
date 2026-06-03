@@ -27,9 +27,38 @@ from rest_framework.viewsets import ModelViewSet
 # Module imports
 from plane.authentication.session import BaseSessionAuthentication
 from plane.api.middleware.api_authentication import APIKeyAuthentication
+from plane.api.rate_limit import ApiKeyRateThrottle, ServiceTokenRateThrottle
+from plane.db.models.api import APIToken
 from plane.utils.exception_logger import log_exception
 from plane.utils.paginator import BasePaginator
 from plane.utils.core.mixins import ReadReplicaControlMixin
+
+
+class ApiKeyRequestThrottlingMixin:
+    """仅对带 X-Api-Key 的第三方请求启用限流，浏览器 session 请求不受影响。"""
+
+    def get_throttles(self):
+        api_key = self.request.headers.get("X-Api-Key")
+        if not api_key:
+            return []
+
+        if APIToken.objects.filter(token=api_key, is_service=True).exists():
+            return [ServiceTokenRateThrottle()]
+
+        return [ApiKeyRateThrottle()]
+
+    def finalize_response(self, request, response, *args, **kwargs):
+        response = super().finalize_response(request, response, *args, **kwargs)
+
+        ratelimit_remaining = request.META.get("X-RateLimit-Remaining")
+        if ratelimit_remaining is not None:
+            response["X-RateLimit-Remaining"] = ratelimit_remaining
+
+        ratelimit_reset = request.META.get("X-RateLimit-Reset")
+        if ratelimit_reset is not None:
+            response["X-RateLimit-Reset"] = ratelimit_reset
+
+        return response
 
 
 class TimezoneMixin:
@@ -46,7 +75,7 @@ class TimezoneMixin:
             timezone.deactivate()
 
 
-class BaseViewSet(TimezoneMixin, ReadReplicaControlMixin, ModelViewSet, BasePaginator):
+class BaseViewSet(ApiKeyRequestThrottlingMixin, TimezoneMixin, ReadReplicaControlMixin, ModelViewSet, BasePaginator):
     model = None
 
     permission_classes = [IsAuthenticated]
@@ -150,7 +179,7 @@ class BaseViewSet(TimezoneMixin, ReadReplicaControlMixin, ModelViewSet, BasePagi
         return expand if expand else None
 
 
-class BaseAPIView(TimezoneMixin, ReadReplicaControlMixin, APIView, BasePaginator):
+class BaseAPIView(ApiKeyRequestThrottlingMixin, TimezoneMixin, ReadReplicaControlMixin, APIView, BasePaginator):
     permission_classes = [IsAuthenticated]
 
     filter_backends = (DjangoFilterBackend, SearchFilter)

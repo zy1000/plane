@@ -66,6 +66,9 @@ export const useMultipleSelect = (props: Props) => {
     getEntityDetailsFromEntityID,
     isExtendedSelection,
     toggleExtendedSelection,
+    extendedSelectionChildIds,
+    addExtendedSelectionChildren,
+    removeExtendedSelectionChildren,
   } = useMultipleSelectStore();
 
   useReloadConfirmations(
@@ -302,6 +305,7 @@ export const useMultipleSelect = (props: Props) => {
         });
         handleEntitySelection(entitiesToAdd, false, "force-add");
         toggleExtendedSelection(entityID);
+        addExtendedSelectionChildren(subIssueIds);
       } else {
         // Third click or no sub-issues: deselect all (parent + sub-issues)
         const entitiesToRemove: TEntityDetails[] = [{ entityID, groupID }];
@@ -311,6 +315,7 @@ export const useMultipleSelect = (props: Props) => {
         handleEntitySelection(entitiesToRemove, false, "force-remove");
         if (isExtended) {
           toggleExtendedSelection(entityID);
+          removeExtendedSelectionChildren(subIssueIds);
         }
       }
     },
@@ -322,6 +327,8 @@ export const useMultipleSelect = (props: Props) => {
       handleEntityClick,
       getLastSelectedEntityDetails,
       toggleExtendedSelection,
+      addExtendedSelectionChildren,
+      removeExtendedSelectionChildren,
     ]
   );
 
@@ -528,17 +535,25 @@ export const useMultipleSelect = (props: Props) => {
     if (disabled) return;
 
     const entityIdSet = new Set(entitiesList.map((entity) => entity.entityID));
+    const protectedChildIdSet = new Set(extendedSelectionChildIds);
     const entitiesToRemove: TEntityDetails[] = [];
 
     selectedEntityIds.forEach((entityID) => {
-      if (!entityIdSet.has(entityID)) {
+      if (!entityIdSet.has(entityID) && !protectedChildIdSet.has(entityID)) {
         const entityDetails = getEntityDetailsFromEntityID(entityID);
         if (entityDetails) entitiesToRemove.push(entityDetails);
       }
     });
 
     if (entitiesToRemove.length > 0) bulkUpdateSelectedEntityDetails(entitiesToRemove, "remove");
-  }, [bulkUpdateSelectedEntityDetails, disabled, entitiesList, getEntityDetailsFromEntityID, selectedEntityIds]);
+  }, [
+    bulkUpdateSelectedEntityDetails,
+    disabled,
+    entitiesList,
+    extendedSelectionChildIds,
+    getEntityDetailsFromEntityID,
+    selectedEntityIds,
+  ]);
 
   /**
    * @description helper functions for selection
