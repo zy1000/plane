@@ -57,7 +57,7 @@ export default function TestManagementHomePage() {
 
   const searchInput = useRef<InputRef>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [pageSize, setPageSize] = useState(20);
   const [total, setTotal] = useState(0);
   const [filters, setFilters] = useState<{ name?: string; project?: string }>({});
   const [modalOpen, setModalOpen] = useState(false);
@@ -304,11 +304,11 @@ export default function TestManagementHomePage() {
     setRepositories([]);
     setTotal(0);
     setCurrentPage(1);
-    setPageSize(10);
+    setPageSize(20);
     setSearchText("");
     setSearchedColumn("");
     setFilters({});
-    fetchRepositories(1, 10, {});
+    fetchRepositories(1, 20, {});
   }, [workspaceSlug, projectId]);
 
   return (

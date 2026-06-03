@@ -53,7 +53,7 @@ export default function CaseManagementReviewDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [reviewCases, setReviewCases] = useState<ReviewCaseRow[]>([]);
   const [currentPage, setCurrentPage] = useState<number>(1);
-  const [pageSize, setPageSize] = useState<number>(10);
+  const [pageSize, setPageSize] = useState<number>(20);
   const [total, setTotal] = useState<number>(0);
   const [ordering, setOrdering] = useState<string | undefined>(undefined);
   const [reviewEnums, setReviewEnums] = useState<Record<string, Record<string, { label: string; color: string }>>>({});

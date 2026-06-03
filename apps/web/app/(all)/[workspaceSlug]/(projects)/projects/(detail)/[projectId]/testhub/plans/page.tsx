@@ -94,7 +94,7 @@ export default function TestPlanDetailPage() {
   const [selectedModuleId, setSelectedModuleId] = useState<string | null>(null);
 
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [pageSize, setPageSize] = useState(20);
   const [total, setTotal] = useState(0);
   const [filters, setFilters] = useState<{ name?: string; assigneeName?: string; states?: number[] }>({});
 

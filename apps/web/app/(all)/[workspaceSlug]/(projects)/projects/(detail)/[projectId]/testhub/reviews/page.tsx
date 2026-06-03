@@ -122,7 +122,7 @@ export default function ReviewsPage() {
   const [selectedModuleId, setSelectedModuleId] = useState<string | null>(null);
   useEffect(() => { selectedModuleIdRef.current = selectedModuleId; }, [selectedModuleId]);
   const [currentPage, setCurrentPage] = useState<number>(1);
-  const [pageSize, setPageSize] = useState<number>(10);
+  const [pageSize, setPageSize] = useState<number>(20);
   const [modules, setModules] = useState<ReviewModule[]>([]);
   const [creatingParentId, setCreatingParentId] = useState<string | "all" | null>(null);
   const [renamingModuleId, setRenamingModuleId] = useState<string | null>(null);
