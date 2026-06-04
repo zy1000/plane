@@ -35,6 +35,7 @@ interface Props {
   placement: Placement | undefined;
   referenceElement: HTMLButtonElement | null;
   value?: string[] | string | null;
+  viewOnly?: boolean;
 }
 
 export const MemberOptions = observer(function MemberOptions(props: Props) {
@@ -47,6 +48,7 @@ export const MemberOptions = observer(function MemberOptions(props: Props) {
     placement,
     referenceElement,
     value,
+    viewOnly = false,
   } = props;
   // router
   const { workspaceSlug } = useParams();
@@ -144,25 +146,35 @@ export const MemberOptions = observer(function MemberOptions(props: Props) {
         }}
         {...attributes.popper}
       >
-        <div className="flex items-center gap-1.5 rounded-sm border border-subtle bg-surface-2 px-2">
-          <SearchIcon className="h-3.5 w-3.5 text-placeholder" strokeWidth={1.5} />
-          <Combobox.Input
-            as="input"
-            ref={inputRef}
-            className="w-full bg-transparent py-1 text-11 text-secondary placeholder:text-placeholder focus:outline-none"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={t("search")}
-            displayValue={(assigned: any) => assigned?.name}
-            onKeyDown={searchInputKeyDown}
-          />
-        </div>
-        <div className="mt-2 max-h-48 space-y-1 overflow-y-scroll">
+        {!viewOnly && (
+          <div className="flex items-center gap-1.5 rounded-sm border border-subtle bg-surface-2 px-2">
+            <SearchIcon className="h-3.5 w-3.5 text-placeholder" strokeWidth={1.5} />
+            <Combobox.Input
+              as="input"
+              ref={inputRef}
+              className="w-full bg-transparent py-1 text-11 text-secondary placeholder:text-placeholder focus:outline-none"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={t("search")}
+              displayValue={(assigned: any) => assigned?.name}
+              onKeyDown={searchInputKeyDown}
+            />
+          </div>
+        )}
+        <div className={cn("max-h-48 space-y-1 overflow-y-scroll", !viewOnly && "mt-2")}>
           {filteredOptions ? (
             filteredOptions.length > 0 ? (
               filteredOptions.map(
                 (option) =>
-                  option && (
+                  option &&
+                  (viewOnly ? (
+                    <div
+                      key={option.value}
+                      className="flex w-full items-center gap-2 truncate rounded-sm px-1 py-1.5 text-secondary select-none"
+                    >
+                      {option.content}
+                    </div>
+                  ) : (
                     <Combobox.Option
                       key={option.value}
                       value={option.value}
@@ -190,7 +202,7 @@ export const MemberOptions = observer(function MemberOptions(props: Props) {
                         </>
                       )}
                     </Combobox.Option>
-                  )
+                  ))
               )
             ) : (
               <p className="px-1.5 py-1 text-placeholder italic">{t("no_matching_results")}</p>

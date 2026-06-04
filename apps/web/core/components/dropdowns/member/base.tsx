@@ -70,10 +70,29 @@ export const MemberDropdownBase = observer(function MemberDropdownBase(props: TM
   // states
   const [isOpen, setIsOpen] = useState(false);
 
+  // 只读展示：允许点击查看成员列表，但不允许修改
+  const viewOnly = disabled;
+
+  const selectedMemberIds = Array.isArray(value) ? value : value ? [value] : [];
+
+  const memberNamesTooltip =
+    viewOnly && multiple && selectedMemberIds.length > 1
+      ? selectedMemberIds
+          .map((id) => getUserDetails(id)?.display_name)
+          .filter(Boolean)
+          .join("、")
+      : undefined;
+
+  const effectiveShowTooltip = showTooltip || !!memberNamesTooltip;
+  const effectiveTooltipContent =
+    tooltipContent ??
+    memberNamesTooltip ??
+    `${value?.length ?? 0} ${value?.length !== 1 ? t("assignees") : t("assignee")}`;
+
   const comboboxProps = {
     value,
     onChange,
-    disabled,
+    disabled: false,
     multiple,
   };
 
@@ -85,6 +104,7 @@ export const MemberDropdownBase = observer(function MemberDropdownBase(props: TM
   });
 
   const dropdownOnChange = (val: string & string[]) => {
+    if (viewOnly) return;
     onChange(val);
     if (!multiple) handleClose();
   };
@@ -115,9 +135,13 @@ export const MemberDropdownBase = observer(function MemberDropdownBase(props: TM
         <button
           ref={setReferenceElement}
           type="button"
-          className={cn("clickable block h-full w-full outline-none", buttonContainerClassName)}
+          className={cn(
+            "clickable block h-full w-full outline-none",
+            viewOnly && "!cursor-pointer",
+            buttonContainerClassName
+          )}
           onClick={handleOnClick}
-          disabled={disabled}
+          disabled={!viewOnly && disabled}
           tabIndex={tabIndex}
         >
           {button}
@@ -129,27 +153,26 @@ export const MemberDropdownBase = observer(function MemberDropdownBase(props: TM
           className={cn(
             "clickable block h-full max-w-full outline-none",
             {
-              "cursor-not-allowed text-secondary": disabled,
-              "cursor-pointer": !disabled,
+              "cursor-not-allowed text-secondary": disabled && !viewOnly,
+              "cursor-pointer": !disabled || viewOnly,
             },
+            viewOnly && "!cursor-pointer",
             buttonContainerClassName
           )}
           onClick={handleOnClick}
-          disabled={disabled}
+          disabled={!viewOnly && disabled}
           tabIndex={tabIndex}
         >
           <DropdownButton
             className={cn(!buttonClassName && "text-11", buttonClassName)}
             isActive={isOpen}
             tooltipHeading={placeholder}
-            tooltipContent={
-              tooltipContent ?? `${value?.length ?? 0} ${value?.length !== 1 ? t("assignees") : t("assignee")}`
-            }
-            showTooltip={showTooltip}
+            tooltipContent={effectiveTooltipContent}
+            showTooltip={effectiveShowTooltip}
             variant={buttonVariant}
             renderToolTipByDefault={renderByDefault}
           >
-            {!hideIcon && <ButtonAvatars showTooltip={showTooltip} userIds={value} icon={icon} />}
+            {!hideIcon && <ButtonAvatars showTooltip={effectiveShowTooltip} userIds={value} icon={icon} />}
             {BUTTON_VARIANTS_WITH_TEXT.includes(buttonVariant) && (
               <span
                 className={cn(
@@ -184,12 +207,13 @@ export const MemberDropdownBase = observer(function MemberDropdownBase(props: TM
         <MemberOptions
           getUserDetails={getUserDetails}
           isOpen={isOpen}
-          memberIds={memberIds}
+          memberIds={viewOnly ? selectedMemberIds : memberIds}
           onDropdownOpen={onDropdownOpen}
           optionsClassName={optionsClassName}
           placement={placement}
           referenceElement={referenceElement}
           value={value}
+          viewOnly={viewOnly}
         />
       )}
     </ComboDropDown>
