@@ -65,58 +65,33 @@ export const CycleTestPlansTable = ({
   <table className="min-w-full table-fixed">
     <thead>
       <tr className="text-left text-xs text-secondary [&>th]:sticky [&>th]:top-0 [&>th]:z-10 [&>th]:bg-surface-1 [&>th]:shadow-[inset_0_-1px_0_var(--border-subtle)]">
-        <th className="w-[26%] px-2 py-2 text-sm font-medium text-primary">测试计划</th>
-        <th className="w-[11%] px-2 py-2 text-sm font-medium text-primary">状态</th>
-        <th className="w-[11%] px-2 py-2 text-sm font-medium text-primary">通过率</th>
-        <th className="w-[11%] px-2 py-2 text-sm font-medium text-primary">阻塞率</th>
-        <th className="w-[11%] px-2 py-2 text-sm font-medium text-primary">开始时间</th>
-        <th className="w-[11%] px-2 py-2 text-sm font-medium text-primary">结束时间</th>
-        <th className="w-[19%] px-2 py-2 text-left text-sm font-medium text-primary">负责人</th>
+        <th className="w-[22%] px-2 py-2 text-sm font-medium text-primary">测试计划</th>
+        <th className="w-[10%] px-2 py-2 text-sm font-medium text-primary">状态</th>
+        <th className="w-[10%] px-2 py-2 text-sm font-medium text-primary">通过率</th>
+        <th className="w-[10%] px-2 py-2 text-sm font-medium text-primary">阻塞率</th>
+        <th className="w-[10%] px-2 py-2 text-sm font-medium text-primary">开始时间</th>
+        <th className="w-[10%] px-2 py-2 text-sm font-medium text-primary">结束时间</th>
+        <th className="w-[18%] px-2 py-2 text-left text-sm font-medium text-primary">负责人</th>
+        <th className="w-[120px] pl-10 pr-2 py-2 text-left text-sm font-medium text-primary">操作</th>
       </tr>
     </thead>
     <tbody>
       {cyclePlans.map((plan: any) => {
         const assigneeIds = getPlanAssigneeIds(plan.assignees);
         return (
-          <tr key={plan.id ?? plan.name} className="group border-b border-subtle hover:bg-layer-1">
-            <td className="px-2 py-2 text-sm text-primary">
-              <div className="flex items-center justify-between gap-2">
-                <div className="min-w-0 flex-1 truncate" title={plan.name ?? "-"}>
-                  {plan.id ? (
-                    <button
-                      type="button"
-                      className="max-w-full truncate text-left text-sm text-primary hover:underline"
-                      onClick={() => onOpenPlan(plan.id)}
-                    >
-                      {plan.name ?? "-"}
-                    </button>
-                  ) : (
-                    plan.name ?? "-"
-                  )}
-                </div>
-                {plan.id ? (
-                  <Popconfirm
-                    title="确定取消该测试计划的关联吗？"
-                    okText="取消关联"
-                    cancelText="取消"
-                    onConfirm={() => {
-                      if (plan.id) onCancelPlanAssociation(plan.id);
-                    }}
-                  >
-                    <Button
-                      variant="link-neutral"
-                      className={`shrink-0 p-0 transition-opacity ${
-                        cancelingPlanId === plan.id ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-                      }`}
-                      loading={cancelingPlanId === plan.id}
-                      disabled={cancelingPlanId === plan.id}
-                      aria-label="取消关联"
-                    >
-                      <Unlink className="h-3.5 w-3.5" />
-                    </Button>
-                  </Popconfirm>
-                ) : null}
-              </div>
+          <tr key={plan.id ?? plan.name} className="border-b border-subtle hover:bg-layer-1">
+            <td className="truncate px-2 py-2 text-sm text-primary" title={plan.name ?? "-"}>
+              {plan.id ? (
+                <button
+                  type="button"
+                  className="max-w-full truncate text-left text-sm text-primary hover:underline"
+                  onClick={() => onOpenPlan(plan.id)}
+                >
+                  {plan.name ?? "-"}
+                </button>
+              ) : (
+                plan.name ?? "-"
+              )}
             </td>
             <td className={`px-2 py-2 text-sm ${getPlanStatusClassName(plan.state)}`}>{plan.state ?? "-"}</td>
             <td className="px-2 py-2 text-sm text-primary">{getPassRate(plan.pass_rate)}</td>
@@ -142,6 +117,28 @@ export const CycleTestPlansTable = ({
               ) : (
                 <span className="text-sm text-placeholder">-</span>
               )}
+            </td>
+            <td className="pl-10 pr-2 py-2 text-left">
+              {plan.id ? (
+                <Popconfirm
+                  title="确定取消该测试计划的关联吗？"
+                  okText="取消关联"
+                  cancelText="取消"
+                  onConfirm={() => {
+                    if (plan.id) onCancelPlanAssociation(plan.id);
+                  }}
+                >
+                  <Button
+                    variant="link-neutral"
+                    className="p-0"
+                    loading={cancelingPlanId === plan.id}
+                    disabled={cancelingPlanId === plan.id}
+                    aria-label="取消关联"
+                  >
+                    <Unlink className="h-3.5 w-3.5" />
+                  </Button>
+                </Popconfirm>
+              ) : null}
             </td>
           </tr>
         );
