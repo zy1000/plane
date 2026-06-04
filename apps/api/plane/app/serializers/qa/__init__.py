@@ -398,7 +398,7 @@ class _CaseModuleBriefSerializer(serializers.ModelSerializer):
 
 
 class ProjectCaseListSerializer(serializers.ModelSerializer):
-    """project-cases 接口专用的轻量序列化器，只输出前端列表实际使用的字段"""
+    """用例列表轻量序列化器，只输出前端列表实际使用的字段"""
 
     repository_name = serializers.CharField(source="repository.name", read_only=True)
     module = _CaseModuleBriefSerializer(read_only=True)

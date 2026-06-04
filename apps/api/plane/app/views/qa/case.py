@@ -699,7 +699,7 @@ class CaseAPI(BaseViewSet):
         cases = cases.order_by('-created_at')
         paginator = self.pagination_class()
         paginated_queryset = paginator.paginate_queryset(cases, request)
-        serializer = CaseListSerializer(paginated_queryset, many=True)
+        serializer = ProjectCaseListSerializer(paginated_queryset, many=True)
         return list_response(data=serializer.data, count=cases.count())
 
     @action(detail=False, methods=['get'], url_path='plan-unassociated-case-ids')
