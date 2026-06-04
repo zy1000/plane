@@ -24,6 +24,10 @@ def all_issues_done(cycle: Cycle):
         issue__state__group__in=[StateGroup.COMPLETED, StateGroup.CANCELLED]
     ).exists()
 
+def all_issues_ready(cycle: Cycle):
+    return not CycleIssue.objects.filter(cycle=cycle).exclude(
+        issue__state__group__in=[StateGroup.COMPLETED, StateGroup.CANCELLED,StateGroup.STARTED]
+    ).exists()
 
 def all_issues_cancelled(cycle: Cycle):
     """判断迭代下的工作项是否全部取消。"""
@@ -98,8 +102,8 @@ def check_cycle_state(cycle: Cycle, next_status: Cycle.Status) -> CycleStateChec
             reasons.append("请先关联测试计划")
         if has_issues(cycle) and all_issues_cancelled(cycle):
             reasons.append("迭代下工作项已全部取消，只能改为已取消")
-        elif not all_issues_done(cycle):
-            reasons.append("存在未完成的工作项")
+        elif not all_issues_ready(cycle):
+            reasons.append("存在未开始的工作项")
         return _result(reasons)
 
     # 测试中 -> 已完成（无额外前置条件）
