@@ -50,7 +50,14 @@ export class CaseService extends APIService {
 
   async getPlanUnassociatedCases(
     workspaceSlug: string,
-    queries: { plan_id: string; repository_id?: string; module_id?: string; page?: number; page_size?: number }
+    queries: {
+      plan_id: string;
+      repository_id?: string;
+      module_id?: string;
+      page?: number;
+      page_size?: number;
+      name__icontains?: string;
+    }
   ): Promise<any> {
     return this.get(`/api/workspaces/${workspaceSlug}/test/case/plan-unassociated-cases/`, { params: queries })
       .then((response) => response?.data)

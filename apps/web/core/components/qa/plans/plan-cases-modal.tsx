@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Tree, Table, Row, Col, Tag, Tooltip } from "antd";
+import { Tree, Table, Row, Col, Tag, Tooltip, Input } from "antd";
 import type { TreeProps } from "antd";
 import type { TableProps } from "antd";
 import { AppstoreOutlined, DownOutlined } from "@ant-design/icons";
@@ -73,9 +73,11 @@ export const PlanCasesModal: React.FC<Props> = ({
   const [selectedNewIds, setSelectedNewIds] = useState<string[]>([]);
   const [checkedTreeKeys, setCheckedTreeKeys] = useState<string[]>([]);
   const nodeCaseIdsCacheRef = useRef<Record<string, string[]>>({});
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [pageSize] = useState<number>(10);
+  const [searchName, setSearchName] = useState<string>("");
 
   const [leftWidth, setLeftWidth] = useState<number>(280);
   const isDraggingRef = useRef<boolean>(false);
@@ -106,12 +108,21 @@ export const PlanCasesModal: React.FC<Props> = ({
     document.body.style.userSelect = "auto";
   };
 
+  const clearSearchDebounce = () => {
+    if (searchDebounceRef.current) {
+      clearTimeout(searchDebounceRef.current);
+      searchDebounceRef.current = null;
+    }
+  };
+
   useEffect(() => {
     const init = Array.isArray(initialSelectedCaseIds) ? initialSelectedCaseIds.filter(Boolean) : [];
     setExistingIds(init);
     setSelectedNewIds([]);
     setCheckedTreeKeys([]);
     nodeCaseIdsCacheRef.current = {};
+    clearSearchDebounce();
+    setSearchName("");
     setSelectedTreeKey("root");
     setSelectedRepositoryId(null);
     setSelectedModuleId(null);
@@ -119,6 +130,10 @@ export const PlanCasesModal: React.FC<Props> = ({
     fetchPlanTree();
     fetchCases(1, undefined, undefined);
   }, [isOpen]);
+
+  useEffect(() => () => {
+    clearSearchDebounce();
+  }, []);
 
   const fetchPlanTree = async () => {
     if (!workspaceSlug || !planId) return;
@@ -132,7 +147,7 @@ export const PlanCasesModal: React.FC<Props> = ({
     }
   };
 
-  const fetchCases = async (page: number, repoId?: string, moduleId?: string) => {
+  const fetchCases = async (page: number, repoId?: string, moduleId?: string, name?: string) => {
     try {
       if (!planId) return;
       setLoading(true);
@@ -142,8 +157,13 @@ export const PlanCasesModal: React.FC<Props> = ({
         page,
         page_size: 10,
       };
-      if (repoId) params.repository_id = repoId;
-      if (moduleId) params.module_id = moduleId;
+      const keyword = name?.trim();
+      if (keyword) {
+        params.name__icontains = keyword;
+      } else {
+        if (repoId) params.repository_id = repoId;
+        if (moduleId) params.module_id = moduleId;
+      }
       const response: TestCaseResponse = await caseService.getPlanUnassociatedCases(String(workspaceSlug), params);
       setCases(response?.data || []);
       setTotal(response?.count || 0);
@@ -158,6 +178,8 @@ export const PlanCasesModal: React.FC<Props> = ({
   };
 
   const onSelect: TreeProps["onSelect"] = (selectedKeys, info) => {
+    clearSearchDebounce();
+    setSearchName("");
     const key = Array.isArray(selectedKeys) && selectedKeys.length > 0 ? String(selectedKeys[0]) : "root";
     setSelectedTreeKey(key);
 
@@ -186,6 +208,19 @@ export const PlanCasesModal: React.FC<Props> = ({
       setSelectedModuleId(moduleId);
       fetchCases(1, repoId || undefined, moduleId || undefined);
     }
+  };
+
+  const handleSearchNameChange = (value: string) => {
+    setSearchName(value);
+    clearSearchDebounce();
+    searchDebounceRef.current = setTimeout(() => {
+      const keyword = value.trim();
+      if (keyword) {
+        fetchCases(1, undefined, undefined, keyword);
+        return;
+      }
+      fetchCases(1, selectedRepositoryId || undefined, selectedModuleId || undefined);
+    }, 300);
   };
 
   const onExpand: TreeProps["onExpand"] = (keys) => {
@@ -435,6 +470,15 @@ export const PlanCasesModal: React.FC<Props> = ({
             />
           </Col>
           <Col flex="auto" className="overflow-y-auto">
+            <div className="mb-3">
+              <Input
+                placeholder="按用例名称搜索"
+                allowClear
+                value={searchName}
+                onChange={(e) => handleSearchNameChange(e.target.value)}
+                className="w-72"
+              />
+            </div>
             {loading && (
               <div className="flex items-center justify-center py-12">
                 <div className="text-secondary">加载中...</div>
@@ -495,6 +539,11 @@ export const PlanCasesModal: React.FC<Props> = ({
                 }}
                 onChange={(p) => {
                   const nextPage = p?.current || 1;
+                  const keyword = searchName.trim();
+                  if (keyword) {
+                    fetchCases(nextPage, undefined, undefined, keyword);
+                    return;
+                  }
                   fetchCases(nextPage, selectedRepositoryId || undefined, selectedModuleId || undefined);
                 }}
               />
