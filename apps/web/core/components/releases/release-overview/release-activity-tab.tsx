@@ -14,7 +14,7 @@ import type { TReleaseActivity } from "@plane/types";
 import { cn } from "@plane/utils";
 import { ActivityOperatorFilterRoot } from "@/components/issues/issue-detail/issue-activity/operator-filter-root";
 import { ActivitySortRoot } from "@/components/issues/issue-detail/issue-activity/sort-root";
-import { ReleaseActivityFeed } from "@/components/releases/release-activity";
+import { buildReleaseActivityFeedItems, ReleaseActivityFeed } from "@/components/releases/release-activity";
 import { ReleaseCommentsSection } from "@/components/releases/release-comments";
 import { useReleaseActivity } from "@/hooks/store/use-release-activity";
 import { useReleaseComment } from "@/hooks/store/use-release-comment";
@@ -53,38 +53,10 @@ export const ReleaseActivityTab: React.FC<Props> = observer(({ workspaceSlug, pr
     () => fetchComments(workspaceSlug, projectId, releaseId)
   );
 
-  const allTabActivities = useMemo<TReleaseActivity[]>(() => {
-    const nonCommentActivities = allActivities.filter((activity) => activity.field !== "comment");
-    const commentsById = new Map(comments.map((comment) => [comment.id, comment]));
-    const commentActivities = comments.map((comment) => {
-      const parentComment = comment.parent ? commentsById.get(comment.parent) : undefined;
-      return {
-        id: `comment-${comment.id}`,
-        workspace: comment.workspace,
-        project: comment.project,
-        release: comment.release,
-        actor: comment.actor ?? null,
-        actor_detail: comment.actor_detail,
-        verb: "created",
-        field: "comment",
-        old_value: null,
-        new_value: comment.comment_stripped || null,
-        old_identifier: null,
-        new_identifier: comment.id,
-        comment: comment.comment_stripped ? `评论：${comment.comment_stripped}` : "新增了评论",
-        release_comment: comment.id,
-        epoch: null,
-        extra: {
-          comment_html: comment.comment_html ?? "",
-          reply_to_actor: parentComment?.actor ?? null,
-          reply_to_name: parentComment?.actor_detail?.display_name ?? null,
-        },
-        created_at: comment.created_at,
-        updated_at: comment.updated_at,
-      };
-    });
-    return [...nonCommentActivities, ...commentActivities];
-  }, [allActivities, comments]);
+  const allTabActivities = useMemo<TReleaseActivity[]>(
+    () => buildReleaseActivityFeedItems(allActivities, comments),
+    [allActivities, comments]
+  );
 
   const operatorIds = useMemo(() => {
     const set = new Set<string>();

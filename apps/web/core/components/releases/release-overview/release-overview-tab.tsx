@@ -7,6 +7,8 @@
 "use client";
 
 import React, { useMemo } from "react";
+import { observer } from "mobx-react";
+import useSWR from "swr";
 import {
   Activity,
   AlertTriangle,
@@ -27,7 +29,9 @@ import type { IRelease } from "@plane/types";
 import { renderFormattedPayloadDate } from "@plane/utils";
 import { DateDropdown } from "@/components/dropdowns/date";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
-import { ReleaseActivityFeed } from "@/components/releases/release-activity";
+import { buildReleaseActivityFeedItems, ReleaseActivityFeed } from "@/components/releases/release-activity";
+import { useReleaseActivity } from "@/hooks/store/use-release-activity";
+import { useReleaseComment } from "@/hooks/store/use-release-comment";
 import { ReleaseStatusDropdown, type TReleaseUpdatePayload } from "../release-status-dropdown";
 import type { ReleaseDetailTabKey } from "./release-page-tabs";
 
@@ -74,7 +78,7 @@ const KEY_FIELD_BUTTON_CLASS = "w-full justify-start px-2";
 const KEY_FIELD_LABEL_CLASS = "text-xs font-medium";
 const KEY_FIELD_VALUE_CLASS = "flex h-7 w-[148px] shrink-0 items-center justify-start";
 
-export const ReleaseOverviewTab: React.FC<Props> = ({
+export const ReleaseOverviewTab: React.FC<Props> = observer(({
   workspaceSlug,
   projectId,
   releaseId,
@@ -97,6 +101,23 @@ export const ReleaseOverviewTab: React.FC<Props> = ({
   onJumpTab,
   onEditNote,
 }) => {
+  const { getActivitiesByReleaseId } = useReleaseActivity();
+  const allActivities = getActivitiesByReleaseId(releaseId);
+  const { getCommentsByReleaseId, fetchComments } = useReleaseComment();
+  const comments = getCommentsByReleaseId(releaseId);
+
+  useSWR(
+    workspaceSlug && projectId && releaseId
+      ? ["release-comments-for-overview-tab", workspaceSlug, projectId, releaseId]
+      : null,
+    () => fetchComments(workspaceSlug, projectId, releaseId)
+  );
+
+  const feedItems = useMemo(
+    () => buildReleaseActivityFeedItems(allActivities, comments),
+    [allActivities, comments]
+  );
+
   const distribution = useMemo(() => {
     const denom = totalIssues > 0 ? totalIssues : 1;
     return [
@@ -436,6 +457,7 @@ export const ReleaseOverviewTab: React.FC<Props> = ({
             workspaceSlug={workspaceSlug}
             projectId={projectId}
             releaseId={releaseId}
+            activities={feedItems}
             limit={5}
             emptyHint="暂无动态"
           />
@@ -443,7 +465,7 @@ export const ReleaseOverviewTab: React.FC<Props> = ({
       </div>
     </div>
   );
-};
+});
 
 const HealthMetric: React.FC<{ icon: React.ReactNode; label: string; value: number }> = ({
   icon,
