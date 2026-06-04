@@ -1233,6 +1233,7 @@ class CaseAPI(BaseViewSet):
         total_count = len(case_data)
         success_count = 0
         fail_list = []
+        request_user_id = getattr(request.user, 'id', None)
         for data in case_data:
             try:
                 code_key = data.get('code') or ''
@@ -1240,6 +1241,8 @@ class CaseAPI(BaseViewSet):
                     name=data['name'],
                     repository_id=repository_id,
                 )
+                if request_user_id is not None:
+                    defaults['assignee_id'] = request_user_id
                 remark = data.get('remark')
                 if remark not in (None, ''):
                     defaults['remark'] = remark
