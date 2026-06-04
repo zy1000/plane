@@ -162,9 +162,17 @@ class TestCase(BaseModel):
 
     @property
     def review(self):
-        crr = CaseReviewRecord.objects.filter(crt__case=self).order_by("-created_at").first()
+        last_record = (
+            CaseReviewRecord.objects.filter(crt__case=self)
+            .select_related("crt")
+            .order_by("-created_at")
+            .first()
+        )
+        if last_record:
+            return last_record.crt.result
 
-        return crr.result if crr else CaseReviewThrough.Result.NOT_START
+        crt = CaseReviewThrough.objects.filter(case=self).order_by("-created_at").first()
+        return crt.result if crt else CaseReviewThrough.Result.NOT_START
 
     def save(self, *args, **kwargs):
         if self.code:
