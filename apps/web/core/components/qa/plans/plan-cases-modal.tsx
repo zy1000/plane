@@ -9,12 +9,14 @@ import { ModalCore, EModalPosition, EModalWidth } from "@plane/ui";
 import { Button } from "@plane/propel/button";
 import { CaseService } from "@/services/qa/case.service";
 import { PlanService } from "@/services/qa/plan.service";
-import {
-  formatDateTime,
-  globalEnums,
-} from "@/app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/util";
 import { useTranslation } from "@plane/i18n";
 import { qaCaseErrorContent, qaCaseSetToastError, qaCaseSetToastSuccess, qaCaseSetToastWarning } from "@/utils/qa-case-error";
+import {
+  CASE_PICKER_MODAL_CLASS,
+  CasePickerModalStyles,
+  CasePriorityPill,
+  CaseTypePill,
+} from "../shared/case-picker-modal-styles";
 
 type TLabel = { id?: string; name?: string } | string;
 type TestCase = {
@@ -53,7 +55,6 @@ export const PlanCasesModal: React.FC<Props> = ({
   onClosed,
 }) => {
   const { t } = useTranslation();
-  const Enums = globalEnums.Enums;
   const caseService = useRef(new CaseService()).current;
   const planService = useRef(new PlanService()).current;
 
@@ -354,44 +355,6 @@ export const PlanCasesModal: React.FC<Props> = ({
     return [buildTreeNode(planTree)];
   }, [planTree]);
 
-  const renderTypePill = (v: number) => {
-    const label = (Enums as any)?.case_type?.[v];
-    if (!label) return <span className="text-placeholder">-</span>;
-    return (
-      <span
-        className="inline-flex items-center rounded-md px-2 py-0.5 text-xs"
-        style={{ background: "var(--label-grey-bg)", color: "var(--label-grey-text)" }}
-      >
-        {label}
-      </span>
-    );
-  };
-
-  const priorityPillStyle: Record<number, { bg: string; text: string; dot: string }> = {
-    0: { bg: "var(--label-indigo-bg)", text: "var(--label-indigo-text)", dot: "var(--priority-low)" },
-    1: { bg: "var(--label-yellow-bg)", text: "var(--label-yellow-text)", dot: "var(--priority-medium)" },
-    2: { bg: "var(--label-orange-bg)", text: "var(--label-orange-text)", dot: "var(--priority-high)" },
-  };
-
-  const renderPriorityPill = (v: number) => {
-    const label = (Enums as any)?.case_priority?.[v];
-    if (!label) return <span className="text-placeholder">-</span>;
-    const style = priorityPillStyle[v] ?? {
-      bg: "var(--label-grey-bg)",
-      text: "var(--label-grey-text)",
-      dot: "var(--priority-none)",
-    };
-    return (
-      <span
-        className="inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-xs"
-        style={{ background: style.bg, color: style.text }}
-      >
-        <span className="size-1.5 rounded-full" style={{ background: style.dot }} />
-        {label}
-      </span>
-    );
-  };
-
   const columns: TableProps<TestCase>["columns"] = [
     {
       title: "名称",
@@ -429,14 +392,14 @@ export const PlanCasesModal: React.FC<Props> = ({
       dataIndex: "type",
       width: 100,
       key: "type",
-      render: (v: number) => renderTypePill(v),
+      render: (v: number) => <CaseTypePill value={v} />,
     },
     {
       title: "优先级",
       dataIndex: "priority",
       width: 90,
       key: "priority",
-      render: (v: number) => renderPriorityPill(v),
+      render: (v: number) => <CasePriorityPill value={v} />,
     },
   ];
 
@@ -473,106 +436,8 @@ export const PlanCasesModal: React.FC<Props> = ({
 
   return (
     <ModalCore isOpen={isOpen} handleClose={closeModal} position={EModalPosition.CENTER} width={EModalWidth.VIIXL}>
-      <div className="qa-plan-cases-modal flex w-full flex-col text-sm text-primary">
-        <style
-          dangerouslySetInnerHTML={{
-            __html: `
-            .qa-plan-cases-modal .custom-tree-indent .ant-tree-indent-unit { width: 12px !important; }
-            .qa-plan-cases-modal .custom-tree-indent .ant-tree-switcher { width: 16px !important; margin-inline-end: 4px !important; display: inline-flex; align-items: center; justify-content: center; }
-            .qa-plan-cases-modal .custom-tree-indent .ant-tree-node-content-wrapper { padding-inline: 6px !important; }
-            /* Tree */
-            .qa-plan-cases-modal .ant-tree { background: transparent; color: var(--txt-primary); font-size: inherit; }
-            .qa-plan-cases-modal .ant-tree .ant-tree-treenode { width: 100%; padding: 1px 0; align-items: center; }
-            .qa-plan-cases-modal .ant-tree .ant-tree-node-content-wrapper { min-height: 30px; display: flex; align-items: center; border-radius: 6px; transition: background-color .15s ease; }
-            .qa-plan-cases-modal .ant-tree .ant-tree-node-content-wrapper:hover { background: var(--bg-layer-1-hover); }
-            .qa-plan-cases-modal .ant-tree .ant-tree-node-content-wrapper.ant-tree-node-selected { background: var(--bg-accent-subtle); }
-            .qa-plan-cases-modal .ant-tree .ant-tree-checkbox { align-self: center; margin: 0 4px 0 0; }
-            .qa-plan-cases-modal .ant-tree .ant-tree-checkbox-inner { border-radius: 4px; border-color: var(--border-strong); background: var(--bg-surface-1); }
-            .qa-plan-cases-modal .ant-tree .ant-tree-checkbox-checked .ant-tree-checkbox-inner { background: var(--bg-accent-primary); border-color: var(--bg-accent-primary); }
-            .qa-plan-cases-modal .ant-tree .ant-tree-checkbox-indeterminate .ant-tree-checkbox-inner::after { background: var(--bg-accent-primary); }
-            .qa-plan-cases-modal .ant-tree .ant-tree-checkbox:hover .ant-tree-checkbox-inner { border-color: var(--bg-accent-primary); }
-            /* Input */
-            .qa-plan-cases-modal .ant-input-affix-wrapper { border-radius: 8px; border-color: var(--border-subtle); background: var(--bg-surface-1); font-size: inherit; }
-            .qa-plan-cases-modal .ant-input-affix-wrapper:hover { border-color: var(--border-strong); }
-            .qa-plan-cases-modal .ant-input-affix-wrapper-focused, .qa-plan-cases-modal .ant-input-affix-wrapper:focus-within { border-color: var(--bg-accent-primary); box-shadow: 0 0 0 2px var(--bg-accent-subtle); }
-            .qa-plan-cases-modal .ant-input { background: transparent; color: var(--txt-primary); font-size: inherit; }
-            .qa-plan-cases-modal .ant-input::placeholder { color: var(--txt-placeholder); }
-            .qa-plan-cases-modal .ant-input-prefix { color: var(--txt-tertiary); margin-inline-end: 8px; }
-            /* Table */
-            .qa-plan-cases-modal .ant-table-wrapper, .qa-plan-cases-modal .ant-table { background: transparent; font-size: inherit; }
-            .qa-plan-cases-modal .ant-table { color: var(--txt-primary); border: 1px solid var(--border-subtle); border-radius: 10px; }
-            .qa-plan-cases-modal .ant-table-container { border-radius: 10px; overflow: hidden; }
-            .qa-plan-cases-modal .ant-table-thead > tr > th { background: var(--bg-surface-2) !important; color: var(--text-color-secondary) !important; font-weight: 500 !important; font-size: inherit !important; border-bottom: 1px solid var(--border-subtle) !important; padding: 10px 12px !important; }
-            .qa-plan-cases-modal .ant-table-thead > tr > th::before { display: none !important; }
-            .qa-plan-cases-modal .ant-table-tbody > tr > td { border-bottom: 1px solid var(--border-subtle) !important; padding: 9px 12px !important; font-size: inherit; }
-            .qa-plan-cases-modal .ant-table-tbody > tr:last-child > td { border-bottom: none !important; }
-            .qa-plan-cases-modal .ant-table-tbody > tr.ant-table-row:hover > td, .qa-plan-cases-modal .ant-table-cell-row-hover { background: var(--bg-layer-1-hover) !important; }
-            .qa-plan-cases-modal .ant-table-tbody > tr.ant-table-row-selected > td { background: var(--bg-accent-subtle) !important; }
-            /* Checkbox */
-            .qa-plan-cases-modal .ant-checkbox-inner { border-radius: 4px; border-color: var(--border-strong); background: var(--bg-surface-1); }
-            .qa-plan-cases-modal .ant-checkbox-checked .ant-checkbox-inner { background: var(--bg-accent-primary); border-color: var(--bg-accent-primary); }
-            .qa-plan-cases-modal .ant-checkbox-indeterminate .ant-checkbox-inner::after { background: var(--bg-accent-primary); }
-            .qa-plan-cases-modal .ant-checkbox:hover .ant-checkbox-inner, .qa-plan-cases-modal .ant-checkbox-wrapper:hover .ant-checkbox-inner { border-color: var(--bg-accent-primary); }
-            .qa-plan-cases-modal .ant-checkbox-checked::after { border-color: var(--bg-accent-primary); }
-            /* Pagination (align with plan-cases page footer style) */
-            .qa-plan-cases-modal .modal-pagination-bar .ant-pagination {
-              margin: 0 !important;
-              color: var(--txt-secondary);
-              font-size: inherit;
-            }
-            .qa-plan-cases-modal .modal-pagination-bar .ant-pagination .ant-pagination-simple-pager {
-              color: var(--txt-secondary);
-            }
-            .qa-plan-cases-modal .modal-pagination-bar .ant-pagination .ant-pagination-simple-pager input {
-              width: 40px;
-              border-radius: 6px;
-              border-color: var(--border-subtle);
-              background: var(--bg-surface-1);
-              color: var(--txt-primary);
-            }
-            .qa-plan-cases-modal .modal-pagination-bar .ant-pagination .ant-pagination-options-size-changer {
-              margin-inline-start: 8px;
-            }
-            .qa-plan-cases-modal .modal-pagination-bar .ant-pagination .ant-select-selector {
-              border-radius: 6px !important;
-              border-color: var(--border-subtle) !important;
-              background: var(--bg-surface-1) !important;
-              color: var(--txt-secondary) !important;
-            }
-            .qa-plan-cases-modal .modal-pagination-bar .ant-pagination .ant-pagination-prev .ant-pagination-item-link,
-            .qa-plan-cases-modal .modal-pagination-bar .ant-pagination .ant-pagination-next .ant-pagination-item-link {
-              color: var(--txt-secondary);
-            }
-            /* Scroll areas: always show vertical scrollbar */
-            .qa-plan-cases-modal .qa-plan-cases-modal-tree-scroll,
-            .qa-plan-cases-modal .qa-plan-cases-modal-table-scroll {
-              scrollbar-gutter: stable;
-              overflow-y: scroll;
-              scrollbar-width: thin;
-              scrollbar-color: var(--scrollbar-thumb) transparent;
-            }
-            .qa-plan-cases-modal .qa-plan-cases-modal-tree-scroll::-webkit-scrollbar,
-            .qa-plan-cases-modal .qa-plan-cases-modal-table-scroll::-webkit-scrollbar {
-              width: 8px;
-              height: 8px;
-              display: block;
-            }
-            .qa-plan-cases-modal .qa-plan-cases-modal-tree-scroll::-webkit-scrollbar-track,
-            .qa-plan-cases-modal .qa-plan-cases-modal-table-scroll::-webkit-scrollbar-track {
-              background: transparent;
-            }
-            .qa-plan-cases-modal .qa-plan-cases-modal-tree-scroll::-webkit-scrollbar-thumb,
-            .qa-plan-cases-modal .qa-plan-cases-modal-table-scroll::-webkit-scrollbar-thumb {
-              background-color: var(--scrollbar-thumb);
-              border-radius: 999px;
-            }
-            .qa-plan-cases-modal .qa-plan-cases-modal-tree-scroll::-webkit-scrollbar-thumb:hover,
-            .qa-plan-cases-modal .qa-plan-cases-modal-table-scroll::-webkit-scrollbar-thumb:hover {
-              background-color: color-mix(in oklch, var(--scrollbar-thumb) 85%, var(--txt-primary));
-            }
-          `,
-          }}
-        />
+      <div className={`${CASE_PICKER_MODAL_CLASS} flex w-full flex-col text-sm text-primary`}>
+        <CasePickerModalStyles />
 
         {/* Header */}
         <div className="flex items-start justify-between gap-4 border-b border-subtle px-6 py-4">
@@ -602,7 +467,7 @@ export const PlanCasesModal: React.FC<Props> = ({
               <div className="flex items-center gap-2 px-4 pb-2 pt-4">
                 <span className="text-sm text-secondary">用例目录</span>
               </div>
-              <div className="qa-plan-cases-modal-tree-scroll flex-1 min-h-0 px-2 pb-3">
+              <div className="tree-scroll flex-1 min-h-0 px-2 pb-3">
                 <Tree
                   showLine={false}
                   checkable
@@ -685,7 +550,7 @@ export const PlanCasesModal: React.FC<Props> = ({
                 )}
                 {!loading && !error && cases.length > 0 && (
                   <>
-                    <div className="qa-plan-cases-modal-table-scroll flex-1 min-h-0">
+                    <div className="table-scroll flex-1 min-h-0">
                       <Table
                         dataSource={cases}
                         columns={columns}

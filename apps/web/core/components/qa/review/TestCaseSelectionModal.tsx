@@ -1,20 +1,26 @@
 "use client";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
-import { Modal, Space, Button, Input, Tree, Table, Tag } from "antd";
+import { Input, Pagination, Table, Tooltip, Tree } from "antd";
 import { globalEnums, getEnums } from "@/app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/util";
-import type { TableProps } from "antd";
-import type { TreeProps } from "antd";
+import type { TableProps, TreeProps } from "antd";
 import { CaseService as QaCaseService } from "@/services/qa/case.service";
-import styles from "./TestCaseSelectionModal.module.css";
-import { AppstoreOutlined, DownOutlined } from "@ant-design/icons";
-import { Atom } from "lucide-react";
+import { ChevronDown, Layers, Search, X } from "lucide-react";
+import { ModalCore, EModalPosition, EModalWidth } from "@plane/ui";
+import { Button } from "@plane/propel/button";
 import { useTranslation } from "@plane/i18n";
 import { qaCaseSetToastError } from "@/utils/qa-case-error";
+import {
+  CASE_PICKER_MODAL_CLASS,
+  CasePickerModalStyles,
+  CasePriorityPill,
+  CaseTypePill,
+} from "../shared/case-picker-modal-styles";
 
 type TTestCase = {
   id: string;
   name: string;
+  repository_name?: string;
   module?: { name?: string } | null;
   type?: number;
   priority?: number;
@@ -30,23 +36,6 @@ type Props = {
   reviewId?: string;
   onConfirm: (ids: string[]) => void;
   onChangeSelected?: (ids: string[]) => void;
-};
-
-const getEnumLabel = (group: "case_state" | "case_type" | "case_priority", value?: number) => {
-  if (value === null || value === undefined) return "-";
-  const map = (globalEnums.Enums as any)?.[group] || {};
-  const label = map[value] ?? map[String(value)] ?? value;
-  return label as string;
-};
-
-const renderEnumTag = (
-  group: "case_state" | "case_type" | "case_priority",
-  value?: number,
-  color: "default" | "processing" | "success" | "warning" | "magenta" = "default"
-) => {
-  const label = getEnumLabel(group, value);
-  if (label === "-" || label === undefined) return <span className="text-placeholder">-</span>;
-  return <Tag color={color}>{label}</Tag>;
 };
 
 export default function TestCaseSelectionModal({
@@ -79,6 +68,10 @@ export default function TestCaseSelectionModal({
   const [pageSize, setPageSize] = useState<number>(10);
   const [searchName, setSearchName] = useState<string>("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [leftWidth, setLeftWidth] = useState<number>(280);
+  const isDraggingRef = useRef<boolean>(false);
+  const startXRef = useRef<number>(0);
+  const startWidthRef = useRef<number>(0);
 
   useEffect(() => {
     if (!open) return;
@@ -165,22 +158,50 @@ export default function TestCaseSelectionModal({
   }, [searchName]);
 
   const caseColumns: TableProps<TTestCase>["columns"] = [
-    { title: "名称", dataIndex: "name", key: "name", render: (v) => <span className={styles.nameCell}>{v}</span> },
-    { title: "用例库", dataIndex: "repository_name", key: "repository_name", render: (m) => m || "-", width: 160 },
-    { title: "模块", dataIndex: "module", key: "module", render: (m) => m?.name || "-", width: 160 },
+    {
+      title: "名称",
+      dataIndex: "name",
+      key: "name",
+      width: 260,
+      ellipsis: { showTitle: false },
+      render: (v?: string) => {
+        const value = v ?? "-";
+        return (
+          <Tooltip title={value}>
+            <div className="truncate text-primary">{value}</div>
+          </Tooltip>
+        );
+      },
+    },
+    {
+      title: "用例库",
+      dataIndex: "repository_name",
+      key: "repository_name",
+      width: 110,
+      ellipsis: true,
+      render: (m?: string) => <span className="text-secondary">{m || "-"}</span>,
+    },
+    {
+      title: "模块",
+      dataIndex: "module",
+      key: "module",
+      width: 110,
+      ellipsis: true,
+      render: (m?: { name?: string } | null) => <span className="text-secondary">{m?.name || "-"}</span>,
+    },
     {
       title: "类型",
       dataIndex: "type",
       key: "type",
-      width: 120,
-      render: (v) => renderEnumTag("case_type", v, "magenta"),
+      width: 100,
+      render: (v?: number) => <CaseTypePill value={v} />,
     },
     {
       title: "优先级",
       dataIndex: "priority",
       key: "priority",
-      width: 120,
-      render: (v) => renderEnumTag("case_priority", v, "warning"),
+      width: 90,
+      render: (v?: number) => <CasePriorityPill value={v} />,
     },
   ];
 
@@ -188,16 +209,37 @@ export default function TestCaseSelectionModal({
     onConfirm(selectedIds);
   };
 
-  const renderNodeTitle = (title: string, icon: ReactNode, count?: number, fontMedium?: boolean) => {
+  const onMouseDownResize = (e: any) => {
+    isDraggingRef.current = true;
+    startXRef.current = e.clientX;
+    startWidthRef.current = leftWidth;
+    window.addEventListener("mousemove", onMouseMoveResize as any);
+    window.addEventListener("mouseup", onMouseUpResize as any);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    if (e && typeof e.preventDefault === "function") e.preventDefault();
+  };
+
+  const onMouseMoveResize = (e: MouseEvent) => {
+    if (!isDraggingRef.current) return;
+    const delta = e.clientX - startXRef.current;
+    const next = Math.min(320, Math.max(200, startWidthRef.current + delta));
+    setLeftWidth(next);
+  };
+
+  const onMouseUpResize = () => {
+    isDraggingRef.current = false;
+    window.removeEventListener("mousemove", onMouseMoveResize as any);
+    window.removeEventListener("mouseup", onMouseUpResize as any);
+    document.body.style.cursor = "auto";
+    document.body.style.userSelect = "auto";
+  };
+
+  const renderNodeTitle = (title: string, count?: number, fontMedium?: boolean) => {
     return (
-      <div className="group flex items-center justify-between gap-2 w-full">
-        <div className="flex items-center gap-2">
-          <span className="inline-flex items-center justify-center w-5 h-5 text-secondary">{icon}</span>
-          <span className={`text-sm text-primary ${fontMedium ? "font-medium" : ""}`}>{title}</span>
-        </div>
-        <div className="flex items-center gap-2">
-          {typeof count === "number" && <span className="text-xs text-secondary">{count}</span>}
-        </div>
+      <div className="group flex w-full items-center gap-2 py-0.5">
+        <span className={`flex-1 truncate text-sm text-primary ${fontMedium ? "font-medium" : ""}`}>{title}</span>
+        {typeof count === "number" && <span className="ml-auto shrink-0 text-xs text-secondary">{count}</span>}
       </div>
     );
   };
@@ -219,20 +261,9 @@ export default function TestCaseSelectionModal({
               ? `module:${id}`
               : id;
 
-    const icon =
-      kind === "root" ? (
-        <AppstoreOutlined />
-      ) : kind === "repository" ? (
-        <Atom size={14} />
-      ) : kind === "repository_modules_all" ? (
-        <AppstoreOutlined />
-      ) : (
-        <AppstoreOutlined />
-      );
-
     const children = Array.isArray(node?.children) ? node.children : [];
     return {
-      title: renderNodeTitle(node?.name ?? "-", icon, count, kind === "root" || kind === "repository_modules_all"),
+      title: renderNodeTitle(node?.name ?? "-", count, kind === "root" || kind === "repository_modules_all"),
       key,
       kind,
       repositoryId,
@@ -346,133 +377,198 @@ export default function TestCaseSelectionModal({
     } catch {}
   };
 
+  const handlePaginationChange = (page: number, size?: number) => {
+    const nextSize = size || pageSize;
+    const nextPage = nextSize !== pageSize ? 1 : page;
+    fetchCases(nextPage, nextSize, selectedRepositoryId || undefined, selectedModuleId || undefined);
+  };
+
+  const selectedCount = selectedIds.length;
+
   return (
-    <Modal
-      open={open}
-      onCancel={onClose}
-      title="选择测试用例"
-      width={1200}
-      keyboard={false}
-      maskClosable={false}
-      getContainer={false}
-      destroyOnClose
-      footer={
-        <Space>
-          <Button onClick={onClose}>取消</Button>
-          <Button type="primary" onClick={handleConfirm} loading={loadingCases}>
-            确定
-          </Button>
-        </Space>
-      }
-    >
-      <div className={styles.modalBody}>
-        <div className={styles.content}>
-          <div className={styles.leftPane}>
-            <div className="px-2">
-              <style
-                dangerouslySetInnerHTML={{
-                  __html: `
-                .custom-tree-indent .ant-tree-indent-unit {
-                  width: 10px !important;
-                }
-                .custom-tree-indent .ant-tree-switcher {
-                  width: 14px !important;
-                  margin-inline-end: 8px !important;
-                }
-                .custom-tree-indent .ant-tree-node-content-wrapper {
-                  padding-inline: 4px !important;
-                }
-              `,
-                }}
+    <ModalCore isOpen={open} handleClose={onClose} position={EModalPosition.CENTER} width={EModalWidth.VIIXL}>
+      <div className={`${CASE_PICKER_MODAL_CLASS} flex w-full flex-col text-sm text-primary`}>
+        <CasePickerModalStyles />
+
+        <div className="flex items-start justify-between gap-4 border-b border-subtle px-6 py-4">
+          <div className="flex items-center gap-3">
+            <h3 className="text-base font-bold text-primary">选择测试用例</h3>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="关闭"
+            className="flex size-8 items-center justify-center rounded-md text-tertiary transition-colors hover:bg-layer-1-hover hover:text-secondary"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+
+        <div className="h-[82vh]">
+          <div className="flex h-full overflow-hidden">
+            <div className="relative flex flex-col bg-layer-1/40" style={{ width: leftWidth, minWidth: 200, maxWidth: 320 }}>
+              <div className="flex items-center gap-2 px-4 pb-2 pt-4">
+                <span className="text-sm text-secondary">用例目录</span>
+              </div>
+              <div className="tree-scroll flex-1 min-h-0 px-2 pb-3">
+                <Tree
+                  showLine={false}
+                  checkable
+                  switcherIcon={({ expanded, isLeaf }: any) =>
+                    isLeaf ? null : (
+                      <ChevronDown
+                        className="size-3.5 text-tertiary transition-transform"
+                        style={{ transform: expanded ? "rotate(0deg)" : "rotate(-90deg)" }}
+                      />
+                    )
+                  }
+                  onSelect={onSelect}
+                  onCheck={onCheck}
+                  onExpand={onExpand}
+                  expandedKeys={expandedKeys}
+                  autoExpandParent={autoExpandParent}
+                  treeData={treeData}
+                  selectedKeys={treeData.length > 0 ? [selectedTreeKey] : []}
+                  checkedKeys={checkedTreeKeys}
+                  className="custom-tree-indent"
+                />
+              </div>
+              <div
+                onMouseDown={onMouseDownResize}
+                className="absolute right-0 top-0 z-10 h-full w-1.5 cursor-col-resize border-r border-subtle transition-colors hover:border-accent-strong hover:bg-accent-subtle"
               />
-              <Tree
-                showLine={false}
-                checkable
-                switcherIcon={
-                  <span className="inline-flex items-center justify-center w-5 h-5 text-secondary">
-                    <DownOutlined />
-                  </span>
-                }
-                onSelect={onSelect}
-                onCheck={onCheck}
-                onExpand={onExpand}
-                expandedKeys={expandedKeys}
-                autoExpandParent={autoExpandParent}
-                treeData={treeData}
-                selectedKeys={treeData.length > 0 ? [selectedTreeKey] : []}
-                checkedKeys={checkedTreeKeys}
-                className="py-2 pl-2 custom-tree-indent"
-              />
+            </div>
+
+            <div className="flex flex-1 flex-col overflow-hidden">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-subtle px-4 py-3">
+                <Input
+                  placeholder="按名称搜索"
+                  allowClear
+                  prefix={<Search className="size-4" />}
+                  value={searchName}
+                  onChange={(e) => setSearchName(e.target.value)}
+                  className="max-w-xs"
+                />
+                {selectedCount > 0 && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className="text-secondary">
+                      已选 <span className="font-medium text-accent-primary">{selectedCount}</span> 个
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedIds([]);
+                        onChangeSelected?.([]);
+                        syncTreeCheckState([]);
+                      }}
+                      className="rounded-md px-2 py-1 text-link-primary transition-colors hover:bg-layer-1-hover"
+                    >
+                      清空
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex flex-1 min-h-0 flex-col">
+                {loadingCases && (
+                  <div className="flex h-full items-center justify-center py-12">
+                    <div className="flex flex-col items-center gap-3 text-tertiary">
+                      <span className="size-6 animate-spin rounded-full border-2 border-subtle border-t-accent-primary" />
+                      <span className="text-sm text-secondary">加载中...</span>
+                    </div>
+                  </div>
+                )}
+                {!loadingCases && cases.length === 0 && (
+                  <div className="flex h-full flex-col items-center justify-center gap-3 py-12 text-center">
+                    <span className="flex size-12 items-center justify-center rounded-full bg-layer-1 text-tertiary">
+                      <Layers className="size-6" />
+                    </span>
+                    <div className="text-sm text-secondary">暂无可关联的用例</div>
+                  </div>
+                )}
+                {!loadingCases && cases.length > 0 && (
+                  <>
+                    <div className="table-scroll flex-1 min-h-0">
+                      <Table<TTestCase>
+                        rowKey="id"
+                        dataSource={cases}
+                        columns={caseColumns as any}
+                        tableLayout="fixed"
+                        pagination={false}
+                        rowSelection={{
+                          selectedRowKeys: selectedIds,
+                          onChange: (keys) => {
+                            const nextKeys = keys as string[];
+                            setSelectedIds(nextKeys);
+                            onChangeSelected?.(nextKeys);
+                            syncTreeCheckState(nextKeys);
+                          },
+                          preserveSelectedRowKeys: true,
+                          selections: [
+                            {
+                              key: "select-all",
+                              text: "本页全选",
+                              onSelect: () => {
+                                const nextKeys = Array.from(new Set([...selectedIds, ...cases.map((c) => String(c.id))]));
+                                setSelectedIds(nextKeys);
+                                onChangeSelected?.(nextKeys);
+                                syncTreeCheckState(nextKeys);
+                              },
+                            },
+                            {
+                              key: "clear-all",
+                              text: "清空选择",
+                              onSelect: () => {
+                                setSelectedIds([]);
+                                onChangeSelected?.([]);
+                                syncTreeCheckState([]);
+                              },
+                            },
+                          ],
+                        }}
+                      />
+                    </div>
+                    <div className="modal-pagination-bar flex-shrink-0 border-t border-subtle bg-surface-1 py-3 pl-4 pr-4">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-secondary">
+                          {total > 0
+                            ? `第 ${(currentPage - 1) * pageSize + 1}-${Math.min(currentPage * pageSize, total)} 条，共 ${total} 条`
+                            : ""}
+                        </span>
+                        <Pagination
+                          simple
+                          current={currentPage}
+                          pageSize={pageSize}
+                          total={total}
+                          showSizeChanger
+                          pageSizeOptions={["10", "20", "50", "100"]}
+                          onChange={handlePaginationChange}
+                          onShowSizeChange={handlePaginationChange}
+                          size="small"
+                        />
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
           </div>
-          <div className={styles.rightPane}>
-            <div className="flex items-center justify-between mb-2">
-              <Input
-                placeholder="按名称搜索"
-                allowClear
-                value={searchName}
-                onChange={(e) => setSearchName(e.target.value)}
-                className="w-64"
-              />
-            </div>
-            <Table<TTestCase>
-              size="small"
-              rowKey="id"
-              loading={loadingCases}
-              dataSource={cases}
-              columns={caseColumns as any}
-              showHeader
-              pagination={{
-                current: currentPage,
-                pageSize,
-                total,
-                showSizeChanger: true,
-                pageSizeOptions: ["10", "20", "50", "100"],
-                onChange: (page) => {
-                  setCurrentPage(page);
-                  fetchCases(page, pageSize, selectedRepositoryId || undefined, selectedModuleId || undefined);
-                },
-                onShowSizeChange: (_current, size) => {
-                  setPageSize(size);
-                  fetchCases(1, size, selectedRepositoryId || undefined, selectedModuleId || undefined);
-                },
-                showTotal: (t, r) => `第 ${r[0]}-${r[1]} 条，共 ${t} 条`,
-              }}
-              rowSelection={{
-                selectedRowKeys: selectedIds,
-                onChange: (keys) => {
-                  const nextKeys = keys as string[];
-                  setSelectedIds(nextKeys);
-                  onChangeSelected?.(nextKeys);
-                  syncTreeCheckState(nextKeys);
-                },
-                preserveSelectedRowKeys: true,
-                selections: [
-                  {
-                    key: "select-all",
-                    text: "本页全选",
-                    onSelect: () => {
-                      const nextKeys = Array.from(new Set([...selectedIds, ...cases.map((c) => String(c.id))]));
-                      setSelectedIds(nextKeys);
-                      onChangeSelected?.(nextKeys);
-                      syncTreeCheckState(nextKeys);
-                    },
-                  },
-                  {
-                    key: "clear-all",
-                    text: "清空选择",
-                    onSelect: () => {
-                      setSelectedIds([]);
-                      onChangeSelected?.([]);
-                      syncTreeCheckState([]);
-                    },
-                  },
-                ],
-              }}
-            />
+        </div>
+
+        <div className="flex items-center justify-between gap-3 border-t border-subtle bg-surface-1 px-6 py-3">
+          <div className="text-sm text-secondary">
+            已选 <span className="font-medium text-accent-primary">{selectedCount}</span> 个用例
+          </div>
+          <div className="flex items-center gap-3">
+            <Button variant="secondary" onClick={onClose} size="lg">
+              取消
+            </Button>
+            <Button variant="primary" onClick={handleConfirm} size="lg" disabled={loadingCases}>
+              {loadingCases ? "处理中..." : selectedCount > 0 ? `确定关联 ${selectedCount} 个` : "确定"}
+            </Button>
           </div>
         </div>
       </div>
-    </Modal>
+    </ModalCore>
   );
 }
