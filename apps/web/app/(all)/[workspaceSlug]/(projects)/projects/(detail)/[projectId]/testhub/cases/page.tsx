@@ -1447,11 +1447,7 @@ export default function TestCasesPage() {
 
                   {repositoryId && !loading && !error && (
                     <div className="flex flex-col h-full overflow-hidden">
-                      <div
-                        className={`testhub-cases-table-scroll flex-1 relative overflow-y-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar]:block [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-[var(--scrollbar-thumb)] [&::-webkit-scrollbar-thumb]:rounded-full ${
-                          pageSize === 100 ? "testhub-cases-scrollbar-strong" : ""
-                        }`}
-                      >
+                      <div className="testhub-cases-table-scroll scrollbar-always-visible flex-1 relative min-w-0 overflow-y-scroll px-0">
                         <Table
                           dataSource={cases}
                           columns={resizableColumns}
@@ -1542,8 +1538,19 @@ export default function TestCasesPage() {
                 <style
                   dangerouslySetInnerHTML={{
                     __html: `
+                      .testhub-cases-table-scroll {
+                        scrollbar-gutter: stable;
+                      }
+
+                      .testhub-cases-table-scroll .ant-table-wrapper,
+                      .testhub-cases-table-scroll .ant-table,
+                      .testhub-cases-table-scroll .ant-table-container {
+                        margin: 0;
+                        padding: 0;
+                      }
+
                       .testhub-cases-table-scroll .ant-table-body {
-                        overflow-y: auto !important;
+                        overflow-y: visible !important;
                       }
 
                       .testhub-cases-table-scroll .ant-table-thead > tr > th {
@@ -1559,19 +1566,56 @@ export default function TestCasesPage() {
                       }
 
                       .testhub-cases-table-scroll ::-webkit-scrollbar {
-                        width: 12px;
-                        height: 12px;
+                        width: 8px;
+                        height: 8px;
                       }
 
                       .testhub-cases-table-scroll ::-webkit-scrollbar-thumb {
-                        background-color: color-mix(in oklch, var(--scrollbar-thumb) 85%, transparent);
-                        border-radius: 999px;
-                        border: 3px solid transparent;
-                        background-clip: content-box;
+                        background-color: #d9d9d9;
+                        border-radius: 4px;
+                      }
+
+                      .testhub-cases-table-scroll ::-webkit-scrollbar-thumb:hover {
+                        background-color: #bfbfbf;
                       }
 
                       .testhub-cases-table-scroll ::-webkit-scrollbar-track {
-                        background: transparent;
+                        background: color-mix(in oklch, var(--border-subtle) 40%, transparent);
+                        border-radius: 4px;
+                      }
+
+                      .testhub-cases-table-scroll .ant-table-container::-webkit-scrollbar,
+                      .testhub-cases-table-scroll .ant-table-content::-webkit-scrollbar,
+                      .testhub-cases-table-scroll .ant-table-body::-webkit-scrollbar {
+                        width: 8px;
+                        height: 8px;
+                      }
+
+                      .testhub-cases-table-scroll .ant-table-container::-webkit-scrollbar-thumb,
+                      .testhub-cases-table-scroll .ant-table-content::-webkit-scrollbar-thumb,
+                      .testhub-cases-table-scroll .ant-table-body::-webkit-scrollbar-thumb {
+                        background-color: #d9d9d9;
+                        border-radius: 4px;
+                      }
+
+                      .testhub-cases-table-scroll .ant-table-container::-webkit-scrollbar-thumb:hover,
+                      .testhub-cases-table-scroll .ant-table-content::-webkit-scrollbar-thumb:hover,
+                      .testhub-cases-table-scroll .ant-table-body::-webkit-scrollbar-thumb:hover {
+                        background-color: #bfbfbf;
+                      }
+
+                      .testhub-cases-table-scroll .ant-table-container::-webkit-scrollbar-track,
+                      .testhub-cases-table-scroll .ant-table-content::-webkit-scrollbar-track,
+                      .testhub-cases-table-scroll .ant-table-body::-webkit-scrollbar-track {
+                        background: color-mix(in oklch, var(--border-subtle) 40%, transparent);
+                        border-radius: 4px;
+                      }
+
+                      .testhub-cases-table-scroll .ant-table-container,
+                      .testhub-cases-table-scroll .ant-table-content,
+                      .testhub-cases-table-scroll .ant-table-body {
+                        scrollbar-width: thin;
+                        scrollbar-color: #d9d9d9 color-mix(in oklch, var(--border-subtle) 40%, transparent);
                       }
                     `,
                   }}
