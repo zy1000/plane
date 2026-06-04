@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Tree, Table, Row, Col, Tag, Tooltip, Input } from "antd";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Tree, Table, Tooltip, Input, Pagination } from "antd";
 import type { TreeProps } from "antd";
 import type { TableProps } from "antd";
-import { AppstoreOutlined, DownOutlined } from "@ant-design/icons";
+import { ChevronDown, Layers, Search, X } from "lucide-react";
 import { ModalCore, EModalPosition, EModalWidth } from "@plane/ui";
 import { Button } from "@plane/propel/button";
 import { CaseService } from "@/services/qa/case.service";
@@ -76,7 +76,7 @@ export const PlanCasesModal: React.FC<Props> = ({
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [currentPage, setCurrentPage] = useState<number>(1);
-  const [pageSize] = useState<number>(10);
+  const [pageSize, setPageSize] = useState<number>(20);
   const [searchName, setSearchName] = useState<string>("");
 
   const [leftWidth, setLeftWidth] = useState<number>(280);
@@ -135,19 +135,42 @@ export const PlanCasesModal: React.FC<Props> = ({
     clearSearchDebounce();
   }, []);
 
+  const getTreeNodeKey = (node: any): string => {
+    const kind = String(node?.kind || "");
+    const id = String(node?.id || "");
+    const repositoryId = node?.repository_id ? String(node.repository_id) : null;
+
+    if (kind === "root") return "root";
+    if (kind === "repository") return `repo:${id}`;
+    if (kind === "repository_modules_all") return `repo:${repositoryId}:all_modules`;
+    if (kind === "module") return `module:${id}`;
+    return id;
+  };
+
+  const collectFirstLevelExpandedKeys = (node: any): string[] => {
+    if (!node) return [];
+    return [getTreeNodeKey(node)];
+  };
+
   const fetchPlanTree = async () => {
     if (!workspaceSlug || !planId) return;
     try {
       const data = await caseService.getPlanUnassociatedCaseTree(String(workspaceSlug), { plan_id: String(planId) });
       setPlanTree(data || null);
-      setExpandedKeys([]);
+      setExpandedKeys(data ? collectFirstLevelExpandedKeys(data) : []);
       setAutoExpandParent(true);
     } catch {
       setPlanTree(null);
     }
   };
 
-  const fetchCases = async (page: number, repoId?: string, moduleId?: string, name?: string) => {
+  const fetchCases = async (
+    page: number,
+    repoId?: string,
+    moduleId?: string,
+    name?: string,
+    pageSizeArg: number = pageSize
+  ) => {
     try {
       if (!planId) return;
       setLoading(true);
@@ -155,7 +178,7 @@ export const PlanCasesModal: React.FC<Props> = ({
       const params: any = {
         plan_id: String(planId || ""),
         page,
-        page_size: 10,
+        page_size: pageSizeArg,
       };
       const keyword = name?.trim();
       if (keyword) {
@@ -168,6 +191,7 @@ export const PlanCasesModal: React.FC<Props> = ({
       setCases(response?.data || []);
       setTotal(response?.count || 0);
       setCurrentPage(page);
+      setPageSize(pageSizeArg);
     } catch (e: unknown) {
       const fallback = "用例加载失败";
       setError(qaCaseErrorContent(e, t, fallback));
@@ -175,6 +199,17 @@ export const PlanCasesModal: React.FC<Props> = ({
     } finally {
       setLoading(false);
     }
+  };
+
+  const handlePaginationChange = (page: number, size?: number) => {
+    const nextSize = size || pageSize;
+    const nextPage = nextSize !== pageSize ? 1 : page;
+    const keyword = searchName.trim();
+    if (keyword) {
+      fetchCases(nextPage, undefined, undefined, keyword, nextSize);
+      return;
+    }
+    fetchCases(nextPage, selectedRepositoryId || undefined, selectedModuleId || undefined, undefined, nextSize);
   };
 
   const onSelect: TreeProps["onSelect"] = (selectedKeys, info) => {
@@ -286,16 +321,11 @@ export const PlanCasesModal: React.FC<Props> = ({
     }
   };
 
-  const renderNodeTitle = (title: string, icon: ReactNode, count?: number, fontMedium?: boolean) => {
+  const renderNodeTitle = (title: string, count?: number, fontMedium?: boolean) => {
     return (
-      <div className="group flex items-center justify-between gap-2 w-full">
-        <div className="flex items-center gap-2">
-          <span className="inline-flex items-center justify-center w-5 h-5 text-secondary">{icon}</span>
-          <span className={`text-sm text-primary ${fontMedium ? "font-medium" : ""}`}>{title}</span>
-        </div>
-        <div className="flex items-center gap-2">
-          {typeof count === "number" && <span className="text-xs text-secondary">{count}</span>}
-        </div>
+      <div className="group flex w-full items-center gap-2 py-0.5">
+        <span className={`flex-1 truncate text-sm text-primary ${fontMedium ? "font-medium" : ""}`}>{title}</span>
+        {typeof count === "number" && <span className="ml-auto shrink-0 text-xs text-secondary">{count}</span>}
       </div>
     );
   };
@@ -306,31 +336,11 @@ export const PlanCasesModal: React.FC<Props> = ({
     const repositoryId = node?.repository_id ? String(node.repository_id) : null;
     const count = typeof node?.count === "number" ? node.count : undefined;
 
-    const key =
-      kind === "root"
-        ? "root"
-        : kind === "repository"
-          ? `repo:${id}`
-          : kind === "repository_modules_all"
-            ? `repo:${repositoryId}:all_modules`
-            : kind === "module"
-              ? `module:${id}`
-              : id;
-
-    const icon =
-      kind === "root" ? (
-        <AppstoreOutlined />
-      ) : kind === "repository" ? (
-        <AppstoreOutlined />
-      ) : kind === "repository_modules_all" ? (
-        <AppstoreOutlined />
-      ) : (
-        <AppstoreOutlined />
-      );
+    const key = getTreeNodeKey({ kind, id, repository_id: repositoryId });
 
     const children = Array.isArray(node?.children) ? node.children : [];
     return {
-      title: renderNodeTitle(node?.name ?? "-", icon, count, kind === "root" || kind === "repository_modules_all"),
+      title: renderNodeTitle(node?.name ?? "-", count, kind === "root" || kind === "repository_modules_all"),
       key,
       kind,
       repositoryId,
@@ -344,6 +354,44 @@ export const PlanCasesModal: React.FC<Props> = ({
     return [buildTreeNode(planTree)];
   }, [planTree]);
 
+  const renderTypePill = (v: number) => {
+    const label = (Enums as any)?.case_type?.[v];
+    if (!label) return <span className="text-placeholder">-</span>;
+    return (
+      <span
+        className="inline-flex items-center rounded-md px-2 py-0.5 text-xs"
+        style={{ background: "var(--label-grey-bg)", color: "var(--label-grey-text)" }}
+      >
+        {label}
+      </span>
+    );
+  };
+
+  const priorityPillStyle: Record<number, { bg: string; text: string; dot: string }> = {
+    0: { bg: "var(--label-indigo-bg)", text: "var(--label-indigo-text)", dot: "var(--priority-low)" },
+    1: { bg: "var(--label-yellow-bg)", text: "var(--label-yellow-text)", dot: "var(--priority-medium)" },
+    2: { bg: "var(--label-orange-bg)", text: "var(--label-orange-text)", dot: "var(--priority-high)" },
+  };
+
+  const renderPriorityPill = (v: number) => {
+    const label = (Enums as any)?.case_priority?.[v];
+    if (!label) return <span className="text-placeholder">-</span>;
+    const style = priorityPillStyle[v] ?? {
+      bg: "var(--label-grey-bg)",
+      text: "var(--label-grey-text)",
+      dot: "var(--priority-none)",
+    };
+    return (
+      <span
+        className="inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-xs"
+        style={{ background: style.bg, color: style.text }}
+      >
+        <span className="size-1.5 rounded-full" style={{ background: style.dot }} />
+        {label}
+      </span>
+    );
+  };
+
   const columns: TableProps<TestCase>["columns"] = [
     {
       title: "名称",
@@ -355,7 +403,7 @@ export const PlanCasesModal: React.FC<Props> = ({
         const value = v ?? "-";
         return (
           <Tooltip title={value}>
-            <div className="truncate">{value}</div>
+            <div className="truncate text-primary">{value}</div>
           </Tooltip>
         );
       },
@@ -364,234 +412,356 @@ export const PlanCasesModal: React.FC<Props> = ({
       title: "用例库",
       dataIndex: "repository_name",
       key: "repository_name",
-      width: 100,
-      render: (v: string) => (v ? v : "-")
+      width: 110,
+      ellipsis: true,
+      render: (v: string) => <span className="text-secondary">{v ? v : "-"}</span>,
     },
     {
       title: "模块",
       dataIndex: "module",
       key: "module",
-      width: 100,
-      render: (v: any) => (v && v.name ? v.name : "-")
+      width: 110,
+      ellipsis: true,
+      render: (v: any) => <span className="text-secondary">{v && v.name ? v.name : "-"}</span>,
     },
     {
       title: "类型",
       dataIndex: "type",
       width: 100,
       key: "type",
-      render: (v: number) => {
-        const label = (Enums as any)?.case_type?.[v] || "-";
-        return <Tag>{label}</Tag>;
-      },
+      render: (v: number) => renderTypePill(v),
     },
     {
       title: "优先级",
       dataIndex: "priority",
-      width: 75,
+      width: 90,
       key: "priority",
-      render: (v: number) => {
-        const label = (Enums as any)?.case_priority?.[v] || "-";
-        return <Tag>{label}</Tag>;
-      },
+      render: (v: number) => renderPriorityPill(v),
     },
-
   ];
 
+  const closeModal = () => {
+    onClose();
+    onClosed && onClosed();
+  };
+
+  const selectedCount = selectedNewIds.length;
+
+  const handleConfirm = async () => {
+    if (!workspaceSlug || !planId) {
+      qaCaseSetToastWarning("缺少必要参数：workspace或计划ID");
+      return;
+    }
+    try {
+      if (!selectedNewIds || selectedNewIds.length === 0) {
+        qaCaseSetToastWarning("请先选择要关联的用例");
+        return;
+      }
+      setSaving(true);
+      await planService.addPlanCases(String(workspaceSlug), String(projectId || ""), {
+        plan_id: String(planId),
+        case_ids: selectedNewIds.map(String),
+      });
+      qaCaseSetToastSuccess("用例关联已更新");
+      closeModal();
+    } catch (e: unknown) {
+      qaCaseSetToastError(e, t, "用例关联失败");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
-    <ModalCore
-      isOpen={isOpen}
-      handleClose={() => {
-        onClose();
-        onClosed && onClosed();
-      }}
-      position={EModalPosition.CENTER}
-      width={EModalWidth.VXL}
-    >
-      <div className="w-full">
-        <div className="flex items-center justify-between gap-4 border-b border-subtle px-6 py-4">
-          <h3 className="text-lg font-medium">
-            规划用例
-          </h3>
-          <Button
-            variant="primary"
-            onClick={() => {
-              onClose();
-              onClosed && onClosed();
-            }}
+    <ModalCore isOpen={isOpen} handleClose={closeModal} position={EModalPosition.CENTER} width={EModalWidth.VIIXL}>
+      <div className="qa-plan-cases-modal flex w-full flex-col text-sm text-primary">
+        <style
+          dangerouslySetInnerHTML={{
+            __html: `
+            .qa-plan-cases-modal .custom-tree-indent .ant-tree-indent-unit { width: 12px !important; }
+            .qa-plan-cases-modal .custom-tree-indent .ant-tree-switcher { width: 16px !important; margin-inline-end: 4px !important; display: inline-flex; align-items: center; justify-content: center; }
+            .qa-plan-cases-modal .custom-tree-indent .ant-tree-node-content-wrapper { padding-inline: 6px !important; }
+            /* Tree */
+            .qa-plan-cases-modal .ant-tree { background: transparent; color: var(--txt-primary); font-size: inherit; }
+            .qa-plan-cases-modal .ant-tree .ant-tree-treenode { width: 100%; padding: 1px 0; align-items: center; }
+            .qa-plan-cases-modal .ant-tree .ant-tree-node-content-wrapper { min-height: 30px; display: flex; align-items: center; border-radius: 6px; transition: background-color .15s ease; }
+            .qa-plan-cases-modal .ant-tree .ant-tree-node-content-wrapper:hover { background: var(--bg-layer-1-hover); }
+            .qa-plan-cases-modal .ant-tree .ant-tree-node-content-wrapper.ant-tree-node-selected { background: var(--bg-accent-subtle); }
+            .qa-plan-cases-modal .ant-tree .ant-tree-checkbox { align-self: center; margin: 0 4px 0 0; }
+            .qa-plan-cases-modal .ant-tree .ant-tree-checkbox-inner { border-radius: 4px; border-color: var(--border-strong); background: var(--bg-surface-1); }
+            .qa-plan-cases-modal .ant-tree .ant-tree-checkbox-checked .ant-tree-checkbox-inner { background: var(--bg-accent-primary); border-color: var(--bg-accent-primary); }
+            .qa-plan-cases-modal .ant-tree .ant-tree-checkbox-indeterminate .ant-tree-checkbox-inner::after { background: var(--bg-accent-primary); }
+            .qa-plan-cases-modal .ant-tree .ant-tree-checkbox:hover .ant-tree-checkbox-inner { border-color: var(--bg-accent-primary); }
+            /* Input */
+            .qa-plan-cases-modal .ant-input-affix-wrapper { border-radius: 8px; border-color: var(--border-subtle); background: var(--bg-surface-1); font-size: inherit; }
+            .qa-plan-cases-modal .ant-input-affix-wrapper:hover { border-color: var(--border-strong); }
+            .qa-plan-cases-modal .ant-input-affix-wrapper-focused, .qa-plan-cases-modal .ant-input-affix-wrapper:focus-within { border-color: var(--bg-accent-primary); box-shadow: 0 0 0 2px var(--bg-accent-subtle); }
+            .qa-plan-cases-modal .ant-input { background: transparent; color: var(--txt-primary); font-size: inherit; }
+            .qa-plan-cases-modal .ant-input::placeholder { color: var(--txt-placeholder); }
+            .qa-plan-cases-modal .ant-input-prefix { color: var(--txt-tertiary); margin-inline-end: 8px; }
+            /* Table */
+            .qa-plan-cases-modal .ant-table-wrapper, .qa-plan-cases-modal .ant-table { background: transparent; font-size: inherit; }
+            .qa-plan-cases-modal .ant-table { color: var(--txt-primary); border: 1px solid var(--border-subtle); border-radius: 10px; }
+            .qa-plan-cases-modal .ant-table-container { border-radius: 10px; overflow: hidden; }
+            .qa-plan-cases-modal .ant-table-thead > tr > th { background: var(--bg-surface-2) !important; color: var(--text-color-secondary) !important; font-weight: 500 !important; font-size: inherit !important; border-bottom: 1px solid var(--border-subtle) !important; padding: 10px 12px !important; }
+            .qa-plan-cases-modal .ant-table-thead > tr > th::before { display: none !important; }
+            .qa-plan-cases-modal .ant-table-tbody > tr > td { border-bottom: 1px solid var(--border-subtle) !important; padding: 9px 12px !important; font-size: inherit; }
+            .qa-plan-cases-modal .ant-table-tbody > tr:last-child > td { border-bottom: none !important; }
+            .qa-plan-cases-modal .ant-table-tbody > tr.ant-table-row:hover > td, .qa-plan-cases-modal .ant-table-cell-row-hover { background: var(--bg-layer-1-hover) !important; }
+            .qa-plan-cases-modal .ant-table-tbody > tr.ant-table-row-selected > td { background: var(--bg-accent-subtle) !important; }
+            /* Checkbox */
+            .qa-plan-cases-modal .ant-checkbox-inner { border-radius: 4px; border-color: var(--border-strong); background: var(--bg-surface-1); }
+            .qa-plan-cases-modal .ant-checkbox-checked .ant-checkbox-inner { background: var(--bg-accent-primary); border-color: var(--bg-accent-primary); }
+            .qa-plan-cases-modal .ant-checkbox-indeterminate .ant-checkbox-inner::after { background: var(--bg-accent-primary); }
+            .qa-plan-cases-modal .ant-checkbox:hover .ant-checkbox-inner, .qa-plan-cases-modal .ant-checkbox-wrapper:hover .ant-checkbox-inner { border-color: var(--bg-accent-primary); }
+            .qa-plan-cases-modal .ant-checkbox-checked::after { border-color: var(--bg-accent-primary); }
+            /* Pagination (align with plan-cases page footer style) */
+            .qa-plan-cases-modal .modal-pagination-bar .ant-pagination {
+              margin: 0 !important;
+              color: var(--txt-secondary);
+              font-size: inherit;
+            }
+            .qa-plan-cases-modal .modal-pagination-bar .ant-pagination .ant-pagination-simple-pager {
+              color: var(--txt-secondary);
+            }
+            .qa-plan-cases-modal .modal-pagination-bar .ant-pagination .ant-pagination-simple-pager input {
+              width: 40px;
+              border-radius: 6px;
+              border-color: var(--border-subtle);
+              background: var(--bg-surface-1);
+              color: var(--txt-primary);
+            }
+            .qa-plan-cases-modal .modal-pagination-bar .ant-pagination .ant-pagination-options-size-changer {
+              margin-inline-start: 8px;
+            }
+            .qa-plan-cases-modal .modal-pagination-bar .ant-pagination .ant-select-selector {
+              border-radius: 6px !important;
+              border-color: var(--border-subtle) !important;
+              background: var(--bg-surface-1) !important;
+              color: var(--txt-secondary) !important;
+            }
+            .qa-plan-cases-modal .modal-pagination-bar .ant-pagination .ant-pagination-prev .ant-pagination-item-link,
+            .qa-plan-cases-modal .modal-pagination-bar .ant-pagination .ant-pagination-next .ant-pagination-item-link {
+              color: var(--txt-secondary);
+            }
+            /* Scroll areas: always show vertical scrollbar */
+            .qa-plan-cases-modal .qa-plan-cases-modal-tree-scroll,
+            .qa-plan-cases-modal .qa-plan-cases-modal-table-scroll {
+              scrollbar-gutter: stable;
+              overflow-y: scroll;
+              scrollbar-width: thin;
+              scrollbar-color: var(--scrollbar-thumb) transparent;
+            }
+            .qa-plan-cases-modal .qa-plan-cases-modal-tree-scroll::-webkit-scrollbar,
+            .qa-plan-cases-modal .qa-plan-cases-modal-table-scroll::-webkit-scrollbar {
+              width: 8px;
+              height: 8px;
+              display: block;
+            }
+            .qa-plan-cases-modal .qa-plan-cases-modal-tree-scroll::-webkit-scrollbar-track,
+            .qa-plan-cases-modal .qa-plan-cases-modal-table-scroll::-webkit-scrollbar-track {
+              background: transparent;
+            }
+            .qa-plan-cases-modal .qa-plan-cases-modal-tree-scroll::-webkit-scrollbar-thumb,
+            .qa-plan-cases-modal .qa-plan-cases-modal-table-scroll::-webkit-scrollbar-thumb {
+              background-color: var(--scrollbar-thumb);
+              border-radius: 999px;
+            }
+            .qa-plan-cases-modal .qa-plan-cases-modal-tree-scroll::-webkit-scrollbar-thumb:hover,
+            .qa-plan-cases-modal .qa-plan-cases-modal-table-scroll::-webkit-scrollbar-thumb:hover {
+              background-color: color-mix(in oklch, var(--scrollbar-thumb) 85%, var(--txt-primary));
+            }
+          `,
+          }}
+        />
+
+        {/* Header */}
+        <div className="flex items-start justify-between gap-4 border-b border-subtle px-6 py-4">
+          <div className="flex items-center gap-3">
+            <div>
+              <h3 className="text-base font-bold text-primary">规划用例</h3>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={closeModal}
+            aria-label="关闭"
+            className="flex size-8 items-center justify-center rounded-md text-tertiary transition-colors hover:bg-layer-1-hover hover:text-secondary"
           >
-            关闭
-          </Button>
+            <X className="size-4" />
+          </button>
         </div>
-        <Row wrap={false} className="h-[80vh] max-h-[80vh] overflow-hidden p-6" gutter={[0, 16]}>
-          <Col
-            className="relative border-r border-subtle overflow-y-auto"
-            flex="0 0 auto"
-            style={{ width: leftWidth, minWidth: 200, maxWidth: 320 }}
-          >
+
+        {/* Body */}
+        <div className="h-[82vh]">
+          <div className="flex h-full overflow-hidden">
+            {/* Left: tree */}
             <div
-              onMouseDown={onMouseDownResize}
-              className="absolute right-0 top-0 h-full w-2"
-              style={{ cursor: "col-resize", zIndex: 10 }}
-            />
-            <style
-              dangerouslySetInnerHTML={{
-                __html: `
-                .custom-tree-indent .ant-tree-indent-unit {
-                  width: 10px !important;
-                }
-                .custom-tree-indent .ant-tree-switcher {
-                  width: 14px !important;
-                  margin-inline-end: 8px !important;
-                }
-                .custom-tree-indent .ant-tree-node-content-wrapper {
-                  padding-inline: 4px !important;
-                }
-              `,
-              }}
-            />
-            <Tree
-              showLine={false}
-              defaultExpandAll
-              checkable
-              switcherIcon={
-                <span className="inline-flex items-center justify-center w-5 h-5 text-secondary">
-                  <DownOutlined />
-                </span>
-              }
-              onSelect={onSelect}
-              onCheck={onCheck}
-              onExpand={onExpand}
-              expandedKeys={expandedKeys}
-              autoExpandParent={autoExpandParent}
-              treeData={treeData}
-              selectedKeys={treeData.length > 0 ? [selectedTreeKey] : []}
-              checkedKeys={checkedTreeKeys}
-              className="py-2 pl-2 custom-tree-indent"
-            />
-          </Col>
-          <Col flex="auto" className="overflow-y-auto">
-            <div className="mb-3">
-              <Input
-                placeholder="按用例名称搜索"
-                allowClear
-                value={searchName}
-                onChange={(e) => handleSearchNameChange(e.target.value)}
-                className="w-72"
+              className="relative flex flex-col bg-layer-1/40"
+              style={{ width: leftWidth, minWidth: 200, maxWidth: 320 }}
+            >
+              <div className="flex items-center gap-2 px-4 pb-2 pt-4">
+                <span className="text-sm text-secondary">用例目录</span>
+              </div>
+              <div className="qa-plan-cases-modal-tree-scroll flex-1 min-h-0 px-2 pb-3">
+                <Tree
+                  showLine={false}
+                  checkable
+                  switcherIcon={({ expanded, isLeaf }: any) =>
+                    isLeaf ? null : (
+                      <ChevronDown
+                        className="size-3.5 text-tertiary transition-transform"
+                        style={{ transform: expanded ? "rotate(0deg)" : "rotate(-90deg)" }}
+                      />
+                    )
+                  }
+                  onSelect={onSelect}
+                  onCheck={onCheck}
+                  onExpand={onExpand}
+                  expandedKeys={expandedKeys}
+                  autoExpandParent={autoExpandParent}
+                  treeData={treeData}
+                  selectedKeys={treeData.length > 0 ? [selectedTreeKey] : []}
+                  checkedKeys={checkedTreeKeys}
+                  className="custom-tree-indent"
+                />
+              </div>
+              <div
+                onMouseDown={onMouseDownResize}
+                className="absolute right-0 top-0 z-10 h-full w-1.5 cursor-col-resize border-r border-subtle transition-colors hover:border-accent-strong hover:bg-accent-subtle"
               />
             </div>
-            {loading && (
-              <div className="flex items-center justify-center py-12">
-                <div className="text-secondary">加载中...</div>
-              </div>
-            )}
-            {error && (
-              <div className="bg-red-50 border border-red-200 rounded-md p-4 mb-4">
-                <div className="text-red-800 text-sm">{error}</div>
-              </div>
-            )}
-            {!loading && !error && cases.length === 0 && (
-              <div className="flex items-center justify-center py-12">
-                <div className="text-secondary">暂无用例</div>
-              </div>
-            )}
-            {!loading && !error && cases.length > 0 && (
-              <Table
-                dataSource={cases}
-                columns={columns}
-                rowKey="id"
-                bordered={true}
-                tableLayout="fixed"
-                rowSelection={{
-                  selectedRowKeys: selectedNewIds,
-                  onChange: (keys) => {
-                    const nextKeys = keys as string[];
-                    setSelectedNewIds(nextKeys);
-                    syncTreeCheckState(nextKeys);
-                  },
-                  preserveSelectedRowKeys: true,
-                  selections: [
-                    {
-                      key: "select-all",
-                      text: "本页全选",
-                      onSelect: () => {
-                        const nextKeys = Array.from(new Set([...selectedNewIds, ...cases.map((c) => c.id)]));
-                        setSelectedNewIds(nextKeys);
-                        syncTreeCheckState(nextKeys);
-                      },
-                    },
-                    {
-                      key: "clear-all",
-                      text: "清空选择",
-                      onSelect: () => {
+
+            {/* Right: search + table */}
+            <div className="flex flex-1 flex-col overflow-hidden">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-subtle px-4 py-3">
+                <Input
+                  placeholder="按用例名称搜索"
+                  allowClear
+                  prefix={<Search className="size-4" />}
+                  value={searchName}
+                  onChange={(e) => handleSearchNameChange(e.target.value)}
+                  className="max-w-xs"
+                />
+                {selectedCount > 0 && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className="text-secondary">
+                      已选 <span className="font-medium text-accent-primary">{selectedCount}</span> 个
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
                         setSelectedNewIds([]);
                         syncTreeCheckState([]);
-                      },
-                    },
-                  ],
-                }}
-                pagination={{
-                  current: currentPage,
-                  pageSize: pageSize,
-                  total: total,
-                  showSizeChanger: false,
-                  showQuickJumper: true,
-                  showTotal: (t, r) => `第 ${r[0]}-${r[1]} 条，共 ${t} 条`,
-                }}
-                onChange={(p) => {
-                  const nextPage = p?.current || 1;
-                  const keyword = searchName.trim();
-                  if (keyword) {
-                    fetchCases(nextPage, undefined, undefined, keyword);
-                    return;
-                  }
-                  fetchCases(nextPage, selectedRepositoryId || undefined, selectedModuleId || undefined);
-                }}
-              />
-            )}
-          </Col>
-        </Row>
-        <div className="sticky bottom-0 w-full bg-surface-1 border-t border-subtle px-6 py-3 flex items-center justify-end gap-3">
-          <Button
-            variant="primary"
-            onClick={() => {
-              onClose();
-              onClosed && onClosed();
-            }}
-            size="sm"
-          >
-            取消
-          </Button>
-          <Button
-            variant="primary"
-            disabled={saving || !workspaceSlug || !planId}
-            onClick={async () => {
-              if (!workspaceSlug || !planId) {
-                qaCaseSetToastWarning("缺少必要参数：workspace或计划ID");
-                return;
-              }
-              try {
-                if (!selectedNewIds || selectedNewIds.length === 0) {
-                  qaCaseSetToastWarning("请先选择要关联的用例");
-                  return;
-                }
-                setSaving(true);
-                await planService.addPlanCases(String(workspaceSlug), String(projectId || ""), {
-                  plan_id: String(planId),
-                  case_ids: selectedNewIds.map(String),
-                });
-                qaCaseSetToastSuccess("用例关联已更新");
-                onClose();
-                onClosed && onClosed();
-              } catch (e: unknown) {
-                qaCaseSetToastError(e, t, "用例关联失败");
-              } finally {
-                setSaving(false);
-              }
-            }}
-            size="sm"
-          >
-            {saving ? "处理中..." : "确定"}
-          </Button>
+                      }}
+                      className="rounded-md px-2 py-1 text-link-primary transition-colors hover:bg-layer-1-hover"
+                    >
+                      清空
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex flex-1 min-h-0 flex-col">
+                {loading && (
+                  <div className="flex h-full items-center justify-center py-12">
+                    <div className="flex flex-col items-center gap-3 text-tertiary">
+                      <span className="size-6 animate-spin rounded-full border-2 border-subtle border-t-accent-primary" />
+                      <span className="text-sm text-secondary">加载中...</span>
+                    </div>
+                  </div>
+                )}
+                {!loading && error && (
+                  <div className="mb-4 rounded-lg border border-danger-subtle bg-danger-subtle px-4 py-3">
+                    <div className="text-sm text-danger-primary">{error}</div>
+                  </div>
+                )}
+                {!loading && !error && cases.length === 0 && (
+                  <div className="flex h-full flex-col items-center justify-center gap-3 py-12 text-center">
+                    <span className="flex size-12 items-center justify-center rounded-full bg-layer-1 text-tertiary">
+                      <Layers className="size-6" />
+                    </span>
+                    <div className="text-sm text-secondary">暂无可关联的用例</div>
+                  </div>
+                )}
+                {!loading && !error && cases.length > 0 && (
+                  <>
+                    <div className="qa-plan-cases-modal-table-scroll flex-1 min-h-0">
+                      <Table
+                        dataSource={cases}
+                        columns={columns}
+                        rowKey="id"
+                        tableLayout="fixed"
+                        pagination={false}
+                        rowSelection={{
+                          selectedRowKeys: selectedNewIds,
+                          onChange: (keys) => {
+                            const nextKeys = keys as string[];
+                            setSelectedNewIds(nextKeys);
+                            syncTreeCheckState(nextKeys);
+                          },
+                          preserveSelectedRowKeys: true,
+                          selections: [
+                            {
+                              key: "select-all",
+                              text: "本页全选",
+                              onSelect: () => {
+                                const nextKeys = Array.from(new Set([...selectedNewIds, ...cases.map((c) => c.id)]));
+                                setSelectedNewIds(nextKeys);
+                                syncTreeCheckState(nextKeys);
+                              },
+                            },
+                            {
+                              key: "clear-all",
+                              text: "清空选择",
+                              onSelect: () => {
+                                setSelectedNewIds([]);
+                                syncTreeCheckState([]);
+                              },
+                            },
+                          ],
+                        }}
+                      />
+                    </div>
+                    <div className="modal-pagination-bar flex-shrink-0 border-t border-subtle bg-surface-1 py-3 pl-4 pr-4">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-secondary">
+                          {total > 0
+                            ? `第 ${(currentPage - 1) * pageSize + 1}-${Math.min(currentPage * pageSize, total)} 条，共 ${total} 条`
+                            : ""}
+                        </span>
+                        <Pagination
+                          simple
+                          current={currentPage}
+                          pageSize={pageSize}
+                          total={total}
+                          showSizeChanger
+                          pageSizeOptions={["10", "20", "50", "100"]}
+                          onChange={handlePaginationChange}
+                          onShowSizeChange={handlePaginationChange}
+                          size="small"
+                        />
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between gap-3 border-t border-subtle bg-surface-1 px-6 py-3">
+          <div className="text-sm text-secondary">
+            已选 <span className="font-medium text-accent-primary">{selectedCount}</span> 个用例
+          </div>
+          <div className="flex items-center gap-3">
+            <Button variant="secondary" onClick={closeModal} size="lg">
+              取消
+            </Button>
+            <Button variant="primary" disabled={saving || !workspaceSlug || !planId} onClick={handleConfirm} size="lg">
+              {saving ? "处理中..." : selectedCount > 0 ? `确定关联 ${selectedCount} 个` : "确定"}
+            </Button>
+          </div>
         </div>
       </div>
     </ModalCore>
