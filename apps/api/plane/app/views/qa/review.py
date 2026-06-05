@@ -364,3 +364,21 @@ class CaseReviewView(BaseViewSet):
         instance.confirmed = True
         instance.save(update_fields=['confirmed'])
         return Response(status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['delete'], url_path='delete-record')
+    def delete_record(self, request, slug):
+        record_id = request.query_params.get('record_id')
+        instance = get_object_or_404(
+            CaseReviewRecord,
+            id=record_id,
+            crt__review__project__workspace__slug=slug,
+        )
+
+        if str(instance.assignee_id) != str(request.user.id):
+            return Response({"detail": "只能删除本人提交的评审记录"}, status=status.HTTP_403_FORBIDDEN)
+
+        if instance.result != CaseReviewRecord.Result.SUGGEST:
+            return Response({"detail": "仅可删除本人提交的建议记录"}, status=status.HTTP_400_BAD_REQUEST)
+
+        instance.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)

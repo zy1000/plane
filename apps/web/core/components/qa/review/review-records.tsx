@@ -1,13 +1,14 @@
 "use client";
 
 import React from "react";
-import { Button, Spin } from "antd";
+import { Button, Popconfirm, Spin } from "antd";
 import { CheckCircleOutlined, CloseCircleOutlined, ExclamationCircleOutlined } from "@ant-design/icons";
-import { cn, renderFormattedDate } from "@plane/utils";
+import { cn } from "@plane/utils";
 import { CaseService as ReviewApiService } from "@/services/qa/review.service";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { ButtonAvatars } from "@/components/dropdowns/member/avatar";
 import { useMember } from "@/hooks/store/use-member";
+import { useUser } from "@/hooks/store/user";
 import { useTranslation } from "@plane/i18n";
 import { qaCaseErrorContent, qaCaseSetToastError, qaCaseSetToastSuccess } from "@/utils/qa-case-error";
 
@@ -34,11 +35,13 @@ export const ReviewRecordsPanel: React.FC<Props> = (props) => {
   const { workspaceSlug, reviewId, caseId, className = "", onRecordsUpdated } = props;
   const reviewService = React.useMemo(() => new ReviewApiService(), []);
   const { getUserDetails } = useMember();
+  const { data: currentUser } = useUser();
 
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [records, setRecords] = React.useState<ReviewRecord[]>([]);
   const [confirmingRecordId, setConfirmingRecordId] = React.useState<string | null>(null);
+  const [deletingRecordId, setDeletingRecordId] = React.useState<string | null>(null);
 
   const fetchRecords = async () => {
     if (!workspaceSlug || !reviewId || !caseId) return;
@@ -75,6 +78,21 @@ export const ReviewRecordsPanel: React.FC<Props> = (props) => {
       qaCaseSetToastError(e, t, "确认失败");
     } finally {
       setConfirmingRecordId(null);
+    }
+  };
+
+  const handleDelete = async (recordId: string) => {
+    if (!workspaceSlug || !recordId) return;
+    try {
+      setDeletingRecordId(recordId);
+      await reviewService.deleteRecord(String(workspaceSlug), recordId);
+      await fetchRecords();
+      onRecordsUpdated?.();
+      qaCaseSetToastSuccess("已删除");
+    } catch (e: unknown) {
+      qaCaseSetToastError(e, t, "删除失败");
+    } finally {
+      setDeletingRecordId(null);
     }
   };
 
@@ -134,6 +152,9 @@ export const ReviewRecordsPanel: React.FC<Props> = (props) => {
             const confirmed = Boolean(r.confirmed);
             const showConfirm = isSuggestion && !confirmed;
             const showConfirmed = isSuggestion && confirmed;
+            const isOwnSuggestion =
+              isSuggestion && Boolean(currentUser?.id) && String(uid || "") === String(currentUser?.id);
+            const deleting = String(deletingRecordId || "") === String(r.id);
             return (
               <div
                 key={String(r.id)}
@@ -168,19 +189,37 @@ export const ReviewRecordsPanel: React.FC<Props> = (props) => {
                 </div>
                 <div className="flex-shrink-0 flex flex-col items-end gap-2">
                   {renderResult(r.result)}
-                  {showConfirm ? (
-                    <Button
-                      size="small"
-                      color="primary" variant="filled"
-                      onClick={() => handleConfirm(String(r.id))}
-                      loading={String(confirmingRecordId || "") === String(r.id)}
-                    >
-                      确认
-                    </Button>
-                  ) : showConfirmed ? (
-                    <span className="text-xs" style={{ color: "#52c41a" }}>
-                      已确认
-                    </span>
+                  {showConfirm || showConfirmed || isOwnSuggestion ? (
+                    <div className="flex items-center justify-end gap-2">
+                      {showConfirm ? (
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          color="primary"
+                          onClick={() => handleConfirm(String(r.id))}
+                          loading={String(confirmingRecordId || "") === String(r.id)}
+                        >
+                          确认
+                        </Button>
+                      ) : showConfirmed ? (
+                        <span className="text-xs" style={{ color: "#52c41a" }}>
+                          已确认
+                        </span>
+                      ) : null}
+                      {isOwnSuggestion ? (
+                        <Popconfirm
+                          title="确认删除该建议记录？"
+                          okText="删除"
+                          cancelText="取消"
+                          okButtonProps={{ danger: true, loading: deleting }}
+                          onConfirm={() => handleDelete(String(r.id))}
+                        >
+                          <Button size="small" variant="outlined" danger disabled={deleting} loading={deleting}>
+                            删除
+                          </Button>
+                        </Popconfirm>
+                      ) : null}
+                    </div>
                   ) : null}
                 </div>
               </div>

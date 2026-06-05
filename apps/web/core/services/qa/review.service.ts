@@ -167,4 +167,13 @@ export class CaseService extends APIService {
       });
   }
 
+  async deleteRecord(workspaceSlug: string, record_id: string): Promise<void> {
+    const params = { record_id };
+    return this.delete(`/api/workspaces/${workspaceSlug}/test/review/delete-record/`, undefined, { params })
+      .then(() => {})
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
 }
