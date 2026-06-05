@@ -1,4 +1,5 @@
 from gunicorn.util import close
+import json
 import uuid
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -15,6 +16,7 @@ from plane.app.serializers.qa import ReviewModuleCreateUpdateSerializer, ReviewM
 from plane.app.views import BaseAPIView, BaseViewSet
 from plane.db.models import CaseReview, CaseReviewModule, CaseReviewThrough, CaseModule, TestCase, CaseReviewRecord, \
     TestCaseRepository, TestCaseVersion
+from plane.bgtasks.test_case_activities_task import test_case_activity
 from plane.utils.paginator import CustomPaginator
 from plane.utils.qa import update_case_review_status
 from plane.utils.response import list_response
@@ -312,6 +314,9 @@ class CaseReviewView(BaseViewSet):
             # 获取评审单与评审用例
             cr = CaseReview.objects.get(id=review_id)
             crt = CaseReviewThrough.objects.get(review=cr, case_id=case_id)
+            # 评审前记录当前结果，用于活动对比
+            old_review_result = crt.result
+
             # 该评审人员上一次评审结果也是通过，本次结果也是通过,并且该用例的结果不为不通过或者重新提审，则只更新记录时间
 
             last_record = None
@@ -340,6 +345,22 @@ class CaseReviewView(BaseViewSet):
                 )
 
             update_case_review_status(cr, crt, assignee_id)
+
+            # 触发评审状态活动
+            crt.refresh_from_db()
+            new_review_result = crt.result
+            if old_review_result != new_review_result:
+                test_case_activity.delay(
+                    type="case_review.activity.updated",
+                    requested_data=json.dumps({
+                        "old_review": old_review_result,
+                        "new_review": new_review_result,
+                    }),
+                    current_instance=None,
+                    case_id=str(case_id),
+                    actor_id=str(request.user.id) if hasattr(request, 'user') else None,
+                    epoch=int(timezone.now().timestamp()),
+                )
 
             # 如果评审通过，则创建用例快照
             if crt.result == CaseReviewThrough.Result.PASS:

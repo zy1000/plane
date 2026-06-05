@@ -9,7 +9,6 @@ import { Tag, Spin, Tooltip, Input, Table, Select, Button } from "antd";
 import { getEnums } from "@/app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/util";
 import { useMember } from "@/hooks/store/use-member";
 import * as LucideIcons from "lucide-react";
-import { useUser } from "@/hooks/store/user";
 import { ModalHeader } from "./update-modal/modal-header";
 import { TitleInput } from "./update-modal/title-input";
 import { CaseMetaForm } from "./update-modal/case-meta-form";
@@ -18,13 +17,14 @@ import { SideInfoPanel } from "./update-modal/side-info-panel";
 import { FileUploadService, generateFileUploadPayload, getFileMetaDataForUpload } from "@plane/services";
 import { WorkItemDisplayModal } from "./work-item-display-modal";
 import { WorkItemSelectModal } from "./work-item-select-modal";
-import { CommentOutlined, PlusOutlined } from "@ant-design/icons";
+import { PlusOutlined } from "@ant-design/icons";
 import type { TIssue } from "@plane/types";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { IssuePeekOverview } from "@/components/issues/peek-overview";
 import { formatCNDateTime } from "./util";
 import styles from "./update-modal.module.css";
 import { ExecutionRecordDetailModal } from "../execution/execution-records";
+import { TestCaseActivityTab } from "./test-case-activity/test-case-activity-tab";
 import { useTranslation } from "@plane/i18n";
 import {
   qaCaseErrorContent,
@@ -427,220 +427,7 @@ function UpdateModalBody({ open, onClose, caseId, workspaceSlug: propWorkspaceSl
     }
   };
 
-  const { data: currentUser } = useUser();
-  const [comments, setComments] = React.useState<any[]>([]);
-  const [commentsLoading, setCommentsLoading] = React.useState<boolean>(false);
-  const [commentPage, setCommentPage] = React.useState<number>(1);
-  const [commentPageSize, setCommentPageSize] = React.useState<number>(10);
-  const [commentTotal, setCommentTotal] = React.useState<number>(0);
-  const [newComment, setNewComment] = React.useState<string>("");
-  const [replyContent, setReplyContent] = React.useState<Record<string, string>>({});
-  const [editContent, setEditContent] = React.useState<Record<string, string>>({});
-  const [replyTargetId, setReplyTargetId] = React.useState<string | undefined>(undefined);
-  const [commentPlaceholder, setCommentPlaceholder] = React.useState<string>("输入评论内容");
-  const newCommentInputRef = React.useRef<any>(null);
 
-  const fetchComments = async (reset = true, pageOverride?: number) => {
-    if (!workspaceSlug || !caseId) return;
-    setCommentsLoading(true);
-    try {
-      const pageToUse = pageOverride ?? (reset ? 1 : commentPage);
-      const resp = await caseService.get(`/api/workspaces/${workspaceSlug}/test/comments/`, {
-        params: { case_id: caseId, page: pageToUse, page_size: commentPageSize, max_depth: 5 },
-      });
-      const results = resp?.data?.data ?? [];
-      const count = resp?.data?.count ?? (Array.isArray(results) ? results.length : 0);
-      setCommentTotal(Number(count || 0));
-      if (reset) {
-        setComments(Array.isArray(results) ? results : []);
-        setCommentPage(1);
-      } else {
-        setComments((prev) => [...prev, ...(Array.isArray(results) ? results : [])]);
-      }
-    } catch {}
-    setCommentsLoading(false);
-  };
-
-  const handleCreateComment = async () => {
-    if (!workspaceSlug || !caseId) return;
-    const content = newComment.trim();
-    if (!content) {
-      qaCaseSetToastWarning("请输入评论内容");
-      return;
-    }
-    try {
-      await caseService.createComment(String(workspaceSlug), { case: String(caseId), content });
-      setNewComment("");
-      setReplyTargetId(undefined);
-      setCommentPlaceholder("输入评论内容");
-      fetchComments(true);
-    } catch (e: any) {
-      qaCaseSetToastError(e, t, "创建失败");
-    }
-  };
-
-  const handleReply = async (parentId: string) => {
-    if (!workspaceSlug || !caseId) return;
-    const content = (replyContent[parentId] || "").trim();
-    if (!content) {
-      qaCaseSetToastWarning("请输入回复内容");
-      return;
-    }
-    try {
-      setReplyTargetId(undefined);
-      await caseService.createComment(String(workspaceSlug), {
-        case: String(caseId),
-        content,
-        parent: String(parentId),
-      });
-      setReplyContent((prev) => ({ ...prev, [parentId]: "" }));
-      fetchComments(true);
-    } catch (e: any) {
-      qaCaseSetToastError(e, t, "回复失败");
-    }
-  };
-  const handleDelete = async (id: string) => {
-    if (!workspaceSlug) return;
-    try {
-      await caseService.deleteComment(String(workspaceSlug), String(id));
-      fetchComments(true);
-    } catch (e: any) {
-      qaCaseSetToastError(e, t, "删除失败");
-    }
-  };
-
-  const startReply = (c: any) => {
-    const id = String(c?.id || "");
-    setReplyTargetId(id);
-  };
-
-  const renderComment = (c: any, depth = 0, parentCreatorName?: string, parentCreatorId?: string) => {
-    const isOwner = currentUser?.id && String(currentUser.id) === String(c?.creator);
-    const children = Array.isArray(c?.children) ? c.children : [];
-    const indentClass = depth === 1 ? styles.depthChild : styles.depth0;
-    const creatorName = String(c?.creator_name || "");
-    return (
-      <div key={String(c?.id)} className={`${styles.commentItem} ${indentClass}`} data-depth={depth}>
-        <div className={`rounded p-2 bg-white`}>
-          {depth === 0 ? (
-            <div className="flex items-center">
-              <span className="flex-1 min-w-0">
-                <div className={styles.noHover}>
-                  <MemberDropdown
-                    multiple={false}
-                    value={c?.creator ?? null}
-                    onChange={() => {}}
-                    disabled={true}
-                    placeholder={creatorName || "未知用户"}
-                    className="w-full text-sm"
-                    buttonContainerClassName="w-full text-left p-0 cursor-default"
-                    buttonVariant="transparent-with-text"
-                    buttonClassName="text-sm p-0 hover:bg-transparent hover:bg-inherit"
-                    showUserDetails={true}
-                    optionsClassName="z-[1200]"
-                  />
-                </div>
-              </span>
-            </div>
-          ) : (
-            <div className="text-sm flex flex-wrap items-center">
-              <div className={styles.noHover}>
-                <MemberDropdown
-                  multiple={false}
-                  value={c?.creator ?? null}
-                  onChange={() => {}}
-                  disabled={true}
-                  placeholder={creatorName || "未知用户"}
-                  className="text-sm"
-                  buttonContainerClassName="p-0 cursor-default inline-flex items-center gap-1"
-                  buttonVariant="transparent-with-text"
-                  buttonClassName="text-sm p-0 hover:bg-transparent hover:bg-inherit font-semibold"
-                  showUserDetails={true}
-                  optionsClassName="z-[1200]"
-                />
-              </div>
-              {depth >= 2 && parentCreatorName ? <span className="mx-1">回复</span> : null}
-              {depth >= 2 && parentCreatorName ? (
-                <div className={styles.noHover}>
-                  <MemberDropdown
-                    multiple={false}
-                    value={parentCreatorId ?? null}
-                    onChange={() => {}}
-                    disabled={true}
-                    placeholder={parentCreatorName || "未知用户"}
-                    className="text-sm"
-                    buttonContainerClassName="p-0 cursor-default inline-flex items-center gap-1"
-                    buttonVariant="transparent-with-text"
-                    buttonClassName="text-sm p-0 hover:bg-transparent hover:bg-inherit font-semibold"
-                    showUserDetails={true}
-                    optionsClassName="z-[1200]"
-                  />
-                </div>
-              ) : null}
-              <span className="mx-1">：</span>
-              <span className="whitespace-pre-wrap break-words">{c?.content || ""}</span>
-            </div>
-          )}
-          {depth === 0 && <div className="mt-2 pl-8 text-sm whitespace-pre-wrap break-words">{c?.content || ""}</div>}
-          <div className={`mt-1 text-xs text-gray-500 flex items-center gap-2 ${depth === 0 ? "pl-8" : ""}`}>
-            <span>{formatCNDateTime(c?.created_at)}</span>
-            <button
-              type="button"
-              title="回复"
-              className="text-gray-500 hover:text-blue-600 inline-flex items-center gap-1"
-              onClick={() => startReply(c)}
-            >
-              <CommentOutlined />
-              <span>回复</span>
-            </button>
-            {isOwner && (
-              <button
-                type="button"
-                title="删除"
-                className="text-gray-500 hover:text-red-600 inline-flex items-center gap-1"
-                onClick={() => handleDelete(String(c?.id))}
-              >
-                <LucideIcons.Trash2 size={14} />
-                <span>删除</span>
-              </button>
-            )}
-          </div>
-          {replyTargetId === String(c?.id) && (
-            <div className={`mt-2 ${depth === 0 ? "pl-8" : ""}`}>
-              <Input.TextArea
-                autoSize={{ minRows: 2, maxRows: 4 }}
-                placeholder={`回复${creatorName}：`}
-                value={replyContent[String(c?.id)] || ""}
-                onChange={(e) => setReplyContent((prev) => ({ ...prev, [String(c?.id)]: e.target.value }))}
-              />
-              <div className="mt-2 flex gap-2">
-                <button
-                  type="button"
-                  className="rounded bg-accent-primary text-on-color hover:bg-accent-primary-hover px-3 py-1.5 text-sm transition-colors"
-                  onClick={() => handleReply(String(c?.id))}
-                >
-                  回复
-                </button>
-                <button
-                  type="button"
-                  className="rounded bg-layer-1 text-secondary hover:bg-layer-1-hover px-3 py-1.5 text-sm transition-colors"
-                  onClick={() => {
-                    setReplyContent((prev) => ({ ...prev, [String(c?.id)]: "" }));
-                    setReplyTargetId(undefined);
-                  }}
-                >
-                  取消
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-        {children &&
-          children.length > 0 &&
-          children.slice(0, 100).map((child: any) => renderComment(child, depth + 1, creatorName, String(c?.creator)))}
-      </div>
-    );
-  };
 
   // 新增：四个下拉框的本地值状态（从 caseData 同步，类型统一为字符串）
   const [assignee, setAssignee] = React.useState<string | undefined>(undefined);
@@ -811,11 +598,6 @@ function UpdateModalBody({ open, onClose, caseId, workspaceSlug: propWorkspaceSl
       setCaseVersions([]);
       setReviewEnums({});
       setLatestExec(null);
-      setComments([]);
-      setCommentTotal(0);
-      setCommentPage(1);
-      setReplyTargetId(undefined);
-      setReplyContent({});
       return;
     }
 
@@ -829,7 +611,6 @@ function UpdateModalBody({ open, onClose, caseId, workspaceSlug: propWorkspaceSl
       fetchCaseVersions(seq),
       fetchReviewEnums(seq),
       fetchLatestExec(seq),
-      fetchComments(true, 1),
     ]).finally(() => {
       if (seq !== loadSeqRef.current) return;
       setInitialLoading(false);
@@ -1169,6 +950,17 @@ function UpdateModalBody({ open, onClose, caseId, workspaceSlug: propWorkspaceSl
                   >
                     评审历史
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("activity")}
+                    className={`px-2 py-3 text-sm leading-5 font-medium -mb-px border-b-2 transition-colors ${
+                      activeTab === "activity"
+                        ? "text-accent-primary border-accent-strong"
+                        : "text-secondary border-transparent hover:text-accent-primary"
+                    }`}
+                  >
+                    活动
+                  </button>
                 </nav>
                 <div className="flex-shrink-0 pt-2">
                   {activeTab === "requirement" && (
@@ -1221,19 +1013,6 @@ function UpdateModalBody({ open, onClose, caseId, workspaceSlug: propWorkspaceSl
                 onFilesChosen={handleFilesChosen}
                 onDownloadAttachment={handleDownloadAttachment}
                 onRemoveCaseAttachment={(id) => handleRemoveCaseAttachment(id)}
-                commentsLoading={commentsLoading}
-                comments={comments}
-                commentPage={commentPage}
-                commentPageSize={commentPageSize}
-                commentTotal={commentTotal}
-                setCommentPage={(n) => setCommentPage(n)}
-                fetchComments={(reset?: boolean, pageOverride?: number) => fetchComments(reset, pageOverride)}
-                renderComment={(c: any) => renderComment(c)}
-                newComment={newComment}
-                commentPlaceholder={commentPlaceholder}
-                newCommentInputRef={newCommentInputRef}
-                onNewCommentChange={(v: string) => setNewComment(v)}
-                onCreateComment={() => handleCreateComment()}
               />
             )}
             {activeTab === "execution" && caseId && (
@@ -1454,6 +1233,13 @@ function UpdateModalBody({ open, onClose, caseId, workspaceSlug: propWorkspaceSl
                 defaultType="Bug"
                 reloadToken={reloadToken}
                 onCountChange={(n) => setCurrentCount(n)}
+              />
+            )}
+            {activeTab === "activity" && caseId && workspaceSlug && projectIdStr && (
+              <TestCaseActivityTab
+                workspaceSlug={String(workspaceSlug)}
+                projectId={projectIdStr}
+                caseId={String(caseId)}
               />
             )}
           </div>

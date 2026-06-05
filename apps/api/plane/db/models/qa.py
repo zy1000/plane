@@ -6,6 +6,7 @@ from django.db import transaction
 from django.db import models
 from django.db.models import Q
 from django.conf import settings
+from django.utils.html import strip_tags
 
 from . import BaseModel, Issue
 
@@ -429,7 +430,13 @@ class PlanCaseRecord(BaseModel):
 
 
 class TestCaseComment(BaseModel):
-    content = models.TextField(verbose_name="Comment Content")
+    # 保留旧纯文本字段以兼容历史数据
+    content = models.TextField(verbose_name="Comment Content", blank=True, default="")
+    # 富文本字段
+    comment_html = models.TextField(blank=True, default="<p></p>")
+    comment_json = models.JSONField(blank=True, default=dict)
+    comment_stripped = models.TextField(blank=True, default="")
+    edited_at = models.DateTimeField(null=True, blank=True)
     creator = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -451,6 +458,10 @@ class TestCaseComment(BaseModel):
         verbose_name="TestCase",
     )
 
+    def save(self, *args, **kwargs):
+        self.comment_stripped = strip_tags(self.comment_html) if self.comment_html else ""
+        super().save(*args, **kwargs)
+
     class Meta:
         verbose_name = "测试用例评论"
         verbose_name_plural = "测试用例评论"
@@ -458,7 +469,48 @@ class TestCaseComment(BaseModel):
         ordering = ("-created_at",)
 
     def __str__(self):
-        return str(self.content)[:50]
+        return str(self.comment_html)[:50]
+
+
+class TestCaseActivity(BaseModel):
+    """用例操作活动记录，仿 CycleActivity 设计"""
+    case = models.ForeignKey(
+        TestCase,
+        on_delete=models.CASCADE,
+        related_name="activities",
+        verbose_name="TestCase",
+    )
+    verb = models.CharField(max_length=255, verbose_name="Action", default="created")
+    field = models.CharField(max_length=255, verbose_name="Field Name", blank=True, null=True)
+    old_value = models.TextField(verbose_name="Old Value", blank=True, null=True)
+    new_value = models.TextField(verbose_name="New Value", blank=True, null=True)
+    comment = models.TextField(verbose_name="Comment", blank=True)
+    test_case_comment = models.ForeignKey(
+        "db.TestCaseComment",
+        on_delete=models.SET_NULL,
+        related_name="comment_activities",
+        null=True,
+        blank=True,
+    )
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="test_case_activities",
+    )
+    old_identifier = models.UUIDField(null=True, blank=True)
+    new_identifier = models.UUIDField(null=True, blank=True)
+    epoch = models.FloatField(null=True, blank=True)
+    extra = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        verbose_name = "TestCase Activity"
+        verbose_name_plural = "TestCase Activities"
+        db_table = "test_case_activities"
+        ordering = ("-created_at",)
+        indexes = [
+            models.Index(fields=["case", "created_at"], name="tc_activity_case_ts"),
+        ]
 
 
 class CaseReviewModule(BaseModel):

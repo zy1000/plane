@@ -156,6 +156,7 @@ class FileAsset(BaseModel):
         CYCLE_COMMENT_DESCRIPTION = "CYCLE_COMMENT_DESCRIPTION"
         RELEASE_COMMENT_DESCRIPTION = "RELEASE_COMMENT_DESCRIPTION"
         PLAN_CASE_RECORD_FILE = "PLAN_CASE_RECORD_FILE"
+        TEST_CASE_COMMENT_DESCRIPTION = "TEST_CASE_COMMENT_DESCRIPTION"
 
     attributes = models.JSONField(default=dict)
     # 末段文件名（含可能的 (1)/(2) 去重后缀）。完整 MinIO key 由 ``path`` 节点链派生 +
@@ -196,6 +197,9 @@ class FileAsset(BaseModel):
     )
     cycle_comment = models.ForeignKey(
         "db.CycleComment", on_delete=models.CASCADE, null=True, related_name="assets"
+    )
+    test_case_comment = models.ForeignKey(
+        "db.TestCaseComment", on_delete=models.CASCADE, null=True, related_name="assets"
     )
     plan_case_record = models.ForeignKey(
         "db.PlanCaseRecord", on_delete=models.CASCADE, null=True, related_name="assets"
@@ -343,6 +347,7 @@ class FileAsset(BaseModel):
             self.EntityTypeContext.DRAFT_ISSUE_DESCRIPTION,
             self.EntityTypeContext.CYCLE_COMMENT_DESCRIPTION,
             self.EntityTypeContext.RELEASE_COMMENT_DESCRIPTION,
+            self.EntityTypeContext.TEST_CASE_COMMENT_DESCRIPTION,
         ]:
             return f"/api/assets/v2/workspaces/{self.workspace.slug}/projects/{self.project_id}/{self.id}/"
 

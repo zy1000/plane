@@ -27,6 +27,7 @@ from plane.db.models import (
     CaseReview,
     CaseReviewThrough,
     TestCaseComment,
+    TestCaseActivity,
     CaseReviewRecord,
     PlanModule,
     PlanCase,
@@ -481,13 +482,38 @@ class CaseIssueSerializer(ModelSerializer):
         fields = ["id", "issues"]
 
 
-class TestCaseCommentSerializer(ModelSerializer):
+class TestCaseCommentSerializer(BaseSerializer):
     children = serializers.SerializerMethodField()
-    creator_name = serializers.CharField(source="creator.display_name", read_only=True)
+    actor_detail = UserLiteSerializer(read_only=True, source="creator")
 
     class Meta:
         model = TestCaseComment
-        fields = "__all__"
+        fields = [
+            "id",
+            "case",
+            "creator",
+            "actor_detail",
+            "comment_html",
+            "comment_json",
+            "comment_stripped",
+            "content",
+            "parent",
+            "edited_at",
+            "children",
+            "created_at",
+            "updated_at",
+            "created_by",
+            "updated_by",
+        ]
+        read_only_fields = [
+            "creator",
+            "comment_stripped",
+            "edited_at",
+            "created_by",
+            "updated_by",
+            "created_at",
+            "updated_at",
+        ]
 
     def get_children(self, obj):
         current_depth = int(self.context.get("current_depth", 1))
@@ -501,6 +527,32 @@ class TestCaseCommentSerializer(ModelSerializer):
             context={"current_depth": current_depth + 1, "max_depth": max_depth},
         )
         return serializer.data
+
+
+class TestCaseActivitySerializer(BaseSerializer):
+    actor_detail = UserLiteSerializer(read_only=True, source="actor")
+
+    class Meta:
+        model = TestCaseActivity
+        fields = [
+            "id",
+            "case",
+            "actor",
+            "actor_detail",
+            "verb",
+            "field",
+            "old_value",
+            "new_value",
+            "old_identifier",
+            "new_identifier",
+            "comment",
+            "test_case_comment",
+            "epoch",
+            "extra",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = fields
 
 
 # ----- review------

@@ -28,7 +28,8 @@ bulk 绑定接口会通过 :func:`rebind_asset_to_path` 把对象 copy 到正式
                                     → ``Workspace -> Project -> 工作项 -> Issue``
 - ``PAGE_DESCRIPTION``              → ``Workspace -> Project -> 页面 -> Page``
 - ``DRAFT_ISSUE_*``                 → ``Workspace -> Project -> 草稿 -> DraftIssue``
-- ``CASE_ATTACHMENT``               → ``Workspace -> Project -> 测试用例 -> TestCase``
+- ``CASE_ATTACHMENT`` / ``TEST_CASE_COMMENT_DESCRIPTION``
+                                    → ``Workspace -> Project -> 测试用例 -> TestCase``
 - ``CYCLE_FILE``                    → ``Workspace -> Project -> 迭代 -> Cycle``
 - ``RELEASE_FILE`` / ``RELEASE_COMMENT_DESCRIPTION``
                                     → ``Workspace -> Project -> 发布 -> Release``
@@ -317,6 +318,23 @@ class _Resolver:
                 entity_type="RELEASE",
                 entity_id=release.pk,
                 display_name=getattr(release, "name", "") or "",
+            )
+
+        # 用例评论中的内联图片：复用与 CASE_ATTACHMENT 相同的目录节点（Workspace -> Project ->
+        # 测试用例 -> TestCase），上传期靠 case_id 定位父级，与具体 test_case_comment 解耦，
+        # 避免评论尚未创建时无法定路径。
+        if et == "TEST_CASE_COMMENT_DESCRIPTION":
+            case = self._get_related(asset, "case")
+            if case is None:
+                return self._temp_node(parent_for_category=proj_node, asset=asset)
+            case_category = self._category_node(
+                parent=proj_node, entity_type="CASE_ATTACHMENT"
+            )
+            return self._get_or_create_node(
+                parent=case_category,
+                entity_type="TESTCASE",
+                entity_id=case.pk,
+                display_name=getattr(case, "name", "") or "",
             )
 
         if et == "PLAN_CASE_RECORD_FILE":

@@ -1,3 +1,5 @@
+import json
+
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status
 from rest_framework.decorators import action
@@ -84,6 +86,7 @@ from plane.app.permissions import (
 from plane.settings.storage import S3Storage
 from plane.utils.asset_upload import presigned_post_for_asset
 from plane.bgtasks.storage_metadata_task import get_asset_object_metadata
+from plane.bgtasks.test_case_activities_task import test_case_activity
 from django.conf import settings
 from django.http import HttpResponseRedirect, FileResponse, StreamingHttpResponse
 import csv
@@ -569,6 +572,8 @@ class PlanView(BaseViewSet):
                     data={"msg": f'你没有权限执行"{plan_case.case.name}"'},
                 )
 
+            old_result = plan_case.result
+
             # 创建执行记录
             pcr = PlanCaseRecord.objects.create(
                 result=result,
@@ -579,6 +584,20 @@ class PlanView(BaseViewSet):
             )
             plan_case.result = result
             plan_case.save()
+
+            # 触发执行情况活动
+            if old_result != result:
+                test_case_activity.delay(
+                    type="case_execution.activity.updated",
+                    requested_data=json.dumps({
+                        "old_result": old_result,
+                        "new_result": result,
+                    }),
+                    current_instance=None,
+                    case_id=str(case_id),
+                    actor_id=str(request.user.id),
+                    epoch=int(timezone.now().timestamp()),
+                )
 
             plan = TestPlan.objects.get(id=plan_id)
             # 修改计划状态
@@ -1106,26 +1125,65 @@ class CaseAPIView(BaseAPIView):
     def post(self, request, slug, project_id):
         serializer = CaseCreateUpdateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        test_plan = serializer.save()
-        serializer = self.serializer_class(instance=test_plan)
-
+        test_case = serializer.save()
+        test_case_activity.delay(
+            type="case.activity.created",
+            requested_data=None,
+            current_instance=None,
+            case_id=str(test_case.id),
+            actor_id=str(request.user.id),
+            epoch=int(timezone.now().timestamp()),
+        )
+        serializer = self.serializer_class(instance=test_case)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     @allow_fine_permission(PermissionKey.QA_CASE_EDIT)
     def put(self, request, slug, project_id):
         case_id = request.data.pop("id")
         case = self.queryset.get(id=case_id)
+        # 在更新前抓快照，用于活动比对
+        current_snapshot = json.dumps({
+            "name": case.name,
+            "type": case.type,
+            "test_type": case.test_type,
+            "priority": case.priority,
+            "assignee_id": str(case.assignee_id) if case.assignee_id else None,
+            "module_id": str(case.module_id) if case.module_id else None,
+            "labels": [str(l) for l in case.labels.values_list("id", flat=True)],
+            "precondition": case.precondition,
+            "text_description": case.text_description,
+            "text_result": case.text_result,
+            "remark": case.remark,
+        })
         update_serializer = CaseCreateUpdateSerializer(
             instance=case, data=request.data, partial=True
         )
         update_serializer.is_valid(raise_exception=True)
         update_serializer.save()
+        test_case_activity.delay(
+            type="case.activity.updated",
+            requested_data=json.dumps(request.data),
+            current_instance=current_snapshot,
+            case_id=str(case_id),
+            actor_id=str(request.user.id),
+            epoch=int(timezone.now().timestamp()),
+        )
         serializer = self.serializer_class(instance=case)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     @allow_fine_permission(PermissionKey.QA_CASE_DELETE)
     def delete(self, request, slug, project_id):
-        self.filter_queryset(self.queryset).all().delete(soft=False)
+        cases = self.filter_queryset(self.queryset).all()
+        for case in cases:
+            test_case_activity.delay(
+                type="case.activity.deleted",
+                requested_data=None,
+                current_instance=json.dumps({"name": case.name}),
+                case_id=str(case.id),
+                actor_id=str(request.user.id),
+                epoch=int(timezone.now().timestamp()),
+            )
+        cases.delete(soft=False)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 

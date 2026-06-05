@@ -163,5 +163,7 @@ from .qa import (
     TestPlanCreateUpdateSerializer,
     TestCaseRepositorySerializer,
     TestCaseRepositoryDetailSerializer,
+    TestCaseCommentSerializer,
+    TestCaseActivitySerializer,
 )
 from .changelog import ChangeLogSerializer, ChangeLogReadRequestSerializer

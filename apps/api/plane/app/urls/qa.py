@@ -19,6 +19,7 @@ from plane.app.views.qa.case import (
     CaseAssetAPIView,
     CaseIssueWithType,
     TestCaseCommentAPIView,
+    TestCaseActivityAPIView,
     CaseAPI,
     CaseLabelAPIView,
     CaseModuleView,
@@ -195,5 +196,10 @@ urlpatterns = [
         "workspaces/<str:slug>/test/comments/<uuid:id>/",
         TestCaseCommentAPIView.as_view(),
         name="test-comments-detail",
+    ),
+    path(
+        "workspaces/<str:slug>/test/case/<uuid:case_id>/activities/",
+        TestCaseActivityAPIView.as_view(),
+        name="test-case-activities",
     ),
 ]

@@ -20,13 +20,14 @@ from django.utils import timezone
 
 from plane.app.permissions import allow_fine_permission, PermissionKey
 from plane.app.serializers.qa import CaseAttachmentSerializer, IssueListSerializer, CaseIssueSerializer, \
-    TestCaseCommentSerializer, PlanCaseRecordSerializer, CaseListSerializer, CaseLabelListSerializer, \
-    IssueUnselectSerializer, ReviewCaseRecordsSerializer, ProjectCaseListSerializer
+    TestCaseCommentSerializer, TestCaseActivitySerializer, PlanCaseRecordSerializer, CaseListSerializer, \
+    CaseLabelListSerializer, IssueUnselectSerializer, ReviewCaseRecordsSerializer, ProjectCaseListSerializer
 from plane.app.serializers.qa.case import CaseExecuteRecordSerializer
 from plane.app.views import BaseAPIView, BaseViewSet
 from plane.utils.import_export import parser_case_file
-from plane.db.models import TestCase, FileAsset, TestCaseComment, PlanCase, Issue, CaseModule, CaseLabel, \
-    CaseReview, CaseReviewThrough, CaseReviewRecord, TestCaseRepository, TestPlan, TestCaseVersion
+from plane.db.models import TestCase, FileAsset, TestCaseComment, TestCaseActivity, PlanCase, Issue, CaseModule, \
+    CaseLabel, CaseReview, CaseReviewThrough, CaseReviewRecord, TestCaseRepository, TestPlan, TestCaseVersion
+from plane.bgtasks.test_case_activities_task import test_case_activity
 from plane.utils.paginator import CustomPaginator
 from plane.utils.response import list_response
 
@@ -111,9 +112,15 @@ class TestCaseCommentAPIView(BaseAPIView):
     def post(self, request, slug):
         parent_id = request.data.get('parent')
         case_id = request.data.get('case') or request.data.get('case_id')
-        content = request.data.get('content')
-        if not case_id or not content:
-            return Response({"error": "content and case are required"}, status=status.HTTP_400_BAD_REQUEST)
+        comment_html = request.data.get('comment_html', '<p></p>')
+        comment_json = request.data.get('comment_json', {})
+        # 兼容旧纯文本字段
+        content = request.data.get('content', '')
+        if not case_id:
+            return Response({"error": "case is required"}, status=status.HTTP_400_BAD_REQUEST)
+        if not comment_html or comment_html.strip() in ('', '<p></p>'):
+            if not content:
+                return Response({"error": "comment_html is required"}, status=status.HTTP_400_BAD_REQUEST)
         try:
             case = TestCase.objects.get(id=case_id)
         except TestCase.DoesNotExist:
@@ -121,7 +128,23 @@ class TestCaseCommentAPIView(BaseAPIView):
         parent = None
         if parent_id:
             parent = self.queryset.filter(id=parent_id, case_id=case_id).first()
-        comment = self.queryset.create(content=content, creator=request.user, case=case, parent=parent)
+        comment = self.queryset.create(
+            comment_html=comment_html,
+            comment_json=comment_json,
+            content=content,
+            creator=request.user,
+            case=case,
+            parent=parent,
+        )
+        # 触发活动记录
+        test_case_activity.delay(
+            type="case_comment.activity.created",
+            requested_data=json.dumps({"id": str(comment.id), "comment_html": comment_html}),
+            current_instance=None,
+            case_id=str(case_id),
+            actor_id=str(request.user.id),
+            epoch=int(timezone.now().timestamp()),
+        )
         serializer = self.serializer_class(comment, context={"current_depth": 1})
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
@@ -144,6 +167,9 @@ class TestCaseCommentAPIView(BaseAPIView):
         if not comment:
             return Response({"error": "Comment not found or no permission"}, status=status.HTTP_404_NOT_FOUND)
 
+        current_snapshot = json.dumps({"id": str(comment.id), "comment_html": comment.comment_html})
+        case_id = str(comment.case_id)
+
         def delete_subtree(node_id):
             children = TestCaseComment.objects.filter(parent_id=node_id)
             for c in children:
@@ -151,7 +177,32 @@ class TestCaseCommentAPIView(BaseAPIView):
             TestCaseComment.objects.filter(id=node_id).delete(soft=False)
 
         delete_subtree(comment.id)
+
+        test_case_activity.delay(
+            type="case_comment.activity.deleted",
+            requested_data=None,
+            current_instance=current_snapshot,
+            case_id=case_id,
+            actor_id=str(request.user.id),
+            epoch=int(timezone.now().timestamp()),
+        )
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class TestCaseActivityAPIView(BaseAPIView):
+    """用例活动记录列表，按 case_id 过滤，支持 created_at__gt 增量拉取。"""
+
+    def get(self, request, slug, case_id):
+        created_at__gt = request.query_params.get("created_at__gt")
+        qs = (
+            TestCaseActivity.objects.filter(case_id=case_id)
+            .select_related("actor")
+            .order_by("created_at")
+        )
+        if created_at__gt:
+            qs = qs.filter(created_at__gt=created_at__gt)
+        serializer = TestCaseActivitySerializer(qs, many=True)
+        return list_response(data=serializer.data, count=qs.count())
 
 
 class CaseAPI(BaseViewSet):

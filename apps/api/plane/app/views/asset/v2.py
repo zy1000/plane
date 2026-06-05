@@ -18,7 +18,7 @@ from rest_framework.permissions import AllowAny
 
 # Module imports
 from ..base import BaseAPIView
-from plane.db.models import FileAsset, Workspace, Project, User, Cycle, Release
+from plane.db.models import FileAsset, Workspace, Project, User, Cycle, Release, TestCase
 from plane.settings.storage import S3Storage
 from plane.app.permissions import allow_permission, ROLE
 from plane.utils.cache import invalidate_cache_directly
@@ -604,6 +604,11 @@ class ProjectAssetEndpoint(BaseAPIView):
         ).exists():
             return FileAsset.EntityTypeContext.RELEASE_COMMENT_DESCRIPTION
 
+        if TestCase.objects.filter(
+            id=related_entity_id, repository__project_id=project_id, deleted_at__isnull=True
+        ).exists():
+            return FileAsset.EntityTypeContext.TEST_CASE_COMMENT_DESCRIPTION
+
         return entity_type
 
     def get_entity_id_field(self, entity_type, entity_id):
@@ -645,6 +650,11 @@ class ProjectAssetEndpoint(BaseAPIView):
         # 作为 path 父级；bulk 阶段再回填 cycle_comment_id（不需要再 rebind path）。
         if entity_type == FileAsset.EntityTypeContext.CYCLE_COMMENT_DESCRIPTION:
             return {"cycle_id": entity_id}
+
+        # 上传阶段 TestCaseComment 尚未创建，entity_identifier 是 case_id，先以 case
+        # 作为 path 父级；bulk 阶段再回填 test_case_comment_id。
+        if entity_type == FileAsset.EntityTypeContext.TEST_CASE_COMMENT_DESCRIPTION:
+            return {"case_id": entity_id}
 
         return {}
 
@@ -841,6 +851,13 @@ class ProjectBulkAssetEndpoint(BaseAPIView):
             except IntegrityError:
                 pass
 
+        # TestCaseComment 创建完成后回填 test_case_comment_id。
+        if asset.entity_type == FileAsset.EntityTypeContext.TEST_CASE_COMMENT_DESCRIPTION:
+            try:
+                assets.update(test_case_comment_id=entity_id)
+            except IntegrityError:
+                pass
+
         if needs_rebind:
             refreshed_assets = list(
                 FileAsset.objects.filter(id__in=asset_ids, workspace__slug=slug)
@@ -900,6 +917,9 @@ class DuplicateAssetEndpoint(BaseAPIView):
 
         if entity_type == FileAsset.EntityTypeContext.RELEASE_COMMENT_DESCRIPTION:
             return {"release_id": entity_id}
+
+        if entity_type == FileAsset.EntityTypeContext.TEST_CASE_COMMENT_DESCRIPTION:
+            return {"case_id": entity_id}
 
         return {}
 

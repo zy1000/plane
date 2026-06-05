@@ -29,6 +29,10 @@ import type { ICycleCommentStore } from "./cycle-comment.store";
 import { CycleCommentStore } from "./cycle-comment.store";
 import type { ICycleActivityStore } from "./cycle-activity.store";
 import { CycleActivityStore } from "./cycle-activity.store";
+import type { ITestCaseCommentStore } from "./test-case-comment.store";
+import { TestCaseCommentStore } from "./test-case-comment.store";
+import type { ITestCaseActivityStore } from "./test-case-activity.store";
+import { TestCaseActivityStore } from "./test-case-activity.store";
 import type { IDashboardStore } from "./dashboard.store";
 import { DashboardStore } from "./dashboard.store";
 import type { IEditorAssetStore } from "./editor/asset.store";
@@ -91,6 +95,8 @@ export class CoreRootStore {
   cycleFilter: ICycleFilterStore;
   cycleComment: ICycleCommentStore;
   cycleActivity: ICycleActivityStore;
+  testCaseComment: ITestCaseCommentStore;
+  testCaseActivity: ITestCaseActivityStore;
   module: IModuleStore;
   moduleFilter: IModuleFilterStore;
   releaseFilter: IReleaseFilterStore;
@@ -133,6 +139,8 @@ export class CoreRootStore {
     this.cycleFilter = new CycleFilterStore(this);
     this.cycleComment = new CycleCommentStore(this);
     this.cycleActivity = new CycleActivityStore(this);
+    this.testCaseComment = new TestCaseCommentStore(this);
+    this.testCaseActivity = new TestCaseActivityStore(this);
     this.module = new ModulesStore(this);
     this.moduleFilter = new ModuleFilterStore(this);
     this.releaseFilter = new ReleaseFilterStore(this);
@@ -173,6 +181,8 @@ export class CoreRootStore {
     this.cycleFilter = new CycleFilterStore(this);
     this.cycleComment = new CycleCommentStore(this);
     this.cycleActivity = new CycleActivityStore(this);
+    this.testCaseComment = new TestCaseCommentStore(this);
+    this.testCaseActivity = new TestCaseActivityStore(this);
     this.module = new ModulesStore(this);
     this.moduleFilter = new ModuleFilterStore(this);
     this.releaseFilter = new ReleaseFilterStore(this);

@@ -1,7 +1,7 @@
 "use client";
 import React from "react";
 import { useParams } from "next/navigation";
-import { Button, Dropdown, Table, Tooltip, Modal, Input, Spin } from "antd";
+import { Button, Dropdown, Table, Tooltip, Modal } from "antd";
 import { DownOutlined, EditOutlined } from "@ant-design/icons";
 import * as LucideIcons from "lucide-react";
 import { convertBytesToSize, renderFormattedDate } from "@plane/utils";
@@ -37,20 +37,6 @@ type BasicInfoPanelProps = {
   onFilesChosen: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onDownloadAttachment: (attachment: any) => void;
   onRemoveCaseAttachment: (id: string) => void;
-
-  commentsLoading: boolean;
-  comments: any[];
-  commentPage: number;
-  commentPageSize: number;
-  commentTotal: number;
-  setCommentPage: (n: number) => void;
-  fetchComments: (reset?: boolean, pageOverride?: number) => void;
-  renderComment: (c: any) => React.ReactNode;
-  newComment: string;
-  commentPlaceholder: string;
-  newCommentInputRef: React.RefObject<any>;
-  onNewCommentChange: (v: string) => void;
-  onCreateComment: () => void;
 };
 
 export function BasicInfoPanel(props: BasicInfoPanelProps) {
@@ -70,19 +56,6 @@ export function BasicInfoPanel(props: BasicInfoPanelProps) {
     onFilesChosen,
     onDownloadAttachment,
     onRemoveCaseAttachment,
-    commentsLoading,
-    comments,
-    commentPage,
-    commentPageSize,
-    commentTotal,
-    setCommentPage,
-    fetchComments,
-    renderComment,
-    newComment,
-    commentPlaceholder,
-    newCommentInputRef,
-    onNewCommentChange,
-    onCreateComment,
   } = props;
 
   const [isEditing, setIsEditing] = React.useState(false);
@@ -521,57 +494,6 @@ export function BasicInfoPanel(props: BasicInfoPanelProps) {
           />
         </div>
       </section>
-      <div className="mt-6 h-[420px] flex flex-col rounded bg-white">
-        <span id="attachments-title" className="flex items-center gap-2 text-sm font-semibold text-secondary">
-          评论
-        </span>
-        <div className="flex-1 min-h-0 overflow-y-auto px-3 py-2">
-          {commentsLoading ? (
-            <div className="py-6 flex justify-center">
-              <Spin />
-            </div>
-          ) : comments.length === 0 ? (
-            <div className="text-sm text-tertiary">暂无评论</div>
-          ) : (
-            <div>
-              {comments.map((c) => renderComment(c))}
-              {commentPage * commentPageSize < commentTotal && (
-                <div className="mt-3">
-                  <button
-                    type="button"
-                    className="rounded bg-layer-1 px-3 py-1.5 text-sm text-secondary hover:bg-layer-1-hover"
-                    onClick={() => {
-                      const nextPage = commentPage + 1;
-                      setCommentPage(nextPage);
-                      fetchComments(false, nextPage);
-                    }}
-                  >
-                    加载更多
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-        <div className=" px-3 py-2 bg-white">
-          <div className="flex items-start gap-2">
-            <Input.TextArea
-              ref={newCommentInputRef}
-              placeholder={commentPlaceholder}
-              autoSize={{ minRows: 1, maxRows: 4 }}
-              value={newComment}
-              onChange={(e) => onNewCommentChange(e.target.value)}
-            />
-            <button
-              type="button"
-              className="mt-0.5 text-on-color bg-accent-primary hover:bg-accent-primary-hover focus:text-on-color focus:bg-accent-primary-hover px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center shrink-0"
-              onClick={onCreateComment}
-            >
-              评论
-            </button>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
