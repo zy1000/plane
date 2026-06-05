@@ -61,6 +61,16 @@ class CycleWriteSerializer(BaseSerializer):
                     project_id=project_id,
                 )
 
+        if self.instance and "owned_by" in data:
+            requested_owner = data.get("owned_by")
+            requested_owner_id = getattr(requested_owner, "id", None)
+            if requested_owner_id != self.instance.owned_by_id and self.instance.owned_by_id != getattr(user, "id", None):
+                raise serializers.ValidationError(
+                    {
+                        "error": "仅当前迭代负责人可以修改负责人",
+                    }
+                )
+
         if status and self.instance and status != self.instance.status:
             if self.instance.owned_by_id != getattr(user, "id", None):
                 raise serializers.ValidationError(

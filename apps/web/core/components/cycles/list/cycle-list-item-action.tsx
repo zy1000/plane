@@ -22,12 +22,12 @@ import { Avatar, AvatarGroup, CustomSelect, FavoriteStar } from "@plane/ui";
 import { getDate, getFileURL, generateQueryParams, renderFormattedPayloadDate } from "@plane/utils";
 // components
 import { DateRangeDropdown } from "@/components/dropdowns/date-range";
-import { ButtonAvatars } from "@/components/dropdowns/member/avatar";
+import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 // hooks
 import { useCycle } from "@/hooks/store/use-cycle";
 import { useCycleFilter } from "@/hooks/store/use-cycle-filter";
 import { useMember } from "@/hooks/store/use-member";
-import { useUserPermissions } from "@/hooks/store/user";
+import { useUser, useUserPermissions } from "@/hooks/store/user";
 import { useAppRouter } from "@/hooks/use-app-router";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 import { useTimeZoneConverter } from "@/hooks/use-timezone-converter";
@@ -60,6 +60,7 @@ export const CycleListItemAction = observer(function CycleListItemAction(props: 
   const [transferIssuesModal, setTransferIssuesModal] = useState(false);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const [isUpdatingDateRange, setIsUpdatingDateRange] = useState(false);
+  const [isUpdatingOwner, setIsUpdatingOwner] = useState(false);
   // hooks
   const { isMobile } = usePlatformOS();
   const { t } = useTranslation();
@@ -72,6 +73,7 @@ export const CycleListItemAction = observer(function CycleListItemAction(props: 
   const pathname = usePathname();
   // store hooks
   const { addCycleToFavorites, removeCycleFromFavorites, updateCycleDetails } = useCycle();
+  const { data: currentUser } = useUser();
   const { allowPermissions } = useUserPermissions();
 
   // local storage
@@ -96,7 +98,7 @@ export const CycleListItemAction = observer(function CycleListItemAction(props: 
   const showStartDateProperty = displayProperties.start_date !== false;
   const showEndDateProperty = displayProperties.end_date !== false;
   const showDateRange = showStartDateProperty || showEndDateProperty;
-  const showCreatedByProperty = displayProperties.created_by !== false;
+  const showOwnerProperty = displayProperties.created_by !== false;
   const showMembersProperty = displayProperties.members !== false;
   const showStatusInGroupedView =
     showStatusProperty &&
@@ -133,8 +135,10 @@ export const CycleListItemAction = observer(function CycleListItemAction(props: 
     projectId
   );
   const isCompleted = cycleStatus === "completed";
+  const isCurrentOwner = Boolean(currentUser?.id) && String(cycleDetails.owned_by_id) === String(currentUser?.id);
   const canChangeStatus = isEditingAllowed && !cycleDetails.archived_at && statusOptions.length > 0;
   const canUpdateDateRange = isEditingAllowed && !cycleDetails.archived_at && !isCompleted;
+  const canUpdateOwner = isEditingAllowed && !cycleDetails.archived_at && isCurrentOwner;
 
   const handleDateRangeSelect = (startDate?: Date, endDate?: Date) => {
     void (async () => {
@@ -222,14 +226,36 @@ export const CycleListItemAction = observer(function CycleListItemAction(props: 
     });
   };
 
-  const createdByDetails = cycleDetails.created_by ? getUserDetails(cycleDetails.created_by) : undefined;
-
   useEffect(() => {
     if (cycleDetails)
       reset({
         ...cycleDetails,
       });
   }, [cycleDetails, reset]);
+
+  const handleOwnerChange = (nextOwnerId: string | null) => {
+    if (!nextOwnerId || isUpdatingOwner || nextOwnerId === cycleDetails.owned_by_id || !canUpdateOwner) return;
+    void (async () => {
+      setIsUpdatingOwner(true);
+      try {
+        await updateCycleDetails(workspaceSlug, projectId, cycleId, { owned_by_id: nextOwnerId });
+        setToast({
+          type: TOAST_TYPE.SUCCESS,
+          title: t("project_cycles.action.update.success.title"),
+          message: t("project_cycles.action.update.success.description"),
+        });
+      } catch (err) {
+        const { title, message } = formatCycleUpdateError(err);
+        setToast({
+          type: TOAST_TYPE.ERROR,
+          title,
+          message,
+        });
+      } finally {
+        setIsUpdatingOwner(false);
+      }
+    })();
+  };
 
   // handlers
   const openCycleOverview = (e: MouseEvent<HTMLButtonElement | HTMLAnchorElement>) => {
@@ -374,8 +400,22 @@ export const CycleListItemAction = observer(function CycleListItemAction(props: 
                 {projectUTCOffset}
               </span>
             )}
-            {showCreatedByProperty && createdByDetails && (
-              <ButtonAvatars showTooltip={false} userIds={createdByDetails?.id} />
+            {showOwnerProperty && (
+              <div className="h-5 w-5">
+                <MemberDropdown
+                  value={cycleDetails?.owned_by_id ?? null}
+                  onChange={handleOwnerChange}
+                  multiple={false}
+                  projectId={projectId}
+                  buttonVariant="transparent-without-text"
+                  className="h-full w-full"
+                  buttonContainerClassName="h-full w-full"
+                  buttonClassName="!p-0 hover:bg-transparent"
+                  placeholder={t("lead")}
+                  showUserDetails
+                  disabled={!canUpdateOwner || isUpdatingOwner}
+                />
+              </div>
             )}
           </div>
         </>
@@ -416,8 +456,22 @@ export const CycleListItemAction = observer(function CycleListItemAction(props: 
           </>
         )
       )}
-      {showCreatedByProperty && createdByDetails && !isActive && (
-        <ButtonAvatars showTooltip={false} userIds={createdByDetails?.id} />
+      {showOwnerProperty && !isActive && (
+        <div className="h-5 w-5">
+          <MemberDropdown
+            value={cycleDetails?.owned_by_id ?? null}
+            onChange={handleOwnerChange}
+            multiple={false}
+            projectId={projectId}
+            buttonVariant="transparent-without-text"
+            className="h-full w-full"
+            buttonContainerClassName="h-full w-full"
+            buttonClassName="!p-0 hover:bg-transparent"
+            placeholder={t("lead")}
+            showUserDetails
+            disabled={!canUpdateOwner || isUpdatingOwner}
+          />
+        </div>
       )}
       {showMembersProperty && !isActive && (
         <Tooltip tooltipContent={`${cycleDetails.assignee_ids?.length} Members`} isMobile={isMobile}>

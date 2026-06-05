@@ -47,7 +47,7 @@ const DISPLAY_PROPERTY_OPTIONS: { key: TCycleDisplayPropertyKey; labelKey: strin
   { key: "issue_count", labelKey: "cycle.display.properties.issue_count" },
   { key: "start_date", labelKey: "cycle.display.properties.start_date" },
   { key: "end_date", labelKey: "cycle.display.properties.end_date" },
-  { key: "created_by", labelKey: "cycle.display.properties.created_by" },
+  { key: "created_by", labelKey: "lead" },
   { key: "members", labelKey: "cycle.display.properties.members" },
 ];
 

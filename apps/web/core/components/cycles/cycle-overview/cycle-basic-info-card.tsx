@@ -13,6 +13,7 @@ import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { formatCycleUpdateError } from "@/components/cycles/use-cycle-error-message";
 import { useCycle } from "@/hooks/store/use-cycle";
 import { useMember } from "@/hooks/store/use-member";
+import { useUser } from "@/hooks/store/user";
 import { useCycleBasicInfo } from "./use-cycle-basic-info";
 
 type Props = {
@@ -43,6 +44,7 @@ export const CycleBasicInfoCard = ({ workspaceSlug, projectId, cycleId, cycleDet
   const { t } = useTranslation();
   const { updateCycleDetails } = useCycle();
   const { getUserDetails } = useMember();
+  const { data: currentUser } = useUser();
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const [isUpdatingDateRange, setIsUpdatingDateRange] = useState(false);
   const [isUpdatingOwner, setIsUpdatingOwner] = useState(false);
@@ -63,9 +65,10 @@ export const CycleBasicInfoCard = ({ workspaceSlug, projectId, cycleId, cycleDet
     endDate ? renderFormattedDate(endDate, "yyyy.MM.dd") : "-"
   }`;
   const isCompleted = cycleStatus === "completed";
+  const isCurrentOwner = Boolean(currentUser?.id) && String(cycleDetails.owned_by_id) === String(currentUser?.id);
   const canChangeStatus = canEdit && !cycleDetails?.archived_at && statusOptions.length > 0;
   const canUpdateDateRange = canEdit && !cycleDetails?.archived_at && !isCompleted;
-  const canUpdateOwner = canEdit && !cycleDetails?.archived_at;
+  const canUpdateOwner = canEdit && !cycleDetails?.archived_at && isCurrentOwner;
 
   const issueTypePieData = useMemo(
     () =>
