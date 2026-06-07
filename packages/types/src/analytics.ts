@@ -37,7 +37,7 @@ export enum ChartYAxisMetric {
   EPIC_WORK_ITEM_COUNT = "EPIC_WORK_ITEM_COUNT",
 }
 
-export type TAnalyticsTabsBase = "overview" | "work-items" | "statistics";
+export type TAnalyticsTabsBase = "overview" | "work-items" | "statistics" | "overdue";
 export type TAnalyticsGraphsBase = "projects" | "work-items" | "custom-work-items";
 export interface AnalyticsTab {
   key: TAnalyticsTabsBase;
@@ -49,6 +49,57 @@ export type TAnalyticsFilterParams = {
   project_ids?: string;
   cycle_id?: string;
   module_id?: string;
+};
+
+export type TOverdueAnalyticsStatus = "active" | "all" | "resolved";
+export type TOverdueEntityType = "issue" | "cycle" | "release" | "test_plan";
+
+export type TOverdueAnalyticsFilterParams = {
+  project_ids?: string;
+  status?: TOverdueAnalyticsStatus;
+  entity_type?: TOverdueEntityType;
+};
+
+export type TOverdueAssignee = {
+  id: string;
+  display_name: string;
+  avatar_url: string;
+};
+
+export type TOverdueRecord = {
+  entity_type: TOverdueEntityType;
+  entity_id: string;
+  name: string;
+  identifier: string | null;
+  project_id: string | null;
+  project_name: string;
+  deadline: string | null;
+  overdue_since: string | null;
+  ended_at: string | null;
+  is_active: boolean;
+  overdue_days: number;
+  phase: "dev" | "test" | null;
+  status_label: string;
+  assignees: TOverdueAssignee[];
+};
+
+export type TOverdueSummary = {
+  work_items: number;
+  cycles: number;
+  releases: number;
+  test_plans: number;
+  total: number;
+};
+
+export type TOverdueTrendPoint = {
+  month: string;
+  count: number;
+};
+
+export type TOverdueAnalyticsResponse = {
+  summary: TOverdueSummary;
+  records: TOverdueRecord[];
+  trend: TOverdueTrendPoint[];
 };
 
 // service types

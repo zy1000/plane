@@ -11,6 +11,8 @@ import type {
   TAnalyticsTabsBase,
   TAnalyticsGraphsBase,
   TAnalyticsFilterParams,
+  TOverdueAnalyticsFilterParams,
+  TOverdueAnalyticsResponse,
 } from "@plane/types";
 // services
 import { APIService } from "./api.service";
@@ -120,6 +122,19 @@ export class AnalyticsService extends APIService {
     }
   ): Promise<T> {
     return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/statistics/`, {
+      params,
+    })
+      .then((res) => res?.data)
+      .catch((err) => {
+        throw err?.response?.data;
+      });
+  }
+
+  async getWorkspaceOverdueAnalytics(
+    workspaceSlug: string,
+    params?: TOverdueAnalyticsFilterParams
+  ): Promise<TOverdueAnalyticsResponse> {
+    return this.get(`/api/workspaces/${workspaceSlug}/overdue-analytics/`, {
       params,
     })
       .then((res) => res?.data)
