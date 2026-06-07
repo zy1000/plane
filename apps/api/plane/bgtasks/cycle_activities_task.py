@@ -84,6 +84,7 @@ def _track_simple_text(
     activities,
     epoch,
     label: Optional[str] = None,
+    strip_html: bool = False,
 ):
     if field not in requested:
         return
@@ -92,6 +93,8 @@ def _track_simple_text(
     if (old_value or None) == (new_value or None):
         return
     label = label or _label_for_field(field)
+    old_text = _strip_html(old_value) if strip_html else (old_value or "")
+    new_text = _strip_html(new_value) if strip_html else (new_value or "")
     _append(
         activities,
         cycle_id=cycle_id,
@@ -100,8 +103,8 @@ def _track_simple_text(
         actor_id=actor_id,
         verb="updated",
         field=field,
-        old_value=old_value or "",
-        new_value=new_value or "",
+        old_value=old_text,
+        new_value=new_text,
         comment=f"更新了{label}",
         epoch=epoch,
     )
@@ -291,7 +294,7 @@ def update_cycle_activity(
     _track_status(requested=requested, current=current, **common)
     _track_date("start_date", requested=requested, current=current, **common)
     _track_date("end_date", requested=requested, current=current, **common)
-    _track_simple_text("suggested_test_scope", requested=requested, current=current, **common)
+    _track_simple_text("suggested_test_scope", requested=requested, current=current, strip_html=True, **common)
     _track_owner(requested=requested, current=current, **common)
 
 

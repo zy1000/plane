@@ -13,9 +13,10 @@ import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import type { ICycle } from "@plane/types";
 // ui
-import { Input, TextArea } from "@plane/ui";
+import { Input } from "@plane/ui";
 import { getDate, renderFormattedPayloadDate, getTabIndex } from "@plane/utils";
 // components
+import { CycleRichTextEditor } from "@/components/cycles/cycle-rich-text-editor";
 import { DateRangeDropdown } from "@/components/dropdowns/date-range";
 import { ProjectDropdown } from "@/components/dropdowns/project/dropdown";
 // hooks
@@ -25,6 +26,7 @@ type Props = {
   handleFormSubmit: (values: Partial<ICycle>) => Promise<void>;
   handleClose: () => void;
   status: boolean;
+  workspaceSlug: string;
   projectId: string;
   setActiveProject: (projectId: string) => void;
   data?: ICycle | null;
@@ -39,8 +41,11 @@ const defaultValues: Partial<ICycle> = {
   end_date: null,
 };
 
+const cycleFormEditorContainerClassName =
+  "min-h-56 !pl-8 rounded-md border-[0.5px] border-subtle-1 bg-layer-2 text-14";
+
 export function CycleForm(props: Props) {
-  const { handleFormSubmit, handleClose, status, projectId, setActiveProject, data, isMobile = false } = props;
+  const { handleFormSubmit, handleClose, status, workspaceSlug, projectId, setActiveProject, data, isMobile = false } = props;
   // plane hooks
   const { t } = useTranslation();
   // store hooks
@@ -51,6 +56,7 @@ export function CycleForm(props: Props) {
     handleSubmit,
     control,
     reset,
+    watch,
   } = useForm<ICycle>({
     defaultValues: {
       project_id: projectId,
@@ -70,6 +76,9 @@ export function CycleForm(props: Props) {
       ...data,
     });
   }, [data, reset]);
+
+  const selectedProjectId = String(watch("project_id") ?? projectId ?? "");
+  const cycleFormEditorId = data?.id ?? "new";
 
   return (
     <form onSubmit={handleSubmit((formData) => handleFormSubmit(formData))}>
@@ -136,14 +145,16 @@ export function CycleForm(props: Props) {
               name="description"
               control={control}
               render={({ field: { value, onChange } }) => (
-                <TextArea
-                  name="description"
-                  placeholder={t("description")}
-                  className="min-h-24 w-full resize-none text-14"
-                  hasError={Boolean(errors?.description)}
-                  value={value}
+                <CycleRichTextEditor
+                  workspaceSlug={workspaceSlug}
+                  projectId={selectedProjectId}
+                  editorId={`cycle-form-description-${cycleFormEditorId}`}
+                  initialValue={value}
+                  editable
+                  dragDropEnabled={false}
                   onChange={onChange}
-                  tabIndex={getIndex("description")}
+                  placeholder={t("description")}
+                  containerClassName={cycleFormEditorContainerClassName}
                 />
               )}
             />
@@ -153,13 +164,16 @@ export function CycleForm(props: Props) {
               name="suggested_test_scope"
               control={control}
               render={({ field: { value, onChange } }) => (
-                <TextArea
-                  name="suggested_test_scope"
-                  placeholder="建议测试范围"
-                  className="min-h-24 w-full resize-none text-14"
-                  value={value ?? ""}
+                <CycleRichTextEditor
+                  workspaceSlug={workspaceSlug}
+                  projectId={selectedProjectId}
+                  editorId={`cycle-form-suggested-test-scope-${cycleFormEditorId}`}
+                  initialValue={value}
+                  editable
+                  dragDropEnabled={false}
                   onChange={onChange}
-                  tabIndex={getIndex("suggested_test_scope")}
+                  placeholder="建议测试范围"
+                  containerClassName={cycleFormEditorContainerClassName}
                 />
               )}
             />

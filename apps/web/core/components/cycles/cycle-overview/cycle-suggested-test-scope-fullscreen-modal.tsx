@@ -14,7 +14,7 @@ import { Modal } from "antd";
 import { ClipboardList, Pencil } from "lucide-react";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import { TextArea } from "@plane/ui";
+import { CycleRichTextEditor, isEmptyCycleRichText } from "@/components/cycles/cycle-rich-text-editor";
 import { useCycle } from "@/hooks/store/use-cycle";
 
 type Props = {
@@ -150,17 +150,27 @@ export const CycleSuggestedTestScopeFullscreenModal: FC<Props> = observer(functi
         )}
         <div className="min-h-0 flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm px-4 pb-3">
           {editing && canEdit ? (
-            <TextArea
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
+            <CycleRichTextEditor
+              workspaceSlug={workspaceSlug}
+              projectId={projectId}
+              editorId={`cycle-suggested-test-scope-${cycleId}-modal-edit`}
+              initialValue={draft}
+              editable
+              onChange={setDraft}
               placeholder="填写建议测试范围..."
-              className="min-h-[min(60vh,480px)] w-full resize-y rounded-md border border-subtle bg-surface-1 px-3 py-2 text-sm text-primary"
-              rows={16}
+              containerClassName="min-h-[min(60vh,480px)] text-sm text-primary"
             />
           ) : (
             <>
-              {draft ? (
-                <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-secondary">{draft}</p>
+              {!isEmptyCycleRichText(draft) ? (
+                <CycleRichTextEditor
+                  workspaceSlug={workspaceSlug}
+                  projectId={projectId}
+                  editorId={`cycle-suggested-test-scope-${cycleId}-modal-readonly`}
+                  initialValue={draft}
+                  editable={false}
+                  containerClassName="!pb-0 !pl-0 text-sm leading-relaxed text-secondary"
+                />
               ) : (
                 <div className="grid h-32 place-items-center text-sm text-placeholder">暂无建议测试范围</div>
               )}

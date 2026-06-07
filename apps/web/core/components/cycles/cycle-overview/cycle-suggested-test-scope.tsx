@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { observer } from "mobx-react";
 import { ClipboardList, Maximize2, Pencil } from "lucide-react";
+import { CycleRichTextEditor, isEmptyCycleRichText } from "@/components/cycles/cycle-rich-text-editor";
 import { CycleSuggestedTestScopeFullscreenModal } from "@/components/cycles/cycle-overview/cycle-suggested-test-scope-fullscreen-modal";
 
 type Props = {
@@ -53,10 +54,17 @@ export const CycleSuggestedTestScope = observer(function CycleSuggestedTestScope
         </div>
       </div>
 
-      {value ? (
+      {!isEmptyCycleRichText(value) ? (
         <div className="relative min-h-0 flex-1">
           <div className="absolute inset-0 overflow-y-auto pr-1 vertical-scrollbar scrollbar-sm">
-            <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-secondary">{value}</p>
+            <CycleRichTextEditor
+              workspaceSlug={workspaceSlug}
+              projectId={projectId}
+              editorId={`cycle-suggested-test-scope-${cycleId}-card`}
+              initialValue={value}
+              editable={false}
+              containerClassName="!pb-0 !pl-0 text-sm leading-relaxed text-secondary"
+            />
           </div>
         </div>
       ) : (

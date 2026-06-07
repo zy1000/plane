@@ -58,7 +58,7 @@ export const CycleDetailsSidebar = observer(function CycleDetailsSidebar(props: 
           isArchived={isArchived}
           handleClose={handleClose}
         />
-        <CycleSidebarDetails projectId={projectId} cycleDetails={cycleDetails} />
+        <CycleSidebarDetails workspaceSlug={workspaceSlug} projectId={projectId} cycleDetails={cycleDetails} />
       </div>
 
       {workspaceSlug && projectId && cycleDetails?.id && (

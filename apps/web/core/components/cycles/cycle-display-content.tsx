@@ -24,6 +24,7 @@ import { Loader, Button } from "@plane/ui";
 import { getDate, toFilterArray } from "@plane/utils";
 import { CycleActivityTab } from "@/components/cycles/cycle-activity-tab";
 import { CycleDescriptionFullscreenModal } from "@/components/cycles/cycle-description-fullscreen-modal";
+import { CycleRichTextEditor, isEmptyCycleRichText } from "@/components/cycles/cycle-rich-text-editor";
 import { CycleAssigneeStatsTable } from "@/components/cycles/cycle-overview/cycle-assignee-stats-table";
 import { CycleBasicInfoCard } from "@/components/cycles/cycle-overview/cycle-basic-info-card";
 import { CycleSuggestedTestScope } from "@/components/cycles/cycle-overview/cycle-suggested-test-scope";
@@ -234,12 +235,17 @@ export const CycleDisplayContent = observer(function CycleDisplayContent(props: 
                 </button>
               </div>
             </div>
-            {cycleDetails.description ? (
+            {!isEmptyCycleRichText(cycleDetails.description) ? (
               <div className="relative min-h-0 flex-1">
                 <div className="absolute inset-0 overflow-y-auto pr-1 vertical-scrollbar scrollbar-sm">
-                  <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-secondary">
-                    {cycleDetails.description}
-                  </p>
+                  <CycleRichTextEditor
+                    workspaceSlug={workspaceSlug}
+                    projectId={projectId}
+                    editorId={`cycle-description-${cycleId}-card`}
+                    initialValue={cycleDetails.description}
+                    editable={false}
+                    containerClassName="!pb-0 !pl-0 text-sm leading-relaxed text-secondary"
+                  />
                 </div>
               </div>
             ) : (

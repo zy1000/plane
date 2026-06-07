@@ -183,11 +183,17 @@ export function CycleCreateUpdateModal(props: CycleModalProps) {
   });
 
   return (
-    <ModalCore isOpen={isOpen} position={EModalPosition.TOP} width={EModalWidth.XXL}>
+    <ModalCore
+      isOpen={isOpen}
+      position={EModalPosition.TOP}
+      width={EModalWidth.VIXL}
+      className="min-h-[36rem]"
+    >
       <CycleForm
         handleFormSubmit={handleFormSubmit}
         handleClose={handleClose}
         status={!!data}
+        workspaceSlug={workspaceSlug}
         projectId={activeProject ?? ""}
         setActiveProject={setActiveProject}
         data={data}

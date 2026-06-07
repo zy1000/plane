@@ -14,21 +14,23 @@ import { useTranslation } from "@plane/i18n";
 import { MembersPropertyIcon, WorkItemsIcon } from "@plane/propel/icons";
 import type { ICycle } from "@plane/types";
 // plane ui
-import { Avatar, AvatarGroup, TextArea } from "@plane/ui";
+import { Avatar, AvatarGroup } from "@plane/ui";
 // helpers
 import { getFileURL } from "@plane/utils";
+import { CycleRichTextEditor, isEmptyCycleRichText } from "@/components/cycles/cycle-rich-text-editor";
 // hooks
 import { useProjectEstimates } from "@/hooks/store/estimates";
 import { useMember } from "@/hooks/store/use-member";
 // plane web constants
 
 type Props = {
+  workspaceSlug: string;
   projectId: string;
   cycleDetails: ICycle;
 };
 
 export const CycleSidebarDetails = observer(function CycleSidebarDetails(props: Props) {
-  const { projectId, cycleDetails } = props;
+  const { workspaceSlug, projectId, cycleDetails } = props;
   // hooks
   const { getUserDetails } = useMember();
   const { areEstimateEnabledByProjectId, currentActiveEstimateId, estimateById } = useProjectEstimates();
@@ -67,11 +69,14 @@ export const CycleSidebarDetails = observer(function CycleSidebarDetails(props: 
         : `${cycleDetails?.completed_estimate_points}/${cycleDetails?.total_estimate_points}`;
   return (
     <div className="flex w-full flex-col gap-5">
-      {cycleDetails?.description && (
-        <TextArea
-          className="ring-none !m-0 max-h-max w-full resize-none !border-0 bg-transparent !p-0 text-13 leading-5 text-secondary outline-none"
-          value={cycleDetails.description}
-          disabled
+      {!isEmptyCycleRichText(cycleDetails?.description) && (
+        <CycleRichTextEditor
+          workspaceSlug={workspaceSlug}
+          projectId={projectId}
+          editorId={`cycle-sidebar-description-${cycleDetails.id}`}
+          initialValue={cycleDetails.description}
+          editable={false}
+          containerClassName="!pb-0 !pl-0 text-13 leading-5 text-secondary"
         />
       )}
 
