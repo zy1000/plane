@@ -173,7 +173,7 @@ export const CreateUpdatePlanModal: React.FC<Props> = (props) => {
 
     if (workspaceSlug && projectId) {
       cycleService
-        .getCyclesWithStatus(workspaceSlug, projectId, ["进行中", "未开始"])
+        .getCyclesWithStatus(workspaceSlug, projectId, ["进行中", "未开始", "测试中"])
         .then((data) => {
           const list = Array.isArray(data) ? data : [];
           const opts = list.map((c: any) => ({
