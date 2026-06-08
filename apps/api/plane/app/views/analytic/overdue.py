@@ -65,6 +65,18 @@ class WorkspaceOverdueAnalyticsEndpoint(BaseAPIView):
     def _resolve_user_name(user) -> str:
         return user.display_name or f"{user.first_name or ''} {user.last_name or ''}".strip() or "-"
 
+    @classmethod
+    def _build_assignees_from_user(cls, user) -> List[Dict[str, Any]]:
+        if user is None:
+            return []
+        return [
+            {
+                "id": str(user.id),
+                "display_name": cls._resolve_user_name(user),
+                "avatar_url": user.avatar_url or "",
+            }
+        ]
+
     @staticmethod
     def _resolve_issue_identifier(issue) -> str:
         project_identifier = getattr(issue.project, "identifier", None) or "-"
@@ -222,7 +234,9 @@ class WorkspaceOverdueAnalyticsEndpoint(BaseAPIView):
         cycle_overdues = CycleOverdueRecord.objects.filter(
             **base_filters,
             deleted_at__isnull=True,
-        ).select_related("cycle", "project")
+            cycle__deleted_at__isnull=True,
+            cycle__archived_at__isnull=True,
+        ).select_related("cycle", "cycle__owned_by", "project")
 
         if status_filter == "active":
             cycle_overdues = cycle_overdues.filter(ended_at__isnull=True)
@@ -259,7 +273,9 @@ class WorkspaceOverdueAnalyticsEndpoint(BaseAPIView):
                     ),
                     "phase": None,
                     "status_label": record.cycle.status if record.cycle else "-",
-                    "assignees": [],
+                    "assignees": self._build_assignees_from_user(
+                        record.cycle.owned_by if record.cycle else None
+                    ),
                 }
             )
 
@@ -269,7 +285,8 @@ class WorkspaceOverdueAnalyticsEndpoint(BaseAPIView):
         release_overdues = ReleaseOverdueRecord.objects.filter(
             **base_filters,
             deleted_at__isnull=True,
-        ).select_related("release", "project")
+            release__deleted_at__isnull=True,
+        ).select_related("release", "release__lead", "project")
 
         if status_filter == "active":
             release_overdues = release_overdues.filter(ended_at__isnull=True)
@@ -310,7 +327,9 @@ class WorkspaceOverdueAnalyticsEndpoint(BaseAPIView):
                     ),
                     "phase": record.phase,
                     "status_label": record.release.get_status_display() if record.release else "-",
-                    "assignees": [],
+                    "assignees": self._build_assignees_from_user(
+                        record.release.lead if record.release else None
+                    ),
                 }
             )
 
