@@ -340,12 +340,39 @@ class WorkspaceOverdueAnalyticsEndpoint(BaseAPIView):
         if project_ids:
             test_plan_queryset = test_plan_queryset.filter(project_id__in=project_ids)
 
-        test_plan_queryset = test_plan_queryset.select_related("project").order_by("-end_time")
+        test_plan_queryset = (
+            test_plan_queryset.select_related("project", "created_by")
+            .prefetch_related("assignees")
+            .order_by("-end_time")
+        )
 
         plan_records: List[Dict[str, Any]] = []
         for plan in test_plan_queryset:
             # 逾期从截止日期次日开始计算
             overdue_since_date = plan.end_time + timedelta(days=1) if plan.end_time else None
+            assignees: List[Dict[str, str]] = []
+            seen_assignee_ids = set()
+            for assignee in plan.assignees.all():
+                assignee_id = str(assignee.id)
+                if assignee_id in seen_assignee_ids:
+                    continue
+                seen_assignee_ids.add(assignee_id)
+                assignees.append(
+                    {
+                        "id": assignee_id,
+                        "display_name": self._resolve_user_name(assignee),
+                        "avatar_url": assignee.avatar_url or "",
+                    }
+                )
+
+            if not assignees and plan.created_by:
+                assignees.append(
+                    {
+                        "id": str(plan.created_by.id),
+                        "display_name": self._resolve_user_name(plan.created_by),
+                        "avatar_url": plan.created_by.avatar_url or "",
+                    }
+                )
             plan_records.append(
                 {
                     "entity_type": "test_plan",
@@ -366,7 +393,7 @@ class WorkspaceOverdueAnalyticsEndpoint(BaseAPIView):
                     ),
                     "phase": None,
                     "status_label": plan.state or "-",
-                    "assignees": [],
+                    "assignees": assignees,
                 }
             )
 
