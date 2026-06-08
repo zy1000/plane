@@ -26,7 +26,6 @@ from plane.db.models import (
     ReleaseOverdueRecord,
     TestPlan,
 )
-from plane.utils.date_utils import get_analytics_filters
 
 
 class WorkspaceOverdueAnalyticsEndpoint(BaseAPIView):
@@ -331,8 +330,6 @@ class WorkspaceOverdueAnalyticsEndpoint(BaseAPIView):
 
         test_plan_queryset = TestPlan.objects.filter(
             project__workspace__slug=slug,
-            project__project_projectmember__member=self.request.user,
-            project__project_projectmember__is_active=True,
             project__deleted_at__isnull=True,
             project__archived_at__isnull=True,
             deleted_at__isnull=True,
@@ -383,13 +380,14 @@ class WorkspaceOverdueAnalyticsEndpoint(BaseAPIView):
         entity_type: Optional[str],
         project_ids: List[str],
     ) -> List[Dict[str, Any]]:
-        filters = get_analytics_filters(
-            slug=slug,
-            user=self.request.user,
-            type="analytics",
-            project_ids=",".join(project_ids) if project_ids else None,
-        )
-        base_filters = filters["base_filters"]
+        # 延期分析改为工作区维度统计，不再按当前用户参与项目做裁剪。
+        base_filters: Dict[str, Any] = {
+            "workspace__slug": slug,
+            "project__deleted_at__isnull": True,
+            "project__archived_at__isnull": True,
+        }
+        if project_ids:
+            base_filters["project_id__in"] = project_ids
         today = timezone.now().date()
 
         records: List[Dict[str, Any]] = []
