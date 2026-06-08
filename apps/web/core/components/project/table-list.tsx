@@ -354,10 +354,13 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
                       {renderSortIcon("name")}
                     </button>
                   </th>
-                  <th className="px-4 py-3 text-left font-medium text-secondary w-28 whitespace-nowrap">
+                  <th className="px-4 py-3 text-left font-medium text-secondary hidden sm:table-cell">负责人</th>
+                  <th className="px-4 py-3 text-center font-medium text-secondary w-28 whitespace-nowrap">
                     项目等级
                   </th>
-                  <th className="px-4 py-3 text-left font-medium text-secondary hidden sm:table-cell">负责人</th>
+                  <th className="px-4 py-3 text-center font-medium text-secondary w-32 whitespace-nowrap">
+                    产品类型
+                  </th>
                   <th className="px-4 py-3 text-left font-medium text-secondary hidden md:table-cell">
                     <button
                       type="button"
@@ -438,13 +441,6 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
                       </div>
                     </Link>
                   </td>
-                  <td className="px-4 py-3 align-middle">
-                    {project.grade ? (
-                      <ProjectGradeBadge grade={project.grade} />
-                    ) : (
-                      <span className="text-secondary">-</span>
-                    )}
-                  </td>
                   <td className="px-4 py-3 hidden sm:table-cell">
                     {canEditProjectLead ? (
                       <MemberDropdown
@@ -485,6 +481,16 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
                     ) : (
                       <span className="text-secondary">-</span>
                     )}
+                  </td>
+                  <td className="px-4 py-3 align-middle text-center">
+                    {project.grade ? (
+                      <ProjectGradeBadge grade={project.grade} />
+                    ) : (
+                      <span className="text-secondary">-</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap text-center">
+                    {project.product_type ?? <span className="text-secondary">-</span>}
                   </td>
                   <td className="px-4 py-3 pl-1 hidden md:table-cell">
                     <span
