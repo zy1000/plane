@@ -53,11 +53,15 @@ export type TAnalyticsFilterParams = {
 
 export type TOverdueAnalyticsStatus = "active" | "all" | "resolved";
 export type TOverdueEntityType = "issue" | "cycle" | "release" | "test_plan";
+export type TOverdueDateField = "deadline" | "overdue_since";
 
 export type TOverdueAnalyticsFilterParams = {
   project_ids?: string;
   status?: TOverdueAnalyticsStatus;
   entity_type?: TOverdueEntityType;
+  date_field?: TOverdueDateField;
+  start_date?: string;
+  end_date?: string;
 };
 
 export type TOverdueAssignee = {

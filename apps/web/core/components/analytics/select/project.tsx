@@ -5,6 +5,7 @@
  */
 
 import { observer } from "mobx-react";
+import { useTranslation } from "@plane/i18n";
 // plane package imports
 import { getButtonStyling } from "@plane/propel/button";
 import { Logo } from "@plane/propel/emoji-icon-picker";
@@ -22,6 +23,7 @@ type Props = {
 
 export const ProjectSelect = observer(function ProjectSelect(props: Props) {
   const { value, onChange, projectIds } = props;
+  const { t } = useTranslation();
   const { getProjectById } = useProject();
 
   const options = projectIds?.map((projectId) => {
@@ -59,7 +61,7 @@ export const ProjectSelect = observer(function ProjectSelect(props: Props) {
                   ?.filter((p) => value.includes(p))
                   .map((p) => getProjectById(p)?.name)
                   .join(", ")
-              : "All projects"}
+              : t("workspace_projects.nav.all")}
           <ChevronDownIcon className="h-3 w-3" aria-hidden="true" />
         </div>
       }
