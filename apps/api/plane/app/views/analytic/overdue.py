@@ -4,10 +4,15 @@
 
 from collections import defaultdict
 from datetime import timedelta
+import io
 from typing import Any, Dict, List, Optional
+from urllib.parse import quote
 
 from django.db.models import Prefetch
+from django.http import FileResponse
 from django.utils import timezone
+from openpyxl import Workbook
+from openpyxl.styles import Alignment, Font, PatternFill
 from rest_framework import status
 from rest_framework.response import Response
 
@@ -27,6 +32,12 @@ from plane.utils.date_utils import get_analytics_filters
 class WorkspaceOverdueAnalyticsEndpoint(BaseAPIView):
     ALLOWED_STATUS = {"active", "all", "resolved"}
     ALLOWED_ENTITY_TYPES = {"issue", "cycle", "release", "test_plan"}
+    ENTITY_LABEL_MAP = {
+        "issue": "工作项",
+        "cycle": "迭代",
+        "release": "发布",
+        "test_plan": "测试计划",
+    }
 
     @staticmethod
     def _parse_csv_ids(raw_value: Optional[str]) -> List[str]:
@@ -72,6 +83,27 @@ class WorkspaceOverdueAnalyticsEndpoint(BaseAPIView):
 
         end_date = today if is_active or ended_at is None else timezone.localdate(ended_at)
         return max((end_date - overdue_since_date).days, 0)
+
+    def _extract_filters_from_request(self, request):
+        status_filter = request.GET.get("status", "all")
+        entity_type = request.GET.get("entity_type")
+        project_ids = self._parse_csv_ids(request.GET.get("project_ids"))
+        return status_filter, entity_type, project_ids
+
+    def _validate_filters(self, *, status_filter: str, entity_type: Optional[str]):
+        if status_filter not in self.ALLOWED_STATUS:
+            return Response(
+                {"error": "status 必须是 active、resolved 或 all"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if entity_type and entity_type not in self.ALLOWED_ENTITY_TYPES:
+            return Response(
+                {"error": "entity_type 必须是 issue、cycle、release 或 test_plan"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        return None
 
     def _build_issue_records(self, *, base_filters: Dict[str, Any], today, status_filter: str) -> List[Dict[str, Any]]:
         # Issue 没有独立历史逾期记录表，因此只返回当前仍逾期的数据
@@ -298,27 +330,17 @@ class WorkspaceOverdueAnalyticsEndpoint(BaseAPIView):
 
         return plan_records
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER], level="WORKSPACE")
-    def get(self, request, slug):
-        status_filter = request.GET.get("status", "all")
-        entity_type = request.GET.get("entity_type")
-        project_ids = self._parse_csv_ids(request.GET.get("project_ids"))
-
-        if status_filter not in self.ALLOWED_STATUS:
-            return Response(
-                {"error": "status 必须是 active、resolved 或 all"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        if entity_type and entity_type not in self.ALLOWED_ENTITY_TYPES:
-            return Response(
-                {"error": "entity_type 必须是 issue、cycle、release 或 test_plan"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
+    def _collect_records(
+        self,
+        *,
+        slug: str,
+        status_filter: str,
+        entity_type: Optional[str],
+        project_ids: List[str],
+    ) -> List[Dict[str, Any]]:
         filters = get_analytics_filters(
             slug=slug,
-            user=request.user,
+            user=self.request.user,
             type="analytics",
             project_ids=",".join(project_ids) if project_ids else None,
         )
@@ -372,6 +394,22 @@ class WorkspaceOverdueAnalyticsEndpoint(BaseAPIView):
             reverse=True,
         )
 
+        return records
+
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER], level="WORKSPACE")
+    def get(self, request, slug):
+        status_filter, entity_type, project_ids = self._extract_filters_from_request(request)
+        validation_error = self._validate_filters(status_filter=status_filter, entity_type=entity_type)
+        if validation_error:
+            return validation_error
+
+        records = self._collect_records(
+            slug=slug,
+            status_filter=status_filter,
+            entity_type=entity_type,
+            project_ids=project_ids,
+        )
+
         summary = {
             "work_items": sum(1 for item in records if item["entity_type"] == "issue"),
             "cycles": sum(1 for item in records if item["entity_type"] == "cycle"),
@@ -398,3 +436,99 @@ class WorkspaceOverdueAnalyticsEndpoint(BaseAPIView):
             },
             status=status.HTTP_200_OK,
         )
+
+
+class WorkspaceOverdueAnalyticsExportEndpoint(WorkspaceOverdueAnalyticsEndpoint):
+    @staticmethod
+    def _format_assignees(record: Dict[str, Any]) -> str:
+        assignees = record.get("assignees") or []
+        names = [
+            assignee.get("display_name")
+            for assignee in assignees
+            if isinstance(assignee, dict) and assignee.get("display_name")
+        ]
+        return ", ".join(names) if names else "-"
+
+    @staticmethod
+    def _format_date(value: Optional[str]) -> str:
+        if not value:
+            return "-"
+        return str(value).split("T")[0]
+
+    @staticmethod
+    def _format_status(record: Dict[str, Any]) -> str:
+        status_label = record.get("status_label") or "-"
+        return f"仍在延期 · {status_label}" if record.get("is_active") else f"已恢复 · {status_label}"
+
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER], level="WORKSPACE")
+    def get(self, request, slug):
+        status_filter, entity_type, project_ids = self._extract_filters_from_request(request)
+        validation_error = self._validate_filters(status_filter=status_filter, entity_type=entity_type)
+        if validation_error:
+            return validation_error
+
+        records = self._collect_records(
+            slug=slug,
+            status_filter=status_filter,
+            entity_type=entity_type,
+            project_ids=project_ids,
+        )
+
+        columns = [
+            ("名称", "name"),
+            ("类型", "entity_type"),
+            ("项目", "project_name"),
+            ("状态", "status_label"),
+            ("截止日期", "deadline"),
+            ("延期开始", "overdue_since"),
+            ("延期天数", "overdue_days"),
+            ("负责人", "assignees"),
+        ]
+
+        workbook = Workbook()
+        worksheet = workbook.active
+        worksheet.title = "延期记录"
+
+        header_font = Font(bold=True, color="FFFFFF")
+        header_fill = PatternFill("solid", fgColor="4F81BD")
+        header_align = Alignment(horizontal="center", vertical="center")
+
+        worksheet.append([label for label, _ in columns])
+        for col_idx, _ in enumerate(columns, start=1):
+            cell = worksheet.cell(row=1, column=col_idx)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = header_align
+
+        for record in records:
+            worksheet.append(
+                [
+                    record.get("name") or "-",
+                    self.ENTITY_LABEL_MAP.get(record.get("entity_type"), "-"),
+                    record.get("project_name") or "-",
+                    self._format_status(record),
+                    self._format_date(record.get("deadline")),
+                    self._format_date(record.get("overdue_since")),
+                    record.get("overdue_days", 0),
+                    self._format_assignees(record),
+                ]
+            )
+
+        widths = [36, 12, 24, 28, 14, 14, 10, 24]
+        for index, width in enumerate(widths, start=1):
+            worksheet.column_dimensions[
+                worksheet.cell(row=1, column=index).column_letter
+            ].width = width
+
+        output = io.BytesIO()
+        workbook.save(output)
+        output.seek(0)
+
+        filename = f"overdue-records-{timezone.now().strftime('%Y%m%d%H%M%S')}.xlsx"
+        response = FileResponse(
+            output,
+            as_attachment=True,
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        response["Content-Disposition"] = f"attachment; filename*=UTF-8''{quote(filename)}"
+        return response

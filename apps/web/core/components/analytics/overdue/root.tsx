@@ -56,7 +56,7 @@ function OverdueAnalyticsRoot() {
 
         <OverdueSummaryCards summary={data?.summary} isLoading={isLoading} />
         <OverdueCharts records={data?.records ?? []} trend={data?.trend ?? []} isLoading={isLoading} />
-        <OverdueRecordsTable records={data?.records ?? []} isLoading={isLoading} />
+        <OverdueRecordsTable records={data?.records ?? []} statusFilter={statusFilter} isLoading={isLoading} />
       </div>
     </AnalyticsWrapper>
   );

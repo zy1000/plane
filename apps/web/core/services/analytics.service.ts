@@ -142,4 +142,25 @@ export class AnalyticsService extends APIService {
         throw err?.response?.data;
       });
   }
+
+  async exportWorkspaceOverdueAnalytics(
+    workspaceSlug: string,
+    params?: TOverdueAnalyticsFilterParams
+  ): Promise<{ blob: Blob; filename: string }> {
+    return this.get(`/api/workspaces/${workspaceSlug}/overdue-analytics/export/`, {
+      params,
+      responseType: "blob",
+    })
+      .then((res) => {
+        const disposition: string = res?.headers?.["content-disposition"] ?? "";
+        const match = disposition.match(/filename\*?=(?:UTF-8'')?([^;]+)/i);
+        const filename = match
+          ? decodeURIComponent(match[1].trim().replace(/^"|"$/g, ""))
+          : `overdue-records-${Date.now()}.xlsx`;
+        return { blob: res?.data as Blob, filename };
+      })
+      .catch((err) => {
+        throw err?.response?.data;
+      });
+  }
 }

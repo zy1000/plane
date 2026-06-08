@@ -18,9 +18,11 @@ import {
   getFacetedRowModel,
   getFacetedUniqueValues,
   getFilteredRowModel,
+  getPaginationRowModel,
   getSortedRowModel,
   useReactTable,
 } from "@tanstack/react-table";
+import { Pagination } from "antd";
 
 import { useTranslation } from "@plane/i18n";
 import { EmptyStateCompact } from "@plane/propel/empty-state";
@@ -35,9 +37,18 @@ interface DataTableProps<TData, TValue> {
   data: TData[];
   searchPlaceholder: string;
   actions?: (table: TanstackTable<TData>) => React.ReactNode;
+  enablePagination?: boolean;
+  pageSize?: number;
 }
 
-export function DataTable<TData, TValue>({ columns, data, searchPlaceholder, actions }: DataTableProps<TData, TValue>) {
+export function DataTable<TData, TValue>({
+  columns,
+  data,
+  searchPlaceholder,
+  actions,
+  enablePagination = false,
+  pageSize = 20,
+}: DataTableProps<TData, TValue>) {
   const [rowSelection, setRowSelection] = React.useState({});
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
@@ -49,6 +60,14 @@ export function DataTable<TData, TValue>({ columns, data, searchPlaceholder, act
   const table = useReactTable({
     data,
     columns,
+    initialState: enablePagination
+      ? {
+          pagination: {
+            pageIndex: 0,
+            pageSize,
+          },
+        }
+      : undefined,
     state: {
       sorting,
       columnVisibility,
@@ -62,7 +81,26 @@ export function DataTable<TData, TValue>({ columns, data, searchPlaceholder, act
     getSortedRowModel: getSortedRowModel(),
     getFacetedRowModel: getFacetedRowModel(),
     getFacetedUniqueValues: getFacetedUniqueValues(),
+    ...(enablePagination ? { getPaginationRowModel: getPaginationRowModel() } : {}),
   });
+
+  const filteredRowsCount = enablePagination ? table.getFilteredRowModel().rows.length : 0;
+  const currentPage = enablePagination ? table.getState().pagination.pageIndex + 1 : 1;
+  const currentPageSize = enablePagination ? table.getState().pagination.pageSize : pageSize;
+  const startIndex = filteredRowsCount > 0 ? (currentPage - 1) * currentPageSize : 0;
+  const endIndex = filteredRowsCount > 0 ? Math.min(currentPage * currentPageSize, filteredRowsCount) : 0;
+
+  const handlePaginationChange = React.useCallback(
+    (nextPage: number, nextPageSize?: number) => {
+      if (!enablePagination) return;
+      const targetPageSize = nextPageSize ?? table.getState().pagination.pageSize;
+      if (targetPageSize !== table.getState().pagination.pageSize) {
+        table.setPageSize(targetPageSize);
+      }
+      table.setPageIndex(Math.max(nextPage - 1, 0));
+    },
+    [enablePagination, table]
+  );
 
   return (
     <div className="space-y-4">
@@ -169,6 +207,26 @@ export function DataTable<TData, TValue>({ columns, data, searchPlaceholder, act
             )}
           </TableBody>
         </Table>
+        {enablePagination && table.getPageCount() > 0 && (
+          <div className="flex-shrink-0 border-t border-subtle px-4 py-3 bg-surface-1 flex items-center justify-between">
+            <div className="flex items-center gap-4 text-sm">
+              <span className="text-secondary">
+                {filteredRowsCount > 0 ? `第 ${startIndex + 1}-${endIndex} 条，共 ${filteredRowsCount} 条` : ""}
+              </span>
+            </div>
+            <Pagination
+              simple
+              current={currentPage}
+              pageSize={currentPageSize}
+              total={filteredRowsCount}
+              showSizeChanger
+              pageSizeOptions={["10", "20", "50", "100"]}
+              onChange={handlePaginationChange}
+              onShowSizeChange={handlePaginationChange}
+              size="small"
+            />
+          </div>
+        )}
       </div>
     </div>
   );

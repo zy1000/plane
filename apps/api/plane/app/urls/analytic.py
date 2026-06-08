@@ -20,6 +20,7 @@ from plane.app.views import (
     ProjectAdvanceAnalyticsStatsEndpoint,
     ProjectAdvanceAnalyticsChartEndpoint,
     WorkspaceOverdueAnalyticsEndpoint,
+    WorkspaceOverdueAnalyticsExportEndpoint,
 )
 
 
@@ -83,6 +84,11 @@ urlpatterns = [
         "workspaces/<str:slug>/overdue-analytics/",
         WorkspaceOverdueAnalyticsEndpoint.as_view(),
         name="workspace-overdue-analytics",
+    ),
+    path(
+        "workspaces/<str:slug>/overdue-analytics/export/",
+        WorkspaceOverdueAnalyticsExportEndpoint.as_view(),
+        name="workspace-overdue-analytics-export",
     ),
     path(
         "workspaces/<str:slug>/projects/<uuid:project_id>/advance-analytics/",

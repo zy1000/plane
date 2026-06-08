@@ -252,7 +252,10 @@ from .analytic.project_analytics import (
     ProjectAdvanceAnalyticsStatsEndpoint,
     ProjectAdvanceAnalyticsChartEndpoint,
 )
-from .analytic.overdue import WorkspaceOverdueAnalyticsEndpoint
+from .analytic.overdue import (
+    WorkspaceOverdueAnalyticsEndpoint,
+    WorkspaceOverdueAnalyticsExportEndpoint,
+)
 
 from .notification.base import (
     NotificationViewSet,
