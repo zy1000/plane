@@ -6,9 +6,8 @@
 
 import { useCallback, useState } from "react";
 import { useParams } from "next/navigation";
-import { useAnalytics } from "@/hooks/store/use-analytics";
+import type { TOverdueRecord } from "@plane/types";
 import { AnalyticsService } from "@/services/analytics.service";
-import type { TOverdueExportOptions } from "./filters/match-overdue-record";
 
 const analyticsService = new AnalyticsService();
 
@@ -26,32 +25,25 @@ const triggerBrowserDownload = (blob: Blob, filename: string) => {
 export const useOverdueExport = () => {
   const [isExporting, setIsExporting] = useState(false);
   const { workspaceSlug } = useParams();
-  const { selectedProjects } = useAnalytics();
 
   const workspaceSlugValue = workspaceSlug?.toString();
 
+  // 导出当前筛选条件下的全部记录（忽略分页），records 由调用方传入已过滤的完整集合
   const exportXlsx = useCallback(
-    async ({ status, entityType, dateField, startDate, endDate, projectIds }: TOverdueExportOptions) => {
+    async (records: TOverdueRecord[]) => {
       if (!workspaceSlugValue) return;
       setIsExporting(true);
       try {
-        const combinedProjectIds = projectIds && projectIds.length > 0 ? projectIds : selectedProjects;
-        const combinedProjectIdsParam = combinedProjectIds.length > 0 ? combinedProjectIds.join(",") : undefined;
-
-        const { blob, filename } = await analyticsService.exportWorkspaceOverdueAnalytics(workspaceSlugValue, {
-          ...(status ? { status } : {}),
-          ...(entityType ? { entity_type: entityType } : {}),
-          ...(dateField ? { date_field: dateField } : {}),
-          ...(startDate ? { start_date: startDate } : {}),
-          ...(endDate ? { end_date: endDate } : {}),
-          ...(combinedProjectIdsParam ? { project_ids: combinedProjectIdsParam } : {}),
-        });
+        const { blob, filename } = await analyticsService.exportWorkspaceOverdueAnalyticsRecords(
+          workspaceSlugValue,
+          records
+        );
         triggerBrowserDownload(blob, filename);
       } finally {
         setIsExporting(false);
       }
     },
-    [workspaceSlugValue, selectedProjects]
+    [workspaceSlugValue]
   );
 
   return {

@@ -503,56 +503,7 @@ class WorkspaceOverdueAnalyticsExportEndpoint(WorkspaceOverdueAnalyticsEndpoint)
         status_label = record.get("status_label") or "-"
         return f"仍在延期 · {status_label}" if record.get("is_active") else f"已恢复 · {status_label}"
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER], level="WORKSPACE")
-    def get(self, request, slug):
-        status_filter, entity_type, project_ids = self._extract_filters_from_request(request)
-        date_field = request.GET.get("date_field", "deadline")
-        start_date_raw = request.GET.get("start_date")
-        end_date_raw = request.GET.get("end_date")
-
-        validation_error = self._validate_filters(status_filter=status_filter, entity_type=entity_type)
-        if validation_error:
-            return validation_error
-
-        if date_field not in self.ALLOWED_DATE_FIELDS:
-            return Response(
-                {"error": "date_field 必须是 deadline 或 overdue_since"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        start_date = self._normalize_filter_date(start_date_raw)
-        if start_date_raw and not start_date:
-            return Response(
-                {"error": "start_date 必须是 YYYY-MM-DD 格式"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        end_date = self._normalize_filter_date(end_date_raw)
-        if end_date_raw and not end_date:
-            return Response(
-                {"error": "end_date 必须是 YYYY-MM-DD 格式"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        if start_date and end_date and start_date > end_date:
-            return Response(
-                {"error": "start_date 不能晚于 end_date"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        records = self._collect_records(
-            slug=slug,
-            status_filter=status_filter,
-            entity_type=entity_type,
-            project_ids=project_ids,
-        )
-        records = self._apply_date_filter(
-            records,
-            date_field=date_field,
-            start_date=start_date,
-            end_date=end_date,
-        )
-
+    def _build_xlsx_response(self, records: List[Dict[str, Any]]):
         columns = [
             ("名称", "name"),
             ("类型", "entity_type"),
@@ -611,3 +562,69 @@ class WorkspaceOverdueAnalyticsExportEndpoint(WorkspaceOverdueAnalyticsEndpoint)
         )
         response["Content-Disposition"] = f"attachment; filename*=UTF-8''{quote(filename)}"
         return response
+
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER], level="WORKSPACE")
+    def get(self, request, slug):
+        status_filter, entity_type, project_ids = self._extract_filters_from_request(request)
+        date_field = request.GET.get("date_field", "deadline")
+        start_date_raw = request.GET.get("start_date")
+        end_date_raw = request.GET.get("end_date")
+
+        validation_error = self._validate_filters(status_filter=status_filter, entity_type=entity_type)
+        if validation_error:
+            return validation_error
+
+        if date_field not in self.ALLOWED_DATE_FIELDS:
+            return Response(
+                {"error": "date_field 必须是 deadline 或 overdue_since"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        start_date = self._normalize_filter_date(start_date_raw)
+        if start_date_raw and not start_date:
+            return Response(
+                {"error": "start_date 必须是 YYYY-MM-DD 格式"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        end_date = self._normalize_filter_date(end_date_raw)
+        if end_date_raw and not end_date:
+            return Response(
+                {"error": "end_date 必须是 YYYY-MM-DD 格式"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if start_date and end_date and start_date > end_date:
+            return Response(
+                {"error": "start_date 不能晚于 end_date"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        records = self._collect_records(
+            slug=slug,
+            status_filter=status_filter,
+            entity_type=entity_type,
+            project_ids=project_ids,
+        )
+        records = self._apply_date_filter(
+            records,
+            date_field=date_field,
+            start_date=start_date,
+            end_date=end_date,
+        )
+
+        return self._build_xlsx_response(records)
+
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER], level="WORKSPACE")
+    def post(self, request, slug):
+        # 直接导出前端按当前筛选条件得到的完整记录集（忽略分页），
+        # 由前端传入已过滤的 records，后端仅负责生成 XLSX。
+        records = request.data.get("records")
+        if not isinstance(records, list):
+            return Response(
+                {"error": "records 必须是数组"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        normalized_records = [record for record in records if isinstance(record, dict)]
+        return self._build_xlsx_response(normalized_records)

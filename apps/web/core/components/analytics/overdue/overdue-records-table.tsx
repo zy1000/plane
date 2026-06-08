@@ -14,7 +14,7 @@ import type { TOverdueEntityType, TOverdueRecord } from "@plane/types";
 import { FiltersRow } from "@/components/rich-filters/filters-row";
 import { FiltersToggle } from "@/components/rich-filters/filters-toggle";
 import { useAppRouter } from "@/hooks/use-app-router";
-import { buildExportParamsFromConditions, recordMatchesConditions } from "./filters/match-overdue-record";
+import { recordMatchesConditions } from "./filters/match-overdue-record";
 import { useOverdueFilter } from "./filters/use-overdue-filter";
 import { useOverdueFiltersConfig } from "./filters/use-overdue-filters-config";
 import { useOverdueExport } from "./use-overdue-export";
@@ -73,11 +73,6 @@ export const OverdueRecordsTable = observer(({ records, isLoading = false }: Pro
   const filteredRecords = useMemo(
     () => records.filter((record) => recordMatchesConditions(record, conditions)),
     [conditions, records]
-  );
-
-  const exportParams = useMemo(
-    () => buildExportParamsFromConditions(conditions),
-    [conditions]
   );
 
   const columns: ColumnDef<TOverdueRecord>[] = useMemo(
@@ -182,10 +177,8 @@ export const OverdueRecordsTable = observer(({ records, isLoading = false }: Pro
             variant="secondary"
             className="h-8 px-3 text-12"
             loading={isExporting}
-            disabled={isExporting}
-            onClick={() =>
-              void exportXlsx(exportParams)
-            }
+            disabled={isExporting || filteredRecords.length === 0}
+            onClick={() => void exportXlsx(filteredRecords)}
           >
             导出
           </Button>

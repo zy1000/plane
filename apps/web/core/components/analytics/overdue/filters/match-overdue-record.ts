@@ -8,8 +8,6 @@ import type {
   TFilterValue,
   TFilterConditionNodeForDisplay,
   TOverdueAnalyticsStatus,
-  TOverdueDateField,
-  TOverdueEntityType,
   TOverdueRecord,
   TSupportedOperators,
 } from "@plane/types";
@@ -25,18 +23,6 @@ import { toFilterArray } from "@plane/utils";
 import type { TOverdueFilterProperty } from "./types";
 
 type TOverdueCondition = TFilterConditionNodeForDisplay<TOverdueFilterProperty, TFilterValue>;
-
-const SUPPORTED_STATUS_VALUES: TOverdueAnalyticsStatus[] = ["active", "resolved"];
-const SUPPORTED_ENTITY_TYPE_VALUES: TOverdueEntityType[] = ["issue", "cycle", "release", "test_plan"];
-
-export type TOverdueExportOptions = {
-  dateField?: TOverdueDateField;
-  endDate?: string;
-  entityType?: TOverdueEntityType;
-  projectIds?: string[];
-  startDate?: string;
-  status?: TOverdueAnalyticsStatus;
-};
 
 const asStringArray = (value: unknown): string[] => {
   const values = toFilterArray(value as never) ?? [];
@@ -213,121 +199,7 @@ const matchesCondition = (record: TOverdueRecord, condition: TOverdueCondition):
   }
 };
 
-const getPropertyConditions = (
-  conditions: TOverdueCondition[],
-  property: TOverdueFilterProperty
-): TOverdueCondition[] => conditions.filter((condition) => condition.property === property && hasConditionValue(condition.value));
-
-const resolveSingleValue = <T extends string>(
-  conditions: TOverdueCondition[],
-  property: TOverdueFilterProperty,
-  allowedValues: T[]
-): T | undefined => {
-  const relevantConditions = getPropertyConditions(conditions, property);
-  if (relevantConditions.length === 0) return undefined;
-
-  let candidateSet = new Set(allowedValues);
-  for (const condition of relevantConditions) {
-    const values = new Set(asStringArray(condition.value).filter((value): value is T => allowedValues.includes(value as T)));
-    if (values.size === 0) continue;
-
-    if (condition.operator === EQUALITY_OPERATOR.EXACT || condition.operator === COLLECTION_OPERATOR.IN) {
-      candidateSet = new Set(Array.from(candidateSet).filter((value) => values.has(value)));
-      continue;
-    }
-
-    return undefined;
-  }
-
-  return candidateSet.size === 1 ? Array.from(candidateSet)[0] : undefined;
-};
-
-const resolveProjectIds = (conditions: TOverdueCondition[]): string[] | undefined => {
-  const projectConditions = getPropertyConditions(conditions, "project_id");
-  if (projectConditions.length === 0) return undefined;
-
-  let candidateSet: Set<string> | undefined;
-  for (const condition of projectConditions) {
-    const values = new Set(asStringArray(condition.value));
-    if (values.size === 0) continue;
-
-    if (condition.operator !== EQUALITY_OPERATOR.EXACT && condition.operator !== COLLECTION_OPERATOR.IN) {
-      return undefined;
-    }
-
-    candidateSet =
-      candidateSet === undefined
-        ? values
-        : new Set(Array.from(candidateSet).filter((existingValue) => values.has(existingValue)));
-  }
-
-  if (!candidateSet || candidateSet.size === 0) return undefined;
-  return Array.from(candidateSet);
-};
-
-const resolveDateExport = (
-  conditions: TOverdueCondition[]
-): Pick<TOverdueExportOptions, "dateField" | "endDate" | "startDate"> => {
-  const deadlineConditions = getPropertyConditions(conditions, "deadline");
-  const overdueSinceConditions = getPropertyConditions(conditions, "overdue_since");
-
-  if (deadlineConditions.length > 0 && overdueSinceConditions.length > 0) {
-    return {};
-  }
-
-  const dateField: TOverdueDateField | undefined =
-    deadlineConditions.length > 0 ? "deadline" : overdueSinceConditions.length > 0 ? "overdue_since" : undefined;
-  if (!dateField) return {};
-
-  const targetConditions = dateField === "deadline" ? deadlineConditions : overdueSinceConditions;
-
-  let startDate: string | undefined;
-  let endDate: string | undefined;
-  for (const condition of targetConditions) {
-    const { start, end } = getRangeBounds(condition.value);
-
-    if (condition.operator === EQUALITY_OPERATOR.EXACT) {
-      const exactDate = start;
-      if (!exactDate) continue;
-      startDate = startDate ? (startDate > exactDate ? startDate : exactDate) : exactDate;
-      endDate = endDate ? (endDate < exactDate ? endDate : exactDate) : exactDate;
-      continue;
-    }
-
-    if (condition.operator === COMPARISON_OPERATOR.RANGE) {
-      if (start) startDate = startDate ? (startDate > start ? startDate : start) : start;
-      if (end) endDate = endDate ? (endDate < end ? endDate : end) : end;
-      continue;
-    }
-
-    return {};
-  }
-
-  if (!startDate && !endDate) return {};
-  if (startDate && endDate && startDate > endDate) return {};
-
-  return {
-    dateField,
-    startDate,
-    endDate,
-  };
-};
-
 export const recordMatchesConditions = (record: TOverdueRecord, conditions: TOverdueCondition[]): boolean => {
   if (conditions.length === 0) return true;
   return conditions.every((condition) => matchesCondition(record, condition));
-};
-
-export const buildExportParamsFromConditions = (conditions: TOverdueCondition[]): TOverdueExportOptions => {
-  const status = resolveSingleValue(conditions, "status", SUPPORTED_STATUS_VALUES);
-  const entityType = resolveSingleValue(conditions, "entity_type", SUPPORTED_ENTITY_TYPE_VALUES);
-  const projectIds = resolveProjectIds(conditions);
-  const dateParams = resolveDateExport(conditions);
-
-  return {
-    ...(status ? { status } : {}),
-    ...(entityType ? { entityType } : {}),
-    ...(projectIds ? { projectIds } : {}),
-    ...dateParams,
-  };
 };

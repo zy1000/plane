@@ -13,6 +13,7 @@ import type {
   TAnalyticsFilterParams,
   TOverdueAnalyticsFilterParams,
   TOverdueAnalyticsResponse,
+  TOverdueRecord,
 } from "@plane/types";
 // services
 import { APIService } from "./api.service";
@@ -151,16 +152,36 @@ export class AnalyticsService extends APIService {
       params,
       responseType: "blob",
     })
-      .then((res) => {
-        const disposition: string = res?.headers?.["content-disposition"] ?? "";
-        const match = disposition.match(/filename\*?=(?:UTF-8'')?([^;]+)/i);
-        const filename = match
-          ? decodeURIComponent(match[1].trim().replace(/^"|"$/g, ""))
-          : `overdue-records-${Date.now()}.xlsx`;
-        return { blob: res?.data as Blob, filename };
-      })
+      .then((res) => this.parseOverdueExportResponse(res))
       .catch((err) => {
         throw err?.response?.data;
       });
+  }
+
+  async exportWorkspaceOverdueAnalyticsRecords(
+    workspaceSlug: string,
+    records: TOverdueRecord[]
+  ): Promise<{ blob: Blob; filename: string }> {
+    return this.post(
+      `/api/workspaces/${workspaceSlug}/overdue-analytics/export/`,
+      { records },
+      { responseType: "blob" }
+    )
+      .then((res) => this.parseOverdueExportResponse(res))
+      .catch((err) => {
+        throw err?.response?.data;
+      });
+  }
+
+  private parseOverdueExportResponse(res: { data: Blob; headers?: Record<string, string> }): {
+    blob: Blob;
+    filename: string;
+  } {
+    const disposition: string = res?.headers?.["content-disposition"] ?? "";
+    const match = disposition.match(/filename\*?=(?:UTF-8'')?([^;]+)/i);
+    const filename = match
+      ? decodeURIComponent(match[1].trim().replace(/^"|"$/g, ""))
+      : `overdue-records-${Date.now()}.xlsx`;
+    return { blob: res?.data as Blob, filename };
   }
 }
