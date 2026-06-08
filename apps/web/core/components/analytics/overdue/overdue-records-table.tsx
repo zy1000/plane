@@ -4,23 +4,26 @@
  * See the LICENSE file for details.
  */
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
+import { observer } from "mobx-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { useParams } from "next/navigation";
 import { Button } from "@plane/propel/button";
 import { renderFormattedDate } from "@plane/utils";
-import type { TOverdueAnalyticsStatus, TOverdueEntityType, TOverdueRecord } from "@plane/types";
+import type { TOverdueEntityType, TOverdueRecord } from "@plane/types";
+import { FiltersRow } from "@/components/rich-filters/filters-row";
+import { FiltersToggle } from "@/components/rich-filters/filters-toggle";
 import { useAppRouter } from "@/hooks/use-app-router";
+import { buildExportParamsFromConditions, recordMatchesConditions } from "./filters/match-overdue-record";
+import { useOverdueFilter } from "./filters/use-overdue-filter";
+import { useOverdueFiltersConfig } from "./filters/use-overdue-filters-config";
 import { useOverdueExport } from "./use-overdue-export";
 import { DataTable } from "../insight-table/data-table";
 
 type Props = {
   records: TOverdueRecord[];
-  statusFilter: TOverdueAnalyticsStatus;
   isLoading?: boolean;
 };
-
-type TEntityFilter = "all" | TOverdueEntityType;
 
 const ENTITY_LABEL_MAP: Record<TOverdueEntityType, string> = {
   issue: "工作项",
@@ -28,14 +31,6 @@ const ENTITY_LABEL_MAP: Record<TOverdueEntityType, string> = {
   release: "发布",
   test_plan: "测试计划",
 };
-
-const ENTITY_FILTER_OPTIONS: Array<{ value: TEntityFilter; label: string }> = [
-  { value: "all", label: "全部类型" },
-  { value: "issue", label: "工作项" },
-  { value: "cycle", label: "迭代" },
-  { value: "release", label: "发布" },
-  { value: "test_plan", label: "测试计划" },
-];
 
 const formatDate = (value: string | null) => (value ? (renderFormattedDate(value) ?? value) : "-");
 
@@ -60,16 +55,29 @@ const buildEntityDetailLink = (workspaceSlug: string, record: TOverdueRecord) =>
   }
 };
 
-export const OverdueRecordsTable = ({ records, statusFilter, isLoading = false }: Props) => {
-  const [entityFilter, setEntityFilter] = useState<TEntityFilter>("all");
+export const OverdueRecordsTable = observer(({ records, isLoading = false }: Props) => {
   const router = useAppRouter();
   const { workspaceSlug } = useParams();
   const { exportXlsx, isExporting } = useOverdueExport();
   const workspaceSlugValue = workspaceSlug?.toString() ?? "";
+  const { areAllConfigsInitialized, configs } = useOverdueFiltersConfig({
+    records,
+    workspaceSlug: workspaceSlugValue,
+  });
+  const filter = useOverdueFilter({
+    areAllConfigsInitialized,
+    configs,
+  });
+  const conditions = filter.allConditionsForDisplay;
 
   const filteredRecords = useMemo(
-    () => (entityFilter === "all" ? records : records.filter((record) => record.entity_type === entityFilter)),
-    [entityFilter, records]
+    () => records.filter((record) => recordMatchesConditions(record, conditions)),
+    [conditions, records]
+  );
+
+  const exportParams = useMemo(
+    () => buildExportParamsFromConditions(conditions),
+    [conditions]
   );
 
   const columns: ColumnDef<TOverdueRecord>[] = useMemo(
@@ -163,37 +171,26 @@ export const OverdueRecordsTable = ({ records, statusFilter, isLoading = false }
       data={filteredRecords}
       columns={columns}
       searchPlaceholder={`${filteredRecords.length} 条延期记录`}
+      searchTriggerPosition="actions-left"
       enablePagination
       pageSize={20}
+      filtersRow={<FiltersRow filter={filter} />}
       actions={() => (
         <div className="flex items-center gap-2">
-          <select
-            value={entityFilter}
-            onChange={(event) => setEntityFilter(event.target.value as TEntityFilter)}
-            className="h-8 rounded border border-subtle bg-surface-1 px-2 text-12 text-primary outline-none"
-          >
-            {ENTITY_FILTER_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+          <FiltersToggle filter={filter} triggerClassName="h-8 w-8" iconButtonSize="xl" />
           <Button
             variant="secondary"
             className="h-8 px-3 text-12"
             loading={isExporting}
             disabled={isExporting}
             onClick={() =>
-              void exportXlsx({
-                status: statusFilter,
-                entityType: entityFilter === "all" ? undefined : entityFilter,
-              })
+              void exportXlsx(exportParams)
             }
           >
-            导出 Excel
+            导出
           </Button>
         </div>
       )}
     />
   );
-};
+});

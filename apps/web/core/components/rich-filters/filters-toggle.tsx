@@ -16,6 +16,8 @@ import { AddFilterButton } from "@/components/rich-filters/add-filters/button";
 
 type TFiltersToggleProps<P extends TFilterProperty, E extends TExternalFilter> = {
   filter: IFilterInstance<P, E> | undefined;
+  triggerClassName?: string;
+  iconButtonSize?: "sm" | "base" | "lg" | "xl";
 };
 
 const COMMON_CLASSNAME =
@@ -24,7 +26,7 @@ const COMMON_CLASSNAME =
 export const FiltersToggle = observer(function FiltersToggle<P extends TFilterProperty, E extends TExternalFilter>(
   props: TFiltersToggleProps<P, E>
 ) {
-  const { filter } = props;
+  const { filter, triggerClassName, iconButtonSize = "lg" } = props;
   // derived values
   const hasAnyConditions = (filter?.allConditionsForDisplay.length ?? 0) > 0;
   const isFilterRowVisible = filter?.isVisible ?? false;
@@ -52,7 +54,7 @@ export const FiltersToggle = observer(function FiltersToggle<P extends TFilterPr
     ? "bg-accent-subtle-hover hover:bg-accent-subtle-hover active:bg-accent-subtle-hover focus:bg-accent-subtle-hover"
     : "bg-accent-subtle hover:bg-accent-subtle active:bg-accent-subtle focus:bg-accent-subtle";
 
-  const buttonClassName = cn({
+  const buttonClassName = cn(triggerClassName, {
     [activeFilterBaseClasses]: showFilterRowChangesPill,
     [backgroundClasses]: showFilterRowChangesPill,
     [noHoverStateClasses]: showFilterRowChangesPill,
@@ -69,7 +71,7 @@ export const FiltersToggle = observer(function FiltersToggle<P extends TFilterPr
         filter={filter}
         buttonConfig={{
           variant: "secondary",
-          className: COMMON_CLASSNAME,
+          className: cn(COMMON_CLASSNAME, triggerClassName),
           label: null,
         }}
         onFilterSelect={() => filter?.toggleVisibility(true)}
@@ -79,7 +81,7 @@ export const FiltersToggle = observer(function FiltersToggle<P extends TFilterPr
 
   return (
     <IconButton
-      size="lg"
+      size={iconButtonSize}
       variant="secondary"
       icon={showFilterRowChangesPill ? FilterAppliedIcon : FilterIcon}
       onClick={handleToggleFilter}

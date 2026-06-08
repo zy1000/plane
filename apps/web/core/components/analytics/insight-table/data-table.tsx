@@ -27,6 +27,7 @@ import { Pagination } from "antd";
 import { useTranslation } from "@plane/i18n";
 import { EmptyStateCompact } from "@plane/propel/empty-state";
 import { SearchIcon, CloseIcon } from "@plane/propel/icons";
+import { IconButton } from "@plane/propel/icon-button";
 // plane package imports
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
 import { cn } from "@plane/utils";
@@ -37,6 +38,8 @@ interface DataTableProps<TData, TValue> {
   data: TData[];
   searchPlaceholder: string;
   actions?: (table: TanstackTable<TData>) => React.ReactNode;
+  filtersRow?: React.ReactNode;
+  searchTriggerPosition?: "left" | "actions-left";
   enablePagination?: boolean;
   pageSize?: number;
 }
@@ -46,6 +49,8 @@ export function DataTable<TData, TValue>({
   data,
   searchPlaceholder,
   actions,
+  filtersRow,
+  searchTriggerPosition = "left",
   enablePagination = false,
   pageSize = 20,
 }: DataTableProps<TData, TValue>) {
@@ -102,70 +107,104 @@ export function DataTable<TData, TValue>({
     [enablePagination, table]
   );
 
+  const firstColumnId = table.getHeaderGroups()?.[0]?.headers?.[0]?.id;
+
+  const handleSearchOpen = React.useCallback(() => {
+    setIsSearchOpen(true);
+    inputRef.current?.focus();
+  }, []);
+
+  const handleSearchClose = React.useCallback(() => {
+    if (firstColumnId) {
+      table.getColumn(firstColumnId)?.setFilterValue("");
+    }
+    setIsSearchOpen(false);
+  }, [firstColumnId, table]);
+
+  const searchControl = React.useCallback(
+    (position: "left" | "actions-left") => (
+      <>
+        {!isSearchOpen && (
+          <>
+            {position === "actions-left" ? (
+              <IconButton
+                type="button"
+                variant="ghost"
+                size="lg"
+                icon={SearchIcon}
+                className="-mr-1"
+                onClick={handleSearchOpen}
+              />
+            ) : (
+              <button
+                type="button"
+                className={cn("grid place-items-center rounded-sm p-2 text-placeholder hover:bg-layer-1", {
+                  "-mr-5": position === "left",
+                })}
+                onClick={handleSearchOpen}
+              >
+                <SearchIcon className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </>
+        )}
+        <div
+          className={cn(
+            "flex w-0 items-center justify-start gap-1 overflow-hidden rounded-md border border-transparent bg-surface-1 text-placeholder opacity-0 transition-[width] ease-linear",
+            {
+              "mr-auto": position === "left",
+              "w-64 border-subtle px-2.5 py-1.5 opacity-100": isSearchOpen,
+            }
+          )}
+        >
+          <SearchIcon className="h-3.5 w-3.5" />
+          <input
+            ref={inputRef}
+            className="w-full max-w-[234px] border-none bg-transparent text-13 text-primary placeholder:text-placeholder focus:outline-none"
+            placeholder="Search"
+            value={(firstColumnId ? table.getColumn(firstColumnId)?.getFilterValue() : "") as string}
+            onChange={(e) => {
+              if (firstColumnId) table.getColumn(firstColumnId)?.setFilterValue(e.target.value);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                setIsSearchOpen(true);
+              }
+            }}
+          />
+          {isSearchOpen && (
+            <button type="button" className="grid place-items-center" onClick={handleSearchClose}>
+              <CloseIcon className="h-3 w-3" />
+            </button>
+          )}
+        </div>
+      </>
+    ),
+    [firstColumnId, handleSearchClose, handleSearchOpen, isSearchOpen, table]
+  );
+
   return (
     <div className="space-y-4">
       <div className="flex w-full items-center justify-between">
         <div className="relative flex max-w-[300px] items-center gap-4">
-          {table.getHeaderGroups()?.[0]?.headers?.[0]?.id && (
+          {firstColumnId && (
             <div className="flex items-center gap-2 text-13 whitespace-nowrap text-placeholder">
               {searchPlaceholder}
             </div>
           )}
-          {!isSearchOpen && (
-            <button
-              type="button"
-              className="-mr-5 grid place-items-center rounded-sm p-2 text-placeholder hover:bg-layer-1"
-              onClick={() => {
-                setIsSearchOpen(true);
-                inputRef.current?.focus();
-              }}
-            >
-              <SearchIcon className="h-3.5 w-3.5" />
-            </button>
-          )}
-          <div
-            className={cn(
-              "mr-auto flex w-0 items-center justify-start gap-1 overflow-hidden rounded-md border border-transparent bg-surface-1 text-placeholder opacity-0 transition-[width] ease-linear",
-              {
-                "w-64 border-subtle px-2.5 py-1.5 opacity-100": isSearchOpen,
-              }
-            )}
-          >
-            <SearchIcon className="h-3.5 w-3.5" />
-            <input
-              ref={inputRef}
-              className="w-full max-w-[234px] border-none bg-transparent text-13 text-primary placeholder:text-placeholder focus:outline-none"
-              placeholder="Search"
-              value={table.getColumn(table.getHeaderGroups()?.[0]?.headers?.[0]?.id)?.getFilterValue() as string}
-              onChange={(e) => {
-                const columnId = table.getHeaderGroups()?.[0]?.headers?.[0]?.id;
-                if (columnId) table.getColumn(columnId)?.setFilterValue(e.target.value);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  setIsSearchOpen(true);
-                }
-              }}
-            />
-            {isSearchOpen && (
-              <button
-                type="button"
-                className="grid place-items-center"
-                onClick={() => {
-                  const columnId = table.getHeaderGroups()?.[0]?.headers?.[0]?.id;
-                  if (columnId) {
-                    table.getColumn(columnId)?.setFilterValue("");
-                  }
-                  setIsSearchOpen(false);
-                }}
-              >
-                <CloseIcon className="h-3 w-3" />
-              </button>
-            )}
-          </div>
+          {searchTriggerPosition === "left" && searchControl("left")}
         </div>
-        {actions && <div>{actions(table)}</div>}
+        <div
+          className={cn("flex items-center", {
+            "gap-1": searchTriggerPosition === "actions-left",
+            "gap-2": searchTriggerPosition !== "actions-left",
+          })}
+        >
+          {searchTriggerPosition === "actions-left" && searchControl("actions-left")}
+          {actions && <div>{actions(table)}</div>}
+        </div>
       </div>
+      {filtersRow}
 
       <div className="rounded-md">
         <Table>
