@@ -7,22 +7,27 @@
 import { useEffect, useMemo } from "react";
 import { FilterInstance } from "@plane/shared-state";
 import type { TFilterConfig } from "@plane/types";
+import { getValueFromLocalStorage, setValueIntoLocalStorage } from "@/hooks/use-local-storage";
 import { overdueFiltersAdapter } from "./adapter";
 import type { TOverdueFilterExpression, TOverdueFilterProperty } from "./types";
 
 type TUseOverdueFilterProps = {
   areAllConfigsInitialized: boolean;
   configs: TFilterConfig<TOverdueFilterProperty>[];
+  workspaceSlug: string;
 };
 
-export const useOverdueFilter = ({ areAllConfigsInitialized, configs }: TUseOverdueFilterProps) => {
+export const useOverdueFilter = ({ areAllConfigsInitialized, configs, workspaceSlug }: TUseOverdueFilterProps) => {
+  const storageKey = `overdue-records-filter:${workspaceSlug}`;
+
   const filter = useMemo(
     () =>
       new FilterInstance<TOverdueFilterProperty, TOverdueFilterExpression>({
         adapter: overdueFiltersAdapter,
-        initialExpression: {},
+        initialExpression: getValueFromLocalStorage(storageKey, {}) as TOverdueFilterExpression,
+        onExpressionChange: (expression) => setValueIntoLocalStorage(storageKey, expression),
       }),
-    []
+    [storageKey]
   );
 
   useEffect(() => {

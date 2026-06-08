@@ -67,6 +67,7 @@ export const OverdueRecordsTable = observer(({ records, isLoading = false }: Pro
   const filter = useOverdueFilter({
     areAllConfigsInitialized,
     configs,
+    workspaceSlug: workspaceSlugValue,
   });
   const conditions = filter.allConditionsForDisplay;
 
