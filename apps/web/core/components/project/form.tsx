@@ -7,7 +7,7 @@
 import { useEffect, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { Info } from "lucide-react";
-import { NETWORK_CHOICES } from "@plane/constants";
+import { NETWORK_CHOICES, PROJECT_PRODUCT_TYPE_OPTIONS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 // plane imports
 import { Button } from "@plane/propel/button";
@@ -16,7 +16,7 @@ import { LockIcon } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Tooltip } from "@plane/propel/tooltip";
 import { EFileAssetType } from "@plane/types";
-import type { IProject, IWorkspace } from "@plane/types";
+import type { IProject, IWorkspace, TProjectProductType } from "@plane/types";
 import { CustomSelect, Input } from "@plane/ui";
 import { renderFormattedDate } from "@plane/utils";
 import { CoverImage } from "@/components/common/cover-image";
@@ -154,6 +154,7 @@ export function ProjectDetailsForm(props: IProjectDetailsForm) {
       timezone: formData.timezone,
       pms_project_name: formData.pms_project_name?.trim() || null,
       estimated_hours: formData.estimated_hours,
+      product_type: formData.product_type ?? null,
     };
 
     // Handle cover image changes
@@ -404,60 +405,90 @@ export function ProjectDetailsForm(props: IProjectDetailsForm) {
               }}
             />
           </div>
-          <div className="col-span-1 flex flex-col gap-4 sm:col-span-2 xl:col-span-1">
-            <div className="flex flex-col gap-1">
-              <h4 className="text-13">{t("common.project_timezone")}</h4>
-              <Controller
-                name="timezone"
-                control={control}
-                rules={{ required: t("project_settings.general.please_select_a_timezone") }}
-                render={({ field: { value, onChange } }) => (
-                  <>
-                    <TimezoneSelect
-                      value={value}
-                      onChange={(value: string) => {
-                        onChange(value);
-                      }}
-                      error={Boolean(errors.timezone)}
-                      disabled={!isAdmin}
-                    />
-                  </>
-                )}
-              />
-              {errors.timezone && <span className="text-11 text-danger-primary">{errors.timezone.message}</span>}
-            </div>
-            <div className="flex flex-col gap-1">
-              <h4 className="text-13">PMS项目名称</h4>
-              <Controller
-                control={control}
-                name="pms_project_name"
-                rules={{
-                  maxLength: {
-                    value: 255,
-                    message: "PMS项目名称不能超过 255 个字符",
-                  },
-                }}
-                render={({ field: { value, onChange, ref } }) => (
-                  <Input
-                    id="pms_project_name"
-                    name="pms_project_name"
-                    type="text"
-                    ref={ref}
-                    value={value ?? ""}
-                    onChange={onChange}
-                    hasError={Boolean(errors.pms_project_name)}
-                    className="font-medium"
-                    placeholder="PMS项目名称"
+          <div className="flex flex-col gap-1 self-start">
+            <h4 className="text-13">产品类型</h4>
+            <Controller
+              name="product_type"
+              control={control}
+              render={({ field: { value, onChange } }) => (
+                <CustomSelect
+                  value={value ?? ""}
+                  onChange={(val: string) => {
+                    onChange(val === "" ? null : (val as TProjectProductType));
+                  }}
+                  label={
+                    value ? (
+                      <span>{value}</span>
+                    ) : (
+                      <span className="text-placeholder">请选择产品类型</span>
+                    )
+                  }
+                  buttonClassName="!border-subtle !shadow-none font-medium rounded-md"
+                  input
+                  disabled={!isAdmin}
+                >
+                  <CustomSelect.Option value="">未设置</CustomSelect.Option>
+                  {PROJECT_PRODUCT_TYPE_OPTIONS.map((option) => (
+                    <CustomSelect.Option key={option} value={option}>
+                      {option}
+                    </CustomSelect.Option>
+                  ))}
+                </CustomSelect>
+              )}
+            />
+          </div>
+          <div className="col-span-1 flex flex-col gap-1">
+            <h4 className="text-13">{t("common.project_timezone")}</h4>
+            <Controller
+              name="timezone"
+              control={control}
+              rules={{ required: t("project_settings.general.please_select_a_timezone") }}
+              render={({ field: { value, onChange } }) => (
+                <>
+                  <TimezoneSelect
+                    value={value}
+                    onChange={(value: string) => {
+                      onChange(value);
+                    }}
+                    error={Boolean(errors.timezone)}
                     disabled={!isAdmin}
                   />
-                )}
-              />
-              {errors.pms_project_name && (
-                <span className="text-11 text-danger-primary">{errors.pms_project_name.message}</span>
+                </>
               )}
-            </div>
+            />
+            {errors.timezone && <span className="text-11 text-danger-primary">{errors.timezone.message}</span>}
           </div>
-          <div className="col-span-1 flex flex-col gap-1 sm:col-span-2 xl:col-span-1">
+          <div className="col-span-1 flex flex-col gap-1">
+            <h4 className="text-13">PMS项目名称</h4>
+            <Controller
+              control={control}
+              name="pms_project_name"
+              rules={{
+                maxLength: {
+                  value: 255,
+                  message: "PMS项目名称不能超过 255 个字符",
+                },
+              }}
+              render={({ field: { value, onChange, ref } }) => (
+                <Input
+                  id="pms_project_name"
+                  name="pms_project_name"
+                  type="text"
+                  ref={ref}
+                  value={value ?? ""}
+                  onChange={onChange}
+                  hasError={Boolean(errors.pms_project_name)}
+                  className="font-medium"
+                  placeholder="PMS项目名称"
+                  disabled={!isAdmin}
+                />
+              )}
+            />
+            {errors.pms_project_name && (
+              <span className="text-11 text-danger-primary">{errors.pms_project_name.message}</span>
+            )}
+          </div>
+          <div className="col-span-1 flex flex-col gap-1">
             <h4 className="text-13">{t("common.project_estimated_hours")}</h4>
             <Controller
               name="estimated_hours"

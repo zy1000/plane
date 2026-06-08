@@ -93,6 +93,32 @@ PROJECT_GRADE_CHOICES = (
     ("C", "C"),
 )
 
+PROJECT_PRODUCT_TYPE_CHOICES = (
+    ("电表", "电表"),
+    ("水表", "水表"),
+    ("气表", "气表"),
+    ("P2P", "P2P"),
+    ("PLC", "PLC"),
+    ("DCU", "DCU"),
+    ("CIU", "CIU"),
+    ("工具", "工具"),
+    ("LoRaWAN", "LoRaWAN"),
+    ("RF mesh", "RF mesh"),
+    ("Sigfox", "Sigfox"),
+    ("wM-Bus", "wM-Bus"),
+    ("Zigbee", "Zigbee"),
+    ("BLE", "BLE"),
+    ("Gateway", "Gateway"),
+    ("WIFI", "WIFI"),
+    ("Ethernet", "Ethernet"),
+    ("Lora", "Lora"),
+    ("Hybrid", "Hybrid"),
+    ("WI-SUN", "WI-SUN"),
+    ("Repeater", "Repeater"),
+    ("RS485", "RS485"),
+    ("其他", "其他"),
+)
+
 
 class Project(BaseModel):
     NETWORK_CHOICES = ((0, "Secret"), (2, "Public"))
@@ -167,6 +193,13 @@ class Project(BaseModel):
         blank=True,
         default='B',
         verbose_name="Project Grade",
+    )
+    product_type = models.CharField(
+        max_length=32,
+        choices=PROJECT_PRODUCT_TYPE_CHOICES,
+        null=True,
+        blank=True,
+        verbose_name="Project Product Type",
     )
 
     pms_project_name = models.CharField(max_length=255, null=True, blank=True)

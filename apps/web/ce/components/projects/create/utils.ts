@@ -20,6 +20,7 @@ export const getProjectFormValues = (): Partial<IProject> => ({
   identifier: "",
   name: "",
   grade: null,
+  product_type: null,
   network: 2,
   project_lead: null,
   /** 创建时默认开启全部项目特性，跳过创建后选择特性的环节 */

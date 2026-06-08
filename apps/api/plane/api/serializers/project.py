@@ -91,6 +91,7 @@ class ProjectCreateSerializer(BaseSerializer):
             "is_issue_type_enabled",
             "is_time_tracking_enabled",
             "grade",
+            "product_type",
             "pms_project_name",
         ]
 
@@ -303,5 +304,6 @@ class ProjectLiteSerializer(BaseSerializer):
             "description",
             "cover_image_url",
             "grade",
+            "product_type",
         ]
         read_only_fields = fields

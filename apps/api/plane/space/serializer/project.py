@@ -19,6 +19,7 @@ class ProjectLiteSerializer(BaseSerializer):
             "emoji",
             "description",
             "grade",
+            "product_type",
             "pms_project_name",
         ]
         read_only_fields = fields

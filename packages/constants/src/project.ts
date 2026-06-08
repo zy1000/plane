@@ -12,6 +12,32 @@ export type TNetworkChoiceIconKey = "Lock" | "Globe2";
 
 /** 与后端 `Project.grade` 选项一致 */
 export const PROJECT_GRADE_OPTIONS = ["P+", "P", "A", "B", "C"] as const;
+/** 与后端 `Project.product_type` 选项一致 */
+export const PROJECT_PRODUCT_TYPE_OPTIONS = [
+  "电表",
+  "水表",
+  "气表",
+  "P2P",
+  "PLC",
+  "DCU",
+  "CIU",
+  "工具",
+  "LoRaWAN",
+  "RF mesh",
+  "Sigfox",
+  "wM-Bus",
+  "Zigbee",
+  "BLE",
+  "Gateway",
+  "WIFI",
+  "Ethernet",
+  "Lora",
+  "Hybrid",
+  "WI-SUN",
+  "Repeater",
+  "RS485",
+  "其他",
+] as const;
 
 export type TNetworkChoice = {
   key: 0 | 2;

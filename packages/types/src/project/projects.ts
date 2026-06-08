@@ -18,6 +18,31 @@ export enum EUserProjectRoles {
 
 /** 项目等级（与后端 Project.grade 一致） */
 export type TProjectGrade = "P+" | "P" | "A" | "B" | "C";
+/** 项目产品类型（与后端 Project.product_type choices 一致） */
+export type TProjectProductType =
+  | "电表"
+  | "水表"
+  | "气表"
+  | "P2P"
+  | "PLC"
+  | "DCU"
+  | "CIU"
+  | "工具"
+  | "LoRaWAN"
+  | "RF mesh"
+  | "Sigfox"
+  | "wM-Bus"
+  | "Zigbee"
+  | "BLE"
+  | "Gateway"
+  | "WIFI"
+  | "Ethernet"
+  | "Lora"
+  | "Hybrid"
+  | "WI-SUN"
+  | "Repeater"
+  | "RS485"
+  | "其他";
 
 export interface IPartialProject {
   id: string;
@@ -56,6 +81,8 @@ export interface IPartialProject {
   description_html?: string | null;
   /** 项目等级（列表/详情接口可能返回） */
   grade?: TProjectGrade | null;
+  /** 项目产品类型（列表/详情接口可能返回） */
+  product_type?: TProjectProductType | null;
 }
 
 export interface IProject extends IPartialProject {

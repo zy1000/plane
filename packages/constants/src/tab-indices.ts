@@ -51,6 +51,7 @@ export const CREATE_LABEL_TAB_INDICES = ["name", "color", "cancel", "submit"];
 export const PROJECT_CREATE_TAB_INDICES = [
   "name",
   "grade",
+  "product_type",
   "identifier",
   "description",
   "network",

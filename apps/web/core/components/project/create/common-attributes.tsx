@@ -9,7 +9,7 @@ import type { UseFormSetValue } from "react-hook-form";
 import { Controller, useFormContext } from "react-hook-form";
 import { InfoIcon } from "@plane/propel/icons";
 // plane imports
-import { ETabIndices, PROJECT_GRADE_OPTIONS } from "@plane/constants";
+import { ETabIndices, PROJECT_GRADE_OPTIONS, PROJECT_PRODUCT_TYPE_OPTIONS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 // ui
 import { Tooltip } from "@plane/propel/tooltip";
@@ -21,7 +21,7 @@ import { cn, projectIdentifierSanitizer, getTabIndex } from "@plane/utils";
 import { ProjectGradeBadge } from "@/components/project/common/project-grade-badge";
 // plane-web types
 import type { TProject } from "@/plane-web/types/projects";
-import type { TProjectGrade } from "@plane/types";
+import type { TProjectGrade, TProjectProductType } from "@plane/types";
 
 type Props = {
   setValue: UseFormSetValue<TProject>;
@@ -38,6 +38,7 @@ function ProjectCommonAttributes(props: Props) {
     control,
   } = useFormContext<TProject>();
   const gradeError = errors.grade?.message;
+  const productTypeError = errors.product_type?.message;
 
   const { getIndex } = getTabIndex(ETabIndices.PROJECT_CREATE, isMobile);
   const { t } = useTranslation();
@@ -62,8 +63,8 @@ function ProjectCommonAttributes(props: Props) {
     handleFormOnChange?.();
   };
   return (
-    <div className="grid grid-cols-1 gap-x-2 gap-y-3 md:grid-cols-4">
-      <div className="md:col-span-2">
+    <div className="grid grid-cols-1 gap-x-2 gap-y-3 md:grid-cols-3">
+      <div className="md:col-span-3">
         <Controller
           control={control}
           name="name"
@@ -132,6 +133,45 @@ function ProjectCommonAttributes(props: Props) {
         />
         <span className="text-11 text-danger-primary">{gradeError}</span>
       </div>
+      <div className="md:col-span-1">
+        <Controller
+          control={control}
+          name="product_type"
+          rules={{ required: "请选择产品类型" }}
+          render={({ field: { value, onChange } }) => {
+            const selected = value ?? null;
+            return (
+              <CustomSelect
+                value={selected ?? ""}
+                onChange={(val: string) => {
+                  onChange(val as TProjectProductType);
+                  handleFormOnChange?.();
+                }}
+                label={
+                  selected ? (
+                    <span className="text-13">{selected}</span>
+                  ) : (
+                    <span className="text-placeholder text-13">请选择产品类型</span>
+                  )
+                }
+                buttonClassName={cn(
+                  "!border-subtle-1 !shadow-none flex !h-[38px] !min-h-[38px] !max-h-[38px] w-full shrink-0 items-center rounded-md border-[0.5px] px-3 !py-0 text-left text-13 font-normal leading-5 focus:outline-none focus:border-blue-400",
+                  productTypeError && "!border-danger-strong"
+                )}
+                input
+                tabIndex={getIndex("product_type")}
+              >
+                {PROJECT_PRODUCT_TYPE_OPTIONS.map((opt) => (
+                  <CustomSelect.Option key={opt} value={opt}>
+                    {opt}
+                  </CustomSelect.Option>
+                ))}
+              </CustomSelect>
+            );
+          }}
+        />
+        <span className="text-11 text-danger-primary">{productTypeError}</span>
+      </div>
       <div className="relative md:col-span-1">
         <Controller
           control={control}
@@ -179,7 +219,7 @@ function ProjectCommonAttributes(props: Props) {
         </Tooltip>
         <span className="text-11 text-danger-primary">{errors?.identifier?.message}</span>
       </div>
-      <div className="md:col-span-4">
+      <div className="md:col-span-3">
         <Controller
           name="description"
           control={control}
