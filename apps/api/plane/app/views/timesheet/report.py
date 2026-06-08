@@ -39,6 +39,7 @@ class TimeSheetReportViewSet(BaseViewSet):
                 "member",
                 "member__extra_info",
             )
+            .prefetch_related("issue__issue_module__module")
             .exclude()
         )
 
@@ -90,6 +91,17 @@ class TimeSheetReportViewSet(BaseViewSet):
 
         return query.order_by("-date", "-start_time", "-id")
 
+    @staticmethod
+    def _get_issue_module_names(issue):
+        if not issue:
+            return ""
+        module_names = [
+            module_issue.module.name
+            for module_issue in issue.issue_module.all()
+            if module_issue.module and getattr(module_issue, "deleted_at", None) is None
+        ]
+        return ", ".join(module_names)
+
     def list(self, request, slug):
         queryset = self._apply_filters(request, slug)
         return self.paginate(
@@ -115,6 +127,7 @@ class TimeSheetReportViewSet(BaseViewSet):
             ("项目编号", "pms_project_name"),
             ("项目名称", "project_name"),
             ("工作项", "issue_name"),
+            ("模块", "module_names"),
             ("测试用例", "case_name"),
             ("成员", "member_name"),
             ("工号", "employee_id"),
@@ -149,6 +162,8 @@ class TimeSheetReportViewSet(BaseViewSet):
                 return record.project.name or ""
             if key == "issue_name":
                 return record.issue.name if record.issue_id else ""
+            if key == "module_names":
+                return self._get_issue_module_names(record.issue)
             if key == "case_name":
                 return record.test_case.name if record.test_case_id else ""
             if key == "member_name":
@@ -183,7 +198,7 @@ class TimeSheetReportViewSet(BaseViewSet):
         for item in queryset.iterator():
             ws.append([format_value(item, key) for _, key in columns])
 
-        widths = [16, 24, 30, 30, 14, 14, 20, 12, 10, 10, 8, 14, 40]
+        widths = [16, 24, 30, 24, 30, 14, 14, 20, 12, 10, 10, 8, 14, 40]
         for idx, width in enumerate(widths, start=1):
             ws.column_dimensions[ws.cell(row=1, column=idx).column_letter].width = width
 
@@ -241,6 +256,7 @@ class TimeSheetReportViewSet(BaseViewSet):
         return {
             "pms_project_name": record.project.pms_project_name or "",
             "issue_name": record.issue.name if record.issue_id else "",
+            "module_names": TimeSheetReportViewSet._get_issue_module_names(record.issue),
             "case_name": record.test_case.name if record.test_case_id else "",
             "member_name": (
                 getattr(member, "display_name", "")
