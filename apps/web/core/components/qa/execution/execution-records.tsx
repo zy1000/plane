@@ -268,106 +268,113 @@ export const ExecutionRecordDetailModal: React.FC<ExecutionRecordDetailModalProp
       zIndex={1200}
     >
       <div className="flex h-[620px] flex-col">
-        <Menu
-          mode="horizontal"
-          selectedKeys={[detailTab]}
-          onClick={({ key }) => setDetailTab(key as "steps" | "files")}
-          items={[
-            { key: "steps", label: "步骤详情" },
-            { key: "files", label: "执行附件" },
-          ]}
-        />
-        <div className="mt-3 flex-1 min-h-0 overflow-y-scroll vertical-scrollbar scrollbar-sm pr-1">
+        <div className="flex items-center gap-3">
+          <Menu
+            className="min-w-0 flex-1"
+            mode="horizontal"
+            selectedKeys={[detailTab]}
+            onClick={({ key }) => setDetailTab(key as "steps" | "files")}
+            items={[
+              { key: "steps", label: "步骤详情" },
+              { key: "files", label: "执行附件" },
+            ]}
+          />
+          {detailTab === "files" ? (
+            <Upload
+              showUploadList={false}
+              beforeUpload={(file) => {
+                handleUpload(file as unknown as File);
+                return false;
+              }}
+              disabled={uploadLoading}
+            >
+              <button
+                type="button"
+                disabled={uploadLoading}
+                className="text-on-color bg-accent-primary hover:bg-accent-primary-hover focus:text-on-color focus:bg-accent-primary-hover px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <LucideIcons.Upload size={13} />
+                上传
+              </button>
+            </Upload>
+          ) : null}
+        </div>
+        <div className="mt-3 flex-1 min-h-0">
           {detailTab === "steps" ? (
-            <StepsDetailTableInner
-              steps={record ? normalizeStepsForDetail(record.steps) : []}
-              resultColorMap={resultColorMap}
-            />
+            <div className="h-full overflow-y-scroll vertical-scrollbar scrollbar-sm pr-1">
+              <StepsDetailTableInner
+                steps={record ? normalizeStepsForDetail(record.steps) : []}
+                resultColorMap={resultColorMap}
+              />
+            </div>
           ) : (
-            <div className="flex flex-col gap-3">
-              <div className="flex items-center justify-end">
-                <Upload
-                  showUploadList={false}
-                  beforeUpload={(file) => {
-                    handleUpload(file as unknown as File);
-                    return false;
-                  }}
-                  disabled={uploadLoading}
-                >
-                  <button
-                    type="button"
-                    disabled={uploadLoading}
-                    className="text-on-color bg-accent-primary hover:bg-accent-primary-hover focus:text-on-color focus:bg-accent-primary-hover px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <LucideIcons.Upload size={13} />
-                    上传
-                  </button>
-                </Upload>
-              </div>
+            <div className="flex h-full min-h-0 flex-col">
               {attachmentLoading ? (
-                <div className="flex items-center justify-center py-6">
+                <div className="flex flex-1 items-center justify-center py-6">
                   <Spin size="small" />
                 </div>
               ) : (
                 <>
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full table-fixed">
-                      <thead>
-                      <tr className="text-left text-sm text-secondary border-b">
-                      <th className="w-2/5 px-2 py-2">文件名</th>
+                  <div className="min-h-0 flex-1 overflow-y-scroll vertical-scrollbar scrollbar-sm pr-1">
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full table-fixed">
+                        <thead>
+                          <tr className="text-left text-sm text-secondary border-b">
+                            <th className="w-2/5 px-2 py-2">文件名</th>
                           <th className="w-1/5 px-2 py-2">大小</th>
                           <th className="w-1/5 px-2 py-2">上传时间</th>
                           <th className="w-1/5 px-2 py-2 text-right">操作</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {attachmentFiles.length === 0 && (
-                          <tr>
-                            <td className="px-2 py-6 text-sm text-secondary" colSpan={4}>
-                              暂无附件
-                            </td>
                           </tr>
-                        )}
-                        {attachmentFiles
-                          .slice((attachmentPage - 1) * attachmentPageSize, attachmentPage * attachmentPageSize)
-                          .map((f) => (
-                            <tr key={f.id} className="border-b hover:bg-layer-1">
-                              <td className="px-2 py-2 truncate text-sm text-gray-800" title={f.name}>
-                                {f.name}
-                              </td>
-                              <td className="px-2 py-2 text-sm text-primary">{formatFileSizeForDetail(f.size)}</td>
-                              <td className="px-2 py-2 text-sm text-primary">
-                                {f.created_at ? (
-                                  <ReadonlyDate value={f.created_at} formatToken="yyyy-MM-dd" hideIcon={true} />
-                                ) : (
-                                  "-"
-                                )}
-                              </td>
-                              <td className="px-2 py-2">
-                                <div className="flex items-center justify-end gap-2">
-                                  <PropelButton
-                                    variant="link-neutral"
-                                    className="p-0"
-                                    onClick={() => handleDownloadFile(f.id, f.name)}
-                                  >
-                                    <Download className="h-3.5 w-3.5" />
-                                  </PropelButton>
-                                  <Popconfirm
-                                    title="确认删除该文件？"
-                                    okText="删除"
-                                    cancelText="取消"
-                                    onConfirm={() => void handleDeleteFile(f.id)}
-                                  >
-                                    <PropelButton variant="link-danger" className="p-0">
-                                      <Trash2 className="h-3.5 w-3.5 text-danger-primary" />
-                                    </PropelButton>
-                                  </Popconfirm>
-                                </div>
+                        </thead>
+                        <tbody>
+                          {attachmentFiles.length === 0 && (
+                            <tr>
+                              <td className="px-2 py-6 text-sm text-secondary" colSpan={4}>
+                                暂无附件
                               </td>
                             </tr>
-                          ))}
-                      </tbody>
-                    </table>
+                          )}
+                          {attachmentFiles
+                            .slice((attachmentPage - 1) * attachmentPageSize, attachmentPage * attachmentPageSize)
+                            .map((f) => (
+                              <tr key={f.id} className="border-b hover:bg-layer-1">
+                                <td className="px-2 py-2 truncate text-sm text-gray-800" title={f.name}>
+                                  {f.name}
+                                </td>
+                                <td className="px-2 py-2 text-sm text-primary">{formatFileSizeForDetail(f.size)}</td>
+                                <td className="px-2 py-2 text-sm text-primary">
+                                  {f.created_at ? (
+                                    <ReadonlyDate value={f.created_at} formatToken="yyyy-MM-dd" hideIcon={true} />
+                                  ) : (
+                                    "-"
+                                  )}
+                                </td>
+                                <td className="px-2 py-2">
+                                  <div className="flex items-center justify-end gap-2">
+                                    <PropelButton
+                                      variant="link-neutral"
+                                      className="p-0"
+                                      onClick={() => handleDownloadFile(f.id, f.name)}
+                                    >
+                                      <Download className="h-3.5 w-3.5" />
+                                    </PropelButton>
+                                    <Popconfirm
+                                      title="确认删除该文件？"
+                                      okText="删除"
+                                      cancelText="取消"
+                                      onConfirm={() => void handleDeleteFile(f.id)}
+                                    >
+                                      <PropelButton variant="link-danger" className="p-0">
+                                        <Trash2 className="h-3.5 w-3.5 text-danger-primary" />
+                                      </PropelButton>
+                                    </Popconfirm>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                   <div className="flex-shrink-0 border-t border-subtle px-2 py-2 bg-surface-1 flex items-center justify-between mt-2">
                     <div className="text-sm text-secondary">
