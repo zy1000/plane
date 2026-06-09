@@ -48,10 +48,20 @@ def build_html_table(data: dict[str, list[str]]) -> str:
 
 
 def split_by_numbering(text):
-    # 按照 "1. xxx", "2. xxx" 分割文本，但只匹配纯数字+点开头的行首
-    pattern = r'(\d+\.)\s*(.*?)(?=\n\d+\.|\Z)'
-    matches = re.findall(pattern, text.strip(), re.DOTALL)
-    return {int(num[:-1]): content.strip() for num, content in matches}
+    # 兼容多种行首编号：1. / 1。 / 1、 / (1) / （1），并支持同段落混用
+    marker = r"(?:[（(]\s*\d+\s*[）)]|\d+\s*[.。、])"
+    capture = r"(?:[（(]\s*(\d+)\s*[）)]|(\d+)\s*[.。、])"
+    pattern = re.compile(
+        r"^[ \t]*" + capture + r"[ \t]*(.*?)(?=^[ \t]*" + marker + r"|\Z)",
+        re.MULTILINE | re.DOTALL,
+    )
+
+    result = {}
+    for match in pattern.finditer(text.strip()):
+        number = match.group(1) or match.group(2)
+        result[int(number)] = match.group(3).strip()
+
+    return result
 
 
 def build_description_result_list(description: str, result: str):
