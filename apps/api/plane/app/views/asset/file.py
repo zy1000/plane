@@ -19,6 +19,7 @@ from plane.app.permissions import (
     allow_fine_permission,
     PermissionKey,
 )
+from plane.app.permissions.base import _get_user_project_permission_keys
 from plane.app.views import BaseAPIView
 from plane.bgtasks.storage_metadata_task import get_asset_object_metadata
 from plane.db.models import FileAsset, Workspace
@@ -371,14 +372,38 @@ class FilestoreAssetOnlyOfficeConfigAPIView(BaseAPIView):
 
         document_type = _onlyoffice_document_type(ext)
         requested_mode = (request.query_params.get("mode") or "").strip().lower()
+        user_permission_keys = _get_user_project_permission_keys(
+            request.user, slug, project_id
+        )
+        is_issue_attachment = (
+            asset.entity_type == FileAsset.EntityTypeContext.ISSUE_ATTACHMENT
+        )
+        # 工作项附件、PDF、或显式请求预览：本质只读，与编辑权限无关。
         view_only = (
             requested_mode == "view"
-            or asset.entity_type == FileAsset.EntityTypeContext.ISSUE_ATTACHMENT
+            or is_issue_attachment
+            or document_type == "pdf"
         )
-        if view_only or document_type == "pdf":
-            mode = "view"
+        # 其余均为编辑请求：必须具备「编辑项目资产」权限，否则直接拒绝并提示，
+        # 不再降级为只读，确保无权限用户无法打开在线编辑器。
+        # 复用 allow_fine_permission 的标准文案，便于前端统一按权限错误识别处理。
+        if (
+            not view_only
+            and PermissionKey.PROJECT_ASSET_EDIT not in user_permission_keys
+        ):
+            return Response(
+                {"error": "您没有所需的项目权限。"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        mode = "view" if view_only else "edit"
+
+        # 下载按钮受细粒度下载权限控制：无权限的用户在预览/编辑界面看不到下载入口。
+        # 工作项附件与项目资产使用各自的下载权限 key。
+        if is_issue_attachment:
+            download_permission_key = PermissionKey.ISSUE_ATTACHMENT_DOWNLOAD
         else:
-            mode = "edit"
+            download_permission_key = PermissionKey.PROJECT_ASSET_DOWNLOAD
+        can_download = download_permission_key in user_permission_keys
 
         config = {
             "type": "desktop",
@@ -388,7 +413,11 @@ class FilestoreAssetOnlyOfficeConfigAPIView(BaseAPIView):
                 "url": document_url,
                 "fileType": ext,
                 "key": doc_key,
-                "permissions": {"download": True, "edit": mode == "edit"},
+                "permissions": {
+                    "download": can_download,
+                    "print": can_download,
+                    "edit": mode == "edit",
+                },
             },
             "editorConfig": {
                 "mode": mode,
@@ -775,7 +804,7 @@ class FilestoreAssetOnlyOfficeRestoreVersionAPIView(BaseAPIView):
 
 
 class FilestoreAssetOnlyOfficeForceSaveAPIView(BaseAPIView):
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER], level="PROJECT")
+    @allow_fine_permission(PermissionKey.PROJECT_ASSET_EDIT)
     def post(self, request, slug, project_id, pk):
         asset = FileAsset.objects.get(
             id=pk,

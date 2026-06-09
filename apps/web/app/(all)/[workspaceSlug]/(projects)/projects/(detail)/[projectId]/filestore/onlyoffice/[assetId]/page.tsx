@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 import { Alert, Button } from "antd";
-import { PROJECT_ASSET_VIEW_PERMISSION_KEY } from "@plane/constants";
+import { PROJECT_ASSET_EDIT_PERMISSION_KEY, PROJECT_ASSET_VIEW_PERMISSION_KEY } from "@plane/constants";
 import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
 import { useUserPermissions } from "@/hooks/store/user";
 import { FilestoreService } from "@/services/filestore.service";
@@ -15,6 +15,12 @@ function FilestoreOnlyOfficePage() {
   const service = useMemo(() => new FilestoreService(), []);
   const canViewFilestore = allowProjectPermissionKeys(
     [PROJECT_ASSET_VIEW_PERMISSION_KEY],
+    workspaceSlug?.toString(),
+    projectId?.toString()
+  );
+  // 该页面是 OnlyOffice 在线编辑入口，必须具备「编辑项目资产」权限才能打开。
+  const canEditFilestore = allowProjectPermissionKeys(
+    [PROJECT_ASSET_EDIT_PERMISSION_KEY],
     workspaceSlug?.toString(),
     projectId?.toString()
   );
@@ -175,7 +181,7 @@ function FilestoreOnlyOfficePage() {
       await initEditor(serverUrl, config, runId);
     } catch (e: any) {
       if (editorRunIdRef.current !== runId) return;
-      setError(e?.detail || e?.message || "加载编辑器失败");
+      setError(e?.error || e?.detail || e?.message || "加载编辑器失败");
     } finally {
       if (editorRunIdRef.current === runId) setLoading(false);
     }
@@ -201,7 +207,7 @@ function FilestoreOnlyOfficePage() {
     return () => window.clearInterval(t);
   }, [triggerForceSave]);
 
-  if (workspaceUserInfo && workspaceSlug && projectId && !canViewFilestore) {
+  if (workspaceUserInfo && workspaceSlug && projectId && (!canViewFilestore || !canEditFilestore)) {
     return <NotAuthorizedView section="general" isProjectView className="h-auto" />;
   }
 

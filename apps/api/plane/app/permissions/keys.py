@@ -143,6 +143,7 @@ class PermissionKey(str, Enum):
     PROJECT_ANALYTICS_VIEW = "project.analytics.view"
     PROJECT_ASSET_VIEW = "project.asset.view"
     PROJECT_ASSET_UPLOAD = "project.asset.upload"
+    PROJECT_ASSET_EDIT = "project.asset.edit"
     PROJECT_ASSET_DELETE = "project.asset.delete"
     PROJECT_ASSET_DOWNLOAD = "project.asset.download"
     QA_CASE_VIEW = "qa.case.view"

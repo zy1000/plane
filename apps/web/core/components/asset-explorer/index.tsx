@@ -143,8 +143,14 @@ export const AssetExplorer = (props: TAssetExplorerProps) => {
 
   const handleDeleteFile = useCallback(
     async (assetId: string) => {
-      await explorer.onDeleteFiles([assetId]);
-      setActiveFile(null);
+      const success = await explorer.onDeleteFiles([assetId]);
+      if (success) setActiveFile(null);
+    },
+    [explorer]
+  );
+  const handleDeleteFolder = useCallback(
+    async (folderId: number) => {
+      await explorer.onDeleteFolder(folderId);
     },
     [explorer]
   );
@@ -255,7 +261,7 @@ export const AssetExplorer = (props: TAssetExplorerProps) => {
                 explorer.setRenamingFolder(folder);
                 explorer.setRenameFolderOpen(true);
               }}
-              onDeleteFolder={explorer.onDeleteFolder}
+              onDeleteFolder={handleDeleteFolder}
             />
           )}
 
@@ -285,6 +291,7 @@ export const AssetExplorer = (props: TAssetExplorerProps) => {
         <DetailsPanel
           file={activeFile}
           permissions={props.permissions}
+          hasPreviewCapability={Boolean(onPreview)}
           hasEditCapability={Boolean(onEdit)}
           onClose={() => setActiveFile(null)}
           onPreviewFile={handlePreviewFile}

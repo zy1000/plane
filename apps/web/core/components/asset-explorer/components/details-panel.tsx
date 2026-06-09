@@ -8,6 +8,7 @@ import { formatBytes, formatMinIODate, getFileExtension } from "../utils/format"
 type TDetailsPanelProps = {
   file: TAssetExplorerFile | null;
   permissions: TAssetExplorerPermissions;
+  hasPreviewCapability: boolean;
   hasEditCapability: boolean;
   onClose: () => void;
   onPreviewFile: (file: TAssetExplorerFile) => void | Promise<void>;
@@ -58,6 +59,7 @@ const InfoRow = ({ label, value, mono }: { label: string; value: React.ReactNode
 export const DetailsPanel = ({
   file,
   permissions,
+  hasPreviewCapability,
   hasEditCapability,
   onClose,
   onPreviewFile,
@@ -111,11 +113,13 @@ export const DetailsPanel = ({
                 操作
               </h4>
               <div className="flex flex-col gap-0.5">
-                <ActionRow
-                  icon={<Eye className="size-4" strokeWidth={1.75} />}
-                  label="预览"
-                  onClick={() => void onPreviewFile(file)}
-                />
+                {hasPreviewCapability && (
+                  <ActionRow
+                    icon={<Eye className="size-4" strokeWidth={1.75} />}
+                    label="预览"
+                    onClick={() => void onPreviewFile(file)}
+                  />
+                )}
                 {hasEditCapability && (
                   <ActionRow
                     icon={<Pencil className="size-4" strokeWidth={1.75} />}

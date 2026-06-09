@@ -207,6 +207,7 @@ export const PROJECT_MEMBER_INVITE_PERMISSION_KEY = "project.member.invite" as c
 /** 项目文件/资产页权限常量，与后端 PermissionKey.PROJECT_ASSET_* 一致 */
 export const PROJECT_ASSET_VIEW_PERMISSION_KEY = "project.asset.view" as const;
 export const PROJECT_ASSET_UPLOAD_PERMISSION_KEY = "project.asset.upload" as const;
+export const PROJECT_ASSET_EDIT_PERMISSION_KEY = "project.asset.edit" as const;
 export const PROJECT_ASSET_DELETE_PERMISSION_KEY = "project.asset.delete" as const;
 export const PROJECT_ASSET_DOWNLOAD_PERMISSION_KEY = "project.asset.download" as const;
 

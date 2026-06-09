@@ -5,9 +5,14 @@ import { observer } from "mobx-react";
 import { useParams, useSearchParams } from "next/navigation";
 import {
   PROJECT_ASSET_DELETE_PERMISSION_KEY,
+  PROJECT_ASSET_EDIT_PERMISSION_KEY,
   PROJECT_ASSET_UPLOAD_PERMISSION_KEY,
   PROJECT_ASSET_VIEW_PERMISSION_KEY,
+  PROJECT_ERROR_MESSAGES,
+  isProjectPermissionError,
 } from "@plane/constants";
+import { useTranslation } from "@plane/i18n";
+import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
 import { ContentWrapper } from "@/components/core/content-wrapper";
 import { PageHead } from "@/components/core/page-title";
@@ -47,10 +52,12 @@ function FilestorePage() {
   const searchParams = useSearchParams();
   const onlyofficeAssetId = searchParams.get("onlyofficeAssetId");
   const { workspaceUserInfo, allowProjectPermissionKeys } = useUserPermissions();
+  const { t } = useTranslation();
   const service = useMemo(() => new FilestoreService(), []);
 
   const canView = allowProjectPermissionKeys([PROJECT_ASSET_VIEW_PERMISSION_KEY], workspaceSlug, projectId);
   const canUpload = allowProjectPermissionKeys([PROJECT_ASSET_UPLOAD_PERMISSION_KEY], workspaceSlug, projectId);
+  const canEdit = allowProjectPermissionKeys([PROJECT_ASSET_EDIT_PERMISSION_KEY], workspaceSlug, projectId);
   const canDelete = allowProjectPermissionKeys([PROJECT_ASSET_DELETE_PERMISSION_KEY], workspaceSlug, projectId);
 
   const [editorOpen, setEditorOpen] = useState(false);
@@ -222,35 +229,50 @@ function FilestorePage() {
       if (!workspaceSlug || !projectId || !asset?.id) return;
       const runId = editorRunIdRef.current + 1;
       editorRunIdRef.current = runId;
-      setEditorAsset(asset);
-      setEditorMode(mode);
-      setEditorOpen(true);
-      setEditorLoading(true);
-      setEditorError("");
+
+      // 先拉取配置，成功后再打开弹框：无权限时直接提示，不做任何打开/关闭弹框的操作。
+      let res: Awaited<ReturnType<typeof service.getOnlyOfficeConfig>> | null = null;
       try {
-        const res = await service.getOnlyOfficeConfig(
+        res = await service.getOnlyOfficeConfig(
           String(workspaceSlug),
           String(projectId),
           String(asset.id),
           mode
         );
-        const config = (res?.config ?? {}) as Record<string, any>;
-        const serverUrl = String(res?.document_server_url ?? "");
-        const currentDocKey = String(config?.document?.key ?? "");
-        setEditorConfig(config);
-        setEditorServerUrl(serverUrl);
-        setDocKey(currentDocKey);
-        latestDocKeyRef.current = currentDocKey;
-        const containerId = `filestore-onlyoffice-editor-${asset.id}`;
+      } catch (error: any) {
+        if (editorRunIdRef.current !== runId) return;
+        if (isProjectPermissionError(error)) {
+          setToast({ type: TOAST_TYPE.ERROR, title: t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title) });
+          return;
+        }
+        message.error(error?.error || error?.detail || error?.message || (mode === "view" ? "加载预览失败" : "加载编辑器失败"));
+        return;
+      }
+      if (editorRunIdRef.current !== runId || !res) return;
+
+      const config = (res.config ?? {}) as Record<string, any>;
+      const serverUrl = String(res.document_server_url ?? "");
+      const currentDocKey = String(config?.document?.key ?? "");
+      setEditorAsset(asset);
+      setEditorMode(mode);
+      setEditorOpen(true);
+      setEditorLoading(true);
+      setEditorError("");
+      setEditorConfig(config);
+      setEditorServerUrl(serverUrl);
+      setDocKey(currentDocKey);
+      latestDocKeyRef.current = currentDocKey;
+      const containerId = `filestore-onlyoffice-editor-${asset.id}`;
+      try {
         await initEditor(serverUrl, config, containerId, mode, runId);
       } catch (error: any) {
         if (editorRunIdRef.current !== runId) return;
-        setEditorError(error?.detail || error?.message || (mode === "view" ? "加载预览失败" : "加载编辑器失败"));
+        setEditorError(error?.error || error?.detail || error?.message || (mode === "view" ? "加载预览失败" : "加载编辑器失败"));
       } finally {
         if (editorRunIdRef.current === runId) setEditorLoading(false);
       }
     },
-    [initEditor, projectId, service, workspaceSlug]
+    [initEditor, projectId, service, t, workspaceSlug]
   );
 
   const handlePreview = useCallback(
@@ -385,8 +407,8 @@ function FilestorePage() {
           workspaceSlug={String(workspaceSlug ?? "")}
           projectId={String(projectId ?? "")}
           permissions={{ canUpload, canDelete, canCreateFolder: canUpload }}
-          onPreview={handlePreview}
-          onEdit={handleEdit}
+          onPreview={canView ? handlePreview : undefined}
+          onEdit={canEdit ? handleEdit : undefined}
         />
       </ContentWrapper>
 

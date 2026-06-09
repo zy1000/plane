@@ -281,19 +281,71 @@ export class AssetExplorerService extends APIService {
       });
   }
 
-  getBatchDownloadURL(
+  async downloadBatch(
     workspaceSlug: string,
     projectId: string,
     params: { assetIds?: string[]; folderIds?: number[] }
-  ): string {
-    const searchParams = new URLSearchParams();
-    if (params.assetIds?.length) searchParams.set("asset_ids", params.assetIds.join(","));
-    if (params.folderIds?.length) searchParams.set("folder_ids", params.folderIds.join(","));
-    const query = searchParams.toString();
-    const prefix = `${API_BASE_URL || ""}/api/workspaces/${workspaceSlug}/projects/${encodeURIComponent(
-      String(projectId)
-    )}/filestore/explorer/batch-download/`;
-    return query ? `${prefix}?${query}` : prefix;
+  ): Promise<{ blob: Blob; filename: string }> {
+    const queryParams: Record<string, string> = {};
+    if (params.assetIds?.length) queryParams.asset_ids = params.assetIds.join(",");
+    if (params.folderIds?.length) queryParams.folder_ids = params.folderIds.join(",");
+    return this.get(
+      `/api/workspaces/${workspaceSlug}/projects/${encodeURIComponent(
+        String(projectId)
+      )}/filestore/explorer/batch-download/`,
+      { params: queryParams },
+      { responseType: "blob" }
+    )
+      .then((response) => {
+        const blob: Blob = response?.data;
+        const disposition: string = response?.headers?.["content-disposition"] ?? "";
+        const match = disposition.match(/filename\*?=(?:UTF-8'')?([^;]+)/i);
+        const filename = match
+          ? decodeURIComponent(match[1].trim().replace(/^"|"$/g, ""))
+          : "filestore-assets.zip";
+        return { blob, filename };
+      })
+      .catch(async (error) => {
+        // responseType=blob 时后端的 JSON 错误体会被包成 Blob，需解回 JSON，便于上层按权限错误识别。
+        const data = error?.response?.data;
+        const status = Number(error?.response?.status ?? 0) || undefined;
+        if (data instanceof Blob) {
+          let parsed: any = { error: "下载失败", status };
+          try {
+            parsed = JSON.parse(await data.text());
+            if (status !== undefined && parsed && typeof parsed === "object" && parsed.status === undefined) {
+              parsed.status = status;
+            }
+            if (
+              parsed &&
+              typeof parsed === "object" &&
+              typeof parsed.error !== "string" &&
+              typeof parsed.detail === "string"
+            ) {
+              parsed.error = parsed.detail;
+            }
+          } catch {
+            // 解析失败则保留默认错误
+          }
+          throw parsed;
+        }
+        if (data && typeof data === "object") {
+          if (status !== undefined && (data as Record<string, any>).status === undefined) {
+            (data as Record<string, any>).status = status;
+          }
+          if (
+            typeof (data as Record<string, any>).error !== "string" &&
+            typeof (data as Record<string, any>).detail === "string"
+          ) {
+            (data as Record<string, any>).error = (data as Record<string, any>).detail;
+          }
+          throw data;
+        }
+        if (typeof data === "string") {
+          throw { error: data, status };
+        }
+        throw { error: error?.message || "下载失败", status };
+      });
   }
 
   async getAssetPresignedURL(
@@ -307,7 +359,24 @@ export class AssetExplorerService extends APIService {
     })
       .then((response) => response?.data?.download_url ?? "")
       .catch((error) => {
-        throw error?.response?.data;
+        const data = error?.response?.data;
+        const status = Number(error?.response?.status ?? 0) || undefined;
+        if (data && typeof data === "object") {
+          if (status !== undefined && (data as Record<string, any>).status === undefined) {
+            (data as Record<string, any>).status = status;
+          }
+          if (
+            typeof (data as Record<string, any>).error !== "string" &&
+            typeof (data as Record<string, any>).detail === "string"
+          ) {
+            (data as Record<string, any>).error = (data as Record<string, any>).detail;
+          }
+          throw data;
+        }
+        if (typeof data === "string") {
+          throw { error: data, status };
+        }
+        throw { error: error?.message || "下载失败", status };
       });
   }
 }

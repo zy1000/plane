@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { message } from "antd";
+import { PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
+import { useTranslation } from "@plane/i18n";
+import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { useFileUploadProgress } from "@/hooks/use-file-upload-progress";
 import type {
   TAssetExplorerFile,
@@ -16,7 +19,29 @@ const rowFolderId = (row: TExplorerRow): number | null => (row.kind === "folder"
 
 export const useAssetExplorer = (props: TUseAssetExplorer) => {
   const { workspaceSlug, projectId, onEdit, onPreview } = props;
+  const { t } = useTranslation();
   const service = useMemo(() => new AssetExplorerService(), []);
+  const isPermissionDenied = useCallback((error: any) => {
+    if (isProjectPermissionError(error)) return true;
+    if (Number(error?.status) === 403) return true;
+    const msg = String(error?.detail ?? error?.message ?? "").trim();
+    if (!msg) return false;
+    return (
+      msg === "您没有所需的项目权限。" ||
+      msg === "You don't have the required permissions." ||
+      msg === "You don't have the required workspace permissions."
+    );
+  }, []);
+  const handleActionError = useCallback(
+    (error: any, fallback: string) => {
+      if (isPermissionDenied(error)) {
+        setToast({ type: TOAST_TYPE.ERROR, title: t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title) });
+        return;
+      }
+      message.error(error?.error || error?.detail || error?.message || fallback);
+    },
+    [isPermissionDenied, t]
+  );
 
   const [rootFolder, setRootFolder] = useState<TAssetFolder | null>(null);
   const [currentFolder, setCurrentFolder] = useState<TAssetFolder | null>(null);
@@ -318,55 +343,96 @@ export const useAssetExplorer = (props: TUseAssetExplorer) => {
   );
 
   const onDeleteFiles = useCallback(
-    async (assetIds: string[]) => {
-      if (!assetIds.length) return;
-      await service.batchDelete(workspaceSlug, projectId, assetIds);
-      await refresh();
+    async (assetIds: string[]): Promise<boolean> => {
+      if (!assetIds.length) return false;
+      try {
+        await service.batchDelete(workspaceSlug, projectId, assetIds);
+        await refresh();
+        return true;
+      } catch (error: any) {
+        handleActionError(error, "删除失败");
+        return false;
+      }
     },
-    [projectId, refresh, service, workspaceSlug]
+    [handleActionError, projectId, refresh, service, workspaceSlug]
   );
 
   const onDeleteFolder = useCallback(
-    async (folderId: number) => {
-      await service.deleteFolder(workspaceSlug, projectId, folderId);
-      await refresh();
+    async (folderId: number): Promise<boolean> => {
+      try {
+        await service.deleteFolder(workspaceSlug, projectId, folderId);
+        await refresh();
+        return true;
+      } catch (error: any) {
+        handleActionError(error, "删除失败");
+        return false;
+      }
     },
-    [projectId, refresh, service, workspaceSlug]
+    [handleActionError, projectId, refresh, service, workspaceSlug]
   );
 
   const onDownloadFile = useCallback(
     async (asset: TAssetExplorerFile) => {
       if (!asset?.id) return;
-      const url = await service.getAssetPresignedURL(workspaceSlug, projectId, asset.id, "attachment");
-      if (!url) {
-        message.error("下载失败");
-        return;
+      try {
+        const url = await service.getAssetPresignedURL(workspaceSlug, projectId, asset.id, "attachment");
+        if (!url) {
+          message.error("下载失败");
+          return;
+        }
+        window.open(url, "_blank", "noopener,noreferrer");
+      } catch (error: any) {
+        if (isPermissionDenied(error)) {
+          setToast({ type: TOAST_TYPE.ERROR, title: t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title) });
+          return;
+        }
+        message.error(error?.error || error?.detail || error?.message || "下载失败");
       }
-      window.open(url, "_blank", "noopener,noreferrer");
     },
-    [projectId, service, workspaceSlug]
+    [isPermissionDenied, projectId, service, t, workspaceSlug]
   );
 
-  const onBatchDownload = useCallback(() => {
+  const onBatchDownload = useCallback(async () => {
     if (selectedCount === 0) return;
-    const url = service.getBatchDownloadURL(workspaceSlug, projectId, {
-      assetIds: selectedAssetIdsArray,
-      folderIds: selectedFolderIdsArray,
-    });
-    window.open(url, "_blank", "noopener,noreferrer");
-  }, [projectId, selectedAssetIdsArray, selectedCount, selectedFolderIdsArray, service, workspaceSlug]);
-
-  const onBatchDelete = useCallback(async () => {
-    if (selectedFolderIdsArray.length) {
-      for (const folderId of selectedFolderIdsArray) {
-        await service.deleteFolder(workspaceSlug, projectId, folderId);
+    try {
+      const { blob, filename } = await service.downloadBatch(workspaceSlug, projectId, {
+        assetIds: selectedAssetIdsArray,
+        folderIds: selectedFolderIdsArray,
+      });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename || "filestore-assets.zip";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error: any) {
+      if (isPermissionDenied(error)) {
+        setToast({ type: TOAST_TYPE.ERROR, title: t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title) });
+        return;
       }
+      message.error(error?.error || error?.detail || error?.message || "下载失败");
     }
-    if (selectedAssetIdsArray.length) {
-      await service.batchDelete(workspaceSlug, projectId, selectedAssetIdsArray);
+  }, [isPermissionDenied, projectId, selectedAssetIdsArray, selectedCount, selectedFolderIdsArray, service, t, workspaceSlug]);
+
+  const onBatchDelete = useCallback(async (): Promise<boolean> => {
+    try {
+      if (selectedFolderIdsArray.length) {
+        for (const folderId of selectedFolderIdsArray) {
+          await service.deleteFolder(workspaceSlug, projectId, folderId);
+        }
+      }
+      if (selectedAssetIdsArray.length) {
+        await service.batchDelete(workspaceSlug, projectId, selectedAssetIdsArray);
+      }
+      await refresh();
+      return true;
+    } catch (error: any) {
+      handleActionError(error, "删除失败");
+      return false;
     }
-    await refresh();
-  }, [projectId, refresh, selectedAssetIdsArray, selectedFolderIdsArray, service, workspaceSlug]);
+  }, [handleActionError, projectId, refresh, selectedAssetIdsArray, selectedFolderIdsArray, service, workspaceSlug]);
 
   const openPickerFor = useCallback(
     (mode: "copy" | "move") => {
