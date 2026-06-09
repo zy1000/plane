@@ -7,7 +7,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import type { ComponentType, SVGProps } from "react";
 import { observer } from "mobx-react";
-import { Ban, Circle, CircleCheck, CircleDashed } from "lucide-react";
+import { Ban, Circle, CircleCheck, CircleDashed, XCircle } from "lucide-react";
 // components
 import { CYCLE_STATUS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
@@ -52,6 +52,7 @@ export const CyclesList = observer(function CyclesList(props: ICyclesList) {
     const iconByStatus: Record<TCycleGroups, ComponentType<SVGProps<SVGSVGElement>>> = {
       in_progress: ContrastIcon as unknown as ComponentType<SVGProps<SVGSVGElement>>,
       testing: Circle,
+      returned: XCircle,
       not_started: CircleDashed,
       completed: CircleCheck,
       cancelled: Ban,
@@ -70,6 +71,7 @@ export const CyclesList = observer(function CyclesList(props: ICyclesList) {
       not_started: [],
       in_progress: [],
       testing: [],
+      returned: [],
       completed: [],
       cancelled: [],
     };
@@ -102,6 +104,12 @@ export const CyclesList = observer(function CyclesList(props: ICyclesList) {
         name: getStatusTitle("testing"),
         count: groupedCycleIds.testing.length,
         icon: getStatusIcon("testing"),
+      },
+      {
+        id: "returned",
+        name: getStatusTitle("returned"),
+        count: groupedCycleIds.returned.length,
+        icon: getStatusIcon("returned"),
       },
       {
         id: "completed",

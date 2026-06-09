@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 
 from plane.db.models import Cycle, CycleIssue, FileAsset, StateGroup
+from plane.utils.html_processor import strip_tags
 
 
 @dataclass
@@ -51,6 +52,18 @@ def has_test_plan(cycle: Cycle):
     return cycle.plans.filter(deleted_at__isnull=True).exists()
 
 
+def has_suggested_test_scope(cycle: Cycle) -> bool:
+    """判断建议测试范围富文本是否有实际可见内容。"""
+    raw = cycle.suggested_test_scope
+    if not raw:
+        return False
+    try:
+        text = strip_tags(str(raw))
+    except Exception:
+        text = str(raw)
+    return bool(text.strip())
+
+
 def _result(reasons: list[str]) -> CycleStateCheckResult:
     return CycleStateCheckResult(allowed=not reasons, reasons=reasons)
 
@@ -92,11 +105,11 @@ def check_cycle_state(cycle: Cycle, next_status: Cycle.Status) -> CycleStateChec
             reasons.append("请先规划工作项")
         return _result(reasons)
 
-    # 进行中 -> 测试中
-    if current == Cycle.Status.IN_PROGRESS and next_status == Cycle.Status.TESTING:
+    # 进行中/已退回 -> 测试中
+    if current in (Cycle.Status.IN_PROGRESS, Cycle.Status.RETURNED) and next_status == Cycle.Status.TESTING:
         if not has_attachment(cycle):
             reasons.append("请上传迭代附件")
-        if not (cycle.suggested_test_scope and str(cycle.suggested_test_scope).strip()):
+        if not has_suggested_test_scope(cycle):
             reasons.append("请填写建议测试范围")
         if not has_test_plan(cycle):
             reasons.append("请先关联测试计划")
@@ -104,6 +117,10 @@ def check_cycle_state(cycle: Cycle, next_status: Cycle.Status) -> CycleStateChec
             reasons.append("迭代下工作项已全部取消，只能改为已取消")
         elif not all_issues_ready(cycle):
             reasons.append("存在未开始的工作项")
+        return _result(reasons)
+
+    # 测试中 -> 已退回（无额外前置条件）
+    if current == Cycle.Status.TESTING and next_status == Cycle.Status.RETURNED:
         return _result(reasons)
 
     # 测试中 -> 已完成（无额外前置条件）

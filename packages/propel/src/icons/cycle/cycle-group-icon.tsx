@@ -15,6 +15,7 @@ import { CYCLE_GROUP_COLORS } from "./helper";
 const iconComponents = {
   in_progress: CycleIcon,
   testing: CycleIcon,
+  returned: CircleX,
   not_started: CircleDotDashed,
   completed: CircleDotFullIcon,
   cancelled: CircleX,

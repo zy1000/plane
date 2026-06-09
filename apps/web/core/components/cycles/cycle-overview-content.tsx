@@ -32,7 +32,7 @@ import {
   Pencil,
 } from "lucide-react";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import { CYCLE_STATUS, EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import { CYCLE_STATUS, CYCLE_STATUS_TRANSITIONS, EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { CheckIcon, MembersPropertyIcon } from "@plane/propel/icons";
 import type { ICycle, TCyclePlotType, TProgressSnapshot, TCycleDistribution, TCycleEstimateDistribution } from "@plane/types";
@@ -194,14 +194,7 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
 
   const cycleStatus = cycleDetails?.status ?? "not_started";
   const statusInfo = CYCLE_STATUS.find((s) => s.value === cycleStatus);
-  const statusOptionsByCurrentStatus: Record<NonNullable<ICycle["status"]>, NonNullable<ICycle["status"]>[]> = {
-    not_started: ["in_progress", "cancelled"],
-    in_progress: ["testing", "cancelled"],
-    testing: ["completed", "cancelled"],
-    completed: [],
-    cancelled: [],
-  };
-  const statusOptions = statusOptionsByCurrentStatus[cycleStatus as NonNullable<ICycle["status"]>] ?? [];
+  const statusOptions = CYCLE_STATUS_TRANSITIONS[cycleStatus as NonNullable<ICycle["status"]>] ?? [];
   const isEditingAllowed = allowPermissions(
     [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
     EUserPermissionsLevel.PROJECT,

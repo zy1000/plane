@@ -7,7 +7,7 @@
 import type { TIssue } from "../issues/issue";
 import type { IIssueFilterOptions } from "../view-props";
 
-export type TCycleGroups = "not_started" | "in_progress" | "testing" | "completed" | "cancelled";
+export type TCycleGroups = "not_started" | "in_progress" | "testing" | "returned" | "completed" | "cancelled";
 export type TCycleOverdueTrigger = "system" | "user";
 
 export interface ICycleOverdueRecord {

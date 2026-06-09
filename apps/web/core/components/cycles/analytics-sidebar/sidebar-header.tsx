@@ -9,7 +9,7 @@ import { observer } from "mobx-react";
 import { Controller, useForm } from "react-hook-form";
 import { ArrowRight } from "lucide-react";
 // Plane Imports
-import { CYCLE_STATUS, EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import { CYCLE_STATUS, CYCLE_STATUS_TRANSITIONS, EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { ChevronRightIcon } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
@@ -148,14 +148,7 @@ export const CycleSidebarHeader = observer(function CycleSidebarHeader(props: Pr
     EUserPermissionsLevel.PROJECT
   );
 
-  const statusOptions =
-    cycleStatus === "not_started"
-      ? ["in_progress", "cancelled"]
-      : cycleStatus === "in_progress"
-        ? ["testing", "cancelled"]
-        : cycleStatus === "testing"
-          ? ["completed", "cancelled"]
-        : [];
+  const statusOptions = cycleStatus ? CYCLE_STATUS_TRANSITIONS[cycleStatus] ?? [] : [];
 
   const canChangeStatus = isEditingAllowed && !isArchived && statusOptions.length > 0;
 

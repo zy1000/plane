@@ -12,8 +12,9 @@ updated only by explicit user actions.
 from plane.db.models import Cycle
 
 
-# Only these terminal states trigger email broadcasts.
+# Only these states trigger email broadcasts.
 CYCLE_STATUS_EMAIL_WHITELIST = {
+    Cycle.Status.RETURNED,
     Cycle.Status.COMPLETED,
     Cycle.Status.CANCELLED,
 }

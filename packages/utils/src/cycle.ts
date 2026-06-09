@@ -30,8 +30,10 @@ export const orderCycles = (
   } = {
     in_progress: 1,
     not_started: 2,
-    completed: 3,
-    cancelled: 4,
+    testing: 3,
+    returned: 4,
+    completed: 5,
+    cancelled: 6,
   };
 
   let filteredCycles = [...cycles];

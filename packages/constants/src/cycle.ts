@@ -5,9 +5,17 @@
  */
 
 // types
+export type TCycleStatusValue =
+  | "not_started"
+  | "in_progress"
+  | "testing"
+  | "returned"
+  | "completed"
+  | "cancelled";
+
 export const CYCLE_STATUS: {
   i18n_label: string;
-  value: "not_started" | "in_progress" | "testing" | "completed" | "cancelled";
+  value: TCycleStatusValue;
   i18n_title: string;
   color: string;
   textColor: string;
@@ -28,6 +36,14 @@ export const CYCLE_STATUS: {
     color: "#8B5CF6",
     textColor: "text-purple-500",
     bgColor: "bg-purple-50",
+  },
+  {
+    i18n_label: "已退回",
+    value: "returned",
+    i18n_title: "已退回",
+    color: "#EF4444",
+    textColor: "text-red-500",
+    bgColor: "bg-red-50",
   },
   {
     i18n_label: "未开始",
@@ -54,3 +70,12 @@ export const CYCLE_STATUS: {
     bgColor: "bg-surface-2",
   },
 ];
+
+export const CYCLE_STATUS_TRANSITIONS: Record<TCycleStatusValue, TCycleStatusValue[]> = {
+  not_started: ["in_progress", "cancelled"],
+  in_progress: ["testing", "cancelled"],
+  testing: ["completed", "cancelled", "returned"],
+  returned: ["testing", "cancelled"],
+  completed: [],
+  cancelled: ["in_progress"],
+};

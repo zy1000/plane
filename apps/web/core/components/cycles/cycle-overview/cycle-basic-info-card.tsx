@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { CYCLE_STATUS } from "@plane/constants";
+import { CYCLE_STATUS, CYCLE_STATUS_TRANSITIONS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { PieChart } from "@plane/propel/charts/pie-chart";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
@@ -25,13 +25,6 @@ type Props = {
 };
 
 const ISSUE_TYPE_RING_COLORS = ["#1D4ED8", "#2563EB", "#3B82F6", "#60A5FA", "#93C5FD", "#14B8A6", "#8B5CF6"];
-const statusOptionsByCurrentStatus: Record<NonNullable<ICycle["status"]>, NonNullable<ICycle["status"]>[]> = {
-  not_started: ["in_progress", "cancelled"],
-  in_progress: ["testing", "cancelled"],
-  testing: ["completed", "cancelled"],
-  completed: [],
-  cancelled: ["in_progress"],
-};
 const isCssColor = (value?: string): value is string =>
   !!value &&
   (value.startsWith("#") ||
@@ -58,7 +51,7 @@ export const CycleBasicInfoCard = ({ workspaceSlug, projectId, cycleId, cycleDet
   const cycleStatus = (cycleDetails?.status ?? "not_started") as NonNullable<ICycle["status"]>;
   const cycleOwner = cycleDetails ? getUserDetails(cycleDetails.owned_by_id) : undefined;
   const statusInfo = CYCLE_STATUS.find((status) => status.value === cycleStatus);
-  const statusOptions = statusOptionsByCurrentStatus[cycleStatus] ?? [];
+  const statusOptions = CYCLE_STATUS_TRANSITIONS[cycleStatus] ?? [];
   const startDate = getDate(cycleDetails?.start_date);
   const endDate = getDate(cycleDetails?.end_date);
   const durationLabel = `${startDate ? renderFormattedDate(startDate, "yyyy.MM.dd") : "-"} ~ ${

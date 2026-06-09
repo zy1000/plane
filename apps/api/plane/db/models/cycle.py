@@ -64,6 +64,7 @@ class Cycle(ProjectBaseModel):
         NOT_STARTED = '未开始'
         IN_PROGRESS = '进行中'
         TESTING = '测试中'
+        RETURNED = '已退回'
         COMPLETED = '已完成'
         CANCELLED = '已取消'
 

@@ -11,7 +11,13 @@ import { useParams, usePathname, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { Eye, ArrowRight } from "lucide-react";
 // plane imports
-import { CYCLE_STATUS, EUserPermissions, EUserPermissionsLevel, IS_FAVORITE_MENU_OPEN } from "@plane/constants";
+import {
+  CYCLE_STATUS,
+  CYCLE_STATUS_TRANSITIONS,
+  EUserPermissions,
+  EUserPermissionsLevel,
+  IS_FAVORITE_MENU_OPEN,
+} from "@plane/constants";
 import { useLocalStorage } from "@plane/hooks";
 import { useTranslation } from "@plane/i18n";
 import { TransferIcon, WorkItemsIcon, MembersPropertyIcon } from "@plane/propel/icons";
@@ -106,14 +112,7 @@ export const CycleListItemAction = observer(function CycleListItemAction(props: 
       currentProjectDisplayFilters?.group_by === "state" ||
       currentProjectDisplayFilters?.group_by === "release" ||
       currentProjectDisplayFilters?.group_by === "none");
-  const statusOptionsByCurrentStatus: Record<NonNullable<ICycle["status"]>, NonNullable<ICycle["status"]>[]> = {
-    not_started: ["in_progress", "cancelled"],
-    in_progress: ["testing", "cancelled"],
-    testing: ["completed", "cancelled"],
-    completed: [],
-    cancelled: [],
-  };
-  const statusOptions = statusOptionsByCurrentStatus[cycleStatus as NonNullable<ICycle["status"]>] ?? [];
+  const statusOptions = CYCLE_STATUS_TRANSITIONS[cycleStatus as NonNullable<ICycle["status"]>] ?? [];
 
   const showIssueCount = useMemo(
     () => showIssueCountProperty && cycleStatus !== "completed" && cycleStatus !== "cancelled",
