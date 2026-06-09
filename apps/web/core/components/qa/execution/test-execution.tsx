@@ -96,7 +96,7 @@ export default function TestExecutionPage() {
     plan_case_result?: Record<string, string>;
   }>({});
   const [attachments, setAttachments] = React.useState<any[]>([]);
-  const [activeTab, setActiveTab] = React.useState<"basic" | "requirement" | "work" | "defect" | "history">("basic");
+  const [activeTab, setActiveTab] = React.useState<"basic" | "requirement" | "work" | "defect" | "attachment" | "history">("basic");
   const [currentCount, setCurrentCount] = React.useState<number>(0);
   const [reviewValue, setReviewValue] = React.useState<string | null>(null);
   const [autoNext, setAutoNext] = React.useState<boolean>(true);
@@ -1161,6 +1161,18 @@ export default function TestExecutionPage() {
                           </button>
                           <button
                             type="button"
+                            onClick={() => setActiveTab("attachment")}
+                            className={`flex items-center gap-1.5 px-2 py-3 text-sm leading-5 font-medium -mb-px border-b-2 transition-colors ${
+                              activeTab === "attachment"
+                                ? "text-accent-primary border-accent-strong"
+                                : "text-secondary border-transparent hover:text-accent-primary"
+                            }`}
+                          >
+                            <LucideIcons.Paperclip size={16} aria-hidden="true" />
+                            附件
+                          </button>
+                          <button
+                            type="button"
                             onClick={async () => {
                               setActiveTab("history");
                               if (!workspaceSlug || !planId || !selectedCaseId) return;
@@ -1292,47 +1304,6 @@ export default function TestExecutionPage() {
                                 />
                               </div>
 
-                              <div id="attachments-section" className="scroll-mb-16">
-                                <div className="mb-2 flex items-center justify-between">
-                                  <span className="flex items-center gap-2 text-sm font-medium text-gray-700">
-                                    附件
-                                  </span>
-                                </div>
-                                {attachments.length === 0 ? (
-                                  <div className="p-3 text-sm text-secondary">暂无附件</div>
-                                ) : (
-                                  <Table
-                                    size="small"
-                                    pagination={false}
-                                    rowKey={(r: any) => String(r?.id)}
-                                    dataSource={attachments}
-                                    columns={[
-                                      {
-                                        title: "文件名",
-                                        dataIndex: ["attributes", "name"],
-                                        key: "name",
-                                        render: (_: any, record: any) => (
-                                          <span className="truncate block max-w-[480px]">
-                                            {String(record?.attributes?.name || record?.filename || record?.id)}
-                                          </span>
-                                        ),
-                                      },
-                                      {
-                                        title: "操作",
-                                        key: "action",
-                                        width: 120,
-                                        render: (_: any, record: any) => (
-                                          <Tooltip title="下载">
-                                            <Button type="link" size="small" onClick={() => handleDownloadAttachment(record)}>
-                                              下载
-                                            </Button>
-                                          </Tooltip>
-                                        ),
-                                      },
-                                    ]}
-                                  />
-                                )}
-                              </div>
                             </div>
                           )}
                         </Transition>
@@ -1385,6 +1356,55 @@ export default function TestExecutionPage() {
                                 defaultType="Bug"
                                 reloadToken={recordsRefreshKey}
                               />
+                            </div>
+                          )}
+                        </Transition>
+
+                        <Transition
+                          show={activeTab === "attachment"}
+                          enter="transition duration-150 ease-out"
+                          enterFrom="transform scale-95 opacity-0"
+                          enterTo="transform scale-100 opacity-100"
+                          leave="transition duration-100 ease-in"
+                          leaveFrom="transform scale-100 opacity-100"
+                          leaveTo="transform scale-95 opacity-0"
+                        >
+                          {activeTab === "attachment" && (
+                            <div id="attachments-section" className="min-h-[550px] scroll-mb-16">
+                              {attachments.length === 0 ? (
+                                <div className="p-3 text-sm text-secondary">暂无附件</div>
+                              ) : (
+                                <Table
+                                  size="small"
+                                  pagination={false}
+                                  rowKey={(r: any) => String(r?.id)}
+                                  dataSource={attachments}
+                                  columns={[
+                                    {
+                                      title: "文件名",
+                                      dataIndex: ["attributes", "name"],
+                                      key: "name",
+                                      render: (_: any, record: any) => (
+                                        <span className="truncate block max-w-[480px]">
+                                          {String(record?.attributes?.name || record?.filename || record?.id)}
+                                        </span>
+                                      ),
+                                    },
+                                    {
+                                      title: "操作",
+                                      key: "action",
+                                      width: 120,
+                                      render: (_: any, record: any) => (
+                                        <Tooltip title="下载">
+                                          <Button type="link" size="small" onClick={() => handleDownloadAttachment(record)}>
+                                            下载
+                                          </Button>
+                                        </Tooltip>
+                                      ),
+                                    },
+                                  ]}
+                                />
+                              )}
                             </div>
                           )}
                         </Transition>
