@@ -13,6 +13,7 @@ import { ModalHeader } from "./update-modal/modal-header";
 import { TitleInput } from "./update-modal/title-input";
 import { CaseMetaForm } from "./update-modal/case-meta-form";
 import { BasicInfoPanel } from "./update-modal/basic-info-panel";
+import { AttachmentsPanel } from "./update-modal/attachments-panel";
 import { SideInfoPanel } from "./update-modal/side-info-panel";
 import { FileUploadService, generateFileUploadPayload, getFileMetaDataForUpload } from "@plane/services";
 import { WorkItemDisplayModal } from "./work-item-display-modal";
@@ -952,14 +953,14 @@ function UpdateModalBody({ open, onClose, caseId, workspaceSlug: propWorkspaceSl
                   </button>
                   <button
                     type="button"
-                    onClick={() => setActiveTab("activity")}
+                    onClick={() => setActiveTab("attachments")}
                     className={`px-2 py-3 text-sm leading-5 font-medium -mb-px border-b-2 transition-colors ${
-                      activeTab === "activity"
+                      activeTab === "attachments"
                         ? "text-accent-primary border-accent-strong"
                         : "text-secondary border-transparent hover:text-accent-primary"
                     }`}
                   >
-                    活动
+                    附件
                   </button>
                 </nav>
                 <div className="flex-shrink-0 pt-2">
@@ -1006,13 +1007,15 @@ function UpdateModalBody({ open, onClose, caseId, workspaceSlug: propWorkspaceSl
                 textResultValue={textResultValue}
                 remarkValue={remarkValue ?? ""}
                 onSave={handleSaveBasicInfo}
-                attachmentsLoading={attachmentsLoading}
-                caseAttachments={caseAttachments}
-                fileInputRef={fileInputRef}
-                onPickAttachments={handlePickAttachments}
-                onFilesChosen={handleFilesChosen}
-                onDownloadAttachment={handleDownloadAttachment}
-                onRemoveCaseAttachment={(id) => handleRemoveCaseAttachment(id)}
+                activityContent={
+                  caseId && workspaceSlug && projectIdStr ? (
+                    <TestCaseActivityTab
+                      workspaceSlug={String(workspaceSlug)}
+                      projectId={projectIdStr}
+                      caseId={String(caseId)}
+                    />
+                  ) : null
+                }
               />
             )}
             {activeTab === "execution" && caseId && (
@@ -1235,11 +1238,15 @@ function UpdateModalBody({ open, onClose, caseId, workspaceSlug: propWorkspaceSl
                 onCountChange={(n) => setCurrentCount(n)}
               />
             )}
-            {activeTab === "activity" && caseId && workspaceSlug && projectIdStr && (
-              <TestCaseActivityTab
-                workspaceSlug={String(workspaceSlug)}
-                projectId={projectIdStr}
-                caseId={String(caseId)}
+            {activeTab === "attachments" && (
+              <AttachmentsPanel
+                attachmentsLoading={attachmentsLoading}
+                caseAttachments={caseAttachments}
+                fileInputRef={fileInputRef}
+                onPickAttachments={handlePickAttachments}
+                onFilesChosen={handleFilesChosen}
+                onDownloadAttachment={handleDownloadAttachment}
+                onRemoveCaseAttachment={(id) => handleRemoveCaseAttachment(id)}
               />
             )}
           </div>
