@@ -6,7 +6,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { PageHead } from "@/components/core/page-title";
 import { Breadcrumbs } from "@plane/ui";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
-import { Row, Col, Card, Input, Tag, Spin, message, Button, Table, Tooltip, Radio, Select, Tree, Modal, Checkbox } from "antd";
+import { Row, Col, Card, Input, Tag, Spin, message, Button, Table, Tooltip, Radio, Select, Tree, Modal, Checkbox, Upload } from "antd";
 import type { TreeProps } from "antd";
 import { AppstoreOutlined, DownOutlined } from "@ant-design/icons";
 import * as LucideIcons from "lucide-react";
@@ -24,6 +24,7 @@ import { WorkItemDisplayModal } from "../cases/work-item-display-modal";
 import { ReviewRecordsPanel } from "../review/review-records";
 import { CreateUpdateIssueModal } from "@/components/issues/issue-modal/modal";
 import { ExecutionRecordsPanel } from "./execution-records";
+import { usePendingExecutionFiles } from "./use-pending-execution-files";
 import { BugIssueModal } from "@/components/issues/issue-modal/bug-modal";
 
 type ReviewCaseRow = {
@@ -43,6 +44,12 @@ type PlanCaseRow = {
   assignees: Array<string>;
   result: string;
   created_by: string | number | null;
+};
+
+const formatFileSize = (bytes: number): string => {
+  if (!bytes || bytes < 1024) return `${bytes || 0} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 };
 
 export default function TestExecutionPage() {
@@ -102,6 +109,8 @@ export default function TestExecutionPage() {
   const [stepActualResultMap, setStepActualResultMap] = React.useState<Record<number, string>>({});
   const [stepExecResultMap, setStepExecResultMap] = React.useState<Record<number, string>>({});
   const [isCreateDefectOpen, setIsCreateDefectOpen] = React.useState<boolean>(false);
+  const { pendingFiles, add: addPendingFile, remove: removePendingFile, clear: clearPendingFiles, uploadAll: uploadPendingFiles } =
+    usePendingExecutionFiles();
 
   const [mounted, setMounted] = React.useState(false);
   const leftRef = React.useRef<HTMLDivElement | null>(null);
@@ -521,15 +530,18 @@ export default function TestExecutionPage() {
     else def = keys[0] ?? null;
     setReviewValue(def);
     setReason("");
+    clearPendingFiles();
   }, [selectedCaseId, cases, currentUser?.id, enumsData?.plan_case_result]);
 
   const casesRef = React.useRef(cases);
   const selectedCaseIdRef = React.useRef(selectedCaseId);
   const autoNextRef = React.useRef(autoNext);
+  const pendingFilesRef = React.useRef(pendingFiles);
   React.useEffect(() => {
     casesRef.current = cases;
     selectedCaseIdRef.current = selectedCaseId;
     autoNextRef.current = autoNext;
+    pendingFilesRef.current = pendingFiles;
   });
 
   const goToNextCase = async () => {
@@ -604,8 +616,29 @@ export default function TestExecutionPage() {
         if (!payload) return;
         setSubmitLoading(true);
         try {
-          await planService.caseExecute(String(workspaceSlug), payload);
+          const res = await planService.caseExecute(String(workspaceSlug), payload);
           message.success("执行结果提交成功");
+
+          // 提交成功后，将暂存的附件真正上传并绑定到本次执行记录
+          const filesToUpload = pendingFilesRef.current;
+          if (filesToUpload.length > 0) {
+            const records: Array<{ case_id: string; record_id: string }> = Array.isArray((res as any)?.records)
+              ? (res as any).records
+              : [];
+            const currentCaseId = String(selectedCaseIdRef.current || "");
+            const recordId =
+              records.find((r) => String(r.case_id) === currentCaseId)?.record_id ?? records[0]?.record_id;
+            if (recordId) {
+              const { failedCount } = await uploadPendingFiles(String(workspaceSlug), String(recordId), filesToUpload);
+              if (failedCount > 0) {
+                message.warning(`有 ${failedCount} 个附件上传失败`);
+              }
+              clearPendingFiles();
+            } else {
+              message.warning("未获取到执行记录，附件未上传");
+            }
+          }
+
           setReason("");
           setStepActualResultMap({});
           setStepExecResultMap({});
@@ -625,7 +658,7 @@ export default function TestExecutionPage() {
           setSubmitLoading(false);
         }
       }, 500),
-    [workspaceSlug, keyword, selectedCaseId, selectedRepositoryId, selectedModuleId]
+    [workspaceSlug, keyword, selectedCaseId, selectedRepositoryId, selectedModuleId, uploadPendingFiles, clearPendingFiles]
   );
 
   React.useEffect(() => {
@@ -1413,6 +1446,41 @@ export default function TestExecutionPage() {
                           }}
                         />
                       </div>
+                      {pendingFiles.length > 0 && (
+                        <div className="rounded-md border border-subtle bg-layer-1/60 px-3 py-2">
+                          <div className="mb-2 flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-2 text-xs font-medium text-secondary">
+                              <span className="flex size-5 items-center justify-center rounded bg-surface-1 text-accent-primary">
+                                <LucideIcons.Paperclip size={13} />
+                              </span>
+                              <span>待上传附件</span>
+                              <span className="text-placeholder">提交结果成功后自动绑定</span>
+                            </div>
+                            <span className="text-xs text-placeholder">共 {pendingFiles.length} 个</span>
+                          </div>
+                          <div className="flex max-h-20 flex-wrap gap-2 overflow-y-auto vertical-scrollbar scrollbar-sm pr-1">
+                            {pendingFiles.map((pf) => (
+                              <Tooltip key={pf.id} title={`${pf.file.name}（${formatFileSize(pf.file.size)}）`}>
+                                <div className="group flex max-w-[260px] items-center gap-2 rounded border border-subtle bg-surface-1 px-2 py-1.5 text-xs shadow-sm transition-colors hover:border-accent-strong">
+                                  <LucideIcons.FileText size={13} className="shrink-0 text-secondary" />
+                                  <div className="min-w-0">
+                                    <div className="truncate text-primary">{pf.file.name}</div>
+                                    <div className="text-[11px] leading-4 text-placeholder">{formatFileSize(pf.file.size)}</div>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    aria-label="移除附件"
+                                    onClick={() => removePendingFile(pf.id)}
+                                    className="ml-1 flex size-4 shrink-0 items-center justify-center rounded text-placeholder transition-colors hover:bg-layer-2 hover:text-danger-primary"
+                                  >
+                                    <LucideIcons.X size={12} />
+                                  </button>
+                                </div>
+                              </Tooltip>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                       <div>
                         <div className="flex items-center gap-2">
                           <button
@@ -1432,6 +1500,25 @@ export default function TestExecutionPage() {
                             >
                               新增缺陷
                             </button>
+                          </Tooltip>
+                          <Tooltip title="附件将在提交结果成功后才上传并绑定">
+                            <Upload
+                              multiple
+                              showUploadList={false}
+                              beforeUpload={(file) => {
+                                addPendingFile(file as unknown as File);
+                                return false;
+                              }}
+                            >
+                              <button
+                                type="button"
+                                disabled={!selectedCaseId}
+                                className="border border-subtle text-secondary hover:bg-layer-1 px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                <LucideIcons.Paperclip size={13} />
+                                上传附件
+                              </button>
+                            </Upload>
                           </Tooltip>
                           <Checkbox checked={autoNext} onChange={(e) => setAutoNext(e.target.checked)}>
                             执行后自动切换下一条

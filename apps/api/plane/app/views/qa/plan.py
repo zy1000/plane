@@ -563,6 +563,7 @@ class PlanView(BaseViewSet):
 
         if isinstance(case_ids, str):
             case_ids = [case_ids]
+        created_records = []
         for case_id in case_ids:
 
             plan_case = PlanCase.objects.get(plan_id=plan_id, case_id=case_id)
@@ -581,6 +582,9 @@ class PlanView(BaseViewSet):
                 steps=steps if steps else plan_case.case.steps,
                 assignee_id=assignee,
                 plan_case=plan_case,
+            )
+            created_records.append(
+                {"case_id": str(case_id), "record_id": str(pcr.id)}
             )
             plan_case.result = result
             plan_case.save()
@@ -608,7 +612,10 @@ class PlanView(BaseViewSet):
             else:
                 plan.state = TestPlan.State.PROGRESS
             plan.save()
-        return Response(status=status.HTTP_201_CREATED)
+        return Response(
+            status=status.HTTP_201_CREATED,
+            data={"records": created_records},
+        )
 
     @action(detail=False, methods=["post"], url_path="export")
     def export(self, request, slug):
