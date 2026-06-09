@@ -375,7 +375,7 @@ export default function TestPlanDetailPage() {
   };
 
   const renderResult = (result: any) => {
-    if (!result) return <span className="text-sm text-tertiary">-</span>;
+    if (!result || result === "-") return null;
     const colorMap: Record<string, string> = {
       通过: "success",
       不通过: "error",
@@ -490,7 +490,7 @@ export default function TestPlanDetailPage() {
       render: (_: unknown, record: TestPlan) => {
         const begin = record.begin_time ? formatDate(record.begin_time) : "-";
         const end = record.end_time ? formatDate(record.end_time) : "-";
-        if (!record.begin_time && !record.end_time) return "-";
+        if (!record.begin_time && !record.end_time) return null;
         return `${begin}-${end}`;
       },
     },
