@@ -5,7 +5,7 @@
  */
 
 import type { TSupportedOperators } from "@plane/types";
-import { CORE_OPERATORS } from "@plane/types";
+import { CORE_OPERATORS, EXTENDED_EQUALITY_OPERATOR } from "@plane/types";
 
 export type TFiltersOperatorConfigs = {
   allowedOperators: Set<TSupportedOperators>;
@@ -17,6 +17,6 @@ export type TUseFiltersOperatorConfigsProps = {
 };
 
 export const useFiltersOperatorConfigs = (_props: TUseFiltersOperatorConfigsProps): TFiltersOperatorConfigs => ({
-  allowedOperators: new Set(Object.values(CORE_OPERATORS)),
+  allowedOperators: new Set([...Object.values(CORE_OPERATORS), EXTENDED_EQUALITY_OPERATOR.CONTAINS]),
   allowNegative: false,
 });

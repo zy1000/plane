@@ -15,6 +15,7 @@ import {
   ModuleIcon,
   StatePropertyIcon,
   PriorityIcon,
+  SearchIcon,
   StateGroupIcon,
   MembersPropertyIcon,
   LabelPropertyIcon,
@@ -46,6 +47,7 @@ import {
   getLabelFilterConfig,
   getMentionFilterConfig,
   getModuleFilterConfig,
+  getNameFilterConfig,
   getPriorityFilterConfig,
   getProjectFilterConfig,
   getReleaseFilterConfig,
@@ -186,6 +188,17 @@ export const useWorkItemFiltersConfig = (props: TUseWorkItemFiltersConfigProps):
    * @returns True if the filter is enabled, false otherwise.
    */
   const isFilterEnabled = useCallback((key: TWorkItemFilterProperty) => filtersToShow.has(key), [filtersToShow]);
+
+  // name filter config
+  const nameFilterConfig = useMemo(
+    () =>
+      getNameFilterConfig<TWorkItemFilterProperty>("name")({
+        isEnabled: isFilterEnabled("name"),
+        filterIcon: SearchIcon,
+        ...operatorConfigs,
+      }),
+    [isFilterEnabled, operatorConfigs]
+  );
 
   // state group filter config
   const stateGroupFilterConfig = useMemo(
@@ -472,6 +485,7 @@ export const useWorkItemFiltersConfig = (props: TUseWorkItemFiltersConfigProps):
   return {
     areAllConfigsInitialized,
     configs: [
+      nameFilterConfig,
       stateFilterConfig,
       stateGroupFilterConfig,
       assigneeFilterConfig,
@@ -492,6 +506,7 @@ export const useWorkItemFiltersConfig = (props: TUseWorkItemFiltersConfigProps):
       ...customPropertyConfigs,
     ],
     configMap: {
+      name: nameFilterConfig,
       project_id: projectFilterConfig,
       state_group: stateGroupFilterConfig,
       state_id: stateFilterConfig,

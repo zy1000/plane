@@ -23,6 +23,7 @@ import { getProjectIssueScopeFromPathname } from "@/store/issue/project";
 // local imports
 import { WorkItemsModal } from "../analytics/work-items/modal";
 import { WorkItemFiltersToggle } from "../work-item-filters/filters-toggle";
+import { WorkItemSearch } from "./work-item-search";
 import {
   DisplayFiltersSelection,
   FiltersDropdown,
@@ -108,6 +109,7 @@ export const HeaderFilters = observer(function HeaderFilters(props: Props) {
         projectDetails={currentProjectDetails ?? undefined}
         isEpic={storeType === EIssuesStoreType.EPIC}
       />
+      {storeType === EIssuesStoreType.PROJECT && <WorkItemSearch entityType={storeType} entityId={filterEntityId} />}
       <div className="hidden @4xl:flex">
         <LayoutSelection
           layouts={LAYOUTS}

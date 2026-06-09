@@ -208,6 +208,7 @@ export const ISSUE_DISPLAY_FILTERS_BY_PAGE: TIssueFiltersToDisplayByPageType = {
   },
   issues: {
     filters: [
+      "name",
       "priority",
       "state_group",
       "state_id",
@@ -284,6 +285,7 @@ export const ISSUE_DISPLAY_FILTERS_BY_PAGE: TIssueFiltersToDisplayByPageType = {
   },
   requirements: {
     filters: [
+      "name",
       "priority",
       "state_group",
       "state_id",
@@ -360,6 +362,7 @@ export const ISSUE_DISPLAY_FILTERS_BY_PAGE: TIssueFiltersToDisplayByPageType = {
   },
   defects: {
     filters: [
+      "name",
       "priority",
       "state_group",
       "state_id",
