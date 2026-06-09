@@ -1132,7 +1132,8 @@ export default function TestCasesPage() {
       dataIndex: "review",
       key: "review",
       render: (v: string) => {
-        const color = reviewEnums?.CaseReviewThrough_Result?.[v]?.color || "default";
+        const rawColor = reviewEnums?.CaseReviewThrough_Result?.[v]?.color || "default";
+        const color = rawColor === "gray" ? "default" : rawColor;
         return (
           <Tag color={color} className="!inline-flex justify-center w-[55px]">
             {v || "-"}

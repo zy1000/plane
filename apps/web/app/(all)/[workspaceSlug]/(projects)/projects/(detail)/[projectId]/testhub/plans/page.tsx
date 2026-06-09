@@ -310,7 +310,8 @@ export default function TestPlanDetailPage() {
   };
 
   const renderState = (state: any) => {
-    const color = (Enums?.plan_state as any)?.[state] || "default";
+    const rawColor = (Enums?.plan_state as any)?.[state] || "default";
+    const color = rawColor === "gray" ? "default" : rawColor;
     const text = state ?? "-";
     return <Tag color={color}>{text}</Tag>;
   };

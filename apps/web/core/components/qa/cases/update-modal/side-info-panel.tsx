@@ -181,7 +181,8 @@ export function SideInfoPanel({
             <span className="text-sm text-primary flex-1 min-w-0 truncate">
               {(() => {
                 const v = String(caseData?.review ?? "-");
-                const color = (reviewEnums?.CaseReviewThrough_Result?.[v]?.color as any) || "default";
+                const rawColor = (reviewEnums?.CaseReviewThrough_Result?.[v]?.color as any) || "default";
+                const color = rawColor === "gray" ? "default" : rawColor;
                 return <Tag color={color}>{v || "-"}</Tag>;
               })()}
             </span>

@@ -763,7 +763,8 @@ export default function ReviewsPage() {
       key: "state",
       width: 140,
       render: (state: string) => {
-        const color = reviewEnums?.CaseReview_State?.[state]?.color || "default";
+        const rawColor = reviewEnums?.CaseReview_State?.[state]?.color || "default";
+        const color = rawColor === "gray" ? "default" : rawColor;
         return <Tag color={color}>{state || "-"}</Tag>;
       },
       filters: Object.entries(reviewEnums?.CaseReview_State || {}).map(([value, meta]) => ({
