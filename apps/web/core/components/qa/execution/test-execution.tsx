@@ -24,7 +24,6 @@ import { WorkItemDisplayModal } from "../cases/work-item-display-modal";
 import { ReviewRecordsPanel } from "../review/review-records";
 import { CreateUpdateIssueModal } from "@/components/issues/issue-modal/modal";
 import { ExecutionRecordsPanel } from "./execution-records";
-import { PlanCaseFilesContent } from "./plan-case-files-content";
 import { BugIssueModal } from "@/components/issues/issue-modal/bug-modal";
 
 type ReviewCaseRow = {
@@ -90,7 +89,7 @@ export default function TestExecutionPage() {
     plan_case_result?: Record<string, string>;
   }>({});
   const [attachments, setAttachments] = React.useState<any[]>([]);
-  const [activeTab, setActiveTab] = React.useState<"basic" | "requirement" | "work" | "defect" | "history" | "files">("basic");
+  const [activeTab, setActiveTab] = React.useState<"basic" | "requirement" | "work" | "defect" | "history">("basic");
   const [currentCount, setCurrentCount] = React.useState<number>(0);
   const [reviewValue, setReviewValue] = React.useState<string | null>(null);
   const [autoNext, setAutoNext] = React.useState<boolean>(true);
@@ -1148,18 +1147,6 @@ export default function TestExecutionPage() {
                             <LucideIcons.History size={16} aria-hidden="true" />
                             执行历史
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => setActiveTab("files")}
-                            className={`flex items-center gap-1.5 px-2 py-3 text-sm leading-5 font-medium -mb-px border-b-2 transition-colors ${
-                              activeTab === "files"
-                                ? "text-accent-primary border-accent-strong"
-                                : "text-secondary border-transparent hover:text-accent-primary"
-                            }`}
-                          >
-                            <LucideIcons.Paperclip size={16} aria-hidden="true" />
-                            文件
-                          </button>
                         </nav>
                       </div>
 
@@ -1388,23 +1375,6 @@ export default function TestExecutionPage() {
                           )}
                         </Transition>
 
-                        <Transition
-                          show={activeTab === "files"}
-                          enter="transition duration-150 ease-out"
-                          enterFrom="transform scale-95 opacity-0"
-                          enterTo="transform scale-100 opacity-100"
-                          leave="transition duration-100 ease-in"
-                          leaveFrom="transform scale-100 opacity-100"
-                          leaveTo="transform scale-95 opacity-0"
-                        >
-                          {activeTab === "files" && (
-                            <PlanCaseFilesContent
-                              workspaceSlug={workspaceSlug}
-                              planId={planId}
-                              caseId={selectedCaseId}
-                            />
-                          )}
-                        </Transition>
                       </div>
                     </div>
                   )}

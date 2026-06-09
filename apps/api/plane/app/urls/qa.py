@@ -42,14 +42,12 @@ from plane.app.views.qa.review import (
     CaseReviewView,
     ReviewListAPIView,
 )
-from plane.app.views.qa.plan_case_file import PlanCaseFileAPI
 from plane.app.views.qa.execution_file import PlanCaseRecordFileAPI
 
 router = SimpleRouter()
 router.register("review", CaseReviewView, basename="review")
 router.register("plan", PlanView, basename="plan")
 router.register("case", CaseAPI, basename="case")
-router.register("plan-case-file", PlanCaseFileAPI, basename="plan-case-file")
 router.register("execution-file", PlanCaseRecordFileAPI, basename="execution-file")
 
 urlpatterns = [
