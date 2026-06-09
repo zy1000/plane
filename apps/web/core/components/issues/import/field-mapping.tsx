@@ -56,6 +56,7 @@ export function FieldMapping({ headers, mapping, onChange }: Props) {
           标题
         </Tag>
         <Tag color="red">类型</Tag>
+        <Tag color="red">负责人</Tag>
         其余属性可选。
         <div className="mt-1 text-xs text-placeholder">
           提示：「需求项（表格列）」可映射多列，每列会作为表格的一列写入工作项描述，单元格内可用换行分隔多行。

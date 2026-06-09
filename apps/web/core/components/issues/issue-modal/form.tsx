@@ -8,6 +8,7 @@ import type { FC } from "react";
 import React, { useState, useRef, useEffect } from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
+import type { FieldErrors } from "react-hook-form";
 import { FormProvider, useForm } from "react-hook-form";
 // editor
 import { ETabIndices, DEFAULT_WORK_ITEM_FORM_VALUES } from "@plane/constants";
@@ -320,6 +321,17 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
     else onChange(null);
   };
 
+  // 表单校验失败（如负责人未填）时给出明确的 toast 提示，避免用户点了提交却没有任何反馈。
+  const handleFormSubmitInvalid = (errors: FieldErrors<TIssue>) => {
+    const message = errors.assignee_ids?.message;
+    if (message)
+      setToast({
+        type: TOAST_TYPE.ERROR,
+        title: t("error"),
+        message: String(message),
+      });
+  };
+
   // debounced duplicate issues swr
   const { duplicateIssues } = useDebouncedDuplicateIssues(
     workspaceSlug?.toString(),
@@ -387,7 +399,7 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
         <div className="max-h-full min-h-0 w-full rounded-lg">
           <form
             ref={formRef}
-            onSubmit={handleSubmit((data) => handleFormSubmit(data))}
+            onSubmit={handleSubmit((data) => handleFormSubmit(data), handleFormSubmitInvalid)}
             className="flex max-h-[min(85vh,56rem)] min-h-0 w-full flex-col"
           >
             <div className="flex-shrink-0 rounded-t-lg bg-surface-1 p-5">

@@ -73,7 +73,7 @@ IMPORT_FIELD_DEFINITIONS: list[dict[str, Any]] = [
     {"key": FIELD_TYPE, "label": "类型", "required": True},
     {"key": FIELD_DESCRIPTION, "label": "描述", "required": False},
     {"key": FIELD_PRIORITY, "label": "优先级", "required": False},
-    {"key": FIELD_ASSIGNEES, "label": "负责人", "required": False},
+    {"key": FIELD_ASSIGNEES, "label": "负责人", "required": True},
     {"key": FIELD_LABELS, "label": "标签", "required": False},
     {"key": FIELD_MODULE, "label": "模块", "required": False},
     {"key": FIELD_CYCLE, "label": "迭代", "required": False},
@@ -501,11 +501,13 @@ class _RowResolver:
             else:
                 result.resolved[FIELD_PRIORITY] = normalized
 
-        # assignees ---------------------------------------------------------
+        # assignees（必填：每行至少一名有效负责人） --------------------------
         assignees_column = inv.get(FIELD_ASSIGNEES)
         if assignees_column:
             raw_value = raw_row.get(assignees_column)
             names = _split_multi(raw_value)
+            if not names:
+                result.errors.append("负责人不能为空")
             users: list[Any] = []
             for name in names:
                 candidates = self.member_by_display_name.get(name) or []

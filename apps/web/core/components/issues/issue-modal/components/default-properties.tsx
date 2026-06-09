@@ -22,7 +22,7 @@ import { ParentPropertyIcon } from "@plane/propel/icons";
 import type { ISearchIssueResponse, TIssue } from "@plane/types";
 // ui
 import { CustomMenu, Tooltip } from "@plane/ui";
-import { getDate, renderFormattedPayloadDate, getTabIndex } from "@plane/utils";
+import { cn, getDate, renderFormattedPayloadDate, getTabIndex } from "@plane/utils";
 // components
 import { CycleDropdown } from "@/components/dropdowns/cycle";
 import { DateDropdown } from "@/components/dropdowns/date";
@@ -108,6 +108,8 @@ export const IssueDefaultProperties = observer(function IssueDefaultProperties(p
     allowProjectPermissionKeys([PROJECT_RELEASES_ISSUE_MANAGE_PERMISSION_KEY], workspaceSlug, projectId)
   );
 
+  const ASSIGNEE_REQUIRED_HINT = "请至少选择一名负责人";
+
   const NO_CYCLE_PERMISSION_HINT = "你没有将工作项加入迭代的权限，如需使用请联系项目管理员";
   const NO_MODULE_PERMISSION_HINT = "你没有将工作项加入模块的权限，如需使用请联系项目管理员";
   const NO_RELEASE_PERMISSION_HINT = "你没有将工作项加入发布的权限，如需使用请联系项目管理员";
@@ -160,7 +162,11 @@ export const IssueDefaultProperties = observer(function IssueDefaultProperties(p
       <Controller
         control={control}
         name="assignee_ids"
-        render={({ field: { value, onChange } }) => (
+        rules={{
+          // 创建工作项时负责人必填；编辑模式（id 存在）不强制，避免阻断历史数据的更新。
+          validate: (value) => (!id && (!Array.isArray(value) || value.length === 0) ? ASSIGNEE_REQUIRED_HINT : undefined),
+        }}
+        render={({ field: { value, onChange }, fieldState: { error } }) => (
           <div className="h-7">
             <MemberDropdown
               projectId={projectId ?? undefined}
@@ -170,7 +176,7 @@ export const IssueDefaultProperties = observer(function IssueDefaultProperties(p
                 handleFormChange();
               }}
               buttonVariant={value?.length > 0 ? "transparent-without-text" : "border-with-text"}
-              buttonClassName={value?.length > 0 ? "hover:bg-transparent" : ""}
+              buttonClassName={cn(value?.length > 0 ? "hover:bg-transparent" : "", error ? "border-danger-strong" : "")}
               placeholder={t("assignees")}
               multiple
               tabIndex={getIndex("assignee_ids")}
