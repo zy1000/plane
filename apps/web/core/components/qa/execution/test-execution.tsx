@@ -506,6 +506,10 @@ export default function TestExecutionPage() {
   }, [cases, selectedCaseId, currentUser?.id]);
 
   React.useEffect(() => {
+    setActiveTab("basic");
+  }, [selectedCaseId]);
+
+  React.useEffect(() => {
     if (!selectedCaseId) return;
     const row = cases.find((item) => String(item.case) === String(selectedCaseId || ""));
     const reviewers = Array.isArray(row?.assignees) ? row!.assignees.map((id) => String(id)) : [];
