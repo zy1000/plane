@@ -1,4 +1,5 @@
 // plane imports
+import type { AxiosRequestConfig } from "axios";
 import { API_BASE_URL } from "@plane/constants";
 import { FileUploadService, generateFileUploadPayload, getFileMetaDataForUpload } from "@plane/services";
 import type { TFileSignedURLResponse } from "@plane/types";
@@ -287,6 +288,84 @@ export class PlanService extends APIService {
 
   async downloadExecutionFile(workspaceSlug: string, fileId: string): Promise<string> {
     return this.get(`/api/workspaces/${workspaceSlug}/test/execution-file/download/`, {
+      params: { asset_id: fileId },
+    })
+      .then((response) => response?.data?.download_url as string)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async getPlanCaseFiles(
+    workspaceSlug: string,
+    planId: string,
+    caseId: string,
+    queries?: { page?: number; page_size?: number }
+  ): Promise<any> {
+    return this.get(`/api/workspaces/${workspaceSlug}/test/plan-case-file/list/`, {
+      params: { plan_id: planId, case_id: caseId, ...(queries || {}) },
+    })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async uploadPlanCaseFile(
+    workspaceSlug: string,
+    planId: string,
+    caseId: string,
+    file: File,
+    uploadProgressHandler?: AxiosRequestConfig["onUploadProgress"]
+  ): Promise<any> {
+    const fileMetaData = await getFileMetaDataForUpload(file);
+    const presignResponse = await this.post(
+      `/api/workspaces/${workspaceSlug}/test/plan-case-file/upload/`,
+      {
+        ...fileMetaData,
+        plan_id: planId,
+        case_id: caseId,
+      }
+    )
+      .then((response) => response?.data as { upload_data: TFileSignedURLResponse["upload_data"]; asset_id: string })
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+
+    if (!presignResponse?.upload_data || !presignResponse?.asset_id) {
+      throw new Error("Failed to obtain presigned upload data");
+    }
+
+    const fileUploadPayload = generateFileUploadPayload(
+      { upload_data: presignResponse.upload_data, asset_id: presignResponse.asset_id, asset_url: "" } as TFileSignedURLResponse,
+      file
+    );
+
+    const fileUploader = new FileUploadService();
+    await fileUploader.uploadFile(presignResponse.upload_data.url, fileUploadPayload, uploadProgressHandler);
+
+    await this.patch(
+      `/api/workspaces/${workspaceSlug}/test/plan-case-file/${presignResponse.asset_id}/uploaded/`,
+      { attributes: fileMetaData }
+    ).catch((error) => {
+      throw error?.response?.data;
+    });
+
+    return { asset_id: presignResponse.asset_id };
+  }
+
+  async deletePlanCaseFile(workspaceSlug: string, fileId: string): Promise<void> {
+    return this.delete(`/api/workspaces/${workspaceSlug}/test/plan-case-file/delete/`, {
+      asset_id: fileId,
+    })
+      .then(() => undefined)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async downloadPlanCaseFile(workspaceSlug: string, fileId: string): Promise<string> {
+    return this.get(`/api/workspaces/${workspaceSlug}/test/plan-case-file/download/`, {
       params: { asset_id: fileId },
     })
       .then((response) => response?.data?.download_url as string)

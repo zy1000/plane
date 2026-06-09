@@ -44,6 +44,7 @@ CATEGORY_SLUG_MAP: dict[str, Tuple[str, str]] = {
     "PAGES_CATEGORY":             ("页面",     "pages"),
     "CYCLES_CATEGORY":            ("迭代",     "cycles"),
     "RELEASES_CATEGORY":          ("发布",     "releases"),
+    "PLANS_CATEGORY":             ("测试计划", "plans"),
     "CASES_CATEGORY":             ("测试用例", "cases"),
     "PLAN_CASE_RECORDS_CATEGORY": ("用例执行", "plan-case-records"),
     # 临时分类：业务实体未就绪时 FileAsset 先落入 ``_temp`` 子目录。
@@ -64,6 +65,7 @@ ENTITY_TO_CATEGORY: dict[str, str] = {
     "PAGE_DESCRIPTION":         "PAGES_CATEGORY",
     "CYCLE_FILE":               "CYCLES_CATEGORY",
     "RELEASE_FILE":             "RELEASES_CATEGORY",
+    "PLAN_CASE_FILE":           "PLANS_CATEGORY",
     "CASE_ATTACHMENT":          "CASES_CATEGORY",
     "PLAN_CASE_RECORD_FILE":    "PLAN_CASE_RECORDS_CATEGORY",
 }

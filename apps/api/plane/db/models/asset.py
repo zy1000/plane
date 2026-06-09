@@ -84,6 +84,8 @@ class FilePath(MPTTModel):
         TESTCASE = "TESTCASE"
         CYCLE = "CYCLE"
         RELEASE = "RELEASE"
+        PLAN = "PLAN"
+        PLAN_CASE = "PLAN_CASE"
         PLAN_CASE_RECORD = "PLAN_CASE_RECORD"
         USER_ROOT = "USER_ROOT"
         USER = "USER"
@@ -93,6 +95,7 @@ class FilePath(MPTTModel):
         PAGES_CATEGORY = "PAGES_CATEGORY"
         CYCLES_CATEGORY = "CYCLES_CATEGORY"
         RELEASES_CATEGORY = "RELEASES_CATEGORY"
+        PLANS_CATEGORY = "PLANS_CATEGORY"
         CASES_CATEGORY = "CASES_CATEGORY"
         PLAN_CASE_RECORDS_CATEGORY = "PLAN_CASE_RECORDS_CATEGORY"
         # 临时分类节点：业务实体（issue/page/...）尚未创建时，FileAsset 先挂到 _temp
@@ -155,6 +158,7 @@ class FileAsset(BaseModel):
         RELEASE_FILE = "RELEASE_FILE"
         CYCLE_COMMENT_DESCRIPTION = "CYCLE_COMMENT_DESCRIPTION"
         RELEASE_COMMENT_DESCRIPTION = "RELEASE_COMMENT_DESCRIPTION"
+        PLAN_CASE_FILE = "PLAN_CASE_FILE"
         PLAN_CASE_RECORD_FILE = "PLAN_CASE_RECORD_FILE"
         TEST_CASE_COMMENT_DESCRIPTION = "TEST_CASE_COMMENT_DESCRIPTION"
 
@@ -200,6 +204,9 @@ class FileAsset(BaseModel):
     )
     test_case_comment = models.ForeignKey(
         "db.TestCaseComment", on_delete=models.CASCADE, null=True, related_name="assets"
+    )
+    plan_case = models.ForeignKey(
+        "db.PlanCase", on_delete=models.CASCADE, null=True, related_name="assets"
     )
     plan_case_record = models.ForeignKey(
         "db.PlanCaseRecord", on_delete=models.CASCADE, null=True, related_name="assets"

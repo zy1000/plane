@@ -33,6 +33,8 @@ bulk 绑定接口会通过 :func:`rebind_asset_to_path` 把对象 copy 到正式
 - ``CYCLE_FILE``                    → ``Workspace -> Project -> 迭代 -> Cycle``
 - ``RELEASE_FILE`` / ``RELEASE_COMMENT_DESCRIPTION``
                                     → ``Workspace -> Project -> 发布 -> Release``
+- ``PLAN_CASE_FILE``               → ``Workspace -> Project -> 测试计划 -> Plan -> PlanCase``
+-                                     （展示名取 ``plan_case.case.name``）
 - ``PLAN_CASE_RECORD_FILE``         → ``Workspace -> Project -> 用例执行 -> PlanCaseRecord``
                                       （展示名取 ``plan_case.case.name``）
 """
@@ -337,6 +339,27 @@ class _Resolver:
                 display_name=getattr(case, "name", "") or "",
             )
 
+        if et == "PLAN_CASE_FILE":
+            plan_case = self._get_related(asset, "plan_case")
+            if plan_case is None:
+                return self._temp_node(parent_for_category=proj_node, asset=asset)
+            plan = getattr(plan_case, "plan", None)
+            if plan is None:
+                return self._temp_node(parent_for_category=proj_node, asset=asset)
+            plan_node = self._get_or_create_node(
+                parent=cat_node,
+                entity_type="PLAN",
+                entity_id=plan.pk,
+                display_name=getattr(plan, "name", "") or "",
+            )
+            display = self._plan_case_name(plan_case)
+            return self._get_or_create_node(
+                parent=plan_node,
+                entity_type="PLAN_CASE",
+                entity_id=plan_case.pk,
+                display_name=display,
+            )
+
         if et == "PLAN_CASE_RECORD_FILE":
             record = self._get_related(asset, "plan_case_record")
             if record is None:
@@ -425,6 +448,13 @@ class _Resolver:
             return ""
         return getattr(case, "name", "") or ""
 
+    @staticmethod
+    def _plan_case_name(plan_case) -> str:
+        case = getattr(plan_case, "case", None)
+        if case is None:
+            return ""
+        return getattr(case, "name", "") or ""
+
 
 _SELECT_RELATED_FIELDS = (
     "workspace",
@@ -438,6 +468,9 @@ _SELECT_RELATED_FIELDS = (
     "release",
     "draft_issue",
     "user",
+    "plan_case",
+    "plan_case__plan",
+    "plan_case__case",
     "plan_case_record",
     "plan_case_record__plan_case",
     "plan_case_record__plan_case__case",
