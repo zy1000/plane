@@ -1,0 +1,235 @@
+# 工作流（工作项状态流转）改造需求文档
+
+> 状态：草案（待评审）
+> 范围：`apps/api`（后端工作流/审批）+ `apps/web`（前端工作流配置与状态变更交互）
+> 核心诉求：把现有工作流里"哪些人可以操作"这一个笼统概念，拆分为 **发起人 / 目标状态负责人 / 审批人** 三个更细的颗粒度。
+
+---
+
+## 1. 背景与目标
+
+### 1.1 现状一句话描述
+当前每个项目、每种工作项类型下可以配置一个工作流。工作流由若干"流转边"组成，每条流转边定义：
+
+- 可以**从哪个状态 → 到哪个状态**（`from_state → to_state`）
+- **哪些人可以操作**（实际由"审批人 + 审批规则 any/all/n_of_m"承载）
+- 流转时**必须填写哪些字段**
+
+### 1.2 改造目标
+保留"状态边"和"必填字段"，把现在笼统的"哪些人可以操作"**拆成三个独立维度**：
+
+1. **发起人**：谁可以发起（触发）这次状态变更。
+2. **目标状态负责人**：转移到目标状态时，工作项的负责人允许是哪些人 / 哪些角色。
+3. **审批人**：谁可以对这次状态变更进行审批。
+
+即一条流转边从「**4 段**」变为「**5 段**」配置。
+
+---
+
+## 2. 现状梳理（As-Is）
+
+### 2.1 数据模型（`apps/api/plane/db/models/workflow.py`）
+| 模型 | 职责 |
+| --- | --- |
+| `Workflow` | 项目 + 工作项类型下的工作流（同一组合仅允许一个激活） |
+| `WorkflowTransition` | 一条流转边 `from_state → to_state`，携带 `approval_type`(any/all/n_of_m)、`required_count`、`dynamic_approver_types`(assignees/created_by) |
+| `WorkflowTransitionApproval` | 流转边上的**静态审批人**（具体用户，逐条记录） |
+| `WorkflowTransitionRequiredField` | 流转边上的**必填字段**（绑定 `TypeExtraField`） |
+| `IssueTransitionRecord` | 工作项一次状态变更申请记录（pending/approved/rejected/cancelled） |
+| `IssueTransitionApprovalRecord` | 申请下单个审批人的投票记录 |
+
+### 2.2 状态变更判定逻辑（`apps/api/plane/utils/workflow/transition.py` → `check_update_state_permission`）
+当前"谁能操作"与"是否需要审批"是耦合的：
+
+- 无工作流 / 无对应流转边规则 → 直接放行。
+- `approval_type = all`（或没有配置审批人）→ **任何人直接变更**。
+- `approval_type = any` → 当前用户必须是审批人之一才能**直接变更**，否则拒绝。
+- `approval_type = n_of_m` → 创建/复用审批申请，需至少 `required_count` 人通过后才落库。
+- 任何分支前都先校验该流转边的**必填字段**是否都有值。
+
+审批人来源（`resolve_transition_approver_ids`）= 静态审批人 ∪ 动态审批人（当前负责人 `assignees` / 创建人 `created_by`）。
+
+### 2.3 前端配置 UI（`apps/web/core/components/project-workflows/workflow-transitions/`）
+每条流转边一行，呈现四个可点击的"盒子"：
+
+| 盒子 | 含义 | 对应数据 |
+| --- | --- | --- |
+| `via` | 这是一条流转 | — |
+| `move to` | 目标状态 | `to_state_id` |
+| `by` | 谁来操作/审批（All / 指定成员 / N_OF_M） | `approver_ids` + `approval_type` + `required_count` |
+| `requiring` | 必填字段 | `extra_field_ids` |
+
+### 2.4 现状的问题
+- "by"（哪些人可以操作）把**触发权限**与**审批权限**混为一谈。
+- 没有"目标状态负责人约束"这一维度。
+- 选择对象只支持**具体成员 + 两种动态类型**，不支持按**角色**选择。
+
+---
+
+## 3. 改造后模型（To-Be）
+
+一条流转边由 **5 段** 构成（UI 上对应 5 个配置项）：
+
+| 顺序 | 配置项 | 含义 | 是否新增 |
+| --- | --- | --- | --- |
+| 1 | 起止状态 | `from_state → to_state` | 不变 |
+| 2 | **发起人** | 谁可以发起这次状态变更 | 新增 |
+| 3 | **目标状态负责人** | 转到目标状态后，负责人允许是哪些人/角色 | 新增 |
+| 4 | **审批人** | 谁可以审批这次状态变更（含 any/all/n_of_m 规则） | 由现有审批能力承接、与发起人解耦 |
+| 5 | **必填字段** | 流转必须填写哪些字段 | 不变 |
+
+### 旧 → 新 概念映射
+| 现状概念 | 改造后归属 |
+| --- | --- |
+| `by`（approval_type + approver_ids + dynamic_approver_types） | 拆为 **发起人**（新）与 **审批人**（保留审批语义） |
+| —（无） | 新增 **目标状态负责人** |
+| `requiring`（必填字段） | 不变 |
+
+---
+
+## 4. 详细需求
+
+> 三个新维度（发起人 / 目标状态负责人 / 审批人）在"选择对象"上需要**统一支持三类来源**：
+> - **指定成员**：具体项目成员（沿用现有静态用户配置方式）。
+> - **角色**：**采用系统已有的自定义项目角色（`project.role.*` / `ProjectRole`）**（已定稿，见第 8 节决策 1）。
+> - **动态对象**：当前工作项的负责人（`assignees`）/ 创建人（`created_by`）等运行时解析的对象（沿用现有 `dynamic_approver_types` 思路）。
+
+### 4.1 发起人（谁可以发起状态变更）
+- **定义**：仅当当前操作用户命中流转边配置的"发起人集合"时，才允许发起该 `from → to` 的状态变更。
+- **可选对象**：指定成员 / 角色 / 动态对象。
+- **校验落点**：`check_update_state_permission` 入口处先做发起人校验，未命中直接拒绝（403），不进入审批流程。
+- **边界规则（已定稿）**：
+  - 未配置发起人时默认"所有项目成员可发起"（保持向后兼容，见决策 4）。
+  - **发起人与审批人完全解耦**（见决策 3）：发起人命中只决定"能否发起"；是否需要审批、由谁审批，完全由审批人段独立配置决定。发起人命中 ≠ 自动审批通过；发起人即便也是审批人，也不豁免审批流程。
+
+### 4.2 目标状态负责人（负责人可以是哪些人/哪些角色）
+- **定义**：工作项流转到 `to_state` 时，其"负责人"（`IssueAssignee`，即 Plane 中的 assignees）允许的范围。
+- **可选对象**：指定成员 / 角色 / 动态对象。
+- **关键语义（已定稿：A + B，见决策 2）**：
+  - **A. 约束校验（主）**：流转时校验工作项的负责人是否都落在允许集合内；不满足则阻断（类似必填字段校验）。
+  - **B. 范围内可调整**：发起时允许在该允许集合范围内选择/变更负责人，作为流转动作的一部分写入。
+  - 未采用 C（自动指派）。
+- **与现有逻辑的衔接**：与 `IssueAssignee` 联动；约束校验需放在发起阶段（拦截不合规），负责人变更落库时机与审批通过（`recompute_transition_record_status` 落 `issue.state`）保持一致；若进入审批流程，需在最终落库前再次校验负责人仍满足约束（防止审批期间被改成不合规）。
+
+### 4.3 审批人（谁能审批）
+- **定义**：沿用现有审批语义——`approval_type`(any/all/n_of_m) + 审批人集合（静态 + 动态 + 新增角色）。
+- **变化点**：从"by"中剥离，独立成段；不再用它隐式表达"谁能操作"。
+- **保持不变**：审批申请创建/复用、投票重算、内容变更重置投票、站内通知、活动流。
+
+### 4.4 必填字段（不变）
+- 保持 `WorkflowTransitionRequiredField` 现有能力与校验时机不变。
+
+### 4.5 角色支持（横切新增维度）
+- 现状仅支持具体用户 + 动态类型，需新增"按角色选择"。
+- 三个新维度都要支持"人 或 角色 或 动态对象"的混选。
+- 运行时把"角色"解析为实际用户集合（结合项目成员与角色绑定关系）后再做命中判断。
+
+---
+
+## 5. 目标流程时序（发起 → 负责人 → 审批 → 落库）
+
+```
+用户发起 from → to 状态变更
+  │
+  ├─[1] 发起人校验：当前用户是否在"发起人集合"内？ 否 → 拒绝
+  │
+  ├─[2] 必填字段校验：必填字段是否都有值？ 否 → 拒绝
+  │
+  ├─[3] 目标状态负责人校验/设定（按最终选定语义 A/B/C）
+  │
+  ├─[4] 审批判定：
+  │        ├─ 无审批人 / all  → 直接落库（状态变更 + 负责人变更）
+  │        └─ any / n_of_m    → 创建审批申请，进入待审批
+  │
+  └─[5] 审批通过后 → 落库 issue.state（+ 必要时落负责人），写活动流与通知
+```
+
+---
+
+## 6. 数据模型变更建议（方向性，细节以评审为准）
+
+- **发起人**：新增 `WorkflowTransitionInitiator`（或在流转边上扩展），结构对齐现有 `WorkflowTransitionApproval`（静态用户）+ 动态类型字段。
+- **目标状态负责人**：新增 `WorkflowTransitionAssigneeRule`（允许的成员/角色/动态类型）。
+- **审批人**：复用 `WorkflowTransitionApproval` + `dynamic_approver_types`。
+- **角色维度**：为上述"人/角色"选择新增"角色引用"存储，**关联自定义项目角色 `ProjectRole`**（见决策 1）。
+- **特殊标识**：前端选择项可沿用现有 `special:assignees` / `special:created_by` 前缀模式，并扩展 `role:<projectRoleId>` 前缀表达项目角色。
+
+---
+
+## 7. 兼容性与数据迁移
+
+- 现有流转边的 `approval_type` + `approver_ids` 语义需平滑迁移：
+  - 默认把现有审批配置迁移到新的"审批人"段。
+  - "发起人"默认全员可发起；"目标状态负责人"默认不约束，保证旧数据行为不变。
+- 前端 `TWorkflowTransition` 类型、`project-workflow.service.ts`、配置组件需同步扩展，保证旧字段读取不报错。
+- 审批申请、投票、通知等运行时数据结构尽量不破坏既有 `transition_record_id` 等契约。
+
+---
+
+## 8. 决策记录与剩余开放问题
+
+### 8.1 已定稿决策
+1. **"角色"采用哪一套？** → **自定义项目角色（`project.role.*` / `ProjectRole`）**。
+2. **"目标状态负责人"语义？** → **A + B**：以约束校验为主，发起时可在允许集合范围内调整负责人。
+3. **发起人与审批人关系？** → **完全解耦**：发起人只决定能否发起，是否审批/由谁审批由审批人段独立判定；发起人不豁免审批。
+4. **未配置时的默认行为？** → **认可**：发起人默认全员可发起、目标负责人默认不约束、审批默认 all（直接通过），保证旧数据行为不变。
+
+### 8.2 剩余开放问题（不阻塞主链路，可在阶段 0 一并敲定）
+5. **是否支持"动态对象"扩展**：除 `assignees` / `created_by` 外，是否需要"上级 / 指定字段引用"等新的动态对象类型。
+6. **前端交互形态**：配置行从 4 盒扩展为 5 段（发起人、目标负责人、审批人各自独立面板），还是把三段收纳进一个"权限"分组面板。
+
+---
+
+## 9. 实施先后顺序（按我要做的事情排列）
+
+> 总原则（依据仓库约定 `model → serializer → view → url → permission`、前端 `service → hook → component`）：**先后端模型与判定逻辑，再接口契约，最后前端配置与交互；先打通主链路，再补通知/活动流与兼容迁移。**
+
+### 阶段 0：需求与方案定稿（先做）
+1. 关键决策已定稿（见 8.1）：角色=自定义项目角色、目标负责人=A+B、发起人与审批人解耦、默认行为认可。
+2. 敲定剩余开放问题（8.2：动态对象扩展、前端交互形态）。
+3. 锁定 5 段配置的最终字段结构。
+
+### 阶段 1：后端数据模型
+4. 设计并新增"发起人""目标状态负责人"模型/字段；"角色"引用关联 `ProjectRole`。
+5. 补齐模型约束与 `clean()`/`save()`（项目归属一致性、软删除唯一性、角色须属于本项目）。
+6. 编写数据迁移：现有 `approver_ids`/`approval_type` → 新审批段；新增段填默认值（全员可发起、负责人不约束）。
+
+### 阶段 2：后端判定与审批逻辑
+7. 新增"项目角色 → 实际用户集合"的解析工具（结合项目成员与 `ProjectRole` 绑定关系）。
+8. 改造 `check_update_state_permission`：按"发起人 → 必填字段 → 目标负责人 → 审批"新顺序判定。
+9. 按 A+B 语义实现"目标状态负责人"约束校验与范围内调整，并在 `recompute_transition_record_status` 落库前再次校验负责人合规。
+10. 回归审批申请创建/复用、投票重算、内容变更重置、`cancel_issue_pending_transitions`，确保拆分后行为正确。
+
+### 阶段 3：后端接口与序列化
+11. 扩展 `WorkflowTransitionSerializer` 与 `WorkflowTransitionAPIView`（create/update 全量替换三段配置），保留视图层"特殊标识/角色标识"解析与回填（`_enrich`）。
+12. 同步 `IssueTransitionRecordListSerializer` / `MyApprovals` 等返回结构（如需暴露发起人、目标负责人信息）。
+13. 校验 `select_related/prefetch_related` 与新返回结构匹配；补后端测试（权限边界、三种审批模式、负责人约束、迁移兼容）。
+
+### 阶段 4：前端 service 与类型
+14. 扩展 `project-workflow.service.ts`：`TWorkflowTransition`/`Create`/`Update` 类型加入发起人、目标负责人、角色选项字段。
+15. 扩展 `approver-utils.ts`：在特殊标识基础上增加"项目角色"选项与标签解析。
+
+### 阶段 5：前端配置 UI
+16. 把流转配置行从 4 段扩展为 5 段（新增"发起人""目标负责人"面板，审批人独立成段）。
+17. 复用成员/角色选择面板，支持"成员 + 项目角色 + 动态对象"混选；处理保存/取消/只读/编辑态。
+
+### 阶段 6：前端状态变更与审批交互
+18. 状态变更被拦截时（`workflow_blocked`）的提示按"发起人不符 / 负责人不符 / 必填缺失 / 进入审批"区分文案。
+19. 回归 `use-workflow-approvals` 与审批弹窗：待审批计数、列表刷新、approve/reject 本地状态。
+
+### 阶段 7：收尾
+20. 通知与活动流文案核对（发起、负责人变更、审批结果）。
+21. 端到端联调 + 兼容性验证（旧工作流数据按默认行为不受影响）。
+
+---
+
+## 10. 附：关键文件索引
+- 后端模型：`apps/api/plane/db/models/workflow.py`
+- 后端判定/审批：`apps/api/plane/utils/workflow/transition.py`
+- 后端接口：`apps/api/plane/app/views/workflow/base.py`
+- 后端序列化：`apps/api/plane/app/serializers/workflow.py`
+- 状态变更入口：`apps/api/plane/app/views/issue/base.py`（`check_update_state_permission` 调用处）
+- 角色体系：`docs/custom-role-permissions.md`、`project.role.*` 权限键
+- 前端 service：`apps/web/core/services/project/project-workflow.service.ts`
+- 前端配置 UI：`apps/web/core/components/project-workflows/workflow-transitions/`
+- 前端审批：`apps/web/core/hooks/store/use-workflow-approvals.ts`、`apps/web/core/components/issues/workflow-approval-modal.tsx`
