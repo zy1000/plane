@@ -11,7 +11,6 @@ import {
   AppstoreOutlined,
   EllipsisOutlined,
   DeleteOutlined,
-  PlayCircleOutlined,
   EditOutlined,
   DownOutlined,
 } from "@ant-design/icons";
@@ -508,19 +507,6 @@ export default function TestPlanDetailPage() {
       width: 120,
       render: (_, record) => (
         <Space size="small">
-          <Button
-            type="text"
-            size="small"
-            icon={<PlayCircleOutlined />}
-            aria-label="执行"
-            onClick={() => {
-              if (!record?.id) return;
-              const ws = (workspaceSlug as string) || "";
-              const pid = (projectId as string) || "";
-              const repoQuery = repositoryId ? `&repositoryId=${encodeURIComponent(String(repositoryId))}` : "";
-              router.push(`/${ws}/projects/${pid}/testhub/plan-cases?planId=${record.id}${repoQuery}`);
-            }}
-          />
           <Button
             type="text"
             size="small"
