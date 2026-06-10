@@ -101,6 +101,25 @@ def open_overdue(
         extra={"cycle_id": str(cycle.id), "triggered_by": triggered_by},
     )
     _emit_overdue_activity("cycle_overdue.activity.opened", record=record)
+    try:
+        from plane.bgtasks.entity_status_email_task import dispatch_cycle_overdue_email
+
+        actor_id = None
+        if record.triggered_by == CycleOverdueTrigger.USER:
+            updater = getattr(record, "updated_by_id", None) or getattr(record, "created_by_id", None)
+            if updater:
+                actor_id = str(updater)
+
+        dispatch_cycle_overdue_email.delay(
+            cycle_id=str(cycle.id),
+            actor_id=actor_id,
+            origin=None,
+        )
+    except Exception:  # noqa: BLE001
+        logger.exception(
+            "emit cycle overdue email failed",
+            extra={"cycle_id": str(cycle.id), "record_id": str(record.id)},
+        )
     return record
 
 

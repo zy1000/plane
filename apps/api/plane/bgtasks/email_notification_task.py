@@ -559,6 +559,8 @@ def _send_entity_status_email(
             "user_preference": f"{base_api}/{workspace_slug}/settings/account/notifications/",
             "old_owner_name": data.get("old_owner_name"),
             "new_owner_name": data.get("new_owner_name"),
+            "owner_name": data.get("owner_name"),
+            "phase_label": data.get("phase_label"),
         }
 
         entity_display_name = "迭代" if entity_kind == "cycle" else "发布"
@@ -566,6 +568,8 @@ def _send_entity_status_email(
             subject = f"[{project_name}] 新建{entity_display_name}：{entity_name}"
         elif event == "owner_changed":
             subject = f"[{project_name}] 你被指定为{entity_display_name} {entity_name} 的负责人"
+        elif event == "overdue":
+            subject = f"[{project_name}] {entity_display_name}延期提醒：{entity_name}"
         else:
             subject = (
                 f"[{project_name}] "
@@ -577,9 +581,11 @@ def _send_entity_status_email(
             ("cycle", "created"): "emails/notifications/cycle-created.html",
             ("cycle", "owner_changed"): "emails/notifications/cycle-owner-update.html",
             ("cycle", "status_changed"): "emails/notifications/cycle-status-update.html",
+            ("cycle", "overdue"): "emails/notifications/cycle-overdue.html",
             ("release", "created"): "emails/notifications/release-created.html",
             ("release", "owner_changed"): "emails/notifications/release-lead-update.html",
             ("release", "status_changed"): "emails/notifications/release-status-update.html",
+            ("release", "overdue"): "emails/notifications/release-overdue.html",
         }
         template_name = template_map.get(
             (entity_kind, event),

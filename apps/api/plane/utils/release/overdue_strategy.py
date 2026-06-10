@@ -120,6 +120,26 @@ def open_overdue(
         extra={"release_id": str(release.id), "phase": phase, "triggered_by": triggered_by},
     )
     _emit_overdue_activity("release_overdue.activity.opened", release=release, record=record)
+    try:
+        from plane.bgtasks.entity_status_email_task import dispatch_release_overdue_email
+
+        actor_id = None
+        if record.triggered_by == ReleaseOverdueTrigger.USER:
+            updater = getattr(record, "updated_by_id", None) or getattr(record, "created_by_id", None)
+            if updater:
+                actor_id = str(updater)
+
+        dispatch_release_overdue_email.delay(
+            release_id=str(release.id),
+            phase=record.phase,
+            actor_id=actor_id,
+            origin=None,
+        )
+    except Exception:  # noqa: BLE001
+        logger.exception(
+            "emit release overdue email failed",
+            extra={"release_id": str(release.id), "phase": record.phase, "record_id": str(record.id)},
+        )
     return record
 
 

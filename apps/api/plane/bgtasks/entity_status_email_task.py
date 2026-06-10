@@ -13,6 +13,7 @@ the actual emails.
 from datetime import datetime, timezone as datetime_timezone
 
 from celery import shared_task
+from django.conf import settings
 
 # Module imports
 from plane.db.models import (
@@ -62,6 +63,11 @@ RELEASE_STATUS_LABELS = {
     "rejected": "已驳回",
     "completed": "已完成",
     "cancelled": "已取消",
+}
+
+RELEASE_OVERDUE_PHASE_LABELS = {
+    "dev": "研发延期",
+    "test": "测试延期",
 }
 
 # Redis key prefix for stashing the origin URL used to render links.
@@ -143,6 +149,10 @@ def _user_display_name(user_id):
 
 def _now_iso():
     return datetime.now(tz=datetime_timezone.utc).isoformat()
+
+
+def _default_origin(origin):
+    return origin or settings.APP_BASE_URL or settings.WEB_URL or None
 
 
 def _set_origin(prefix, entity_id, origin):
@@ -405,6 +415,90 @@ def dispatch_release_created_email(release_id, actor_id, origin):
             event="created",
             old_value="",
             new_value="created",
+            payload=payload,
+            receiver_ids=receiver_ids,
+            effective_actor_id=effective_actor_id,
+        )
+    except Exception as e:
+        log_exception(e)
+
+
+@shared_task
+def dispatch_cycle_overdue_email(cycle_id, actor_id=None, origin=None):
+    try:
+        cycle = (
+            Cycle.objects.filter(pk=cycle_id)
+            .select_related("project", "project__workspace", "owned_by", "created_by")
+            .first()
+        )
+        if not cycle:
+            return
+
+        origin = _default_origin(origin)
+        _set_origin(CYCLE_ORIGIN_REDIS_PREFIX, cycle_id, origin)
+        effective_actor_id = _resolve_cycle_actor_id(cycle, actor_id)
+        receiver_ids = _filter_eligible_receivers(
+            cycle.project_id,
+            _all_project_member_ids(cycle.project_id),
+            actor_id=actor_id,
+        )
+
+        payload = _cycle_payload(
+            cycle,
+            actor_id=actor_id,
+            origin=origin,
+            event="overdue",
+            owner_name=_user_display_name(cycle.owned_by_id),
+        )
+        _enqueue_email_logs(
+            entity_name="cycle",
+            entity_id=cycle_id,
+            event="overdue",
+            old_value="",
+            new_value="overdue",
+            payload=payload,
+            receiver_ids=receiver_ids,
+            effective_actor_id=effective_actor_id,
+        )
+    except Exception as e:
+        log_exception(e)
+
+
+@shared_task
+def dispatch_release_overdue_email(release_id, phase, actor_id=None, origin=None):
+    try:
+        release = (
+            Release.objects.filter(pk=release_id)
+            .select_related("project", "project__workspace", "created_by", "lead")
+            .first()
+        )
+        if not release:
+            return
+
+        origin = _default_origin(origin)
+        _set_origin(RELEASE_ORIGIN_REDIS_PREFIX, release_id, origin)
+        effective_actor_id = _resolve_release_actor_id(release, actor_id)
+        receiver_ids = _filter_eligible_receivers(
+            release.project_id,
+            _all_project_member_ids(release.project_id),
+            actor_id=actor_id,
+        )
+
+        payload = _release_payload(
+            release,
+            actor_id=actor_id,
+            origin=origin,
+            event="overdue",
+            owner_name=_user_display_name(release.lead_id),
+            phase=phase,
+            phase_label=RELEASE_OVERDUE_PHASE_LABELS.get(phase, phase),
+        )
+        _enqueue_email_logs(
+            entity_name="release",
+            entity_id=release_id,
+            event="overdue",
+            old_value="",
+            new_value="overdue",
             payload=payload,
             receiver_ids=receiver_ids,
             effective_actor_id=effective_actor_id,

@@ -1,0 +1,86 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>迭代 {{ entity.name }} 延期提醒</title>
+    <style type="text/css" emogrify="no">html { font-family: system-ui; } p, h1, h2, h3, h4 { margin: 0; } a:hover { color: #3358d4 !important; }</style>
+  </head>
+  <body bgcolor="#ffffff" text="#3b3f44" link="#006399" style="background-color: #f7f9ff; margin: 20px">
+    <div style="width: 600px; table-layout: fixed; height: 100%; margin-left: auto; margin-right: auto;">
+      <div>
+        <table style="width: 600px" cellspacing="0">
+          <tr>
+            <td>
+              <div style="margin-left: 30px; margin-bottom: 20px; margin-top: 20px; font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 24px; font-weight: 700; color: #1f2d3d; letter-spacing: 0.04em; line-height: 1;">
+                Plane
+              </div>
+            </td>
+          </tr>
+        </table>
+      </div>
+      <div style="color: #1f2d5c; padding: 30px; border-radius: 4px; background-color: #fcfcfd; max-width: 100%;">
+        <table style="width: 100%">
+          <tr>
+            <td>
+              <p style="font-size: 1rem; color: #1f2d5c; font-weight: 600;">迭代延期提醒</p>
+              <p style="font-size: 0.95rem; font-weight: 500; color: #1f2d5c; line-height: 28px">
+                {{ workspace_name }} / <a target="_blank" style="color: #1f2d5c; text-decoration: none;" href="{{ project_url }}">{{ project }}</a>
+                / <a target="_blank" style="color: #1f2d5c; text-decoration: none;" href="{{ entity.url }}">{{ entity.name }}</a>
+              </p>
+            </td>
+          </tr>
+        </table>
+
+        <hr style="background-color: #f0f0f3; height: 1px; border: 0; margin-top: 15px; margin-bottom: 15px;" />
+
+        <p style="font-size: 1rem; color: #1f2d5c; line-height: 28px;">
+          {% if is_system %}
+            系统检测到该迭代已超过计划结束时间。
+          {% else %}
+            <span style="font-weight: 700;">
+              {% if actor %}{{ actor.display_name }}{% else %}系统{% endif %}
+            </span>
+            标记了迭代延期。
+          {% endif %}
+        </p>
+
+        <div style="margin-top: 20px; padding: 16px 20px; border: 1px solid #e5e7f0; border-radius: 6px; background-color: #fafbff;">
+          <p style="font-size: 0.95rem; color: #1f2d5c; margin-bottom: 10px;">
+            <span style="font-weight: 600;">迭代名称：</span>
+            <a target="_blank" href="{{ entity.url }}" style="color: #3358d4; text-decoration: none;">{{ entity.name }}</a>
+          </p>
+          <p style="font-size: 0.95rem; color: #1f2d5c; margin-bottom: 10px;">
+            <span style="font-weight: 600;">负责人：</span>
+            <span style="font-weight: 700; color: #e5484d;">{{ owner_name|default:"未设置" }}</span>
+          </p>
+          {% if entity.start_date or entity.end_date %}
+          <p style="font-size: 0.9rem; color: #4b5563;">
+            <span style="font-weight: 600;">周期：</span>
+            {{ entity.start_date|slice:":10"|default:"—" }} ~ {{ entity.end_date|slice:":10"|default:"—" }}
+          </p>
+          {% endif %}
+          {% if activity_time %}
+          <p style="font-size: 0.85rem; color: #6b7280; margin-top: 8px;">
+            触发时间：{{ activity_time }}
+          </p>
+          {% endif %}
+        </div>
+
+        <div style="margin-top: 24px;">
+          <a href="{{ entity.url }}" target="_blank"
+             style="background-color: #3f76ff; color: #ffffff; padding: 10px 18px; border-radius: 4px; text-decoration: none; font-size: 0.95rem; font-weight: 500;">
+            查看迭代详情
+          </a>
+        </div>
+
+        <hr style="background-color: #f0f0f3; height: 1px; border: 0; margin-top: 30px; margin-bottom: 15px;" />
+        <p style="font-size: 0.8rem; color: #6b7280; line-height: 20px;">
+          这封邮件发送给 {{ recipient_label }}。若不想再收到此类通知，请在
+          <a href="{{ user_preference }}" target="_blank" style="color: #3358d4; text-decoration: none;">通知偏好设置</a>
+          中关闭"状态变更"邮件。
+        </p>
+      </div>
+    </div>
+  </body>
+</html>
