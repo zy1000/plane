@@ -26,18 +26,19 @@ def has_required_schedule_fields(release: Release):
 
 
 def has_issues(release: Release):
-    return ReleaseIssue.objects.filter(release=release).exists()
+    return ReleaseIssue.objects.filter(release=release, issue__deleted_at__isnull=True).exists()
 
 
 def all_issues_done(release: Release):
     """判断发布下面的工作项是否全部完成"""
-    return not ReleaseIssue.objects.filter(release=release).exclude(
+    return not ReleaseIssue.objects.filter(release=release, issue__deleted_at__isnull=True).exclude(
         issue__state__group__in=[StateGroup.COMPLETED, StateGroup.CANCELLED]).exists()
 
 
 def all_issues_cancelled(release: Release):
     """判断发布下的工作项是否全部取消"""
-    return not ReleaseIssue.objects.filter(release=release).exclude(issue__state__group=StateGroup.CANCELLED).exists()
+    return not ReleaseIssue.objects.filter(release=release, issue__deleted_at__isnull=True).exclude(
+        issue__state__group=StateGroup.CANCELLED).exists()
 
 
 def has_attachment(release: Release):
