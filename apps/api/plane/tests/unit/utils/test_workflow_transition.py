@@ -12,11 +12,25 @@ from plane.db.models import (
     State,
     Workflow,
     WorkflowApproverTarget,
+    WorkflowPrincipalDimension,
+    WorkflowPrincipalKind,
     WorkflowTransition,
+    WorkflowTransitionPrincipal,
     Workspace,
     WorkspaceMember,
 )
 from plane.utils.workflow.transition import approve_transition_record, check_update_state_permission
+
+
+def _add_dynamic_approvers(transition, dynamic_targets):
+    """为流转边写入审批人维度的动态对象行（替代旧的 dynamic_approver_types 字段）。"""
+    for dynamic_target in dynamic_targets:
+        WorkflowTransitionPrincipal.objects.create(
+            transition=transition,
+            dimension=WorkflowPrincipalDimension.APPROVER,
+            kind=WorkflowPrincipalKind.DYNAMIC,
+            dynamic_target=dynamic_target,
+        )
 
 
 @pytest.mark.unit
@@ -121,7 +135,10 @@ class TestWorkflowTransitionDynamicApprovers:
             to_state=to_state,
             approval_type=ApprovalType.N_OF_M,
             required_count=2,
-            dynamic_approver_types=[
+        )
+        _add_dynamic_approvers(
+            transition,
+            [
                 WorkflowApproverTarget.ASSIGNEES,
                 WorkflowApproverTarget.CREATED_BY,
             ],
@@ -154,15 +171,15 @@ class TestWorkflowTransitionDynamicApprovers:
         workflow = workflow_context["workflow"]
         from_state = workflow_context["from_state"]
 
-        WorkflowTransition.objects.create(
+        transition = WorkflowTransition.objects.create(
             workflow=workflow,
             project=project,
             from_state=from_state,
             to_state=to_state,
             approval_type=ApprovalType.N_OF_M,
             required_count=2,
-            dynamic_approver_types=[WorkflowApproverTarget.ASSIGNEES],
         )
+        _add_dynamic_approvers(transition, [WorkflowApproverTarget.ASSIGNEES])
         IssueAssignee.objects.create(issue=issue, assignee=assignee, project=project)
 
         allowed, error, record = check_update_state_permission(
@@ -186,15 +203,15 @@ class TestWorkflowTransitionDynamicApprovers:
         workflow = workflow_context["workflow"]
         from_state = workflow_context["from_state"]
 
-        WorkflowTransition.objects.create(
+        transition = WorkflowTransition.objects.create(
             workflow=workflow,
             project=project,
             from_state=from_state,
             to_state=to_state,
             approval_type=ApprovalType.ANY,
             required_count=1,
-            dynamic_approver_types=[WorkflowApproverTarget.CREATED_BY],
         )
+        _add_dynamic_approvers(transition, [WorkflowApproverTarget.CREATED_BY])
 
         allowed, error, record = check_update_state_permission(
             issue=issue,
@@ -234,14 +251,17 @@ class TestWorkflowTransitionDynamicApprovers:
         workflow = workflow_context["workflow"]
         from_state = workflow_context["from_state"]
 
-        WorkflowTransition.objects.create(
+        transition = WorkflowTransition.objects.create(
             workflow=workflow,
             project=project,
             from_state=from_state,
             to_state=to_state,
             approval_type=ApprovalType.N_OF_M,
             required_count=2,
-            dynamic_approver_types=[
+        )
+        _add_dynamic_approvers(
+            transition,
+            [
                 WorkflowApproverTarget.CREATED_BY,
                 WorkflowApproverTarget.ASSIGNEES,
             ],

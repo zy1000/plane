@@ -14,8 +14,10 @@ from plane.db.models import (
     TransitionRecordStatus,
     Workflow,
     WorkflowApproverTarget,
+    WorkflowPrincipalDimension,
+    WorkflowPrincipalKind,
     WorkflowTransition,
-    WorkflowTransitionApproval, TypeExtraFieldValue,
+    WorkflowTransitionPrincipal, TypeExtraFieldValue,
 )
 from plane.db.models.workflow import WorkflowTransitionRequiredField
 
@@ -47,24 +49,42 @@ def get_active_transition(issue: Issue, to_state: State):
     return workflow, transition, has_any
 
 
-def resolve_transition_approver_ids(issue: Issue, transition: WorkflowTransition) -> list:
-    """解析流转配置中的静态/动态审批人，返回去重后的真实用户 ID 列表。"""
-    approver_ids = list(
-        WorkflowTransitionApproval.objects.filter(
-            transition=transition,
-            deleted_at__isnull=True,
-        ).values_list("approver_id", flat=True)
+def get_transition_principals(transition: WorkflowTransition, dimension: str):
+    """按维度读取流转边上的对象行，所有查询都必须显式带 dimension 过滤。"""
+    return WorkflowTransitionPrincipal.objects.filter(
+        transition=transition,
+        dimension=dimension,
+        deleted_at__isnull=True,
     )
 
-    dynamic_approver_types = transition.dynamic_approver_types or []
-    if WorkflowApproverTarget.ASSIGNEES in dynamic_approver_types:
+
+def resolve_transition_approver_ids(issue: Issue, transition: WorkflowTransition) -> list:
+    """解析审批人维度配置中的成员/动态对象，返回去重后的真实用户 ID 列表。"""
+    approver_ids = []
+    want_assignees = False
+    want_created_by = False
+
+    for principal in get_transition_principals(transition, WorkflowPrincipalDimension.APPROVER):
+        if principal.kind == WorkflowPrincipalKind.MEMBER:
+            if principal.member_id:
+                approver_ids.append(principal.member_id)
+        elif principal.kind == WorkflowPrincipalKind.DYNAMIC:
+            if principal.dynamic_target == WorkflowApproverTarget.ASSIGNEES:
+                want_assignees = True
+            elif principal.dynamic_target == WorkflowApproverTarget.CREATED_BY:
+                want_created_by = True
+        elif principal.kind == WorkflowPrincipalKind.ROLE:
+            # TODO(阶段2): 角色 -> 用户的解析交由阶段2的解析器处理，本阶段跳过。
+            continue
+
+    if want_assignees:
         approver_ids.extend(
             IssueAssignee.objects.filter(
                 issue=issue,
                 deleted_at__isnull=True,
             ).values_list("assignee_id", flat=True)
         )
-    if WorkflowApproverTarget.CREATED_BY in dynamic_approver_types and issue.created_by_id:
+    if want_created_by and issue.created_by_id:
         approver_ids.append(issue.created_by_id)
 
     return list(dict.fromkeys(approver_ids))

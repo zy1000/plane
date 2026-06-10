@@ -23,6 +23,18 @@ class WorkflowApproverTarget(models.TextChoices):
     CREATED_BY = "created_by", "工作项创建人"
 
 
+class WorkflowPrincipalDimension(models.TextChoices):
+    INITIATOR = "initiator", "发起人"
+    ASSIGNEE = "assignee", "目标负责人"
+    APPROVER = "approver", "审批人"
+
+
+class WorkflowPrincipalKind(models.TextChoices):
+    MEMBER = "member", "指定成员"
+    ROLE = "role", "项目角色"
+    DYNAMIC = "dynamic", "动态对象"
+
+
 class Workflow(ProjectBaseModel):
     """
     某个项目下、某个工作项类型的状态流转工作流。
@@ -114,11 +126,6 @@ class WorkflowTransition(ProjectBaseModel):
         blank=True,
         verbose_name="最少通过人数（仅 n_of_m 模式生效）",
     )
-    dynamic_approver_types = models.JSONField(
-        blank=True,
-        default=list,
-        verbose_name="动态审批人类型",
-    )
 
     class Meta:
         verbose_name = "Workflow Transition"
@@ -152,7 +159,6 @@ class WorkflowTransition(ProjectBaseModel):
     def clean(self):
         super().clean()
         issue_type = self.workflow.issue_type
-        dynamic_approver_types = self.dynamic_approver_types or []
 
         # to_state 必须属于 workflow.issue_type
         if self.to_state_id and self.to_state.issue_type_id != issue_type.pk:
@@ -187,29 +193,6 @@ class WorkflowTransition(ProjectBaseModel):
         if self.from_state_id and self.from_state.project_id != self.project_id:
             raise ValidationError({"from_state": "起始状态不属于当前项目。"})
 
-        if not isinstance(dynamic_approver_types, list):
-            raise ValidationError({"dynamic_approver_types": "动态审批人必须是列表。"})
-
-        invalid_targets = [
-            approver_target
-            for approver_target in dynamic_approver_types
-            if approver_target not in WorkflowApproverTarget.values
-        ]
-        if invalid_targets:
-            raise ValidationError(
-                {
-                    "dynamic_approver_types": (
-                        "存在不支持的动态审批人类型：" + ", ".join(invalid_targets)
-                    )
-                }
-            )
-
-        normalized_targets = []
-        for approver_target in dynamic_approver_types:
-            if approver_target not in normalized_targets:
-                normalized_targets.append(approver_target)
-        self.dynamic_approver_types = normalized_targets
-
     def save(self, *args, **kwargs):
         # 保持 project 与 workflow.project 一致
         if self.workflow_id and not self.project_id:
@@ -220,61 +203,145 @@ class WorkflowTransition(ProjectBaseModel):
         return super().save(*args, **kwargs)
 
 
-class WorkflowTransitionApproval(BaseModel):
+class WorkflowTransitionPrincipal(BaseModel):
     """
-    工作流流转边上的审批人配置，每条记录代表一个审批人。
-    审批策略（approval_type / allow_self_approve / required_count）定义在 WorkflowTransition 上。
-    审批人必须是该流转边所属项目的成员。
-    始终通过 transition 访问，无需独立的 project/workspace 冗余字段。
-    启用/停用审批人配置请使用软删除（deleted_at）。
+    工作流流转边上"被选中的对象"，统一承载发起人 / 目标负责人 / 审批人三个维度。
+    - dimension 区分维度（initiator / assignee / approver）。
+    - kind 区分对象类型（member 指定成员 / role 项目角色 / dynamic 动态对象），
+      并与 member / role / dynamic_target 三列严格一一对应（恰好一列有值）。
+    项目作用域经 transition 间接获得，无需独立的 project/workspace 冗余字段。
+    启用/停用配置请使用软删除（deleted_at）。
     """
 
     transition = models.ForeignKey(
         WorkflowTransition,
         on_delete=models.CASCADE,
-        related_name="approvals",
+        related_name="principals",
         verbose_name="所属流转边",
     )
-    approver = models.ForeignKey(
+    dimension = models.CharField(
+        max_length=10,
+        choices=WorkflowPrincipalDimension.choices,
+        verbose_name="维度",
+    )
+    kind = models.CharField(
+        max_length=10,
+        choices=WorkflowPrincipalKind.choices,
+        verbose_name="对象类型",
+    )
+    member = models.ForeignKey(
         "db.User",
         on_delete=models.CASCADE,
-        related_name="workflow_approvals",
-        verbose_name="审批人",
+        null=True,
+        blank=True,
+        related_name="workflow_transition_principals",
+        verbose_name="指定成员",
+    )
+    role = models.ForeignKey(
+        "db.ProjectRole",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="workflow_transition_principals",
+        verbose_name="项目角色",
+    )
+    dynamic_target = models.CharField(
+        max_length=20,
+        choices=WorkflowApproverTarget.choices,
+        null=True,
+        blank=True,
+        verbose_name="动态对象",
     )
 
     class Meta:
-        verbose_name = "Workflow Transition Approval"
-        verbose_name_plural = "Workflow Transition Approvals"
-        db_table = "workflow_transition_approvals"
-        ordering = ("transition", "created_at")
+        verbose_name = "Workflow Transition Principal"
+        verbose_name_plural = "Workflow Transition Principals"
+        db_table = "workflow_transition_principals"
+        ordering = ("transition", "dimension", "created_at")
         constraints = [
+            # kind 与三列严格一致（恰好一列有值）
+            models.CheckConstraint(
+                check=(
+                    Q(kind="member", member__isnull=False, role__isnull=True, dynamic_target__isnull=True)
+                    | Q(kind="role", member__isnull=True, role__isnull=False, dynamic_target__isnull=True)
+                    | Q(kind="dynamic", member__isnull=True, role__isnull=True, dynamic_target__isnull=False)
+                ),
+                name="wf_principal_kind_coherent",
+            ),
+            # 唯一性按 (transition, dimension, <对象>) 范围，避免同维度重复选同一对象
             models.UniqueConstraint(
-                fields=["transition", "approver"],
-                condition=Q(deleted_at__isnull=True),
-                name="workflow_approval_unique_transition_approver_when_not_deleted",
-            )
+                fields=["transition", "dimension", "member"],
+                condition=Q(member__isnull=False, deleted_at__isnull=True),
+                name="wf_principal_uniq_member",
+            ),
+            models.UniqueConstraint(
+                fields=["transition", "dimension", "role"],
+                condition=Q(role__isnull=False, deleted_at__isnull=True),
+                name="wf_principal_uniq_role",
+            ),
+            models.UniqueConstraint(
+                fields=["transition", "dimension", "dynamic_target"],
+                condition=Q(dynamic_target__isnull=False, deleted_at__isnull=True),
+                name="wf_principal_uniq_dynamic",
+            ),
         ]
 
     def __str__(self):
-        return f"{self.approver} → {self.transition}"
+        target = self.member_id or self.role_id or self.dynamic_target
+        return f"[{self.dimension}/{self.kind}] {target} → {self.transition}"
 
     def clean(self):
         super().clean()
         from .project import ProjectMember
 
-        # 审批人必须是该流转边所属项目的成员
-        if self.approver_id and self.transition_id:
+        # 1) kind 与三列一致性兜底（数据库 CheckConstraint 的应用层镜像）
+        populated = {
+            WorkflowPrincipalKind.MEMBER: self.member_id is not None,
+            WorkflowPrincipalKind.ROLE: self.role_id is not None,
+            WorkflowPrincipalKind.DYNAMIC: bool(self.dynamic_target),
+        }
+        if sum(1 for is_set in populated.values() if is_set) != 1:
+            raise ValidationError(
+                "成员 / 角色 / 动态对象三者必须且只能填写其中一项。"
+            )
+        if not populated.get(self.kind):
+            raise ValidationError({"kind": "kind 与所填写的对象列不一致。"})
+
+        # 2) member 必须是 transition.workflow.project 在职成员
+        if (
+            self.kind == WorkflowPrincipalKind.MEMBER
+            and self.member_id
+            and self.transition_id
+        ):
             project = self.transition.workflow.project
             if not ProjectMember.objects.filter(
                 project=project,
-                member=self.approver,
+                member=self.member,
                 is_active=True,
             ).exists():
                 raise ValidationError(
                     {
-                        "approver": f"用户 '{self.approver}' 不是当前项目的成员，无法设为审批人。"
+                        "member": f"用户 '{self.member}' 不是当前项目的成员，无法设为流转对象。"
                     }
                 )
+
+        # 3) role 必须属于该流转边所在项目
+        if (
+            self.kind == WorkflowPrincipalKind.ROLE
+            and self.role_id
+            and self.transition_id
+        ):
+            if str(self.role.project_id) != str(self.transition.project_id):
+                raise ValidationError({"role": "该角色不属于当前项目。"})
+
+        # 4) dynamic_target 必须是受支持的动态对象类型
+        if (
+            self.kind == WorkflowPrincipalKind.DYNAMIC
+            and self.dynamic_target not in WorkflowApproverTarget.values
+        ):
+            raise ValidationError(
+                {"dynamic_target": f"不支持的动态对象类型：{self.dynamic_target}"}
+            )
 
     def save(self, *args, **kwargs):
         self.full_clean(exclude=["created_by", "updated_by"])

@@ -20,8 +20,10 @@ from plane.db.models import (
     TransitionRecordStatus,
     Workflow,
     WorkflowApproverTarget,
+    WorkflowPrincipalDimension,
+    WorkflowPrincipalKind,
     WorkflowTransition,
-    WorkflowTransitionApproval,
+    WorkflowTransitionPrincipal,
 )
 from plane.db.models.workflow import WorkflowTransitionRequiredField
 from plane.utils.workflow.transition import approve_transition_record
@@ -90,17 +92,30 @@ class WorkflowTransitionAPIView(BaseAPIView):
             workflow_id=workflow_id,
         )
 
-    def _build_approvals(self, transition, approver_ids):
-        """批量创建审批人记录，忽略已存在的重复项。"""
-        WorkflowTransitionApproval.objects.bulk_create(
-            [
-                WorkflowTransitionApproval(
-                    transition=transition, approver_id=approver_id
-                )
-                for approver_id in approver_ids
-            ],
-            ignore_conflicts=True,
+    def _build_approvals(self, transition, member_ids, dynamic_targets):
+        """批量创建审批人维度的成员行与动态对象行，忽略已存在的重复项。"""
+        principals = [
+            WorkflowTransitionPrincipal(
+                transition=transition,
+                dimension=WorkflowPrincipalDimension.APPROVER,
+                kind=WorkflowPrincipalKind.MEMBER,
+                member_id=member_id,
+            )
+            for member_id in member_ids
+        ]
+        principals.extend(
+            WorkflowTransitionPrincipal(
+                transition=transition,
+                dimension=WorkflowPrincipalDimension.APPROVER,
+                kind=WorkflowPrincipalKind.DYNAMIC,
+                dynamic_target=dynamic_target,
+            )
+            for dynamic_target in dynamic_targets
         )
+        if principals:
+            WorkflowTransitionPrincipal.objects.bulk_create(
+                principals, ignore_conflicts=True
+            )
 
     def _parse_approver_selections(self, approver_ids):
         static_approver_ids = []
@@ -117,16 +132,22 @@ class WorkflowTransitionAPIView(BaseAPIView):
         return static_approver_ids, dynamic_approver_types
 
     def _with_approvers(self, serializer_data, transition):
-        """在序列化数据中附加当前审批人 ID 列表。"""
-        approver_ids = list(
-            transition.approvals.filter(deleted_at__isnull=True).values_list(
-                "approver_id", flat=True
-            )
+        """在序列化数据中附加当前审批人 ID 列表（保持 special: 前缀契约不变）。"""
+        approver_ids = []
+        principals = transition.principals.filter(
+            dimension=WorkflowPrincipalDimension.APPROVER,
+            deleted_at__isnull=True,
         )
-        approver_ids.extend(
-            f"{SPECIAL_APPROVER_PREFIX}{approver_type}"
-            for approver_type in (transition.dynamic_approver_types or [])
-        )
+        for principal in principals:
+            if principal.kind == WorkflowPrincipalKind.MEMBER and principal.member_id:
+                approver_ids.append(principal.member_id)
+            elif (
+                principal.kind == WorkflowPrincipalKind.DYNAMIC
+                and principal.dynamic_target
+            ):
+                approver_ids.append(
+                    f"{SPECIAL_APPROVER_PREFIX}{principal.dynamic_target}"
+                )
         return {**serializer_data, "approver_ids": approver_ids}
 
     def _with_required_field_ids(self, serializer_data, transition):
@@ -148,7 +169,7 @@ class WorkflowTransitionAPIView(BaseAPIView):
     def get(self, request, slug, project_id, workflow_id):
         transitions = self.get_workflow_queryset(
             project_id, workflow_id
-        ).prefetch_related("approvals", "required_fields")
+        ).prefetch_related("principals", "required_fields")
         serializer = self.serializer_class(instance=transitions, many=True)
         data = [
             self._enrich(item, transition)
@@ -168,11 +189,9 @@ class WorkflowTransitionAPIView(BaseAPIView):
             static_approver_ids, dynamic_approver_types = (
                 self._parse_approver_selections(approver_ids)
             )
-            if static_approver_ids:
-                self._build_approvals(transition, static_approver_ids)
-            if transition.dynamic_approver_types != dynamic_approver_types:
-                transition.dynamic_approver_types = dynamic_approver_types
-                transition.save(update_fields=["dynamic_approver_types", "updated_at"])
+            self._build_approvals(
+                transition, static_approver_ids, dynamic_approver_types
+            )
             # 判断是否有绑定自定义字段
             if extra_field_ids := request.data.get("extra_field_ids"):
                 bulk_object = [
@@ -205,17 +224,18 @@ class WorkflowTransitionAPIView(BaseAPIView):
         )
         serializer.is_valid(raise_exception=True)
         serializer.save()
-        # 若请求中包含 approver_ids，则全量替换审批人
+        # 若请求中包含 approver_ids，则全量替换审批人维度的对象行
         if "approver_ids" in request.data:
-            transition.approvals.all().delete()
+            transition.principals.filter(
+                dimension=WorkflowPrincipalDimension.APPROVER
+            ).delete()
             approver_ids = request.data["approver_ids"] or []
             static_approver_ids, dynamic_approver_types = (
                 self._parse_approver_selections(approver_ids)
             )
-            if static_approver_ids:
-                self._build_approvals(transition, static_approver_ids)
-            transition.dynamic_approver_types = dynamic_approver_types
-            transition.save(update_fields=["dynamic_approver_types", "updated_at"])
+            self._build_approvals(
+                transition, static_approver_ids, dynamic_approver_types
+            )
 
         # 先清空之前的必须字段
         WorkflowTransitionRequiredField.objects.filter(workflow=transition).delete(

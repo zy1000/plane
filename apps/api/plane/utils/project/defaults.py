@@ -10,9 +10,12 @@ from plane.db.models import (
     StateGroup,
     TypeExtraField,
     Workflow,
+    WorkflowPrincipalDimension,
+    WorkflowPrincipalKind,
     WorkflowTransition,
+    WorkflowTransitionPrincipal,
     WorkflowTransitionRequiredField,
-    IssueTypeCategory, WorkflowTransitionApproval, User,
+    IssueTypeCategory, User,
 )
 from plane.utils.data_model import IssueTypeModel
 from plane.utils.project.member import add_user_to_project
@@ -348,7 +351,12 @@ def create_default_bug_workflow(issue_types: list[IssueType], **kwargs):
             add_user_to_project(approver_users,project)
 
             for approver_user in approver_users:
-                WorkflowTransitionApproval.objects.create(transition=obj, approver=approver_user)
+                WorkflowTransitionPrincipal.objects.create(
+                    transition=obj,
+                    dimension=WorkflowPrincipalDimension.APPROVER,
+                    kind=WorkflowPrincipalKind.MEMBER,
+                    member=approver_user,
+                )
             continue
 
         transitions.append(
