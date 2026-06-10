@@ -83,6 +83,8 @@ from plane.utils.response import list_response
 from plane.utils.timezone_converter import user_timezone_converter
 from plane.bgtasks.webhook_task import model_activity
 from plane.bgtasks.entity_status_email_task import (
+    dispatch_release_created_email,
+    dispatch_release_lead_email,
     dispatch_release_status_email,
     RELEASE_STATUS_EMAIL_WHITELIST,
 )
@@ -417,6 +419,7 @@ class ReleaseViewSet(BaseViewSet):
                     "has_test_overdue_history",
                 )
             ).first()
+            origin = base_host(request=request, is_app=True)
             model_activity.delay(
                 model_name="release",
                 model_id=str(release["id"]),
@@ -424,18 +427,30 @@ class ReleaseViewSet(BaseViewSet):
                 current_instance=None,
                 actor_id=request.user.id,
                 slug=slug,
-                origin=base_host(request=request, is_app=True),
+                origin=origin,
             )
-            transaction.on_commit(
-                lambda: release_activity_task.delay(
+            release_id = str(release["id"])
+            actor_id = str(request.user.id)
+            project_id_str = str(project_id)
+
+            def _enqueue_release_created_tasks():
+                release_activity_task.delay(
                     type="release.activity.created",
                     requested_data=json.dumps(request.data, cls=DjangoJSONEncoder),
                     current_instance=None,
-                    release_id=str(release["id"]),
-                    actor_id=str(request.user.id),
-                    project_id=str(project_id),
+                    release_id=release_id,
+                    actor_id=actor_id,
+                    project_id=project_id_str,
                     epoch=int(timezone.now().timestamp()),
                 )
+                dispatch_release_created_email.delay(
+                    release_id=release_id,
+                    actor_id=actor_id,
+                    origin=origin,
+                )
+
+            transaction.on_commit(
+                _enqueue_release_created_tasks
             )
             datetime_fields = ["created_at", "updated_at"]
             release = user_timezone_converter(release, datetime_fields, request.user.user_timezone)
@@ -763,6 +778,7 @@ class ReleaseViewSet(BaseViewSet):
             )
         current_instance = json.dumps(ReleaseSerializer(current_release).data, cls=DjangoJSONEncoder)
         previous_status = current_release.status
+        previous_lead_id = current_release.lead_id
         previous_test_handoff_date = current_release.test_handoff_date
         previous_target_date = current_release.target_date
         serializer = ReleaseWriteSerializer(current_release, data=request.data, partial=True,context={'user': request.user})
@@ -770,6 +786,7 @@ class ReleaseViewSet(BaseViewSet):
 
         if serializer.is_valid():
             updated_release = serializer.save()
+            new_lead_id = updated_release.lead_id
 
             new_status = updated_release.status
             if new_status and new_status != previous_status:
@@ -818,6 +835,7 @@ class ReleaseViewSet(BaseViewSet):
                 "has_dev_overdue_history",
                 "has_test_overdue_history",
             ).first()
+            origin = base_host(request=request, is_app=True)
 
             model_activity.delay(
                 model_name="release",
@@ -826,7 +844,7 @@ class ReleaseViewSet(BaseViewSet):
                 current_instance=current_instance,
                 actor_id=request.user.id,
                 slug=slug,
-                origin=base_host(request=request, is_app=True),
+                origin=origin,
             )
             transaction.on_commit(
                 lambda: release_activity_task.delay(
@@ -839,6 +857,14 @@ class ReleaseViewSet(BaseViewSet):
                     epoch=int(timezone.now().timestamp()),
                 )
             )
+            if str(new_lead_id or "") != str(previous_lead_id or ""):
+                dispatch_release_lead_email.delay(
+                    release_id=str(release["id"]),
+                    actor_id=str(request.user.id),
+                    old_lead_id=str(previous_lead_id) if previous_lead_id else None,
+                    new_lead_id=str(new_lead_id) if new_lead_id else None,
+                    origin=origin,
+                )
 
             if (
                 new_status
@@ -850,7 +876,7 @@ class ReleaseViewSet(BaseViewSet):
                     actor_id=str(request.user.id),
                     old_status=previous_status,
                     new_status=new_status,
-                    origin=base_host(request=request, is_app=True),
+                    origin=origin,
                 )
 
             datetime_fields = ["created_at", "updated_at"]

@@ -2,53 +2,44 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
-"""Celery tasks that fan out status-change notifications for Cycle/Release.
+"""Celery tasks that fan out Cycle/Release email notifications.
 
-These tasks enqueue rows into :class:`EmailNotificationLog` (one eligible
-recipient) so the existing Beat aggregator (``stack_email_notification``)
-picks them up and dispatches the actual emails.
-
-Recipients are scoped to the people most directly tied to the entity rather
-than every project member:
-
-* Cycle: the cycle owner (``owned_by``) plus every assignee of issues that
-  currently live under the cycle.
-* Release: the release lead (``lead``) plus its explicit ``members``.
-
-We still require recipients to be active project members and honour their
-``UserNotificationPreference.state_change`` opt-out.
+All tasks here enqueue one row per receiver into :class:`EmailNotificationLog`.
+The Beat aggregator (``stack_email_notification``) later merges and dispatches
+the actual emails.
 """
 
 # Python imports
 from datetime import datetime, timezone as datetime_timezone
 
-# Third party imports
 from celery import shared_task
-from django.utils import timezone
 
 # Module imports
 from plane.db.models import (
     Cycle,
     EmailNotificationLog,
-    IssueAssignee,
     ProjectMember,
     Release,
-    ReleaseMember,
+    User,
     UserNotificationPreference,
 )
 from plane.settings.redis import redis_instance
 from plane.utils.exception_logger import log_exception
 
 
-# Only terminal/abnormal states trigger broadcasts. Keep in sync with
-# ``plane.utils.cycle_status.CYCLE_STATUS_EMAIL_WHITELIST``.
+# Keep in sync with ``plane.utils.cycle_status.CYCLE_STATUS_EMAIL_WHITELIST``.
 CYCLE_STATUS_EMAIL_WHITELIST = {
+    Cycle.Status.IN_PROGRESS,
+    Cycle.Status.TESTING,
     Cycle.Status.RETURNED,
     Cycle.Status.COMPLETED,
     Cycle.Status.CANCELLED,
 }
 
 RELEASE_STATUS_EMAIL_WHITELIST = {
+    "in-progress",
+    "pending-test",
+    "rejected",
     "completed",
     "cancelled",
 }
@@ -115,42 +106,139 @@ def _filter_eligible_receivers(project_id, candidate_ids, actor_id):
     return [mid for mid in active_ids if mid not in disabled]
 
 
-def _cycle_candidate_receiver_ids(cycle):
-    """Owner of the cycle plus every assignee of issues currently in it."""
-    ids = set()
-    if cycle.owned_by_id:
-        ids.add(str(cycle.owned_by_id))
-    ids.update(
-        str(uid)
-        for uid in IssueAssignee.objects.filter(
-            issue__issue_cycle__cycle_id=cycle.id,
-            issue__issue_cycle__deleted_at__isnull=True,
-            deleted_at__isnull=True,
-        )
-        .values_list("assignee_id", flat=True)
-        .distinct()
-        if uid is not None
-    )
-    return ids
-
-
-def _release_candidate_receiver_ids(release):
-    """Lead of the release plus its explicit members."""
-    ids = set()
-    if release.lead_id:
-        ids.add(str(release.lead_id))
-    ids.update(
-        str(uid)
-        for uid in ReleaseMember.objects.filter(
-            release_id=release.id, deleted_at__isnull=True
+def _all_project_member_ids(project_id):
+    return {
+        str(mid)
+        for mid in ProjectMember.objects.filter(
+            project_id=project_id,
+            is_active=True,
         ).values_list("member_id", flat=True)
-        if uid is not None
+        if mid is not None
+    }
+
+
+def _normalize_user_id(user_id):
+    return str(user_id) if user_id else None
+
+
+def _user_display_name(user_id):
+    if not user_id:
+        return ""
+    user = User.objects.filter(pk=user_id).only(
+        "id",
+        "display_name",
+        "first_name",
+        "last_name",
+        "email",
+    ).first()
+    if not user:
+        return ""
+    return (
+        user.display_name
+        or f"{user.first_name or ''} {user.last_name or ''}".strip()
+        or user.email
+        or ""
     )
-    return ids
 
 
 def _now_iso():
     return datetime.now(tz=datetime_timezone.utc).isoformat()
+
+
+def _set_origin(prefix, entity_id, origin):
+    if not origin:
+        return
+    redis_instance().set(
+        f"{prefix}:{entity_id}",
+        origin,
+        ex=7200,
+    )
+
+
+def _resolve_cycle_actor_id(cycle, actor_id):
+    if actor_id:
+        return str(actor_id)
+    fallback_actor_id = cycle.owned_by_id or cycle.created_by_id
+    return _normalize_user_id(fallback_actor_id)
+
+
+def _resolve_release_actor_id(release, actor_id):
+    if actor_id:
+        return str(actor_id)
+    fallback_actor_id = release.lead_id or release.created_by_id
+    return _normalize_user_id(fallback_actor_id)
+
+
+def _cycle_payload(cycle, actor_id, origin, event, **kwargs):
+    payload = {
+        "entity_kind": "cycle",
+        "event": event,
+        "name": cycle.name,
+        "project_id": str(cycle.project_id),
+        "project_identifier": cycle.project.identifier,
+        "project_name": cycle.project.name,
+        "workspace_slug": cycle.project.workspace.slug,
+        "workspace_name": cycle.project.workspace.name,
+        "start_date": cycle.start_date.isoformat() if cycle.start_date else None,
+        "end_date": cycle.end_date.isoformat() if cycle.end_date else None,
+        "actor_id": _normalize_user_id(actor_id),
+        "is_system": actor_id is None,
+        "activity_time": _now_iso(),
+        "origin": origin,
+    }
+    payload.update(kwargs)
+    return payload
+
+
+def _release_payload(release, actor_id, origin, event, **kwargs):
+    payload = {
+        "entity_kind": "release",
+        "event": event,
+        "name": release.name,
+        "project_id": str(release.project_id),
+        "project_identifier": release.project.identifier,
+        "project_name": release.project.name,
+        "workspace_slug": release.project.workspace.slug,
+        "workspace_name": release.project.workspace.name,
+        "start_date": release.start_date.isoformat() if release.start_date else None,
+        "target_date": release.target_date.isoformat() if release.target_date else None,
+        "actor_id": _normalize_user_id(actor_id),
+        "is_system": actor_id is None,
+        "activity_time": _now_iso(),
+        "origin": origin,
+    }
+    payload.update(kwargs)
+    return payload
+
+
+def _enqueue_email_logs(
+    *,
+    entity_name,
+    entity_id,
+    event,
+    old_value,
+    new_value,
+    payload,
+    receiver_ids,
+    effective_actor_id,
+):
+    if not receiver_ids or not effective_actor_id:
+        return
+    bulk = [
+        EmailNotificationLog(
+            triggered_by_id=effective_actor_id,
+            receiver_id=receiver_id,
+            entity_identifier=entity_id,
+            entity_name=entity_name,
+            entity=event,
+            old_value=old_value,
+            new_value=new_value,
+            data={f"{entity_name}_activity": payload},
+        )
+        for receiver_id in receiver_ids
+    ]
+    if bulk:
+        EmailNotificationLog.objects.bulk_create(bulk)
 
 
 @shared_task
@@ -162,67 +250,40 @@ def dispatch_cycle_status_email(cycle_id, actor_id, old_status, new_status, orig
 
         cycle = (
             Cycle.objects.filter(pk=cycle_id)
-            .select_related("project", "project__workspace", "owned_by")
+            .select_related("project", "project__workspace", "owned_by", "created_by")
             .first()
         )
         if not cycle:
             return
 
-        # Stash the origin so the Beat-scheduled sender can build links.
-        if origin:
-            redis_instance().set(
-                f"{CYCLE_ORIGIN_REDIS_PREFIX}:{cycle_id}",
-                origin,
-                ex=7200,
-            )
-
-        # Fall back to the cycle owner when the change was triggered by the
-        # system (auto-delay) so the NOT NULL ``triggered_by`` FK stays valid.
-        effective_actor_id = actor_id or str(cycle.owned_by_id)
-
+        _set_origin(CYCLE_ORIGIN_REDIS_PREFIX, cycle_id, origin)
+        effective_actor_id = _resolve_cycle_actor_id(cycle, actor_id)
         receiver_ids = _filter_eligible_receivers(
             cycle.project_id,
-            _cycle_candidate_receiver_ids(cycle),
+            _all_project_member_ids(cycle.project_id),
             actor_id=actor_id,
         )
-        if not receiver_ids:
-            return
 
-        payload = {
-            "entity_kind": "cycle",
-            "name": cycle.name,
-            "project_id": str(cycle.project_id),
-            "project_identifier": cycle.project.identifier,
-            "project_name": cycle.project.name,
-            "workspace_slug": cycle.project.workspace.slug,
-            "workspace_name": cycle.project.workspace.name,
-            "start_date": cycle.start_date.isoformat() if cycle.start_date else None,
-            "end_date": cycle.end_date.isoformat() if cycle.end_date else None,
-            "old_status": old_status,
-            "new_status": new_status,
-            "old_status_label": CYCLE_STATUS_LABELS.get(old_status, old_status),
-            "new_status_label": CYCLE_STATUS_LABELS.get(new_status, new_status),
-            "actor_id": actor_id,
-            "is_system": actor_id is None,
-            "activity_time": _now_iso(),
-            "origin": origin,
-        }
-
-        bulk = [
-            EmailNotificationLog(
-                triggered_by_id=effective_actor_id,
-                receiver_id=receiver_id,
-                entity_identifier=cycle_id,
-                entity_name="cycle",
-                entity=new_status,
-                old_value=old_status,
-                new_value=new_status,
-                data={"cycle_activity": payload},
-            )
-            for receiver_id in receiver_ids
-        ]
-        if bulk:
-            EmailNotificationLog.objects.bulk_create(bulk)
+        payload = _cycle_payload(
+            cycle,
+            actor_id=actor_id,
+            origin=origin,
+            event="status_changed",
+            old_status=old_status,
+            new_status=new_status,
+            old_status_label=CYCLE_STATUS_LABELS.get(old_status, old_status),
+            new_status_label=CYCLE_STATUS_LABELS.get(new_status, new_status),
+        )
+        _enqueue_email_logs(
+            entity_name="cycle",
+            entity_id=cycle_id,
+            event="status_changed",
+            old_value=old_status,
+            new_value=new_status,
+            payload=payload,
+            receiver_ids=receiver_ids,
+            effective_actor_id=effective_actor_id,
+        )
     except Exception as e:
         log_exception(e)
 
@@ -242,69 +303,207 @@ def dispatch_release_status_email(release_id, actor_id, old_status, new_status, 
         if not release:
             return
 
-        if origin:
-            redis_instance().set(
-                f"{RELEASE_ORIGIN_REDIS_PREFIX}:{release_id}",
-                origin,
-                ex=7200,
-            )
-
-        # Prefer an explicit actor, then the release lead, then the creator,
-        # so the NOT NULL ``triggered_by`` FK always resolves to a real user.
-        fallback_actor_id = release.lead_id or release.created_by_id
-        effective_actor_id = actor_id or (
-            str(fallback_actor_id) if fallback_actor_id else None
-        )
-        if not effective_actor_id:
-            # No user we can attribute to - nothing we can safely persist.
-            return
-
+        _set_origin(RELEASE_ORIGIN_REDIS_PREFIX, release_id, origin)
+        effective_actor_id = _resolve_release_actor_id(release, actor_id)
         receiver_ids = _filter_eligible_receivers(
             release.project_id,
-            _release_candidate_receiver_ids(release),
+            _all_project_member_ids(release.project_id),
             actor_id=actor_id,
         )
-        if not receiver_ids:
+
+        payload = _release_payload(
+            release,
+            actor_id=actor_id,
+            origin=origin,
+            event="status_changed",
+            old_status=old_status,
+            new_status=new_status,
+            old_status_label=RELEASE_STATUS_LABELS.get(old_status, old_status),
+            new_status_label=RELEASE_STATUS_LABELS.get(new_status, new_status),
+        )
+        _enqueue_email_logs(
+            entity_name="release",
+            entity_id=release_id,
+            event="status_changed",
+            old_value=old_status,
+            new_value=new_status,
+            payload=payload,
+            receiver_ids=receiver_ids,
+            effective_actor_id=effective_actor_id,
+        )
+    except Exception as e:
+        log_exception(e)
+
+
+@shared_task
+def dispatch_cycle_created_email(cycle_id, actor_id, origin):
+    try:
+        cycle = (
+            Cycle.objects.filter(pk=cycle_id)
+            .select_related("project", "project__workspace", "owned_by", "created_by")
+            .first()
+        )
+        if not cycle:
             return
 
-        payload = {
-            "entity_kind": "release",
-            "name": release.name,
-            "project_id": str(release.project_id),
-            "project_identifier": release.project.identifier,
-            "project_name": release.project.name,
-            "workspace_slug": release.project.workspace.slug,
-            "workspace_name": release.project.workspace.name,
-            "start_date": (
-                release.start_date.isoformat() if release.start_date else None
-            ),
-            "target_date": (
-                release.target_date.isoformat() if release.target_date else None
-            ),
-            "old_status": old_status,
-            "new_status": new_status,
-            "old_status_label": RELEASE_STATUS_LABELS.get(old_status, old_status),
-            "new_status_label": RELEASE_STATUS_LABELS.get(new_status, new_status),
-            "actor_id": actor_id,
-            "is_system": actor_id is None,
-            "activity_time": _now_iso(),
-            "origin": origin,
-        }
+        _set_origin(CYCLE_ORIGIN_REDIS_PREFIX, cycle_id, origin)
+        effective_actor_id = _resolve_cycle_actor_id(cycle, actor_id)
+        receiver_ids = _filter_eligible_receivers(
+            cycle.project_id,
+            _all_project_member_ids(cycle.project_id),
+            actor_id=actor_id,
+        )
 
-        bulk = [
-            EmailNotificationLog(
-                triggered_by_id=effective_actor_id,
-                receiver_id=receiver_id,
-                entity_identifier=release_id,
-                entity_name="release",
-                entity=new_status,
-                old_value=old_status,
-                new_value=new_status,
-                data={"release_activity": payload},
-            )
-            for receiver_id in receiver_ids
-        ]
-        if bulk:
-            EmailNotificationLog.objects.bulk_create(bulk)
+        payload = _cycle_payload(
+            cycle,
+            actor_id=actor_id,
+            origin=origin,
+            event="created",
+        )
+        _enqueue_email_logs(
+            entity_name="cycle",
+            entity_id=cycle_id,
+            event="created",
+            old_value="",
+            new_value="created",
+            payload=payload,
+            receiver_ids=receiver_ids,
+            effective_actor_id=effective_actor_id,
+        )
+    except Exception as e:
+        log_exception(e)
+
+
+@shared_task
+def dispatch_release_created_email(release_id, actor_id, origin):
+    try:
+        release = (
+            Release.objects.filter(pk=release_id)
+            .select_related("project", "project__workspace", "created_by", "lead")
+            .first()
+        )
+        if not release:
+            return
+
+        _set_origin(RELEASE_ORIGIN_REDIS_PREFIX, release_id, origin)
+        effective_actor_id = _resolve_release_actor_id(release, actor_id)
+        receiver_ids = _filter_eligible_receivers(
+            release.project_id,
+            _all_project_member_ids(release.project_id),
+            actor_id=actor_id,
+        )
+
+        payload = _release_payload(
+            release,
+            actor_id=actor_id,
+            origin=origin,
+            event="created",
+        )
+        _enqueue_email_logs(
+            entity_name="release",
+            entity_id=release_id,
+            event="created",
+            old_value="",
+            new_value="created",
+            payload=payload,
+            receiver_ids=receiver_ids,
+            effective_actor_id=effective_actor_id,
+        )
+    except Exception as e:
+        log_exception(e)
+
+
+@shared_task
+def dispatch_cycle_owner_email(cycle_id, actor_id, old_owner_id, new_owner_id, origin):
+    try:
+        if not new_owner_id:
+            return
+
+        cycle = (
+            Cycle.objects.filter(pk=cycle_id)
+            .select_related("project", "project__workspace", "owned_by", "created_by")
+            .first()
+        )
+        if not cycle:
+            return
+
+        _set_origin(CYCLE_ORIGIN_REDIS_PREFIX, cycle_id, origin)
+        effective_actor_id = _resolve_cycle_actor_id(cycle, actor_id)
+        receiver_ids = _filter_eligible_receivers(
+            cycle.project_id,
+            {_normalize_user_id(new_owner_id)},
+            actor_id=actor_id,
+        )
+
+        old_owner_name = _user_display_name(old_owner_id)
+        new_owner_name = _user_display_name(new_owner_id)
+        payload = _cycle_payload(
+            cycle,
+            actor_id=actor_id,
+            origin=origin,
+            event="owner_changed",
+            old_owner_id=_normalize_user_id(old_owner_id),
+            new_owner_id=_normalize_user_id(new_owner_id),
+            old_owner_name=old_owner_name,
+            new_owner_name=new_owner_name,
+        )
+        _enqueue_email_logs(
+            entity_name="cycle",
+            entity_id=cycle_id,
+            event="owner_changed",
+            old_value=old_owner_name,
+            new_value=new_owner_name,
+            payload=payload,
+            receiver_ids=receiver_ids,
+            effective_actor_id=effective_actor_id,
+        )
+    except Exception as e:
+        log_exception(e)
+
+
+@shared_task
+def dispatch_release_lead_email(release_id, actor_id, old_lead_id, new_lead_id, origin):
+    try:
+        if not new_lead_id:
+            return
+
+        release = (
+            Release.objects.filter(pk=release_id)
+            .select_related("project", "project__workspace", "created_by", "lead")
+            .first()
+        )
+        if not release:
+            return
+
+        _set_origin(RELEASE_ORIGIN_REDIS_PREFIX, release_id, origin)
+        effective_actor_id = _resolve_release_actor_id(release, actor_id)
+        receiver_ids = _filter_eligible_receivers(
+            release.project_id,
+            {_normalize_user_id(new_lead_id)},
+            actor_id=actor_id,
+        )
+
+        old_lead_name = _user_display_name(old_lead_id)
+        new_lead_name = _user_display_name(new_lead_id)
+        payload = _release_payload(
+            release,
+            actor_id=actor_id,
+            origin=origin,
+            event="owner_changed",
+            old_owner_id=_normalize_user_id(old_lead_id),
+            new_owner_id=_normalize_user_id(new_lead_id),
+            old_owner_name=old_lead_name,
+            new_owner_name=new_lead_name,
+        )
+        _enqueue_email_logs(
+            entity_name="release",
+            entity_id=release_id,
+            event="owner_changed",
+            old_value=old_lead_name,
+            new_value=new_lead_name,
+            payload=payload,
+            receiver_ids=receiver_ids,
+            effective_actor_id=effective_actor_id,
+        )
     except Exception as e:
         log_exception(e)

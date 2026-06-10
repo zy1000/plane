@@ -59,7 +59,7 @@
           {% if entity.start_date or entity.end_date %}
           <p style="font-size: 0.9rem; color: #4b5563;">
             <span style="font-weight: 600;">周期：</span>
-            {{ entity.start_date|default:"—" }} ~ {{ entity.end_date|default:"—" }}
+            {{ entity.start_date|slice:":10"|default:"—" }} ~ {{ entity.end_date|slice:":10"|default:"—" }}
           </p>
           {% endif %}
           {% if activity_time %}
@@ -78,7 +78,7 @@
 
         <hr style="background-color: #f0f0f3; height: 1px; border: 0; margin-top: 30px; margin-bottom: 15px;" />
         <p style="font-size: 0.8rem; color: #6b7280; line-height: 20px;">
-          这封邮件发送给 {{ receiver.email }}。若不想再收到此类通知，请在
+          这封邮件发送给 {{ recipient_label }}。若不想再收到此类通知，请在
           <a href="{{ user_preference }}" target="_blank" style="color: #3358d4; text-decoration: none;">通知偏好设置</a>
           中关闭"状态变更"邮件。
         </p>

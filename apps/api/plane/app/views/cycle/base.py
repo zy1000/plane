@@ -66,7 +66,11 @@ from plane.utils.cycle_status import CYCLE_STATUS_EMAIL_WHITELIST
 from .. import BaseAPIView, BaseViewSet
 from plane.bgtasks.webhook_task import model_activity
 from plane.bgtasks.cycle_activities_task import cycle_activity as cycle_activity_task
-from plane.bgtasks.entity_status_email_task import dispatch_cycle_status_email
+from plane.bgtasks.entity_status_email_task import (
+    dispatch_cycle_created_email,
+    dispatch_cycle_owner_email,
+    dispatch_cycle_status_email,
+)
 from plane.utils.cycle.overdue_strategy import (
     scan_cycles_for_overdue,
     sync_overdue_on_date_change,
@@ -377,6 +381,7 @@ class CycleViewSet(BaseViewSet):
                 cycle = user_timezone_converter(
                     cycle, datetime_fields, project_timezone
                 )
+                origin = base_host(request=request, is_app=True)
 
                 # Send the model activity
                 model_activity.delay(
@@ -386,7 +391,7 @@ class CycleViewSet(BaseViewSet):
                     current_instance=None,
                     actor_id=request.user.id,
                     slug=slug,
-                    origin=base_host(request=request, is_app=True),
+                    origin=origin,
                 )
                 cycle_activity_task.delay(
                     type="cycle.activity.created",
@@ -396,6 +401,11 @@ class CycleViewSet(BaseViewSet):
                     actor_id=str(request.user.id),
                     project_id=str(project_id),
                     epoch=int(timezone.now().timestamp()),
+                )
+                dispatch_cycle_created_email.delay(
+                    cycle_id=str(cycle["id"]),
+                    actor_id=str(request.user.id),
+                    origin=origin,
                 )
                 return Response(cycle, status=status.HTTP_201_CREATED)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -417,6 +427,7 @@ class CycleViewSet(BaseViewSet):
 
         current_instance = json.dumps(CycleSerializer(cycle).data, cls=DjangoJSONEncoder)
         previous_status = cycle.status
+        previous_owner_id = cycle.owned_by_id
         previous_end_date = cycle.end_date
 
         request_data = request.data
@@ -439,6 +450,7 @@ class CycleViewSet(BaseViewSet):
         )
         if serializer.is_valid():
             updated_cycle = serializer.save()
+            new_owner_id = updated_cycle.owned_by_id
             new_status = updated_cycle.status
             if new_status and new_status != previous_status:
                 sync_overdue_on_status_change(updated_cycle, previous_status, new_status)
@@ -484,6 +496,7 @@ class CycleViewSet(BaseViewSet):
 
             datetime_fields = ["start_date", "end_date"]
             cycle = user_timezone_converter(cycle, datetime_fields, project_timezone)
+            origin = base_host(request=request, is_app=True)
 
             # Send the model activity
             model_activity.delay(
@@ -493,7 +506,7 @@ class CycleViewSet(BaseViewSet):
                 current_instance=current_instance,
                 actor_id=request.user.id,
                 slug=slug,
-                origin=base_host(request=request, is_app=True),
+                origin=origin,
             )
             cycle_activity_task.delay(
                 type="cycle.activity.updated",
@@ -504,6 +517,14 @@ class CycleViewSet(BaseViewSet):
                 project_id=str(project_id),
                 epoch=int(timezone.now().timestamp()),
             )
+            if str(new_owner_id or "") != str(previous_owner_id or ""):
+                dispatch_cycle_owner_email.delay(
+                    cycle_id=str(cycle["id"]),
+                    actor_id=str(request.user.id),
+                    old_owner_id=str(previous_owner_id) if previous_owner_id else None,
+                    new_owner_id=str(new_owner_id) if new_owner_id else None,
+                    origin=origin,
+                )
 
             new_status = cycle.get("status")
             if (
@@ -516,7 +537,7 @@ class CycleViewSet(BaseViewSet):
                     actor_id=str(request.user.id),
                     old_status=previous_status,
                     new_status=new_status,
-                    origin=base_host(request=request, is_app=True),
+                    origin=origin,
                 )
 
             return Response(cycle, status=status.HTTP_200_OK)

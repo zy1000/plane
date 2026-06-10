@@ -14,6 +14,8 @@ from plane.db.models import Cycle
 
 # Only these states trigger email broadcasts.
 CYCLE_STATUS_EMAIL_WHITELIST = {
+    Cycle.Status.IN_PROGRESS,
+    Cycle.Status.TESTING,
     Cycle.Status.RETURNED,
     Cycle.Status.COMPLETED,
     Cycle.Status.CANCELLED,

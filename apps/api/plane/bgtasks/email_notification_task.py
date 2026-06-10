@@ -4,7 +4,7 @@
 
 import logging
 import re
-from datetime import datetime
+from datetime import datetime, timedelta, timezone as datetime_timezone
 
 from bs4 import BeautifulSoup
 
@@ -43,13 +43,46 @@ def release_lock(lock_id):
     redis_client.delete(lock_id)
 
 
+UTC_PLUS_8 = datetime_timezone(timedelta(hours=8))
+
+
+def _normalize_receiver_ids(receiver_ids):
+    return sorted({str(receiver_id) for receiver_id in (receiver_ids or []) if receiver_id})
+
+
+def _format_activity_time_to_utc8(activity_time):
+    if not activity_time:
+        return None
+
+    if isinstance(activity_time, str):
+        raw_value = activity_time.strip()
+        if not raw_value:
+            return None
+        if re.match(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$", raw_value):
+            return raw_value
+        try:
+            parsed_time = datetime.fromisoformat(raw_value.replace("Z", "+00:00"))
+        except ValueError:
+            return raw_value
+    elif isinstance(activity_time, datetime):
+        parsed_time = activity_time
+    else:
+        return str(activity_time)
+
+    if parsed_time.tzinfo is None:
+        parsed_time = parsed_time.replace(tzinfo=datetime_timezone.utc)
+
+    return parsed_time.astimezone(UTC_PLUS_8).strftime("%Y-%m-%d %H:%M:%S")
+
+
 @shared_task
 def stack_email_notification():
     # Aggregate all unsent email notification logs and fan out per entity
     # type to the matching send task. ``issue`` logs keep their original
     # (receiver -> issue -> actor list) payload shape; ``cycle`` / ``release``
-    # logs get grouped per (receiver, entity_identifier) too but dispatched
-    # to their own senders.
+    # logs use event-aware grouping:
+    # - created/status_changed: (entity_identifier, event) broadcast
+    # - owner_changed: (receiver, entity_identifier, event) single-recipient
     email_notifications = list(
         EmailNotificationLog.objects.filter(processed_at__isnull=True).order_by("receiver").values()
     )
@@ -94,28 +127,50 @@ def stack_email_notification():
         if not entity_notifications:
             continue
 
-        # Group by (receiver_id, entity_identifier) so one email per entity
-        # per receiver even if many transitions queued up.
+        # created/status_changed -> broadcast by (entity, event)
+        # owner_changed -> single receiver by (receiver, entity, event)
         grouped = {}
         for n in entity_notifications:
-            key = (str(n.get("receiver_id")), str(n.get("entity_identifier")))
+            activity_payload = (n.get("data", {}) or {}).get(f"{entity_name}_activity", {}) or {}
+            event = activity_payload.get("event") or "status_changed"
+            entity_id = str(n.get("entity_identifier"))
+            receiver_id = str(n.get("receiver_id"))
+            if event == "owner_changed":
+                key = ("single", receiver_id, entity_id, event)
+            else:
+                key = ("broadcast", entity_id, event)
             grouped.setdefault(key, []).append(n)
 
-        for (receiver_id, entity_id), rows in grouped.items():
+        for group_key, rows in grouped.items():
+            group_mode = group_key[0]
+            if group_mode == "single":
+                _, receiver_id, entity_id, event = group_key
+                receiver_ids = [receiver_id]
+            else:
+                _, entity_id, event = group_key
+                receiver_ids = _normalize_receiver_ids(
+                    [row.get("receiver_id") for row in rows if row.get("receiver_id") is not None]
+                )
+
             rows_sorted = sorted(rows, key=lambda r: r.get("created_at"))
             email_notification_ids = [r.get("id") for r in rows_sorted]
             processed_notifications.extend(email_notification_ids)
 
             # Keep the first observed old_value and the latest new_value so
-            # a pause -> completed sequence renders as old -> completed.
+            # the email can render the full transition when needed.
             first = rows_sorted[0]
             last = rows_sorted[-1]
-            activity_payload = first.get("data", {}) or {}
+            first_activity = (first.get("data", {}) or {}).get(f"{entity_name}_activity", {}) or {}
+            last_activity = (last.get("data", {}) or {}).get(f"{entity_name}_activity", {}) or {}
             aggregated_data = {
-                **(activity_payload.get(f"{entity_name}_activity") or {}),
+                **first_activity,
+                "event": event,
                 "old_status": first.get("old_value"),
                 "new_status": last.get("new_value"),
+                "old_status_label": first_activity.get("old_status_label") or first.get("old_value"),
+                "new_status_label": last_activity.get("new_status_label") or last.get("new_value"),
                 "triggered_by_id": str(first.get("triggered_by_id")),
+                "activity_time": last_activity.get("activity_time") or first_activity.get("activity_time"),
             }
 
             task = (
@@ -123,7 +178,7 @@ def stack_email_notification():
             )
             task.delay(
                 entity_id=entity_id,
-                receiver_id=receiver_id,
+                receiver_ids=receiver_ids,
                 notification_data=aggregated_data,
                 email_notification_ids=email_notification_ids,
             )
@@ -373,13 +428,12 @@ def _send_entity_status_email(
     *,
     entity_kind,
     entity_id,
-    receiver_id,
+    receiver_ids,
     notification_data,
     email_notification_ids,
     model_class,
     origin_redis_prefix,
     url_segment,
-    template_name,
 ):
     """Shared implementation for cycle/release status-change emails.
 
@@ -387,9 +441,14 @@ def _send_entity_status_email(
     ``stack_email_notification`` (at least ``old_status``/``new_status`` and
     the same payload the dispatch task stashed into ``EmailNotificationLog.data``).
     """
+    normalized_receiver_ids = _normalize_receiver_ids(receiver_ids)
+    if not normalized_receiver_ids:
+        return
+
     sorted_ids = sorted(email_notification_ids or [])
     ids_str = "_".join(str(nid) for nid in sorted_ids)
-    lock_id = f"send_{entity_kind}_status_email_{entity_id}_{receiver_id}_{ids_str}"
+    receivers_str = "_".join(normalized_receiver_ids)
+    lock_id = f"send_{entity_kind}_status_email_{entity_id}_{receivers_str}_{ids_str}"
 
     try:
         if not acquire_lock(lock_id=lock_id):
@@ -421,14 +480,28 @@ def _send_entity_status_email(
             EMAIL_FROM,
         ) = get_email_configuration()
 
-        receiver = User.objects.get(pk=receiver_id)
         entity = model_class.objects.select_related("project", "project__workspace").get(pk=entity_id)
 
+        receiver_map = {
+            str(user.id): user
+            for user in User.objects.filter(pk__in=normalized_receiver_ids).only("id", "email")
+        }
+        receiver_emails = [
+            receiver_map[receiver_id].email
+            for receiver_id in normalized_receiver_ids
+            if receiver_id in receiver_map and receiver_map[receiver_id].email
+        ]
+        if not receiver_emails:
+            release_lock(lock_id=lock_id)
+            return
+
         data = dict(notification_data or {})
+        event = data.get("event") or "status_changed"
         workspace_slug = data.get("workspace_slug") or entity.project.workspace.slug
         project_id = data.get("project_id") or str(entity.project_id)
         project_name = data.get("project_name") or entity.project.name
         workspace_name = data.get("workspace_name") or entity.project.workspace.name
+        entity_name = data.get("name") or entity.name
 
         actor = None
         actor_id = data.get("actor_id")
@@ -443,15 +516,17 @@ def _send_entity_status_email(
         is_system = data.get("is_system") or actor_id is None
 
         entity_url = (
-            f"{base_api}/{workspace_slug}/projects/{project_id}/{url_segment}/{entity_id}"
+            f"{base_api}/{workspace_slug}/projects/{project_id}/{url_segment}/{entity_id}/overview"
         )
         project_url = f"{base_api}/{workspace_slug}/projects/{project_id}/{url_segment}/"
+        recipient_label = receiver_emails[0] if len(receiver_emails) == 1 else "所有成员"
 
         context = {
             "entity_kind": entity_kind,
+            "event": event,
             "entity": {
                 "id": str(entity.id),
-                "name": data.get("name") or entity.name,
+                "name": entity_name,
                 "url": entity_url,
                 "start_date": data.get("start_date"),
                 "end_date": data.get("end_date"),
@@ -475,19 +550,40 @@ def _send_entity_status_email(
                 else None
             ),
             "is_system": is_system,
-            "activity_time": data.get("activity_time"),
+            "activity_time": _format_activity_time_to_utc8(data.get("activity_time")),
             "workspace": workspace_slug,
             "workspace_name": workspace_name,
             "project": project_name,
             "project_url": project_url,
-            "receiver": {"email": receiver.email},
+            "recipient_label": recipient_label,
             "user_preference": f"{base_api}/{workspace_slug}/settings/account/notifications/",
+            "old_owner_name": data.get("old_owner_name"),
+            "new_owner_name": data.get("new_owner_name"),
         }
 
-        subject = (
-            f"[{project_name}] "
-            f"{context['entity']['name']} "
-            f"状态更新为 {context['status']['new_label']}"
+        entity_display_name = "迭代" if entity_kind == "cycle" else "发布"
+        if event == "created":
+            subject = f"[{project_name}] 新建{entity_display_name}：{entity_name}"
+        elif event == "owner_changed":
+            subject = f"[{project_name}] 你被指定为{entity_display_name} {entity_name} 的负责人"
+        else:
+            subject = (
+                f"[{project_name}] "
+                f"{context['entity']['name']} "
+                f"状态更新为 {context['status']['new_label']}"
+            )
+
+        template_map = {
+            ("cycle", "created"): "emails/notifications/cycle-created.html",
+            ("cycle", "owner_changed"): "emails/notifications/cycle-owner-update.html",
+            ("cycle", "status_changed"): "emails/notifications/cycle-status-update.html",
+            ("release", "created"): "emails/notifications/release-created.html",
+            ("release", "owner_changed"): "emails/notifications/release-lead-update.html",
+            ("release", "status_changed"): "emails/notifications/release-status-update.html",
+        }
+        template_name = template_map.get(
+            (entity_kind, event),
+            template_map[(entity_kind, "status_changed")],
         )
 
         html_content = render_to_string(template_name, context)
@@ -506,7 +602,7 @@ def _send_entity_status_email(
                 subject=remove_unwanted_characters(subject),
                 body=text_content,
                 from_email=EMAIL_FROM,
-                to=[receiver.email],
+                to=receiver_emails,
                 connection=connection,
             )
             msg.attach_alternative(html_content, "text/html")
@@ -534,34 +630,32 @@ def _send_entity_status_email(
 
 
 @shared_task
-def send_cycle_status_email(entity_id, receiver_id, notification_data, email_notification_ids):
+def send_cycle_status_email(entity_id, receiver_ids, notification_data, email_notification_ids):
     from plane.bgtasks.entity_status_email_task import CYCLE_ORIGIN_REDIS_PREFIX
 
     _send_entity_status_email(
         entity_kind="cycle",
         entity_id=entity_id,
-        receiver_id=receiver_id,
+        receiver_ids=receiver_ids,
         notification_data=notification_data,
         email_notification_ids=email_notification_ids,
         model_class=Cycle,
         origin_redis_prefix=CYCLE_ORIGIN_REDIS_PREFIX,
         url_segment="cycles",
-        template_name="emails/notifications/cycle-status-update.html",
     )
 
 
 @shared_task
-def send_release_status_email(entity_id, receiver_id, notification_data, email_notification_ids):
+def send_release_status_email(entity_id, receiver_ids, notification_data, email_notification_ids):
     from plane.bgtasks.entity_status_email_task import RELEASE_ORIGIN_REDIS_PREFIX
 
     _send_entity_status_email(
         entity_kind="release",
         entity_id=entity_id,
-        receiver_id=receiver_id,
+        receiver_ids=receiver_ids,
         notification_data=notification_data,
         email_notification_ids=email_notification_ids,
         model_class=Release,
         origin_redis_prefix=RELEASE_ORIGIN_REDIS_PREFIX,
         url_segment="releases",
-        template_name="emails/notifications/release-status-update.html",
     )
