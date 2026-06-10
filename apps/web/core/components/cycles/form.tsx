@@ -41,8 +41,12 @@ const defaultValues: Partial<ICycle> = {
   end_date: null,
 };
 
-const cycleFormEditorContainerClassName =
-  "min-h-56 !pl-8 rounded-md border-[0.5px] border-subtle-1 bg-layer-2 text-14";
+/* 编辑器正文字号取自 --font-size-regular（由 .editor-container.large-font 以更高优先级设为 1rem），
+   这里用 !important 覆盖该变量，使描述字号与标题输入框的 text-14（0.875rem）一致 */
+const cycleFormEditorFontSizeOverrideClassName = "[--font-size-regular:0.875rem]!";
+const cycleFormDescriptionEditorContainerClassName = `min-h-44 rounded-md border-[0.5px] border-subtle-1 bg-layer-2 text-14 ${cycleFormEditorFontSizeOverrideClassName}`;
+const cycleFormSuggestedTestScopeEditorContainerClassName =
+  `min-h-56 rounded-md border-[0.5px] border-subtle-1 bg-layer-2 text-14 ${cycleFormEditorFontSizeOverrideClassName}`;
 
 export function CycleForm(props: Props) {
   const { handleFormSubmit, handleClose, status, workspaceSlug, projectId, setActiveProject, data, isMobile = false } = props;
@@ -154,30 +158,32 @@ export function CycleForm(props: Props) {
                   dragDropEnabled={false}
                   onChange={onChange}
                   placeholder={t("description")}
-                  containerClassName={cycleFormEditorContainerClassName}
+                  containerClassName={cycleFormDescriptionEditorContainerClassName}
                 />
               )}
             />
           </div>
-          <div>
-            <Controller
-              name="suggested_test_scope"
-              control={control}
-              render={({ field: { value, onChange } }) => (
-                <CycleRichTextEditor
-                  workspaceSlug={workspaceSlug}
-                  projectId={selectedProjectId}
-                  editorId={`cycle-form-suggested-test-scope-${cycleFormEditorId}`}
-                  initialValue={value}
-                  editable
-                  dragDropEnabled={false}
-                  onChange={onChange}
-                  placeholder="建议测试范围"
-                  containerClassName={cycleFormEditorContainerClassName}
-                />
-              )}
-            />
-          </div>
+          {status && (
+            <div>
+              <Controller
+                name="suggested_test_scope"
+                control={control}
+                render={({ field: { value, onChange } }) => (
+                  <CycleRichTextEditor
+                    workspaceSlug={workspaceSlug}
+                    projectId={selectedProjectId}
+                    editorId={`cycle-form-suggested-test-scope-${cycleFormEditorId}`}
+                    initialValue={value}
+                    editable
+                    dragDropEnabled={false}
+                    onChange={onChange}
+                    placeholder="建议测试范围"
+                    containerClassName={cycleFormSuggestedTestScopeEditorContainerClassName}
+                  />
+                )}
+              />
+            </div>
+          )}
           <div className="flex flex-wrap items-center gap-2">
             <div className="space-y-1">
               <Controller
