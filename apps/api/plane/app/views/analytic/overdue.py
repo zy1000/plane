@@ -8,7 +8,7 @@ import io
 from typing import Any, Dict, List, Optional
 from urllib.parse import quote
 
-from django.db.models import Prefetch
+from django.db.models import Prefetch, Q
 from django.http import FileResponse
 from django.utils import timezone
 from openpyxl import Workbook
@@ -177,7 +177,7 @@ class WorkspaceOverdueAnalyticsEndpoint(BaseAPIView):
                 target_date__isnull=False,
                 target_date__lt=today,
             )
-            .exclude(state__group__in=["completed", "cancelled"])
+            .exclude(Q(state__group__in=["completed", "cancelled"]) | Q(state__name="Suspend"))
             .select_related("project", "state")
             .prefetch_related(active_assignees_prefetch)
             .order_by("-target_date")
