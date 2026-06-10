@@ -21,7 +21,7 @@ type Props = {
   caseId: string;
 };
 
-const SECTION_CARD = "rounded-xl border border-subtle bg-surface-1";
+const SECTION_CARD = "rounded-xl bg-surface-1";
 const FEED_COLLAPSED_MAX_HEIGHT_PX = 560;
 
 const SUB_TABS: { key: SubTabKey; label: string }[] = [
