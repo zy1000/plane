@@ -69,6 +69,7 @@ from plane.bgtasks.cycle_activities_task import cycle_activity as cycle_activity
 from plane.bgtasks.entity_status_email_task import (
     dispatch_cycle_created_email,
     dispatch_cycle_owner_email,
+    dispatch_cycle_schedule_email,
     dispatch_cycle_status_email,
 )
 from plane.utils.cycle.overdue_strategy import (
@@ -428,6 +429,7 @@ class CycleViewSet(BaseViewSet):
         current_instance = json.dumps(CycleSerializer(cycle).data, cls=DjangoJSONEncoder)
         previous_status = cycle.status
         previous_owner_id = cycle.owned_by_id
+        previous_start_date = cycle.start_date
         previous_end_date = cycle.end_date
 
         request_data = request.data
@@ -524,6 +526,20 @@ class CycleViewSet(BaseViewSet):
                     old_owner_id=str(previous_owner_id) if previous_owner_id else None,
                     new_owner_id=str(new_owner_id) if new_owner_id else None,
                     origin=origin,
+                )
+
+            if (
+                updated_cycle.start_date != previous_start_date
+                or updated_cycle.end_date != previous_end_date
+            ):
+                dispatch_cycle_schedule_email.delay(
+                    cycle_id=str(cycle["id"]),
+                    actor_id=str(request.user.id),
+                    origin=origin,
+                    old_start_date=(
+                        previous_start_date.isoformat() if previous_start_date else None
+                    ),
+                    old_end_date=previous_end_date.isoformat() if previous_end_date else None,
                 )
 
             new_status = cycle.get("status")

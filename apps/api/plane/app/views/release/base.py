@@ -85,6 +85,7 @@ from plane.bgtasks.webhook_task import model_activity
 from plane.bgtasks.entity_status_email_task import (
     dispatch_release_created_email,
     dispatch_release_lead_email,
+    dispatch_release_schedule_email,
     dispatch_release_status_email,
     RELEASE_STATUS_EMAIL_WHITELIST,
 )
@@ -779,6 +780,7 @@ class ReleaseViewSet(BaseViewSet):
         current_instance = json.dumps(ReleaseSerializer(current_release).data, cls=DjangoJSONEncoder)
         previous_status = current_release.status
         previous_lead_id = current_release.lead_id
+        previous_start_date = current_release.start_date
         previous_test_handoff_date = current_release.test_handoff_date
         previous_target_date = current_release.target_date
         serializer = ReleaseWriteSerializer(current_release, data=request.data, partial=True,context={'user': request.user})
@@ -864,6 +866,28 @@ class ReleaseViewSet(BaseViewSet):
                     old_lead_id=str(previous_lead_id) if previous_lead_id else None,
                     new_lead_id=str(new_lead_id) if new_lead_id else None,
                     origin=origin,
+                )
+
+            if (
+                updated_release.start_date != previous_start_date
+                or updated_release.target_date != previous_target_date
+                or updated_release.test_handoff_date != previous_test_handoff_date
+            ):
+                dispatch_release_schedule_email.delay(
+                    release_id=str(release["id"]),
+                    actor_id=str(request.user.id),
+                    origin=origin,
+                    old_start_date=(
+                        previous_start_date.isoformat() if previous_start_date else None
+                    ),
+                    old_target_date=(
+                        previous_target_date.isoformat() if previous_target_date else None
+                    ),
+                    old_test_handoff_date=(
+                        previous_test_handoff_date.isoformat()
+                        if previous_test_handoff_date
+                        else None
+                    ),
                 )
 
             if (

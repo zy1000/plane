@@ -3,7 +3,7 @@
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>你被指定为发布负责人</title>
+    <title>发布 {{ entity.name }} 计划时间更新</title>
     <style type="text/css" emogrify="no">html { font-family: system-ui; } p, h1, h2, h3, h4 { margin: 0; } a:hover { color: #3358d4 !important; }</style>
   </head>
   <body bgcolor="#ffffff" text="#3b3f44" link="#006399" style="background-color: #f7f9ff; margin: 20px">
@@ -23,7 +23,7 @@
         <table style="width: 100%">
           <tr>
             <td>
-              <p style="font-size: 1rem; color: #1f2d5c; font-weight: 600;">发布负责人变更</p>
+              <p style="font-size: 1rem; color: #1f2d5c; font-weight: 600;">发布计划时间更新</p>
               <p style="font-size: 0.95rem; font-weight: 500; color: #1f2d5c; line-height: 28px">
                 {{ workspace_name }} / <a target="_blank" style="color: #1f2d5c; text-decoration: none;" href="{{ project_url }}">{{ project }}</a>
                 / <a target="_blank" style="color: #1f2d5c; text-decoration: none;" href="{{ entity.url }}">{{ entity.name }}</a>
@@ -35,12 +35,13 @@
         <hr style="background-color: #f0f0f3; height: 1px; border: 0; margin-top: 15px; margin-bottom: 15px;" />
 
         <p style="font-size: 1rem; color: #1f2d5c; line-height: 28px;">
-          你已被指定为该发布的负责人。
-          {% if not is_system %}
-            操作人：
+          {% if is_system %}
+            发布计划时间已由系统更新。
+          {% else %}
             <span style="font-weight: 700;">
               {% if actor %}{{ actor.display_name }}{% else %}系统{% endif %}
             </span>
+            更新了发布计划时间。
           {% endif %}
         </p>
 
@@ -49,17 +50,15 @@
             <span style="font-weight: 600;">发布名称：</span>
             <a target="_blank" href="{{ entity.url }}" style="color: #3358d4; text-decoration: none;">{{ entity.name }}</a>
           </p>
-          <p style="font-size: 0.95rem; color: #1f2d5c; margin-bottom: 10px;">
-            <span style="font-weight: 600;">负责人变化：</span>
-            <span style="color: #6b7280;">{{ old_owner_name|default:"未设置" }}</span>
-            <span style="margin: 0 6px;">→</span>
-            <span style="font-weight: 600; color: #1f2d5c;">{{ new_owner_name|default:"未设置" }}</span>
-          </p>
-          {% if entity.test_handoff_date %}
-          <p style="font-size: 0.9rem; color: #4b5563; margin-bottom: 10px;">
-            <span style="font-weight: 600;">转测日期：</span>
-            {{ entity.test_handoff_date }}
-          </p>
+          {% if date_changes %}
+            {% for c in date_changes %}
+            <p style="font-size: 0.95rem; color: #1f2d5c; margin-bottom: 10px;">
+              <span style="font-weight: 600;">{{ c.label }}：</span>
+              <span style="color: #6b7280;">{{ c.old|default:"未设置" }}</span>
+              <span style="margin: 0 6px;">→</span>
+              <span style="font-weight: 600; color: #1f2d5c;">{{ c.new|default:"未设置" }}</span>
+            </p>
+            {% endfor %}
           {% endif %}
           {% if activity_time %}
           <p style="font-size: 0.85rem; color: #6b7280; margin-top: 8px;">

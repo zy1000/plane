@@ -531,6 +531,7 @@ def _send_entity_status_email(
                 "start_date": data.get("start_date"),
                 "end_date": data.get("end_date"),
                 "target_date": data.get("target_date"),
+                "test_handoff_date": data.get("test_handoff_date"),
             },
             "status": {
                 "old": data.get("old_status"),
@@ -561,6 +562,7 @@ def _send_entity_status_email(
             "new_owner_name": data.get("new_owner_name"),
             "owner_name": data.get("owner_name"),
             "phase_label": data.get("phase_label"),
+            "date_changes": data.get("date_changes"),
         }
 
         entity_display_name = "迭代" if entity_kind == "cycle" else "发布"
@@ -570,6 +572,8 @@ def _send_entity_status_email(
             subject = f"[{project_name}] 你被指定为{entity_display_name} {entity_name} 的负责人"
         elif event == "overdue":
             subject = f"[{project_name}] {entity_display_name}延期提醒：{entity_name}"
+        elif event == "schedule_changed":
+            subject = f"[{project_name}] {entity_display_name}计划时间已更新：{entity_name}"
         else:
             subject = (
                 f"[{project_name}] "
@@ -582,10 +586,12 @@ def _send_entity_status_email(
             ("cycle", "owner_changed"): "emails/notifications/cycle-owner-update.html",
             ("cycle", "status_changed"): "emails/notifications/cycle-status-update.html",
             ("cycle", "overdue"): "emails/notifications/cycle-overdue.html",
+            ("cycle", "schedule_changed"): "emails/notifications/cycle-schedule-update.html",
             ("release", "created"): "emails/notifications/release-created.html",
             ("release", "owner_changed"): "emails/notifications/release-lead-update.html",
             ("release", "status_changed"): "emails/notifications/release-status-update.html",
             ("release", "overdue"): "emails/notifications/release-overdue.html",
+            ("release", "schedule_changed"): "emails/notifications/release-schedule-update.html",
         }
         template_name = template_map.get(
             (entity_kind, event),

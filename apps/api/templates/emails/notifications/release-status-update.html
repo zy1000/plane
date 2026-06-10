@@ -62,6 +62,12 @@
             {{ entity.start_date|default:"—" }} ~ {{ entity.target_date|default:"—" }}
           </p>
           {% endif %}
+          {% if entity.test_handoff_date %}
+          <p style="font-size: 0.9rem; color: #4b5563; margin-top: 8px;">
+            <span style="font-weight: 600;">转测日期：</span>
+            {{ entity.test_handoff_date }}
+          </p>
+          {% endif %}
           {% if activity_time %}
           <p style="font-size: 0.85rem; color: #6b7280; margin-top: 8px;">
             触发时间：{{ activity_time }}
