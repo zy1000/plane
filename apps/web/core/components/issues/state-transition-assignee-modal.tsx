@@ -70,7 +70,7 @@ export const StateTransitionAssigneeModal = ({
               leaveFrom="opacity-100 scale-100"
               leaveTo="opacity-0 scale-95"
             >
-              <Dialog.Panel className="w-full max-w-lg overflow-hidden rounded-xl bg-surface-1 shadow-raised-200">
+              <Dialog.Panel className="flex flex-col w-full max-w-lg min-h-[280px] overflow-hidden rounded-xl bg-surface-1 shadow-raised-200">
                 <div className="flex items-center justify-between border-b border-subtle px-5 py-4">
                   <div>
                     <Dialog.Title className="text-base font-semibold text-primary">
@@ -89,7 +89,7 @@ export const StateTransitionAssigneeModal = ({
                   </button>
                 </div>
 
-                <div className="space-y-3 px-5 py-4">
+                <div className="flex-1 space-y-3 px-5 py-4">
                   {noAllowedAssignees ? (
                     <div className="flex items-start gap-2 rounded-md border border-warning/50 bg-warning/10 px-3 py-2 text-sm text-warning">
                       <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" />
@@ -100,16 +100,20 @@ export const StateTransitionAssigneeModal = ({
                       <p className="text-xs text-secondary">
                         可选负责人（{normalizedAllowedAssigneeIds.length}）
                       </p>
-                      <MemberDropdown
-                        multiple
-                        value={selectedAssigneeIds}
-                        onChange={setSelectedAssigneeIds}
-                        projectId={projectId}
-                        memberIds={normalizedAllowedAssigneeIds}
-                        placeholder="请选择负责人"
-                        className="w-full"
-                        buttonContainerClassName="w-full text-left"
-                      />
+                      <div className="h-9">
+                        <MemberDropdown
+                          multiple
+                          value={selectedAssigneeIds}
+                          onChange={setSelectedAssigneeIds}
+                          projectId={projectId}
+                          memberIds={normalizedAllowedAssigneeIds}
+                          placeholder="请选择负责人"
+                          buttonVariant="border-with-text"
+                          dropdownArrow
+                          className="w-full"
+                          buttonContainerClassName="h-full w-full text-left"
+                        />
+                      </div>
                     </div>
                   )}
                 </div>
