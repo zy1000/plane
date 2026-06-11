@@ -6,7 +6,7 @@
 
 import type { FC } from "react";
 import { useEffect, useRef, useState } from "react";
-import { ArrowRight, MoreHorizontal, Tag, Users } from "lucide-react";
+import { MoreHorizontal, Tag, Users } from "lucide-react";
 import { EIconSize } from "@plane/constants";
 import { StateGroupIcon } from "@plane/propel/icons";
 import type { IState } from "@plane/types";
@@ -155,13 +155,11 @@ export const TransitionFlowRow: FC<TTransitionFlowRowProps> = ({
   const assigneeSummary = getPrincipalSummary(assigneeIds, "不约束");
   const approverSummary = getPrincipalSummary(approverIds, "All");
 
-  const box1Active = (isOwner && activeBox === 1) || (isNew && step === 1 && !isOwner);
   const box2Active = (isOwner && activeBox === 2) || (isNew && step === 2 && !isOwner);
   const box3Active = (isOwner && activeBox === 3) || (isNew && step === 3 && !isOwner);
   const box4Active = (isOwner && activeBox === 4) || (isNew && step === 4 && !isOwner);
   const box5Active = (isOwner && activeBox === 5) || (isNew && step === 5 && !isOwner);
 
-  const box1Done = isNew ? step !== 1 : true;
   const box2Done = isNew ? [3, 4, 5, "done"].includes(step) : true;
   const box3Done = isNew ? [4, 5, "done"].includes(step) : true;
   const box4Done = isNew ? [5, "done"].includes(step) : true;
@@ -528,20 +526,7 @@ export const TransitionFlowRow: FC<TTransitionFlowRowProps> = ({
       )}
 
       <div className="px-3 pt-2.5 pb-3 pr-9">
-        <div className="grid grid-cols-6 gap-2">
-          <div>
-            <p className="mb-1 text-xs text-tertiary">via</p>
-            <button
-              type="button"
-              onClick={handleOpenFlowPanel}
-              disabled={!isEditable}
-              className={getBoxClassName(box1Active, box1Done)}
-            >
-              <ArrowRight className="h-3.5 w-3.5 flex-shrink-0 text-secondary" />
-              <span className="flex-1 text-left text-primary">Transition</span>
-            </button>
-          </div>
-
+        <div className="grid grid-cols-5 gap-2">
           <div>
             <p className="mb-1 text-xs text-tertiary">move to</p>
             <button
