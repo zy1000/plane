@@ -20,6 +20,10 @@ import { store } from "@/lib/store-context";
 import { ISSUE_FILTER_DEFAULT_DATA } from "@/store/issue/helpers/base-issues.store";
 import { useIssueDetail } from "./store/use-issue-detail";
 import { useIssues } from "./store/use-issues";
+import {
+  useStateTransitionAssigneeGuard,
+  type TStateTransitionUpdatePayload,
+} from "./store/use-state-transition-assignee-guard";
 import { useIssuesActions } from "./use-issues-actions";
 
 type DNDStoreType =
@@ -48,8 +52,9 @@ export const useGroupIssuesDragNDrop = (
   groupBy: TIssueGroupByOptions | undefined,
   subGroupBy?: TIssueGroupByOptions
 ) => {
-  const { workspaceSlug } = useParams();
+  const { workspaceSlug, projectId } = useParams();
   const { t } = useTranslation();
+  const stateTransitionGuard = useStateTransitionAssigneeGuard(workspaceSlug?.toString(), projectId?.toString());
 
   const [pendingDrop, setPendingDrop] = useState<PendingDrop | null>(null);
 
@@ -112,8 +117,9 @@ export const useGroupIssuesDragNDrop = (
       delete data[moduleKey];
     }
 
-    updateIssue &&
-      updateIssue(projectId, issueId, data).catch((error) => {
+    const submitIssueUpdate = async (payload: Partial<TIssue>) => {
+      if (!updateIssue) return;
+      await updateIssue(projectId, issueId, payload).catch((error) => {
         const errorData = error as TIssueWorkflowUpdateError;
         const approvalInitiated = isWorkflowApprovalInitiated(errorData);
         setToast({
@@ -123,6 +129,29 @@ export const useGroupIssuesDragNDrop = (
           message: extractIssueUpdateErrorMessage(errorData) ?? errorToastProps.message,
         });
       });
+    };
+
+    const sourceIssue = getIssueById(issueId);
+    const nextStateId = typeof data.state_id === "string" ? data.state_id : null;
+    if (sourceIssue && nextStateId && String(sourceIssue.state_id) !== String(nextStateId)) {
+      await stateTransitionGuard.requestStateChange(
+        sourceIssue,
+        nextStateId,
+        async (transitionPayload: TStateTransitionUpdatePayload) => {
+          const nextPayload: Partial<TIssue> = {
+            ...data,
+            state_id: transitionPayload.state_id,
+          };
+          if ("assignee_ids" in transitionPayload) {
+            nextPayload.assignee_ids = transitionPayload.assignee_ids;
+          }
+          await submitIssueUpdate(nextPayload);
+        }
+      );
+      return;
+    }
+
+    await submitIssueUpdate(data);
   };
 
   const executeDrop = async (
@@ -193,5 +222,11 @@ export const useGroupIssuesDragNDrop = (
     setPendingDrop(null);
   };
 
-  return { handleOnDrop, pendingDrop, confirmStateSelection, cancelStateSelection };
+  return {
+    handleOnDrop,
+    pendingDrop,
+    confirmStateSelection,
+    cancelStateSelection,
+    assigneeModalProps: stateTransitionGuard.modalProps,
+  };
 };

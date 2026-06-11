@@ -27,6 +27,7 @@ import { useIssuesActions } from "@/hooks/use-issues-actions";
 import { DeleteIssueModal } from "../../delete-issue-modal";
 import { IssueLayoutHOC } from "../issue-layout-HOC";
 import type { IQuickActionProps, TRenderQuickActions } from "../list/list-view-types";
+import { StateTransitionAssigneeModal } from "../../state-transition-assignee-modal";
 //components
 import { getSourceFromDropPayload } from "../utils";
 import { KanBan } from "./default";
@@ -128,12 +129,8 @@ export const BaseKanBanRoot = observer(function BaseKanBanRoot(props: IBaseKanBa
     EUserPermissionsLevel.PROJECT
   );
 
-  const { handleOnDrop, pendingDrop, confirmStateSelection, cancelStateSelection } = useGroupIssuesDragNDrop(
-    storeType,
-    orderBy,
-    group_by,
-    sub_group_by
-  );
+  const { handleOnDrop, pendingDrop, confirmStateSelection, cancelStateSelection, assigneeModalProps } =
+    useGroupIssuesDragNDrop(storeType, orderBy, group_by, sub_group_by);
 
   const canEditProperties = useCallback(
     (projectId: string | undefined) => {
@@ -269,6 +266,7 @@ export const BaseKanBanRoot = observer(function BaseKanBanRoot(props: IBaseKanBa
         onSelect={confirmStateSelection}
         onCancel={cancelStateSelection}
       />
+      <StateTransitionAssigneeModal {...assigneeModalProps} />
       {/* drag and delete component */}
       <div
         className={`fixed left-1/2 -translate-x-1/2 ${

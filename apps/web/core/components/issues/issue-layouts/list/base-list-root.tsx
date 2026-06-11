@@ -23,6 +23,7 @@ import { useIssueStoreType } from "@/hooks/use-issue-layout-store";
 import { useIssuesActions } from "@/hooks/use-issues-actions";
 // components
 import { IssueLayoutHOC } from "../issue-layout-HOC";
+import { StateTransitionAssigneeModal } from "../../state-transition-assignee-modal";
 import { List } from "./default";
 // types
 import type { IQuickActionProps, TRenderQuickActions } from "./list-view-types";
@@ -120,7 +121,7 @@ export const BaseListRoot = observer(function BaseListRoot(props: IBaseListRoot)
     [canEditPropertiesBasedOnProject, enableInlineEditing, isEditingAllowed]
   );
 
-  const handleOnDrop = useGroupIssuesDragNDrop(storeType, orderBy, group_by);
+  const { handleOnDrop, assigneeModalProps } = useGroupIssuesDragNDrop(storeType, orderBy, group_by);
 
   const renderQuickActions: TRenderQuickActions = useCallback(
     ({ issue, parentRef }) => (
@@ -180,30 +181,33 @@ export const BaseListRoot = observer(function BaseListRoot(props: IBaseListRoot)
 
   return (
     <IssueLayoutHOC layout={EIssueLayoutTypes.LIST}>
-      <div className={`relative size-full bg-surface-2`}>
-        <List
-          issuesMap={issueMap}
-          displayProperties={displayProperties}
-          group_by={group_by}
-          orderBy={orderBy}
-          updateIssue={updateIssue}
-          quickActions={renderQuickActions}
-          groupedIssueIds={groupedIssueIds ?? {}}
-          loadMoreIssues={loadMoreIssues}
-          showEmptyGroup={showEmptyGroup}
-          canEditProperties={canEditProperties}
-          disableIssueCreation={!enableIssueCreation || !isEditingAllowed}
-          hideColumnHeaderAddButton={hideColumnHeaderAddButton}
-          addIssuesToView={addIssuesToView}
-          isCompletedCycle={isCompletedCycle}
-          handleOnDrop={handleOnDrop}
-          handleCollapsedGroups={handleCollapsedGroups}
-          collapsedGroups={collapsedGroups}
-          isEpic={isEpic}
-          selectedGroupId={selectedGroupId}
-          onSelectGroup={setSelectedGroupId}
-        />
-      </div>
+      <>
+        <div className={`relative size-full bg-surface-2`}>
+          <List
+            issuesMap={issueMap}
+            displayProperties={displayProperties}
+            group_by={group_by}
+            orderBy={orderBy}
+            updateIssue={updateIssue}
+            quickActions={renderQuickActions}
+            groupedIssueIds={groupedIssueIds ?? {}}
+            loadMoreIssues={loadMoreIssues}
+            showEmptyGroup={showEmptyGroup}
+            canEditProperties={canEditProperties}
+            disableIssueCreation={!enableIssueCreation || !isEditingAllowed}
+            hideColumnHeaderAddButton={hideColumnHeaderAddButton}
+            addIssuesToView={addIssuesToView}
+            isCompletedCycle={isCompletedCycle}
+            handleOnDrop={handleOnDrop}
+            handleCollapsedGroups={handleCollapsedGroups}
+            collapsedGroups={collapsedGroups}
+            isEpic={isEpic}
+            selectedGroupId={selectedGroupId}
+            onSelectGroup={setSelectedGroupId}
+          />
+        </div>
+        <StateTransitionAssigneeModal {...assigneeModalProps} />
+      </>
     </IssueLayoutHOC>
   );
 });

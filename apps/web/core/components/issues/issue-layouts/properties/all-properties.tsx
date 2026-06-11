@@ -42,6 +42,10 @@ import { useIssues } from "@/hooks/store/use-issues";
 import { useLabel } from "@/hooks/store/use-label";
 import { useProject } from "@/hooks/store/use-project";
 import { useProjectState } from "@/hooks/store/use-project-state";
+import {
+  useStateTransitionAssigneeGuard,
+  type TStateTransitionUpdatePayload,
+} from "@/hooks/store/use-state-transition-assignee-guard";
 import { useAppRouter } from "@/hooks/use-app-router";
 import { useIssueStoreType } from "@/hooks/use-issue-layout-store";
 import { usePlatformOS } from "@/hooks/use-platform-os";
@@ -56,6 +60,7 @@ import {
   isWorkflowApprovalInitiated,
   type TIssueWorkflowUpdateError,
 } from "../../workflow-error-utils";
+import { StateTransitionAssigneeModal } from "../../state-transition-assignee-modal";
 import { WithDisplayPropertiesHOC } from "./with-display-properties-HOC";
 
 export interface IIssueProperties {
@@ -91,6 +96,7 @@ export const IssueProperties = observer(function IssueProperties(props: IIssuePr
   // router
   const router = useAppRouter();
   const { workspaceSlug, projectId } = useParams();
+  const stateTransitionGuard = useStateTransitionAssigneeGuard(workspaceSlug?.toString(), issue.project_id ?? undefined);
 
   // derived values
   const stateDetails = getStateById(issue.state_id);
@@ -157,25 +163,36 @@ export const IssueProperties = observer(function IssueProperties(props: IIssuePr
     [workspaceSlug, issue, changeModulesInIssue, addCycleToIssue, removeCycleFromIssue, showIssueUpdateErrorToast]
   );
 
-  const handleState = async (stateId: string) => {
-    if (!updateIssue) return;
-    try {
-      await updateIssue(issue.project_id, issue.id, { state_id: stateId });
-    } catch (error) {
-      const errorData = error as TIssueWorkflowUpdateError;
-      const errorMessage = extractIssueUpdateErrorMessage(errorData);
-      const approvalInitiated = isWorkflowApprovalInitiated(errorData);
-      setToast({
-        type: approvalInitiated ? TOAST_TYPE.INFO : TOAST_TYPE.ERROR,
-        title: approvalInitiated ? "已发起审批流程" : t("common.error.label"),
-        message:
-          errorMessage ??
-          (approvalInitiated
-            ? "该状态变更需审批人通过后才会生效"
-            : t("entity.update.failed", { entity: t("issue.label") })),
-      });
-    }
-  };
+  const submitStateChange = useCallback(
+    async (payload: TStateTransitionUpdatePayload) => {
+      if (!updateIssue) return;
+      try {
+        await updateIssue(issue.project_id, issue.id, payload);
+      } catch (error) {
+        const errorData = error as TIssueWorkflowUpdateError;
+        const errorMessage = extractIssueUpdateErrorMessage(errorData);
+        const approvalInitiated = isWorkflowApprovalInitiated(errorData);
+        setToast({
+          type: approvalInitiated ? TOAST_TYPE.INFO : TOAST_TYPE.ERROR,
+          title: approvalInitiated ? "已发起审批流程" : t("common.error.label"),
+          message:
+            errorMessage ??
+            (approvalInitiated
+              ? "该状态变更需审批人通过后才会生效"
+              : t("entity.update.failed", { entity: t("issue.label") })),
+        });
+      }
+    },
+    [issue.id, issue.project_id, t, updateIssue]
+  );
+
+  const handleState = useCallback(
+    async (stateId: string) => {
+      if (!updateIssue) return;
+      await stateTransitionGuard.requestStateChange(issue, stateId, submitStateChange);
+    },
+    [issue, stateTransitionGuard, submitStateChange, updateIssue]
+  );
 
   const handlePriority = async (value: TIssuePriorities) => {
     if (updateIssue) await updateIssue(issue.project_id, issue.id, { priority: value });
@@ -612,6 +629,7 @@ export const IssueProperties = observer(function IssueProperties(props: IIssuePr
           maxRender={3}
         />
       </WithDisplayPropertiesHOC>
+      <StateTransitionAssigneeModal {...stateTransitionGuard.modalProps} />
     </div>
   );
 });
