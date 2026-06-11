@@ -5,10 +5,11 @@
  */
 
 import type { FC } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { Check, ChevronDown, Tag } from "lucide-react";
 import { cn } from "@plane/utils";
 import { useIssueTypeExtraFields } from "@/hooks/store/use-issue-type-extra-fields";
+import { DropdownPanel } from "./dropdown-panel";
 
 type TFieldsSelectProps = {
   workspaceSlug: string;
@@ -29,7 +30,7 @@ export const FieldsSelect: FC<TFieldsSelectProps> = ({
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const containerRef = useRef<HTMLDivElement>(null);
+  const [referenceElement, setReferenceElement] = useState<HTMLButtonElement | null>(null);
 
   const { fields, isLoading } = useIssueTypeExtraFields(workspaceSlug, projectId, issueTypeId, undefined, { lite: true });
 
@@ -49,24 +50,18 @@ export const FieldsSelect: FC<TFieldsSelectProps> = ({
     onChange([...value, fieldId]);
   };
 
-  useEffect(() => {
-    if (!isOpen) return;
-    const onMouseDown = (event: MouseEvent) => {
-      if (!containerRef.current?.contains(event.target as Node)) {
-        setIsOpen(false);
-        setSearch("");
-      }
-    };
-    document.addEventListener("mousedown", onMouseDown);
-    return () => document.removeEventListener("mousedown", onMouseDown);
-  }, [isOpen]);
+  const handleClose = () => {
+    setIsOpen(false);
+    setSearch("");
+  };
 
   return (
-    <div ref={containerRef} className="relative">
+    <div className="relative">
       <button
+        ref={setReferenceElement}
         type="button"
         disabled={disabled}
-        onClick={() => setIsOpen((prev) => !prev)}
+        onClick={() => (isOpen ? handleClose() : setIsOpen(true))}
         className={cn(
           "flex h-9 w-full items-center gap-2 rounded-md border border-subtle bg-surface-1 px-3 text-sm transition-colors",
           disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer hover:border-accent-primary/50 hover:bg-surface-2",
@@ -78,8 +73,8 @@ export const FieldsSelect: FC<TFieldsSelectProps> = ({
         <ChevronDown className={cn("h-3.5 w-3.5 flex-shrink-0 text-secondary transition-transform", isOpen && "rotate-180")} />
       </button>
 
-      {isOpen && (
-        <div className="absolute left-0 top-full z-20 mt-1 w-full min-w-[260px] rounded-md border border-subtle bg-surface-1 shadow-lg">
+      <DropdownPanel isOpen={isOpen} referenceElement={referenceElement} onClose={handleClose} minWidth={260}>
+        <div>
           <div className="border-b border-subtle p-2">
             <input
               autoFocus
@@ -122,7 +117,7 @@ export const FieldsSelect: FC<TFieldsSelectProps> = ({
             )}
           </div>
         </div>
-      )}
+      </DropdownPanel>
     </div>
   );
 };

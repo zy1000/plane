@@ -6,7 +6,7 @@
 
 import type { FC } from "react";
 import { useEffect, useMemo } from "react";
-import { ArrowRight, Tag } from "lucide-react";
+import { ArrowRight, Pencil, Tag } from "lucide-react";
 import { EIconSize } from "@plane/constants";
 import { StateGroupIcon } from "@plane/propel/icons";
 import { Avatar } from "@plane/ui";
@@ -18,6 +18,7 @@ import { useProjectRoles } from "@/hooks/store/use-project-roles";
 import type { TWorkflowTransition } from "@/services/project/project-workflow.service";
 import {
   WORKFLOW_SPECIAL_APPROVER_OPTIONS,
+  getRoleIdFromToken,
   getWorkflowApproverLabel,
   isRoleToken,
 } from "./approver-utils";
@@ -32,7 +33,9 @@ type TWorkflowViewPanelProps = {
   workspaceSlug: string;
   projectId: string;
   issueTypeId: string;
+  isEditable?: boolean;
   onClose: () => void;
+  onEdit?: () => void;
 };
 
 const TITLE_BY_BOX: Record<TViewBox, string> = {
@@ -62,7 +65,9 @@ export const WorkflowViewPanel: FC<TWorkflowViewPanelProps> = ({
   workspaceSlug,
   projectId,
   issueTypeId,
+  isEditable = false,
   onClose,
+  onEdit,
 }) => {
   const isPrincipal = box === "initiator" || box === "assignee" || box === "approver";
 
@@ -109,6 +114,26 @@ export const WorkflowViewPanel: FC<TWorkflowViewPanelProps> = ({
     if (box === "approver") return transition.approver_ids;
     return [];
   }, [box, transition.approver_ids, transition.assignee_ids, transition.initiator_ids]);
+
+  const groupedPrincipalIds = useMemo(() => {
+    const dynamic: string[] = [];
+    const role: string[] = [];
+    const member: string[] = [];
+
+    principalIds.forEach((id) => {
+      if (isSpecialToken(id)) {
+        dynamic.push(id);
+        return;
+      }
+      if (isRoleToken(id)) {
+        role.push(id);
+        return;
+      }
+      member.push(id);
+    });
+
+    return { dynamic, role, member };
+  }, [principalIds]);
 
   const approvalRuleText = useMemo(() => {
     if (transition.approver_ids.length === 0) return "无需指定审批人（All）";
@@ -159,6 +184,41 @@ export const WorkflowViewPanel: FC<TWorkflowViewPanelProps> = ({
 
     // principal: initiator / assignee / approver
     const dimension = box as "initiator" | "assignee" | "approver";
+
+    const renderPrincipalItem = (id: string) => {
+      const roleId = getRoleIdFromToken(id);
+      const specialOption = WORKFLOW_SPECIAL_APPROVER_OPTIONS.find((option) => option.id === id);
+      const isMember = !isSpecialToken(id) && !isRoleToken(id);
+      const user = isMember ? getUserDetails(id) : undefined;
+      const label = roleId
+        ? (roleTokenNameMap[roleId] ?? "项目角色")
+        : getWorkflowApproverLabel(id, getUserDetails, (rid) => roleTokenNameMap[rid]);
+
+      return (
+        <div
+          key={id}
+          className="flex items-center gap-2 rounded-md border border-subtle bg-surface-2 px-3 py-1.5 text-sm text-primary"
+        >
+          {isMember && <Avatar name={user?.display_name} src={user?.avatar_url} size="sm" className="flex-shrink-0" />}
+          <div className="min-w-0">
+            <span className="block truncate">{label}</span>
+            {specialOption && <p className="text-xs text-secondary">{specialOption.description}</p>}
+          </div>
+        </div>
+      );
+    };
+
+    const renderPrincipalGroup = (title: string, ids: string[]) => {
+      if (ids.length === 0) return null;
+
+      return (
+        <div className="space-y-1.5">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-tertiary">{title}</p>
+          {ids.map(renderPrincipalItem)}
+        </div>
+      );
+    };
+
     return (
       <div className="space-y-3">
         {principalIds.length === 0 ? (
@@ -167,21 +227,10 @@ export const WorkflowViewPanel: FC<TWorkflowViewPanelProps> = ({
             <p className="mt-0.5 text-xs text-tertiary">{PRINCIPAL_DEFAULT[dimension].description}</p>
           </div>
         ) : (
-          <div className="space-y-1.5">
-            {principalIds.map((id) => {
-              const label = getWorkflowApproverLabel(id, getUserDetails, (roleId) => roleTokenNameMap[roleId]);
-              const isMember = !isSpecialToken(id) && !isRoleToken(id);
-              const user = isMember ? getUserDetails(id) : undefined;
-              return (
-                <div
-                  key={id}
-                  className="flex items-center gap-2 rounded-md border border-subtle bg-surface-2 px-3 py-1.5 text-sm text-primary"
-                >
-                  {isMember && <Avatar name={user?.display_name} src={user?.avatar_url} size="sm" className="flex-shrink-0" />}
-                  <span className="truncate">{label}</span>
-                </div>
-              );
-            })}
+          <div className="space-y-3">
+            {renderPrincipalGroup("动态人员", groupedPrincipalIds.dynamic)}
+            {renderPrincipalGroup("角色", groupedPrincipalIds.role)}
+            {renderPrincipalGroup("成员", groupedPrincipalIds.member)}
           </div>
         )}
 
@@ -207,6 +256,16 @@ export const WorkflowViewPanel: FC<TWorkflowViewPanelProps> = ({
           <ArrowRight className="h-4 w-4" />
         </button>
         <h3 className="text-sm font-medium text-primary">{TITLE_BY_BOX[box]}</h3>
+        {isEditable && onEdit && (
+          <button
+            type="button"
+            onClick={onEdit}
+            className="ml-auto flex h-6 w-6 flex-shrink-0 items-center justify-center rounded text-secondary transition-colors hover:bg-layer-1 hover:text-primary"
+            aria-label="编辑流转"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </button>
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto p-3">

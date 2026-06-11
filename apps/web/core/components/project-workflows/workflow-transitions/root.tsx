@@ -240,7 +240,9 @@ export const WorkflowTransitionsRoot: FC<TWorkflowTransitionsRootProps> = ({
                 workspaceSlug={workspaceSlug}
                 projectId={projectId}
                 issueTypeId={workflow.issue_type_id}
+                isEditable={isEditable}
                 onClose={() => setActiveView(null)}
+                onEdit={() => handleOpenEdit(activeView.fromState, activeView.transition)}
               />
             </div>
           )}

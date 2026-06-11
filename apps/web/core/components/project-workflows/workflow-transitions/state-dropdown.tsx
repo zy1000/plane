@@ -5,12 +5,13 @@
  */
 
 import type { FC } from "react";
-import { useState, useRef } from "react";
+import { useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { EIconSize } from "@plane/constants";
 import { StateGroupIcon } from "@plane/propel/icons";
 import type { IState } from "@plane/types";
 import { cn } from "@plane/utils";
+import { DropdownPanel } from "./dropdown-panel";
 
 type TStateDropdownProps = {
   states: IState[];
@@ -31,7 +32,7 @@ export const StateDropdown: FC<TStateDropdownProps> = ({
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const containerRef = useRef<HTMLDivElement>(null);
+  const [referenceElement, setReferenceElement] = useState<HTMLButtonElement | null>(null);
 
   const selectedState = value ? states.find((s) => s.id === value) : null;
   const availableStates = states.filter((s) => !excludeStateIds.includes(s.id));
@@ -45,19 +46,18 @@ export const StateDropdown: FC<TStateDropdownProps> = ({
     setSearch("");
   };
 
-  const handleBlur = (e: React.FocusEvent) => {
-    if (!containerRef.current?.contains(e.relatedTarget as Node)) {
-      setIsOpen(false);
-      setSearch("");
-    }
+  const handleClose = () => {
+    setIsOpen(false);
+    setSearch("");
   };
 
   return (
-    <div ref={containerRef} className="relative" onBlur={handleBlur}>
+    <div className="relative">
       <button
+        ref={setReferenceElement}
         type="button"
         disabled={disabled}
-        onClick={() => setIsOpen((prev) => !prev)}
+        onClick={() => (isOpen ? handleClose() : setIsOpen(true))}
         className={cn(
           "flex h-9 w-full items-center gap-2 rounded-md border border-subtle bg-surface-1 px-3 text-sm transition-colors",
           disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer hover:border-accent-primary/50 hover:bg-surface-2",
@@ -75,8 +75,8 @@ export const StateDropdown: FC<TStateDropdownProps> = ({
         <ChevronDown className={cn("h-3.5 w-3.5 flex-shrink-0 text-secondary transition-transform", isOpen && "rotate-180")} />
       </button>
 
-      {isOpen && (
-        <div className="absolute left-0 top-full z-20 mt-1 w-full min-w-[200px] rounded-md border border-subtle bg-surface-1 shadow-lg">
+      <DropdownPanel isOpen={isOpen} referenceElement={referenceElement} onClose={handleClose} minWidth={200}>
+        <div>
           <div className="p-1.5">
             <input
               autoFocus
@@ -107,7 +107,7 @@ export const StateDropdown: FC<TStateDropdownProps> = ({
             )}
           </div>
         </div>
-      )}
+      </DropdownPanel>
     </div>
   );
 };
