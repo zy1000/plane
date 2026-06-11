@@ -7,7 +7,7 @@
 import { useState } from "react";
 import { observer } from "mobx-react";
 import type { Control } from "react-hook-form";
-import { Controller } from "react-hook-form";
+import { Controller, useFormState } from "react-hook-form";
 import {
   ETabIndices,
   EUserPermissions,
@@ -108,6 +108,9 @@ export const IssueDefaultProperties = observer(function IssueDefaultProperties(p
     allowProjectPermissionKeys([PROJECT_RELEASES_ISSUE_MANAGE_PERMISSION_KEY], workspaceSlug, projectId)
   );
 
+  const { errors } = useFormState({ control });
+  const assigneeError = errors.assignee_ids;
+
   const ASSIGNEE_REQUIRED_HINT = "请至少选择一名负责人";
 
   const NO_CYCLE_PERMISSION_HINT = "你没有将工作项加入迭代的权限，如需使用请联系项目管理员";
@@ -121,7 +124,7 @@ export const IssueDefaultProperties = observer(function IssueDefaultProperties(p
   maxDate?.setDate(maxDate.getDate());
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className={cn("flex flex-wrap items-center gap-2", assigneeError && "pb-5")}>
       <Controller
         control={control}
         name="state_id"
@@ -167,7 +170,7 @@ export const IssueDefaultProperties = observer(function IssueDefaultProperties(p
           validate: (value) => (!id && (!Array.isArray(value) || value.length === 0) ? ASSIGNEE_REQUIRED_HINT : undefined),
         }}
         render={({ field: { value, onChange }, fieldState: { error } }) => (
-          <div className="h-7">
+          <div className="relative h-7">
             <MemberDropdown
               projectId={projectId ?? undefined}
               value={value}
@@ -181,6 +184,11 @@ export const IssueDefaultProperties = observer(function IssueDefaultProperties(p
               multiple
               tabIndex={getIndex("assignee_ids")}
             />
+            {error?.message && (
+              <span className="absolute left-0 top-full z-10 mt-0.5 whitespace-nowrap text-caption-sm-medium text-danger-primary">
+                {error.message}
+              </span>
+            )}
           </div>
         )}
       />

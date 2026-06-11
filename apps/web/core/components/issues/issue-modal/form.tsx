@@ -8,7 +8,6 @@ import type { FC } from "react";
 import React, { useState, useRef, useEffect } from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
-import type { FieldErrors } from "react-hook-form";
 import { FormProvider, useForm } from "react-hook-form";
 // editor
 import { ETabIndices, DEFAULT_WORK_ITEM_FORM_VALUES } from "@plane/constants";
@@ -28,6 +27,7 @@ import {
   getTextContent,
   getChangedIssuefields,
   getTabIndex,
+  withDefaultAssigneeIds,
 } from "@plane/utils";
 // components
 import {
@@ -45,6 +45,7 @@ import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useProject } from "@/hooks/store/use-project";
 import { useProjectState } from "@/hooks/store/use-project-state";
 import { useWorkspaceDraftIssues } from "@/hooks/store/workspace-draft";
+import { useUser } from "@/hooks/store/user/user-user";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 import { useProjectIssueProperties } from "@/hooks/use-project-issue-properties";
 // plane web imports
@@ -140,10 +141,18 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
   } = useIssueDetail();
   const { fetchCycles } = useProjectIssueProperties();
   const { fetchProjectStates, getDefaultStateIdByIssueTypeId, getStateById } = useProjectState();
+  const { data: currentUser } = useUser();
+
+  const getCreateFormValues = (values: Partial<TIssue>) =>
+    withDefaultAssigneeIds(
+      { ...DEFAULT_WORK_ITEM_FORM_VALUES, ...values },
+      currentUser?.id,
+      { isEditMode: !!data?.id }
+    );
 
   // form info
   const methods = useForm<TIssue>({
-    defaultValues: { ...DEFAULT_WORK_ITEM_FORM_VALUES, project_id: defaultProjectId, ...data },
+    defaultValues: getCreateFormValues({ project_id: defaultProjectId, ...data }),
     reValidateMode: "onChange",
   });
   const {
@@ -171,10 +180,10 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
       if (workItemTemplateId) {
         // reset work item template id
         setWorkItemTemplateId(null);
-        reset({ ...DEFAULT_WORK_ITEM_FORM_VALUES, project_id: projectId });
+        reset(getCreateFormValues({ project_id: projectId }));
         editorRef.current?.clearEditor();
       } else {
-        reset(getUpdateFormDataForReset(projectId, getValues()));
+        reset(getCreateFormValues(getUpdateFormDataForReset(projectId, getValues())));
       }
     }
     if (projectId && routeProjectId !== projectId) fetchCycles(workspaceSlug?.toString(), projectId);
@@ -185,10 +194,21 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
   // Reset form when data prop changes
   useEffect(() => {
     if (data) {
-      reset({ ...DEFAULT_WORK_ITEM_FORM_VALUES, project_id: projectId, ...data });
+      reset(getCreateFormValues({ project_id: projectId, ...data }));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [...dataResetProperties]);
+
+  // 当前用户异步加载完成后，为新建表单补上默认负责人。
+  useEffect(() => {
+    if (data?.id) return;
+
+    const assigneeIds = getValues("assignee_ids");
+    if (assigneeIds?.length) return;
+    if (!currentUser?.id) return;
+
+    setValue("assignee_ids", [String(currentUser.id)], { shouldDirty: false });
+  }, [currentUser?.id, data?.id, getValues, setValue]);
 
   // Update the issue type id when the project id changes
   useEffect(() => {
@@ -277,13 +297,14 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
             editorRef,
           });
         } else {
-          reset({
-            ...DEFAULT_WORK_ITEM_FORM_VALUES,
-            ...(isCreateMoreToggleEnabled ? { ...data } : {}),
-            project_id: getValues<"project_id">("project_id"),
-            type_id: getValues<"type_id">("type_id"),
-            description_html: data?.description_html ?? "<p></p>",
-          });
+          reset(
+            getCreateFormValues({
+              ...(isCreateMoreToggleEnabled ? { ...data } : {}),
+              project_id: getValues<"project_id">("project_id"),
+              type_id: getValues<"type_id">("type_id"),
+              description_html: data?.description_html ?? "<p></p>",
+            })
+          );
           editorRef?.current?.clearEditor();
         }
       })
@@ -319,17 +340,6 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
 
     if (isDirty && condition) onChange(watch());
     else onChange(null);
-  };
-
-  // 表单校验失败（如负责人未填）时给出明确的 toast 提示，避免用户点了提交却没有任何反馈。
-  const handleFormSubmitInvalid = (errors: FieldErrors<TIssue>) => {
-    const message = errors.assignee_ids?.message;
-    if (message)
-      setToast({
-        type: TOAST_TYPE.ERROR,
-        title: t("error"),
-        message: String(message),
-      });
   };
 
   // debounced duplicate issues swr
@@ -399,7 +409,7 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
         <div className="max-h-full min-h-0 w-full rounded-lg">
           <form
             ref={formRef}
-            onSubmit={handleSubmit((data) => handleFormSubmit(data), handleFormSubmitInvalid)}
+            onSubmit={handleSubmit((data) => handleFormSubmit(data))}
             className="flex max-h-[min(85vh,56rem)] min-h-0 w-full flex-col"
           >
             <div className="flex-shrink-0 rounded-t-lg bg-surface-1 p-5">

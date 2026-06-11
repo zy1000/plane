@@ -4,7 +4,6 @@ import type { FC } from "react";
 import React, { useEffect, useRef, useState } from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
-import type { FieldErrors } from "react-hook-form";
 import { FormProvider, useForm } from "react-hook-form";
 import { ETabIndices, DEFAULT_WORK_ITEM_FORM_VALUES } from "@plane/constants";
 import type { EditorRefApi } from "@plane/editor";
@@ -17,6 +16,7 @@ import {
   getUpdateFormDataForReset,
   getTextContent,
   getTabIndex,
+  withDefaultAssigneeIds,
 } from "@plane/utils";
 import {
   IssueDefaultProperties,
@@ -30,6 +30,7 @@ import { useIssueModal } from "@/hooks/context/use-issue-modal";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useProject } from "@/hooks/store/use-project";
 import { useProjectState } from "@/hooks/store/use-project-state";
+import { useUser } from "@/hooks/store/user/user-user";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 import { useProjectIssueProperties } from "@/hooks/use-project-issue-properties";
 import { DeDupeButtonRoot } from "@/plane-web/components/de-dupe/de-dupe-button";
@@ -117,14 +118,25 @@ export const BugIssueFormRoot: FC<BugIssueFormProps> = observer((props) => {
   } = useIssueDetail();
   const { fetchCycles } = useProjectIssueProperties();
   const { getStateById } = useProjectState();
+  const { data: currentUser } = useUser();
+
+  const getCreateFormValues = (values: Partial<TIssue>) =>
+    withDefaultAssigneeIds(
+      {
+        ...DEFAULT_WORK_ITEM_FORM_VALUES,
+        ...values,
+        description_html: values.description_html ?? initialDescriptionHtml ?? "<p></p>",
+      },
+      currentUser?.id,
+      { isEditMode: !!data?.id }
+    );
 
   const methods = useForm<TIssue>({
-    defaultValues: {
-      ...DEFAULT_WORK_ITEM_FORM_VALUES,
+    defaultValues: getCreateFormValues({
       project_id: defaultProjectId,
       ...data,
       description_html: data?.description_html ?? initialDescriptionHtml ?? "<p></p>",
-    },
+    }),
     reValidateMode: "onChange",
   });
   const {
@@ -163,16 +175,10 @@ export const BugIssueFormRoot: FC<BugIssueFormProps> = observer((props) => {
     if (isDirty) {
       if (workItemTemplateId) {
         setWorkItemTemplateId(null);
-        reset({
-          ...DEFAULT_WORK_ITEM_FORM_VALUES,
-          project_id: projectId,
-        });
+        reset(getCreateFormValues({ project_id: projectId }));
         editorRef.current?.clearEditor();
       } else {
-        const resetData = getUpdateFormDataForReset(projectId, getValues());
-        reset({
-          ...resetData,
-        });
+        reset(getCreateFormValues(getUpdateFormDataForReset(projectId, getValues())));
       }
     }
     if (projectId && routeProjectId !== projectId) fetchCycles(workspaceSlug?.toString(), projectId);
@@ -181,15 +187,26 @@ export const BugIssueFormRoot: FC<BugIssueFormProps> = observer((props) => {
 
   useEffect(() => {
     if (data) {
-      reset({
-        ...DEFAULT_WORK_ITEM_FORM_VALUES,
-        project_id: projectId,
-        ...data,
-        description_html: initialDescriptionHtml ?? data.description_html,
-      });
+      reset(
+        getCreateFormValues({
+          project_id: projectId,
+          ...data,
+          description_html: initialDescriptionHtml ?? data.description_html,
+        })
+      );
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [...dataResetProperties]);
+
+  useEffect(() => {
+    if (data?.id) return;
+
+    const assigneeIds = getValues("assignee_ids");
+    if (assigneeIds?.length) return;
+    if (!currentUser?.id) return;
+
+    setValue("assignee_ids", [String(currentUser.id)], { shouldDirty: false });
+  }, [currentUser?.id, data?.id, getValues, setValue]);
 
   const { issueTypes } = useProjectIssueTypes(workspaceSlug?.toString(), projectId ?? undefined);
 
@@ -215,17 +232,6 @@ export const BugIssueFormRoot: FC<BugIssueFormProps> = observer((props) => {
     if (!onChange) return;
     if (isDirty && condition) onChange(watch());
     else onChange(null);
-  };
-
-  // 表单校验失败（如负责人未填）时给出明确的 toast 提示。
-  const handleFormSubmitInvalid = (errors: FieldErrors<TIssue>) => {
-    const message = errors.assignee_ids?.message;
-    if (message)
-      setToast({
-        type: TOAST_TYPE.ERROR,
-        title: t("error"),
-        message: String(message),
-      });
   };
 
   const { duplicateIssues } = useDebouncedDuplicateIssues(
@@ -293,12 +299,13 @@ export const BugIssueFormRoot: FC<BugIssueFormProps> = observer((props) => {
       setToast({ type: TOAST_TYPE.SUCCESS, title: t("success"), message: "创建成功" });
       await onSubmit(created, is_draft_issue);
       setGptAssistantModal(false);
-      reset({
-        ...DEFAULT_WORK_ITEM_FORM_VALUES,
-        project_id: getValues<"project_id">("project_id"),
-        type_id: getValues<"type_id">("type_id"),
-        description_html: "<p></p>",
-      });
+      reset(
+        getCreateFormValues({
+          project_id: getValues<"project_id">("project_id"),
+          type_id: getValues<"type_id">("type_id"),
+          description_html: "<p></p>",
+        })
+      );
       editorRef?.current?.clearEditor();
     } catch (error: any) {
       const msg = error?.error || error?.detail || error?.message || "创建失败";
@@ -314,7 +321,7 @@ export const BugIssueFormRoot: FC<BugIssueFormProps> = observer((props) => {
         <div className="max-h-full min-h-0 w-full rounded-lg">
           <form
             ref={formRef}
-            onSubmit={handleSubmit((d) => handleFormSubmit(d), handleFormSubmitInvalid)}
+            onSubmit={handleSubmit((d) => handleFormSubmit(d))}
             className="flex max-h-[min(85vh,56rem)] min-h-0 w-full flex-col"
           >
             <div className="flex-shrink-0 rounded-t-lg bg-surface-1 p-5">

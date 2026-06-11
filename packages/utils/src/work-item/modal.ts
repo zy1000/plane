@@ -9,6 +9,23 @@ import { set } from "lodash-es";
 import { DEFAULT_WORK_ITEM_FORM_VALUES } from "@plane/constants";
 import type { IPartialProject, ISearchIssueResponse, IState, TIssue } from "@plane/types";
 
+export const getDefaultAssigneeIds = (currentUserId?: string | null): string[] =>
+  currentUserId ? [String(currentUserId)] : [];
+
+export const withDefaultAssigneeIds = (
+  formValues: Partial<TIssue>,
+  currentUserId?: string | null,
+  options?: { isEditMode?: boolean }
+): Partial<TIssue> => {
+  if (options?.isEditMode) return formValues;
+  if (Array.isArray(formValues.assignee_ids) && formValues.assignee_ids.length > 0) return formValues;
+
+  const defaultAssigneeIds = getDefaultAssigneeIds(currentUserId);
+  if (defaultAssigneeIds.length === 0) return formValues;
+
+  return { ...formValues, assignee_ids: defaultAssigneeIds };
+};
+
 export const getUpdateFormDataForReset = (projectId: string | null | undefined, formData: Partial<TIssue>) => ({
   ...DEFAULT_WORK_ITEM_FORM_VALUES,
   project_id: projectId,
