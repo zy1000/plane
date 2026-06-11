@@ -12,6 +12,7 @@ import type { IState } from "@plane/types";
 import { Button, EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
 import { cn } from "@plane/utils";
 import type { TApprovalType, TWorkflowTransition } from "@/services/project/project-workflow.service";
+import { ApprovalRuleSelect } from "./approval-rule-select";
 import { FieldsSelect } from "./fields-select";
 import { PrincipalSelect } from "./principal-select";
 import { StateDropdown } from "./state-dropdown";
@@ -176,9 +177,6 @@ export const TransitionEditModal: FC<TTransitionEditModalProps> = ({
                 workspaceSlug={workspaceSlug}
                 projectId={projectId}
                 value={initiatorIds}
-                requiredCount={1}
-                isNofM={false}
-                showApprovalRule={false}
                 onChange={(ids) => {
                   setInitiatorIds(ids);
                 }}
@@ -191,9 +189,6 @@ export const TransitionEditModal: FC<TTransitionEditModalProps> = ({
                 workspaceSlug={workspaceSlug}
                 projectId={projectId}
                 value={assigneeIds}
-                requiredCount={1}
-                isNofM={false}
-                showApprovalRule={false}
                 onChange={(ids) => {
                   setAssigneeIds(ids);
                 }}
@@ -202,18 +197,32 @@ export const TransitionEditModal: FC<TTransitionEditModalProps> = ({
 
             <TimelineItem
               title="审批人"
-              description={selectedToState ? `通过后将进入 ${selectedToState.name}` : "配置审批对象与规则"}
+              description={selectedToState ? `通过后将进入 ${selectedToState.name}` : "配置审批对象"}
             >
               <PrincipalSelect
                 dimension="approver"
                 workspaceSlug={workspaceSlug}
                 projectId={projectId}
                 value={approverIds}
+                onChange={(ids) => {
+                  setApproverIds(ids);
+                  if (ids.length < 2) {
+                    setRequiredCount(1);
+                    setIsNofMApproval(false);
+                    return;
+                  }
+
+                  setRequiredCount((current) => Math.min(Math.max(1, current), ids.length));
+                }}
+              />
+            </TimelineItem>
+
+            <TimelineItem title="审批规则" description="根据审批人数量设置通过规则">
+              <ApprovalRuleSelect
+                approverCount={approverIds.length}
                 requiredCount={requiredCount}
                 isNofM={isNofMApproval}
-                showApprovalRule
-                onChange={(ids, count, useNofM) => {
-                  setApproverIds(ids);
+                onChange={(count, useNofM) => {
                   setRequiredCount(count);
                   setIsNofMApproval(useNofM);
                 }}

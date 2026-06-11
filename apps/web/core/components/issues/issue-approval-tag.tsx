@@ -6,6 +6,8 @@ import { Avatar } from "@plane/ui";
 import { message } from "antd";
 import { useUser } from "@/hooks/store/user";
 import { useIssueApprovalStatus } from "@/hooks/store/use-issue-approval-status";
+import { useIssueDetail } from "@/hooks/store/use-issue-detail";
+import { useMember } from "@/hooks/store/use-member";
 import {
   ProjectWorkflowService,
   type TTransitionRecord,
@@ -50,6 +52,37 @@ function StateChip({ name, color }: { name: string | null; color: string | null 
   );
 }
 
+type TUserDetails = { display_name?: string | null; avatar_url?: string | null } | undefined;
+
+function AssigneeGroup({
+  userIds,
+  getUserDetails,
+  emptyLabel = "无负责人",
+}: {
+  userIds: string[];
+  getUserDetails: (userId: string) => TUserDetails;
+  emptyLabel?: string;
+}) {
+  if (userIds.length === 0) {
+    return <span className="text-xs" style={{ color: "#9ca3af" }}>{emptyLabel}</span>;
+  }
+
+  return (
+    <div className="flex items-center gap-2 flex-wrap">
+      {userIds.map((userId) => {
+        const user = getUserDetails(userId);
+        const displayName = user?.display_name ?? "未知成员";
+        return (
+          <div key={userId} className="flex items-center gap-1.5">
+            <Avatar name={displayName} src={user?.avatar_url ?? undefined} size="sm" className="flex-shrink-0" />
+            <span className="text-sm truncate">{displayName}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function ApproverRow({ rec }: { rec: TApprovalRecord }) {
   const color = rec.action === null ? STATUS_COLOR.pending
     : rec.action === "approved" ? STATUS_COLOR.approved
@@ -75,12 +108,16 @@ function RecordDetail({
   workspaceSlug,
   projectId,
   onActioned,
+  getUserDetails,
+  currentAssigneeIds,
 }: {
   record: TTransitionRecord;
   currentUserId: string | undefined;
   workspaceSlug: string;
   projectId: string;
   onActioned: () => void;
+  getUserDetails: (userId: string) => TUserDetails;
+  currentAssigneeIds: string[];
 }) {
   const [action, setAction] = useState<"approved" | "rejected" | null>(null);
   const [comment, setComment] = useState("");
@@ -90,6 +127,7 @@ function RecordDetail({
   const alreadyActed = myRec?.action != null;
   const canAct = record.status === "pending" && myRec !== undefined && !alreadyActed;
   const approvedCount = record.approval_records.filter((r) => r.action === "approved").length;
+  const targetAssigneeIds = record.target_assignee_ids ?? [];
 
   const handleSubmit = async () => {
     if (!action) return;
@@ -105,22 +143,27 @@ function RecordDetail({
     }
   };
 
-  const statusColor = STATUS_COLOR[record.status] ?? STATUS_COLOR.pending;
-  const statusLabel = { pending: "待审批", approved: "已通过", rejected: "已拒绝", cancelled: "已取消" }[record.status] ?? "待审批";
-
   return (
     <div className="flex flex-1 flex-col gap-4 min-h-0">
-      {/* 状态 + 流转 */}
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-center gap-2 flex-wrap">
-          <StateChip name={record.from_state_name} color={record.from_state_color} />
-          <ArrowRight className="h-3.5 w-3.5 flex-shrink-0" style={{ color: "#9ca3af" }} />
-          <StateChip name={record.to_state_name} color={record.to_state_color} />
+      <div>
+        <p className="text-xs font-medium uppercase tracking-wider mb-2" style={{ color: "#9ca3af" }}>
+          变更信息
+        </p>
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <StateChip name={record.from_state_name} color={record.from_state_color} />
+            <ArrowRight className="h-3.5 w-3.5 flex-shrink-0" style={{ color: "#9ca3af" }} />
+            <StateChip name={record.to_state_name} color={record.to_state_color} />
+          </div>
+
+          {record.target_assignee_ids !== null && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <AssigneeGroup userIds={currentAssigneeIds} getUserDetails={getUserDetails} />
+              <ArrowRight className="h-3.5 w-3.5 flex-shrink-0" style={{ color: "#9ca3af" }} />
+              <AssigneeGroup userIds={targetAssigneeIds} getUserDetails={getUserDetails} />
+            </div>
+          )}
         </div>
-        <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium flex-shrink-0" style={tagStyle(statusColor)}>
-          <Clock className="h-3 w-3" />
-          {statusLabel}
-        </span>
       </div>
 
       {/* 进度 */}
@@ -236,6 +279,22 @@ export function IssueApprovalTag({ workspaceSlug, projectId, issueId }: IssueApp
   const { data: currentUser } = useUser();
   const { records, hasPendingApproval, isLoading, invalidate } = useIssueApprovalStatus(workspaceSlug, projectId, issueId);
 
+  const {
+    issue: { getIssueById },
+  } = useIssueDetail();
+  const {
+    getUserDetails,
+    project: { getProjectMemberIds, fetchProjectMembers },
+  } = useMember();
+  const currentAssigneeIds = getIssueById(issueId)?.assignee_ids ?? [];
+
+  React.useEffect(() => {
+    if (!isOpen) return;
+    if (!getProjectMemberIds(projectId, false)) {
+      fetchProjectMembers(workspaceSlug, projectId);
+    }
+  }, [fetchProjectMembers, getProjectMemberIds, isOpen, projectId, workspaceSlug]);
+
   // 弹窗打开中时保持渲染，避免因 hasPendingApproval 变为 false 而闪烁关闭
   if (!hasPendingApproval && !isOpen) return null;
 
@@ -324,6 +383,8 @@ export function IssueApprovalTag({ workspaceSlug, projectId, issueId }: IssueApp
                         workspaceSlug={workspaceSlug}
                         projectId={projectId}
                         onActioned={handleActioned}
+                        getUserDetails={getUserDetails}
+                        currentAssigneeIds={currentAssigneeIds}
                       />
                     ) : (
                       <div className="flex flex-col items-center justify-center gap-2 py-8 text-center">

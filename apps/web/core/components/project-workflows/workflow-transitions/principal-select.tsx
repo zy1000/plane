@@ -27,10 +27,7 @@ type TPrincipalSelectProps = {
   workspaceSlug: string;
   projectId: string;
   value: string[];
-  requiredCount: number;
-  isNofM: boolean;
-  showApprovalRule?: boolean;
-  onChange: (principalIds: string[], count: number, useNofM: boolean) => void;
+  onChange: (principalIds: string[]) => void;
   disabled?: boolean;
 };
 
@@ -59,9 +56,6 @@ export const PrincipalSelect: FC<TPrincipalSelectProps> = ({
   workspaceSlug,
   projectId,
   value,
-  requiredCount,
-  isNofM,
-  showApprovalRule = true,
   onChange,
   disabled = false,
 }) => {
@@ -81,7 +75,6 @@ export const PrincipalSelect: FC<TPrincipalSelectProps> = ({
 
   const memberIds = getProjectMemberIds(projectId, false) ?? [];
   const isAllSelected = value.length === 0;
-  const shouldShowApprovalRule = dimension === "approver" && showApprovalRule;
 
   const roleTokenNameMap = useMemo(
     () =>
@@ -158,14 +151,12 @@ export const PrincipalSelect: FC<TPrincipalSelectProps> = ({
   };
 
   const handleSelectAll = () => {
-    onChange([], 1, false);
+    onChange([]);
   };
 
   const handleToggle = (principalId: string) => {
     const next = value.includes(principalId) ? value.filter((v) => v !== principalId) : [...value, principalId];
-    const nextCount = Math.min(requiredCount, Math.max(1, next.length));
-    const nextUseNofM = shouldShowApprovalRule ? (next.length >= 2 ? isNofM : false) : false;
-    onChange(next, nextCount, nextUseNofM);
+    onChange(next);
   };
 
   const hasAnyResult =
@@ -352,38 +343,6 @@ export const PrincipalSelect: FC<TPrincipalSelectProps> = ({
                 </button>
               );
             })}
-
-            {shouldShowApprovalRule && !isAllSelected && value.length >= 2 && (
-              <div className="mt-2 border-t border-subtle px-2 pt-3">
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => onChange(value, requiredCount, !isNofM)}
-                    className={cn(
-                      "flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center rounded border transition-colors",
-                      isNofM ? "border-accent-primary bg-accent-primary" : "border-secondary bg-transparent"
-                    )}
-                  >
-                    {isNofM && <Check className="h-2.5 w-2.5 text-white" />}
-                  </button>
-                  <span className="flex-1 text-xs text-secondary">最少需要审批人数</span>
-                  {isNofM && (
-                    <input
-                      type="number"
-                      min={1}
-                      max={value.length}
-                      value={requiredCount}
-                      onChange={(e) => {
-                        const next = parseInt(e.target.value, 10);
-                        if (Number.isNaN(next)) return;
-                        onChange(value, Math.min(Math.max(1, next), value.length), isNofM);
-                      }}
-                      className="w-12 rounded border border-subtle bg-surface-2 px-1.5 py-0.5 text-center text-sm font-medium text-primary outline-none focus:border-accent-primary/50"
-                    />
-                  )}
-                </div>
-              </div>
-            )}
 
             {isRolesLoading && (
               <p className="px-2 py-2 text-xs text-tertiary">正在加载成员与角色...</p>
