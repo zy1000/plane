@@ -11,86 +11,42 @@ import { EIconSize } from "@plane/constants";
 import { StateGroupIcon } from "@plane/propel/icons";
 import type { IState } from "@plane/types";
 import { cn } from "@plane/utils";
-import type { TWorkflowTransition, TApprovalType } from "@/services/project/project-workflow.service";
+import type { TWorkflowTransition } from "@/services/project/project-workflow.service";
 import { TransitionFlowRow } from "./transition-flow-row";
-import type { TPrincipalPanelDimension } from "./workflow-side-panel";
+import type { TViewBox } from "./workflow-view-panel";
+
+type TActiveView = {
+  fromState: IState;
+  transition: TWorkflowTransition;
+  box: TViewBox;
+};
 
 type TStateTransitionCardProps = {
   state: IState;
   allStates: IState[];
   transitions: TWorkflowTransition[];
-  workspaceSlug: string;
-  projectId: string;
-  issueTypeId: string;
   isEditable: boolean;
-  activePanelOwner: string | null;
-  onSetActivePanelOwner: (key: string | null) => void;
-  onSaveTransition: (
-    stateId: string,
-    data: {
-      id?: string;
-      to_state_id: string;
-      initiator_ids: string[];
-      assignee_ids: string[];
-      approver_ids: string[];
-      approval_type: TApprovalType;
-      required_count?: number;
-      extra_field_ids: string[];
-    }
-  ) => Promise<void>;
+  activeView: TActiveView | null;
+  onCreate: (state: IState) => void;
+  onViewBox: (state: IState, transition: TWorkflowTransition, box: TViewBox) => void;
+  onEdit: (state: IState, transition: TWorkflowTransition) => void;
   onDeleteTransition: (transitionId: string) => Promise<void>;
-  onRequestStatePanel: (
-    availableStates: IState[],
-    currentValue: string | null,
-    onConfirm: (stateId: string) => void
-  ) => void;
-  onRequestPrincipalPanel: (
-    dimension: TPrincipalPanelDimension,
-    currentValue: string[],
-    onConfirm: (principalIds: string[], count: number, useNofM: boolean) => void,
-    options?: {
-      requiredCount?: number;
-      isNofM?: boolean;
-      showApprovalRule?: boolean;
-      readOnly?: boolean;
-      onNext?: (principalIds: string[], count: number, useNofM: boolean) => void;
-    }
-  ) => void;
-  onRequestFlowPanel: (onConfirm: () => void) => void;
-  onRequestFieldsPanel: (
-    currentValue: string[],
-    onConfirm: (extraFieldIds: string[]) => void,
-    readOnly?: boolean
-  ) => void;
 };
 
 export const StateTransitionCard: FC<TStateTransitionCardProps> = ({
   state,
   allStates,
   transitions,
-  workspaceSlug,
-  projectId,
-  issueTypeId,
   isEditable,
-  activePanelOwner,
-  onSetActivePanelOwner,
-  onSaveTransition,
+  activeView,
+  onCreate,
+  onViewBox,
+  onEdit,
   onDeleteTransition,
-  onRequestStatePanel,
-  onRequestPrincipalPanel,
-  onRequestFlowPanel,
-  onRequestFieldsPanel,
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
-  const [showNewRow, setShowNewRow] = useState(false);
 
   const transitionCount = transitions.length;
-  const usedToStateIds = transitions.map((t) => t.to_state_id);
-
-  const handleAddFlow = () => {
-    if (!isExpanded) setIsExpanded(true);
-    setShowNewRow(true);
-  };
 
   return (
     <div className="rounded-lg border border-subtle bg-surface-1 transition-all">
@@ -137,54 +93,21 @@ export const StateTransitionCard: FC<TStateTransitionCardProps> = ({
               transition={transition}
               fromState={state}
               allStates={allStates}
-              workspaceSlug={workspaceSlug}
-              projectId={projectId}
-              issueTypeId={issueTypeId}
-              usedToStateIds={usedToStateIds}
               isEditable={isEditable}
-              rowKey={transition.id}
-              activePanelOwner={activePanelOwner}
-              onSetActivePanelOwner={onSetActivePanelOwner}
-              onSave={(data) => onSaveTransition(state.id, data)}
+              activeViewBox={activeView?.transition.id === transition.id ? activeView.box : null}
+              onViewBox={(box) => onViewBox(state, transition, box)}
+              onEdit={() => onEdit(state, transition)}
               onDelete={onDeleteTransition}
-              onDiscard={() => {}}
-              onRequestStatePanel={onRequestStatePanel}
-              onRequestPrincipalPanel={onRequestPrincipalPanel}
-              onRequestFlowPanel={onRequestFlowPanel}
-              onRequestFieldsPanel={onRequestFieldsPanel}
             />
           ))}
 
-          {showNewRow && (
-            <TransitionFlowRow
-              transition={null}
-              fromState={state}
-              allStates={allStates}
-              workspaceSlug={workspaceSlug}
-              projectId={projectId}
-              issueTypeId={issueTypeId}
-              usedToStateIds={usedToStateIds}
-              isEditable={isEditable}
-              rowKey={`new-${state.id}`}
-              activePanelOwner={activePanelOwner}
-              onSetActivePanelOwner={onSetActivePanelOwner}
-              onSave={async (data) => {
-                await onSaveTransition(state.id, data);
-                setShowNewRow(false);
-              }}
-              onDelete={async () => {}}
-              onDiscard={() => setShowNewRow(false)}
-              onRequestStatePanel={onRequestStatePanel}
-              onRequestPrincipalPanel={onRequestPrincipalPanel}
-              onRequestFlowPanel={onRequestFlowPanel}
-              onRequestFieldsPanel={onRequestFieldsPanel}
-            />
-          )}
-
-          {isEditable && !showNewRow && (
+          {isEditable && (
             <button
               type="button"
-              onClick={handleAddFlow}
+              onClick={() => {
+                if (!isExpanded) setIsExpanded(true);
+                onCreate(state);
+              }}
               className="flex items-center gap-1.5 text-xs text-secondary transition-colors hover:text-accent-primary"
             >
               <Plus className="h-3.5 w-3.5" />

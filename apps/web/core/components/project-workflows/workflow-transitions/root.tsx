@@ -14,14 +14,10 @@ import type { IState } from "@plane/types";
 import { useWorkflowTransitions } from "@/hooks/store/use-workflow-transitions";
 import { useProjectState } from "@/hooks/store/use-project-state";
 import { useUserPermissions } from "@/hooks/store/user";
-import type { TApprovalType, TWorkflow } from "@/services/project/project-workflow.service";
+import type { TApprovalType, TWorkflow, TWorkflowTransition } from "@/services/project/project-workflow.service";
 import { StateTransitionCard } from "./state-transition-card";
-import {
-  WorkflowSidePanel,
-  type TPanelConfig,
-  type TPrincipalPanelConfig,
-  type TFieldsPanelConfig,
-} from "./workflow-side-panel";
+import { TransitionEditModal } from "./transition-edit-modal";
+import { WorkflowViewPanel, type TViewBox } from "./workflow-view-panel";
 
 type TWorkflowTransitionsRootProps = {
   workspaceSlug: string;
@@ -75,13 +71,15 @@ export const WorkflowTransitionsRoot: FC<TWorkflowTransitionsRootProps> = ({
     [t]
   );
 
-  const [activePanel, setActivePanel] = useState<TPanelConfig | null>(null);
-  const [activePanelOwner, setActivePanelOwner] = useState<string | null>(null);
-
-  const handleSetActivePanelOwner = (key: string | null) => {
-    setActivePanelOwner(key);
-    if (key === null) setActivePanel(null);
-  };
+  const [editing, setEditing] = useState<{
+    fromState: IState;
+    transition: TWorkflowTransition | null;
+  } | null>(null);
+  const [activeView, setActiveView] = useState<{
+    fromState: IState;
+    transition: TWorkflowTransition;
+    box: TViewBox;
+  } | null>(null);
 
   const isEditable = allowProjectPermissionKeys(["workflow.config"], workspaceSlug, projectId);
 
@@ -155,62 +153,26 @@ export const WorkflowTransitionsRoot: FC<TWorkflowTransitionsRootProps> = ({
     }
   };
 
-  const handleRequestStatePanel = (
-    availableStates: IState[],
-    currentValue: string | null,
-    onConfirm: (stateId: string) => void
-  ) => {
-    setActivePanel({ type: "state", availableStates, currentValue, onConfirm });
+  const handleOpenCreate = (state: IState) => {
+    setEditing({ fromState: state, transition: null });
   };
 
-  const handleRequestPrincipalPanel = (
-    dimension: TPrincipalPanelConfig["dimension"],
-    currentValue: string[],
-    onConfirm: (principalIds: string[], count: number, useNofM: boolean) => void,
-    options?: {
-      requiredCount?: number;
-      isNofM?: boolean;
-      showApprovalRule?: boolean;
-      readOnly?: boolean;
-      onNext?: (principalIds: string[], count: number, useNofM: boolean) => void;
-    }
-  ) => {
-    const config: TPrincipalPanelConfig = {
-      type: "principal",
-      dimension,
-      workspaceSlug,
-      projectId,
-      currentValue,
-      requiredCount: options?.requiredCount ?? 1,
-      isNofM: options?.isNofM ?? false,
-      showApprovalRule: options?.showApprovalRule,
-      onConfirm,
-      readOnly: options?.readOnly,
-      onNext: options?.onNext,
-    };
-    setActivePanel(config);
+  const handleOpenEdit = (state: IState, transition: TWorkflowTransition) => {
+    setActiveView(null);
+    setEditing({ fromState: state, transition });
   };
 
-  const handleRequestFlowPanel = (onConfirm: () => void) => {
-    setActivePanel({ type: "flow", onConfirm });
+  const handleViewBox = (state: IState, transition: TWorkflowTransition, box: TViewBox) => {
+    setActiveView((prev) =>
+      prev && prev.transition.id === transition.id && prev.box === box
+        ? null
+        : { fromState: state, transition, box }
+    );
   };
 
-  const handleRequestFieldsPanel = (
-    currentValue: string[],
-    onConfirm: (extraFieldIds: string[]) => void,
-    readOnly?: boolean
-  ) => {
-    const config: TFieldsPanelConfig = {
-      type: "fields",
-      workspaceSlug,
-      projectId,
-      issueTypeId: workflow.issue_type_id,
-      currentValue,
-      onConfirm,
-      readOnly,
-    };
-    setActivePanel(config);
-  };
+  const modalUsedToStateIds = editing
+    ? (transitionsByState[editing.fromState.id] ?? []).map((transition) => transition.to_state_id)
+    : [];
 
   return (
     <div className="flex flex-col gap-6">
@@ -232,12 +194,11 @@ export const WorkflowTransitionsRoot: FC<TWorkflowTransitionsRootProps> = ({
         )}
       </div>
 
-      {/* define workflow section — two-column layout when panel is open */}
+      {/* define workflow section */}
       <div>
         <h3 className="mb-3 text-sm font-medium text-secondary">Define workflow</h3>
 
         <div className="flex items-start gap-4">
-          {/* main content */}
           <div className="min-w-0 flex-1">
             {isLoading ? (
               <TransitionsSkeleton />
@@ -254,38 +215,55 @@ export const WorkflowTransitionsRoot: FC<TWorkflowTransitionsRootProps> = ({
                     state={state}
                     allStates={allStates}
                     transitions={transitionsByState[state.id] ?? []}
-                    workspaceSlug={workspaceSlug}
-                    projectId={projectId}
-                    issueTypeId={workflow.issue_type_id}
                     isEditable={isEditable}
-                    activePanelOwner={activePanelOwner}
-                    onSetActivePanelOwner={handleSetActivePanelOwner}
-                    onSaveTransition={handleSaveTransition}
+                    activeView={activeView}
+                    onCreate={handleOpenCreate}
+                    onViewBox={handleViewBox}
+                    onEdit={handleOpenEdit}
                     onDeleteTransition={handleDeleteTransition}
-                    onRequestStatePanel={handleRequestStatePanel}
-                    onRequestPrincipalPanel={handleRequestPrincipalPanel}
-                    onRequestFlowPanel={handleRequestFlowPanel}
-                    onRequestFieldsPanel={handleRequestFieldsPanel}
                   />
                 ))}
               </div>
             )}
           </div>
 
-          {/* right side panel */}
-          {activePanel && (
-            <div className="w-64 flex-shrink-0 sticky top-0 flex flex-col" style={{ height: "calc(100vh - 2.75rem)" }}>
-              <WorkflowSidePanel
-                config={activePanel}
-                onClose={() => {
-                  setActivePanel(null);
-                  setActivePanelOwner(null);
-                }}
+          {activeView && (
+            <div
+              className="w-64 flex-shrink-0 sticky top-0 flex flex-col"
+              style={{ height: "calc(100vh - 2.75rem)" }}
+            >
+              <WorkflowViewPanel
+                box={activeView.box}
+                transition={activeView.transition}
+                fromState={activeView.fromState}
+                allStates={allStates}
+                workspaceSlug={workspaceSlug}
+                projectId={projectId}
+                issueTypeId={workflow.issue_type_id}
+                onClose={() => setActiveView(null)}
               />
             </div>
           )}
         </div>
       </div>
+
+      {editing && (
+        <TransitionEditModal
+          isOpen={!!editing}
+          workspaceSlug={workspaceSlug}
+          projectId={projectId}
+          issueTypeId={workflow.issue_type_id}
+          fromState={editing.fromState}
+          allStates={allStates}
+          usedToStateIds={modalUsedToStateIds}
+          transition={editing.transition}
+          onClose={() => setEditing(null)}
+          onSave={async (data) => {
+            await handleSaveTransition(editing.fromState.id, data);
+            setEditing(null);
+          }}
+        />
+      )}
     </div>
   );
 };
