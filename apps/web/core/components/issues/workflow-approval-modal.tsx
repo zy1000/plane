@@ -5,6 +5,7 @@ import { ArrowRight, CheckCircle2, XCircle, Clock, ChevronLeft, X, Loader2, Sear
 import { Avatar } from "@plane/ui";
 import { cn } from "@plane/utils";
 import { message } from "antd";
+import { useMember } from "@/hooks/store/use-member";
 import { useUser } from "@/hooks/store/user";
 import { useWorkflowApprovals } from "@/hooks/store/use-workflow-approvals";
 import type { TTransitionRecord, TApprovalRecord } from "@/services/project/project-workflow.service";
@@ -208,11 +209,13 @@ function RecordCard({
 function DetailPanel({
   record,
   currentUserId,
+  getAssigneeLabel,
   onSubmit,
   isSubmitting,
 }: {
   record: TTransitionRecord;
   currentUserId: string | undefined;
+  getAssigneeLabel: (userId: string) => string;
   onSubmit: (action: "approved" | "rejected", comment: string) => void;
   isSubmitting: boolean;
 }) {
@@ -222,6 +225,7 @@ function DetailPanel({
   const myRec = record.approval_records.find((r) => r.approver_id === currentUserId);
   const alreadyActed = myRec?.action != null;
   const canAct = record.status === "pending" && myRec !== undefined && !alreadyActed;
+  const targetAssigneeNames = (record.target_assignee_ids ?? []).map((userId) => getAssigneeLabel(userId));
 
   const approvedCount = record.approval_records.filter((r) => r.action === "approved").length;
   const total = record.approval_records.length;
@@ -268,6 +272,15 @@ function DetailPanel({
           审批进度：{approvedCount}/{total}
           {record.required_count ? `，需 ${record.required_count} 人通过` : ""}
         </div>
+
+        {record.target_assignee_ids !== null && (
+          <div className="mt-2 rounded-md border border-subtle bg-layer-1 px-2.5 py-2 text-xs text-secondary">
+            <p className="font-medium text-primary">审批通过后负责人将更新为：</p>
+            <p className="mt-1">
+              {targetAssigneeNames.length > 0 ? targetAssigneeNames.join("、") : "无负责人"}
+            </p>
+          </div>
+        )}
       </div>
 
       {/* 审批人列表 */}
@@ -404,6 +417,10 @@ export function WorkflowApprovalModal({ isOpen, onClose, workspaceSlug, projectI
   const [searchQuery, setSearchQuery] = useState("");
 
   const { data: currentUser } = useUser();
+  const {
+    getUserDetails,
+    project: { getProjectMemberIds, fetchProjectMembers },
+  } = useMember();
 
   const {
     pendingRecords,
@@ -419,6 +436,13 @@ export function WorkflowApprovalModal({ isOpen, onClose, workspaceSlug, projectI
     if (!isOpen) return;
     fetchPendingApprovals();
   }, [isOpen, fetchPendingApprovals]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    if (!getProjectMemberIds(projectId, false)) {
+      fetchProjectMembers(workspaceSlug, projectId);
+    }
+  }, [fetchProjectMembers, getProjectMemberIds, isOpen, projectId, workspaceSlug]);
 
   useEffect(() => {
     if (!isOpen || activeTab !== "processed") return;
@@ -469,6 +493,7 @@ export function WorkflowApprovalModal({ isOpen, onClose, workspaceSlug, projectI
     : records;
 
   const getCurrentUserId = (): string | undefined => currentUser?.id?.toString();
+  const getAssigneeLabel = (userId: string) => getUserDetails(userId)?.display_name ?? "未知成员";
 
   return (
     <Transition.Root show={isOpen} as={React.Fragment}>
@@ -607,6 +632,7 @@ export function WorkflowApprovalModal({ isOpen, onClose, workspaceSlug, projectI
                       <DetailPanel
                         record={selectedRecord}
                         currentUserId={getCurrentUserId()}
+                        getAssigneeLabel={getAssigneeLabel}
                         onSubmit={handleSubmit}
                         isSubmitting={isSubmitting}
                       />

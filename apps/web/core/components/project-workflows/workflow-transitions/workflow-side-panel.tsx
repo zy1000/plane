@@ -5,7 +5,7 @@
  */
 
 import type { FC } from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowRight, Check, ChevronRight, Tag } from "lucide-react";
 import { EIconSize } from "@plane/constants";
 import { StateGroupIcon } from "@plane/propel/icons";
@@ -14,8 +14,11 @@ import { Avatar } from "@plane/ui";
 import { cn } from "@plane/utils";
 import { useIssueTypeExtraFields } from "@/hooks/store/use-issue-type-extra-fields";
 import { useMember } from "@/hooks/store/use-member";
+import { useProjectRoles } from "@/hooks/store/use-project-roles";
 import {
+  WORKFLOW_SPECIAL_APPROVER_IDS,
   WORKFLOW_SPECIAL_APPROVER_OPTIONS,
+  buildRoleToken,
   getWorkflowApproverLabel,
 } from "./approver-utils";
 
@@ -26,16 +29,21 @@ export type TStatePanelConfig = {
   onConfirm: (stateId: string) => void;
 };
 
-export type TMemberPanelConfig = {
-  type: "member";
+export type TPrincipalPanelDimension = "initiator" | "assignee" | "approver";
+
+export type TPrincipalPanelConfig = {
+  type: "principal";
+  dimension: TPrincipalPanelDimension;
+  workspaceSlug: string;
   projectId: string;
   currentValue: string[];
   requiredCount: number;
   isNofM: boolean;
+  showApprovalRule?: boolean;
   readOnly?: boolean;
-  onConfirm: (memberIds: string[], count: number, useNofM: boolean) => void;
+  onConfirm: (principalIds: string[], count: number, useNofM: boolean) => void;
   /** 当设置时，底部按钮变为 Next，点击后调用此回调而不关闭面板（由调用方负责打开下一个面板）。 */
-  onNext?: (memberIds: string[], count: number, useNofM: boolean) => void;
+  onNext?: (principalIds: string[], count: number, useNofM: boolean) => void;
 };
 
 export type TFlowPanelConfig = {
@@ -53,7 +61,7 @@ export type TFieldsPanelConfig = {
   onConfirm: (extraFieldIds: string[]) => void;
 };
 
-export type TPanelConfig = TStatePanelConfig | TMemberPanelConfig | TFlowPanelConfig | TFieldsPanelConfig;
+export type TPanelConfig = TStatePanelConfig | TPrincipalPanelConfig | TFlowPanelConfig | TFieldsPanelConfig;
 
 const STATE_GROUP_ORDER: TStateGroups[] = ["backlog", "unstarted", "started", "completed", "cancelled"];
 const STATE_GROUP_LABELS: Record<TStateGroups, string> = {
@@ -135,27 +143,48 @@ const StatePanel: FC<{ config: TStatePanelConfig; onConfirm: (stateId: string) =
   );
 };
 
-const MemberPanel: FC<{
-  config: TMemberPanelConfig;
+const PrincipalPanel: FC<{
+  config: TPrincipalPanelConfig;
   onClose: () => void;
-  onConfirm: (memberIds: string[], count: number, useNofM: boolean) => void;
+  onConfirm: (principalIds: string[], count: number, useNofM: boolean) => void;
 }> = ({ config, onClose, onConfirm }) => {
   const readOnly = config.readOnly ?? false;
   const [selected, setSelected] = useState<string[]>(config.currentValue);
   const [requiredCount, setRequiredCount] = useState(config.requiredCount);
   const [useNofM, setUseNofM] = useState(config.isNofM);
   const [search, setSearch] = useState("");
+  const showApprovalRule =
+    config.dimension === "approver" && (config.showApprovalRule ?? true);
 
   const {
     getUserDetails,
-    project: { getProjectMemberIds },
+    project: { getProjectMemberIds, fetchProjectMembers },
   } = useMember();
+  const {
+    roles,
+    fetchRoles,
+    isLoading: isRolesLoading,
+  } = useProjectRoles(config.workspaceSlug, config.projectId);
+
+  useEffect(() => {
+    if (!getProjectMemberIds(config.projectId, false)) {
+      fetchProjectMembers("", config.projectId);
+    }
+    fetchRoles();
+  }, [config.projectId, fetchProjectMembers, fetchRoles, getProjectMemberIds]);
 
   const memberIds = getProjectMemberIds(config.projectId, false) ?? [];
   const isAllSelected = selected.length === 0;
+  const roleTokenNameMap = roles.reduce<Record<string, string>>((acc, role) => {
+    acc[role.id] = role.name;
+    return acc;
+  }, {});
   const filteredSpecialOptions = WORKFLOW_SPECIAL_APPROVER_OPTIONS.filter((option) =>
     `${option.label} ${option.description}`.toLowerCase().includes(search.toLowerCase())
   );
+  const filteredRoleOptions = search
+    ? roles.filter((role) => role.name.toLowerCase().includes(search.toLowerCase()))
+    : roles;
 
   const filteredIds = search
     ? memberIds.filter((id) => {
@@ -167,20 +196,35 @@ const MemberPanel: FC<{
       })
     : memberIds;
 
+  const defaultLabelByDimension: Record<TPrincipalPanelDimension, string> = {
+    initiator: "全部成员",
+    assignee: "不约束",
+    approver: "All",
+  };
+
+  const defaultDescriptionByDimension: Record<TPrincipalPanelDimension, string> = {
+    initiator: "未配置发起人时默认全员可发起",
+    assignee: "未配置负责人规则时默认不限制",
+    approver: "未配置审批人时默认为直接通过",
+  };
+
   const handleSelectAll = () => {
     if (readOnly) return;
     setSelected([]);
     setRequiredCount(1);
+    setUseNofM(false);
   };
 
   const handleToggle = (id: string) => {
     if (readOnly) return;
     const newSelected = selected.includes(id) ? selected.filter((s) => s !== id) : [...selected, id];
-    const newCount = Math.min(requiredCount, Math.max(1, newSelected.length));
     setSelected(newSelected);
-    setRequiredCount(newCount);
-    // auto-disable n_of_m when fewer than 2 members selected
-    if (newSelected.length < 2) setUseNofM(false);
+    if (showApprovalRule) {
+      const newCount = Math.min(requiredCount, Math.max(1, newSelected.length));
+      setRequiredCount(newCount);
+      // auto-disable n_of_m when fewer than 2 principals selected
+      if (newSelected.length < 2) setUseNofM(false);
+    }
   };
 
   return (
@@ -212,13 +256,13 @@ const MemberPanel: FC<{
               >
                 {isAllSelected && <Check className="h-2.5 w-2.5 text-white" />}
               </div>
-              <span className="font-medium text-primary">All</span>
+                <span className="font-medium text-primary">{defaultLabelByDimension[config.dimension]}</span>
             </div>
-            <span className="text-xs text-tertiary">Default</span>
+            <span className="text-xs text-tertiary">{defaultDescriptionByDimension[config.dimension]}</span>
           </button>
         )}
 
-        {/* special approver options */}
+        {/* special principal options */}
         {filteredSpecialOptions.map((option) => {
           const isSelected = selected.includes(option.id);
           return (
@@ -240,6 +284,30 @@ const MemberPanel: FC<{
                 <p className="truncate font-medium text-primary">{option.label}</p>
                 <p className="text-xs text-secondary">{option.description}</p>
               </div>
+            </button>
+          );
+        })}
+
+        {/* role list */}
+        {filteredRoleOptions.map((role) => {
+          const roleToken = buildRoleToken(role.id);
+          const isSelected = selected.includes(roleToken);
+          return (
+            <button
+              key={role.id}
+              type="button"
+              onClick={() => handleToggle(roleToken)}
+              className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm transition-colors hover:bg-layer-1"
+            >
+              <div
+                className={cn(
+                  "flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center rounded border transition-colors",
+                  isSelected ? "border-accent-primary bg-accent-primary" : "border-secondary bg-transparent"
+                )}
+              >
+                {isSelected && <Check className="h-2.5 w-2.5 text-white" />}
+              </div>
+              <span className="truncate text-primary">{role.name}（角色）</span>
             </button>
           );
         })}
@@ -270,8 +338,8 @@ const MemberPanel: FC<{
           );
         })}
 
-        {/* n_of_m — only when 2+ specific members selected */}
-        {!isAllSelected && selected.length >= 2 && (
+        {/* n_of_m approval rule */}
+        {showApprovalRule && !isAllSelected && selected.length >= 2 && (
           <div className="mt-2 border-t border-subtle px-2 pt-3">
             <div className="flex items-center gap-2">
               <button
@@ -305,6 +373,42 @@ const MemberPanel: FC<{
                   )}
                 />
               )}
+            </div>
+          </div>
+        )}
+
+        {!isAllSelected && selected.length > 0 && (
+          <div className="mt-2 border-t border-subtle px-2 pt-2">
+            <p className="text-xs text-tertiary">
+              已选择 {selected.length} 个对象
+              {selected.some((token) => token.startsWith(WORKFLOW_SPECIAL_APPROVER_IDS.ASSIGNEES)) ||
+              selected.some((token) => token.startsWith(WORKFLOW_SPECIAL_APPROVER_IDS.CREATED_BY))
+                ? "（含动态对象）"
+                : ""}
+            </p>
+          </div>
+        )}
+
+        {(isRolesLoading || memberIds.length === 0) && (
+          <p className="px-2 py-2 text-xs text-tertiary">正在加载成员与角色...</p>
+        )}
+
+        {readOnly && !isAllSelected && (
+          <div className="mt-2 border-t border-subtle px-2 pt-2">
+            <p className="mb-1 text-xs text-tertiary">已选对象</p>
+            <div className="space-y-1">
+              {selected.map((principalId) => {
+                const label = getWorkflowApproverLabel(
+                  principalId,
+                  getUserDetails,
+                  (roleId) => roleTokenNameMap[roleId]
+                );
+                return (
+                  <div key={principalId} className="truncate text-xs text-secondary">
+                    {label}
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
@@ -478,13 +582,18 @@ type TWorkflowSidePanelProps = {
 };
 
 export const WorkflowSidePanel: FC<TWorkflowSidePanelProps> = ({ config, onClose }) => {
-  const titleMap: Record<TPanelConfig["type"], string> = {
-    state: "States",
-    member: "Members",
-    flow: "Flow",
-    fields: "必填字段",
-  };
-  const title = titleMap[config.type];
+  const title =
+    config.type === "principal"
+      ? config.dimension === "initiator"
+        ? "发起人"
+        : config.dimension === "assignee"
+          ? "目标负责人"
+          : "审批人"
+      : config.type === "state"
+        ? "States"
+        : config.type === "flow"
+          ? "Flow"
+          : "必填字段";
 
   const handleStateConfirm = (stateId: string) => {
     if (config.type === "state") {
@@ -493,10 +602,10 @@ export const WorkflowSidePanel: FC<TWorkflowSidePanelProps> = ({ config, onClose
     }
   };
 
-  const handleMemberConfirm = (memberIds: string[], count: number, useNofM: boolean) => {
-    if (config.type === "member") {
+  const handlePrincipalConfirm = (principalIds: string[], count: number, useNofM: boolean) => {
+    if (config.type === "principal") {
       onClose();
-      config.onConfirm(memberIds, count, useNofM);
+      config.onConfirm(principalIds, count, useNofM);
     }
   };
 
@@ -529,7 +638,9 @@ export const WorkflowSidePanel: FC<TWorkflowSidePanelProps> = ({ config, onClose
       </div>
 
       {config.type === "state" && <StatePanel config={config} onConfirm={handleStateConfirm} />}
-      {config.type === "member" && <MemberPanel config={config} onClose={onClose} onConfirm={handleMemberConfirm} />}
+      {config.type === "principal" && (
+        <PrincipalPanel config={config} onClose={onClose} onConfirm={handlePrincipalConfirm} />
+      )}
       {config.type === "flow" && <FlowPanel config={config} onConfirm={handleFlowConfirm} />}
       {config.type === "fields" && (
         <FieldsPanel config={config} onClose={onClose} onConfirm={handleFieldsConfirm} />

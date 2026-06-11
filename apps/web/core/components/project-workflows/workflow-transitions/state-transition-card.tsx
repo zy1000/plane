@@ -13,6 +13,7 @@ import type { IState } from "@plane/types";
 import { cn } from "@plane/utils";
 import type { TWorkflowTransition, TApprovalType } from "@/services/project/project-workflow.service";
 import { TransitionFlowRow } from "./transition-flow-row";
+import type { TPrincipalPanelDimension } from "./workflow-side-panel";
 
 type TStateTransitionCardProps = {
   state: IState;
@@ -29,6 +30,8 @@ type TStateTransitionCardProps = {
     data: {
       id?: string;
       to_state_id: string;
+      initiator_ids: string[];
+      assignee_ids: string[];
       approver_ids: string[];
       approval_type: TApprovalType;
       required_count?: number;
@@ -41,13 +44,17 @@ type TStateTransitionCardProps = {
     currentValue: string | null,
     onConfirm: (stateId: string) => void
   ) => void;
-  onRequestMemberPanel: (
+  onRequestPrincipalPanel: (
+    dimension: TPrincipalPanelDimension,
     currentValue: string[],
-    requiredCount: number,
-    isNofM: boolean,
-    onConfirm: (memberIds: string[], count: number, useNofM: boolean) => void,
-    readOnly?: boolean,
-    onNext?: (memberIds: string[], count: number, useNofM: boolean) => void
+    onConfirm: (principalIds: string[], count: number, useNofM: boolean) => void,
+    options?: {
+      requiredCount?: number;
+      isNofM?: boolean;
+      showApprovalRule?: boolean;
+      readOnly?: boolean;
+      onNext?: (principalIds: string[], count: number, useNofM: boolean) => void;
+    }
   ) => void;
   onRequestFlowPanel: (onConfirm: () => void) => void;
   onRequestFieldsPanel: (
@@ -70,7 +77,7 @@ export const StateTransitionCard: FC<TStateTransitionCardProps> = ({
   onSaveTransition,
   onDeleteTransition,
   onRequestStatePanel,
-  onRequestMemberPanel,
+  onRequestPrincipalPanel,
   onRequestFlowPanel,
   onRequestFieldsPanel,
 }) => {
@@ -142,7 +149,7 @@ export const StateTransitionCard: FC<TStateTransitionCardProps> = ({
               onDelete={onDeleteTransition}
               onDiscard={() => {}}
               onRequestStatePanel={onRequestStatePanel}
-              onRequestMemberPanel={onRequestMemberPanel}
+              onRequestPrincipalPanel={onRequestPrincipalPanel}
               onRequestFlowPanel={onRequestFlowPanel}
               onRequestFieldsPanel={onRequestFieldsPanel}
             />
@@ -168,7 +175,7 @@ export const StateTransitionCard: FC<TStateTransitionCardProps> = ({
               onDelete={async () => {}}
               onDiscard={() => setShowNewRow(false)}
               onRequestStatePanel={onRequestStatePanel}
-              onRequestMemberPanel={onRequestMemberPanel}
+              onRequestPrincipalPanel={onRequestPrincipalPanel}
               onRequestFlowPanel={onRequestFlowPanel}
               onRequestFieldsPanel={onRequestFieldsPanel}
             />

@@ -25,6 +25,8 @@ export type TWorkflowTransition = {
   workflow_id: string;
   from_state_id: string | null;
   to_state_id: string;
+  initiator_ids: string[];
+  assignee_ids: string[];
   approval_type: TApprovalType;
   required_count: number;
   approver_ids: string[];
@@ -35,6 +37,8 @@ export type TWorkflowTransitionCreatePayload = {
   workflow_id: string;
   from_state_id: string | null;
   to_state_id: string;
+  initiator_ids?: string[];
+  assignee_ids?: string[];
   approval_type: TApprovalType;
   required_count?: number;
   approver_ids?: string[];
@@ -44,6 +48,8 @@ export type TWorkflowTransitionCreatePayload = {
 export type TWorkflowTransitionUpdatePayload = {
   id: string;
   to_state_id?: string;
+  initiator_ids?: string[];
+  assignee_ids?: string[];
   approval_type?: TApprovalType;
   required_count?: number;
   approver_ids?: string[];
@@ -76,6 +82,7 @@ export type TTransitionRecord = {
   to_state_group: string | null;
   status: "pending" | "approved" | "rejected" | "cancelled";
   required_count: number | null;
+  target_assignee_ids: string[] | null;
   approval_records: TApprovalRecord[];
   created_at: string;
   completed_at: string | null;

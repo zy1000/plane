@@ -19,7 +19,7 @@ import { StateTransitionCard } from "./state-transition-card";
 import {
   WorkflowSidePanel,
   type TPanelConfig,
-  type TMemberPanelConfig,
+  type TPrincipalPanelConfig,
   type TFieldsPanelConfig,
 } from "./workflow-side-panel";
 
@@ -107,6 +107,8 @@ export const WorkflowTransitionsRoot: FC<TWorkflowTransitionsRootProps> = ({
     data: {
       id?: string;
       to_state_id: string;
+      initiator_ids: string[];
+      assignee_ids: string[];
       approver_ids: string[];
       approval_type: TApprovalType;
       required_count?: number;
@@ -119,6 +121,8 @@ export const WorkflowTransitionsRoot: FC<TWorkflowTransitionsRootProps> = ({
         await updateTransition({
           id: data.id,
           to_state_id: data.to_state_id,
+          initiator_ids: data.initiator_ids,
+          assignee_ids: data.assignee_ids,
           approver_ids: data.approver_ids,
           approval_type: data.approval_type,
           extra_field_ids: data.extra_field_ids,
@@ -129,6 +133,8 @@ export const WorkflowTransitionsRoot: FC<TWorkflowTransitionsRootProps> = ({
           workflow_id: workflow.id,
           from_state_id: stateId,
           to_state_id: data.to_state_id,
+          initiator_ids: data.initiator_ids,
+          assignee_ids: data.assignee_ids,
           approver_ids: data.approver_ids,
           approval_type: data.approval_type,
           extra_field_ids: data.extra_field_ids,
@@ -157,23 +163,30 @@ export const WorkflowTransitionsRoot: FC<TWorkflowTransitionsRootProps> = ({
     setActivePanel({ type: "state", availableStates, currentValue, onConfirm });
   };
 
-  const handleRequestMemberPanel = (
+  const handleRequestPrincipalPanel = (
+    dimension: TPrincipalPanelConfig["dimension"],
     currentValue: string[],
-    requiredCount: number,
-    isNofM: boolean,
-    onConfirm: (memberIds: string[], count: number, useNofM: boolean) => void,
-    readOnly?: boolean,
-    onNext?: (memberIds: string[], count: number, useNofM: boolean) => void
+    onConfirm: (principalIds: string[], count: number, useNofM: boolean) => void,
+    options?: {
+      requiredCount?: number;
+      isNofM?: boolean;
+      showApprovalRule?: boolean;
+      readOnly?: boolean;
+      onNext?: (principalIds: string[], count: number, useNofM: boolean) => void;
+    }
   ) => {
-    const config: TMemberPanelConfig = {
-      type: "member",
+    const config: TPrincipalPanelConfig = {
+      type: "principal",
+      dimension,
+      workspaceSlug,
       projectId,
       currentValue,
-      requiredCount,
-      isNofM,
+      requiredCount: options?.requiredCount ?? 1,
+      isNofM: options?.isNofM ?? false,
+      showApprovalRule: options?.showApprovalRule,
       onConfirm,
-      readOnly,
-      onNext,
+      readOnly: options?.readOnly,
+      onNext: options?.onNext,
     };
     setActivePanel(config);
   };
@@ -250,7 +263,7 @@ export const WorkflowTransitionsRoot: FC<TWorkflowTransitionsRootProps> = ({
                     onSaveTransition={handleSaveTransition}
                     onDeleteTransition={handleDeleteTransition}
                     onRequestStatePanel={handleRequestStatePanel}
-                    onRequestMemberPanel={handleRequestMemberPanel}
+                    onRequestPrincipalPanel={handleRequestPrincipalPanel}
                     onRequestFlowPanel={handleRequestFlowPanel}
                     onRequestFieldsPanel={handleRequestFieldsPanel}
                   />

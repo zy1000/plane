@@ -4,9 +4,11 @@
  * See the LICENSE file for details.
  */
 
+import { useState } from "react";
 import { observer } from "mobx-react";
 // i18n
 import { useTranslation } from "@plane/i18n";
+import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 // utils
 import { cn, getDate, renderFormattedPayloadDate, shouldHighlightIssueDueDate } from "@plane/utils";
 // components
@@ -17,11 +19,13 @@ import { StateDropdown } from "@/components/dropdowns/state/dropdown";
 import { WorkItemTypeIcon } from "@/components/issues/work-item-type-icon";
 // hooks
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
+import { useIssueStateTransition } from "@/hooks/store/use-issue-state-transition";
 import { useProjectIssueTypes } from "@/hooks/store/use-project-issue-types";
 import { useProjectState } from "@/hooks/store/use-project-state";
 import { projectIssueTypesCache } from "@/services/project";
 // plane web
 import { DateAlert } from "@/plane-web/components/issues/issue-details/sidebar/date-alert";
+import { StateTransitionAssigneeModal } from "../state-transition-assignee-modal";
 import type { TIssueOperations } from "../issue-detail";
 
 type TPeekCorePropertyBar = {
@@ -44,7 +48,11 @@ export const PeekOverviewCorePropertyBar = observer(function PeekOverviewCorePro
     issue: { getIssueById },
   } = useIssueDetail();
   const { getStateById } = useProjectState();
+  const { evaluateStateTransition } = useIssueStateTransition(workspaceSlug, projectId);
   const { issueTypes } = useProjectIssueTypes(workspaceSlug, projectId);
+  const [pendingToStateId, setPendingToStateId] = useState<string | null>(null);
+  const [allowedAssigneeIds, setAllowedAssigneeIds] = useState<string[]>([]);
+  const [isTransitionSubmitting, setIsTransitionSubmitting] = useState(false);
 
   const issue = getIssueById(issueId);
   if (!issue) return <></>;
@@ -53,6 +61,46 @@ export const PeekOverviewCorePropertyBar = observer(function PeekOverviewCorePro
     ? issueTypes?.find((issueType) => issueType.id === issue.type_id)?.logo_props?.icon ??
       (issue?.project_id ? projectIssueTypesCache.get(issue.project_id)?.[issue.type_id]?.logo_props?.icon : undefined)
     : undefined;
+
+  const closeAssigneeModal = () => {
+    if (isTransitionSubmitting) return;
+    setPendingToStateId(null);
+    setAllowedAssigneeIds([]);
+  };
+
+  const handleStateChange = async (nextStateId: string) => {
+    const transitionCheck = await evaluateStateTransition(issue, nextStateId);
+    if (!transitionCheck.shouldPromptAssigneeSelection) {
+      await issueOperations.update(workspaceSlug, projectId, issueId, { state_id: nextStateId });
+      return;
+    }
+
+    if (transitionCheck.allowedAssigneeIds.length === 0) {
+      setToast({
+        type: TOAST_TYPE.WARNING,
+        title: "无法切换状态",
+        message: "目标状态未解析到可选负责人，请联系项目管理员检查工作流规则。",
+      });
+      return;
+    }
+
+    setPendingToStateId(nextStateId);
+    setAllowedAssigneeIds(transitionCheck.allowedAssigneeIds);
+  };
+
+  const handleConfirmTransitionAssignees = async (selectedAssigneeIds: string[]) => {
+    if (!pendingToStateId) return;
+    setIsTransitionSubmitting(true);
+    try {
+      await issueOperations.update(workspaceSlug, projectId, issueId, {
+        state_id: pendingToStateId,
+        assignee_ids: selectedAssigneeIds,
+      });
+      closeAssigneeModal();
+    } finally {
+      setIsTransitionSubmitting(false);
+    }
+  };
 
   // 与 IssueTitleInput 的 TextArea（px-3）+ 容器 -ml-3 的文本起点一致；首列补 pl-3，并去掉状态按钮左侧默认内边距，避免相对标题再右偏
   const fieldShell = (index: number) =>
@@ -63,12 +111,13 @@ export const PeekOverviewCorePropertyBar = observer(function PeekOverviewCorePro
     );
 
   return (
-    <div
-      className={cn(
-        "mb-2 flex w-full min-w-0 flex-nowrap items-stretch text-body-xs-medium",
-        disabled && "opacity-60"
-      )}
-    >
+    <>
+      <div
+        className={cn(
+          "mb-2 flex w-full min-w-0 flex-nowrap items-stretch text-body-xs-medium",
+          disabled && "opacity-60"
+        )}
+      >
       <div className={fieldShell(0)}>
         {issue.type_name ? (
           <div className="flex h-7 w-full min-w-0 items-center gap-1.5 truncate rounded-sm pr-1.5 text-body-xs-medium leading-5 text-secondary">
@@ -85,7 +134,7 @@ export const PeekOverviewCorePropertyBar = observer(function PeekOverviewCorePro
       <div className={fieldShell(1)}>
         <StateDropdown
           value={issue?.state_id}
-          onChange={(val) => issueOperations.update(workspaceSlug, projectId, issueId, { state_id: val })}
+          onChange={handleStateChange}
           projectId={projectId}
           issueTypeId={issue?.type_id}
           disabled={disabled}
@@ -188,6 +237,16 @@ export const PeekOverviewCorePropertyBar = observer(function PeekOverviewCorePro
           ) : null}
         </div>
       </div>
-    </div>
+      </div>
+      <StateTransitionAssigneeModal
+        isOpen={Boolean(pendingToStateId)}
+        projectId={projectId}
+        allowedAssigneeIds={allowedAssigneeIds}
+        initialAssigneeIds={issue.assignee_ids ?? []}
+        isSubmitting={isTransitionSubmitting}
+        onClose={closeAssigneeModal}
+        onConfirm={handleConfirmTransitionAssignees}
+      />
+    </>
   );
 });

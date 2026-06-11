@@ -4,9 +4,11 @@
  * See the LICENSE file for details.
  */
 
+import { useState } from "react";
 import { observer } from "mobx-react";
 // i18n
 import { useTranslation } from "@plane/i18n";
+import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 // ui
 import {
   CycleIcon,
@@ -31,6 +33,7 @@ import { StateDropdown } from "@/components/dropdowns/state/dropdown";
 // hooks
 import { useProjectEstimates } from "@/hooks/store/estimates";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
+import { useIssueStateTransition } from "@/hooks/store/use-issue-state-transition";
 import { useMember } from "@/hooks/store/use-member";
 import { useProject } from "@/hooks/store/use-project";
 import { useProjectIssueTypes } from "@/hooks/store/use-project-issue-types";
@@ -47,6 +50,7 @@ import { IssueCycleSelect } from "./cycle-select";
 import { IssueLabel } from "./label";
 import { IssueModuleSelect } from "./module-select";
 import { IssueReleaseSelect } from "./release-select";
+import { StateTransitionAssigneeModal } from "../state-transition-assignee-modal";
 import type { TIssueOperations } from "./root";
 import { Rocket, Type } from "lucide-react";
 import { WorkItemTypeIcon } from "@/components/issues/work-item-type-icon";
@@ -71,6 +75,10 @@ export const IssueDetailsSidebar = observer(function IssueDetailsSidebar(props: 
   const { getUserDetails } = useMember();
   const { getStateById } = useProjectState();
   const { issueTypes } = useProjectIssueTypes(workspaceSlug, projectId);
+  const { evaluateStateTransition } = useIssueStateTransition(workspaceSlug, projectId);
+  const [pendingToStateId, setPendingToStateId] = useState<string | null>(null);
+  const [allowedAssigneeIds, setAllowedAssigneeIds] = useState<string[]>([]);
+  const [isTransitionSubmitting, setIsTransitionSubmitting] = useState(false);
   const issue = getIssueById(issueId);
   if (!issue) return <></>;
 
@@ -83,6 +91,48 @@ export const IssueDetailsSidebar = observer(function IssueDetailsSidebar(props: 
     ? issueTypes?.find((issueType) => issueType.id === issue.type_id)?.logo_props?.icon ??
       (issue?.project_id ? projectIssueTypesCache.get(issue.project_id)?.[issue.type_id]?.logo_props?.icon : undefined)
     : undefined;
+
+  const closeAssigneeModal = () => {
+    if (isTransitionSubmitting) return;
+    setPendingToStateId(null);
+    setAllowedAssigneeIds([]);
+  };
+
+  const handleStateChange = async (nextStateId: string) => {
+    const transitionCheck = await evaluateStateTransition(issue, nextStateId);
+    if (!transitionCheck.shouldPromptAssigneeSelection) {
+      await issueOperations.update(workspaceSlug, projectId, issueId, {
+        state_id: nextStateId,
+      });
+      return;
+    }
+
+    if (transitionCheck.allowedAssigneeIds.length === 0) {
+      setToast({
+        type: TOAST_TYPE.WARNING,
+        title: "无法切换状态",
+        message: "目标状态未解析到可选负责人，请联系项目管理员检查工作流规则。",
+      });
+      return;
+    }
+
+    setPendingToStateId(nextStateId);
+    setAllowedAssigneeIds(transitionCheck.allowedAssigneeIds);
+  };
+
+  const handleConfirmTransitionAssignees = async (selectedAssigneeIds: string[]) => {
+    if (!pendingToStateId) return;
+    setIsTransitionSubmitting(true);
+    try {
+      await issueOperations.update(workspaceSlug, projectId, issueId, {
+        state_id: pendingToStateId,
+        assignee_ids: selectedAssigneeIds,
+      });
+      closeAssigneeModal();
+    } finally {
+      setIsTransitionSubmitting(false);
+    }
+  };
 
   return (
     <>
@@ -98,7 +148,7 @@ export const IssueDetailsSidebar = observer(function IssueDetailsSidebar(props: 
               </div>
               <StateDropdown
                 value={issue?.state_id}
-                onChange={(val) => issueOperations.update(workspaceSlug, projectId, issueId, { state_id: val })}
+                onChange={handleStateChange}
                 projectId={projectId?.toString() ?? ""}
                 issueTypeId={issue?.type_id}
                 disabled={!isEditable}
@@ -356,6 +406,15 @@ export const IssueDetailsSidebar = observer(function IssueDetailsSidebar(props: 
           </div>
         </div>
       </div>
+      <StateTransitionAssigneeModal
+        isOpen={Boolean(pendingToStateId)}
+        projectId={projectId}
+        allowedAssigneeIds={allowedAssigneeIds}
+        initialAssigneeIds={issue.assignee_ids ?? []}
+        isSubmitting={isTransitionSubmitting}
+        onClose={closeAssigneeModal}
+        onConfirm={handleConfirmTransitionAssignees}
+      />
     </>
   );
 });
