@@ -41,20 +41,18 @@ type TTransitionEditModalProps = {
 
 type TTimelineItemProps = {
   title: string;
-  description?: string;
   isLast?: boolean;
   children: ReactNode;
 };
 
-const TimelineItem: FC<TTimelineItemProps> = ({ title, description, isLast = false, children }) => (
+const TimelineItem: FC<TTimelineItemProps> = ({ title, isLast = false, children }) => (
   <div className="grid grid-cols-[16px_minmax(0,1fr)] gap-3">
     <div className="relative flex justify-center">
-      <div className="mt-[9px] h-2 w-2 rounded-full bg-accent-primary" />
+      <div className="mt-[10px] h-2 w-2 rounded-full bg-accent-primary" />
       {!isLast && <div className="absolute top-5 bottom-0 w-px bg-subtle" />}
     </div>
     <div className={cn("pb-4", isLast && "pb-0")}>
-      <p className="text-sm font-medium text-primary">{title}</p>
-      {description && <p className="mt-0.5 text-xs text-secondary">{description}</p>}
+      <p className="text-base font-medium text-primary">{title}</p>
       <div className="mt-2">{children}</div>
     </div>
   </div>
@@ -100,11 +98,6 @@ export const TransitionEditModal: FC<TTransitionEditModalProps> = ({
     [fromState.id, transition?.to_state_id, usedToStateIds]
   );
 
-  const selectedToState = useMemo(
-    () => (toStateId ? allStates.find((state) => state.id === toStateId) : null),
-    [allStates, toStateId]
-  );
-
   const isDirty =
     toStateId !== (transition?.to_state_id ?? null) ||
     !isSameTokenSet(initiatorIds, transition?.initiator_ids ?? []) ||
@@ -147,21 +140,18 @@ export const TransitionEditModal: FC<TTransitionEditModalProps> = ({
       <div className="flex h-full min-h-0 flex-col">
         <div className="border-b border-subtle px-5 py-4">
           <h3 className="text-base font-semibold text-primary">{transition ? "编辑流转" : "新建流转"}</h3>
-          <p className="mt-1 text-xs text-secondary">
-            从 <span className="font-medium text-primary">{fromState.name}</span> 配置工作流流转规则
-          </p>
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4" data-modal-wheel-scroll>
-          <div className="rounded-lg border border-subtle bg-surface-1 p-4">
-            <TimelineItem title="起始状态" description="当前卡片所属状态（只读）">
+          <div className="rounded-lg bg-surface-1 p-4">
+            <TimelineItem title="起始状态">
               <div className="flex h-9 items-center gap-2 rounded-md border border-subtle bg-surface-2 px-3 text-sm text-primary">
                 <StateGroupIcon stateGroup={fromState.group} color={fromState.color} size={EIconSize.SM} />
                 <span className="truncate">{fromState.name}</span>
               </div>
             </TimelineItem>
 
-            <TimelineItem title="移动到" description="设置该流转的目标状态">
+            <TimelineItem title="移动到">
               <StateDropdown
                 states={allStates}
                 value={toStateId}
@@ -171,7 +161,7 @@ export const TransitionEditModal: FC<TTransitionEditModalProps> = ({
               />
             </TimelineItem>
 
-            <TimelineItem title="发起人" description="未配置时默认全部成员可发起">
+            <TimelineItem title="发起人">
               <PrincipalSelect
                 dimension="initiator"
                 workspaceSlug={workspaceSlug}
@@ -183,7 +173,7 @@ export const TransitionEditModal: FC<TTransitionEditModalProps> = ({
               />
             </TimelineItem>
 
-            <TimelineItem title="目标负责人" description="未配置时默认不限制负责人">
+            <TimelineItem title="目标负责人">
               <PrincipalSelect
                 dimension="assignee"
                 workspaceSlug={workspaceSlug}
@@ -195,10 +185,7 @@ export const TransitionEditModal: FC<TTransitionEditModalProps> = ({
               />
             </TimelineItem>
 
-            <TimelineItem
-              title="审批人"
-              description={selectedToState ? `通过后将进入 ${selectedToState.name}` : "配置审批对象"}
-            >
+            <TimelineItem title="审批人">
               <PrincipalSelect
                 dimension="approver"
                 workspaceSlug={workspaceSlug}
@@ -217,7 +204,7 @@ export const TransitionEditModal: FC<TTransitionEditModalProps> = ({
               />
             </TimelineItem>
 
-            <TimelineItem title="审批规则" description="根据审批人数量设置通过规则">
+            <TimelineItem title="审批规则">
               <ApprovalRuleSelect
                 approverCount={approverIds.length}
                 requiredCount={requiredCount}
@@ -229,7 +216,7 @@ export const TransitionEditModal: FC<TTransitionEditModalProps> = ({
               />
             </TimelineItem>
 
-            <TimelineItem title="必填字段" description="审批通过前需要补齐的字段" isLast>
+            <TimelineItem title="必填字段" isLast>
               <FieldsSelect
                 workspaceSlug={workspaceSlug}
                 projectId={projectId}

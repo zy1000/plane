@@ -42,7 +42,7 @@ type TSelectedPrincipal = {
 const DEFAULT_LABEL_BY_DIMENSION: Record<TPrincipalSelectDimension, string> = {
   initiator: "全部成员",
   assignee: "不约束",
-  approver: "All",
+  approver: "无需审批",
 };
 
 const DEFAULT_DESCRIPTION_BY_DIMENSION: Record<TPrincipalSelectDimension, string> = {

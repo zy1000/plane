@@ -194,10 +194,7 @@ export const WorkflowTransitionsRoot: FC<TWorkflowTransitionsRootProps> = ({
         )}
       </div>
 
-      {/* define workflow section */}
       <div>
-        <h3 className="mb-3 text-sm font-medium text-secondary">Define workflow</h3>
-
         <div className="flex items-start gap-4">
           <div className="min-w-0 flex-1">
             {isLoading ? (
@@ -235,7 +232,6 @@ export const WorkflowTransitionsRoot: FC<TWorkflowTransitionsRootProps> = ({
               <WorkflowViewPanel
                 box={activeView.box}
                 transition={activeView.transition}
-                fromState={activeView.fromState}
                 allStates={allStates}
                 workspaceSlug={workspaceSlug}
                 projectId={projectId}

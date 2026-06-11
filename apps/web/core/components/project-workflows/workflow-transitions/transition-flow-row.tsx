@@ -18,7 +18,6 @@ import type { TViewBox } from "./workflow-view-panel";
 
 type TTransitionFlowRowProps = {
   transition: TWorkflowTransition;
-  fromState: IState;
   allStates: IState[];
   isEditable: boolean;
   activeViewBox: TViewBox | null;
@@ -29,7 +28,6 @@ type TTransitionFlowRowProps = {
 
 export const TransitionFlowRow: FC<TTransitionFlowRowProps> = ({
   transition,
-  fromState,
   allStates,
   isEditable,
   activeViewBox,
@@ -54,7 +52,7 @@ export const TransitionFlowRow: FC<TTransitionFlowRowProps> = ({
 
   const initiatorSummary = getPrincipalSummary(transition.initiator_ids, "All");
   const assigneeSummary = getPrincipalSummary(transition.assignee_ids, "不约束");
-  const approverSummary = getPrincipalSummary(transition.approver_ids, "All");
+  const approverSummary = getPrincipalSummary(transition.approver_ids, "无需审批");
 
   useEffect(() => {
     if (!showMenu) return;
@@ -85,7 +83,12 @@ export const TransitionFlowRow: FC<TTransitionFlowRowProps> = ({
     );
 
   return (
-    <div className="relative rounded-md border border-subtle bg-surface-1 transition-colors">
+    <div
+      className={cn(
+        "relative rounded-md border border-subtle bg-surface-1 transition-colors",
+        showMenu && "z-30"
+      )}
+    >
       {isEditable && (
         <div ref={menuRef} className="absolute top-2 right-2 z-10">
           <button
@@ -118,10 +121,9 @@ export const TransitionFlowRow: FC<TTransitionFlowRowProps> = ({
       )}
 
       <div className="px-3 pt-2.5 pb-3 pr-9">
-        <p className="mb-2 text-xs text-tertiary">from {fromState.name}</p>
         <div className="grid grid-cols-5 gap-2">
           <div>
-            <p className="mb-1 text-xs text-tertiary">move to</p>
+            <p className="mb-1 text-xs text-tertiary">目标状态</p>
             <button type="button" onClick={() => onViewBox("state")} className={getBoxClassName(activeViewBox === "state")}>
               {selectedToState ? (
                 <>
@@ -171,7 +173,7 @@ export const TransitionFlowRow: FC<TTransitionFlowRowProps> = ({
           </div>
 
           <div>
-            <p className="mb-1 text-xs text-tertiary">requiring</p>
+            <p className="mb-1 text-xs text-tertiary">必填字段</p>
             <button
               type="button"
               onClick={() => onViewBox("fields")}

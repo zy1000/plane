@@ -28,7 +28,6 @@ export type TViewBox = "state" | "initiator" | "assignee" | "approver" | "fields
 type TWorkflowViewPanelProps = {
   box: TViewBox;
   transition: TWorkflowTransition;
-  fromState: IState;
   allStates: IState[];
   workspaceSlug: string;
   projectId: string;
@@ -52,7 +51,7 @@ const PRINCIPAL_DEFAULT: Record<
 > = {
   initiator: { label: "全部成员", description: "未配置发起人时默认全员可发起" },
   assignee: { label: "不约束", description: "未配置负责人规则时默认不限制" },
-  approver: { label: "All", description: "未配置审批人时默认为直接通过" },
+  approver: { label: "无需审批", description: "未配置审批人时默认为直接通过" },
 };
 
 const isSpecialToken = (id: string) => WORKFLOW_SPECIAL_APPROVER_OPTIONS.some((option) => option.id === id);
@@ -60,7 +59,6 @@ const isSpecialToken = (id: string) => WORKFLOW_SPECIAL_APPROVER_OPTIONS.some((o
 export const WorkflowViewPanel: FC<TWorkflowViewPanelProps> = ({
   box,
   transition,
-  fromState,
   allStates,
   workspaceSlug,
   projectId,
@@ -136,7 +134,7 @@ export const WorkflowViewPanel: FC<TWorkflowViewPanelProps> = ({
   }, [principalIds]);
 
   const approvalRuleText = useMemo(() => {
-    if (transition.approver_ids.length === 0) return "无需指定审批人（All）";
+    if (transition.approver_ids.length === 0) return "无需审批";
     if (transition.approval_type === "all") return "需全部审批人通过";
     if (transition.approval_type === "any") return "任意一人通过即可";
     return `需 ${Math.max(1, transition.required_count || 1)} 人通过`;
@@ -269,7 +267,6 @@ export const WorkflowViewPanel: FC<TWorkflowViewPanelProps> = ({
       </div>
 
       <div className="flex-1 overflow-y-auto p-3">
-        <p className={cn("mb-2 text-xs text-tertiary", box === "fields" && "mb-1")}>from {fromState.name}</p>
         {renderBody()}
       </div>
     </div>

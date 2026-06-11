@@ -76,9 +76,6 @@ export const StateTransitionAssigneeModal = ({
                     <Dialog.Title className="text-base font-semibold text-primary">
                       选择目标负责人
                     </Dialog.Title>
-                    <p className="mt-0.5 text-xs text-secondary">
-                      当前负责人不满足目标状态规则，请在允许范围内选择负责人后再提交。
-                    </p>
                   </div>
                   <button
                     type="button"

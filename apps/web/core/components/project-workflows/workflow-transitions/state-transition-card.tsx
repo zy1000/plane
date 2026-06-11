@@ -91,7 +91,6 @@ export const StateTransitionCard: FC<TStateTransitionCardProps> = ({
             <TransitionFlowRow
               key={transition.id}
               transition={transition}
-              fromState={state}
               allStates={allStates}
               isEditable={isEditable}
               activeViewBox={activeView?.transition.id === transition.id ? activeView.box : null}
