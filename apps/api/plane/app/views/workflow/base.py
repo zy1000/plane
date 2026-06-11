@@ -17,6 +17,8 @@ from plane.app.views import BaseAPIView
 from plane.db.models import (
     IssueTransitionApprovalRecord,
     IssueTransitionRecord,
+    ProjectMember,
+    ProjectRole,
     TransitionRecordStatus,
     Workflow,
     WorkflowApproverTarget,
@@ -32,6 +34,12 @@ SPECIAL_APPROVER_PREFIX = "special:"
 SPECIAL_APPROVER_ID_MAP = {
     f"{SPECIAL_APPROVER_PREFIX}{WorkflowApproverTarget.ASSIGNEES}": WorkflowApproverTarget.ASSIGNEES,
     f"{SPECIAL_APPROVER_PREFIX}{WorkflowApproverTarget.CREATED_BY}": WorkflowApproverTarget.CREATED_BY,
+}
+ROLE_PRINCIPAL_PREFIX = "role:"
+PRINCIPAL_DIMENSION_FIELD_MAP = {
+    WorkflowPrincipalDimension.INITIATOR: "initiator_ids",
+    WorkflowPrincipalDimension.ASSIGNEE: "assignee_ids",
+    WorkflowPrincipalDimension.APPROVER: "approver_ids",
 }
 
 
@@ -92,12 +100,14 @@ class WorkflowTransitionAPIView(BaseAPIView):
             workflow_id=workflow_id,
         )
 
-    def _build_approvals(self, transition, member_ids, dynamic_targets):
-        """批量创建审批人维度的成员行与动态对象行，忽略已存在的重复项。"""
+    def _build_principals(
+        self, transition, dimension, member_ids, role_ids, dynamic_targets
+    ):
+        """批量创建指定维度对象行（成员/角色/动态对象），忽略重复项。"""
         principals = [
             WorkflowTransitionPrincipal(
                 transition=transition,
-                dimension=WorkflowPrincipalDimension.APPROVER,
+                dimension=dimension,
                 kind=WorkflowPrincipalKind.MEMBER,
                 member_id=member_id,
             )
@@ -106,7 +116,16 @@ class WorkflowTransitionAPIView(BaseAPIView):
         principals.extend(
             WorkflowTransitionPrincipal(
                 transition=transition,
-                dimension=WorkflowPrincipalDimension.APPROVER,
+                dimension=dimension,
+                kind=WorkflowPrincipalKind.ROLE,
+                role_id=role_id,
+            )
+            for role_id in role_ids
+        )
+        principals.extend(
+            WorkflowTransitionPrincipal(
+                transition=transition,
+                dimension=dimension,
                 kind=WorkflowPrincipalKind.DYNAMIC,
                 dynamic_target=dynamic_target,
             )
@@ -117,38 +136,98 @@ class WorkflowTransitionAPIView(BaseAPIView):
                 principals, ignore_conflicts=True
             )
 
-    def _parse_approver_selections(self, approver_ids):
-        static_approver_ids = []
-        dynamic_approver_types = []
+    def _parse_principal_tokens(self, tokens):
+        member_ids = []
+        role_ids = []
+        dynamic_targets = []
 
-        for approver_id in approver_ids:
-            if approver_id in SPECIAL_APPROVER_ID_MAP:
-                approver_type = SPECIAL_APPROVER_ID_MAP[approver_id]
-                if approver_type not in dynamic_approver_types:
-                    dynamic_approver_types.append(approver_type)
+        for token in tokens:
+            token = str(token)
+            if token in SPECIAL_APPROVER_ID_MAP:
+                dynamic_target = SPECIAL_APPROVER_ID_MAP[token]
+                if dynamic_target not in dynamic_targets:
+                    dynamic_targets.append(dynamic_target)
                 continue
-            static_approver_ids.append(approver_id)
+            if token.startswith(SPECIAL_APPROVER_PREFIX):
+                raise ValueError(f"不支持的动态对象：{token}")
+            if token.startswith(ROLE_PRINCIPAL_PREFIX):
+                role_id = token[len(ROLE_PRINCIPAL_PREFIX):]
+                if role_id and role_id not in role_ids:
+                    role_ids.append(role_id)
+                continue
+            if token not in member_ids:
+                member_ids.append(token)
 
-        return static_approver_ids, dynamic_approver_types
+        return member_ids, role_ids, dynamic_targets
 
-    def _with_approvers(self, serializer_data, transition):
-        """在序列化数据中附加当前审批人 ID 列表（保持 special: 前缀契约不变）。"""
-        approver_ids = []
+    def _parse_and_validate_principal_tokens(self, project_id, dimension, tokens):
+        member_ids, role_ids, dynamic_targets = self._parse_principal_tokens(tokens)
+
+        if member_ids:
+            member_qs = ProjectMember.objects.filter(
+                project_id=project_id,
+                member_id__in=member_ids,
+                is_active=True,
+                deleted_at__isnull=True,
+            )
+            if dimension == WorkflowPrincipalDimension.ASSIGNEE:
+                member_qs = member_qs.filter(role__gte=15)
+            valid_member_ids = {str(member_id) for member_id in member_qs.values_list("member_id", flat=True)}
+            invalid_member_ids = set(member_ids) - valid_member_ids
+            if invalid_member_ids:
+                raise ValueError("成员不属于当前项目或不可用于该配置")
+
+        if role_ids:
+            valid_role_ids = {
+                str(role_id)
+                for role_id in ProjectRole.objects.filter(
+                    project_id=project_id,
+                    id__in=role_ids,
+                    deleted_at__isnull=True,
+                ).values_list("id", flat=True)
+            }
+            invalid_role_ids = set(role_ids) - valid_role_ids
+            if invalid_role_ids:
+                raise ValueError("角色不属于当前项目")
+
+        return member_ids, role_ids, dynamic_targets
+
+    def _save_principals(self, transition, dimension, tokens, replace=False):
+        if replace:
+            transition.principals.filter(dimension=dimension).delete()
+        member_ids, role_ids, dynamic_targets = self._parse_and_validate_principal_tokens(
+            project_id=transition.project_id,
+            dimension=dimension,
+            tokens=tokens or [],
+        )
+        self._build_principals(
+            transition=transition,
+            dimension=dimension,
+            member_ids=member_ids,
+            role_ids=role_ids,
+            dynamic_targets=dynamic_targets,
+        )
+
+    def _with_principals(self, serializer_data, transition, dimension, field_name):
+        """在序列化数据中附加指定维度 ID 列表（member/role/special 三类令牌）。"""
+        principal_ids = []
         principals = transition.principals.filter(
-            dimension=WorkflowPrincipalDimension.APPROVER,
+            dimension=dimension,
             deleted_at__isnull=True,
         )
         for principal in principals:
             if principal.kind == WorkflowPrincipalKind.MEMBER and principal.member_id:
-                approver_ids.append(principal.member_id)
+                principal_ids.append(str(principal.member_id))
+            elif principal.kind == WorkflowPrincipalKind.ROLE and principal.role_id:
+                principal_ids.append(f"{ROLE_PRINCIPAL_PREFIX}{principal.role_id}")
             elif (
                 principal.kind == WorkflowPrincipalKind.DYNAMIC
                 and principal.dynamic_target
             ):
-                approver_ids.append(
+                principal_ids.append(
                     f"{SPECIAL_APPROVER_PREFIX}{principal.dynamic_target}"
                 )
-        return {**serializer_data, "approver_ids": approver_ids}
+        return {**serializer_data, field_name: principal_ids}
 
     def _with_required_field_ids(self, serializer_data, transition):
         """在序列化数据中附加当前必填字段 ID 列表。"""
@@ -160,10 +239,11 @@ class WorkflowTransitionAPIView(BaseAPIView):
         return {**serializer_data, "extra_field_ids": [str(i) for i in ids]}
 
     def _enrich(self, serializer_data, transition):
-        """附加审批人与必填字段，统一在一处调用。"""
-        return self._with_required_field_ids(
-            self._with_approvers(serializer_data, transition), transition
-        )
+        """附加发起人/目标负责人/审批人/必填字段，统一在一处调用。"""
+        data = serializer_data
+        for dimension, field_name in PRINCIPAL_DIMENSION_FIELD_MAP.items():
+            data = self._with_principals(data, transition, dimension, field_name)
+        return self._with_required_field_ids(data, transition)
 
     @allow_fine_permission(PermissionKey.WORKFLOW_VIEW)
     def get(self, request, slug, project_id, workflow_id):
@@ -184,14 +264,25 @@ class WorkflowTransitionAPIView(BaseAPIView):
             data=data, context={"project_id": project_id}
         )
         if serializer.is_valid():
+            try:
+                for dimension, field_name in PRINCIPAL_DIMENSION_FIELD_MAP.items():
+                    if field_name in request.data:
+                        self._parse_and_validate_principal_tokens(
+                            project_id=project_id,
+                            dimension=dimension,
+                            tokens=request.data.get(field_name) or [],
+                        )
+            except ValueError as exc:
+                return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
             transition = serializer.save(project_id=project_id)
-            approver_ids = request.data.get("approver_ids") or []
-            static_approver_ids, dynamic_approver_types = (
-                self._parse_approver_selections(approver_ids)
-            )
-            self._build_approvals(
-                transition, static_approver_ids, dynamic_approver_types
-            )
+            for dimension, field_name in PRINCIPAL_DIMENSION_FIELD_MAP.items():
+                if field_name in request.data:
+                    self._save_principals(
+                        transition=transition,
+                        dimension=dimension,
+                        tokens=request.data.get(field_name) or [],
+                    )
             # 判断是否有绑定自定义字段
             if extra_field_ids := request.data.get("extra_field_ids"):
                 bulk_object = [
@@ -223,19 +314,27 @@ class WorkflowTransitionAPIView(BaseAPIView):
             context={"project_id": project_id},
         )
         serializer.is_valid(raise_exception=True)
+        try:
+            for dimension, field_name in PRINCIPAL_DIMENSION_FIELD_MAP.items():
+                if field_name in request.data:
+                    self._parse_and_validate_principal_tokens(
+                        project_id=project_id,
+                        dimension=dimension,
+                        tokens=request.data.get(field_name) or [],
+                    )
+        except ValueError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
         serializer.save()
-        # 若请求中包含 approver_ids，则全量替换审批人维度的对象行
-        if "approver_ids" in request.data:
-            transition.principals.filter(
-                dimension=WorkflowPrincipalDimension.APPROVER
-            ).delete()
-            approver_ids = request.data["approver_ids"] or []
-            static_approver_ids, dynamic_approver_types = (
-                self._parse_approver_selections(approver_ids)
-            )
-            self._build_approvals(
-                transition, static_approver_ids, dynamic_approver_types
-            )
+        # 若请求中包含维度字段，则按维度全量替换对象行
+        for dimension, field_name in PRINCIPAL_DIMENSION_FIELD_MAP.items():
+            if field_name in request.data:
+                self._save_principals(
+                    transition=transition,
+                    dimension=dimension,
+                    tokens=request.data.get(field_name) or [],
+                    replace=True,
+                )
 
         # 先清空之前的必须字段
         WorkflowTransitionRequiredField.objects.filter(workflow=transition).delete(

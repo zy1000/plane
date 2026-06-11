@@ -110,6 +110,7 @@ class IssueTransitionRecordListSerializer(BaseSerializer):
     to_state_color = serializers.CharField(source="to_state.color", read_only=True, allow_null=True)
     to_state_group = serializers.CharField(source="to_state.group", read_only=True, allow_null=True)
     required_count = serializers.IntegerField(source="transition.required_count", read_only=True, allow_null=True)
+    target_assignee_ids = serializers.JSONField(read_only=True)
     approval_records = IssueTransitionApprovalRecordSerializer(many=True, read_only=True)
 
     class Meta:
@@ -129,6 +130,7 @@ class IssueTransitionRecordListSerializer(BaseSerializer):
             "to_state_group",
             "status",
             "required_count",
+            "target_assignee_ids",
             "approval_records",
             "created_at",
             "completed_at",

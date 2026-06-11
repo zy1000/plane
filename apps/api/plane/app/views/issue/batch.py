@@ -17,6 +17,7 @@ from plane.utils.host import base_host
 from plane.utils.workflow.transition import (
     cancel_issue_pending_transitions,
     capture_issue_content_snapshot,
+    check_state_assignee_constraint,
     check_update_state_permission,
     reset_pending_transition_votes_if_content_changed,
 )
@@ -31,6 +32,7 @@ class IssueBatchUpdate(BaseAPIView):
         properties = request.data.get("properties", {})
 
         state_id = properties.get("state_id")
+        has_assignee_update = "assignee_ids" in properties
 
         queryset = self.queryset.filter(project_id=project_id, id__in=issue_ids)
         blocked = []
@@ -54,6 +56,7 @@ class IssueBatchUpdate(BaseAPIView):
                         to_state=to_state,
                         user=request.user,
                         project_id=project_id,
+                        target_assignee_ids=properties.get("assignee_ids"),
                     )
                     if not allowed:
                         blocked.append({
@@ -62,6 +65,21 @@ class IssueBatchUpdate(BaseAPIView):
                             "transition_record_id": str(transition_record.id) if transition_record else None,
                         })
                         continue
+            elif has_assignee_update and query.state_id:
+                allowed, error_msg = check_state_assignee_constraint(
+                    issue=query,
+                    state=query.state,
+                    desired_assignee_ids=properties.get("assignee_ids"),
+                )
+                if not allowed:
+                    blocked.append(
+                        {
+                            "issue_id": str(query.id),
+                            "error": error_msg,
+                            "transition_record_id": None,
+                        }
+                    )
+                    continue
 
             serializer = IssueBatchUpdateSerializer(instance=query, data=properties, partial=True)
             if serializer.is_valid():

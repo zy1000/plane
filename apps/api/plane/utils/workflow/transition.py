@@ -7,6 +7,8 @@ from plane.db.models import (
     Issue,
     IssueActivity,
     IssueAssignee,
+    ProjectMember,
+    ProjectMemberRole,
     IssueTransitionApprovalRecord,
     IssueTransitionRecord,
     Notification,
@@ -17,7 +19,8 @@ from plane.db.models import (
     WorkflowPrincipalDimension,
     WorkflowPrincipalKind,
     WorkflowTransition,
-    WorkflowTransitionPrincipal, TypeExtraFieldValue,
+    WorkflowTransitionPrincipal,
+    TypeExtraFieldValue,
 )
 from plane.db.models.workflow import WorkflowTransitionRequiredField
 
@@ -58,36 +61,101 @@ def get_transition_principals(transition: WorkflowTransition, dimension: str):
     )
 
 
-def resolve_transition_approver_ids(issue: Issue, transition: WorkflowTransition) -> list:
-    """解析审批人维度配置中的成员/动态对象，返回去重后的真实用户 ID 列表。"""
-    approver_ids = []
+def _normalize_user_ids(values):
+    if values is None:
+        return []
+    return list(dict.fromkeys(str(value) for value in values if value))
+
+
+def get_issue_assignee_ids(issue: Issue):
+    return _normalize_user_ids(
+        IssueAssignee.objects.filter(
+            issue=issue,
+            deleted_at__isnull=True,
+        ).values_list("assignee_id", flat=True)
+    )
+
+
+def get_assignable_project_member_ids(project_id, member_ids):
+    """按普通工作项负责人规则过滤：项目内活跃且权限足够的成员。"""
+    normalized_member_ids = _normalize_user_ids(member_ids)
+    if not normalized_member_ids:
+        return []
+
+    return _normalize_user_ids(
+        ProjectMember.objects.filter(
+            project_id=project_id,
+            role__gte=15,
+            is_active=True,
+            deleted_at__isnull=True,
+            member_id__in=normalized_member_ids,
+        ).values_list("member_id", flat=True)
+    )
+
+
+def resolve_role_member_ids(project_id, role_ids):
+    """将项目角色集合解析为当前项目内在职成员的用户 ID 列表。"""
+    normalized_role_ids = _normalize_user_ids(role_ids)
+    if not normalized_role_ids:
+        return []
+
+    return _normalize_user_ids(
+        ProjectMemberRole.objects.filter(
+            role_id__in=normalized_role_ids,
+            role__project_id=project_id,
+            role__deleted_at__isnull=True,
+            member__project_id=project_id,
+            member__is_active=True,
+            member__deleted_at__isnull=True,
+            member__member_id__isnull=False,
+            deleted_at__isnull=True,
+        )
+        .values_list("member__member_id", flat=True)
+        .distinct()
+    )
+
+
+def resolve_dimension_user_ids(
+    issue: Issue, transition: WorkflowTransition, dimension: str
+) -> list:
+    """解析指定维度中的 member/role/dynamic，返回去重后的真实用户 ID 列表。"""
+    principals = list(get_transition_principals(transition, dimension))
+    if not principals:
+        return []
+
+    user_ids = []
+    role_ids = []
     want_assignees = False
     want_created_by = False
 
-    for principal in get_transition_principals(transition, WorkflowPrincipalDimension.APPROVER):
-        if principal.kind == WorkflowPrincipalKind.MEMBER:
-            if principal.member_id:
-                approver_ids.append(principal.member_id)
+    for principal in principals:
+        if principal.kind == WorkflowPrincipalKind.MEMBER and principal.member_id:
+            user_ids.append(principal.member_id)
+        elif principal.kind == WorkflowPrincipalKind.ROLE and principal.role_id:
+            role_ids.append(principal.role_id)
         elif principal.kind == WorkflowPrincipalKind.DYNAMIC:
             if principal.dynamic_target == WorkflowApproverTarget.ASSIGNEES:
                 want_assignees = True
             elif principal.dynamic_target == WorkflowApproverTarget.CREATED_BY:
                 want_created_by = True
-        elif principal.kind == WorkflowPrincipalKind.ROLE:
-            # TODO(阶段2): 角色 -> 用户的解析交由阶段2的解析器处理，本阶段跳过。
-            continue
 
+    if role_ids:
+        user_ids.extend(resolve_role_member_ids(issue.project_id, role_ids))
     if want_assignees:
-        approver_ids.extend(
-            IssueAssignee.objects.filter(
-                issue=issue,
-                deleted_at__isnull=True,
-            ).values_list("assignee_id", flat=True)
-        )
+        user_ids.extend(get_issue_assignee_ids(issue))
     if want_created_by and issue.created_by_id:
-        approver_ids.append(issue.created_by_id)
+        user_ids.append(issue.created_by_id)
 
-    return list(dict.fromkeys(approver_ids))
+    return _normalize_user_ids(user_ids)
+
+
+def resolve_transition_approver_ids(issue: Issue, transition: WorkflowTransition) -> list:
+    """解析审批人维度配置中的成员/角色/动态对象，返回去重后的真实用户 ID 列表。"""
+    return resolve_dimension_user_ids(
+        issue=issue,
+        transition=transition,
+        dimension=WorkflowPrincipalDimension.APPROVER,
+    )
 
 
 # 工作项内容变更时，会触发 PENDING 审批投票重置的核心字段集合
@@ -114,7 +182,117 @@ def _evaluate_required_fields(transition, issue: Issue):
     return True, None
 
 
-def check_update_state_permission(issue: Issue, to_state: State, user, **kwargs):
+def _check_transition_initiator(issue: Issue, transition: WorkflowTransition, user):
+    """发起人维度为空时默认全员可发起；有配置时要求命中。"""
+    if not get_transition_principals(
+        transition, WorkflowPrincipalDimension.INITIATOR
+    ).exists():
+        return True, None
+
+    initiator_ids = set(
+        resolve_dimension_user_ids(
+            issue=issue,
+            transition=transition,
+            dimension=WorkflowPrincipalDimension.INITIATOR,
+        )
+    )
+    if str(user.id) in initiator_ids:
+        return True, None
+    return False, "你不是该状态流转的发起人"
+
+
+def check_transition_assignee_rule(
+    issue: Issue, transition: WorkflowTransition, target_assignee_ids=None
+):
+    """校验指定流转边的目标负责人约束。未配置规则时默认不约束。"""
+    desired_ids = set(
+        _normalize_user_ids(
+            target_assignee_ids
+            if target_assignee_ids is not None
+            else get_issue_assignee_ids(issue)
+        )
+    )
+    if not desired_ids and get_issue_assignee_ids(issue):
+        return False, "工作项负责人不能为空"
+
+    assignable_ids = set(get_assignable_project_member_ids(issue.project_id, desired_ids))
+    if desired_ids != assignable_ids:
+        return False, "目标负责人不是当前项目可分配成员"
+
+    if not get_transition_principals(
+        transition, WorkflowPrincipalDimension.ASSIGNEE
+    ).exists():
+        return True, None
+
+    allowed_ids = set(
+        resolve_dimension_user_ids(
+            issue=issue,
+            transition=transition,
+            dimension=WorkflowPrincipalDimension.ASSIGNEE,
+        )
+    )
+    if desired_ids.issubset(allowed_ids):
+        return True, None
+    return False, "目标状态负责人不符合工作流规则"
+
+
+def check_state_assignee_constraint(issue: Issue, state: State, desired_assignee_ids=None):
+    """
+    校验当前状态的负责人持续约束：
+    - 取指向该状态的所有入边；
+    - 任一入边未配置 assignee 规则 => 该状态不约束；
+    - 否则按所有入边规则并集校验 desired 是否命中。
+    """
+    workflow = get_active_workflow(issue)
+    if not workflow:
+        return True, None
+
+    incoming_transitions = list(
+        WorkflowTransition.objects.filter(
+            workflow=workflow,
+            to_state=state,
+            deleted_at__isnull=True,
+        )
+    )
+    if not incoming_transitions:
+        return True, None
+
+    allowed_ids = set()
+    for transition in incoming_transitions:
+        if not get_transition_principals(
+            transition, WorkflowPrincipalDimension.ASSIGNEE
+        ).exists():
+            return True, None
+        allowed_ids.update(
+            resolve_dimension_user_ids(
+                issue=issue,
+                transition=transition,
+                dimension=WorkflowPrincipalDimension.ASSIGNEE,
+            )
+        )
+
+    desired_ids = set(
+        _normalize_user_ids(
+            desired_assignee_ids
+            if desired_assignee_ids is not None
+            else get_issue_assignee_ids(issue)
+        )
+    )
+    if not desired_ids and get_issue_assignee_ids(issue):
+        return False, "工作项负责人不能为空"
+
+    assignable_ids = set(get_assignable_project_member_ids(issue.project_id, desired_ids))
+    if desired_ids != assignable_ids:
+        return False, "目标负责人不是当前项目可分配成员"
+
+    if desired_ids.issubset(allowed_ids):
+        return True, None
+    return False, "当前状态负责人不符合工作流规则"
+
+
+def check_update_state_permission(
+    issue: Issue, to_state: State, user, target_assignee_ids=None, **kwargs
+):
     """
     检查是否可以直接变更工作项状态。
     返回: (allowed: bool, error_message: str | None, transition_record: IssueTransitionRecord | None)
@@ -125,11 +303,6 @@ def check_update_state_permission(issue: Issue, to_state: State, user, **kwargs)
     """
     workflow, wft, exist_wft = get_active_transition(issue, to_state)
 
-    # 流转需要的必填字段是否都存在值
-    ok, error = _evaluate_required_fields(wft, issue)
-    if not ok:
-        return False, error, None
-
     if not workflow:
         return True, None, None
 
@@ -137,23 +310,43 @@ def check_update_state_permission(issue: Issue, to_state: State, user, **kwargs)
     if exist_wft and not wft:
         return False, "需要按照工作流规则更改状态", None
 
-    # 没有配置流转规则或策略是 ALL（所有人直接通过）
-    if not wft or wft.approval_type == ApprovalType.ALL:
+    # 没有配置流转规则则放行
+    if not wft:
         return True, None, None
 
-    # ANY：审批人之一则放行
-    if wft.approval_type == ApprovalType.ANY:
-        approver_ids = resolve_transition_approver_ids(issue, wft)
-        if not approver_ids:
-            return False, "当前工作项未找到可用审批人", None
-        if user.id in approver_ids:
-            return True, None, None
-        return False, "你不是该状态的审批人", None
+    desired_assignee_ids = _normalize_user_ids(
+        target_assignee_ids
+        if target_assignee_ids is not None
+        else get_issue_assignee_ids(issue)
+    )
 
-    # N_OF_M：发起/复用审批申请
-    if wft.approval_type == ApprovalType.N_OF_M:
+    # 1) 发起人校验
+    ok, error = _check_transition_initiator(issue=issue, transition=wft, user=user)
+    if not ok:
+        return False, error, None
+
+    # 2) 流转必填字段校验
+    ok, error = _evaluate_required_fields(wft, issue)
+    if not ok:
+        return False, error, None
+
+    # 3) 目标负责人约束校验
+    ok, error = check_transition_assignee_rule(
+        issue=issue,
+        transition=wft,
+        target_assignee_ids=desired_assignee_ids,
+    )
+    if not ok:
+        return False, error, None
+
+    # 4) 审批判定
+    if wft.approval_type == ApprovalType.ALL:
+        return True, None, None
+
+    # ANY / N_OF_M：发起/复用审批申请；发起人即便也是审批人也不直接豁免审批。
+    if wft.approval_type in (ApprovalType.ANY, ApprovalType.N_OF_M):
         approver_ids = resolve_transition_approver_ids(issue, wft)
-        required_count = wft.required_count or 1
+        required_count = 1 if wft.approval_type == ApprovalType.ANY else (wft.required_count or 1)
         if not approver_ids:
             return False, "当前工作项未找到可用审批人，无法发起审批", None
         if len(approver_ids) < required_count:
@@ -163,8 +356,9 @@ def check_update_state_permission(issue: Issue, to_state: State, user, **kwargs)
             transition=wft,
             from_state=issue.state,
             to_state=to_state,
-            project_id=kwargs['project_id'],
+            project_id=kwargs["project_id"],
             initiated_by=user,
+            target_assignee_ids=desired_assignee_ids,
         )
         if created:
             return False, "已创建审批流程,需要审批人审批通过后更改", record
@@ -174,18 +368,25 @@ def check_update_state_permission(issue: Issue, to_state: State, user, **kwargs)
 
 
 def ensure_transition_record(
-        issue: Issue,
-        transition: WorkflowTransition,
-        from_state,
-        to_state: State,
-        project_id,
-        initiated_by=None,
+    issue: Issue,
+    transition: WorkflowTransition,
+    from_state,
+    to_state: State,
+    project_id,
+    initiated_by=None,
+    target_assignee_ids=None,
 ) -> tuple:
     """
     取消同一流转边中、目标状态不同的 PENDING 申请（已过期的旧申请），
     然后 get_or_create 目标状态的 PENDING 申请，若新建则初始化审批人记录。
     返回: (record, created)
     """
+    normalized_target_assignee_ids = (
+        _normalize_user_ids(target_assignee_ids)
+        if target_assignee_ids is not None
+        else None
+    )
+
     # 取消同一 issue+transition 下目标状态不同的 PENDING 申请
     IssueTransitionRecord.objects.filter(
         issue=issue,
@@ -199,7 +400,10 @@ def ensure_transition_record(
         from_state=from_state,
         to_state=to_state,
         status=TransitionRecordStatus.PENDING,
-        project_id=project_id
+        project_id=project_id,
+        defaults={
+            "target_assignee_ids": normalized_target_assignee_ids,
+        },
     )
 
     if created:
@@ -233,6 +437,45 @@ def ensure_transition_record(
             workspace_id=issue.workspace_id,
             epoch=int(timezone.now().timestamp()),
         )
+
+    elif record.target_assignee_ids != normalized_target_assignee_ids:
+        record.target_assignee_ids = normalized_target_assignee_ids
+        record.save(update_fields=["target_assignee_ids", "updated_at"])
+
+        reset_count = IssueTransitionApprovalRecord.objects.filter(
+            transition_record=record,
+            action__isnull=False,
+            deleted_at__isnull=True,
+        ).update(action=None, comment="")
+
+        if reset_count:
+            approver_ids = list(
+                IssueTransitionApprovalRecord.objects.filter(
+                    transition_record=record,
+                    deleted_at__isnull=True,
+                ).values_list("approver_id", flat=True)
+            )
+            from_name = from_state.name if from_state else "（初始）"
+            to_name = to_state.name if to_state else ""
+            IssueActivity.objects.create(
+                issue=issue,
+                actor=initiated_by,
+                verb="updated",
+                field="workflow_approval_request",
+                old_value=from_name,
+                new_value="reset",
+                old_identifier=from_state.id if from_state else None,
+                new_identifier=to_state.id if to_state else None,
+                comment=f"目标负责人变更，已重置审批投票（{from_name} → {to_name}）",
+                project_id=project_id,
+                workspace_id=issue.workspace_id,
+                epoch=int(timezone.now().timestamp()),
+            )
+            _send_approval_reset_notifications(
+                record=record,
+                issue=issue,
+                approver_ids=approver_ids,
+            )
 
     return record, created
 
@@ -571,6 +814,34 @@ def cancel_issue_pending_transitions(issue: Issue, cancelled_by, project_id: str
     return len(pending_records)
 
 
+def _replace_issue_assignees(issue: Issue, assignee_ids):
+    """全量替换 issue 负责人，返回 (old_ids, new_ids, changed)。"""
+    old_assignee_ids = get_issue_assignee_ids(issue)
+    new_assignee_ids = _normalize_user_ids(assignee_ids)
+    if set(old_assignee_ids) == set(new_assignee_ids):
+        return old_assignee_ids, new_assignee_ids, False
+
+    IssueAssignee.objects.filter(issue=issue, deleted_at__isnull=True).delete()
+    if new_assignee_ids:
+        IssueAssignee.objects.bulk_create(
+            [
+                IssueAssignee(
+                    issue=issue,
+                    assignee_id=assignee_id,
+                    project_id=issue.project_id,
+                    workspace_id=issue.workspace_id,
+                    created_by_id=issue.created_by_id,
+                    updated_by_id=issue.updated_by_id,
+                )
+                for assignee_id in new_assignee_ids
+            ],
+            batch_size=100,
+            ignore_conflicts=True,
+        )
+
+    return old_assignee_ids, new_assignee_ids, True
+
+
 def recompute_transition_record_status(record: IssueTransitionRecord, acted_by=None):
     """
     重算主申请状态（调用前必须在事务+行锁保护下）。
@@ -619,8 +890,10 @@ def recompute_transition_record_status(record: IssueTransitionRecord, acted_by=N
     required = transition.required_count or 1
 
     if approved_count >= required:
+        issue = record.issue
+
         # 落 state 之前再校验一次必填字段，防止申请发起后被绕过
-        ok, error = _evaluate_required_fields(transition, record.issue)
+        ok, error = _evaluate_required_fields(transition, issue)
         if not ok:
             record.status = TransitionRecordStatus.CANCELLED
             record.completed_at = timezone.now()
@@ -638,7 +911,35 @@ def recompute_transition_record_status(record: IssueTransitionRecord, acted_by=N
                 new_identifier=record.to_state_id,
                 comment=f"必填字段缺失，审批已取消（{from_name} → {to_name}）：{error}",
                 project_id=record.project_id,
-                workspace_id=record.issue.workspace_id,
+                workspace_id=issue.workspace_id,
+                epoch=int(timezone.now().timestamp()),
+            )
+            return
+
+        # 审批最终落库前再校验一次目标负责人约束，避免审批期被改坏
+        ok, error = check_transition_assignee_rule(
+            issue=issue,
+            transition=transition,
+            target_assignee_ids=record.target_assignee_ids,
+        )
+        if not ok:
+            record.status = TransitionRecordStatus.CANCELLED
+            record.completed_at = timezone.now()
+            record.save(update_fields=["status", "completed_at", "updated_at"])
+            from_name = record.from_state.name if record.from_state_id else "（初始）"
+            to_name = record.to_state.name if record.to_state_id else ""
+            IssueActivity.objects.create(
+                issue=issue,
+                actor=acted_by,
+                verb="updated",
+                field="workflow_approval_request",
+                old_value=from_name,
+                new_value="cancelled",
+                old_identifier=record.from_state_id,
+                new_identifier=record.to_state_id,
+                comment=f"目标负责人不符合规则，审批已取消（{from_name} → {to_name}）：{error}",
+                project_id=record.project_id,
+                workspace_id=issue.workspace_id,
                 epoch=int(timezone.now().timestamp()),
             )
             return
@@ -647,8 +948,7 @@ def recompute_transition_record_status(record: IssueTransitionRecord, acted_by=N
         record.completed_at = timezone.now()
         record.save(update_fields=["status", "completed_at", "updated_at"])
 
-        # 落 issue 状态
-        issue = record.issue
+        # 同事务落 issue 状态
         if record.to_state_id:
             old_state_name = issue.state.name if issue.state_id else "（初始）"
             old_state_id = issue.state_id
@@ -668,3 +968,23 @@ def recompute_transition_record_status(record: IssueTransitionRecord, acted_by=N
                 workspace_id=issue.workspace_id,
                 epoch=int(timezone.now().timestamp()),
             )
+
+        # 同事务落目标负责人（仅当审批申请中携带了目标负责人）
+        if record.target_assignee_ids is not None:
+            old_assignee_ids, new_assignee_ids, changed = _replace_issue_assignees(
+                issue=issue,
+                assignee_ids=record.target_assignee_ids,
+            )
+            if changed:
+                IssueActivity.objects.create(
+                    issue=issue,
+                    actor=acted_by,
+                    verb="updated",
+                    field="assignees",
+                    old_value=",".join(old_assignee_ids),
+                    new_value=",".join(new_assignee_ids),
+                    comment="工作流审批通过，负责人已按规则更新",
+                    project_id=record.project_id,
+                    workspace_id=issue.workspace_id,
+                    epoch=int(timezone.now().timestamp()),
+                )

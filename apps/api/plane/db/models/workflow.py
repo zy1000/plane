@@ -394,6 +394,12 @@ class IssueTransitionRecord(ProjectBaseModel):
         related_name="transition_records_as_target",
         verbose_name="目标状态",
     )
+    # 审批流中暂存本次流转目标负责人；None 表示本次流转不修改负责人。
+    target_assignee_ids = models.JSONField(
+        null=True,
+        blank=True,
+        verbose_name="目标负责人ID列表",
+    )
     status = models.CharField(
         max_length=20,
         choices=TransitionRecordStatus.choices,

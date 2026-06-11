@@ -100,6 +100,7 @@ from plane.utils.extra_field_value import serialize_extra_field_values
 from plane.settings.redis import redis_instance
 from plane.utils.workflow import (
     check_update_state_permission,
+    check_state_assignee_constraint,
     cancel_issue_pending_transitions,
     capture_issue_content_snapshot,
     reset_pending_transition_votes_if_content_changed,
@@ -832,6 +833,12 @@ class IssueViewSet(BaseViewSet):
 
         # 工作流审批检查
         state_id = request.data.get("state_id")
+        has_assignee_update = "assignee_ids" in request.data
+        desired_assignee_ids = (
+            request.data.get("assignee_ids")
+            if has_assignee_update
+            else getattr(issue, "assignee_ids", None)
+        )
         if state_id and str(state_id) != str(issue.state_id):
             try:
                 to_state = StateModel.objects.get(pk=state_id, project_id=project_id)
@@ -840,6 +847,7 @@ class IssueViewSet(BaseViewSet):
                     to_state=to_state,
                     user=request.user,
                     project_id=project_id,
+                    target_assignee_ids=desired_assignee_ids,
                 )
                 if not allowed:
                     redis_client.delete(lock_id)
@@ -855,6 +863,18 @@ class IssueViewSet(BaseViewSet):
                 )
             except StateModel.DoesNotExist:
                 pass
+        elif has_assignee_update and issue.state_id:
+            allowed, error_msg = check_state_assignee_constraint(
+                issue=issue,
+                state=issue.state,
+                desired_assignee_ids=desired_assignee_ids,
+            )
+            if not allowed:
+                redis_client.delete(lock_id)
+                return Response(
+                    {"error": error_msg, "workflow_blocked": True},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
 
         # 评审期间内容变更检测：仅在存在 PENDING 审批时捕获快照，避免无谓查询
         approval_before_snapshot = None
