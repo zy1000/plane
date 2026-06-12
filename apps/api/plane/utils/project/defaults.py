@@ -15,10 +15,52 @@ from plane.db.models import (
     WorkflowTransition,
     WorkflowTransitionPrincipal,
     WorkflowTransitionRequiredField,
-    IssueTypeCategory, User,
+    IssueTypeCategory, User, Workspace, WorkspaceRole, ProjectRole
 )
 from plane.utils.data_model import IssueTypeModel
 from plane.utils.project.member import add_user_to_project
+
+QA_ROLE_SET = ['软件测试工程师', '软件测试负责人']
+RD_ROLE_SET = ['软件研发工程师', '软件研发负责人']
+BUG_REQUIRED_FIELD = ["修复版本", "技术原因及解决方案"]
+TRANSITION_RULES = [
+    dict(from_state='Backlog', to_state='Open', initiator=None, assignee=dict(role_name=RD_ROLE_SET)),
+    dict(from_state='Open', to_state='Fixed', initiator=dict(role_name=RD_ROLE_SET),
+         assignee=dict(role_name=QA_ROLE_SET), required_field=BUG_REQUIRED_FIELD),
+    dict(from_state='Open', to_state='Pending-Reject', initiator=dict(role_name=RD_ROLE_SET),
+         assignee=dict(role_name=QA_ROLE_SET), required_field=['技术原因及解决方案']),
+    dict(from_state='Fixed', to_state='Reopen', initiator=dict(role_name=QA_ROLE_SET),
+         assignee=dict(role_name=RD_ROLE_SET)),
+    dict(from_state='Fixed', to_state='Closed', initiator=dict(role_name=QA_ROLE_SET),
+         assignee=dict(dynamic_target=['created_by']), required_field=BUG_REQUIRED_FIELD),
+    dict(from_state='Pending-Reject', to_state='Rejected',
+         initiator=dict(role_name=QA_ROLE_SET),
+         assignee=dict(dynamic_target=['created_by']),
+         approver=dict(role_name=['软件测试负责人'], member_name=['欧秋洁', '何洽', '钟长会']),
+         required_field=['技术原因及解决方案'], approval_type=ApprovalType.N_OF_M, required_count=2
+         ),
+    dict(from_state='Pending-Reject', to_state='Suspend',
+         initiator=dict(role_name=QA_ROLE_SET),
+         assignee=dict(dynamic_target=['created_by']),
+         approver=dict(role_name=['软件测试负责人'], member_name=['欧秋洁', '何洽', '钟长会']),
+         required_field=['技术原因及解决方案'], approval_type=ApprovalType.N_OF_M, required_count=2
+         ),
+    dict(from_state='Pending-Reject', to_state='Reopen', initiator=dict(role_name=QA_ROLE_SET),
+         assignee=dict(role_name=RD_ROLE_SET)),
+    dict(from_state='Suspend', to_state='Closed', initiator=dict(dynamic_target=['created_by']),
+         assignee=dict(dynamic_target=['created_by']), required_field=BUG_REQUIRED_FIELD),
+    dict(from_state='Suspend', to_state='Reopen', initiator=dict(dynamic_target=['created_by']),
+         assignee=dict(role_name=RD_ROLE_SET)),
+    dict(from_state='Reopen', to_state='Fixed', initiator=dict(role_name=RD_ROLE_SET),
+         assignee=dict(role_name=QA_ROLE_SET), required_field=BUG_REQUIRED_FIELD),
+    dict(from_state='Reopen', to_state='Pending-Reject', initiator=dict(role_name=RD_ROLE_SET),
+         assignee=dict(role_name=QA_ROLE_SET), required_field=['技术原因及解决方案']),
+]
+
+
+def get_bug_issue_type(issue_types: list[IssueType]):
+    return next((issue_type for issue_type in issue_types if getattr(issue_type.category, "name", None) == "缺陷"),
+                None)
 
 
 def init_issue_type() -> list[IssueTypeModel]:
@@ -268,148 +310,220 @@ def create_default_bug_extra_field(issue_types: list[IssueType]):
     )
 
 
+def add_principal(rule_info: dict, project: Project, transition: WorkflowTransition):
+    """添加工作流的审批人、目标人、发起人"""
+    bulk_object = []
+
+    def add(data: dict, dimension: str):
+        for key, value in data.items():
+            if key == 'role_name':
+                role_ids = list(
+                    ProjectRole.objects.filter(project=project, name__in=value).values_list('id', flat=True))
+                for role_id in role_ids:
+                    bulk_object.append(
+                        WorkflowTransitionPrincipal(transition=transition, role_id=role_id, dimension=dimension,
+                                                    kind=WorkflowPrincipalKind.ROLE))
+            elif key == 'member_name':
+                member_ids = list(
+                    User.objects.filter(display_name__in=value).values_list('id', flat=True)
+                )
+                for member_id in member_ids:
+                    bulk_object.append(
+                        WorkflowTransitionPrincipal(transition=transition, member_id=member_id, dimension=dimension,
+                                                    kind=WorkflowPrincipalKind.MEMBER))
+            elif key == 'dynamic_target':
+                for dynamic_target in value:
+                    bulk_object.append(
+                        WorkflowTransitionPrincipal(transition=transition, dynamic_target=dynamic_target,
+                                                    dimension=dimension,
+                                                    kind=WorkflowPrincipalKind.DYNAMIC))
+
+    if initiator := rule_info.get('initiator'):
+        add(initiator, WorkflowPrincipalDimension.INITIATOR)
+    if assignee := rule_info.get('assignee'):
+        add(assignee, WorkflowPrincipalDimension.ASSIGNEE)
+    if approver := rule_info.get('approver'):
+        add(approver, WorkflowPrincipalDimension.APPROVER)
+
+    # 批量生成操作人记录
+    WorkflowTransitionPrincipal.objects.bulk_create(bulk_object)
+
+
 def create_default_bug_workflow(issue_types: list[IssueType], **kwargs):
-    defect_issue_type = next(
-        (
-            issue_type
-            for issue_type in issue_types
-            if getattr(issue_type.category, "name", None) == "缺陷"
-        ),
-        None,
-    )
+    defect_issue_type = get_bug_issue_type(issue_types)
     if defect_issue_type is None:
         return None
 
     project = kwargs["project"]
-    workflow = Workflow.objects.filter(
-        project=project,
-        issue_type=defect_issue_type,
-        is_active=True,
-        deleted_at__isnull=True,
-    ).first()
 
-    if workflow is None:
-        workflow = Workflow.objects.create(
-            project=project,
-            workspace=kwargs["workspace"],
-            issue_type=defect_issue_type,
-            name="缺陷默认工作流",
-            is_active=True,
-            created_by=kwargs["created_by"],
-        )
+    # 将三人添加进项目里面
+    approver_users = User.objects.filter(display_name__in=['欧秋洁', '何洽', '钟长会'])
+    add_user_to_project(approver_users, project)
+
+    # 创建默认缺陷工作流
+    workflow = Workflow.objects.create(
+        project=project,
+        workspace=kwargs["workspace"],
+        issue_type=defect_issue_type,
+        name="缺陷默认工作流",
+        is_active=True,
+        created_by=kwargs["created_by"],
+    )
 
     states = State.objects.filter(
         project=project, issue_type=defect_issue_type, deleted_at__isnull=True
     )
     state_map = {state.name: state for state in states}
 
-    transition_rules = [
-        ("Backlog", "Open"),
-        ("Open", "Fixed"),
-        ("Open", "Pending-Reject"),
-        ("Fixed", "Reopen"),
-        ("Fixed", "Closed"),
-        ("Pending-Reject", "Rejected"),
-        ("Pending-Reject", "Closed"),
-        ("Pending-Reject", "Suspend"),
-        ("Pending-Reject", "Reopen"),
-        ("Suspend", "Closed"),
-        ("Suspend", "Reopen"),
-    ]
-
-    existing_transitions = set(
-        WorkflowTransition.objects.filter(
-            workflow=workflow, deleted_at__isnull=True
-        ).values_list(
-            "from_state__name",
-            "to_state__name",
-        )
-    )
-
-    transitions = []
-    for from_name, to_name in transition_rules:
-        from_state = state_map.get(from_name)
-        to_state = state_map.get(to_name)
-        if (
-                from_state is None
-                or to_state is None
-                or (from_name, to_name) in existing_transitions
-        ):
-            continue
-        if from_name == 'Pending-Reject' and to_name == 'Rejected':
-            obj = WorkflowTransition.objects.create(
-                workflow=workflow,
-                project=project,
-                workspace=kwargs["workspace"],
-                from_state=from_state,
-                to_state=to_state,
-                approval_type=ApprovalType.ANY,
-                created_by=kwargs["created_by"],
-            )
-            approver_users = User.objects.filter(display_name__in=['欧秋洁', '何洽', '钟长会'])
-            # 将三人添加进项目里面
-            add_user_to_project(approver_users,project)
-
-            for approver_user in approver_users:
-                WorkflowTransitionPrincipal.objects.create(
-                    transition=obj,
-                    dimension=WorkflowPrincipalDimension.APPROVER,
-                    kind=WorkflowPrincipalKind.MEMBER,
-                    member=approver_user,
-                )
-            continue
-
-        transitions.append(
-            WorkflowTransition(
-                workflow=workflow,
-                project=project,
-                workspace=kwargs["workspace"],
-                from_state=from_state,
-                to_state=to_state,
-                approval_type=ApprovalType.ALL,
-                created_by=kwargs["created_by"],
-            )
+    for rule_info in TRANSITION_RULES:
+        from_state = state_map.get(rule_info["from_state"])
+        to_state = state_map.get(rule_info["to_state"])
+        # 创建工作流规则
+        transition = WorkflowTransition.objects.create(
+            workflow=workflow,
+            project=project,
+            workspace=kwargs["workspace"],
+            from_state=from_state,
+            to_state=to_state,
+            approval_type=rule_info.get('approval_type', ApprovalType.ANY),
+            required_count=rule_info.get('required_count'),
         )
 
-    if transitions:
-        WorkflowTransition.objects.bulk_create(transitions)
+        add_principal(rule_info, project, transition)
 
-    # 为 Open -> Fixed 流转边绑定必填字段
-    to_state = [
-        state_map.get("Fixed"),
-        state_map.get("Pending-Reject"),
-        state_map.get("Closed"),
-    ]
-    query = WorkflowTransition.objects.filter(
-        workflow=workflow,
-        to_state__in=to_state,
-        deleted_at__isnull=True,
-    )
-    for obj in query:
-        if obj.to_state and obj.to_state.name == "Pending-Reject":
-            required_field_names = ["技术原因及解决方案"]
-        else:
-            required_field_names = ["修复版本", "技术原因及解决方案"]
-        extra_fields = TypeExtraField.objects.filter(
-            issue_type=defect_issue_type,
-            name__in=required_field_names,
-            deleted_at__isnull=True,
-        )
-        existing_field_ids = set(
-            WorkflowTransitionRequiredField.objects.filter(
-                workflow=obj,
+        # 创建必须字段
+        if required_field := rule_info.get('required_field'):
+            extra_fields = TypeExtraField.objects.filter(
+                issue_type=defect_issue_type,
+                name__in=required_field,
                 deleted_at__isnull=True,
-            ).values_list("extra_field_id", flat=True)
-        )
-        required_field_records = [
-            WorkflowTransitionRequiredField(
-                workflow=obj,
-                extra_field=field,
             )
-            for field in extra_fields
-            if field.id not in existing_field_ids
-        ]
-        if required_field_records:
+            required_field_records = [
+                WorkflowTransitionRequiredField(
+                    workflow=transition,
+                    extra_field=field,
+                )
+                for field in extra_fields
+            ]
             WorkflowTransitionRequiredField.objects.bulk_create(required_field_records)
 
+    # transition_rules = [
+    #     ("Backlog", "Open"),
+    #     ("Open", "Fixed"),
+    #     ("Open", "Pending-Reject"),
+    #     ("Fixed", "Reopen"),
+    #     ("Fixed", "Closed"),
+    #     ("Pending-Reject", "Rejected"),
+    #     ("Pending-Reject", "Closed"),
+    #     ("Pending-Reject", "Suspend"),
+    #     ("Pending-Reject", "Reopen"),
+    #     ("Suspend", "Closed"),
+    #     ("Suspend", "Reopen"),
+    # ]
+    #
+    # existing_transitions = set(
+    #     WorkflowTransition.objects.filter(
+    #         workflow=workflow, deleted_at__isnull=True
+    #     ).values_list(
+    #         "from_state__name",
+    #         "to_state__name",
+    #     )
+    # )
+    #
+    # transitions = []
+    # for from_name, to_name in transition_rules:
+    #     from_state = state_map.get(from_name)
+    #     to_state = state_map.get(to_name)
+    #     if (
+    #             from_state is None
+    #             or to_state is None
+    #             or (from_name, to_name) in existing_transitions
+    #     ):
+    #         continue
+    #     if from_name == 'Pending-Reject' and to_name == 'Rejected':
+    #         obj = WorkflowTransition.objects.create(
+    #             workflow=workflow,
+    #             project=project,
+    #             workspace=kwargs["workspace"],
+    #             from_state=from_state,
+    #             to_state=to_state,
+    #             approval_type=ApprovalType.ANY,
+    #             created_by=kwargs["created_by"],
+    #         )
+    #         approver_users = User.objects.filter(display_name__in=['欧秋洁', '何洽', '钟长会'])
+    #         # 将三人添加进项目里面
+    #         add_user_to_project(approver_users, project)
+    #
+    #         for approver_user in approver_users:
+    #             WorkflowTransitionPrincipal.objects.create(
+    #                 transition=obj,
+    #                 dimension=WorkflowPrincipalDimension.APPROVER,
+    #                 kind=WorkflowPrincipalKind.MEMBER,
+    #                 member=approver_user,
+    #             )
+    #         continue
+    #
+    #     transitions.append(
+    #         WorkflowTransition(
+    #             workflow=workflow,
+    #             project=project,
+    #             workspace=kwargs["workspace"],
+    #             from_state=from_state,
+    #             to_state=to_state,
+    #             approval_type=ApprovalType.ALL,
+    #             created_by=kwargs["created_by"],
+    #         )
+    #     )
+    #
+    # if transitions:
+    #     WorkflowTransition.objects.bulk_create(transitions)
+    #
+    # # 为 Open -> Fixed 流转边绑定必填字段
+    # to_state = [
+    #     state_map.get("Fixed"),
+    #     state_map.get("Pending-Reject"),
+    #     state_map.get("Closed"),
+    # ]
+    # query = WorkflowTransition.objects.filter(
+    #     workflow=workflow,
+    #     to_state__in=to_state,
+    #     deleted_at__isnull=True,
+    # )
+    # for obj in query:
+    #     if obj.to_state and obj.to_state.name == "Pending-Reject":
+    #         required_field_names = ["技术原因及解决方案"]
+    #     else:
+    #         required_field_names = ["修复版本", "技术原因及解决方案"]
+    #     extra_fields = TypeExtraField.objects.filter(
+    #         issue_type=defect_issue_type,
+    #         name__in=required_field_names,
+    #         deleted_at__isnull=True,
+    #     )
+    #     existing_field_ids = set(
+    #         WorkflowTransitionRequiredField.objects.filter(
+    #             workflow=obj,
+    #             deleted_at__isnull=True,
+    #         ).values_list("extra_field_id", flat=True)
+    #     )
+    #     required_field_records = [
+    #         WorkflowTransitionRequiredField(
+    #             workflow=obj,
+    #             extra_field=field,
+    #         )
+    #         for field in extra_fields
+    #         if field.id not in existing_field_ids
+    #     ]
+    #     if required_field_records:
+    #         WorkflowTransitionRequiredField.objects.bulk_create(required_field_records)
+
     return workflow
+
+
+def create_default_role(workspace: Workspace, project_id: str):
+    workspace_roles: list[WorkspaceRole] = WorkspaceRole.objects.filter(workspace=workspace)
+    bulk_obj = [
+        ProjectRole(name=role.name, description=role.description, permissions=role.permissions, source_template=role,
+                    project_id=project_id, workspace=workspace)
+        for role in workspace_roles
+    ]
+    ProjectRole.objects.bulk_create(bulk_obj)

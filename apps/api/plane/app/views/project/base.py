@@ -86,7 +86,7 @@ from plane.utils.project.defaults import (
     bulk_create_issue_state,
     create_default_bug_workflow,
     temporary_create_issue_type,
-    create_default_bug_extra_field,
+    create_default_bug_extra_field, create_default_role,
 )
 from plane.utils.response import list_response
 
@@ -587,6 +587,8 @@ class ProjectViewSet(BaseViewSet):
                     member_id=serializer.data["project_lead"],
                     role=ROLE.ADMIN.value,
                 )
+
+            create_default_role(workspace=workspace,project_id=serializer.data["id"])
 
             bulk_create_issue_state(
                 issue_types=issue_types,
