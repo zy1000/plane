@@ -202,7 +202,11 @@ const WorkspaceRolesPage = observer(function WorkspaceRolesPage({ params }: Rout
               role={selectedRole}
               permissions={rolePermissionState?.data?.permissions ?? []}
               permissionKeys={rolePermissionState?.data?.permission_keys ?? []}
-              isLoading={Boolean(rolePermissionState?.isLoading)}
+              isLoading={Boolean(
+                selectedRoleId &&
+                  !rolePermissionState?.data &&
+                  (rolePermissionState?.isLoading || !rolePermissionState?.loaded)
+              )}
               isAdmin={isAdmin}
               searchQuery={searchQuery}
               onTogglePermission={togglePermission}

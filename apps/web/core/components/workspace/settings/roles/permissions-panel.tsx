@@ -154,6 +154,15 @@ export function PermissionsPanel({
     }
   }, [role?.id, visibleScopeGroups, handleActiveScopeChange]);
 
+  // 权限数据加载后，若当前 activeScope 下无分类（如模板页默认 workspace 但权限均为 project），自动切到有数据的 scope
+  useEffect(() => {
+    if (!role?.id || visibleScopeGroups.length === 0) return;
+    const activeGroup = scopeGroups.find((g) => g.scope === activeScope);
+    if (!activeGroup || activeGroup.totalPermissions === 0) {
+      handleActiveScopeChange(visibleScopeGroups[0].scope);
+    }
+  }, [role?.id, visibleScopeGroups, activeScope, scopeGroups, handleActiveScopeChange]);
+
   const currentScopeGroup = useMemo(
     () => scopeGroups.find((g) => g.scope === activeScope) ?? null,
     [scopeGroups, activeScope]
@@ -295,8 +304,8 @@ export function PermissionsPanel({
     );
   }
 
-  // --- Loading state ---
-  if (isLoading) {
+  // --- Loading state: 仅首次加载（无缓存数据）时展示 skeleton，后台刷新保留当前内容 ---
+  if (isLoading && permissions.length === 0) {
     return (
       <div className="flex h-full flex-1 flex-col overflow-hidden">
         <div className="flex min-h-0 flex-1 overflow-hidden">

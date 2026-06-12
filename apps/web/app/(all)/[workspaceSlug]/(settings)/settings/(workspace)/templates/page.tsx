@@ -37,7 +37,7 @@ const WorkspaceTemplatesPage = observer(function WorkspaceTemplatesPage({ params
 
   const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeScope, setActiveScope] = useState<PermissionScope>("workspace");
+  const [activeScope, setActiveScope] = useState<PermissionScope>("project");
 
   // store hooks
   const { workspaceUserInfo, allowPermissions } = useUserPermissions();
@@ -64,6 +64,8 @@ const WorkspaceTemplatesPage = observer(function WorkspaceTemplatesPage({ params
 
   useSWR(canView ? `WORKSPACE_ROLES_${workspaceSlug}` : null, canView ? fetchRoles : null);
 
+  const effectiveSelectedRoleId = selectedRoleId ?? roles[0]?.id ?? null;
+
   // auto-select first role
   useEffect(() => {
     if (roles.length > 0 && !selectedRoleId) {
@@ -76,26 +78,29 @@ const WorkspaceTemplatesPage = observer(function WorkspaceTemplatesPage({ params
 
   // load role permissions when selection changes
   useEffect(() => {
-    if (selectedRoleId) {
-      void loadRolePermissions(selectedRoleId);
+    if (effectiveSelectedRoleId) {
+      void loadRolePermissions(effectiveSelectedRoleId);
     }
-  }, [selectedRoleId, loadRolePermissions]);
+  }, [effectiveSelectedRoleId, loadRolePermissions]);
 
   // 切回浏览器标签时刷新当前角色权限
   useEffect(() => {
-    if (!selectedRoleId) return;
+    if (!effectiveSelectedRoleId) return;
     const onVisibilityChange = () => {
       if (document.visibilityState === "visible") {
-        void loadRolePermissions(selectedRoleId);
+        void loadRolePermissions(effectiveSelectedRoleId);
       }
     };
     document.addEventListener("visibilitychange", onVisibilityChange);
     return () => document.removeEventListener("visibilitychange", onVisibilityChange);
-  }, [selectedRoleId, loadRolePermissions]);
+  }, [effectiveSelectedRoleId, loadRolePermissions]);
 
   const pageTitle = currentWorkspace?.name ? `${currentWorkspace.name} - 模板` : undefined;
-  const selectedRole = selectedRoleId ? (roles.find((r) => r.id === selectedRoleId) ?? null) : null;
-  const rolePermissionState = selectedRoleId ? getRolePermissionState(selectedRoleId) : null;
+  const selectedRole = effectiveSelectedRoleId
+    ? (roles.find((r) => r.id === effectiveSelectedRoleId) ?? null)
+    : null;
+  const rolePermissionState = effectiveSelectedRoleId ? getRolePermissionState(effectiveSelectedRoleId) : null;
+
   const activeScopeSummary = useMemo(
     () =>
       getPermissionScopeSummary(
@@ -139,7 +144,7 @@ const WorkspaceTemplatesPage = observer(function WorkspaceTemplatesPage({ params
           totalRoleCount={roles.length}
           isLoading={isLoading}
           isAdmin={isAdmin}
-          selectedRoleId={selectedRoleId}
+          selectedRoleId={effectiveSelectedRoleId}
           onSelectRole={handleSelectRole}
           onCreate={(data) => createRole({ ...data, type: ROLE_TYPE })}
           onUpdate={async (roleId, data) => {
@@ -205,7 +210,11 @@ const WorkspaceTemplatesPage = observer(function WorkspaceTemplatesPage({ params
               role={selectedRole}
               permissions={rolePermissionState?.data?.permissions ?? []}
               permissionKeys={rolePermissionState?.data?.permission_keys ?? []}
-              isLoading={Boolean(rolePermissionState?.isLoading)}
+              isLoading={Boolean(
+                effectiveSelectedRoleId &&
+                  !rolePermissionState?.data &&
+                  (rolePermissionState?.isLoading || !rolePermissionState?.loaded)
+              )}
               isAdmin={isAdmin}
               searchQuery={searchQuery}
               onTogglePermission={togglePermission}

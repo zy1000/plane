@@ -21,6 +21,22 @@ type TRolePermissionState = {
   loaded: boolean;
 };
 
+type TWorkspaceRolesCache = {
+  roles: IWorkspaceRole[];
+  permissions: Record<string, TRolePermissionState>;
+};
+
+const workspaceRolesCacheBySlug = new Map<string, TWorkspaceRolesCache>();
+
+const getWorkspaceRolesCache = (slug: string): TWorkspaceRolesCache => {
+  let cache = workspaceRolesCacheBySlug.get(slug);
+  if (!cache) {
+    cache = { roles: [], permissions: {} };
+    workspaceRolesCacheBySlug.set(slug, cache);
+  }
+  return cache;
+};
+
 const emptyPermissionState = (): TRolePermissionState => ({
   data: null,
   isLoading: false,
@@ -32,16 +48,42 @@ const emptyPermissionState = (): TRolePermissionState => ({
  * 通过 `roleType` 参数在消费层按类型过滤展示。
  */
 export const useWorkspaceRoles = (workspaceSlug: string | undefined, roleType?: TWorkspaceRoleType) => {
-  const [rolesState, setRolesState] = useState<TRolesState>({
-    roles: [],
+  const cache = workspaceSlug ? getWorkspaceRolesCache(workspaceSlug) : null;
+
+  const [rolesState, setRolesState] = useState<TRolesState>(() => ({
+    roles: cache?.roles ?? [],
     isLoading: false,
-  });
-  const [permissionByRoleId, setPermissionByRoleId] = useState<Record<string, TRolePermissionState>>({});
+  }));
+  const [permissionByRoleId, setPermissionByRoleId] = useState<Record<string, TRolePermissionState>>(
+    () => ({ ...(cache?.permissions ?? {}) })
+  );
   const [error, setError] = useState<string | null>(null);
 
   const permissionRef = useRef(permissionByRoleId);
   permissionRef.current = permissionByRoleId;
   const inFlightRef = useRef<Set<string>>(new Set());
+
+  const syncRolesCache = useCallback(
+    (roles: IWorkspaceRole[]) => {
+      if (workspaceSlug) {
+        getWorkspaceRolesCache(workspaceSlug).roles = roles;
+      }
+    },
+    [workspaceSlug]
+  );
+
+  const updatePermissionByRoleId = useCallback(
+    (updater: (prev: Record<string, TRolePermissionState>) => Record<string, TRolePermissionState>) => {
+      setPermissionByRoleId((prev) => {
+        const next = updater(prev);
+        if (workspaceSlug) {
+          getWorkspaceRolesCache(workspaceSlug).permissions = next;
+        }
+        return next;
+      });
+    },
+    [workspaceSlug]
+  );
 
   const fetchRoles = useCallback(async () => {
     if (!workspaceSlug) return;
@@ -49,12 +91,13 @@ export const useWorkspaceRoles = (workspaceSlug: string | undefined, roleType?: 
     setError(null);
     try {
       const data = await workspaceService.fetchWorkspaceRoles(workspaceSlug);
+      syncRolesCache(data);
       setRolesState({ roles: data, isLoading: false });
     } catch {
       setError("获取角色列表失败");
       setRolesState((prev) => ({ ...prev, isLoading: false }));
     }
-  }, [workspaceSlug]);
+  }, [workspaceSlug, syncRolesCache]);
 
   // 按 roleType 过滤，未传则返回全量
   const roles = useMemo(
@@ -69,23 +112,26 @@ export const useWorkspaceRoles = (workspaceSlug: string | undefined, roleType?: 
       if (inFlightRef.current.has(roleId)) return;
       inFlightRef.current.add(roleId);
 
-      setPermissionByRoleId((prev) => ({
-        ...prev,
-        [roleId]: {
-          ...(prev[roleId] ?? emptyPermissionState()),
-          isLoading: true,
-        },
-      }));
+      updatePermissionByRoleId((prev) => {
+        const existing = prev[roleId];
+        return {
+          ...prev,
+          [roleId]: {
+            ...(existing ?? emptyPermissionState()),
+            isLoading: !existing?.data,
+          },
+        };
+      });
 
       try {
         const data = await workspaceService.fetchWorkspaceRolePermissions(workspaceSlug, roleId);
-        setPermissionByRoleId((prev) => ({
+        updatePermissionByRoleId((prev) => ({
           ...prev,
           [roleId]: { data, isLoading: false, loaded: true },
         }));
       } catch {
         setError("获取角色权限失败");
-        setPermissionByRoleId((prev) => ({
+        updatePermissionByRoleId((prev) => ({
           ...prev,
           [roleId]: { data: null, isLoading: false, loaded: true },
         }));
@@ -93,7 +139,7 @@ export const useWorkspaceRoles = (workspaceSlug: string | undefined, roleType?: 
         inFlightRef.current.delete(roleId);
       }
     },
-    [workspaceSlug]
+    [workspaceSlug, updatePermissionByRoleId]
   );
 
   const getRolePermissionState = useCallback(
@@ -107,25 +153,27 @@ export const useWorkspaceRoles = (workspaceSlug: string | undefined, roleType?: 
       // 若调用者未指定 type，则使用当前 hook 的 roleType（如有），否则默认 workspace
       const payload = { ...data, type: data.type ?? roleType ?? "workspace" };
       const newRole = await workspaceService.createWorkspaceRole(workspaceSlug, payload);
-      setRolesState((prev) => ({
-        ...prev,
-        roles: [newRole, ...prev.roles],
-      }));
+      setRolesState((prev) => {
+        const nextRoles = [newRole, ...prev.roles];
+        syncRolesCache(nextRoles);
+        return { ...prev, roles: nextRoles };
+      });
       return newRole;
     },
-    [workspaceSlug, roleType]
+    [workspaceSlug, roleType, syncRolesCache]
   );
 
   const updateRole = useCallback(
     async (roleId: string, data: Partial<{ name: string; description: string }>): Promise<IWorkspaceRole> => {
       if (!workspaceSlug) throw new Error("缺少 workspaceSlug");
       const updated = await workspaceService.updateWorkspaceRole(workspaceSlug, roleId, data);
-      setRolesState((prev) => ({
-        ...prev,
-        roles: prev.roles.map((r) => (r.id === roleId ? updated : r)),
-      }));
+      setRolesState((prev) => {
+        const nextRoles = prev.roles.map((r) => (r.id === roleId ? updated : r));
+        syncRolesCache(nextRoles);
+        return { ...prev, roles: nextRoles };
+      });
       // Update cached permission data role info too
-      setPermissionByRoleId((prev) => {
+      updatePermissionByRoleId((prev) => {
         const cur = prev[roleId];
         if (!cur?.data) return prev;
         return {
@@ -135,24 +183,25 @@ export const useWorkspaceRoles = (workspaceSlug: string | undefined, roleType?: 
       });
       return updated;
     },
-    [workspaceSlug]
+    [workspaceSlug, syncRolesCache, updatePermissionByRoleId]
   );
 
   const deleteRole = useCallback(
     async (roleId: string): Promise<void> => {
       if (!workspaceSlug) throw new Error("缺少 workspaceSlug");
       await workspaceService.deleteWorkspaceRole(workspaceSlug, roleId);
-      setRolesState((prev) => ({
-        ...prev,
-        roles: prev.roles.filter((r) => r.id !== roleId),
-      }));
-      setPermissionByRoleId((prev) => {
+      setRolesState((prev) => {
+        const nextRoles = prev.roles.filter((r) => r.id !== roleId);
+        syncRolesCache(nextRoles);
+        return { ...prev, roles: nextRoles };
+      });
+      updatePermissionByRoleId((prev) => {
         const next = { ...prev };
         delete next[roleId];
         return next;
       });
     },
-    [workspaceSlug]
+    [workspaceSlug, syncRolesCache, updatePermissionByRoleId]
   );
 
   const togglePermission = useCallback(
@@ -173,7 +222,7 @@ export const useWorkspaceRoles = (workspaceSlug: string | undefined, roleType?: 
         ...p,
         is_bound: newKeys.includes(p.key),
       }));
-      setPermissionByRoleId((prev) => ({
+      updatePermissionByRoleId((prev) => ({
         ...prev,
         [roleId]: {
           ...prev[roleId],
@@ -189,20 +238,20 @@ export const useWorkspaceRoles = (workspaceSlug: string | undefined, roleType?: 
 
       try {
         const updated = await workspaceService.updateWorkspaceRolePermissions(workspaceSlug, roleId, newKeys);
-        setPermissionByRoleId((prev) => ({
+        updatePermissionByRoleId((prev) => ({
           ...prev,
           [roleId]: { data: updated, isLoading: false, loaded: true },
         }));
       } catch {
         // Rollback on error
-        setPermissionByRoleId((prev) => ({
+        updatePermissionByRoleId((prev) => ({
           ...prev,
           [roleId]: { data: currentState.data, isLoading: false, loaded: true },
         }));
         throw new Error("更新权限失败，请重试");
       }
     },
-    [workspaceSlug]
+    [workspaceSlug, updatePermissionByRoleId]
   );
 
   return {

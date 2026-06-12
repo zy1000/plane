@@ -52,10 +52,13 @@ export const useProjectRoles = (workspaceSlug: string | undefined, projectId: st
       if (inFlightRef.current.has(roleId)) return;
       inFlightRef.current.add(roleId);
 
-      setPermissionByRoleId((prev) => ({
-        ...prev,
-        [roleId]: { ...(prev[roleId] ?? emptyPermissionState()), isLoading: true },
-      }));
+      setPermissionByRoleId((prev) => {
+        const existing = prev[roleId];
+        return {
+          ...prev,
+          [roleId]: { ...(existing ?? emptyPermissionState()), isLoading: !existing?.data },
+        };
+      });
 
       try {
         const data = await projectRoleService.fetchPermissions(workspaceSlug, projectId, roleId);

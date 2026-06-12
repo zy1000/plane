@@ -231,7 +231,11 @@ const ProjectRolesPage = observer(function ProjectRolesPage({ params }: Route.Co
               role={selectedRole as unknown as IWorkspaceRole}
               permissions={rolePermissionState?.data?.permissions ?? []}
               permissionKeys={rolePermissionState?.data?.permission_keys ?? []}
-              isLoading={Boolean(rolePermissionState?.isLoading)}
+              isLoading={Boolean(
+                selectedRoleId &&
+                  !rolePermissionState?.data &&
+                  (rolePermissionState?.isLoading || !rolePermissionState?.loaded)
+              )}
               isAdmin={isAdmin}
               searchQuery={searchQuery}
               onTogglePermission={togglePermission}
