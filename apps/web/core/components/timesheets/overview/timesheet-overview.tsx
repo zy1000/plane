@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Calendar, CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import { observer } from "mobx-react";
 import { DatePicker } from "antd";
@@ -12,6 +12,7 @@ import { OverviewDailyBarChart } from "./overview-daily-bar-chart";
 import { OverviewProjectPieChart } from "./overview-project-pie-chart";
 import { OverviewRecentEntries } from "./overview-recent-entries";
 import { OverviewMissingDaysAlert } from "./overview-missing-days-alert";
+import { OverviewMemberSelect } from "./overview-member-select";
 
 type Props = {
   workspaceSlug: string;
@@ -62,10 +63,18 @@ function OverviewSkeleton() {
 
 export const TimesheetOverview = observer(function TimesheetOverview({ workspaceSlug, memberId }: Props) {
   const { fetchProjects } = useProject();
+  const [selectedMemberId, setSelectedMemberId] = useState<string | undefined>(memberId);
+  const userTouchedRef = useRef(false);
 
   useEffect(() => {
     if (workspaceSlug) fetchProjects(workspaceSlug);
   }, [workspaceSlug, fetchProjects]);
+
+  useEffect(() => {
+    if (!userTouchedRef.current && memberId) {
+      setSelectedMemberId(memberId);
+    }
+  }, [memberId]);
 
   const {
     mode,
@@ -90,7 +99,7 @@ export const TimesheetOverview = observer(function TimesheetOverview({ workspace
     goToWeek,
     goToPrevMonth,
     goToNextMonth,
-  } = useTimesheetOverview({ workspaceSlug, memberId });
+  } = useTimesheetOverview({ workspaceSlug, memberId: selectedMemberId });
 
   const [pickerOpen, setPickerOpen] = useState(false);
 
@@ -136,6 +145,14 @@ export const TimesheetOverview = observer(function TimesheetOverview({ workspace
             <h1 className="text-lg font-semibold text-primary">工时概览</h1>
           </div>
           <div className="flex items-center gap-3">
+            <OverviewMemberSelect
+              workspaceSlug={workspaceSlug}
+              value={selectedMemberId}
+              onChange={(nextMemberId) => {
+                userTouchedRef.current = true;
+                setSelectedMemberId(nextMemberId);
+              }}
+            />
             {!isCurrentPeriod && (
               <button
                 onClick={handleCurrentPeriod}
