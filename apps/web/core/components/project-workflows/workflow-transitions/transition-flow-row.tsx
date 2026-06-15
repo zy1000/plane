@@ -11,9 +11,8 @@ import { EIconSize } from "@plane/constants";
 import { StateGroupIcon } from "@plane/propel/icons";
 import type { IState } from "@plane/types";
 import { cn } from "@plane/utils";
-import { useMember } from "@/hooks/store/use-member";
 import type { TWorkflowTransition } from "@/services/project/project-workflow.service";
-import { getWorkflowApproverLabel } from "./approver-utils";
+import { isRoleToken, WORKFLOW_SPECIAL_APPROVER_OPTIONS } from "./approver-utils";
 import type { TViewBox } from "./workflow-view-panel";
 
 type TTransitionFlowRowProps = {
@@ -38,16 +37,28 @@ export const TransitionFlowRow: FC<TTransitionFlowRowProps> = ({
   const [showMenu, setShowMenu] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-  const { getUserDetails } = useMember();
 
   const selectedToState = allStates.find((state) => state.id === transition.to_state_id);
 
   const getPrincipalSummary = (ids: string[], emptyLabel: string) => {
     if (ids.length === 0) return emptyLabel;
-    const labels = ids.map((id) => getWorkflowApproverLabel(id, getUserDetails));
-    if (labels.length === 1) return labels[0];
-    if (labels.length === 2) return labels.join("、");
-    return `${labels.length} 个对象`;
+    let roleCount = 0;
+    let memberCount = 0;
+    const specialLabels: string[] = [];
+    ids.forEach((id) => {
+      const specialOption = WORKFLOW_SPECIAL_APPROVER_OPTIONS.find((option) => option.id === id);
+      if (specialOption) {
+        specialLabels.push(specialOption.label);
+      } else if (isRoleToken(id)) {
+        roleCount += 1;
+      } else {
+        memberCount += 1;
+      }
+    });
+    const parts = [...specialLabels];
+    if (roleCount > 0) parts.push(`${roleCount} 个角色`);
+    if (memberCount > 0) parts.push(`${memberCount} 个成员`);
+    return parts.join("、");
   };
 
   const initiatorSummary = getPrincipalSummary(transition.initiator_ids, "All");
