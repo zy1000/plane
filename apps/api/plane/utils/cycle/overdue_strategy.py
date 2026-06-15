@@ -124,6 +124,8 @@ def open_overdue(
         workspace_id=cycle.workspace_id,
         phase=phase,
         triggered_by=triggered_by,
+        snapshot_owner=cycle.owned_by,
+        snapshot_status=cycle.status or "",
         started_at=started_at or timezone.now(),
     )
     logger.info(

@@ -719,7 +719,7 @@ class CycleViewSet(BaseViewSet):
             project_id=project_id,
             workspace__slug=slug,
             deleted_at__isnull=True,
-        ).order_by("-started_at")
+        ).select_related("snapshot_owner").order_by("-started_at")
         serializer = CycleOverdueRecordSerializer(records, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 

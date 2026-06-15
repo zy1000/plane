@@ -237,7 +237,7 @@ class WorkspaceOverdueAnalyticsEndpoint(BaseAPIView):
             deleted_at__isnull=True,
             cycle__deleted_at__isnull=True,
             cycle__archived_at__isnull=True,
-        ).select_related("cycle", "cycle__owned_by", "project")
+        ).select_related("cycle", "cycle__owned_by", "snapshot_owner", "project")
 
         if status_filter == "active":
             cycle_overdues = cycle_overdues.filter(ended_at__isnull=True)
@@ -250,6 +250,8 @@ class WorkspaceOverdueAnalyticsEndpoint(BaseAPIView):
         for record in cycle_overdues:
             overdue_since_date = timezone.localdate(record.started_at) if record.started_at else None
             is_active = record.ended_at is None
+            snapshot_owner = record.snapshot_owner or (record.cycle.owned_by if record.cycle else None)
+            snapshot_status = record.snapshot_status or (record.cycle.status if record.cycle else "-")
             deadline = None
             if record.cycle:
                 if record.phase == CycleOverduePhase.DEV and record.cycle.test_handoff_date:
@@ -276,10 +278,8 @@ class WorkspaceOverdueAnalyticsEndpoint(BaseAPIView):
                         today=today,
                     ),
                     "phase": record.phase,
-                    "status_label": record.cycle.status if record.cycle else "-",
-                    "assignees": self._build_assignees_from_user(
-                        record.cycle.owned_by if record.cycle else None
-                    ),
+                    "status_label": snapshot_status or "-",
+                    "assignees": self._build_assignees_from_user(snapshot_owner),
                 }
             )
 
@@ -290,7 +290,7 @@ class WorkspaceOverdueAnalyticsEndpoint(BaseAPIView):
             **base_filters,
             deleted_at__isnull=True,
             release__deleted_at__isnull=True,
-        ).select_related("release", "release__lead", "project")
+        ).select_related("release", "release__lead", "snapshot_owner", "project")
 
         if status_filter == "active":
             release_overdues = release_overdues.filter(ended_at__isnull=True)
@@ -303,6 +303,10 @@ class WorkspaceOverdueAnalyticsEndpoint(BaseAPIView):
         for record in release_overdues:
             overdue_since_date = timezone.localdate(record.started_at) if record.started_at else None
             is_active = record.ended_at is None
+            snapshot_owner = record.snapshot_owner or (record.release.lead if record.release else None)
+            snapshot_status = record.snapshot_status or (
+                record.release.get_status_display() if record.release else "-"
+            )
 
             deadline = None
             if record.release:
@@ -330,10 +334,8 @@ class WorkspaceOverdueAnalyticsEndpoint(BaseAPIView):
                         today=today,
                     ),
                     "phase": record.phase,
-                    "status_label": record.release.get_status_display() if record.release else "-",
-                    "assignees": self._build_assignees_from_user(
-                        record.release.lead if record.release else None
-                    ),
+                    "status_label": snapshot_status or "-",
+                    "assignees": self._build_assignees_from_user(snapshot_owner),
                 }
             )
 

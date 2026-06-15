@@ -383,6 +383,8 @@ class ReleaseUserPropertiesSerializer(BaseSerializer):
 
 
 class ReleaseOverdueRecordSerializer(BaseSerializer):
+    snapshot_owner_detail = UserLiteSerializer(read_only=True, source="snapshot_owner")
+
     class Meta:
         model = ReleaseOverdueRecord
         fields = [
@@ -392,6 +394,9 @@ class ReleaseOverdueRecordSerializer(BaseSerializer):
             "started_at",
             "ended_at",
             "triggered_by",
+            "snapshot_owner",
+            "snapshot_owner_detail",
+            "snapshot_status",
             "created_at",
             "updated_at",
         ]

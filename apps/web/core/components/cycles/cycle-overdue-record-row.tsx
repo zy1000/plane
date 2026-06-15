@@ -16,19 +16,25 @@ type Props = {
 
 export function CycleOverdueRecordRow({ record }: Props) {
   const phaseLabel = getCycleOverduePhaseLabel(record.phase) ?? record.phase;
+  const snapshotOwner = record.snapshot_owner_detail?.display_name || "-";
+  const snapshotStatus = record.snapshot_status || "-";
+
   return (
     <div className="flex items-center justify-between rounded-sm border border-subtle px-2 py-1.5">
-      <div className="flex items-center gap-2">
-        <span
-          className={
-            record.phase === "dev"
-              ? "rounded bg-danger-subtle px-1.5 py-0.5 text-11 font-medium text-danger-primary"
-              : "rounded bg-warning-subtle px-1.5 py-0.5 text-11 font-medium text-[#F59E0B]"
-          }
-        >
-          {phaseLabel}
-        </span>
-        <span className="text-12 text-secondary">{renderFormattedDate(record.started_at)}</span>
+      <div className="min-w-0 space-y-0.5">
+        <div className="flex items-center gap-2">
+          <span
+            className={
+              record.phase === "dev"
+                ? "rounded bg-danger-subtle px-1.5 py-0.5 text-11 font-medium text-danger-primary"
+                : "rounded bg-warning-subtle px-1.5 py-0.5 text-11 font-medium text-[#F59E0B]"
+            }
+          >
+            {phaseLabel}
+          </span>
+          <span className="text-12 text-secondary">{renderFormattedDate(record.started_at)}</span>
+        </div>
+        <div className="max-w-[360px] truncate text-11 text-tertiary">{`负责人：${snapshotOwner} · 状态：${snapshotStatus}`}</div>
       </div>
       <div className="text-11 text-tertiary">
         {record.ended_at ? `已于 ${renderFormattedDate(record.ended_at)} 结束` : "进行中"}

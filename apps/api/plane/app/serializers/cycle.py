@@ -198,6 +198,8 @@ class CycleUserPropertiesSerializer(BaseSerializer):
 
 
 class CycleOverdueRecordSerializer(BaseSerializer):
+    snapshot_owner_detail = UserLiteSerializer(read_only=True, source="snapshot_owner")
+
     class Meta:
         model = CycleOverdueRecord
         fields = [
@@ -207,6 +209,9 @@ class CycleOverdueRecordSerializer(BaseSerializer):
             "started_at",
             "ended_at",
             "triggered_by",
+            "snapshot_owner",
+            "snapshot_owner_detail",
+            "snapshot_status",
             "created_at",
             "updated_at",
         ]

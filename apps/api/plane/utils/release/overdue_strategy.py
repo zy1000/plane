@@ -113,6 +113,8 @@ def open_overdue(
         workspace_id=release.workspace_id,
         phase=phase,
         triggered_by=triggered_by,
+        snapshot_owner=release.lead,
+        snapshot_status=release.get_status_display(),
         started_at=started_at or timezone.now(),
     )
     logger.info(

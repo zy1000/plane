@@ -5,6 +5,7 @@
  */
 
 import type { TIssue } from "../issues/issue";
+import type { IUserLite } from "../users";
 import type { IIssueFilterOptions } from "../view-props";
 
 export type TCycleGroups = "not_started" | "in_progress" | "testing" | "returned" | "completed" | "cancelled";
@@ -18,6 +19,9 @@ export interface ICycleOverdueRecord {
   started_at: string;
   ended_at: string | null;
   triggered_by: TCycleOverdueTrigger;
+  snapshot_owner: string | null;
+  snapshot_owner_detail: IUserLite | null;
+  snapshot_status: string;
   created_at: string;
   updated_at: string;
 }

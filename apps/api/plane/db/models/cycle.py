@@ -148,6 +148,14 @@ class CycleOverdueRecord(ProjectBaseModel):
         choices=CycleOverdueTrigger.choices,
         default=CycleOverdueTrigger.SYSTEM,
     )
+    snapshot_owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="%(class)s_snapshot_owner",
+    )
+    snapshot_status = models.CharField(max_length=32, blank=True, default="")
 
     class Meta:
         verbose_name = "Cycle Overdue Record"
