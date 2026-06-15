@@ -12,6 +12,7 @@ export const CYCLE_FIELD_LABELS: Record<string, string> = {
   status: "状态",
   start_date: "开始时间",
   end_date: "结束时间",
+  test_handoff_date: "转测日期",
   suggested_test_scope: "建议测试范围",
   owned_by: "负责人",
   owned_by_id: "负责人",

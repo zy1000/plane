@@ -12,6 +12,7 @@ import { Disclosure, Transition } from "@headlessui/react";
 import { ChevronDownIcon } from "@plane/propel/icons";
 import type { ICycleOverdueRecord } from "@plane/types";
 import { CycleOverdueRecordRow } from "@/components/cycles/cycle-overdue-record-row";
+import { getCycleOverduePhaseLabel } from "@/components/cycles/cycle-status-config";
 import { CycleService } from "@/services/cycle.service";
 
 type Props = {
@@ -46,9 +47,13 @@ export function CycleOverdueRecordsSection(props: Props) {
             <Disclosure.Button className="flex w-full items-center justify-between gap-2 p-1.5">
               <div className="flex items-center justify-start gap-2 text-13">
                 <span className="font-medium text-secondary">延期记录</span>
-                {totalCount > 0 ? (
+                {activeRecord ? (
+                  <span className="rounded bg-warning-subtle px-1.5 py-0.5 text-11 font-medium text-[#F59E0B]">
+                    当前 {getCycleOverduePhaseLabel(activeRecord.phase)}
+                  </span>
+                ) : totalCount > 0 ? (
                   <span className="rounded bg-danger-subtle px-1.5 py-0.5 text-11 font-medium text-danger-primary">
-                    迭代逾期
+                    曾延期 {totalCount} 次
                   </span>
                 ) : (
                   <span className="text-11 text-tertiary">无</span>

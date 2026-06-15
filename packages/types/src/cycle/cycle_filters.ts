@@ -28,6 +28,7 @@ export type TCycleDisplayPropertyKey =
   | "issue_count"
   | "start_date"
   | "end_date"
+  | "test_handoff_date"
   | "created_by"
   | "members";
 

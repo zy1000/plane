@@ -26,6 +26,7 @@ _CYCLE_FIELD_LABELS = {
     "status": "状态",
     "start_date": "开始时间",
     "end_date": "结束时间",
+    "test_handoff_date": "转测日期",
     "suggested_test_scope": "建议测试范围",
     "owned_by": "负责人",
     "owned_by_id": "负责人",
@@ -34,6 +35,11 @@ _CYCLE_FIELD_LABELS = {
     "comment": "评论",
     "overdue": "延期记录",
     "cycle": "迭代",
+}
+
+_OVERDUE_PHASE_LABELS = {
+    "dev": "研发延期",
+    "test": "测试延期",
 }
 
 def _label_for_field(field: str) -> str:
@@ -511,6 +517,8 @@ def create_cycle_overdue_activity(
     epoch,
 ):
     requested = json.loads(requested_data) if requested_data else {}
+    phase = requested.get("phase") or ""
+    phase_label = _OVERDUE_PHASE_LABELS.get(phase, phase) or "延期记录"
     record_id = requested.get("record_id")
     _append(
         activities,
@@ -520,9 +528,9 @@ def create_cycle_overdue_activity(
         actor_id=actor_id,
         verb="created",
         field="overdue",
-        new_value="延期记录",
+        new_value=phase_label,
         new_identifier=record_id if is_valid_uuid(str(record_id or "")) else None,
-        comment="开启了延期记录",
+        comment=f"开启了{phase_label}",
         epoch=epoch,
     )
 
@@ -539,6 +547,8 @@ def close_cycle_overdue_activity(
     epoch,
 ):
     requested = json.loads(requested_data) if requested_data else {}
+    phase = requested.get("phase") or ""
+    phase_label = _OVERDUE_PHASE_LABELS.get(phase, phase) or "延期记录"
     record_id = requested.get("record_id")
     _append(
         activities,
@@ -548,9 +558,9 @@ def close_cycle_overdue_activity(
         actor_id=actor_id,
         verb="closed",
         field="overdue",
-        old_value="延期记录",
+        old_value=phase_label,
         old_identifier=record_id if is_valid_uuid(str(record_id or "")) else None,
-        comment="关闭了延期记录",
+        comment=f"关闭了{phase_label}",
         epoch=epoch,
     )
 

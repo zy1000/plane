@@ -70,6 +70,11 @@ RELEASE_OVERDUE_PHASE_LABELS = {
     "test": "测试延期",
 }
 
+CYCLE_OVERDUE_PHASE_LABELS = {
+    "dev": "研发延期",
+    "test": "测试延期",
+}
+
 # Redis key prefix for stashing the origin URL used to render links.
 CYCLE_ORIGIN_REDIS_PREFIX = "cycle_status_email_origin"
 RELEASE_ORIGIN_REDIS_PREFIX = "release_status_email_origin"
@@ -204,6 +209,9 @@ def _cycle_payload(cycle, actor_id, origin, event, **kwargs):
         "workspace_name": cycle.project.workspace.name,
         "start_date": cycle.start_date.isoformat() if cycle.start_date else None,
         "end_date": cycle.end_date.isoformat() if cycle.end_date else None,
+        "test_handoff_date": (
+            cycle.test_handoff_date.isoformat() if cycle.test_handoff_date else None
+        ),
         "actor_id": _normalize_user_id(actor_id),
         "is_system": actor_id is None,
         "activity_time": _now_iso(),
@@ -561,7 +569,7 @@ def dispatch_release_schedule_email(
 
 
 @shared_task
-def dispatch_cycle_overdue_email(cycle_id, actor_id=None, origin=None):
+def dispatch_cycle_overdue_email(cycle_id, phase=None, actor_id=None, origin=None):
     try:
         cycle = (
             Cycle.objects.filter(pk=cycle_id)
@@ -586,6 +594,8 @@ def dispatch_cycle_overdue_email(cycle_id, actor_id=None, origin=None):
             origin=origin,
             event="overdue",
             owner_name=_user_display_name(cycle.owned_by_id),
+            phase=phase,
+            phase_label=CYCLE_OVERDUE_PHASE_LABELS.get(phase, phase),
         )
         _enqueue_email_logs(
             entity_name="cycle",

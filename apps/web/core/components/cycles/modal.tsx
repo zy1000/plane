@@ -114,6 +114,7 @@ export function CycleCreateUpdateModal(props: CycleModalProps) {
       ...formData,
       start_date: renderFormattedPayloadDate(formData.start_date) ?? null,
       end_date: renderFormattedPayloadDate(formData.end_date) ?? null,
+      test_handoff_date: renderFormattedPayloadDate(formData.test_handoff_date) ?? null,
     };
 
     let isDateValid: boolean = true;

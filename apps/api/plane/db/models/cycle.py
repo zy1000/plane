@@ -77,6 +77,7 @@ class Cycle(ProjectBaseModel):
     )
     start_date = models.DateTimeField(verbose_name="Start Date", blank=True, null=True)
     end_date = models.DateTimeField(verbose_name="End Date", blank=True, null=True)
+    test_handoff_date = models.DateTimeField(verbose_name="Test Handoff Date", blank=True, null=True)
     owned_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -123,6 +124,11 @@ class Cycle(ProjectBaseModel):
         return f"{self.name} <{self.project.name}>"
 
 
+class CycleOverduePhase(models.TextChoices):
+    DEV = "dev", "研发延期"
+    TEST = "test", "测试延期"
+
+
 class CycleOverdueTrigger(models.TextChoices):
     SYSTEM = "system", "系统自动"
     USER = "user", "人工标记"
@@ -134,6 +140,7 @@ class CycleOverdueRecord(ProjectBaseModel):
         on_delete=models.CASCADE,
         related_name="overdue_records",
     )
+    phase = models.CharField(max_length=8, choices=CycleOverduePhase.choices)
     started_at = models.DateTimeField(default=timezone.now)
     ended_at = models.DateTimeField(null=True, blank=True)
     triggered_by = models.CharField(
@@ -149,9 +156,9 @@ class CycleOverdueRecord(ProjectBaseModel):
         ordering = ("-started_at",)
         constraints = [
             models.UniqueConstraint(
-                fields=["cycle"],
+                fields=["cycle", "phase"],
                 condition=models.Q(ended_at__isnull=True, deleted_at__isnull=True),
-                name="cycle_overdue_record_unique_active",
+                name="cycle_overdue_record_unique_active_per_phase",
             )
         ]
 

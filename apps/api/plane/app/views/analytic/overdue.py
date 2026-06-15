@@ -19,6 +19,7 @@ from rest_framework.response import Response
 from plane.app.permissions import ROLE, allow_permission
 from plane.app.views.base import BaseAPIView
 from plane.db.models import (
+    CycleOverduePhase,
     CycleOverdueRecord,
     Issue,
     IssueAssignee,
@@ -250,8 +251,11 @@ class WorkspaceOverdueAnalyticsEndpoint(BaseAPIView):
             overdue_since_date = timezone.localdate(record.started_at) if record.started_at else None
             is_active = record.ended_at is None
             deadline = None
-            if record.cycle and record.cycle.end_date:
-                deadline = record.cycle.end_date.date()
+            if record.cycle:
+                if record.phase == CycleOverduePhase.DEV and record.cycle.test_handoff_date:
+                    deadline = record.cycle.test_handoff_date.date()
+                elif record.phase == CycleOverduePhase.TEST and record.cycle.end_date:
+                    deadline = record.cycle.end_date.date()
 
             cycle_records.append(
                 {
@@ -271,7 +275,7 @@ class WorkspaceOverdueAnalyticsEndpoint(BaseAPIView):
                         ended_at=record.ended_at,
                         today=today,
                     ),
-                    "phase": None,
+                    "phase": record.phase,
                     "status_label": record.cycle.status if record.cycle else "-",
                     "assignees": self._build_assignees_from_user(
                         record.cycle.owned_by if record.cycle else None

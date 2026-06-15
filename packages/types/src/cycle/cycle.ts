@@ -9,10 +9,12 @@ import type { IIssueFilterOptions } from "../view-props";
 
 export type TCycleGroups = "not_started" | "in_progress" | "testing" | "returned" | "completed" | "cancelled";
 export type TCycleOverdueTrigger = "system" | "user";
+export type TCycleOverduePhase = "dev" | "test";
 
 export interface ICycleOverdueRecord {
   id: string;
   cycle: string;
+  phase: TCycleOverduePhase;
   started_at: string;
   ended_at: string | null;
   triggered_by: TCycleOverdueTrigger;
@@ -103,10 +105,16 @@ export interface ICycle extends TProgressSnapshot {
   description: string;
   suggested_test_scope?: string | null;
   end_date: string | null;
+  test_handoff_date: string | null;
   id: string;
   is_favorite?: boolean;
   has_active_overdue?: boolean;
   has_overdue_history?: boolean;
+  has_active_dev_overdue?: boolean;
+  has_active_test_overdue?: boolean;
+  has_dev_overdue_history?: boolean;
+  has_test_overdue_history?: boolean;
+  active_overdue_phase?: TCycleOverduePhase | null;
   name: string;
   owned_by_id: string;
   project_id: string;

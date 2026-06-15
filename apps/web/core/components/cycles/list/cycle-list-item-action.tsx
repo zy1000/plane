@@ -27,6 +27,7 @@ import type { ICycle } from "@plane/types";
 import { Avatar, AvatarGroup, CustomSelect, FavoriteStar } from "@plane/ui";
 import { getDate, getFileURL, generateQueryParams, renderFormattedPayloadDate } from "@plane/utils";
 // components
+import { DateDropdown } from "@/components/dropdowns/date";
 import { DateRangeDropdown } from "@/components/dropdowns/date-range";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 // hooks
@@ -104,6 +105,7 @@ export const CycleListItemAction = observer(function CycleListItemAction(props: 
   const showStartDateProperty = displayProperties.start_date !== false;
   const showEndDateProperty = displayProperties.end_date !== false;
   const showDateRange = showStartDateProperty || showEndDateProperty;
+  const showTestHandoffDateProperty = displayProperties.test_handoff_date !== false;
   const showOwnerProperty = displayProperties.created_by !== false;
   const showMembersProperty = displayProperties.members !== false;
   const showStatusInGroupedView =
@@ -159,6 +161,38 @@ export const CycleListItemAction = observer(function CycleListItemAction(props: 
         await updateCycleDetails(workspaceSlug, projectId, cycleId, {
           start_date: nextStartDate,
           end_date: nextEndDate,
+        });
+        setToast({
+          type: TOAST_TYPE.SUCCESS,
+          title: t("project_cycles.action.update.success.title"),
+          message: t("project_cycles.action.update.success.description"),
+        });
+      } catch (err) {
+        const { title, message } = formatCycleUpdateError(err);
+        setToast({
+          type: TOAST_TYPE.ERROR,
+          title,
+          message,
+        });
+      } finally {
+        setIsUpdatingDateRange(false);
+      }
+    })();
+  };
+
+  const handleTestHandoffDateSelect = (handoffDate?: Date) => {
+    void (async () => {
+      const nextHandoffDate = handoffDate ? renderFormattedPayloadDate(handoffDate) : null;
+      const currentHandoffDate = cycleDetails.test_handoff_date ?? null;
+
+      if (isUpdatingDateRange || nextHandoffDate === currentHandoffDate || !canUpdateDateRange) {
+        return;
+      }
+
+      setIsUpdatingDateRange(true);
+      try {
+        await updateCycleDetails(workspaceSlug, projectId, cycleId, {
+          test_handoff_date: nextHandoffDate,
         });
         setToast({
           type: TOAST_TYPE.SUCCESS,
@@ -278,7 +312,11 @@ export const CycleListItemAction = observer(function CycleListItemAction(props: 
       />
       <button
         onClick={openCycleOverview}
-        className={`z-[1] flex flex-shrink-0 gap-1 text-11 text-accent-secondary ${isMobile || (isActive && !searchParams.has("peekCycle")) ? "flex" : "hidden group-hover:flex"}`}
+        className={`z-[1] flex flex-shrink-0 gap-1 text-11 text-accent-secondary ${
+          isMobile || (isActive && !searchParams.has("peekCycle"))
+            ? "visible"
+            : "invisible pointer-events-none group-hover:visible group-hover:pointer-events-auto"
+        }`}
       >
         <Eye className="my-auto h-4 w-4 text-accent-secondary" />
         <span>{t("project_cycles.more_details")}</span>
@@ -399,6 +437,19 @@ export const CycleListItemAction = observer(function CycleListItemAction(props: 
                 {projectUTCOffset}
               </span>
             )}
+            {showTestHandoffDateProperty && (
+              <DateDropdown
+                buttonVariant="transparent-with-text"
+                buttonContainerClassName="h-6 flex items-center gap-1.5 rounded-sm text-11 text-tertiary [&>div]:hover:bg-transparent"
+                buttonClassName="p-0"
+                value={getDate(cycleDetails.test_handoff_date)}
+                onChange={(val) => handleTestHandoffDateSelect(val ?? undefined)}
+                placeholder={t("test_handoff_date")}
+                minDate={getDate(cycleDetails.start_date) ?? undefined}
+                maxDate={getDate(cycleDetails.end_date) ?? undefined}
+                disabled={!canUpdateDateRange || isUpdatingDateRange}
+              />
+            )}
             {showOwnerProperty && (
               <div className="h-5 w-5">
                 <MemberDropdown
@@ -419,39 +470,54 @@ export const CycleListItemAction = observer(function CycleListItemAction(props: 
           </div>
         </>
       ) : (
-        showDateRange && (
+        (showDateRange || showTestHandoffDateProperty) && (
           <>
-            <DateRangeDropdown
-              buttonVariant={"transparent-with-text"}
-              buttonContainerClassName="h-6 w-full flex items-center gap-1.5 rounded-sm text-11 text-tertiary [&>div]:hover:bg-transparent"
-              buttonClassName="p-0"
-              value={{
-                from: showStartDateProperty ? getDate(cycleDetails.start_date) : undefined,
-                to: showEndDateProperty ? getDate(cycleDetails.end_date) : undefined,
-              }}
-              onSelect={(val) => {
-                handleDateRangeSelect(val?.from, val?.to);
-              }}
-              placeholder={{
-                from: t("project_cycles.start_date"),
-                to: t("project_cycles.end_date"),
-              }}
-              showTooltip={isProjectTimeZoneDifferent() && !!cycleDetails.start_date && !!cycleDetails.end_date}
-              customTooltipHeading={t("project_cycles.in_your_timezone")}
-              customTooltipContent={
-                <span className="flex gap-1">
-                  {renderFormattedDateInUserTimezone(cycleDetails.start_date ?? "")}
-                  <ArrowRight className="my-auto h-3 w-3 flex-shrink-0" />
-                  {renderFormattedDateInUserTimezone(cycleDetails.end_date ?? "")}
-                </span>
-              }
-              mergeDates
-              disabled={!canUpdateDateRange || isUpdatingDateRange}
-              hideIcon={{
-                from: false,
-                to: false,
-              }}
-            />
+            {showDateRange && (
+              <DateRangeDropdown
+                buttonVariant={"transparent-with-text"}
+                buttonContainerClassName="h-6 w-full flex items-center gap-1.5 rounded-sm text-11 text-tertiary [&>div]:hover:bg-transparent"
+                buttonClassName="p-0"
+                value={{
+                  from: showStartDateProperty ? getDate(cycleDetails.start_date) : undefined,
+                  to: showEndDateProperty ? getDate(cycleDetails.end_date) : undefined,
+                }}
+                onSelect={(val) => {
+                  handleDateRangeSelect(val?.from, val?.to);
+                }}
+                placeholder={{
+                  from: t("project_cycles.start_date"),
+                  to: t("project_cycles.end_date"),
+                }}
+                showTooltip={isProjectTimeZoneDifferent() && !!cycleDetails.start_date && !!cycleDetails.end_date}
+                customTooltipHeading={t("project_cycles.in_your_timezone")}
+                customTooltipContent={
+                  <span className="flex gap-1">
+                    {renderFormattedDateInUserTimezone(cycleDetails.start_date ?? "")}
+                    <ArrowRight className="my-auto h-3 w-3 flex-shrink-0" />
+                    {renderFormattedDateInUserTimezone(cycleDetails.end_date ?? "")}
+                  </span>
+                }
+                mergeDates
+                disabled={!canUpdateDateRange || isUpdatingDateRange}
+                hideIcon={{
+                  from: false,
+                  to: false,
+                }}
+              />
+            )}
+            {showTestHandoffDateProperty && (
+              <DateDropdown
+                buttonVariant="transparent-with-text"
+                buttonContainerClassName="h-6 w-full flex items-center gap-1.5 rounded-sm text-11 text-tertiary [&>div]:hover:bg-transparent"
+                buttonClassName="p-0"
+                value={getDate(cycleDetails.test_handoff_date)}
+                onChange={(val) => handleTestHandoffDateSelect(val ?? undefined)}
+                placeholder={t("test_handoff_date")}
+                minDate={getDate(cycleDetails.start_date) ?? undefined}
+                maxDate={getDate(cycleDetails.end_date) ?? undefined}
+                disabled={!canUpdateDateRange || isUpdatingDateRange}
+              />
+            )}
           </>
         )
       )}

@@ -17,6 +17,7 @@ import { Input } from "@plane/ui";
 import { getDate, renderFormattedPayloadDate, getTabIndex } from "@plane/utils";
 // components
 import { CycleRichTextEditor } from "@/components/cycles/cycle-rich-text-editor";
+import { DateDropdown } from "@/components/dropdowns/date";
 import { DateRangeDropdown } from "@/components/dropdowns/date-range";
 import { ProjectDropdown } from "@/components/dropdowns/project/dropdown";
 // hooks
@@ -39,6 +40,7 @@ const defaultValues: Partial<ICycle> = {
   suggested_test_scope: "",
   start_date: null,
   end_date: null,
+  test_handoff_date: null,
 };
 
 /* 编辑器正文字号取自 --font-size-regular（由 .editor-container.large-font 以更高优先级设为 1rem），
@@ -69,6 +71,7 @@ export function CycleForm(props: Props) {
       suggested_test_scope: data?.suggested_test_scope || "",
       start_date: data?.start_date || null,
       end_date: data?.end_date || null,
+      test_handoff_date: data?.test_handoff_date || null,
     },
   });
 
@@ -184,7 +187,7 @@ export function CycleForm(props: Props) {
               />
             </div>
           )}
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-start gap-2">
             <div className="space-y-1">
               <Controller
                 control={control}
@@ -201,7 +204,6 @@ export function CycleForm(props: Props) {
                         buttonVariant="border-with-text"
                         className="h-7"
                         buttonClassName={errors?.end_date ? "border-danger-strong" : ""}
-                        minDate={new Date()}
                         value={{
                           from: getDate(startDateValue),
                           to: getDate(endDateValue),
@@ -224,6 +226,40 @@ export function CycleForm(props: Props) {
                 )}
               />
               <span className="text-11 text-danger-primary">{errors?.end_date?.message}</span>
+            </div>
+            <div className="space-y-1">
+              <Controller
+                control={control}
+                name="test_handoff_date"
+                rules={{
+                  required: t("test_handoff_date_is_required"),
+                  validate: (value) => {
+                    const testDate = getDate(value);
+                    if (!testDate) return undefined;
+                    const startDate = getDate(watch("start_date"));
+                    const endDate = getDate(watch("end_date"));
+                    if ((startDate && testDate < startDate) || (endDate && testDate > endDate))
+                      return t("test_handoff_date_out_of_range");
+                    return undefined;
+                  },
+                }}
+                render={({ field: { value, onChange } }) => (
+                  <div className="h-7">
+                    <DateDropdown
+                      buttonVariant="border-with-text"
+                      buttonClassName={errors?.test_handoff_date ? "border-danger-strong" : ""}
+                      value={getDate(value)}
+                      onChange={(val) => onChange(val ? renderFormattedPayloadDate(val) : null)}
+                      placeholder={t("test_handoff_date")}
+                      minDate={getDate(watch("start_date")) ?? undefined}
+                      maxDate={getDate(watch("end_date")) ?? undefined}
+                      hideIcon
+                      tabIndex={getIndex("test_handoff_date")}
+                    />
+                  </div>
+                )}
+              />
+              <span className="text-11 text-danger-primary">{errors?.test_handoff_date?.message}</span>
             </div>
           </div>
         </div>

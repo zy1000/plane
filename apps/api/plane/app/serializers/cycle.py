@@ -33,17 +33,23 @@ class CycleWriteSerializer(BaseSerializer):
         status = data.get("status")
         user = self.context.get("user")
         has_end_date_in_payload = "end_date" in data
+        has_test_handoff_date_in_payload = "test_handoff_date" in data
 
         if self.instance and has_end_date_in_payload and data.get("end_date") is None:
             raise serializers.ValidationError("结束时间不可清空")
 
+        # 转测日期：创建时必填、更新时不可清空
+        if self.instance is None:
+            if data.get("test_handoff_date", None) is None:
+                raise serializers.ValidationError("转测日期为必填项")
+        elif has_test_handoff_date_in_payload and data.get("test_handoff_date") is None:
+            raise serializers.ValidationError("转测日期不可清空")
+
         if (
             data.get("start_date", None) is not None
-            and data.get("end_date", None) is not None
-            and data.get("start_date", None) > data.get("end_date", None)
+            or data.get("end_date", None) is not None
+            or data.get("test_handoff_date", None) is not None
         ):
-            raise serializers.ValidationError("Start date cannot exceed end date")
-        if data.get("start_date", None) is not None or data.get("end_date", None) is not None:
             project_id = (
                 self.initial_data.get("project_id", None)
                 or (self.instance and self.instance.project_id)
@@ -60,6 +66,31 @@ class CycleWriteSerializer(BaseSerializer):
                     date=str(data.get("end_date").date()),
                     project_id=project_id,
                 )
+            if data.get("test_handoff_date", None) is not None:
+                data["test_handoff_date"] = convert_to_utc(
+                    date=str(data.get("test_handoff_date").date()),
+                    project_id=project_id,
+                )
+
+        effective_start = data.get("start_date", self.instance.start_date if self.instance else None)
+        effective_end = data.get("end_date", self.instance.end_date if self.instance else None)
+        effective_handoff = data.get(
+            "test_handoff_date", self.instance.test_handoff_date if self.instance else None
+        )
+
+        if (
+            effective_start is not None
+            and effective_end is not None
+            and effective_start > effective_end
+        ):
+            raise serializers.ValidationError("Start date cannot exceed end date")
+
+        # 转测日期必须落在开始日期和结束日期之间
+        if effective_handoff is not None:
+            if effective_start is not None and effective_handoff < effective_start:
+                raise serializers.ValidationError("转测日期不能早于开始日期")
+            if effective_end is not None and effective_handoff > effective_end:
+                raise serializers.ValidationError("转测日期不能晚于结束日期")
 
         if self.instance and "owned_by" in data:
             requested_owner = data.get("owned_by")
@@ -123,6 +154,7 @@ class CycleSerializer(BaseSerializer):
             "suggested_test_scope",
             "start_date",
             "end_date",
+            "test_handoff_date",
             "owned_by_id",
             "view_props",
             "sort_order",
@@ -171,6 +203,7 @@ class CycleOverdueRecordSerializer(BaseSerializer):
         fields = [
             "id",
             "cycle",
+            "phase",
             "started_at",
             "ended_at",
             "triggered_by",

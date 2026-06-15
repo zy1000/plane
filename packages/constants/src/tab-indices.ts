@@ -68,6 +68,7 @@ export const PROJECT_CYCLE_TAB_INDICES = [
   "description",
   "suggested_test_scope",
   "date_range",
+  "test_handoff_date",
   "cancel",
   "submit",
   "project_id",

@@ -13,6 +13,7 @@ from .cycle import (
     CycleIssue,
     CycleUserProperties,
     CycleOverdueRecord,
+    CycleOverduePhase,
     CycleOverdueTrigger,
 )
 from .deploy_board import DeployBoard

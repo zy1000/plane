@@ -17,6 +17,7 @@ import type { ICycle } from "@plane/types";
 import { CustomSelect } from "@plane/ui";
 import { getDate, renderFormattedPayloadDate } from "@plane/utils";
 // components
+import { DateDropdown } from "@/components/dropdowns/date";
 import { DateRangeDropdown } from "@/components/dropdowns/date-range";
 // hooks
 import { useCycle } from "@/hooks/store/use-cycle";
@@ -37,6 +38,7 @@ type Props = {
 const defaultValues: Partial<ICycle> = {
   start_date: null,
   end_date: null,
+  test_handoff_date: null,
   status: undefined,
 };
 
@@ -71,6 +73,7 @@ export const CycleSidebarHeader = observer(function CycleSidebarHeader(props: Pr
       if (key === "status") return value !== cycleDetails.status;
       if (key === "start_date") return (value ?? null) !== (cycleDetails.start_date ?? null);
       if (key === "end_date") return (value ?? null) !== (cycleDetails.end_date ?? null);
+      if (key === "test_handoff_date") return (value ?? null) !== (cycleDetails.test_handoff_date ?? null);
       return true;
     });
 
@@ -141,6 +144,23 @@ export const CycleSidebarHeader = observer(function CycleSidebarHeader(props: Pr
       });
     }
     return isDateValid;
+  };
+
+  const handleTestHandoffDateChange = async (handoffDate: Date | undefined) => {
+    const result = await submitChanges({
+      test_handoff_date: renderFormattedPayloadDate(handoffDate) || null,
+    });
+    if (!result.success) {
+      const { title, message } = formatCycleUpdateError(result.error);
+      setToast({ type: TOAST_TYPE.ERROR, title, message });
+      return false;
+    }
+    setToast({
+      type: TOAST_TYPE.SUCCESS,
+      title: t("project_cycles.action.update.success.title"),
+      message: t("project_cycles.action.update.success.description"),
+    });
+    return true;
   };
 
   const isEditingAllowed = allowPermissions(
@@ -254,7 +274,6 @@ export const CycleSidebarHeader = observer(function CycleSidebarHeader(props: Pr
                   <DateRangeDropdown
                     className="h-7"
                     buttonVariant="border-with-text"
-                    minDate={new Date()}
                     value={{
                       from: getDate(startDateValue),
                       to: getDate(endDateValue),
@@ -289,6 +308,27 @@ export const CycleSidebarHeader = observer(function CycleSidebarHeader(props: Pr
                   {projectUTCOffset}
                 </span>
               )}
+            </div>
+          )}
+        />
+
+        <Controller
+          control={control}
+          name="test_handoff_date"
+          render={({ field: { value, onChange } }) => (
+            <div className="h-7">
+              <DateDropdown
+                buttonVariant="border-with-text"
+                value={getDate(value)}
+                onChange={async (val) => {
+                  const isValid = await handleTestHandoffDateChange(val ?? undefined);
+                  if (isValid) onChange(val ? renderFormattedPayloadDate(val) : null);
+                }}
+                placeholder={t("test_handoff_date")}
+                minDate={getDate(cycleDetails.start_date) ?? undefined}
+                maxDate={getDate(cycleDetails.end_date) ?? undefined}
+                disabled={!isEditingAllowed || isArchived || isCompleted}
+              />
             </div>
           )}
         />

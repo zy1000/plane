@@ -19,6 +19,7 @@ from django.db.models import (
     OuterRef,
     Prefetch,
     Q,
+    Subquery,
     UUIDField,
     Value,
     When,
@@ -46,6 +47,7 @@ from plane.bgtasks.issue_activities_task import issue_activity
 from plane.db.models import (
     Cycle,
     CycleIssue,
+    CycleOverduePhase,
     CycleOverdueRecord,
     UserFavorite,
     CycleUserProperties,
@@ -102,6 +104,37 @@ class CycleViewSet(BaseViewSet):
             cycle_id=OuterRef("pk"),
             deleted_at__isnull=True,
         )
+        active_overdue_phase_subquery = (
+            CycleOverdueRecord.objects.filter(
+                cycle_id=OuterRef("pk"),
+                ended_at__isnull=True,
+                deleted_at__isnull=True,
+            )
+            .order_by("-started_at")
+            .values("phase")[:1]
+        )
+        active_dev_overdue_subquery = CycleOverdueRecord.objects.filter(
+            cycle_id=OuterRef("pk"),
+            phase=CycleOverduePhase.DEV,
+            ended_at__isnull=True,
+            deleted_at__isnull=True,
+        )
+        active_test_overdue_subquery = CycleOverdueRecord.objects.filter(
+            cycle_id=OuterRef("pk"),
+            phase=CycleOverduePhase.TEST,
+            ended_at__isnull=True,
+            deleted_at__isnull=True,
+        )
+        any_dev_overdue_subquery = CycleOverdueRecord.objects.filter(
+            cycle_id=OuterRef("pk"),
+            phase=CycleOverduePhase.DEV,
+            deleted_at__isnull=True,
+        )
+        any_test_overdue_subquery = CycleOverdueRecord.objects.filter(
+            cycle_id=OuterRef("pk"),
+            phase=CycleOverduePhase.TEST,
+            deleted_at__isnull=True,
+        )
 
         project = Project.objects.get(id=self.kwargs.get("project_id"))
 
@@ -142,6 +175,16 @@ class CycleViewSet(BaseViewSet):
             .annotate(is_favorite=Exists(favorite_subquery))
             .annotate(has_active_overdue=Exists(active_overdue_subquery))
             .annotate(has_overdue_history=Exists(any_overdue_subquery))
+            .annotate(has_active_dev_overdue=Exists(active_dev_overdue_subquery))
+            .annotate(has_active_test_overdue=Exists(active_test_overdue_subquery))
+            .annotate(has_dev_overdue_history=Exists(any_dev_overdue_subquery))
+            .annotate(has_test_overdue_history=Exists(any_test_overdue_subquery))
+            .annotate(
+                active_overdue_phase=Coalesce(
+                    Subquery(active_overdue_phase_subquery, output_field=CharField()),
+                    Value(None, output_field=CharField()),
+                )
+            )
             .annotate(
                 total_issues=Count(
                     "issue_cycle__issue__id",
@@ -240,6 +283,7 @@ class CycleViewSet(BaseViewSet):
                 "suggested_test_scope",
                 "start_date",
                 "end_date",
+                "test_handoff_date",
                 "owned_by_id",
                 "view_props",
                 "sort_order",
@@ -256,11 +300,16 @@ class CycleViewSet(BaseViewSet):
                 "status",
                 "has_active_overdue",
                 "has_overdue_history",
+                "has_active_dev_overdue",
+                "has_active_test_overdue",
+                "has_dev_overdue_history",
+                "has_test_overdue_history",
+                "active_overdue_phase",
                 "plan_ids",
                 "version",
                 "created_by",
             )
-            datetime_fields = ["start_date", "end_date"]
+            datetime_fields = ["start_date", "end_date", "test_handoff_date"]
             data = user_timezone_converter(data, datetime_fields, project_timezone)
 
             # enrich with plans
@@ -290,6 +339,7 @@ class CycleViewSet(BaseViewSet):
             "suggested_test_scope",
             "start_date",
             "end_date",
+            "test_handoff_date",
             "owned_by_id",
             "view_props",
             "sort_order",
@@ -308,10 +358,15 @@ class CycleViewSet(BaseViewSet):
             "status",
             "has_active_overdue",
             "has_overdue_history",
+            "has_active_dev_overdue",
+            "has_active_test_overdue",
+            "has_dev_overdue_history",
+            "has_test_overdue_history",
+            "active_overdue_phase",
             "version",
             "created_by",
         )
-        datetime_fields = ["start_date", "end_date"]
+        datetime_fields = ["start_date", "end_date", "test_handoff_date"]
         data = user_timezone_converter(data, datetime_fields, project_timezone)
 
         # enrich with plans
@@ -353,6 +408,7 @@ class CycleViewSet(BaseViewSet):
                         "suggested_test_scope",
                         "start_date",
                         "end_date",
+                        "test_handoff_date",
                         "owned_by_id",
                         "view_props",
                         "sort_order",
@@ -369,6 +425,11 @@ class CycleViewSet(BaseViewSet):
                         "status",
                         "has_active_overdue",
                         "has_overdue_history",
+                        "has_active_dev_overdue",
+                        "has_active_test_overdue",
+                        "has_dev_overdue_history",
+                        "has_test_overdue_history",
+                        "active_overdue_phase",
                         "created_by",
                     )
                     .first()
@@ -378,7 +439,7 @@ class CycleViewSet(BaseViewSet):
                 project = Project.objects.get(id=self.kwargs.get("project_id"))
                 project_timezone = project.timezone
 
-                datetime_fields = ["start_date", "end_date"]
+                datetime_fields = ["start_date", "end_date", "test_handoff_date"]
                 cycle = user_timezone_converter(
                     cycle, datetime_fields, project_timezone
                 )
@@ -431,6 +492,7 @@ class CycleViewSet(BaseViewSet):
         previous_owner_id = cycle.owned_by_id
         previous_start_date = cycle.start_date
         previous_end_date = cycle.end_date
+        previous_test_handoff_date = cycle.test_handoff_date
 
         request_data = request.data
 
@@ -458,6 +520,7 @@ class CycleViewSet(BaseViewSet):
                 sync_overdue_on_status_change(updated_cycle, previous_status, new_status)
             sync_overdue_on_date_change(
                 updated_cycle,
+                prev_handoff=previous_test_handoff_date,
                 prev_end=previous_end_date,
             )
 
@@ -472,6 +535,7 @@ class CycleViewSet(BaseViewSet):
                 "suggested_test_scope",
                 "start_date",
                 "end_date",
+                "test_handoff_date",
                 "owned_by_id",
                 "view_props",
                 "sort_order",
@@ -489,6 +553,11 @@ class CycleViewSet(BaseViewSet):
                 "status",
                 "has_active_overdue",
                 "has_overdue_history",
+                "has_active_dev_overdue",
+                "has_active_test_overdue",
+                "has_dev_overdue_history",
+                "has_test_overdue_history",
+                "active_overdue_phase",
                 "created_by",
             ).first()
 
@@ -496,7 +565,7 @@ class CycleViewSet(BaseViewSet):
             project = Project.objects.get(id=self.kwargs.get("project_id"))
             project_timezone = project.timezone
 
-            datetime_fields = ["start_date", "end_date"]
+            datetime_fields = ["start_date", "end_date", "test_handoff_date"]
             cycle = user_timezone_converter(cycle, datetime_fields, project_timezone)
             origin = base_host(request=request, is_app=True)
 
@@ -586,29 +655,35 @@ class CycleViewSet(BaseViewSet):
                 # model fields
                 "name",
                 "description",
-                "suggested_test_scope",
-                "start_date",
-                "end_date",
-                "owned_by_id",
-                "view_props",
-                "sort_order",
-                "external_source",
-                "external_id",
-                "progress_snapshot",
-                "sub_issues",
-                "logo_props",
-                "version",
-                # meta fields
-                "is_favorite",
-                "total_issues",
-                "completed_issues",
-                "assignee_ids",
-                "status",
-                "has_active_overdue",
-                "has_overdue_history",
-                "created_by",
-            )
-            .first()
+            "suggested_test_scope",
+            "start_date",
+            "end_date",
+            "test_handoff_date",
+            "owned_by_id",
+            "view_props",
+            "sort_order",
+            "external_source",
+            "external_id",
+            "progress_snapshot",
+            "sub_issues",
+            "logo_props",
+            "version",
+            # meta fields
+            "is_favorite",
+            "total_issues",
+            "completed_issues",
+            "assignee_ids",
+            "status",
+            "has_active_overdue",
+            "has_overdue_history",
+            "has_active_dev_overdue",
+            "has_active_test_overdue",
+            "has_dev_overdue_history",
+            "has_test_overdue_history",
+            "active_overdue_phase",
+            "created_by",
+        )
+        .first()
         )
 
         if data is None:
@@ -618,7 +693,7 @@ class CycleViewSet(BaseViewSet):
         # Fetch the project timezone
         project = Project.objects.get(id=self.kwargs.get("project_id"))
         project_timezone = project.timezone
-        datetime_fields = ["start_date", "end_date"]
+        datetime_fields = ["start_date", "end_date", "test_handoff_date"]
         data = user_timezone_converter(data, datetime_fields, project_timezone)
 
         recent_visited_task.delay(
