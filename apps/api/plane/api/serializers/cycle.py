@@ -71,13 +71,6 @@ class CycleCreateSerializer(BaseSerializer):
             raise serializers.ValidationError("Project not found")
         if not project.cycle_view:
             raise serializers.ValidationError("Cycles are not enabled for this project")
-        if (
-            data.get("start_date", None) is not None
-            and data.get("end_date", None) is not None
-            and data.get("start_date", None) > data.get("end_date", None)
-        ):
-            raise serializers.ValidationError("Start date cannot exceed end date")
-
         if data.get("start_date", None) is not None and data.get("end_date", None) is not None:
             data["start_date"] = convert_to_utc(
                 date=str(data.get("start_date").date()),
@@ -88,6 +81,8 @@ class CycleCreateSerializer(BaseSerializer):
                 date=str(data.get("end_date", None).date()),
                 project_id=project_id,
             )
+            if data.get("start_date", None) > data.get("end_date", None):
+                raise serializers.ValidationError("Start date cannot exceed end date")
 
         if not data.get("owned_by"):
             data["owned_by"] = self.context["request"].user
