@@ -18,7 +18,7 @@ from plane.db.models import CaseReview, CaseReviewModule, CaseReviewThrough, Cas
     TestCaseRepository, TestCaseVersion
 from plane.bgtasks.test_case_activities_task import test_case_activity
 from plane.utils.paginator import CustomPaginator
-from plane.utils.qa import update_case_review_status
+from plane.utils.qa import update_case_review_status, update_review_status
 from plane.utils.response import list_response
 from plane.app.views.qa.filters import CaseReviewFilter
 from plane.app.views.qa.plan import NumericSuffixCodeOrderingFilter
@@ -202,6 +202,8 @@ class CaseReviewView(BaseViewSet):
                  to_create_case_ids],
                 batch_size=1000,
             )
+            update_review_status(review)
+
 
         return Response(status=status.HTTP_200_OK)
 

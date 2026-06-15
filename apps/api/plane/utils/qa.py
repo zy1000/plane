@@ -1,7 +1,22 @@
 from plane.db.models import CaseReview, CaseReviewRecord, CaseReviewThrough, TestCase
 
+def update_review_status(cr: CaseReview):
+    """用例评审状态变更"""
+    through_results = set(
+        CaseReviewThrough.objects.filter(review=cr).values_list('result', flat=True)
+    )
+    if (
+            CaseReviewThrough.Result.NOT_START in through_results or
+            CaseReviewThrough.Result.PROCESS in through_results or
+            CaseReviewThrough.Result.RE_REVIEW in through_results
+    ):
+        cr.state = CaseReview.State.PROGRESS
+    else:
+        cr.state = CaseReview.State.COMPLETED
+    cr.save()
 
 def update_case_review_status(cr, crt, assignee_id=None):
+    """更新某个执行记录的状态"""
     if cr.mode == CaseReview.ReviewMode.SINGLE:
         target_assignee_id = assignee_id or cr.assignees.values_list('id', flat=True).first()
         last_record = (
@@ -49,18 +64,7 @@ def update_case_review_status(cr, crt, assignee_id=None):
                 crt.result = CaseReviewThrough.Result.PROCESS
             crt.save()
 
-    through_results = set(
-        CaseReviewThrough.objects.filter(review=cr).values_list('result', flat=True)
-    )
-    if (
-            CaseReviewThrough.Result.NOT_START in through_results or
-            CaseReviewThrough.Result.PROCESS in through_results or
-            CaseReviewThrough.Result.RE_REVIEW in through_results
-    ):
-        cr.state = CaseReview.State.PROGRESS
-    else:
-        cr.state = CaseReview.State.COMPLETED
-    cr.save()
+    update_review_status(cr)
 
 
 def re_approval_case(case: TestCase):
