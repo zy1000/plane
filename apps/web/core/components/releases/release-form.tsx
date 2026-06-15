@@ -42,6 +42,7 @@ export function ReleaseForm(props: Props) {
     handleSubmit,
     control,
     reset,
+    watch,
   } = useForm<IRelease>({
     defaultValues: {
       name: data?.name || "",
@@ -136,10 +137,12 @@ export function ReleaseForm(props: Props) {
             <Controller
               control={control}
               name="start_date"
+              rules={{ required: t("start_date_is_required") }}
               render={({ field: { value: startDateValue, onChange: onChangeStartDate } }) => (
                 <Controller
                   control={control}
                   name="target_date"
+                  rules={{ required: t("end_date_is_required") }}
                   render={({ field: { value: endDateValue, onChange: onChangeEndDate } }) => (
                     <DateRangeDropdown
                       buttonVariant="border-with-text"
@@ -168,6 +171,18 @@ export function ReleaseForm(props: Props) {
             <Controller
               control={control}
               name="test_handoff_date"
+              rules={{
+                required: t("test_handoff_date_is_required"),
+                validate: (value) => {
+                  const testDate = getDate(value);
+                  if (!testDate) return undefined;
+                  const startDate = getDate(watch("start_date"));
+                  const endDate = getDate(watch("target_date"));
+                  if ((startDate && testDate < startDate) || (endDate && testDate > endDate))
+                    return t("test_handoff_date_out_of_range");
+                  return undefined;
+                },
+              }}
               render={({ field: { value, onChange } }) => (
                 <div className="h-7">
                   <DateDropdown
@@ -175,6 +190,8 @@ export function ReleaseForm(props: Props) {
                     value={getDate(value)}
                     onChange={(val) => onChange(val ? renderFormattedPayloadDate(val) : null)}
                     placeholder={t("test_handoff_date")}
+                    minDate={getDate(watch("start_date")) ?? undefined}
+                    maxDate={getDate(watch("target_date")) ?? undefined}
                     hideIcon
                     tabIndex={getIndex("test_handoff_date")}
                   />
@@ -217,6 +234,11 @@ export function ReleaseForm(props: Props) {
               )}
             />
           </div>
+          {(errors?.start_date || errors?.target_date || errors?.test_handoff_date) && (
+            <span className="text-11 text-danger-primary">
+              {errors?.start_date?.message ?? errors?.target_date?.message ?? errors?.test_handoff_date?.message}
+            </span>
+          )}
         </div>
       </div>
       <div className="flex items-center justify-end gap-2 border-t-[0.5px] border-subtle px-5 py-4">

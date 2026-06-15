@@ -64,23 +64,43 @@ class ReleaseWriteSerializer(BaseSerializer):
     def validate(self, data):
         status = data.get("status")
         user = self.context.get("user")
-        target_date = data.get(
-            "target_date", self.instance.target_date if self.instance else None
-        )
-        test_handoff_date = data.get(
-            "test_handoff_date", self.instance.test_handoff_date if self.instance else None
-        )
 
-        if (
-                data.get("start_date", None) is not None
-                and data.get("target_date", None) is not None
-                and data.get("start_date", None) > data.get("target_date", None)
-        ):
-            raise serializers.ValidationError("Start date cannot exceed target date")
+        def _effective(field):
+            if field in data:
+                return data.get(field)
+            return getattr(self.instance, field) if self.instance else None
 
+        start_date = _effective("start_date")
+        target_date = _effective("target_date")
+        test_handoff_date = _effective("test_handoff_date")
+
+        # 创建时开始日期、结束日期、转测日期均为必填
+        if self.instance is None:
+            if not start_date:
+                raise serializers.ValidationError({"error": "请设置发布开始日期"})
+            if not target_date:
+                raise serializers.ValidationError({"error": "请设置发布结束日期"})
+            if not test_handoff_date:
+                raise serializers.ValidationError({"error": "请设置转测日期"})
+        else:
+            # 更新时禁止把已有日期显式清空
+            if "start_date" in data and data.get("start_date") is None:
+                raise serializers.ValidationError({"error": "开始日期不能为空"})
+            if "target_date" in data and data.get("target_date") is None:
+                raise serializers.ValidationError({"error": "结束日期不能为空"})
+            if "test_handoff_date" in data and data.get("test_handoff_date") is None:
+                raise serializers.ValidationError({"error": "转测日期不能为空"})
+
+        # 开始日期不能晚于结束日期
+        if start_date and target_date and start_date > target_date:
+            raise serializers.ValidationError("开始时间不能晚于结束时间")
+
+        # 转测日期必须落在开始日期和结束日期之间
         if test_handoff_date:
             if not target_date:
                 raise serializers.ValidationError('请先设置发布结束日期')
+            if start_date and test_handoff_date < start_date:
+                raise serializers.ValidationError('转测日期不能早于发布开始日期')
             if test_handoff_date > target_date:
                 raise serializers.ValidationError('转测日期不能晚于发布结束日期')
         # 检查状态变更是否符合规则
@@ -120,7 +140,7 @@ class ReleaseWriteSerializer(BaseSerializer):
         if release_name:
             if Release.objects.filter(name=release_name, project=project).exists():
                 raise serializers.ValidationError(
-                    {"error": "Release with this name already exists"}
+                    {"error": "发布名称已存在"}
                 )
 
         release = Release.objects.create(**validated_data, project=project)
@@ -155,7 +175,7 @@ class ReleaseWriteSerializer(BaseSerializer):
                             .exists()
             ):
                 raise serializers.ValidationError(
-                    {"error": "Release with this name already exists"}
+                    {"error": "发布名称已存在"}
                 )
 
         if members is not None:
