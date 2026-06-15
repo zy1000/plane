@@ -1,3 +1,6 @@
+from collections import defaultdict
+
+from django.db.models import Prefetch
 from rest_framework import status
 from rest_framework.response import Response
 
@@ -10,6 +13,8 @@ from plane.app.permissions import (
 from plane.app.serializers.workflow import (
     IssueTransitionActionSerializer,
     IssueTransitionRecordListSerializer,
+    WorkflowFlowchartStateSerializer,
+    WorkflowFlowchartTransitionSerializer,
     WorkflowSerializer,
     WorkflowTransitionSerializer,
 )
@@ -19,6 +24,7 @@ from plane.db.models import (
     IssueTransitionRecord,
     ProjectMember,
     ProjectRole,
+    State,
     TransitionRecordStatus,
     Workflow,
     WorkflowApproverTarget,
@@ -361,6 +367,85 @@ class WorkflowTransitionAPIView(BaseAPIView):
             qs = qs.filter(id=transition_id)
         qs.delete(soft=False)
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class WorkflowFlowchartAPIView(BaseAPIView):
+    """
+    GET /workspaces/<slug>/projects/<project_id>/workflows/flowchart/?issue_type_id=<可选>
+
+    返回项目下「启用中」工作流的流程图聚合数据，供工作项页面只读查看。
+    不设置工作流细粒度权限，凡是能进入该项目工作项页面的成员（含访客）都可查看。
+    数据已在后端解析好状态节点、流转边、发起人/目标负责人/审批人、审批规则文案
+    与必填字段，前端只负责渲染，无需再发额外请求拼接成员/角色/字段名称。
+    """
+
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    def get(self, request, slug, project_id):
+        issue_type_id = request.query_params.get("issue_type_id")
+
+        # 未软删的流转对象，预取成员头像资源与角色，避免逐条额外查询
+        principal_qs = (
+            WorkflowTransitionPrincipal.objects.filter(deleted_at__isnull=True)
+            .select_related("member", "member__avatar_asset", "role")
+        )
+        required_field_qs = WorkflowTransitionRequiredField.objects.filter(
+            deleted_at__isnull=True
+        ).select_related("extra_field")
+        transitions_qs = (
+            WorkflowTransition.objects.filter(project_id=project_id)
+            .select_related("from_state", "to_state")
+            .prefetch_related(
+                Prefetch("principals", queryset=principal_qs),
+                Prefetch("required_fields", queryset=required_field_qs),
+            )
+            .order_by("from_state__sequence", "to_state__sequence")
+        )
+
+        workflows = (
+            Workflow.objects.filter(project_id=project_id, is_active=True)
+            .select_related("issue_type")
+            .prefetch_related(Prefetch("transitions", queryset=transitions_qs))
+            .order_by("issue_type__name")
+        )
+        if issue_type_id:
+            workflows = workflows.filter(issue_type_id=issue_type_id)
+
+        workflows = list(workflows)
+
+        # 一次性取出相关工作项类型的状态（State 默认管理器已排除 triage 状态）
+        issue_type_ids = [workflow.issue_type_id for workflow in workflows]
+        states_by_type = defaultdict(list)
+        if issue_type_ids:
+            states = State.objects.filter(
+                project_id=project_id,
+                issue_type_id__in=issue_type_ids,
+            ).order_by("sequence")
+            for state in states:
+                states_by_type[state.issue_type_id].append(state)
+
+        results = []
+        for workflow in workflows:
+            results.append(
+                {
+                    "issue_type_id": str(workflow.issue_type_id),
+                    "issue_type_name": workflow.issue_type.name,
+                    "logo_props": workflow.issue_type.logo_props,
+                    "workflow": {
+                        "id": str(workflow.id),
+                        "name": workflow.name,
+                        "description": workflow.description,
+                        "is_active": workflow.is_active,
+                    },
+                    "states": WorkflowFlowchartStateSerializer(
+                        states_by_type.get(workflow.issue_type_id, []), many=True
+                    ).data,
+                    "transitions": WorkflowFlowchartTransitionSerializer(
+                        workflow.transitions.all(), many=True
+                    ).data,
+                }
+            )
+
+        return Response({"results": results})
 
 
 class MyApprovalsAPIView(BaseAPIView):

@@ -2,13 +2,52 @@ from rest_framework import serializers
 
 from plane.app.serializers import BaseSerializer
 from plane.db.models import (
+    ApprovalType,
     IssueTransitionApprovalRecord,
     IssueTransitionRecord,
     IssueType,
     State,
     Workflow,
+    WorkflowApproverTarget,
+    WorkflowPrincipalDimension,
+    WorkflowPrincipalKind,
     WorkflowTransition,
 )
+
+# 动态对象（特殊审批对象）的中文展示文案
+DYNAMIC_TARGET_LABELS = {
+    WorkflowApproverTarget.ASSIGNEES: "工作项负责人",
+    WorkflowApproverTarget.CREATED_BY: "工作项创建人",
+}
+
+
+def build_workflow_principal_item(principal):
+    """把一个流转对象（成员/角色/动态对象）转换成前端可直接展示的字典。"""
+    if principal.kind == WorkflowPrincipalKind.MEMBER and principal.member_id:
+        member = principal.member
+        return {
+            "kind": "member",
+            "id": str(principal.member_id),
+            "label": member.display_name or member.email or "成员",
+            "avatar_url": member.avatar_url,
+        }
+    if principal.kind == WorkflowPrincipalKind.ROLE and principal.role_id:
+        return {
+            "kind": "role",
+            "id": str(principal.role_id),
+            "label": principal.role.name,
+            "avatar_url": None,
+        }
+    if principal.kind == WorkflowPrincipalKind.DYNAMIC and principal.dynamic_target:
+        return {
+            "kind": "dynamic",
+            "id": principal.dynamic_target,
+            "label": DYNAMIC_TARGET_LABELS.get(
+                principal.dynamic_target, principal.dynamic_target
+            ),
+            "avatar_url": None,
+        }
+    return None
 
 
 class WorkflowSerializer(BaseSerializer):
@@ -141,3 +180,91 @@ class IssueTransitionRecordListSerializer(BaseSerializer):
 class IssueTransitionActionSerializer(serializers.Serializer):
     action = serializers.ChoiceField(choices=["approved", "rejected"])
     comment = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+class WorkflowFlowchartStateSerializer(BaseSerializer):
+    """流程图中的状态节点（只读）。"""
+
+    class Meta:
+        model = State
+        fields = ["id", "name", "color", "group"]
+        read_only_fields = fields
+
+
+class WorkflowFlowchartTransitionSerializer(BaseSerializer):
+    """
+    流程图中的一条流转边（只读），附带已解析好的发起人、目标负责人、
+    审批人、审批规则文案与必填字段，前端无需再二次拼接。
+    依赖调用方对 principals / required_fields 做过滤未删除的 prefetch。
+    """
+
+    from_state_id = serializers.UUIDField(read_only=True, allow_null=True)
+    to_state_id = serializers.UUIDField(read_only=True, allow_null=True)
+    approval_rule_label = serializers.SerializerMethodField()
+    initiators = serializers.SerializerMethodField()
+    assignees = serializers.SerializerMethodField()
+    approvers = serializers.SerializerMethodField()
+    required_fields = serializers.SerializerMethodField()
+
+    class Meta:
+        model = WorkflowTransition
+        fields = [
+            "id",
+            "from_state_id",
+            "to_state_id",
+            "approval_type",
+            "required_count",
+            "approval_rule_label",
+            "initiators",
+            "assignees",
+            "approvers",
+            "required_fields",
+        ]
+        read_only_fields = fields
+
+    def _principals(self, obj, dimension):
+        items = []
+        for principal in obj.principals.all():
+            if principal.dimension != dimension:
+                continue
+            item = build_workflow_principal_item(principal)
+            if item:
+                items.append(item)
+        return items
+
+    def get_initiators(self, obj):
+        return self._principals(obj, WorkflowPrincipalDimension.INITIATOR)
+
+    def get_assignees(self, obj):
+        return self._principals(obj, WorkflowPrincipalDimension.ASSIGNEE)
+
+    def get_approvers(self, obj):
+        return self._principals(obj, WorkflowPrincipalDimension.APPROVER)
+
+    def get_required_fields(self, obj):
+        fields = []
+        for required in obj.required_fields.all():
+            if not required.extra_field_id:
+                continue
+            fields.append(
+                {
+                    "id": str(required.extra_field_id),
+                    "name": required.extra_field.name,
+                    "field_type": required.extra_field.field_type,
+                }
+            )
+        return fields
+
+    def get_approval_rule_label(self, obj):
+        approver_count = sum(
+            1
+            for principal in obj.principals.all()
+            if principal.dimension == WorkflowPrincipalDimension.APPROVER
+        )
+        if approver_count == 0:
+            return "无需审批"
+        if obj.approval_type == ApprovalType.ALL:
+            return "需全部审批人通过"
+        if obj.approval_type == ApprovalType.ANY:
+            return "任意一人通过即可"
+        return f"需 {max(1, obj.required_count or 1)} 人通过"

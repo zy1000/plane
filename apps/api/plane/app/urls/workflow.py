@@ -6,6 +6,7 @@ from plane.app.views.workflow.base import (
     MyApprovalsAPIView,
     TransitionRecordActionAPIView,
     WorkflowAPIView,
+    WorkflowFlowchartAPIView,
     WorkflowTransitionAPIView,
     WorkspaceBatchIssueTransitionRecordsAPIView,
 )
@@ -15,6 +16,11 @@ urlpatterns = [
         "workspaces/<str:slug>/projects/<uuid:project_id>/workflows/",
         WorkflowAPIView.as_view(),
         name="project-workflows",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/workflows/flowchart/",
+        WorkflowFlowchartAPIView.as_view(),
+        name="project-workflows-flowchart",
     ),
     path(
         "workspaces/<str:slug>/projects/<uuid:project_id>/workflows/<uuid:workflow_id>/transitions/",

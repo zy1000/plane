@@ -7,7 +7,7 @@
 import { observer } from "mobx-react";
 import { useParams, usePathname } from "next/navigation";
 // icons
-import { Circle, ClipboardCheck } from "lucide-react";
+import { Circle, ClipboardCheck, GitBranch } from "lucide-react";
 // plane imports
 import {
   EUserPermissions,
@@ -28,6 +28,7 @@ import { CountChip } from "@/components/common/count-chip";
 // constants
 import { HeaderFilters } from "@/components/issues/filters";
 import { WorkflowApprovalModal } from "@/components/issues/workflow-approval-modal";
+import { WorkflowFlowchartModal } from "@/components/issues/workflow-flowchart-modal";
 import { IssueExportModal } from "@/components/issues/export/export-modal";
 import { stringifyAppliedFilters } from "@/components/issues/export/utils";
 import { ImportIssuesModal } from "@/components/issues/import";
@@ -43,6 +44,7 @@ import { useUserPermissions } from "@/hooks/store/user";
 import { useAppRouter } from "@/hooks/use-app-router";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 import { useWorkflowApprovals } from "@/hooks/store/use-workflow-approvals";
+import { useProjectWorkflowFlowchart } from "@/hooks/store/use-project-workflow-flowchart";
 // plane web imports
 import { CommonProjectBreadcrumbs } from "@/plane-web/components/breadcrumbs/common";
 import { getProjectIssueScopeFromPathname } from "@/store/issue/project";
@@ -80,11 +82,20 @@ export const IssuesHeader = observer(function IssuesHeader() {
   const [isApprovalModalOpen, setIsApprovalModalOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isFlowchartModalOpen, setIsFlowchartModalOpen] = useState(false);
 
   const { pendingCount, fetchPendingCount } = useWorkflowApprovals(
     workspaceSlug?.toString(),
     projectId?.toString()
   );
+
+  // 工作流流程图：仅当项目存在启用中的工作流时展示入口，所有项目成员均可查看
+  const {
+    flowcharts,
+    hasActiveWorkflow,
+    isLoading: isFlowchartLoading,
+    fetchFlowchart,
+  } = useProjectWorkflowFlowchart(workspaceSlug?.toString(), projectId?.toString());
 
   // 页面加载时拉取待审批数量（用于红点）
   useEffect(() => {
@@ -92,6 +103,13 @@ export const IssuesHeader = observer(function IssuesHeader() {
       fetchPendingCount();
     }
   }, [workspaceSlug, projectId, fetchPendingCount]);
+
+  // 页面加载时拉取启用中的工作流流程图（用于入口可见性与弹框渲染）
+  useEffect(() => {
+    if (workspaceSlug && projectId) {
+      fetchFlowchart();
+    }
+  }, [workspaceSlug, projectId, fetchFlowchart]);
 
   const filteredQueryString = useMemo(() => {
     if (!projectId) return "";
@@ -160,6 +178,19 @@ export const IssuesHeader = observer(function IssuesHeader() {
             canUserCreateIssue={canUserCreateIssue}
           />
         </div>
+        {hasActiveWorkflow && (
+          <div className="relative hidden md:block">
+            <Button
+              variant="secondary"
+              size="lg"
+              onClick={() => setIsFlowchartModalOpen(true)}
+              className="flex items-center gap-1"
+            >
+              <GitBranch className="h-3.5 w-3.5 rotate-90" />
+              工作流
+            </Button>
+          </div>
+        )}
         {canUserCreateIssue && (
           <>
             <Button
@@ -207,6 +238,14 @@ export const IssuesHeader = observer(function IssuesHeader() {
             }}
             workspaceSlug={workspaceSlug.toString()}
             projectId={projectId.toString()}
+          />
+        )}
+        {isFlowchartModalOpen && (
+          <WorkflowFlowchartModal
+            isOpen={isFlowchartModalOpen}
+            onClose={() => setIsFlowchartModalOpen(false)}
+            flowcharts={flowcharts}
+            isLoading={isFlowchartLoading}
           />
         )}
         {workspaceSlug && projectId && (

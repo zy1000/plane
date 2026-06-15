@@ -38,6 +38,19 @@
     }
   }
 
+  /* slide in from right */
+  --animate-slide-in-from-right: slideInFromRight 0.25s ease-out forwards;
+  @keyframes slideInFromRight {
+    0% {
+      transform: translateX(16px);
+      opacity: 0;
+    }
+    100% {
+      transform: translateX(0);
+      opacity: 1;
+    }
+  }
+
   /* slide out */
   --animate-slide-out: slideOut 0.25s ease-out forwards;
   @keyframes slideOut {

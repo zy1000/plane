@@ -98,6 +98,61 @@ export type TApprovalActionPayload = {
   comment?: string;
 };
 
+// ---- 工作流流程图（只读聚合，后端已解析好展示字段） ----
+
+export type TFlowchartPrincipalKind = "member" | "role" | "dynamic";
+
+export type TFlowchartPrincipal = {
+  kind: TFlowchartPrincipalKind;
+  id: string;
+  label: string;
+  avatar_url: string | null;
+};
+
+export type TFlowchartRequiredField = {
+  id: string;
+  name: string;
+  field_type: string;
+};
+
+export type TFlowchartState = {
+  id: string;
+  name: string;
+  color: string;
+  group: string;
+};
+
+export type TFlowchartTransition = {
+  id: string;
+  from_state_id: string | null;
+  to_state_id: string | null;
+  approval_type: TApprovalType;
+  required_count: number | null;
+  approval_rule_label: string;
+  initiators: TFlowchartPrincipal[];
+  assignees: TFlowchartPrincipal[];
+  approvers: TFlowchartPrincipal[];
+  required_fields: TFlowchartRequiredField[];
+};
+
+export type TWorkflowFlowchart = {
+  issue_type_id: string;
+  issue_type_name: string;
+  logo_props: Record<string, unknown> | null;
+  workflow: {
+    id: string;
+    name: string;
+    description: string;
+    is_active: boolean;
+  };
+  states: TFlowchartState[];
+  transitions: TFlowchartTransition[];
+};
+
+export type TWorkflowFlowchartResponse = {
+  results: TWorkflowFlowchart[];
+};
+
 export class ProjectWorkflowService extends APIService {
   constructor() {
     super(API_BASE_URL);
@@ -319,6 +374,23 @@ export class ProjectWorkflowService extends APIService {
       data
     )
       .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /**
+   * 获取项目下启用中的工作流流程图聚合数据（只读）。
+   * 不传 issueTypeId 时返回所有启用工作流，可用于判断是否展示入口与默认渲染。
+   */
+  async fetchWorkflowFlowchart(
+    workspaceSlug: string,
+    projectId: string,
+    issueTypeId?: string
+  ): Promise<TWorkflowFlowchart[]> {
+    const params = issueTypeId ? { issue_type_id: issueTypeId } : undefined;
+    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/workflows/flowchart/`, { params })
+      .then((response) => (response?.data as TWorkflowFlowchartResponse)?.results ?? [])
       .catch((error) => {
         throw error?.response?.data;
       });
