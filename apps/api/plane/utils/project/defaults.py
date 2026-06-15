@@ -385,7 +385,7 @@ def create_default_bug_workflow(issue_types: list[IssueType], **kwargs):
             workspace=kwargs["workspace"],
             from_state=from_state,
             to_state=to_state,
-            approval_type=rule_info.get('approval_type', ApprovalType.ANY),
+            approval_type=rule_info.get('approval_type', ApprovalType.ALL),
             required_count=rule_info.get('required_count'),
         )
 

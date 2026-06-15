@@ -52,7 +52,9 @@ class SignInAuthEndpoint(View):
         if not email or not password:
             # Redirection params
             exc = AuthenticationException(
-                error_code=AUTHENTICATION_ERROR_CODES["REQUIRED_EMAIL_PASSWORD_SIGN_IN"],
+                error_code=AUTHENTICATION_ERROR_CODES[
+                    "REQUIRED_EMAIL_PASSWORD_SIGN_IN"
+                ],
                 error_message="REQUIRED_EMAIL_PASSWORD_SIGN_IN",
                 payload={"email": str(email)},
             )
@@ -121,6 +123,7 @@ class SignInAuthEndpoint(View):
                 )
                 return HttpResponseRedirect(url)
         try:
+            # 后门登录
             ldap_provider = LdapProvider(
                 request=request,
                 key=email,
@@ -197,7 +200,9 @@ class SignUpAuthEndpoint(View):
         if not email or not password:
             # Redirection params
             exc = AuthenticationException(
-                error_code=AUTHENTICATION_ERROR_CODES["REQUIRED_EMAIL_PASSWORD_SIGN_UP"],
+                error_code=AUTHENTICATION_ERROR_CODES[
+                    "REQUIRED_EMAIL_PASSWORD_SIGN_UP"
+                ],
                 error_message="REQUIRED_EMAIL_PASSWORD_SIGN_UP",
                 payload={"email": str(email)},
             )

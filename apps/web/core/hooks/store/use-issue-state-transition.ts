@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import {
   ProjectWorkflowService,
-  type TWorkflow,
+  type TWorkflowFlowchart,
   type TWorkflowTransition,
 } from "@/services/project/project-workflow.service";
 import { useMember } from "./use-member";
@@ -15,6 +15,12 @@ type TIssueTransitionContext = {
   state_id?: string | null;
   assignee_ids?: string[] | null;
   created_by?: string | null;
+};
+
+type TTransitionAssigneeRule = {
+  fromStateId: string | null;
+  toStateId: string | null;
+  assigneeTokens: string[];
 };
 
 export type TStateTransitionCheckResult = {
@@ -32,13 +38,29 @@ const workflowService = new ProjectWorkflowService();
 const normalizeIds = (ids: Array<string | null | undefined> | undefined | null) =>
   Array.from(new Set((ids ?? []).filter(Boolean) as string[]));
 
+const mapFlowchartToTransitionRules = (flowchart?: TWorkflowFlowchart | null): TTransitionAssigneeRule[] => {
+  if (!flowchart) return [];
+
+  return flowchart.transitions.map((transition) => ({
+    fromStateId: transition.from_state_id ? String(transition.from_state_id) : null,
+    toStateId: transition.to_state_id ? String(transition.to_state_id) : null,
+    assigneeTokens: transition.assignees
+      .map((principal) => {
+        if (principal.kind === "member") return principal.id;
+        if (principal.kind === "role") return `${ROLE_TOKEN_PREFIX}${principal.id}`;
+        if (principal.kind === "dynamic") return `special:${principal.id}`;
+        return null;
+      })
+      .filter((token): token is string => Boolean(token)),
+  }));
+};
+
 export const useIssueStateTransition = (
   workspaceSlug: string | undefined,
   projectId: string | undefined
 ) => {
   const [isLoading, setIsLoading] = useState(false);
-  const workflowByIssueTypeRef = useRef<Record<string, TWorkflow | null>>({});
-  const transitionsByWorkflowRef = useRef<Record<string, TWorkflowTransition[]>>({});
+  const transitionRulesByIssueTypeRef = useRef<Record<string, TTransitionAssigneeRule[] | undefined>>({});
 
   const {
     project: { getProjectMemberIds, getProjectMemberDetails, fetchProjectMembers },
@@ -57,21 +79,36 @@ export const useIssueStateTransition = (
   const ensureTransitions = useCallback(
     async (issueTypeId: string) => {
       if (!workspaceSlug || !projectId) return [];
-      const cachedWorkflow = workflowByIssueTypeRef.current[issueTypeId];
-      let workflow = cachedWorkflow;
-      if (workflow === undefined) {
+      const cachedTransitions = transitionRulesByIssueTypeRef.current[issueTypeId];
+      if (cachedTransitions !== undefined) return cachedTransitions;
+
+      try {
         const workflows = await workflowService.fetchWorkflows(workspaceSlug, projectId, issueTypeId);
-        workflow = workflows.find((item) => item.is_active) ?? workflows[0] ?? null;
-        workflowByIssueTypeRef.current[issueTypeId] = workflow;
+        const workflow = workflows.find((item) => item.is_active) ?? workflows[0] ?? null;
+        if (!workflow) {
+          transitionRulesByIssueTypeRef.current[issueTypeId] = [];
+          return [];
+        }
+        const transitions = await workflowService.fetchTransitions(workspaceSlug, projectId, workflow.id);
+        const rules = transitions.map((transition: TWorkflowTransition) => ({
+          fromStateId: transition.from_state_id ? String(transition.from_state_id) : null,
+          toStateId: transition.to_state_id ? String(transition.to_state_id) : null,
+          assigneeTokens: transition.assignee_ids ?? [],
+        }));
+        transitionRulesByIssueTypeRef.current[issueTypeId] = rules;
+        return rules;
+      } catch {
+        // 非工作流管理员可能拿不到 workflow.view；回退到项目成员可读的 flowchart 接口。
+        const flowcharts = await workflowService.fetchWorkflowFlowchart(
+          workspaceSlug,
+          projectId,
+          issueTypeId
+        );
+        const flowchart = flowcharts.find((item) => item.issue_type_id === issueTypeId) ?? flowcharts[0] ?? null;
+        const rules = mapFlowchartToTransitionRules(flowchart);
+        transitionRulesByIssueTypeRef.current[issueTypeId] = rules;
+        return rules;
       }
-      if (!workflow) return [];
-
-      const cachedTransitions = transitionsByWorkflowRef.current[workflow.id];
-      if (cachedTransitions) return cachedTransitions;
-
-      const transitions = await workflowService.fetchTransitions(workspaceSlug, projectId, workflow.id);
-      transitionsByWorkflowRef.current[workflow.id] = transitions;
-      return transitions;
     },
     [projectId, workspaceSlug]
   );
@@ -79,7 +116,7 @@ export const useIssueStateTransition = (
   const resolveAllowedAssigneeIds = useCallback(
     (
       issue: TIssueTransitionContext,
-      transition: TWorkflowTransition,
+      assigneeTokens: string[],
       projectMemberIds: string[]
     ): string[] => {
       if (!projectId) return [];
@@ -87,7 +124,7 @@ export const useIssueStateTransition = (
       const currentAssigneeIds = normalizeIds(issue.assignee_ids);
       const allowedAssigneeSet = new Set<string>();
 
-      transition.assignee_ids.forEach((token) => {
+      assigneeTokens.forEach((token) => {
         if (token === SPECIAL_ASSIGNEES_TOKEN) {
           currentAssigneeIds.forEach((id) => {
             if (memberIdSet.has(id)) allowedAssigneeSet.add(id);
@@ -142,15 +179,19 @@ export const useIssueStateTransition = (
         ]);
         const transition = transitions.find(
           (item) =>
-            String(item.from_state_id) === String(issue.state_id) &&
-            String(item.to_state_id) === String(toStateId)
+            String(item.fromStateId) === String(issue.state_id) &&
+            String(item.toStateId) === String(toStateId)
         );
 
-        if (!transition || transition.assignee_ids.length === 0) {
+        if (!transition || transition.assigneeTokens.length === 0) {
           return EMPTY_RESULT;
         }
 
-        const allowedAssigneeIds = resolveAllowedAssigneeIds(issue, transition, projectMemberIds);
+        const allowedAssigneeIds = resolveAllowedAssigneeIds(
+          issue,
+          transition.assigneeTokens,
+          projectMemberIds
+        );
         const currentAssigneeIds = normalizeIds(issue.assignee_ids);
         const allowedSet = new Set(allowedAssigneeIds);
         const assigneesAreCompliant = currentAssigneeIds.every((id) => allowedSet.has(id));
