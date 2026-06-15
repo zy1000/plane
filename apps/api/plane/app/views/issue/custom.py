@@ -136,18 +136,20 @@ class IssueAPI(BaseViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        if row_numbers:
-            selected = set(row_numbers)
-            rows = [r for r in rows if r.get("__row_number__") in selected]
-
         if not rows:
             return Response(
                 {"error": "未选择任何有效行，请至少勾选一行进行导入"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        result = build_issues(rows, mapping, project=project, user=request.user)
-        if result["success_count"] == 0:
+        result = build_issues(
+            rows,
+            mapping,
+            project=project,
+            user=request.user,
+            row_numbers=row_numbers or None,
+        )
+        if result["success_count"] == 0 and result.get("skipped_count", 0) == 0:
             return Response(result, status=status.HTTP_400_BAD_REQUEST)
         return Response(result, status=status.HTTP_200_OK)
 

@@ -39,6 +39,7 @@ export type ValidationRow = {
   row_number: number;
   title: string;
   passed: boolean;
+  duplicate: boolean;
   errors: string[];
   warnings: string[];
   error_reason: string;
@@ -48,6 +49,7 @@ export type ValidationRow = {
 export type ValidationResponse = {
   total_count: number;
   passed_count: number;
+  duplicate_count: number;
   all_passed: boolean;
   results: ValidationRow[];
 };
@@ -58,10 +60,18 @@ export type BulkImportFailure = {
   error: string;
 };
 
+export type BulkImportSkipped = {
+  row_number: number;
+  title: string;
+  reason: string;
+};
+
 export type BulkImportResponse = {
   total_count: number;
   success_count: number;
   created_ids: string[];
+  skipped_count: number;
+  skipped: BulkImportSkipped[];
   failed: BulkImportFailure[];
 };
 

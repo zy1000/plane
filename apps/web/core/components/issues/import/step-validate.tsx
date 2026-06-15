@@ -28,11 +28,16 @@ export function StepValidate({ validation, selectedRowKeys, passedRowKeys, onSel
         dataIndex: "passed",
         key: "passed",
         width: 90,
-        render: (passed: boolean) => (
-          <span className={passed ? "text-success-primary font-medium" : "text-danger-primary font-medium"}>
-            {passed ? "通过" : "不通过"}
-          </span>
-        ),
+        render: (_, record) => {
+          if (record.duplicate) {
+            return <span className="text-warning-primary font-medium">已存在</span>;
+          }
+          return (
+            <span className={record.passed ? "text-success-primary font-medium" : "text-danger-primary font-medium"}>
+              {record.passed ? "通过" : "不通过"}
+            </span>
+          );
+        },
       },
       {
         title: "错误 / 提示",
@@ -66,8 +71,10 @@ export function StepValidate({ validation, selectedRowKeys, passedRowKeys, onSel
       selectedRowKeys,
       preserveSelectedRowKeys: true,
       onChange: (keys) => onSelectionChange(keys as number[]),
-      // 已校验失败的行不允许勾选
-      getCheckboxProps: (record) => ({ disabled: !passedRowKeys.has(record.row_number) }),
+      // 已校验失败或已存在的行不允许勾选
+      getCheckboxProps: (record) => ({
+        disabled: record.duplicate || !passedRowKeys.has(record.row_number),
+      }),
     }),
     [selectedRowKeys, onSelectionChange, passedRowKeys]
   );
@@ -84,19 +91,25 @@ export function StepValidate({ validation, selectedRowKeys, passedRowKeys, onSel
           <div className="text-base font-medium text-primary">校验结果</div>
           <div className="mt-1 text-sm text-secondary">
             {validation
-              ? `通过 ${validation.passed_count} / ${validation.total_count} 行；已勾选 ${selectedRowKeys.length} 行`
+              ? `通过 ${validation.passed_count} / ${validation.total_count} 行；已存在 ${validation.duplicate_count ?? 0} 行将跳过；已勾选 ${selectedRowKeys.length} 行`
               : "暂无结果"}
           </div>
         </div>
         {validation && (
           <div
             className={
-              validation.all_passed
-                ? "rounded-full bg-success-subtle px-3 py-1 text-sm font-medium text-success-primary"
-                : "rounded-full bg-danger-subtle px-3 py-1 text-sm font-medium text-danger-primary"
+              !validation.all_passed
+                ? "rounded-full bg-danger-subtle px-3 py-1 text-sm font-medium text-danger-primary"
+                : validation.duplicate_count > 0
+                  ? "rounded-full bg-warning-subtle px-3 py-1 text-sm font-medium text-warning-primary"
+                  : "rounded-full bg-success-subtle px-3 py-1 text-sm font-medium text-success-primary"
             }
           >
-            {validation.all_passed ? "全部通过，可开始导入" : "存在未通过行，可仅勾选通过行导入"}
+            {!validation.all_passed
+              ? "存在未通过行，可仅勾选通过行导入"
+              : validation.duplicate_count > 0
+                ? "全部通过校验，已存在行将自动跳过"
+                : "全部通过，可开始导入"}
           </div>
         )}
       </div>
@@ -122,7 +135,10 @@ export function StepValidate({ validation, selectedRowKeys, passedRowKeys, onSel
           pagination={false}
           bordered
           scroll={{ y: 360 }}
-          rowClassName={(record) => (record.passed ? "bg-success-subtle/30" : "bg-danger-subtle/30")}
+          rowClassName={(record) => {
+            if (record.duplicate) return "bg-warning-subtle/30";
+            return record.passed ? "bg-success-subtle/30" : "bg-danger-subtle/30";
+          }}
         />
       </div>
     </div>

@@ -157,7 +157,7 @@ export function useImportIssues(args: UseImportIssuesArgs) {
     try {
       const data: ValidationResponse = await issueService.validateImport(workspaceSlug, projectId, formData);
       setValidation(data);
-      const passedRows = (data?.results ?? []).filter((r) => r.passed).map((r) => r.row_number);
+      const passedRows = (data?.results ?? []).filter((r) => r.passed && !r.duplicate).map((r) => r.row_number);
       setSelectedRowKeys(passedRows);
       setStep("validate");
     } catch (error: any) {
@@ -176,12 +176,14 @@ export function useImportIssues(args: UseImportIssuesArgs) {
       message.error("请至少勾选一行进行导入");
       return;
     }
-    const passedRows = new Set(
-      (validation?.results ?? []).filter((r) => r.passed).map((r) => r.row_number)
+    const selectableRows = new Set(
+      (validation?.results ?? [])
+        .filter((r) => r.passed && !r.duplicate)
+        .map((r) => r.row_number)
     );
-    const hasFailedSelected = selectedRowKeys.some((row) => !passedRows.has(row));
+    const hasFailedSelected = selectedRowKeys.some((row) => !selectableRows.has(row));
     if (hasFailedSelected) {
-      message.error("所选行中存在未通过校验的项，请取消勾选后重试");
+      message.error("所选行中存在未通过校验或已存在的项，请取消勾选后重试");
       return;
     }
     const formData = new FormData();
@@ -192,8 +194,12 @@ export function useImportIssues(args: UseImportIssuesArgs) {
     setImporting(true);
     try {
       const data: BulkImportResponse = await issueService.bulkImport(workspaceSlug, projectId, formData);
-      if (data.success_count > 0) {
+      if (data.success_count > 0 && data.skipped_count > 0) {
+        message.success(`成功导入 ${data.success_count} 条工作项，跳过 ${data.skipped_count} 条已存在工作项`);
+      } else if (data.success_count > 0) {
         message.success(`成功导入 ${data.success_count} 条工作项`);
+      } else if (data.skipped_count > 0) {
+        message.success(`未新增工作项，已跳过 ${data.skipped_count} 条已存在工作项`);
       }
       if (data.failed && data.failed.length > 0) {
         message.warning(`有 ${data.failed.length} 条数据导入失败`);

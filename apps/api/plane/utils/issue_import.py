@@ -73,7 +73,7 @@ IMPORT_FIELD_DEFINITIONS: list[dict[str, Any]] = [
     {"key": FIELD_TYPE, "label": "类型", "required": True},
     {"key": FIELD_DESCRIPTION, "label": "描述", "required": False},
     {"key": FIELD_PRIORITY, "label": "优先级", "required": False},
-    {"key": FIELD_ASSIGNEES, "label": "负责人", "required": True},
+    {"key": FIELD_ASSIGNEES, "label": "负责人", "required": False},
     {"key": FIELD_LABELS, "label": "标签", "required": False},
     {"key": FIELD_MODULE, "label": "模块", "required": False},
     {"key": FIELD_CYCLE, "label": "迭代", "required": False},
@@ -127,6 +127,9 @@ class RowResult:
     warnings: list[str] = field(default_factory=list)
     resolved: dict[str, Any] = field(default_factory=dict)
     raw: dict[str, Any] = field(default_factory=dict)
+    duplicate: bool = False
+    duplicate_of_row: int | None = None
+    duplicate_of_issue_id: Any = None
 
     @property
     def passed(self) -> bool:
@@ -137,6 +140,7 @@ class RowResult:
             "row_number": self.row_number,
             "title": self.title,
             "passed": self.passed,
+            "duplicate": self.duplicate,
             "errors": list(self.errors),
             "warnings": list(self.warnings),
             "error_reason": "；".join(self.errors),
@@ -396,6 +400,23 @@ class _RowResolver:
             )
         )
 
+        # 缓存：项目内已有工作项（用于同父同名去重）。
+        self.existing_issue_by_id: dict[Any, Issue] = {}
+        self.sequence_id_to_id: dict[int, Any] = {}
+        self.existing_by_parent_name: dict[tuple[Any, str], Any] = {}
+        existing_issues = Issue.objects.filter(project_id=self.project_id).only(
+            "id", "parent_id", "sequence_id", "name"
+        )
+        for issue in existing_issues:
+            self.existing_issue_by_id[issue.id] = issue
+            self.sequence_id_to_id[issue.sequence_id] = issue.id
+            normalized_name = _normalize_issue_name(issue.name)
+            if not normalized_name:
+                continue
+            self.existing_by_parent_name.setdefault(
+                (issue.parent_id, normalized_name), issue.id
+            )
+
     # ---- 字段解析 ---------------------------------------------------------
 
     def resolve(self, raw_row: dict[str, Any], mapping: dict[str, str]) -> RowResult:
@@ -501,13 +522,11 @@ class _RowResolver:
             else:
                 result.resolved[FIELD_PRIORITY] = normalized
 
-        # assignees（必填：每行至少一名有效负责人） --------------------------
+        # assignees（可选：有值时需为有效负责人） --------------------------
         assignees_column = inv.get(FIELD_ASSIGNEES)
         if assignees_column:
             raw_value = raw_row.get(assignees_column)
             names = _split_multi(raw_value)
-            if not names:
-                result.errors.append("负责人不能为空")
             users: list[Any] = []
             for name in names:
                 candidates = self.member_by_display_name.get(name) or []
@@ -717,11 +736,14 @@ def validate_rows(
         results.append(result)
 
     _post_validate_parent_refs(results)
+    _mark_duplicates(resolver, results)
 
     passed_count = sum(1 for r in results if r.passed)
+    duplicate_count = sum(1 for r in results if r.duplicate)
     return {
         "total_count": len(results),
         "passed_count": passed_count,
+        "duplicate_count": duplicate_count,
         "all_passed": passed_count == len(results) and len(results) > 0,
         "results": [r.to_dict() for r in results],
     }
@@ -776,11 +798,99 @@ def _detect_parent_cycles(
             cursor = parent_map[cursor]
 
 
+def _normalize_issue_name(value: Any) -> str:
+    """导入去重的标题规范化（仅去首尾空格，保留大小写）。"""
+    return _clean_text(value)
+
+
+def _resolve_dedup_parent_scope(
+    parent_ref: Any,
+    resolver: _RowResolver,
+    by_row_number: dict[int, RowResult],
+) -> tuple[str, Any] | None:
+    """
+    返回判重作用域：
+    - ("db", parent_issue_id | None): 顶层或已存在父项
+    - ("row", parent_row_number): 本批父项（#行号）
+    """
+    if not isinstance(parent_ref, dict):
+        return ("db", None)
+    kind = parent_ref.get("kind")
+    value = parent_ref.get("value")
+    if kind == "existing":
+        parent_issue_id = resolver.sequence_id_to_id.get(value)
+        if parent_issue_id is None:
+            return None
+        return ("db", parent_issue_id)
+    if kind == "row":
+        target = by_row_number.get(value)
+        if target is None:
+            return None
+        if target.duplicate_of_issue_id is not None:
+            return ("db", target.duplicate_of_issue_id)
+        return ("row", target.row_number)
+    return None
+
+
+def _get_duplicate_warning(result: RowResult) -> str:
+    if result.duplicate_of_row is not None:
+        return "本次导入已有同名同父工作项，将跳过重复行"
+    return "相同父工作项下已存在同名工作项，将跳过导入"
+
+
+def _mark_duplicates(resolver: _RowResolver, results: list[RowResult]) -> None:
+    """标记同父同名重复行：先查 DB，再查本批已出现行。"""
+    seen: dict[tuple[str, Any, str], int] = {}
+    by_row_number: dict[int, RowResult] = {
+        result.row_number: result for result in results if result.row_number
+    }
+
+    for result in results:
+        result.duplicate = False
+        result.duplicate_of_row = None
+        result.duplicate_of_issue_id = None
+
+        if not result.passed:
+            continue
+
+        name_key = _normalize_issue_name(result.resolved.get(FIELD_NAME))
+        if not name_key:
+            continue
+
+        parent_scope = _resolve_dedup_parent_scope(
+            result.resolved.get(FIELD_PARENT), resolver, by_row_number
+        )
+        if parent_scope is None:
+            continue
+        scope_kind, scope_value = parent_scope
+
+        if scope_kind == "db":
+            existing_issue_id = resolver.existing_by_parent_name.get(
+                (scope_value, name_key)
+            )
+            if existing_issue_id is not None:
+                result.duplicate = True
+                result.duplicate_of_issue_id = existing_issue_id
+                result.warnings.append(_get_duplicate_warning(result))
+                continue
+
+        dedup_key = (scope_kind, scope_value, name_key)
+        first_row_number = seen.get(dedup_key)
+        if first_row_number is None:
+            seen[dedup_key] = result.row_number
+            continue
+
+        result.duplicate = True
+        result.duplicate_of_row = first_row_number
+        result.warnings.append(_get_duplicate_warning(result))
+
+
 def build_issues(
     rows: list[dict[str, Any]],
     mapping: dict[str, str],
     project,
     user,
+    row_numbers: list[int] | None = None,
 ) -> dict[str, Any]:
     """
     事务化执行导入。返回成功/失败统计；任一行失败即回滚整批。
@@ -791,13 +901,21 @@ def build_issues(
         result = resolver.resolve(raw_row, mapping)
         results.append(result)
     _post_validate_parent_refs(results)
+    _mark_duplicates(resolver, results)
 
-    failed = [r for r in results if not r.passed]
+    selected_row_numbers = (
+        set(row_numbers)
+        if row_numbers is not None
+        else {r.row_number for r in results if r.row_number}
+    )
+    failed = [r for r in results if r.row_number in selected_row_numbers and not r.passed]
     if failed:
         return {
             "total_count": len(results),
             "success_count": 0,
             "created_ids": [],
+            "skipped_count": 0,
+            "skipped": [],
             "failed": [
                 {
                     "row_number": r.row_number,
@@ -810,6 +928,7 @@ def build_issues(
 
     created_ids: list[str] = []
     label_cache: dict[str, Label] = dict(resolver.label_by_name)
+    skipped: list[dict[str, Any]] = []
 
     try:
         with transaction.atomic():
@@ -817,6 +936,31 @@ def build_issues(
 
             # 第一轮：建 Issue + 关联（跳过 parent 字段）
             for r in results:
+                if r.duplicate:
+                    skipped.append(
+                        {
+                            "row_number": r.row_number,
+                            "title": r.title,
+                            "reason": _get_duplicate_warning(r),
+                        }
+                    )
+                    duplicate_issue = None
+                    if r.duplicate_of_row is not None:
+                        duplicate_issue = row_to_issue.get(r.duplicate_of_row)
+                    elif r.duplicate_of_issue_id is not None:
+                        duplicate_issue = resolver.existing_issue_by_id.get(
+                            r.duplicate_of_issue_id
+                        )
+                    if duplicate_issue is None:
+                        raise ValueError(
+                            f"第 {r.row_number} 行重复项引用解析失败：row={r.duplicate_of_row}, issue_id={r.duplicate_of_issue_id}"
+                        )
+                    row_to_issue[r.row_number] = duplicate_issue
+                    continue
+
+                if r.row_number not in selected_row_numbers:
+                    continue
+
                 issue = _create_issue(
                     r,
                     project=project,
@@ -828,6 +972,8 @@ def build_issues(
 
             # 第二轮：回填父项
             for r in results:
+                if r.duplicate or r.row_number not in selected_row_numbers:
+                    continue
                 parent_ref = r.resolved.get(FIELD_PARENT)
                 if not isinstance(parent_ref, dict):
                     continue
@@ -846,6 +992,8 @@ def build_issues(
             "total_count": len(results),
             "success_count": 0,
             "created_ids": [],
+            "skipped_count": 0,
+            "skipped": [],
             "failed": [
                 {
                     "row_number": 0,
@@ -859,6 +1007,8 @@ def build_issues(
         "total_count": len(results),
         "success_count": len(created_ids),
         "created_ids": created_ids,
+        "skipped_count": len(skipped),
+        "skipped": skipped,
         "failed": [],
     }
 

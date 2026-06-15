@@ -9,7 +9,7 @@ export const IMPORT_FIELD_DEFINITIONS: ImportFieldDefinition[] = [
   { key: "type", label: "类型", required: true },
   { key: "description", label: "描述", required: false },
   { key: "priority", label: "优先级", required: false },
-  { key: "assignees", label: "负责人", required: true },
+  { key: "assignees", label: "负责人", required: false },
   { key: "labels", label: "标签", required: false },
   { key: "module", label: "模块", required: false },
   { key: "cycle", label: "迭代", required: false },
