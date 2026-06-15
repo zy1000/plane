@@ -17,7 +17,7 @@ import {
   type TFlowEdge,
   type TFlowNode,
 } from "./flow-layout";
-import { ApprovalRuleBadge, approvalRuleColor } from "./flow-shared";
+import { ApprovalRuleBadge, edgeMarkerColor, RequiredFieldsBadge } from "./flow-shared";
 import { TransitionDetailPanel } from "./transition-detail-panel";
 
 const ZOOM_MIN = 0.6;
@@ -293,11 +293,13 @@ export function WorkflowFlowGraph({ flowchart }: { flowchart: TWorkflowFlowchart
               </div>
             ))}
 
-            {/* 审批规则圆点（连线中点）：默认小彩点，悬停 / 选中时浮出完整规则 */}
+            {/* 连线中点圆点：仅当流转有审批规则（彩点）或必填字段（黄点）时显示，否则只保留连线 */}
             {layout.edges.map((edge) => {
+              const color = edgeMarkerColor(edge.transition);
+              if (!color) return null;
+              const hasApproval = edge.transition.approvers.length > 0;
               const active = isEdgeActive(edge);
               const dimmed = isEdgeDimmed(edge);
-              const color = approvalRuleColor(edge.transition);
               const showRule = emphasizedEdge?.id === edge.id;
               return (
                 <div
@@ -307,7 +309,11 @@ export function WorkflowFlowGraph({ flowchart }: { flowchart: TWorkflowFlowchart
                 >
                   {showRule ? (
                     <div className="pointer-events-none absolute bottom-full left-1/2 mb-2 -translate-x-1/2 whitespace-nowrap rounded-full bg-surface-1 shadow-md">
-                      <ApprovalRuleBadge transition={edge.transition} />
+                      {hasApproval ? (
+                        <ApprovalRuleBadge transition={edge.transition} />
+                      ) : (
+                        <RequiredFieldsBadge transition={edge.transition} />
+                      )}
                     </div>
                   ) : null}
                   <button
@@ -318,7 +324,11 @@ export function WorkflowFlowGraph({ flowchart }: { flowchart: TWorkflowFlowchart
                       e.stopPropagation();
                       setSelectedEdgeId(edge.id);
                     }}
-                    aria-label={`审批规则：${edge.transition.approval_rule_label}`}
+                    aria-label={
+                      hasApproval
+                        ? `审批规则：${edge.transition.approval_rule_label}`
+                        : `必填字段：${edge.transition.required_fields.length} 项`
+                    }
                     className="grid h-5 w-5 place-items-center rounded-full transition-opacity"
                     style={{ opacity: dimmed ? 0.25 : 1 }}
                   >

@@ -8,7 +8,7 @@
 
 import React from "react";
 import * as LucideIcons from "lucide-react";
-import { Layers, ShieldCheck, Sparkles, Users } from "lucide-react";
+import { Layers, ShieldCheck, Sparkles, Tag, Users } from "lucide-react";
 import { Avatar } from "@plane/ui";
 import type { TFlowchartPrincipal, TFlowchartState, TFlowchartTransition } from "@/services/project/project-workflow.service";
 
@@ -30,6 +30,21 @@ export const APPROVAL_RULE_COLORS: Record<string, string> = {
 export function approvalRuleColor(transition: TFlowchartTransition): string {
   const ruleKey = transition.approvers.length === 0 ? "none" : transition.approval_type;
   return APPROVAL_RULE_COLORS[ruleKey] ?? APPROVAL_RULE_COLORS.none;
+}
+
+/** 必填字段圆点颜色 - 黄色 */
+export const REQUIRED_FIELD_DOT_COLOR = "#eab308";
+
+/**
+ * 连线中点圆点的颜色：
+ * - 有审批规则 → 审批规则主题色（保持现状，紫色等）
+ * - 仅有必填字段 → 黄色
+ * - 两者都没有 → null（不画圆点，仅保留连线）
+ */
+export function edgeMarkerColor(transition: TFlowchartTransition): string | null {
+  if (transition.approvers.length > 0) return approvalRuleColor(transition);
+  if (transition.required_fields.length > 0) return REQUIRED_FIELD_DOT_COLOR;
+  return null;
 }
 
 /** 审批规则在连线徽章上的极简短标签 */
@@ -99,6 +114,20 @@ export function ApprovalRuleBadge({ transition, compact = false }: { transition:
     >
       <ShieldCheck className={compact ? "h-2.5 w-2.5" : "h-3 w-3"} />
       {label}
+    </span>
+  );
+}
+
+/** 必填字段徽章：流转无审批但有必填字段时，连线圆点悬浮 / 选中浮出 */
+export function RequiredFieldsBadge({ transition }: { transition: TFlowchartTransition }) {
+  const color = REQUIRED_FIELD_DOT_COLOR;
+  return (
+    <span
+      className="inline-flex flex-shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium"
+      style={{ color, backgroundColor: `${color}1f`, border: `1px solid ${color}40` }}
+    >
+      <Tag className="h-3 w-3" />
+      {transition.required_fields.length} 个必填字段
     </span>
   );
 }
