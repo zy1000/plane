@@ -7,7 +7,7 @@
 import { useEffect, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { Info } from "lucide-react";
-import { NETWORK_CHOICES, PROJECT_PRODUCT_TYPE_OPTIONS } from "@plane/constants";
+import { NETWORK_CHOICES, PROJECT_GRADE_OPTIONS, PROJECT_PRODUCT_TYPE_OPTIONS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 // plane imports
 import { Button } from "@plane/propel/button";
@@ -16,7 +16,7 @@ import { LockIcon } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Tooltip } from "@plane/propel/tooltip";
 import { EFileAssetType } from "@plane/types";
-import type { IProject, IWorkspace, TProjectProductType } from "@plane/types";
+import type { IProject, IWorkspace, TProjectGrade, TProjectProductType } from "@plane/types";
 import { CustomSelect, Input } from "@plane/ui";
 import { renderFormattedDate } from "@plane/utils";
 import { CoverImage } from "@/components/common/cover-image";
@@ -30,6 +30,7 @@ import { usePlatformOS } from "@/hooks/use-platform-os";
 // services
 import { ProjectService } from "@/services/project";
 // local imports
+import { ProjectGradeBadge } from "@/components/project/common/project-grade-badge";
 import { ProjectNetworkIcon } from "./project-network-icon";
 import { ProjectDescriptionFormEditor } from "./project-description-form-editor";
 
@@ -153,7 +154,7 @@ export function ProjectDetailsForm(props: IProjectDetailsForm) {
       logo_props: formData.logo_props,
       timezone: formData.timezone,
       pms_project_name: formData.pms_project_name?.trim() || null,
-      estimated_hours: formData.estimated_hours,
+      grade: formData.grade ?? null,
       product_type: formData.product_type ?? null,
     };
 
@@ -489,45 +490,36 @@ export function ProjectDetailsForm(props: IProjectDetailsForm) {
             )}
           </div>
           <div className="col-span-1 flex flex-col gap-1">
-            <h4 className="text-13">{t("common.project_estimated_hours")}</h4>
+            <h4 className="text-13">项目等级</h4>
             <Controller
-              name="estimated_hours"
+              name="grade"
               control={control}
-              rules={{
-                min: { value: 0, message: t("project_settings.general.estimated_hours_min") },
-                validate: (v) => {
-                  if (v === null || v === undefined || v === "") return true;
-                  const n = Number(v);
-                  if (!Number.isFinite(n)) return t("project_settings.general.estimated_hours_invalid");
-                  if (Math.abs(n * 2 - Math.round(n * 2)) > 1e-9) {
-                    return t("project_settings.general.estimated_hours_half_step");
-                  }
-                  return true;
-                },
-              }}
-              render={({ field: { value, onChange, ref } }) => (
-                <Input
-                  id="estimated_hours"
-                  name="estimated_hours"
-                  type="number"
-                  ref={ref}
+              render={({ field: { value, onChange } }) => (
+                <CustomSelect
                   value={value ?? ""}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    onChange(v === "" ? null : Number(v));
+                  onChange={(val: string) => {
+                    onChange(val === "" ? null : (val as TProjectGrade));
                   }}
-                  min={0}
-                  step={0.5}
-                  hasError={Boolean(errors.estimated_hours)}
-                  className="font-medium"
-                  placeholder={t("common.project_estimated_hours_placeholder")}
+                  label={
+                    value ? (
+                      <ProjectGradeBadge grade={value} />
+                    ) : (
+                      <span className="text-placeholder">{t("select_project_grade")}</span>
+                    )
+                  }
+                  buttonClassName="!border-subtle !shadow-none font-medium rounded-md"
+                  input
                   disabled={!isAdmin}
-                />
+                >
+                  <CustomSelect.Option value="">未设置</CustomSelect.Option>
+                  {PROJECT_GRADE_OPTIONS.map((option) => (
+                    <CustomSelect.Option key={option} value={option}>
+                      <ProjectGradeBadge grade={option} />
+                    </CustomSelect.Option>
+                  ))}
+                </CustomSelect>
               )}
             />
-            {errors.estimated_hours && (
-              <span className="text-11 text-danger-primary">{errors.estimated_hours.message}</span>
-            )}
           </div>
         </div>
         <div className="flex items-center justify-between py-2">
