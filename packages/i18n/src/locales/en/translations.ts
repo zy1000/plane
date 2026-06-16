@@ -992,6 +992,8 @@ export default {
       add_selected: "Add selected work items",
       select_all: "Select all",
       deselect_all: "Deselect all",
+      my_work_items: "My work items",
+      loading_more: "Loading more work items...",
     },
     open_in_full_screen: "Open work item in full screen",
   },

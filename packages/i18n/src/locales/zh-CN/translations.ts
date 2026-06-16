@@ -1149,6 +1149,8 @@ export default {
       add_selected: "添加所选工作项",
       select_all: "全选",
       deselect_all: "取消全选",
+      my_work_items: "我的工作项",
+      loading_more: "正在加载更多工作项...",
     },
     open_in_full_screen: "在全屏中打开工作项",
   },

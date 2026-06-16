@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
+from typing import Optional, Union
+
 # Django imports
 from django.db.models import Q, QuerySet
 
@@ -149,6 +151,26 @@ class IssueSearchEndpoint(BaseAPIView):
         method = self.get_child_optional_types if type_filter == 'child' else self.get_parent_optional_types
         return issues.filter(type__name__in=method(type_name=issue_type.name))
 
+    def parse_int_query_param(
+        self,
+        value: Union[str, int, None],
+        default: int,
+        *,
+        minimum: Optional[int] = None,
+        maximum: Optional[int] = None,
+    ) -> int:
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            parsed = default
+
+        if minimum is not None:
+            parsed = max(minimum, parsed)
+        if maximum is not None:
+            parsed = min(maximum, parsed)
+
+        return parsed
+
     def get(self, request, slug, project_id):
         query = request.query_params.get("search", False)
         workspace_search = request.query_params.get("workspace_search", "false")
@@ -163,8 +185,10 @@ class IssueSearchEndpoint(BaseAPIView):
         type_name = request.query_params.get("type_name", False)
         type_filter = request.query_params.get("type_filter", False)
         issue_type_id = request.query_params.get("issue_type_id", False)
-        
-
+        my_work_items = request.query_params.get("my_work_items", "false")
+        type_ids = request.query_params.get("type_ids", "")
+        limit = self.parse_int_query_param(request.query_params.get("limit"), 100, minimum=1, maximum=1000)
+        offset = self.parse_int_query_param(request.query_params.get("offset"), 0, minimum=0)
 
         issues = Issue.issue_objects.filter(
             workspace__slug=slug,
@@ -193,6 +217,14 @@ class IssueSearchEndpoint(BaseAPIView):
         if issue_type_id:
             issues = self.filter_issues_by_type(issues, issue_type_id, project_id)
 
+        if type_ids:
+            parsed_type_ids = [type_id.strip() for type_id in type_ids.split(",") if type_id.strip()]
+            if parsed_type_ids:
+                issues = issues.filter(type_id__in=parsed_type_ids)
+
+        if my_work_items == "true":
+            issues = issues.filter(Q(created_by=self.request.user) | Q(assignees=self.request.user)).distinct()
+
         if cycle == "true":
             issues = self.exclude_issues_in_cycles(issues)
 
@@ -213,6 +245,8 @@ class IssueSearchEndpoint(BaseAPIView):
         ).exists():
             issues = issues.filter(created_by=self.request.user)
 
+        issues = issues.order_by("-created_at")
+
         return Response(
             issues.values(
                 "name",
@@ -227,6 +261,6 @@ class IssueSearchEndpoint(BaseAPIView):
                 "state__group",
                 "state__color",
                 'type_id'
-            )[:100],
+            )[offset:offset + limit],
             status=status.HTTP_200_OK,
         )
