@@ -10,9 +10,11 @@ import { CalendarClock, CalendarPlus, Rocket, UserRound } from "lucide-react";
 // i18n
 import { useTranslation } from "@plane/i18n";
 // ui icons
-import { CycleIcon, ModuleIcon, LabelPropertyIcon } from "@plane/propel/icons";
+import { CycleIcon, EstimatePropertyIcon, ModuleIcon, LabelPropertyIcon } from "@plane/propel/icons";
 import { cn, renderFormattedDate, renderFormattedTime } from "@plane/utils";
+import { EstimateDropdown } from "@/components/dropdowns/estimate";
 // helpers
+import { useProjectEstimates } from "@/hooks/store/estimates";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useMember } from "@/hooks/store/use-member";
 import { useProject } from "@/hooks/store/use-project";
@@ -87,6 +89,7 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
   const { t } = useTranslation();
   // store hooks
   const { getProjectById } = useProject();
+  const { areEstimateEnabledByProjectId } = useProjectEstimates();
   const {
     issue: { getIssueById },
   } = useIssueDetail();
@@ -121,6 +124,33 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
             issueId={issueId}
             disabled={disabled}
           />
+
+          {areEstimateEnabledByProjectId(projectId) && (
+            <div className="flex w-full items-center gap-2">
+              <div className="flex h-7.5 w-30 shrink-0 items-center gap-1.5 text-body-xs-regular text-tertiary">
+                <EstimatePropertyIcon className="size-4 shrink-0" />
+                <span>{t("common.estimate")}</span>
+              </div>
+              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
+                <EstimateDropdown
+                  value={issue?.estimate_point ?? undefined}
+                  onChange={(val: string | undefined) =>
+                    issueOperations.update(workspaceSlug, projectId, issueId, { estimate_point: val })
+                  }
+                  projectId={projectId}
+                  disabled={disabled}
+                  buttonVariant="transparent-with-text"
+                  className="group w-full"
+                  buttonContainerClassName="w-full text-left h-7.5 rounded-sm"
+                  buttonClassName={`text-body-xs-medium justify-between ${issue?.estimate_point ? "" : "text-placeholder"}`}
+                  placeholder={t("common.none")}
+                  hideIcon
+                  dropdownArrow
+                  dropdownArrowClassName="h-3.5 w-3.5 hidden group-hover:inline"
+                />
+              </div>
+            </div>
+          )}
 
           <div className="flex w-full items-start gap-2">
             <div className="flex h-7.5 w-30 shrink-0 items-center gap-1.5 text-body-xs-regular text-tertiary">
