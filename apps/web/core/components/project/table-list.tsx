@@ -20,7 +20,6 @@ import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Tooltip } from "@plane/propel/tooltip";
 import { Avatar, ContentWrapper, ERowVariant } from "@plane/ui";
 import { calculateTotalFilters, cn, copyUrlToClipboard, getFileURL, renderFormattedDate } from "@plane/utils";
-import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { ProjectsLoader } from "@/components/ui/loader/projects-loader";
 import { captureClick } from "@/helpers/event-tracker.helper";
 import { useCommandPalette } from "@/hooks/store/use-command-palette";
@@ -58,7 +57,6 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
     filteredProjectIds: storeFilteredProjectIds,
     getProjectById,
     fetchPartialProjects,
-    updateProject,
     addProjectToFavorites,
     removeProjectFromFavorites,
   } = useProject();
@@ -77,28 +75,6 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
     [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
     EUserPermissionsLevel.WORKSPACE
   );
-  const canEditProjectLead = allowPermissions([EUserPermissions.ADMIN], EUserPermissionsLevel.WORKSPACE);
-
-  const handleUpdateProjectLead = useCallback(
-    async (projectId: string, leadId: string | null) => {
-      if (!workspaceSlugString) return;
-      try {
-        await updateProject(workspaceSlugString, projectId, { project_lead: leadId });
-        setToast({
-          type: TOAST_TYPE.SUCCESS,
-          title: "负责人已更新",
-        });
-      } catch {
-        setToast({
-          type: TOAST_TYPE.ERROR,
-          title: "更新失败",
-          message: "未能更新负责人，请稍后重试",
-        });
-      }
-    },
-    [updateProject, workspaceSlugString]
-  );
-
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [sortKey, setSortKey] = useState<TSortKey>("created_at");
@@ -404,8 +380,6 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
                         k === PROJECT_PUBLISH_VIEW_PERMISSION_KEY ||
                         k === PROJECT_PUBLISH_CREATE_PERMISSION_KEY
                     );
-                  const projectLeadId =
-                    typeof project.project_lead === "string" ? project.project_lead : project.project_lead?.id ?? null;
                   const projectLead =
                     typeof project.project_lead === "string"
                       ? getUserDetails(project.project_lead)
@@ -442,32 +416,12 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
                     </Link>
                   </td>
                   <td className="px-4 py-3 hidden sm:table-cell">
-                    {canEditProjectLead ? (
-                      <MemberDropdown
-                        multiple={false}
-                        value={projectLeadId}
-                        onChange={(val) => handleUpdateProjectLead(project.id, val)}
-                        disabled={!workspaceSlugString || isArchived}
-                        placeholder="选择负责人"
-                        className="w-full text-sm"
-                        buttonContainerClassName="w-full text-left p-0"
-                        buttonVariant="transparent-with-text"
-                        buttonClassName={cn("text-xs p-0 hover:bg-transparent hover:bg-inherit", {
-                          "text-primary": !isArchived,
-                          "text-placeholder": isArchived,
-                        })}
-                        showUserDetails={true}
-                        hideIcon={!projectLeadId}
-                        optionsClassName="z-[60]"
-                        projectId={project.id}
-                      />
-                    ) : projectLead ? (
+                    {projectLead ? (
                       <div className="flex items-center gap-2 min-w-0">
                         <Avatar
                           name={projectLead.display_name}
                           src={getFileURL(projectLead.avatar_url)}
                           showTooltip={false}
-                          size="sm"
                         />
                         <span
                           className={cn("truncate text-xs", {
@@ -475,12 +429,10 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
                             "text-placeholder": isArchived,
                           })}
                         >
-                          {projectLead.display_name ?? projectLead.email ?? "-"}
+                          {projectLead.display_name ?? projectLead.email}
                         </span>
                       </div>
-                    ) : (
-                      <span className="text-secondary">-</span>
-                    )}
+                    ) : null}
                   </td>
                   <td className="px-4 py-3 align-middle text-center">
                     {project.grade ? (
