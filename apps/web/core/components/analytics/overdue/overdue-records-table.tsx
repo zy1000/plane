@@ -4,12 +4,12 @@
  * See the LICENSE file for details.
  */
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { observer } from "mobx-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { useParams } from "next/navigation";
 import { Button } from "@plane/propel/button";
-import { renderFormattedDate } from "@plane/utils";
+import { cn, renderFormattedDate } from "@plane/utils";
 import type { TOverdueEntityType, TOverdueRecord } from "@plane/types";
 import { FiltersRow } from "@/components/rich-filters/filters-row";
 import { FiltersToggle } from "@/components/rich-filters/filters-toggle";
@@ -25,12 +25,19 @@ type Props = {
   isLoading?: boolean;
 };
 
+type TQuickStatusFilter = "all" | "active" | "resolved";
+
 const ENTITY_LABEL_MAP: Record<TOverdueEntityType, string> = {
   issue: "工作项",
   cycle: "迭代",
   release: "发布",
   test_plan: "测试计划",
 };
+
+const QUICK_STATUS_FILTERS: Array<{ key: Exclude<TQuickStatusFilter, "all">; label: string }> = [
+  { key: "active", label: "正在延期" },
+  { key: "resolved", label: "历史延期" },
+];
 
 const formatDate = (value: string | null) => (value ? (renderFormattedDate(value) ?? value) : "-");
 
@@ -70,11 +77,21 @@ export const OverdueRecordsTable = observer(({ records, isLoading = false }: Pro
     workspaceSlug: workspaceSlugValue,
   });
   const conditions = filter.allConditionsForDisplay;
+  const [quickStatusFilter, setQuickStatusFilter] = useState<TQuickStatusFilter>("all");
 
-  const filteredRecords = useMemo(
+  const recordsByFilterConditions = useMemo(
     () => records.filter((record) => recordMatchesConditions(record, conditions)),
     [conditions, records]
   );
+  const quickFilteredRecords = useMemo(() => {
+    if (quickStatusFilter === "active") {
+      return recordsByFilterConditions.filter((record) => record.is_active);
+    }
+    if (quickStatusFilter === "resolved") {
+      return recordsByFilterConditions.filter((record) => !record.is_active);
+    }
+    return recordsByFilterConditions;
+  }, [quickStatusFilter, recordsByFilterConditions]);
 
   const columns: ColumnDef<TOverdueRecord>[] = useMemo(
     () => [
@@ -164,22 +181,44 @@ export const OverdueRecordsTable = observer(({ records, isLoading = false }: Pro
 
   return (
     <DataTable
-      data={filteredRecords}
+      data={quickFilteredRecords}
       columns={columns}
-      searchPlaceholder={`${filteredRecords.length} 条延期记录`}
+      searchPlaceholder={`${quickFilteredRecords.length} 条延期记录`}
       searchTriggerPosition="actions-left"
       enablePagination
       pageSize={20}
       filtersRow={<FiltersRow filter={filter} />}
       actions={() => (
         <div className="flex items-center gap-2">
+          <div className="flex items-center gap-0.5 rounded-md border border-subtle bg-surface-1 p-0.5">
+            {QUICK_STATUS_FILTERS.map((item) => {
+              const isActive = quickStatusFilter === item.key;
+
+              return (
+                <button
+                  key={item.key}
+                  type="button"
+                  aria-pressed={isActive}
+                  className={cn(
+                    "h-6 rounded-sm px-2 text-11 transition-colors",
+                    isActive ? "bg-accent-subtle font-medium text-accent-primary" : "text-secondary hover:bg-layer-2-hover"
+                  )}
+                  onClick={() =>
+                    setQuickStatusFilter((current) => (current === item.key ? "all" : item.key))
+                  }
+                >
+                  {item.label}
+                </button>
+              );
+            })}
+          </div>
           <FiltersToggle filter={filter} triggerClassName="h-8 w-8" iconButtonSize="xl" />
           <Button
             variant="secondary"
             className="h-8 px-3 text-12"
             loading={isExporting}
-            disabled={isExporting || filteredRecords.length === 0}
-            onClick={() => void exportXlsx(filteredRecords)}
+            disabled={isExporting || quickFilteredRecords.length === 0}
+            onClick={() => void exportXlsx(quickFilteredRecords)}
           >
             导出
           </Button>
