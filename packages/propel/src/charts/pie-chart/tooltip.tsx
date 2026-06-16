@@ -8,19 +8,24 @@ import React from "react";
 import type { NameType, Payload, ValueType } from "recharts/types/component/DefaultTooltipContent";
 // plane imports
 import { Card, ECardSpacing } from "../../card";
+import { cn } from "../../utils";
 
 type Props = {
   dotColor?: string;
   label: string;
   payload: Payload<ValueType, NameType>[];
+  className?: string;
 };
 
 export const CustomPieChartTooltip = React.memo(function CustomPieChartTooltip(props: Props) {
-  const { dotColor, label, payload } = props;
+  const { dotColor, label, payload, className } = props;
 
   return (
     <Card
-      className="vertical-scrollbar flex scrollbar-sm max-h-[40vh] w-[12rem] flex-col overflow-y-scroll"
+      className={cn(
+        "vertical-scrollbar flex scrollbar-sm max-h-[40vh] w-[12rem] flex-col overflow-y-scroll",
+        className
+      )}
       spacing={ECardSpacing.SM}
     >
       <p className="flex-shrink-0 truncate border-b border-subtle pb-2 text-11 font-medium text-primary">{label}</p>

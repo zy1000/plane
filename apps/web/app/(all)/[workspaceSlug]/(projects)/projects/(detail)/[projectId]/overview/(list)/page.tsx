@@ -64,13 +64,7 @@ const ProjectPagesPage = observer(() => {
     <>
       <PageHead title={pageTitle} />
 
-      <OverviewListView
-        key={project.id}
-        project={project}
-        workspaceSlug={workspaceSlug.toString()}
-      >
-        <h2>qqq</h2>
-      </OverviewListView>
+      <OverviewListView key={project.id} project={project} workspaceSlug={workspaceSlug.toString()} />
     </>
   );
 });

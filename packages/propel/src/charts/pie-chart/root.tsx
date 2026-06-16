@@ -30,6 +30,9 @@ export const PieChart = React.memo(function PieChart<K extends string, T extends
     cornerRadius,
     paddingAngle,
     tooltipLabel,
+    tooltipPosition,
+    tooltipClassName,
+    showActiveOuterRing,
   } = props;
   // states
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
@@ -73,7 +76,7 @@ export const PieChart = React.memo(function PieChart<K extends string, T extends
             cx="50%"
             cy="50%"
             blendStroke
-            activeShape={<CustomActiveShape />}
+            activeShape={<CustomActiveShape showOuterRing={showActiveOuterRing} />}
             innerRadius={innerRadius}
             outerRadius={outerRadius}
             cornerRadius={cornerRadius}
@@ -127,6 +130,8 @@ export const PieChart = React.memo(function PieChart<K extends string, T extends
           )}
           {showTooltip && (
             <Tooltip
+              position={tooltipPosition}
+              allowEscapeViewBox={tooltipPosition ? { x: true, y: true } : undefined}
               cursor={{
                 fill: "currentColor",
                 className: "bg-layer-1-hover cursor-pointer",
@@ -143,7 +148,14 @@ export const PieChart = React.memo(function PieChart<K extends string, T extends
                     ? tooltipLabel(payload[0]?.payload?.payload)
                     : tooltipLabel
                   : dataKey;
-                return <CustomPieChartTooltip dotColor={cellData.fill} label={label} payload={payload} />;
+                return (
+                  <CustomPieChartTooltip
+                    dotColor={cellData.fill}
+                    label={label}
+                    payload={payload}
+                    className={tooltipClassName}
+                  />
+                );
               }}
             />
           )}

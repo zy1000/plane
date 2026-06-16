@@ -176,6 +176,9 @@ export type TPieChartProps<K extends string, T extends string> = Pick<
     text?: string | number;
   };
   tooltipLabel?: string | ((payload: any) => string);
+  tooltipPosition?: { x: number; y: number };
+  tooltipClassName?: string;
+  showActiveOuterRing?: boolean;
   customLegend?: (props: any) => React.ReactNode;
 };
 

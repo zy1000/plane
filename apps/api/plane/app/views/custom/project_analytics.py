@@ -69,6 +69,10 @@ class CustomProjectAdvanceAnalyticsEndpoint(ProjectAdvanceAnalyticsBaseView):
             or 0
         )
 
+        # 概览健康指标基于当前作用域的全量工作项（不随 analytics_date_range 收窄），
+        # 以反映项目「此刻」的真实状态。
+        scope_queryset = base_queryset
+
         if self.filters["analytics_date_range"]:
             base_queryset = base_queryset.filter(
                 created_at__gte=self.filters["analytics_date_range"]["current"]["gte"],
@@ -84,6 +88,32 @@ class CustomProjectAdvanceAnalyticsEndpoint(ProjectAdvanceAnalyticsBaseView):
             cancelled_work_items=Count("id", filter=Q(state__group="cancelled")),
         )
 
+        # 风险指标：逾期 / 临期（未来 7 天到期）的未完成工作项
+        today = timezone.now().date()
+        open_state = ~Q(state__group__in=["completed", "cancelled"])
+        risk_counts = scope_queryset.aggregate(
+            overdue_work_items=Count(
+                "id",
+                filter=Q(target_date__isnull=False, target_date__lt=today) & open_state,
+            ),
+            due_soon_work_items=Count(
+                "id",
+                filter=Q(
+                    target_date__isnull=False,
+                    target_date__gte=today,
+                    target_date__lte=today + timedelta(days=7),
+                )
+                & open_state,
+            ),
+        )
+
+        # 质量指标：缺陷总数 / 待处理缺陷（缺陷判定方式与成员统计保持一致）
+        defect_filter = Q(type__category__name="缺陷")
+        defect_counts = scope_queryset.aggregate(
+            total_defects=Count("id", filter=defect_filter),
+            pending_defects=Count("id", filter=defect_filter & open_state),
+        )
+
         return {
             "total_work_items": {"count": work_item_counts["total_work_items"] or 0},
             "started_work_items": {"count": work_item_counts["started_work_items"] or 0},
@@ -92,13 +122,73 @@ class CustomProjectAdvanceAnalyticsEndpoint(ProjectAdvanceAnalyticsBaseView):
             "completed_work_items": {"count": work_item_counts["completed_work_items"] or 0},
             "cancelled_work_items": {"count": work_item_counts["cancelled_work_items"] or 0},
             "total_timesheet_hours": float(total_hours),
+            "overdue_work_items": risk_counts["overdue_work_items"] or 0,
+            "due_soon_work_items": risk_counts["due_soon_work_items"] or 0,
+            "total_defects": defect_counts["total_defects"] or 0,
+            "pending_defects": defect_counts["pending_defects"] or 0,
+            "created_completed_trend": self.get_created_completed_trend(scope_queryset),
         }
+
+    def get_created_completed_trend(
+            self, scope_queryset, months: int = 6
+    ) -> List[Dict[str, Any]]:
+        """近 N 个月「新建 vs 完成」节奏趋势。
+
+        新建按 created_at 归月，完成按 completed_at 归月（即「当月真正完成」），
+        缺失月份补 0，返回按月份升序排列的列表。
+        """
+        today = timezone.now().date()
+        start_index = (today.year * 12 + (today.month - 1)) - (months - 1)
+        month_keys = []
+        for offset in range(months):
+            index = start_index + offset
+            month_keys.append(f"{index // 12:04d}-{index % 12 + 1:02d}")
+
+        created_rows = (
+            scope_queryset.annotate(month=TruncMonth("created_at"))
+            .values("month")
+            .annotate(count=Count("id"))
+            .order_by("month")
+        )
+        completed_rows = (
+            scope_queryset.filter(completed_at__isnull=False)
+            .annotate(month=TruncMonth("completed_at"))
+            .values("month")
+            .annotate(count=Count("id"))
+            .order_by("month")
+        )
+        created_map = {
+            row["month"].strftime("%Y-%m"): row["count"]
+            for row in created_rows
+            if row["month"]
+        }
+        completed_map = {
+            row["month"].strftime("%Y-%m"): row["count"]
+            for row in completed_rows
+            if row["month"]
+        }
+
+        return [
+            {
+                "month": key,
+                "created": created_map.get(key, 0),
+                "completed": completed_map.get(key, 0),
+            }
+            for key in month_keys
+        ]
 
     def get_member_stats(self, project_id: str) -> List[Dict[str, Any]]:
         members = ProjectMember.objects.filter(
             project_id=project_id,
             is_active=True,
         ).select_related("member")
+
+        hours_by_member = {
+            row["member_id"]: float(row["hours"] or 0)
+            for row in TimeSheet.objects.filter(project_id=project_id)
+            .values("member_id")
+            .annotate(hours=models.Sum("hours"))
+        }
 
         issue_counts_by_member = {
             row["assignees__id"]: {
@@ -137,6 +227,7 @@ class CustomProjectAdvanceAnalyticsEndpoint(ProjectAdvanceAnalyticsBaseView):
                 "avatar_url": avatar_url,
                 "work_item_count": work_item_count,
                 "defect_count": defect_count,
+                "timesheet_hours": round(hours_by_member.get(user.id, 0), 2),
             })
         return result
 

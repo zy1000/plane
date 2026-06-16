@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { observer } from "mobx-react";
 import { CloseOutlined } from "@ant-design/icons";
 import { Modal, Pagination } from "antd";
-import { BookOpen, History, Maximize2, Megaphone, Plus, Trash2, Users } from "lucide-react";
+import { BookOpen, History, Maximize2, Megaphone, Plus, Timer, Trash2, Users } from "lucide-react";
 import { PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import type { IProject, TNameDescriptionLoader } from "@plane/types";
@@ -12,24 +12,29 @@ import { getDate, renderFormattedDate } from "@plane/utils";
 import { ProjectDescriptionInput } from "@/components/project/project-description-input";
 import { ProjectActivity } from "@/components/project/project-activity";
 import { useMember } from "@/hooks/store/use-member";
-import { useProject } from "@/hooks/store/use-project";
 import { ProjectAnnouncementService } from "@/services/project";
 import {
   AnnouncementDetailModal,
   CreateAnnouncementModal,
   type TProjectAnnouncement,
 } from "./announcement-modals";
-import type { IProjectOverviewAnalytics } from "./overview-analytics.types";
+import { OverviewCard } from "./overview-card";
 import { OverviewDescriptionModal } from "./overview-description-modal";
-import { ProjectOverviewKpiCards } from "./overview-kpi-cards";
-import { OverviewMemberStats } from "./overview-member-stats";
+import { OverviewDistributionCard } from "./overview-distribution-card";
+import { OverviewFactsRail } from "./overview-facts-rail";
+import { Reveal } from "./overview-reveal";
+import { OverviewMemberTimesheet } from "./overview-member-timesheet";
+import { OverviewTeamWorkload } from "./overview-team-workload";
+import { OverviewVelocityCard } from "./overview-velocity-card";
+import { ProjectHealthHero } from "./project-health-hero";
+import { useProjectOverview } from "./use-project-overview";
 
 const announcementService = new ProjectAnnouncementService();
 
-const sectionCard = "rounded-lg border border-subtle bg-surface-1";
+const iconButtonClass =
+  "cursor-pointer rounded-md p-1 text-placeholder transition-colors hover:bg-surface-2 hover:text-primary";
 
 type TPageView = {
-  children: React.ReactNode;
   project: IProject;
   workspaceSlug: string;
 };
@@ -49,16 +54,16 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
   const [isDescriptionModalOpen, setIsDescriptionModalOpen] = useState(false);
   const [isActivityModalOpen, setIsActivityModalOpen] = useState(false);
   const [isAnnouncementsFullscreenOpen, setIsAnnouncementsFullscreenOpen] = useState(false);
-  const [isMembersFullscreenOpen, setIsMembersFullscreenOpen] = useState(false);
-  const [analyticsData, setAnalyticsData] = useState<IProjectOverviewAnalytics | null>(null);
-  const [isLoadingAnalytics, setIsLoadingAnalytics] = useState(true);
+  const [isMembersModalOpen, setIsMembersModalOpen] = useState(false);
+  const [isHoursModalOpen, setIsHoursModalOpen] = useState(false);
   const {
     getUserDetails,
     project: { getProjectMemberIds },
   } = useMember();
-  const { fetchProjectAnalyze } = useProject();
 
+  const overview = useProjectOverview(workspaceSlug, project.id);
   const projectMemberIds = getProjectMemberIds(project.id, true);
+  const memberCount = projectMemberIds?.length ?? overview.memberStats.length;
 
   const fetchAnnouncements = useCallback(async () => {
     if (!workspaceSlug || !project?.id) return;
@@ -84,23 +89,6 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
   useEffect(() => {
     fetchAnnouncements();
   }, [fetchAnnouncements]);
-
-  useEffect(() => {
-    if (!workspaceSlug || !project?.id) return;
-
-    setIsLoadingAnalytics(true);
-    fetchProjectAnalyze(workspaceSlug, project.id)
-      .then((response: IProjectOverviewAnalytics) => {
-        setAnalyticsData(response);
-      })
-      .catch((error) => {
-        console.error(error);
-        setAnalyticsData(null);
-      })
-      .finally(() => {
-        setIsLoadingAnalytics(false);
-      });
-  }, [workspaceSlug, project?.id, fetchProjectAnalyze]);
 
   const creatorLabel = useMemo(
     () =>
@@ -279,45 +267,62 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
 
   return (
     <div className="h-full w-full overflow-y-auto vertical-scrollbar scrollbar-sm">
-      <div className="flex flex-col gap-5 px-6 py-4">
+      <div className="flex flex-col gap-4 px-6 py-5">
         {/* Header */}
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-          <h1 className="shrink-0 text-lg font-normal text-primary">项目概览</h1>
+        <Reveal className="flex flex-wrap items-center gap-x-4 gap-y-1">
+          <h1 className="shrink-0 text-xl font-semibold tracking-tight text-primary">项目概览</h1>
           <p className="min-w-0 truncate text-sm text-placeholder">
             {project.name} · {project.identifier}
           </p>
-        </div>
+        </Reveal>
 
-        {/* KPI Cards */}
-        <ProjectOverviewKpiCards workspaceSlug={workspaceSlug} project={project} analyticsData={analyticsData} />
+        {/* 健康总览 Hero */}
+        <Reveal delay={60}>
+          <ProjectHealthHero overview={overview}>
+            <OverviewFactsRail
+              project={project}
+              totalHours={overview.totalHours}
+              memberCount={memberCount}
+              onMembersClick={() => setIsMembersModalOpen(true)}
+              onHoursClick={() => setIsHoursModalOpen(true)}
+            />
+          </ProjectHealthHero>
+        </Reveal>
 
-        {/* Description + Announcements */}
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-          <div>
-            <div className={`${sectionCard} flex h-[380px] flex-col px-4 pt-4 pb-2`}>
-              <div className="mb-3 flex flex-shrink-0 items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <BookOpen className="h-3.5 w-3.5 text-placeholder" />
-                  <span className="text-sm font-medium text-primary">项目描述</span>
-                  {projectDescriptionEditMeta !== null && (
-                    <span className="text-xs text-placeholder">
-                      {projectDescriptionEditMeta}
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    className="cursor-pointer rounded-md p-1 text-placeholder transition-colors hover:bg-surface-2 hover:text-primary"
-                    aria-label="全屏查看项目描述"
-                    title="全屏查看"
-                    onClick={() => setIsDescriptionModalOpen(true)}
-                  >
-                    <Maximize2 className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              </div>
-              <div className="min-h-0 flex-1 overflow-hidden">
+        {/* Bento 栅格 */}
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
+          <Reveal delay={160} className="xl:col-span-4">
+            <OverviewDistributionCard
+              className="h-[340px]"
+              distribution={overview.distribution}
+              total={overview.counts.total}
+              isLoading={overview.isLoading}
+            />
+          </Reveal>
+          <Reveal delay={200} className="xl:col-span-8">
+            <OverviewVelocityCard className="h-[340px]" trend={overview.trend} isLoading={overview.isLoading} />
+          </Reveal>
+
+          {/* 项目描述 */}
+          <Reveal delay={240} className="xl:col-span-7">
+            <OverviewCard
+              className="h-[380px]"
+              title="项目描述"
+              icon={BookOpen}
+              meta={projectDescriptionEditMeta}
+              action={
+                <button
+                  type="button"
+                  className={iconButtonClass}
+                  aria-label="全屏查看项目描述"
+                  title="全屏查看"
+                  onClick={() => setIsDescriptionModalOpen(true)}
+                >
+                  <Maximize2 className="h-3.5 w-3.5" />
+                </button>
+              }
+            >
+              <div className="h-full overflow-hidden px-4 pb-4">
                 <ProjectDescriptionInput
                   workspaceSlug={workspaceSlug}
                   projectId={project.id}
@@ -328,86 +333,50 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
                   containerClassName="h-full vertical-scrollbar scrollbar-sm overflow-y-auto pb-0"
                 />
               </div>
-            </div>
-          </div>
-          <div>
-            <div className={`${sectionCard} flex h-[380px] flex-col`}>
-              <div className="flex flex-shrink-0 items-center justify-between px-4 py-3">
-                <div className="flex items-center gap-2">
-                  <Megaphone className="h-3.5 w-3.5 text-placeholder" />
-                  <span className="text-sm font-medium text-primary">项目公告</span>
-                </div>
-                <div className="flex items-center gap-2">
+            </OverviewCard>
+          </Reveal>
+
+          {/* 项目公告 */}
+          <Reveal delay={280} className="xl:col-span-5">
+            <OverviewCard
+              className="h-[380px]"
+              title="项目公告"
+              icon={Megaphone}
+              action={
+                <>
                   <button
                     type="button"
-                    className="cursor-pointer rounded-md p-1 text-placeholder transition-colors hover:bg-surface-2 hover:text-primary"
+                    className={iconButtonClass}
                     aria-label="新增公告"
                     title="新增公告"
                     onClick={() => setIsCreateModalOpen(true)}
                   >
                     <Plus className="h-3.5 w-3.5" />
                   </button>
-                  <button
-                    type="button"
-                    className="cursor-pointer rounded-md p-1 text-placeholder transition-colors hover:bg-surface-2 hover:text-primary"
-                    onClick={() => setIsAnnouncementsFullscreenOpen(true)}
-                  >
+                  <button type="button" className={iconButtonClass} onClick={() => setIsAnnouncementsFullscreenOpen(true)}>
                     <Maximize2 className="h-3.5 w-3.5" />
                   </button>
-                </div>
-              </div>
-
+                </>
+              }
+              bodyClassName="flex flex-col"
+            >
               {announcementsListBody}
-            </div>
-          </div>
-        </div>
+            </OverviewCard>
+          </Reveal>
 
-        {/* Project members + Project activity */}
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-          <div>
-            <div className={`${sectionCard} flex h-[380px] flex-col p-4`}>
-              <div className="mb-3 flex flex-shrink-0 items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Users className="h-3.5 w-3.5 text-placeholder" />
-                  <span className="text-sm font-medium text-primary">项目成员</span>
-                  {projectMemberIds !== null && (
-                    <span className="shrink-0 text-xs text-placeholder">共 {projectMemberIds.length} 人</span>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  className="cursor-pointer rounded-md p-1 text-placeholder transition-colors hover:bg-surface-2 hover:text-primary"
-                  onClick={() => setIsMembersFullscreenOpen(true)}
-                >
+          {/* 项目活动 */}
+          <Reveal delay={320} className="xl:col-span-12">
+            <OverviewCard
+              className="h-[380px]"
+              title="项目活动"
+              icon={History}
+              action={
+                <button type="button" className={iconButtonClass} onClick={() => setIsActivityModalOpen(true)}>
                   <Maximize2 className="h-3.5 w-3.5" />
                 </button>
-              </div>
-              <div className="min-h-0 flex-1 overflow-hidden">
-                <OverviewMemberStats
-                  workspaceSlug={workspaceSlug}
-                  projectId={project.id}
-                  analyticsData={analyticsData}
-                  isAnalyticsLoading={isLoadingAnalytics}
-                />
-              </div>
-            </div>
-          </div>
-          <div>
-            <div className={`${sectionCard} flex h-[380px] flex-col p-4`}>
-              <div className="mb-3 flex flex-shrink-0 items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <History className="h-3.5 w-3.5 text-placeholder" />
-                  <span className="text-sm font-medium text-primary">项目活动</span>
-                </div>
-                <button
-                  type="button"
-                  className="cursor-pointer rounded-md p-1 text-placeholder transition-colors hover:bg-surface-2 hover:text-primary"
-                  onClick={() => setIsActivityModalOpen(true)}
-                >
-                  <Maximize2 className="h-3.5 w-3.5" />
-                </button>
-              </div>
-              <div className="min-h-0 flex-1 overflow-hidden">
+              }
+            >
+              <div className="h-full px-4 pb-4">
                 <ProjectActivity
                   workspaceSlug={workspaceSlug}
                   projectId={project.id}
@@ -415,8 +384,8 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
                   containerClassName="h-full overflow-y-auto vertical-scrollbar scrollbar-sm"
                 />
               </div>
-            </div>
-          </div>
+            </OverviewCard>
+          </Reveal>
         </div>
       </div>
 
@@ -538,46 +507,57 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
         <div className="flex h-full min-h-0 flex-1 flex-col bg-surface-1">{announcementsListBody}</div>
       </Modal>
 
-      {/* 项目成员全屏 */}
+      {/* 团队负荷 Modal */}
       <Modal
         title={
           <div className="flex min-h-11 items-center gap-2 pr-2">
             <Users className="h-4 w-4 shrink-0 text-placeholder" />
-            <span className="text-base font-medium text-primary">项目成员</span>
+            <span className="text-base font-medium text-primary">团队负荷</span>
+            <span className="text-sm text-placeholder">共 {memberCount} 人</span>
           </div>
         }
-        open={isMembersFullscreenOpen}
-        onCancel={() => setIsMembersFullscreenOpen(false)}
-        closable
-        closeIcon={
-          <span className="inline-flex items-center gap-2 text-sm font-normal text-primary transition-colors">
-            <CloseOutlined className="text-base text-inherit" />
-            <span>退出全屏</span>
-          </span>
-        }
+        open={isMembersModalOpen}
+        onCancel={() => setIsMembersModalOpen(false)}
         footer={null}
-        centered={false}
-        width="100%"
-        style={{ top: 0, padding: 0, margin: 0, maxWidth: "100vw" }}
-        className={fullscreenModalClassName}
-        classNames={{ wrapper: "!p-0", header: "!mb-0 border-b border-subtle" }}
-        styles={{
-          content: fullscreenModalContentStyles,
-          header: fullscreenModalHeaderStyles,
-          body: fullscreenModalBodyStyles,
-        }}
+        centered
+        width={720}
         destroyOnClose
-        getContainer={() => document.body}
+        styles={{ body: { padding: 0, overflow: "hidden" } }}
       >
-        <div className="flex h-full min-h-0 flex-1 flex-col bg-surface-1">
-          <div className="min-h-0 flex-1 overflow-hidden px-4 pb-3">
-            <OverviewMemberStats
-              workspaceSlug={workspaceSlug}
-              projectId={project.id}
-              analyticsData={analyticsData}
-              isAnalyticsLoading={isLoadingAnalytics}
-            />
+        <div className="h-[60vh] max-h-[60vh]">
+          <OverviewTeamWorkload
+            workspaceSlug={workspaceSlug}
+            projectId={project.id}
+            memberStats={overview.memberStats}
+            isAnalyticsLoading={overview.isLoading}
+          />
+        </div>
+      </Modal>
+
+      {/* 成员工时 Modal */}
+      <Modal
+        title={
+          <div className="flex min-h-11 items-center gap-2 pr-2">
+            <Timer className="h-4 w-4 shrink-0 text-placeholder" />
+            <span className="text-base font-medium text-primary">成员工时</span>
+            <span className="text-sm text-placeholder">累计 {overview.totalHours}h</span>
           </div>
+        }
+        open={isHoursModalOpen}
+        onCancel={() => setIsHoursModalOpen(false)}
+        footer={null}
+        centered
+        width={720}
+        destroyOnClose
+        styles={{ body: { padding: 0, overflow: "hidden" } }}
+      >
+        <div className="h-[60vh] max-h-[60vh]">
+          <OverviewMemberTimesheet
+            workspaceSlug={workspaceSlug}
+            projectId={project.id}
+            memberStats={overview.memberStats}
+            isAnalyticsLoading={overview.isLoading}
+          />
         </div>
       </Modal>
     </div>
