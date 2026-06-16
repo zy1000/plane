@@ -165,8 +165,9 @@ export class IssueService extends APIService {
     workspaceSlug: string,
     projectId: string,
     payload: {
-      scope: "selected" | "filtered";
+      scope: "selected" | "filtered" | "cycles";
       issue_ids?: string[];
+      cycle_ids?: string[];
       fields: string[];
       format: "json" | "csv" | "xlsx";
     },

@@ -1291,9 +1291,9 @@ class BulkExportIssuesEndpoint(BaseAPIView):
         raw_fields = request.data.get("fields") or []
         export_format = (request.data.get("format") or "json").lower()
 
-        if scope not in ("selected", "filtered"):
+        if scope not in ("selected", "filtered", "cycles"):
             return Response(
-                {"error": "scope must be 'selected' or 'filtered'"},
+                {"error": "scope must be 'selected', 'filtered' or 'cycles'"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         if export_format not in ("json", "csv", "xlsx"):
@@ -1325,11 +1325,22 @@ class BulkExportIssuesEndpoint(BaseAPIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
             queryset = queryset.filter(pk__in=issue_ids)
-        else:
+        elif scope == "filtered":
             # 复用列表接口的筛选逻辑，参数仍从 query string 读取
             legacy_filters = issue_filters(request.query_params, "GET")
             if legacy_filters:
                 queryset = queryset.filter(**legacy_filters)
+        else:
+            cycle_ids = request.data.get("cycle_ids") or []
+            if not cycle_ids:
+                return Response(
+                    {"error": "cycle_ids is required when scope=cycles"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            queryset = queryset.filter(
+                issue_cycle__cycle_id__in=cycle_ids,
+                issue_cycle__deleted_at__isnull=True,
+            )
 
         issues = (
             queryset.select_related(
