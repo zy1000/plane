@@ -231,7 +231,7 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
         ) : (
           <div>
             {announcements.map((item) => (
-              <div key={item.id} className="relative border-b border-b-subtle last:border-b-transparent">
+              <div key={item.id} className="relative">
                 <button
                   type="button"
                   className="group/list-block relative flex min-h-11 w-full cursor-pointer flex-col gap-3 bg-layer-transparent py-3 pr-10 pl-6 text-left text-13 transition-colors hover:bg-layer-transparent-hover md:flex-row md:items-center"
@@ -242,7 +242,7 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
                   }}
                 >
                   <div className="flex min-w-0 flex-1 items-center gap-2 pr-2">
-                    <span className="truncate font-semibold text-primary">{item.name}</span>
+                    <span className="truncate text-primary">{item.name}</span>
                   </div>
                   <div className="flex flex-shrink-0 items-center gap-3 text-11 text-tertiary">
                     <span className="max-w-32 truncate">{creatorLabel(item.created_by)}</span>
@@ -399,7 +399,9 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
                 </button>
               }
             >
-              <div className="h-full overflow-hidden px-4 pb-4">
+              {/* contain:paint 让本卡片成为只读编辑器内 position:fixed 拖拽手柄的包含块并裁剪它，
+                  否则该 fixed 元素会逃逸 overflow-hidden、停靠在描述完整高度处，撑出页面底部空白 */}
+              <div className="h-full overflow-hidden px-4 pb-4 [contain:paint]">
                 <ProjectDescriptionInput
                   workspaceSlug={workspaceSlug}
                   projectId={project.id}
