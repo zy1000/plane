@@ -2,16 +2,33 @@ import { type FC, useMemo } from "react";
 import { PieChart as PieChartIcon } from "lucide-react";
 import { PieChart } from "@plane/propel/charts/pie-chart";
 import { OverviewCard } from "./overview-card";
-import type { TDistributionSlice } from "./use-project-overview";
+
+export type TOverviewDistributionItem = {
+  key: string;
+  label: string;
+  value: number;
+  color: string;
+};
 
 type Props = {
-  distribution: TDistributionSlice[];
+  distribution: TOverviewDistributionItem[];
   total: number;
   isLoading: boolean;
   className?: string;
+  /** 卡片标题，默认「工作项分布」 */
+  title?: string;
+  /** 环心下方说明文案，默认「工作项」 */
+  centerLabel?: string;
 };
 
-export const OverviewDistributionCard: FC<Props> = ({ distribution, total, isLoading, className }) => {
+export const OverviewDistributionCard: FC<Props> = ({
+  distribution,
+  total,
+  isLoading,
+  className,
+  title = "工作项分布",
+  centerLabel = "工作项",
+}) => {
   const { data, cells } = useMemo(
     () => ({
       data: distribution.map((slice) => ({
@@ -27,7 +44,7 @@ export const OverviewDistributionCard: FC<Props> = ({ distribution, total, isLoa
   );
 
   return (
-    <OverviewCard title="工作项分布" icon={PieChartIcon} className={className}>
+    <OverviewCard title={title} icon={PieChartIcon} className={className}>
       <div className="flex h-full flex-col px-4 pb-4">
         {isLoading ? (
           <div className="grid flex-1 place-items-center text-sm text-placeholder">加载中...</div>
@@ -56,7 +73,7 @@ export const OverviewDistributionCard: FC<Props> = ({ distribution, total, isLoa
               <div className="pointer-events-none absolute inset-0 grid place-items-center">
                 <div className="flex flex-col items-center">
                   <span className="text-2xl font-semibold leading-none tabular-nums text-primary">{total}</span>
-                  <span className="mt-1 text-xs text-placeholder">工作项</span>
+                  <span className="mt-1 text-xs text-placeholder">{centerLabel}</span>
                 </div>
               </div>
             </div>

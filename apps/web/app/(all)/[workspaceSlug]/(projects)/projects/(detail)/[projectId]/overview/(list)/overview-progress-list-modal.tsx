@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { Modal, Pagination } from "antd";
-import { useRouter } from "next/navigation";
 import useSWR from "swr";
 import { ClipboardList, FileSearch, Package, Repeat } from "lucide-react";
 import { CYCLE_STATUS } from "@plane/constants";
@@ -93,7 +92,7 @@ const SECTION_CONFIG: Record<
     pageParamKey: "page",
     dataKey: "cycles",
     getNavigateUrl: (itemId, workspaceSlug, projectId) =>
-      `/${workspaceSlug}/projects/${projectId}/cycles/${itemId}`,
+      `/${workspaceSlug}/projects/${projectId}/cycles/${itemId}/overview`,
   },
   release: {
     title: "发布",
@@ -150,7 +149,6 @@ function getQaStatusDetails(status?: string) {
 
 export function OverviewProgressListModal({ open, onClose, section, workspaceSlug, projectId }: Props) {
   const { t } = useTranslation();
-  const router = useRouter();
   const [page, setPage] = useState(1);
 
   const config = SECTION_CONFIG[section];
@@ -236,13 +234,14 @@ export function OverviewProgressListModal({ open, onClose, section, workspaceSlu
                 items.map((item) => (
                   <TableRow key={item.id} className="transition-colors hover:bg-layer-1">
                     <TableCell className="min-w-0 truncate text-sm text-primary" title={item.name}>
-                      <button
-                        type="button"
-                        className="truncate text-left hover:underline"
-                        onClick={() => router.push(config.getNavigateUrl(item.id, workspaceSlug, projectId))}
+                      <a
+                        href={config.getNavigateUrl(item.id, workspaceSlug, projectId)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="truncate text-left !text-primary visited:!text-primary hover:!text-primary hover:underline active:!text-primary"
                       >
                         {item.name}
-                      </button>
+                      </a>
                     </TableCell>
                     <TableCell className="whitespace-nowrap tabular-nums text-sm text-primary">
                       {formatStatisticTableDateRange(item.start_date, item.end_date)}

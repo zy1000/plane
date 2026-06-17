@@ -3,13 +3,25 @@ import { observer } from "mobx-react";
 import { CloseOutlined } from "@ant-design/icons";
 import { Modal, Pagination } from "antd";
 import useSWR from "swr";
-import { BookOpen, History, Maximize2, Megaphone, Plus, Timer, Trash2, Users } from "lucide-react";
+import {
+  AlertTriangle,
+  BookOpen,
+  History,
+  Maximize2,
+  Megaphone,
+  MoreHorizontal,
+  Plus,
+  Timer,
+  Trash2,
+  Users,
+} from "lucide-react";
 import { PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import type { IProject, TNameDescriptionLoader } from "@plane/types";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import { getDate, renderFormattedDate } from "@plane/utils";
+import { CustomMenu } from "@plane/ui";
+import { calculateTimeAgo, getDate, renderFormattedDate } from "@plane/utils";
+import { OverdueByAssigneeCard } from "@/components/common/overdue-by-assignee-card";
 import { ProjectDescriptionInput } from "@/components/project/project-description-input";
 import { ProjectActivity } from "@/components/project/project-activity";
 import { useMember } from "@/hooks/store/use-member";
@@ -21,8 +33,9 @@ import {
 } from "./announcement-modals";
 import { OverviewCard } from "./overview-card";
 import { OverviewDescriptionModal } from "./overview-description-modal";
-import { OverviewDistributionCard } from "./overview-distribution-card";
+import { OverviewDistributionCard, type TOverviewDistributionItem } from "./overview-distribution-card";
 import { OverviewFactsRail } from "./overview-facts-rail";
+import { OverviewProjectMeta } from "./overview-project-meta";
 import { Reveal } from "./overview-reveal";
 import { OverviewMemberTimesheet } from "./overview-member-timesheet";
 import {
@@ -39,6 +52,18 @@ const projectStatisticService = new ProjectStatisticService();
 
 const iconButtonClass =
   "cursor-pointer rounded-md p-1 text-placeholder transition-colors hover:bg-surface-2 hover:text-primary";
+
+/** 工作项类型环形图配色（无类型自带颜色时按序兜底） */
+const WORK_ITEM_TYPE_PALETTE = [
+  "#3f76ff",
+  "#16a34a",
+  "#f59e0b",
+  "#8b5cf6",
+  "#ef4444",
+  "#06b6d4",
+  "#ec4899",
+  "#64748b",
+];
 
 type TPageView = {
   project: IProject;
@@ -62,6 +87,7 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
   const [isAnnouncementsFullscreenOpen, setIsAnnouncementsFullscreenOpen] = useState(false);
   const [isMembersModalOpen, setIsMembersModalOpen] = useState(false);
   const [isHoursModalOpen, setIsHoursModalOpen] = useState(false);
+  const [isOverdueModalOpen, setIsOverdueModalOpen] = useState(false);
   const [progressListModalSection, setProgressListModalSection] = useState<OverviewProgressSection | null>(null);
   const {
     getUserDetails,
@@ -120,16 +146,42 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
     [getUserDetails]
   );
 
+  const workItemTypeDistribution = useMemo<TOverviewDistributionItem[]>(() => {
+    const rows = statisticData?.work_item_stats ?? [];
+    return rows
+      .map((row, index) => ({
+        key: row.type_id,
+        label: row.name,
+        value: Math.max((row.total ?? 0) - (row.cancelled ?? 0), 0),
+        color: row.logo_props?.icon?.color || WORK_ITEM_TYPE_PALETTE[index % WORK_ITEM_TYPE_PALETTE.length],
+      }))
+      .filter((item) => item.value > 0);
+  }, [statisticData?.work_item_stats]);
+
+  const workItemTypeTotal = useMemo(
+    () => workItemTypeDistribution.reduce((acc, item) => acc + item.value, 0),
+    [workItemTypeDistribution]
+  );
+
   const projectDescriptionEditMeta = useMemo(() => {
     if (!project.updated_at) return null;
-    const timeLabel =
-      renderFormattedDate(getDate(project.updated_at), "yyyy-MM-dd") ?? String(project.updated_at);
     const userId = project.updated_by ?? project.created_by;
-    if (!userId) return timeLabel;
-    const details = getUserDetails(userId);
-    const name = details?.display_name || details?.email || userId;
-    return `${name} · ${timeLabel}`;
-  }, [project.updated_at, project.updated_by, project.created_by, getUserDetails]);
+    const details = userId ? getUserDetails(userId) : null;
+    const displayName = userId ? details?.display_name || details?.email || userId : null;
+
+    return (
+      <div className="flex items-center gap-1 text-tertiary">
+        <span className="grid size-4 flex-shrink-0 place-items-center">
+          <History className="size-3.5" />
+        </span>
+        <p className="text-11">
+          {t("description_versions.last_edited_by")}{" "}
+          <span className="font-medium">{displayName ?? t("common.deactivated_user")}</span>{" "}
+          {calculateTimeAgo(project.updated_at)}
+        </p>
+      </div>
+    );
+  }, [project.updated_at, project.updated_by, project.created_by, getUserDetails, t]);
 
   const handleDeleteAnnouncement = async (id: string) => {
     if (!workspaceSlug || !project?.id) return;
@@ -172,62 +224,58 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
   const announcementsListBody = (
     <>
       <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-3 vertical-scrollbar scrollbar-sm">
-        <Table wrapperClassName="overflow-visible">
-          <TableHeader className="border-y-0 bg-transparent [&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-surface-1 [&_th]:shadow-[inset_0_-1px_0_var(--border-subtle)]">
-            <TableRow>
-              <TableHead className="h-8 w-2/5 text-left text-xs font-medium text-placeholder">公告</TableHead>
-              <TableHead className="h-8 w-1/5 text-left text-xs font-medium text-placeholder">创建人</TableHead>
-              <TableHead className="h-8 w-1/4 text-left text-xs font-medium text-placeholder">创建时间</TableHead>
-              <TableHead className="h-8 w-12 text-left text-xs font-medium text-placeholder">操作</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isLoadingAnnouncements ? (
-              <TableRow>
-                <TableCell colSpan={4}>
-                  <div className="grid h-14 place-items-center text-sm text-placeholder">加载中...</div>
-                </TableCell>
-              </TableRow>
-            ) : announcements.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={4}>
-                  <div className="grid h-14 place-items-center text-sm text-placeholder">暂无公告</div>
-                </TableCell>
-              </TableRow>
-            ) : (
-              announcements.map((item) => (
-                <TableRow key={item.id} className="transition-colors hover:bg-layer-1">
-                  <TableCell
-                    className="max-w-[200px] cursor-pointer truncate text-sm text-primary"
-                    title={item.name}
-                    onClick={() => {
-                      setActiveAnnouncement(item);
-                      setIsDetailModalOpen(true);
-                    }}
+        {isLoadingAnnouncements ? (
+          <div className="grid h-14 place-items-center text-sm text-placeholder">加载中...</div>
+        ) : announcements.length === 0 ? (
+          <div className="grid h-14 place-items-center text-sm text-placeholder">暂无公告</div>
+        ) : (
+          <div>
+            {announcements.map((item) => (
+              <div key={item.id} className="relative border-b border-b-subtle last:border-b-transparent">
+                <button
+                  type="button"
+                  className="group/list-block relative flex min-h-11 w-full cursor-pointer flex-col gap-3 bg-layer-transparent py-3 pr-10 pl-6 text-left text-13 transition-colors hover:bg-layer-transparent-hover md:flex-row md:items-center"
+                  title={item.name}
+                  onClick={() => {
+                    setActiveAnnouncement(item);
+                    setIsDetailModalOpen(true);
+                  }}
+                >
+                  <div className="flex min-w-0 flex-1 items-center gap-2 pr-2">
+                    <span className="truncate font-semibold text-primary">{item.name}</span>
+                  </div>
+                  <div className="flex flex-shrink-0 items-center gap-3 text-11 text-tertiary">
+                    <span className="max-w-32 truncate">{creatorLabel(item.created_by)}</span>
+                    <span>{item.created_at ? renderFormattedDate(getDate(item.created_at), "yyyy-MM-dd") : "-"}</span>
+                  </div>
+                </button>
+                <div className="absolute top-1/2 right-0 -translate-y-1/2" onClick={(e) => e.stopPropagation()}>
+                  <CustomMenu
+                    customButton={
+                      <button
+                        type="button"
+                        className="grid size-7 cursor-pointer place-items-center rounded-md text-placeholder transition-colors hover:bg-surface-2 hover:text-primary"
+                        aria-label="公告操作"
+                      >
+                        <MoreHorizontal className="size-3.5" />
+                      </button>
+                    }
+                    placement="bottom-end"
+                    closeOnSelect
                   >
-                    {item.name}
-                  </TableCell>
-                  <TableCell className="text-sm">{creatorLabel(item.created_by)}</TableCell>
-                  <TableCell className="text-sm">
-                    {item.created_at ? renderFormattedDate(getDate(item.created_at), "yyyy-MM-dd") : "-"}
-                  </TableCell>
-                  <TableCell className="text-left">
-                    <button
-                      type="button"
-                      className="cursor-pointer rounded-md p-1 text-placeholder transition-colors hover:bg-surface-2 hover:text-red-500"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        confirmDeleteAnnouncement(item.id);
-                      }}
+                    <CustomMenu.MenuItem
+                      className="flex items-center gap-2 text-danger-primary"
+                      onClick={() => confirmDeleteAnnouncement(item.id)}
                     >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
+                      <Trash2 className="size-3 flex-shrink-0" />
+                      <span>删除</span>
+                    </CustomMenu.MenuItem>
+                  </CustomMenu>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {totalCount > pageSize && (
@@ -295,9 +343,12 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
 
         {/* 健康总览 Hero */}
         <Reveal delay={60}>
-          <ProjectHealthHero overview={overview}>
+          <ProjectHealthHero
+            overview={overview}
+            onOverdueClick={() => setIsOverdueModalOpen(true)}
+            leftExtra={<OverviewProjectMeta project={project} />}
+          >
             <OverviewFactsRail
-              project={project}
               totalHours={overview.totalHours}
               memberCount={memberCount}
               cycleCount={statisticData?.cycles?.count ?? 0}
@@ -319,9 +370,10 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
           <Reveal delay={160} className="xl:col-span-4">
             <OverviewDistributionCard
               className="h-[340px]"
-              distribution={overview.distribution}
-              total={overview.counts.total}
-              isLoading={overview.isLoading}
+              title="工作项类型分布"
+              distribution={workItemTypeDistribution}
+              total={workItemTypeTotal}
+              isLoading={!statisticData}
             />
           </Reveal>
           <Reveal delay={200} className="xl:col-span-8">
@@ -581,6 +633,36 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
             memberStats={overview.memberStats}
             isAnalyticsLoading={overview.isLoading}
           />
+        </div>
+      </Modal>
+
+      {/* 延期工作项负责人 Modal */}
+      <Modal
+        title={
+          <div className="flex min-h-11 items-center gap-2 pr-2">
+            <AlertTriangle className="h-4 w-4 shrink-0 text-danger-primary" />
+            <span className="text-base font-medium text-primary">延期工作项负责人</span>
+            <span className="text-sm text-placeholder">
+              共 {statisticData?.overdue_by_assignee?.total ?? overview.overdue} 条
+            </span>
+          </div>
+        }
+        open={isOverdueModalOpen}
+        onCancel={() => setIsOverdueModalOpen(false)}
+        footer={null}
+        centered
+        width={1200}
+        destroyOnClose
+        styles={{ body: { padding: 0, overflow: "hidden" } }}
+      >
+        <div className="flex h-[78vh] max-h-[78vh] flex-col bg-surface-1">
+          <div className="min-h-0 flex-1 overflow-hidden px-4 pb-3">
+            <OverdueByAssigneeCard
+              hideHeader
+              data={statisticData?.overdue_by_assignee}
+              className="h-full min-h-0 bg-surface-1 p-4"
+            />
+          </div>
         </div>
       </Modal>
 

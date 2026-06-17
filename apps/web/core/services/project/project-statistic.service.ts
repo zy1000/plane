@@ -87,6 +87,7 @@ export type TProjectStatisticResponse = {
     unstarted: number;
     started: number;
     completed: number;
+    cancelled: number;
     total: number;
   }>;
   overdue_by_assignee: {

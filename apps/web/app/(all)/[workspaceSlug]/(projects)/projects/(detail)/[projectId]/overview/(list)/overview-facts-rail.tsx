@@ -1,15 +1,9 @@
 import { type FC, type ReactNode } from "react";
 import { observer } from "mobx-react";
-import { Award, CalendarClock, ClipboardList, FileSearch, Package, Repeat, Timer, UserCircle2, Users } from "lucide-react";
-import { DoubleCircleIcon, InfoIcon } from "@plane/propel/icons";
-import type { IProject } from "@plane/types";
-import { Avatar } from "@plane/ui";
-import { getDate, getFileURL, renderFormattedDate } from "@plane/utils";
-import { ProjectGradeBadge } from "@/components/project/common/project-grade-badge";
-import { useMember } from "@/hooks/store/use-member";
+import { ClipboardList, FileSearch, Package, Repeat, Timer, Users } from "lucide-react";
+import { InfoIcon } from "@plane/propel/icons";
 
 type Props = {
-  project: IProject;
   totalHours: number;
   memberCount: number;
   cycleCount?: number;
@@ -27,7 +21,7 @@ type Props = {
 type TFact = {
   key: string;
   label: string;
-  icon: typeof Award;
+  icon: typeof Timer;
   iconClassName: string;
   value: ReactNode;
   onClick?: () => void;
@@ -37,7 +31,6 @@ type TFact = {
 
 export const OverviewFactsRail: FC<Props> = observer(
   ({
-    project,
     totalHours,
     memberCount,
     cycleCount = 0,
@@ -51,42 +44,7 @@ export const OverviewFactsRail: FC<Props> = observer(
     onTestPlansClick,
     onCaseReviewsClick,
   }) => {
-  const { getUserDetails } = useMember();
-
-  const projectLead =
-    typeof project.project_lead === "string"
-      ? getUserDetails(project.project_lead)
-      : project.project_lead ?? undefined;
-
-  const primaryFacts: TFact[] = [
-    {
-      key: "status",
-      label: "项目状态",
-      icon: DoubleCircleIcon,
-      iconClassName: "text-placeholder",
-      value: <span className="text-sm text-primary">{project.archived_at ? "已归档" : "进行中"}</span>,
-    },
-    {
-      key: "lead",
-      label: "负责人",
-      icon: UserCircle2,
-      iconClassName: "text-emerald-500",
-      value: projectLead ? (
-        <div className="flex min-w-0 items-center gap-1.5">
-          <Avatar name={projectLead.display_name} src={getFileURL(projectLead.avatar_url)} size={18} showTooltip={false} />
-          <span className="truncate text-sm text-primary">{projectLead.display_name ?? projectLead.email}</span>
-        </div>
-      ) : (
-        <span className="text-sm text-placeholder">未指定</span>
-      ),
-    },
-    {
-      key: "grade",
-      label: "项目等级",
-      icon: Award,
-      iconClassName: "text-amber-500",
-      value: project.grade ? <ProjectGradeBadge grade={project.grade} /> : <span className="text-sm text-placeholder">-</span>,
-    },
+  const facts: TFact[] = [
     {
       key: "hours",
       label: "累计工时",
@@ -101,20 +59,6 @@ export const OverviewFactsRail: FC<Props> = observer(
       actionIcon: InfoIcon,
       onActionClick: onHoursClick,
     },
-    {
-      key: "created",
-      label: "创建时间",
-      icon: CalendarClock,
-      iconClassName: "text-violet-500",
-      value: (
-        <span className="text-sm tabular-nums text-primary">
-          {project.created_at ? renderFormattedDate(getDate(project.created_at), "yyyy-MM-dd") : "-"}
-        </span>
-      ),
-    },
-  ];
-
-  const progressFacts: TFact[] = [
     {
       key: "members",
       label: "成员",
@@ -170,7 +114,7 @@ export const OverviewFactsRail: FC<Props> = observer(
     return (
       <div
         key={fact.key}
-        className={`relative flex min-w-0 items-center gap-2.5 rounded-md px-2.5 py-2 transition-colors${isClickable ? " cursor-pointer hover:bg-layer-1-hover" : ""}`}
+        className={`relative flex h-full min-w-0 flex-1 basis-0 items-center gap-2.5 rounded-md px-3 py-3 transition-colors${isClickable ? " cursor-pointer hover:bg-layer-1-hover" : ""}`}
         onClick={fact.onClick}
         role={isClickable ? "button" : undefined}
         tabIndex={isClickable ? 0 : undefined}
@@ -211,11 +155,8 @@ export const OverviewFactsRail: FC<Props> = observer(
   };
 
   return (
-    <div className="flex flex-col gap-1 rounded-lg border border-subtle bg-layer-1 p-2">
-      <div className="grid grid-cols-2 gap-1 sm:grid-cols-3 xl:grid-cols-5">{primaryFacts.map(renderFact)}</div>
-      <div className="grid grid-cols-2 gap-1 sm:grid-cols-3 xl:grid-cols-5">
-        {progressFacts.map(renderFact)}
-      </div>
+    <div className="flex h-full w-full min-h-0 flex-col rounded-lg border border-subtle bg-layer-1 p-2.5">
+      <div className="flex h-full w-full flex-1 items-stretch gap-1">{facts.map(renderFact)}</div>
     </div>
   );
 });

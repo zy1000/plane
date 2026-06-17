@@ -1186,11 +1186,15 @@ class ProjectAPI(BaseViewSet):
                     "unstarted": 0,
                     "started": 0,
                     "completed": 0,
+                    "cancelled": 0,
                     "total": 0,
                 }
 
-            work_item_stats_map[type_id][bucket] += row.get("count") or 0
-            work_item_stats_map[type_id]["total"] += row.get("count") or 0
+            count = row.get("count") or 0
+            work_item_stats_map[type_id][bucket] += count
+            work_item_stats_map[type_id]["total"] += count
+            if group == "cancelled":
+                work_item_stats_map[type_id]["cancelled"] += count
 
         work_item_stats = sorted(
             work_item_stats_map.values(), key=lambda x: x["total"], reverse=True

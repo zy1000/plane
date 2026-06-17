@@ -9,7 +9,13 @@ type Props = {
   isAnalyticsLoading: boolean;
 };
 
-const CHART_MEMBER_LIMIT = 30;
+const MemberXAxisTick = ({ x, y, payload }: { x?: number; y?: number; payload?: { value: string } }) => (
+  <g transform={`translate(${x ?? 0},${y ?? 0})`}>
+    <text y={0} dy={4} dx={-2} transform="rotate(-35)" textAnchor="end" className="fill-tertiary text-11">
+      {payload?.value}
+    </text>
+  </g>
+);
 
 export const OverviewMemberTimesheet: FC<Props> = observer(({ memberStats, isAnalyticsLoading }) => {
   const rows = useMemo(
@@ -20,11 +26,11 @@ export const OverviewMemberTimesheet: FC<Props> = observer(({ memberStats, isAna
           name: member.display_name,
           hours: Math.round((member.timesheet_hours ?? 0) * 100) / 100,
         }))
+        .filter((row) => row.hours > 0)
         .sort((a, b) => b.hours - a.hours),
     [memberStats]
   );
 
-  const chartRows = useMemo(() => rows.slice(0, CHART_MEMBER_LIMIT), [rows]);
   const maxHours = useMemo(() => Math.max(...rows.map((row) => row.hours), 8), [rows]);
 
   if (isAnalyticsLoading) {
@@ -38,7 +44,7 @@ export const OverviewMemberTimesheet: FC<Props> = observer(({ memberStats, isAna
   }
 
   if (rows.length === 0) {
-    return <div className="flex h-full items-center justify-center text-sm text-placeholder">暂无成员数据</div>;
+    return <div className="flex h-full items-center justify-center text-sm text-placeholder">暂无工时数据</div>;
   }
 
   return (
@@ -46,14 +52,11 @@ export const OverviewMemberTimesheet: FC<Props> = observer(({ memberStats, isAna
       <div className="flex h-full min-h-0 flex-col rounded-lg border border-subtle bg-layer-1 p-4">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div className="text-sm font-medium text-primary">成员工时分布</div>
-          {rows.length > CHART_MEMBER_LIMIT && (
-            <span className="text-xs text-placeholder">仅展示工时前 {CHART_MEMBER_LIMIT} 名</span>
-          )}
         </div>
         <div className="min-h-0 flex-1">
           <BarChart
             className="h-full w-full"
-            data={chartRows}
+            data={rows}
             xAxis={{ key: "name", label: "" }}
             yAxis={{ key: "hours", label: "工时（h）", domain: [0, Math.ceil(maxHours)] }}
             bars={[
@@ -73,9 +76,10 @@ export const OverviewMemberTimesheet: FC<Props> = observer(({ memberStats, isAna
                 textClassName: "",
               },
             ]}
-            barSize={chartRows.length > 10 ? 20 : 34}
+            barSize={rows.length > 10 ? 20 : 34}
             showTooltip
-            margin={{ top: 12, right: 20, bottom: 0, left: -12 }}
+            customTicks={{ x: MemberXAxisTick }}
+            margin={{ top: 12, right: 20, bottom: 56, left: -12 }}
           />
         </div>
       </div>
