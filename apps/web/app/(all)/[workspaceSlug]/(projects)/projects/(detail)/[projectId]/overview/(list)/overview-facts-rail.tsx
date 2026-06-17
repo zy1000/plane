@@ -1,7 +1,7 @@
 import { type FC, type ReactNode } from "react";
 import { observer } from "mobx-react";
-import { ClipboardList, FileSearch, Package, Repeat, Timer, Users } from "lucide-react";
-import { InfoIcon } from "@plane/propel/icons";
+import { ClipboardList, FileSearch, Rocket, Timer, Users } from "lucide-react";
+import { CycleIcon, InfoIcon } from "@plane/propel/icons";
 
 type Props = {
   totalHours: number;
@@ -21,7 +21,7 @@ type Props = {
 type TFact = {
   key: string;
   label: string;
-  icon: typeof Timer;
+  icon: FC<{ className?: string }>;
   iconClassName: string;
   value: ReactNode;
   onClick?: () => void;
@@ -63,7 +63,7 @@ export const OverviewFactsRail: FC<Props> = observer(
       key: "members",
       label: "成员",
       icon: Users,
-      iconClassName: "text-[#3f76ff]",
+      iconClassName: "text-placeholder",
       value: <span className="text-sm tabular-nums text-primary">{memberCount} 人</span>,
       actionIcon: InfoIcon,
       onActionClick: onMembersClick,
@@ -71,8 +71,8 @@ export const OverviewFactsRail: FC<Props> = observer(
     {
       key: "cycles",
       label: "迭代",
-      icon: Repeat,
-      iconClassName: "text-[#3f76ff]",
+      icon: CycleIcon,
+      iconClassName: "text-placeholder",
       value: <span className="text-sm tabular-nums text-primary">{cycleCount} 个</span>,
       actionIcon: InfoIcon,
       onActionClick: onCyclesClick,
@@ -80,7 +80,7 @@ export const OverviewFactsRail: FC<Props> = observer(
     {
       key: "releases",
       label: "发布",
-      icon: Package,
+      icon: Rocket,
       iconClassName: "text-emerald-500",
       value: <span className="text-sm tabular-nums text-primary">{releaseCount} 个</span>,
       actionIcon: InfoIcon,
@@ -114,7 +114,7 @@ export const OverviewFactsRail: FC<Props> = observer(
     return (
       <div
         key={fact.key}
-        className={`relative flex h-full min-w-0 flex-1 basis-0 items-center gap-2.5 rounded-md px-3 py-3 transition-colors${isClickable ? " cursor-pointer hover:bg-layer-1-hover" : ""}`}
+        className={`relative flex h-full min-w-0 flex-1 basis-0 items-center gap-1.5 rounded-md px-3 py-3 transition-colors${isClickable ? " cursor-pointer hover:bg-layer-1-hover" : ""}`}
         onClick={fact.onClick}
         role={isClickable ? "button" : undefined}
         tabIndex={isClickable ? 0 : undefined}
@@ -143,7 +143,7 @@ export const OverviewFactsRail: FC<Props> = observer(
             <ActionIcon className="h-3 w-3" />
           </button>
         )}
-        <div className="grid h-8 w-8 flex-shrink-0 place-items-center">
+        <div className="grid h-6 w-6 flex-shrink-0 place-items-center">
           <Icon className={`h-4 w-4 ${fact.iconClassName}`} />
         </div>
         <div className="flex min-w-0 flex-col">

@@ -6,7 +6,7 @@ import type { TProjectOverviewData } from "./use-project-overview";
 type Props = {
   overview: TProjectOverviewData;
   children?: ReactNode;
-  /** 左侧区域（仪表 + 健康判定）下方的附加内容，如项目静态信息 */
+  /** 左侧 Hero 区域内的附加内容，如项目静态信息 */
   leftExtra?: ReactNode;
   onOverdueClick?: () => void;
 };
@@ -137,11 +137,16 @@ export const ProjectHealthHero: FC<Props> = ({ overview, children, leftExtra, on
         style={{ backgroundColor: health.color }}
       />
       <div className="relative flex flex-col gap-5 lg:flex-row lg:items-stretch lg:gap-7">
-        {/* 仪表 + 健康判定 + 项目信息 */}
-        <div className="flex flex-shrink-0 flex-col gap-4">
-          <div className="flex items-center gap-5">
+        {/* 项目信息 + 仪表 + 健康判定 */}
+        <div className="flex w-full flex-shrink-0 flex-col gap-4 lg:w-[540px] lg:flex-row lg:items-center lg:gap-5">
+          {leftExtra && (
+            <div className="flex border-b border-dashed border-subtle pb-3 lg:w-[210px] lg:flex-shrink-0 lg:self-stretch lg:border-r lg:border-b-0 lg:pb-0 lg:pr-4">
+              {leftExtra}
+            </div>
+          )}
+          <div className="flex min-w-0 items-center gap-4">
             <RadialGauge value={completionRate} color={health.color} />
-            <div className="flex flex-col gap-2">
+            <div className="flex min-w-0 flex-col gap-2">
               <span className="text-xs text-placeholder">项目健康度</span>
               <span
                 className="inline-flex w-fit items-center gap-1.5 rounded-full px-2.5 py-1 text-sm font-medium"
@@ -151,12 +156,8 @@ export const ProjectHealthHero: FC<Props> = ({ overview, children, leftExtra, on
                 {health.label}
               </span>
               <span className="max-w-[180px] text-xs leading-relaxed text-secondary">{health.description}</span>
-              <span className="text-xs text-placeholder tabular-nums">
-                共 {counts.total} 个工作项 · {openCount} 个进行中
-              </span>
             </div>
           </div>
-          {leftExtra && <div className="border-t border-dashed border-subtle pt-3">{leftExtra}</div>}
         </div>
 
         {/* 关键指标 chips + 项目事实 */}

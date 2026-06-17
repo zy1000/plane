@@ -38,7 +38,7 @@ export const OverviewCard: FC<Props> = ({
     <div className="flex flex-shrink-0 items-center justify-between gap-2 px-4 py-3">
       <div className="flex min-w-0 items-center gap-2">
         <Icon className={cn("h-4 w-4 flex-shrink-0 text-placeholder", iconClassName)} />
-        <span className="truncate text-sm font-medium text-primary">{title}</span>
+        <span className="truncate text-sm font-semibold text-primary">{title}</span>
         {meta != null &&
           (typeof meta === "string" ? (
             <span className="flex-shrink-0 text-xs text-placeholder">{meta}</span>
