@@ -36,6 +36,12 @@ app.conf.beat_schedule = {
         "task": "plane.license.bgtasks.tracer.instance_traces",
         "schedule": crontab(hour="*/6", minute=0),  # Every 6 hours
     },
+    "check-three-times-a-day-to-send-upcoming-overdue-reminders": {
+        "task": "plane.bgtasks.upcoming_overdue_reminder_task.scan_upcoming_overdue_reminders_task",
+        "schedule": crontab(
+            hour="1,6,10", minute=0
+        ),  # UTC 01:00/06:00/10:00, Beijing 09:00/14:00/18:00
+    },
     # Occurs once every day
     "check-every-day-to-delete-hard-delete": {
         "task": "plane.bgtasks.deletion_task.hard_delete",
@@ -91,7 +97,9 @@ app.conf.beat_schedule = {
 # Setup logging
 @after_setup_logger.connect
 def setup_loggers(logger, *args, **kwargs):
-    formatter = JsonFormatter('"%(levelname)s %(asctime)s %(module)s %(name)s %(message)s')
+    formatter = JsonFormatter(
+        '"%(levelname)s %(asctime)s %(module)s %(name)s %(message)s'
+    )
     handler = logging.StreamHandler()
     handler.setFormatter(fmt=formatter)
     logger.addHandler(handler)
@@ -99,7 +107,9 @@ def setup_loggers(logger, *args, **kwargs):
 
 @after_setup_task_logger.connect
 def setup_task_loggers(logger, *args, **kwargs):
-    formatter = JsonFormatter('"%(levelname)s %(asctime)s %(module)s %(name)s %(message)s')
+    formatter = JsonFormatter(
+        '"%(levelname)s %(asctime)s %(module)s %(name)s %(message)s'
+    )
     handler = logging.StreamHandler()
     handler.setFormatter(fmt=formatter)
     logger.addHandler(handler)

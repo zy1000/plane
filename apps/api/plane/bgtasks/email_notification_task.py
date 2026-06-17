@@ -563,6 +563,11 @@ def _send_entity_status_email(
             "owner_name": data.get("owner_name"),
             "phase_label": data.get("phase_label"),
             "date_changes": data.get("date_changes"),
+            "deadline_label": data.get("deadline_label"),
+            "deadline_date": data.get("deadline_date"),
+            "remaining_days": data.get("remaining_days"),
+            "reminder_slot": data.get("reminder_slot"),
+            "current_status_label": data.get("current_status_label"),
         }
 
         entity_display_name = "迭代" if entity_kind == "cycle" else "发布"
@@ -572,6 +577,8 @@ def _send_entity_status_email(
             subject = f"[{project_name}] 你被指定为{entity_display_name} {entity_name} 的负责人"
         elif event == "overdue":
             subject = f"[{project_name}] {entity_display_name}延期提醒：{entity_name}"
+        elif event == "upcoming_overdue":
+            subject = f"[{project_name}] {entity_display_name}即将延期提醒：{entity_name}"
         elif event == "schedule_changed":
             subject = f"[{project_name}] {entity_display_name}计划时间已更新：{entity_name}"
         else:
@@ -586,11 +593,13 @@ def _send_entity_status_email(
             ("cycle", "owner_changed"): "emails/notifications/cycle-owner-update.html",
             ("cycle", "status_changed"): "emails/notifications/cycle-status-update.html",
             ("cycle", "overdue"): "emails/notifications/cycle-overdue.html",
+            ("cycle", "upcoming_overdue"): "emails/notifications/cycle-upcoming-overdue.html",
             ("cycle", "schedule_changed"): "emails/notifications/cycle-schedule-update.html",
             ("release", "created"): "emails/notifications/release-created.html",
             ("release", "owner_changed"): "emails/notifications/release-lead-update.html",
             ("release", "status_changed"): "emails/notifications/release-status-update.html",
             ("release", "overdue"): "emails/notifications/release-overdue.html",
+            ("release", "upcoming_overdue"): "emails/notifications/release-upcoming-overdue.html",
             ("release", "schedule_changed"): "emails/notifications/release-schedule-update.html",
         }
         template_name = template_map.get(

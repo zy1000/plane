@@ -655,6 +655,126 @@ def dispatch_release_overdue_email(release_id, phase, actor_id=None, origin=None
 
 
 @shared_task
+def dispatch_cycle_upcoming_overdue_email(
+    cycle_id,
+    phase,
+    deadline_label,
+    deadline_date,
+    remaining_days,
+    reminder_key,
+    reminder_slot,
+    actor_id=None,
+    origin=None,
+):
+    try:
+        cycle = (
+            Cycle.objects.filter(pk=cycle_id)
+            .select_related("project", "project__workspace", "owned_by", "created_by")
+            .first()
+        )
+        if not cycle:
+            return
+
+        origin = _default_origin(origin)
+        _set_origin(CYCLE_ORIGIN_REDIS_PREFIX, cycle_id, origin)
+        effective_actor_id = _resolve_cycle_actor_id(cycle, actor_id)
+        receiver_ids = _filter_eligible_receivers(
+            cycle.project_id,
+            {_normalize_user_id(cycle.owned_by_id)},
+            actor_id=actor_id,
+        )
+
+        payload = _cycle_payload(
+            cycle,
+            actor_id=actor_id,
+            origin=origin,
+            event="upcoming_overdue",
+            owner_name=_user_display_name(cycle.owned_by_id),
+            phase=phase,
+            phase_label=CYCLE_OVERDUE_PHASE_LABELS.get(phase, phase),
+            deadline_label=deadline_label,
+            deadline_date=deadline_date,
+            remaining_days=remaining_days,
+            reminder_key=reminder_key,
+            reminder_slot=reminder_slot,
+            current_status=cycle.status,
+            current_status_label=CYCLE_STATUS_LABELS.get(cycle.status, cycle.status),
+        )
+        _enqueue_email_logs(
+            entity_name="cycle",
+            entity_id=cycle_id,
+            event="upcoming_overdue",
+            old_value="",
+            new_value="upcoming_overdue",
+            payload=payload,
+            receiver_ids=receiver_ids,
+            effective_actor_id=effective_actor_id,
+        )
+    except Exception as e:
+        log_exception(e)
+
+
+@shared_task
+def dispatch_release_upcoming_overdue_email(
+    release_id,
+    phase,
+    deadline_label,
+    deadline_date,
+    remaining_days,
+    reminder_key,
+    reminder_slot,
+    actor_id=None,
+    origin=None,
+):
+    try:
+        release = (
+            Release.objects.filter(pk=release_id)
+            .select_related("project", "project__workspace", "created_by", "lead")
+            .first()
+        )
+        if not release:
+            return
+
+        origin = _default_origin(origin)
+        _set_origin(RELEASE_ORIGIN_REDIS_PREFIX, release_id, origin)
+        effective_actor_id = _resolve_release_actor_id(release, actor_id)
+        receiver_ids = _filter_eligible_receivers(
+            release.project_id,
+            {_normalize_user_id(release.lead_id)},
+            actor_id=actor_id,
+        )
+
+        payload = _release_payload(
+            release,
+            actor_id=actor_id,
+            origin=origin,
+            event="upcoming_overdue",
+            owner_name=_user_display_name(release.lead_id),
+            phase=phase,
+            phase_label=RELEASE_OVERDUE_PHASE_LABELS.get(phase, phase),
+            deadline_label=deadline_label,
+            deadline_date=deadline_date,
+            remaining_days=remaining_days,
+            reminder_key=reminder_key,
+            reminder_slot=reminder_slot,
+            current_status=release.status,
+            current_status_label=RELEASE_STATUS_LABELS.get(release.status, release.status),
+        )
+        _enqueue_email_logs(
+            entity_name="release",
+            entity_id=release_id,
+            event="upcoming_overdue",
+            old_value="",
+            new_value="upcoming_overdue",
+            payload=payload,
+            receiver_ids=receiver_ids,
+            effective_actor_id=effective_actor_id,
+        )
+    except Exception as e:
+        log_exception(e)
+
+
+@shared_task
 def dispatch_cycle_owner_email(cycle_id, actor_id, old_owner_id, new_owner_id, origin):
     try:
         if not new_owner_id:
