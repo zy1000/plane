@@ -87,6 +87,7 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
   const [isAnnouncementsFullscreenOpen, setIsAnnouncementsFullscreenOpen] = useState(false);
   const [isMembersModalOpen, setIsMembersModalOpen] = useState(false);
   const [isHoursModalOpen, setIsHoursModalOpen] = useState(false);
+  const [isHoursChartReady, setIsHoursChartReady] = useState(false);
   const [isOverdueModalOpen, setIsOverdueModalOpen] = useState(false);
   const [progressListModalSection, setProgressListModalSection] = useState<OverviewProgressSection | null>(null);
   const {
@@ -97,6 +98,20 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
   const overview = useProjectOverview(workspaceSlug, project.id);
   const projectMemberIds = getProjectMemberIds(project.id, true);
   const memberCount = projectMemberIds?.length ?? overview.memberStats.length;
+
+  const handleHoursModalOpenChange = useCallback((open: boolean) => {
+    if (!open) {
+      setIsHoursChartReady(false);
+      return;
+    }
+
+    if (typeof window === "undefined") {
+      setIsHoursChartReady(true);
+      return;
+    }
+
+    window.requestAnimationFrame(() => setIsHoursChartReady(true));
+  }, []);
 
   const { data: statisticData } = useSWR(
     workspaceSlug && project.id ? `project-statistic-overview-${workspaceSlug}-${project.id}` : null,
@@ -624,6 +639,7 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
         }
         open={isHoursModalOpen}
         onCancel={() => setIsHoursModalOpen(false)}
+        afterOpenChange={handleHoursModalOpenChange}
         footer={null}
         centered
         width={2500}
@@ -634,6 +650,7 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
           <OverviewMemberTimesheet
             memberStats={overview.memberStats}
             isAnalyticsLoading={overview.isLoading}
+            isChartReady={isHoursChartReady}
           />
         </div>
       </Modal>

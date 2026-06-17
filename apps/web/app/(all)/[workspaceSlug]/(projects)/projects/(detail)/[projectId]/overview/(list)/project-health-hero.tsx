@@ -1,6 +1,7 @@
 import { type FC, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Activity, AlertTriangle, Bug, CircleCheck, Clock, Loader2 } from "lucide-react";
 import { InfoIcon } from "@plane/propel/icons";
+import { Popover } from "@plane/propel/popover";
 import type { TProjectOverviewData } from "./use-project-overview";
 
 type Props = {
@@ -81,6 +82,44 @@ const TONE_CLASSES: Record<TStatChip["tone"], { icon: string; value: string }> =
   danger: { icon: "text-danger-primary", value: "text-danger-primary" },
 };
 
+const HEALTH_RULE_LEVELS = [
+  { label: "健康", color: "#16a34a", rule: "逾期 < 10% 且完成率 ≥ 50%" },
+  { label: "需关注", color: "#f59e0b", rule: "逾期 ≥ 10% 或完成率 < 50%" },
+  { label: "有风险", color: "#ef4444", rule: "逾期 ≥ 25% 或有未完成且完成率 < 20%" },
+] as const;
+
+const ProjectHealthRulesHint: FC = () => (
+  <Popover>
+    <Popover.Button
+      type="button"
+      className="inline-flex cursor-pointer rounded p-0.5 text-placeholder transition-colors hover:bg-surface-2 hover:text-primary"
+      aria-label="查看项目健康度判定规则"
+    >
+      <InfoIcon className="h-3.5 w-3.5" />
+    </Popover.Button>
+    <Popover.Panel side="bottom" align="start" className="z-50 w-[240px] rounded-lg border border-subtle bg-surface-1 p-3 shadow-raised-200">
+      <p className="text-xs font-medium text-primary">判定规则</p>
+      <p className="mt-1.5 text-xs leading-relaxed text-secondary">综合完成率与逾期占比判定，取最严重等级。</p>
+      <div className="mt-2 space-y-1 text-xs leading-relaxed text-secondary">
+        <p>完成率 = 已完成 ÷ (总数 − 已取消)</p>
+        <p>逾期占比 = 逾期未完成 ÷ 未完成数</p>
+      </div>
+      <ul className="mt-2.5 space-y-1.5">
+        {HEALTH_RULE_LEVELS.map((item) => (
+          <li key={item.label} className="flex items-start gap-1.5 text-xs leading-relaxed">
+            <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full" style={{ backgroundColor: item.color }} />
+            <span className="text-secondary">
+              <span className="font-medium text-primary">{item.label}</span>
+              <span className="text-placeholder"> — </span>
+              {item.rule}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </Popover.Panel>
+  </Popover>
+);
+
 const StatChip: FC<{ chip: TStatChip }> = ({ chip }) => {
   const Icon = chip.icon;
   const tone = TONE_CLASSES[chip.tone];
@@ -147,7 +186,10 @@ export const ProjectHealthHero: FC<Props> = ({ overview, children, leftExtra, on
           <div className="flex min-w-0 items-center gap-4">
             <RadialGauge value={completionRate} color={health.color} />
             <div className="flex min-w-0 flex-col gap-2">
-              <span className="text-xs text-placeholder">项目健康度</span>
+              <div className="flex items-center gap-1">
+                <span className="text-xs text-placeholder">项目健康度</span>
+                <ProjectHealthRulesHint />
+              </div>
               <span
                 className="inline-flex w-fit items-center gap-1.5 rounded-full px-2.5 py-1 text-sm font-medium"
                 style={{ color: health.color, backgroundColor: `${health.color}1a` }}

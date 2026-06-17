@@ -11,6 +11,7 @@ import { useParams, usePathname } from "next/navigation";
 import {
   EUserPermissionsLevel,
   EUserPermissions,
+  ENABLE_PROJECT_STATISTICS_NAV,
   PROJECT_ANALYTICS_VIEW_PERMISSION_KEY,
   PROJECT_ASSET_VIEW_PERMISSION_KEY,
   PROJECT_MODULES_VIEW_PERMISSION_KEY,
@@ -107,7 +108,7 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
         icon: BarChart3,
         access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
         permissionKeys: [PROJECT_ANALYTICS_VIEW_PERMISSION_KEY],
-        shouldRender: true,
+        shouldRender: ENABLE_PROJECT_STATISTICS_NAV,
         sortOrder: 0.5,
       },
       {

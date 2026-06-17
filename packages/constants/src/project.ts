@@ -247,3 +247,6 @@ export const PROJECT_RELEASES_ISSUE_MANAGE_PERMISSION_KEY = "releases.issue.mana
 /** 兼容旧命名，避免现有调用方失效 */
 export const PROJECT_PUBLISH_VIEW_PERMISSION_KEY = PROJECT_RELEASES_VIEW_PERMISSION_KEY;
 export const PROJECT_PUBLISH_CREATE_PERMISSION_KEY = PROJECT_RELEASES_CREATE_PERMISSION_KEY;
+
+/** 暂时隐藏项目「统计」导航入口；页面与路由保留，恢复时改为 true */
+export const ENABLE_PROJECT_STATISTICS_NAV = false;

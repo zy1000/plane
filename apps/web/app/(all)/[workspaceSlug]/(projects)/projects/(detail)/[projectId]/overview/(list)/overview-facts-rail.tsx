@@ -1,7 +1,7 @@
 import { type FC, type ReactNode } from "react";
 import { observer } from "mobx-react";
-import { ClipboardList, FileSearch, Rocket, Timer, Users } from "lucide-react";
-import { CycleIcon, InfoIcon } from "@plane/propel/icons";
+import { ClipboardList, FileSearch, Repeat, Rocket, Timer, Users } from "lucide-react";
+import { InfoIcon } from "@plane/propel/icons";
 
 type Props = {
   totalHours: number;
@@ -63,7 +63,7 @@ export const OverviewFactsRail: FC<Props> = observer(
       key: "members",
       label: "成员",
       icon: Users,
-      iconClassName: "text-placeholder",
+      iconClassName: "text-[#3f76ff]",
       value: <span className="text-sm tabular-nums text-primary">{memberCount} 人</span>,
       actionIcon: InfoIcon,
       onActionClick: onMembersClick,
@@ -71,8 +71,8 @@ export const OverviewFactsRail: FC<Props> = observer(
     {
       key: "cycles",
       label: "迭代",
-      icon: CycleIcon,
-      iconClassName: "text-placeholder",
+      icon: Repeat,
+      iconClassName: "text-[#3f76ff]",
       value: <span className="text-sm tabular-nums text-primary">{cycleCount} 个</span>,
       actionIcon: InfoIcon,
       onActionClick: onCyclesClick,

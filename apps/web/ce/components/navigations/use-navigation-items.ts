@@ -9,6 +9,7 @@ import { useMemo, useCallback } from "react";
 import {
   EUserPermissions,
   EUserPermissionsLevel,
+  ENABLE_PROJECT_STATISTICS_NAV,
   PROJECT_ANALYTICS_VIEW_PERMISSION_KEY,
   PROJECT_ASSET_VIEW_PERMISSION_KEY,
   PROJECT_MODULES_VIEW_PERMISSION_KEY,
@@ -60,7 +61,7 @@ export const useNavigationItems = ({
         icon: BarChart3,
         access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
         permissionKeys: [PROJECT_ANALYTICS_VIEW_PERMISSION_KEY],
-        shouldRender: true,
+        shouldRender: ENABLE_PROJECT_STATISTICS_NAV,
         sortOrder: 0.5,
       },
       {

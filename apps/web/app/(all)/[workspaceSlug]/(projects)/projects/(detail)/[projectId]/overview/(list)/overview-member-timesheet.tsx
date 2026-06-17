@@ -7,6 +7,7 @@ import type { IOverviewMemberStat } from "./overview-analytics.types";
 type Props = {
   memberStats: IOverviewMemberStat[];
   isAnalyticsLoading: boolean;
+  isChartReady: boolean;
 };
 
 const MemberXAxisTick = ({ x, y, payload }: { x?: number; y?: number; payload?: { value: string } }) => (
@@ -17,7 +18,20 @@ const MemberXAxisTick = ({ x, y, payload }: { x?: number; y?: number; payload?: 
   </g>
 );
 
-export const OverviewMemberTimesheet: FC<Props> = observer(({ memberStats, isAnalyticsLoading }) => {
+const TimesheetChartLoader = () => (
+  <div className="flex h-full min-h-0 flex-col overflow-hidden px-5 pb-5">
+    <div className="flex h-full min-h-0 flex-col rounded-lg border border-subtle bg-layer-1 p-4">
+      <Loader className="mb-3">
+        <Loader.Item width="120px" height="18px" className="bg-layer-2" />
+      </Loader>
+      <Loader className="min-h-0 flex-1">
+        <Loader.Item width="100%" height="100%" className="bg-layer-2" />
+      </Loader>
+    </div>
+  </div>
+);
+
+export const OverviewMemberTimesheet: FC<Props> = observer(({ memberStats, isAnalyticsLoading, isChartReady }) => {
   const rows = useMemo(
     () =>
       memberStats
@@ -33,15 +47,7 @@ export const OverviewMemberTimesheet: FC<Props> = observer(({ memberStats, isAna
 
   const maxHours = useMemo(() => Math.max(...rows.map((row) => row.hours), 8), [rows]);
 
-  if (isAnalyticsLoading) {
-    return (
-      <Loader className="gap-3 px-4 pb-4">
-        <Loader.Item width="100%" height="40px" />
-        <Loader.Item width="100%" height="40px" />
-        <Loader.Item width="80%" height="40px" />
-      </Loader>
-    );
-  }
+  if (isAnalyticsLoading || !isChartReady) return <TimesheetChartLoader />;
 
   if (rows.length === 0) {
     return <div className="flex h-full items-center justify-center text-sm text-placeholder">暂无工时数据</div>;
