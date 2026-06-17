@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { observer } from "mobx-react";
 import { CloseOutlined } from "@ant-design/icons";
 import { Modal, Pagination } from "antd";
+import useSWR from "swr";
 import { BookOpen, History, Maximize2, Megaphone, Plus, Timer, Trash2, Users } from "lucide-react";
 import { PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
@@ -12,7 +13,7 @@ import { getDate, renderFormattedDate } from "@plane/utils";
 import { ProjectDescriptionInput } from "@/components/project/project-description-input";
 import { ProjectActivity } from "@/components/project/project-activity";
 import { useMember } from "@/hooks/store/use-member";
-import { ProjectAnnouncementService } from "@/services/project";
+import { ProjectAnnouncementService, ProjectStatisticService } from "@/services/project";
 import {
   AnnouncementDetailModal,
   CreateAnnouncementModal,
@@ -24,12 +25,17 @@ import { OverviewDistributionCard } from "./overview-distribution-card";
 import { OverviewFactsRail } from "./overview-facts-rail";
 import { Reveal } from "./overview-reveal";
 import { OverviewMemberTimesheet } from "./overview-member-timesheet";
+import {
+  OverviewProgressListModal,
+  type OverviewProgressSection,
+} from "./overview-progress-list-modal";
 import { OverviewTeamWorkload } from "./overview-team-workload";
 import { OverviewVelocityCard } from "./overview-velocity-card";
 import { ProjectHealthHero } from "./project-health-hero";
 import { useProjectOverview } from "./use-project-overview";
 
 const announcementService = new ProjectAnnouncementService();
+const projectStatisticService = new ProjectStatisticService();
 
 const iconButtonClass =
   "cursor-pointer rounded-md p-1 text-placeholder transition-colors hover:bg-surface-2 hover:text-primary";
@@ -56,6 +62,7 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
   const [isAnnouncementsFullscreenOpen, setIsAnnouncementsFullscreenOpen] = useState(false);
   const [isMembersModalOpen, setIsMembersModalOpen] = useState(false);
   const [isHoursModalOpen, setIsHoursModalOpen] = useState(false);
+  const [progressListModalSection, setProgressListModalSection] = useState<OverviewProgressSection | null>(null);
   const {
     getUserDetails,
     project: { getProjectMemberIds },
@@ -64,6 +71,16 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
   const overview = useProjectOverview(workspaceSlug, project.id);
   const projectMemberIds = getProjectMemberIds(project.id, true);
   const memberCount = projectMemberIds?.length ?? overview.memberStats.length;
+
+  const { data: statisticData } = useSWR(
+    workspaceSlug && project.id ? `project-statistic-overview-${workspaceSlug}-${project.id}` : null,
+    () =>
+      projectStatisticService.getStatistic(workspaceSlug, project.id, {
+        page_size: 20,
+        include_all_statuses: true,
+      }),
+    { keepPreviousData: true }
+  );
 
   const fetchAnnouncements = useCallback(async () => {
     if (!workspaceSlug || !project?.id) return;
@@ -283,8 +300,16 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
               project={project}
               totalHours={overview.totalHours}
               memberCount={memberCount}
+              cycleCount={statisticData?.cycles?.count ?? 0}
+              releaseCount={statisticData?.releases?.count ?? 0}
+              testPlanCount={statisticData?.test_plans?.count ?? 0}
+              caseReviewCount={statisticData?.case_reviews?.count ?? 0}
               onMembersClick={() => setIsMembersModalOpen(true)}
               onHoursClick={() => setIsHoursModalOpen(true)}
+              onCyclesClick={() => setProgressListModalSection("cycle")}
+              onReleasesClick={() => setProgressListModalSection("release")}
+              onTestPlansClick={() => setProgressListModalSection("plan")}
+              onCaseReviewsClick={() => setProgressListModalSection("review")}
             />
           </ProjectHealthHero>
         </Reveal>
@@ -304,7 +329,7 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
           </Reveal>
 
           {/* 项目描述 */}
-          <Reveal delay={240} className="xl:col-span-7">
+          <Reveal delay={240} className="xl:col-span-12">
             <OverviewCard
               className="h-[380px]"
               title="项目描述"
@@ -337,7 +362,7 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
           </Reveal>
 
           {/* 项目公告 */}
-          <Reveal delay={280} className="xl:col-span-5">
+          <Reveal delay={280} className="xl:col-span-12">
             <OverviewCard
               className="h-[380px]"
               title="项目公告"
@@ -520,11 +545,11 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
         onCancel={() => setIsMembersModalOpen(false)}
         footer={null}
         centered
-        width={720}
+        width={2500}
         destroyOnClose
         styles={{ body: { padding: 0, overflow: "hidden" } }}
       >
-        <div className="h-[60vh] max-h-[60vh]">
+        <div className="h-[78vh] max-h-[78vh]">
           <OverviewTeamWorkload
             workspaceSlug={workspaceSlug}
             projectId={project.id}
@@ -547,19 +572,27 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
         onCancel={() => setIsHoursModalOpen(false)}
         footer={null}
         centered
-        width={720}
+        width={2500}
         destroyOnClose
         styles={{ body: { padding: 0, overflow: "hidden" } }}
       >
-        <div className="h-[60vh] max-h-[60vh]">
+        <div className="h-[78vh] max-h-[78vh]">
           <OverviewMemberTimesheet
-            workspaceSlug={workspaceSlug}
-            projectId={project.id}
             memberStats={overview.memberStats}
             isAnalyticsLoading={overview.isLoading}
           />
         </div>
       </Modal>
+
+      {progressListModalSection && (
+        <OverviewProgressListModal
+          open={Boolean(progressListModalSection)}
+          onClose={() => setProgressListModalSection(null)}
+          section={progressListModalSection}
+          workspaceSlug={workspaceSlug}
+          projectId={project.id}
+        />
+      )}
     </div>
   );
 });

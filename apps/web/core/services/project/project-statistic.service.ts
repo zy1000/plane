@@ -126,6 +126,7 @@ export class ProjectStatisticService extends APIService {
       page_size?: number;
       start_date?: string;
       end_date?: string;
+      include_all_statuses?: boolean;
     }
   ): Promise<TProjectStatisticResponse> {
     return this.get(`/api/workspaces/${workspaceSlug}/project/statistic/`, {

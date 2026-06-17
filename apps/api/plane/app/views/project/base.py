@@ -1005,6 +1005,11 @@ class ProjectAPI(BaseViewSet):
             except (ValueError, TypeError):
                 pass
 
+        include_all_statuses_param = request.query_params.get("include_all_statuses")
+        include_all_statuses = (
+            str(include_all_statuses_param).lower() in {"1", "true", "yes", "y"}
+        )
+
         base_issue_qs = Issue.objects.filter(
             workspace__slug=slug,
             project_id=project_id,
@@ -1263,13 +1268,6 @@ class ProjectAPI(BaseViewSet):
                 project__project_projectmember__member=request.user,
                 project__project_projectmember__is_active=True,
             )
-            .filter(
-                status__in=[
-                    Cycle.Status.NOT_STARTED,
-                    Cycle.Status.IN_PROGRESS,
-                    Cycle.Status.TESTING,
-                ]
-            )
             .select_related("owned_by")
             .annotate(
                 work_item_count=Count(
@@ -1283,8 +1281,16 @@ class ProjectAPI(BaseViewSet):
                     ),
                 )
             )
-            .order_by("start_date", "name")
         )
+        if not include_all_statuses:
+            cycles_queryset = cycles_queryset.filter(
+                status__in=[
+                    Cycle.Status.NOT_STARTED,
+                    Cycle.Status.IN_PROGRESS,
+                    Cycle.Status.TESTING,
+                ]
+            )
+        cycles_queryset = cycles_queryset.order_by("start_date", "name")
 
         cycles_paginator = CustomPaginator()
         cycles_paginator.page_size = statistic_table_page_size
@@ -1333,7 +1339,6 @@ class ProjectAPI(BaseViewSet):
                 deleted_at__isnull=True,
                 archived_at__isnull=True,
             )
-            .exclude(status__in=["completed", "cancelled"])
             .select_related("lead")
             .annotate(
                 work_item_count=Count(
@@ -1347,8 +1352,12 @@ class ProjectAPI(BaseViewSet):
                     ),
                 )
             )
-            .order_by("start_date", "name")
         )
+        if not include_all_statuses:
+            releases_queryset = releases_queryset.exclude(
+                status__in=["completed", "cancelled"]
+            )
+        releases_queryset = releases_queryset.order_by("start_date", "name")
         releases_data = [
             {
                 "id": str(release.id),
@@ -1387,13 +1396,14 @@ class ProjectAPI(BaseViewSet):
         plan_offset = (plan_page - 1) * plan_page_size
         plan_limit = plan_offset + plan_page_size
 
+        test_plan_queryset = TestPlan.objects.filter(
+            project_id=project_id,
+            deleted_at__isnull=True,
+        )
+        if not include_all_statuses:
+            test_plan_queryset = test_plan_queryset.filter(state=TestPlan.State.PROGRESS)
         test_plan_queryset = (
-            TestPlan.objects.filter(
-                project_id=project_id,
-                deleted_at__isnull=True,
-                state=TestPlan.State.PROGRESS,
-            )
-            .prefetch_related("assignees")
+            test_plan_queryset.prefetch_related("assignees")
             .annotate(case_count=Count("cases", distinct=True))
             .order_by("begin_time", "name")
         )
@@ -1436,13 +1446,16 @@ class ProjectAPI(BaseViewSet):
         review_offset = (review_page - 1) * review_page_size
         review_limit = review_offset + review_page_size
 
-        case_review_queryset = (
-            CaseReview.objects.filter(
-                project_id=project_id,
-                deleted_at__isnull=True,
-                state=CaseReview.State.PROGRESS,
+        case_review_queryset = CaseReview.objects.filter(
+            project_id=project_id,
+            deleted_at__isnull=True,
+        )
+        if not include_all_statuses:
+            case_review_queryset = case_review_queryset.filter(
+                state=CaseReview.State.PROGRESS
             )
-            .prefetch_related("assignees")
+        case_review_queryset = (
+            case_review_queryset.prefetch_related("assignees")
             .annotate(case_count=Count("cases", distinct=True))
             .order_by("started_at", "name")
         )
