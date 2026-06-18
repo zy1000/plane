@@ -1075,7 +1075,6 @@ export default function TestCasesPage() {
       width: 110,
       sorter: true,
       sortOrder: ordering === "code" ? "ascend" : ordering === "-code" ? "descend" : null,
-      ...getColumnSearchProps("code"),
       render: (value: string, record: any) => {
         const codeColWidth = columnWidths["code"] ?? 110;
         const textMaxWidth = Math.max(40, codeColWidth - 20);
@@ -1105,7 +1104,6 @@ export default function TestCasesPage() {
       dataIndex: "name",
       key: "name",
       width: 260,
-      ...getColumnSearchProps("name"),
       render: (_: any, record: any) => {
         const nameColWidth = columnWidths["name"] ?? 260;
         const textMaxWidth = Math.max(40, nameColWidth - 20);
