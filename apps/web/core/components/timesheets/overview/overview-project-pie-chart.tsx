@@ -31,22 +31,25 @@ export const OverviewProjectPieChart = observer(function OverviewProjectPieChart
     <Card className="border border-subtle p-4">
       <div className="mb-4 text-sm font-medium text-primary">{title}</div>
       {resolvedData.length > 0 ? (
-        <div className="grid h-[260px] w-full grid-cols-1 gap-x-4 md:grid-cols-2">
-          <PieChart
-            className="size-full"
-            dataKey="value"
-            margin={{ top: 0, right: -10, bottom: 12, left: -10 }}
-            data={resolvedData}
-            cells={resolvedData.map((d) => ({ key: d.key, fill: d.color }))}
-            showTooltip
-            tooltipLabel="工时"
-            paddingAngle={4}
-            cornerRadius={4}
-            innerRadius="50%"
-            showLabel={false}
-          />
-          <div className="flex items-center">
-            <div className="w-full space-y-3">
+        <div className="grid w-full grid-cols-1 gap-4 md:h-[260px] md:grid-cols-2">
+          <div className="h-[220px] min-w-0 overflow-hidden md:h-full">
+            <PieChart
+              className="size-full"
+              dataKey="value"
+              margin={{ top: 8, right: 8, bottom: 8, left: 8 }}
+              data={resolvedData}
+              cells={resolvedData.map((d) => ({ key: d.key, fill: d.color }))}
+              showTooltip
+              tooltipLabel="工时"
+              paddingAngle={4}
+              cornerRadius={4}
+              innerRadius="50%"
+              showLabel={false}
+              showActiveOuterRing={false}
+            />
+          </div>
+          <div className="min-h-0 min-w-0 md:h-full">
+            <div className="max-h-[220px] w-full space-y-3 overflow-y-auto pr-1 md:h-full md:max-h-none">
               {resolvedData.map((item) => (
                 <div key={item.id} className="flex items-center justify-between gap-2 text-sm">
                   <div className="flex items-center gap-2 min-w-0">
