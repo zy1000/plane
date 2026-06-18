@@ -755,19 +755,14 @@ export default function PlanCasesPage() {
           Boolean(record?.assignee) &&
           Boolean(currentUser?.id) &&
           String(record.assignee) === String(currentUser?.id);
-        const executeDisabledReason = !record?.assignee
-          ? "未设置执行人，无法执行"
-          : !isAssignedToCurrentUser
-            ? "仅该用例执行人可执行"
-            : "";
+        const actionLabel = isAssignedToCurrentUser ? "执行" : "查看";
         return (
           <Space>
-            <Tooltip tooltipContent={executeDisabledReason || "执行"}>
+            <Tooltip tooltipContent={actionLabel}>
               <span>
                 <Button
                   size="small"
                   type="link"
-                  disabled={!isAssignedToCurrentUser}
                   onClick={() => {
                     const cid = record?.case?.id;
                     if (!cid) return;
@@ -776,7 +771,7 @@ export default function PlanCasesPage() {
                     );
                   }}
                 >
-                  执行
+                  {actionLabel}
                 </Button>
               </span>
             </Tooltip>
