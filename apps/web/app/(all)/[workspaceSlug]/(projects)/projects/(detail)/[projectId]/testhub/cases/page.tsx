@@ -67,6 +67,7 @@ import { MoveCaseModal } from "@/components/qa/cases/move-modal";
 import { CopyCaseModal } from "@/components/qa/cases/copy-modal";
 import { CopyModuleModal } from "@/components/qa/cases/copy-module-modal";
 import CasesExportModal from "@/components/qa/cases/cases-export-modal";
+import { CasesSearchInput } from "@/components/qa/cases/cases-search";
 
 type ResizableHeaderCellProps = ComponentPropsWithoutRef<"th"> & {
   width?: number;
@@ -222,6 +223,7 @@ export default function TestCasesPage() {
 
   // 筛选状态管理
   const [filters, setFilters] = useState<{
+    search?: string;
     name?: string;
     code?: string;
     labels__name__icontains?: string;
@@ -546,7 +548,8 @@ export default function TestCasesPage() {
         queryParams.module_id = selectedModuleId;
       }
 
-      // name__icontains, state__in, type__in, priority__in
+      // search, name__icontains, state__in, type__in, priority__in
+      if (filterParams.search) queryParams.search = filterParams.search;
       if (filterParams.name) queryParams.name__icontains = filterParams.name;
       if (filterParams.code) queryParams.code__icontains = filterParams.code;
       if (filterParams.labels__name__icontains)
@@ -1376,6 +1379,15 @@ export default function TestCasesPage() {
                     </Breadcrumbs>
                   </div>
                   <div className="flex items-center gap-2">
+                    <CasesSearchInput
+                      disabled={!repositoryId}
+                      value={filters.search ?? ""}
+                      onSearch={(query) => {
+                        const nextFilters = { ...filters, search: query.trim() || undefined };
+                        setFilters(nextFilters);
+                        fetchCases(1, pageSize, nextFilters);
+                      }}
+                    />
                     <button
                       type="button"
                       className="h-8 w-8 rounded border border-accent-strong bg-accent-subtle text-accent-primary flex items-center justify-center"

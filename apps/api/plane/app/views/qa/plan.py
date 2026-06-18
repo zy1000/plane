@@ -1174,6 +1174,7 @@ class CaseAPIView(BaseAPIView):
         SearchFilter,
         NumericSuffixCodeOrderingFilter,
     )
+    search_fields = ["name", "code"]
     filterset_fields = {
         "name": ["exact", "icontains", "in"],
         "code": ["exact", "icontains", "in"],
