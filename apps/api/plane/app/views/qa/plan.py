@@ -24,7 +24,7 @@ from django.db.models import (
     Value,
     When,
 )
-from django.db.models.functions import Cast
+from django.db.models.functions import Cast, Coalesce
 from django.shortcuts import get_object_or_404
 from plane.app.serializers.qa import (
     TestPlanDetailSerializer,
@@ -1182,10 +1182,11 @@ class CaseAPIView(BaseAPIView):
         "repository_id": ["exact"],
         "type": ["exact", "in"],
         "priority": ["exact", "in"],
+        "assignee": ["exact", "in"],
         "id": ["exact", "in"],
         "plan_cases__plan__id": ["exact", "in"],
     }
-    ordering_fields = ["updated_at", "code"]
+    ordering_fields = ["updated_at", "created_at", "code", "priority"]
 
     @allow_fine_permission(PermissionKey.QA_CASE_VIEW)
     def get(self, request, slug, project_id):
@@ -1207,6 +1208,37 @@ class CaseAPIView(BaseAPIView):
                 expanded.update(new_children)
                 frontier = new_children
             queryset = queryset.filter(module_id__in=list(expanded))
+
+        review_record_result_subquery = (
+            CaseReviewRecord.objects.filter(crt__case_id=OuterRef("pk"))
+            .order_by("-created_at")
+            .values("crt__result")[:1]
+        )
+        review_through_result_subquery = (
+            CaseReviewThrough.objects.filter(case_id=OuterRef("pk"))
+            .order_by("-created_at")
+            .values("result")[:1]
+        )
+        queryset = queryset.annotate(
+            _review_result=Coalesce(
+                Subquery(review_record_result_subquery, output_field=CharField()),
+                Subquery(review_through_result_subquery, output_field=CharField()),
+                Value(CaseReviewThrough.Result.NOT_START, output_field=CharField()),
+                output_field=CharField(),
+            )
+        )
+
+        review_values: list[str] = []
+        for raw in request.query_params.getlist("review__in"):
+            if raw is None:
+                continue
+            for part in str(raw).split(","):
+                value = part.strip()
+                if value:
+                    review_values.append(value)
+        if review_values:
+            queryset = queryset.filter(_review_result__in=list(dict.fromkeys(review_values)))
+
         cases = self.filter_queryset(queryset)
         paginator = self.pagination_class()
         paginated_queryset = paginator.paginate_queryset(cases, request)

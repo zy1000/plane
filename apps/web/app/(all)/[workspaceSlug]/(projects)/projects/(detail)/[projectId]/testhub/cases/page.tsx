@@ -1,23 +1,23 @@
 "use client";
 
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState, useRef, useMemo } from "react";
-import type { ComponentPropsWithoutRef, CSSProperties, MouseEvent as ReactMouseEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PageHead } from "@/components/core/page-title";
-import { Table, Tag, Input, Button, Space, Modal, Dropdown, Pagination } from "antd";
-import { EllipsisOutlined, SearchOutlined, EditOutlined, DeleteOutlined } from "@ant-design/icons";
-import type { TableProps, InputRef, TableColumnType } from "antd";
+import { Button, Col, Dropdown, Input, Modal, Pagination, Row, Tag, Tree } from "antd";
+import { AppstoreOutlined, EllipsisOutlined, PlusOutlined, ShareAltOutlined } from "@ant-design/icons";
+import type { TreeProps } from "antd";
 import { CaseService } from "@/services/qa/case.service";
 import { CreateCaseModal } from "@/components/qa/cases/create-modal";
 import { ImportCaseModal } from "@/components/qa/cases/import-modal";
-import { Tree, Row, Col } from "antd";
-import type { TreeProps } from "antd";
-import { AppstoreOutlined, PlusOutlined, UnorderedListOutlined, ShareAltOutlined } from "@ant-design/icons";
+import { MoveCaseModal } from "@/components/qa/cases/move-modal";
+import { CopyCaseModal } from "@/components/qa/cases/copy-modal";
+import { CopyModuleModal } from "@/components/qa/cases/copy-module-modal";
+import CasesExportModal from "@/components/qa/cases/cases-export-modal";
+import { CasesSearchInput } from "@/components/qa/cases/cases-search";
 import { CaseModuleService } from "@/services/qa";
 import UpdateModal from "@/components/qa/cases/update-modal";
 import { useQueryParams } from "@/hooks/use-query-params";
 import { CaseService as ReviewApiService } from "@/services/qa/review.service";
-import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { FolderOpenDot } from "lucide-react";
 import { formatDateTime, globalEnums } from "../util";
 import { Breadcrumbs } from "@plane/ui";
@@ -28,6 +28,17 @@ import { isProjectPermissionError } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { qaCaseSetToastError, qaCaseSetToastSuccess, qaCaseSetToastWarning } from "@/utils/qa-case-error";
 import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
+import { FiltersRow } from "@/components/rich-filters/filters-row";
+import { FiltersToggle } from "@/components/rich-filters/filters-toggle";
+import { CasesDisplayFilters, DEFAULT_CASE_DISPLAY_PROPERTIES } from "@/components/qa/cases/cases-display-filters";
+import type { TCaseDisplayProperties } from "@/components/qa/cases/cases-display-filters";
+import { CasesTable } from "@/components/qa/cases/cases-table";
+import type { TCaseTableRecord } from "@/components/qa/cases/cases-table";
+import { casesExpressionToQueryParams } from "@/components/qa/cases/filters/expression-to-query";
+import type { TCasesFilterQueryParams } from "@/components/qa/cases/filters/expression-to-query";
+import { useCasesFilter } from "@/components/qa/cases/filters/use-cases-filter";
+import { useCasesFiltersConfig } from "@/components/qa/cases/filters/use-cases-filters-config";
+import type { TCaseFilterExpression } from "@/components/qa/cases/filters/types";
 
 type TCreator = {
   display_name?: string;
@@ -46,11 +57,17 @@ type TLabel =
 
 type TestCase = {
   id: string;
+  code?: string;
   name: string;
+  review?: string;
   remark?: string;
   state?: number;
   type?: number;
   priority?: number;
+  module?: TModule;
+  assignee?: {
+    id?: string;
+  };
   created_at?: string;
   updated_at?: string;
   created_by?: TCreator;
@@ -63,84 +80,11 @@ type TestCaseResponse = {
   data: TestCase[];
 };
 
-import { MoveCaseModal } from "@/components/qa/cases/move-modal";
-import { CopyCaseModal } from "@/components/qa/cases/copy-modal";
-import { CopyModuleModal } from "@/components/qa/cases/copy-module-modal";
-import CasesExportModal from "@/components/qa/cases/cases-export-modal";
-import { CasesSearchInput } from "@/components/qa/cases/cases-search";
+type TCasesFilters = {
+  search?: string;
+} & TCasesFilterQueryParams;
 
-type ResizableHeaderCellProps = ComponentPropsWithoutRef<"th"> & {
-  width?: number;
-  minWidth?: number;
-  onResize?: (width: number) => void;
-};
-
-function ResizableHeaderCell(props: ResizableHeaderCellProps) {
-  const { width, minWidth = 80, onResize, children, style, ...restProps } = props;
-  const thRef = useRef<HTMLTableCellElement>(null);
-  const cleanupRef = useRef<(() => void) | null>(null);
-
-  useEffect(() => {
-    return () => {
-      cleanupRef.current?.();
-      cleanupRef.current = null;
-    };
-  }, []);
-
-  const handleMouseDown = (e: ReactMouseEvent<HTMLDivElement>) => {
-    if (e.button !== 0) return;
-    e.preventDefault();
-    e.stopPropagation();
-
-    const startX = e.clientX;
-    const startWidth = width ?? thRef.current?.getBoundingClientRect().width ?? 0;
-
-    const onMouseMove = (ev: MouseEvent) => {
-      const delta = ev.clientX - startX;
-      const nextWidth = Math.max(minWidth, startWidth + delta);
-      onResize?.(Math.round(nextWidth));
-    };
-
-    const onMouseUp = () => {
-      document.removeEventListener("mousemove", onMouseMove);
-      document.removeEventListener("mouseup", onMouseUp);
-      cleanupRef.current = null;
-    };
-
-    document.addEventListener("mousemove", onMouseMove);
-    document.addEventListener("mouseup", onMouseUp);
-    cleanupRef.current = () => {
-      document.removeEventListener("mousemove", onMouseMove);
-      document.removeEventListener("mouseup", onMouseUp);
-    };
-  };
-
-  const nextStyle: CSSProperties = {
-    ...style,
-    ...(width ? { width } : {}),
-    position: style?.position,
-  };
-
-  return (
-    <th ref={thRef} {...restProps} style={nextStyle}>
-      {children}
-      <div
-        onMouseDown={handleMouseDown}
-        style={{
-          position: "absolute",
-          top: 0,
-          right: 0,
-          height: "100%",
-          width: 8,
-          cursor: "col-resize",
-          userSelect: "none",
-          touchAction: "none",
-          zIndex: 2,
-        }}
-      />
-    </th>
-  );
-}
+const EMPTY_CASE_FILTER_EXPRESSION: TCaseFilterExpression = {};
 
 // 独立的输入组件，避免 Tree 渲染导致输入法中断
 const ModuleInput = ({
@@ -220,27 +164,42 @@ export default function TestCasesPage() {
   const [pageSize, setPageSize] = useState<number>(20);
   const [total, setTotal] = useState<number>(0);
   const [ordering, setOrdering] = useState<string | undefined>(undefined);
+  const [caseDisplayProperties, setCaseDisplayProperties] = useState<TCaseDisplayProperties>(() => ({
+    ...DEFAULT_CASE_DISPLAY_PROPERTIES,
+  }));
 
   // 筛选状态管理
-  const [filters, setFilters] = useState<{
-    search?: string;
-    name?: string;
-    code?: string;
-    labels__name__icontains?: string;
-    state?: number[];
-    type?: number[];
-    priority?: number[];
-  }>({});
-
-  const [searchText, setSearchText] = useState("");
-  const [searchedColumn, setSearchedColumn] = useState("");
+  const [filters, setFilters] = useState<TCasesFilters>({});
+  const [filterExpression, setFilterExpression] = useState<TCaseFilterExpression>(EMPTY_CASE_FILTER_EXPRESSION);
   const [allTotal, setAllTotal] = useState<number | undefined>(undefined);
-  const searchInput = useRef<InputRef>(null);
 
   const caseService = new CaseService();
   const caseModuleService = new CaseModuleService();
   const reviewService = new ReviewApiService();
   const [reviewEnums, setReviewEnums] = useState<Record<string, Record<string, { label: string; color: string }>>>({});
+  const caseTypeEnums = useMemo(
+    () =>
+      Object.entries((globalEnums.Enums as any)?.case_type || {}).reduce(
+        (acc, [value, label]) => ({ ...acc, [String(value)]: String(label) }),
+        {} as Record<string, string>
+      ),
+    [(globalEnums.Enums as any)?.case_type]
+  );
+  const casePriorityEnums = useMemo(
+    () =>
+      Object.entries((globalEnums.Enums as any)?.case_priority || {}).reduce(
+        (acc, [value, label]) => ({ ...acc, [String(value)]: String(label) }),
+        {} as Record<string, string>
+      ),
+    [(globalEnums.Enums as any)?.case_priority]
+  );
+  const { areAllConfigsInitialized, configs: casesFilterConfigs } = useCasesFiltersConfig({
+    workspaceSlug: String(workspaceSlug || ""),
+    projectId: String(projectId || ""),
+    reviewEnums,
+    caseTypeEnums,
+    casePriorityEnums,
+  });
   // 新增：创建子模块的临时状态
   const [creatingParentId, setCreatingParentId] = useState<string | "all" | null>(null);
   const [renamingModuleId, setRenamingModuleId] = useState<string | null>(null);
@@ -261,9 +220,10 @@ export default function TestCasesPage() {
       repositoryId,
       selectedModuleId,
       filters,
+      filterExpression,
       ordering,
     });
-  }, [repositoryId, selectedModuleId, filters, ordering]);
+  }, [repositoryId, selectedModuleId, filters, filterExpression, ordering]);
   const lastSelectionContextKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -276,8 +236,6 @@ export default function TestCasesPage() {
     lastSelectionContextKeyRef.current = selectionContextKey;
   }, [selectionContextKey]);
 
-  // 新增：树主题（默认/紧凑/高对比）
-  const [treeTheme, setTreeTheme] = useState<"light" | "compact" | "high-contrast">("light");
   const [expandedKeys, setExpandedKeys] = useState<string[]>(["all"]);
   const [autoExpandParent, setAutoExpandParent] = useState<boolean>(true);
   const onExpand: TreeProps["onExpand"] = (keys) => {
@@ -314,19 +272,6 @@ export default function TestCasesPage() {
     document.body.style.userSelect = "auto";
   };
 
-  // 自定义节点标题：统一图标+文案+间距
-  const updateModuleCount = (modules: any[], id: string, count: number): any[] => {
-    return modules.map((m) => {
-      if (String(m.id) === id) {
-        return { ...m, total: count };
-      }
-      if (m.children) {
-        return { ...m, children: updateModuleCount(m.children, id, count) };
-      }
-      return m;
-    });
-  };
-
   const batchUpdateModuleCounts = (modules: any[], countsMap: Record<string, number>): any[] => {
     return modules.map((m) => {
       const updatedM = { ...m };
@@ -342,11 +287,14 @@ export default function TestCasesPage() {
 
   useEffect(() => {
     if (repositoryId) {
+      const resetFilters: TCasesFilters = filters.search ? { search: filters.search } : {};
+      setFilterExpression(EMPTY_CASE_FILTER_EXPRESSION);
+      setFilters(resetFilters);
       try {
         if (repositoryIdFromUrl) sessionStorage.setItem("selectedRepositoryId", repositoryIdFromUrl);
       } catch {}
       fetchModules();
-      fetchCases(); // 初始加载所有用例
+      fetchCases(1, pageSize, resetFilters); // 初始加载所有用例
     } else {
       setLoading(false);
     }
@@ -548,16 +496,14 @@ export default function TestCasesPage() {
         queryParams.module_id = selectedModuleId;
       }
 
-      // search, name__icontains, state__in, type__in, priority__in
+      // search + rich filters
       if (filterParams.search) queryParams.search = filterParams.search;
-      if (filterParams.name) queryParams.name__icontains = filterParams.name;
-      if (filterParams.code) queryParams.code__icontains = filterParams.code;
+      if (filterParams.review__in) queryParams.review__in = filterParams.review__in;
+      if (filterParams.type__in) queryParams.type__in = filterParams.type__in;
+      if (filterParams.priority__in) queryParams.priority__in = filterParams.priority__in;
+      if (filterParams.assignee__in) queryParams.assignee__in = filterParams.assignee__in;
       if (filterParams.labels__name__icontains)
         queryParams.labels__name__icontains = filterParams.labels__name__icontains;
-      if (filterParams.state && filterParams.state.length > 0) queryParams.state__in = filterParams.state.join(",");
-      if (filterParams.type && filterParams.type.length > 0) queryParams.type__in = filterParams.type.join(",");
-      if (filterParams.priority && filterParams.priority.length > 0)
-        queryParams.priority__in = filterParams.priority.join(",");
 
       const response: TestCaseResponse = await caseService.getCases(
         workspaceSlug as string,
@@ -581,6 +527,29 @@ export default function TestCasesPage() {
       setLoading(false);
     }
   };
+
+  const handleRichFiltersChange = useCallback(
+    (expression: TCaseFilterExpression) => {
+      const mappedQuery = casesExpressionToQueryParams(expression);
+      const nextFilters: TCasesFilters = {
+        ...(filters.search ? { search: filters.search } : {}),
+        ...mappedQuery,
+      };
+      setFilterExpression(expression);
+      setFilters(nextFilters);
+      fetchCases(1, pageSize, nextFilters);
+    },
+    [fetchCases, filters.search, pageSize]
+  );
+
+  const casesFilter = useCasesFilter({
+    instanceKey: `${repositoryId || "all"}-${projectId || "all"}`,
+    initialExpression: EMPTY_CASE_FILTER_EXPRESSION,
+    areAllConfigsInitialized,
+    configs: casesFilterConfigs,
+    onExpressionChange: handleRichFiltersChange,
+  });
+
   // 新增：监听模块选择变化，触发列表刷新（避免使用旧状态）
   useEffect(() => {
     if (!repositoryId) return;
@@ -806,198 +775,42 @@ export default function TestCasesPage() {
     },
   ];
 
-  const getColumnSearchProps = (
-    dataIndex: keyof TestCase | string,
-    queryParam?: string
-  ): TableColumnType<TestCase> => ({
-    filterDropdown: ({ setSelectedKeys, selectedKeys, confirm, clearFilters }) => (
-      <div style={{ padding: 8 }} onKeyDown={(e) => e.stopPropagation()}>
-        <Input
-          ref={searchInput}
-          placeholder={`搜索 ${
-            dataIndex === "name"
-              ? "名称"
-              : dataIndex === "labels"
-                ? "标签"
-                : dataIndex === "code"
-                  ? "用例编号"
-                  : "其他"
-          }`}
-          value={selectedKeys[0]}
-          onChange={(e) => setSelectedKeys(e.target.value ? [e.target.value] : [])}
-          onPressEnter={() => handleSearch(selectedKeys as string[], dataIndex, confirm, queryParam)}
-          style={{ marginBottom: 8, display: "block" }}
-        />
-        <Space>
-          <Button
-            type="primary"
-            onClick={() => handleSearch(selectedKeys as string[], dataIndex, confirm, queryParam)}
-            icon={<SearchOutlined />}
-            size="small"
-            style={{ width: 90 }}
-          >
-            搜索
-          </Button>
-          <Button
-            onClick={() => clearFilters && handleReset(clearFilters, dataIndex, confirm, queryParam)}
-            size="small"
-            style={{ width: 90 }}
-          >
-            重置
-          </Button>
-        </Space>
-      </div>
-    ),
-    filterIcon: (filtered: boolean) => <SearchOutlined style={{ color: filtered ? "#1677ff" : undefined }} />,
-    onFilter: (value, record) => {
-      // 本地筛选逻辑保留，但实际上主要依赖服务端筛选
-      if (dataIndex === "name") {
-        return record.name
-          .toString()
-          .toLowerCase()
-          .includes((value as string).toLowerCase());
-      }
-      return true;
-    },
-    onFilterDropdownOpenChange: (visible) => {
-      if (visible) {
-        setTimeout(() => searchInput.current?.select(), 100);
-      }
-    },
-    filteredValue:
-      dataIndex === "name" && filters.name
-        ? [filters.name]
-        : dataIndex === "code" && filters.code
-          ? [filters.code]
-          : queryParam === "labels__name__icontains" && filters.labels__name__icontains
-            ? [filters.labels__name__icontains]
-            : null,
-  });
-
-  const handleSearch = (
-    selectedKeys: string[],
-    dataIndex: keyof TestCase | string,
-    confirm?: () => void,
-    queryParam?: string
-  ) => {
-    setSearchText(selectedKeys[0]);
-    setSearchedColumn(dataIndex as string);
-
-    const newFilters = { ...filters };
-    const paramKey = queryParam || (dataIndex as string);
-
-    if (selectedKeys[0]) {
-      if (paramKey === "name") newFilters.name = selectedKeys[0];
-      if (paramKey === "code") newFilters.code = selectedKeys[0];
-      if (paramKey === "labels__name__icontains") newFilters.labels__name__icontains = selectedKeys[0];
-    } else {
-      if (paramKey === "name") delete newFilters.name;
-      if (paramKey === "code") delete newFilters.code;
-      if (paramKey === "labels__name__icontains") delete newFilters.labels__name__icontains;
-    }
-
-    setFilters(newFilters);
-    confirm?.();
-  };
-
-  const handleReset = (
-    clearFilters: () => void,
-    dataIndex: keyof TestCase | string,
-    confirm?: () => void,
-    queryParam?: string
-  ) => {
-    clearFilters();
-    setSearchText("");
-
-    const newFilters = { ...filters };
-    const paramKey = queryParam || (dataIndex as string);
-
-    if (paramKey === "name") {
-      delete newFilters.name;
-    }
-    if (paramKey === "code") {
-      delete newFilters.code;
-    }
-    if (paramKey === "labels__name__icontains") {
-      delete newFilters.labels__name__icontains;
-    }
-
-    setFilters(newFilters);
-    confirm?.();
-  };
-
-  // 表格变更回调：统一处理分页与服务端过滤
-  const handleTableChange: TableProps<TestCase>["onChange"] = (pagination, tableFilters, sorter) => {
-    const selectedStates = (tableFilters?.state as number[] | undefined) || [];
-    const selectedTypes = (tableFilters?.type as number[] | undefined) || [];
-    const selectedPriorities = (tableFilters?.priority as number[] | undefined) || [];
-    const nameFilter = tableFilters?.name?.[0] as string | undefined;
-    const labelsFilter = tableFilters?.labels?.[0] as string | undefined;
-    const codeFilter = tableFilters?.code?.[0] as string | undefined;
-
-    const sorterValue = Array.isArray(sorter) ? sorter[0] : sorter;
-    const sorterField = String((sorterValue as any)?.field ?? "");
-    const sorterOrder = (sorterValue as any)?.order as "ascend" | "descend" | undefined;
-
-    const nextOrdering =
-      sorterField === "updated_at"
-        ? sorterOrder === "ascend"
-          ? "updated_at"
-          : sorterOrder === "descend"
-            ? "-updated_at"
-            : undefined
-        : sorterField === "code"
-          ? sorterOrder === "ascend"
-            ? "code"
-            : sorterOrder === "descend"
-              ? "-code"
-              : undefined
-          : undefined;
-
-    const newFilters = {
-      ...filters,
-      state: selectedStates.length ? selectedStates.map((v) => Number(v)) : undefined,
-      type: selectedTypes.length ? selectedTypes.map((v) => Number(v)) : undefined,
-      priority: selectedPriorities.length ? selectedPriorities.map((v) => Number(v)) : undefined,
-    };
-
-    // 从 tableFilters 中获取最新的搜索值，而不是依赖 filters 状态
-    if (nameFilter) {
-      newFilters.name = nameFilter;
-    } else {
-      delete newFilters.name;
-    }
-
-    if (codeFilter) {
-      newFilters.code = codeFilter;
-    } else {
-      delete newFilters.code;
-    }
-
-    if (labelsFilter) {
-      newFilters.labels__name__icontains = labelsFilter;
-    } else {
-      delete newFilters.labels__name__icontains;
-    }
-
-    const nextPage = pagination.current || 1;
-    const nextPageSize = pagination.pageSize || pageSize;
-
-    setCurrentPage(nextPage);
-    setPageSize(nextPageSize);
-    setFilters(newFilters);
-    setOrdering(nextOrdering);
-    fetchCases(nextPage, nextPageSize, newFilters, nextOrdering ?? null);
-  };
-
   const handlePaginationChange = (page: number, size?: number) => {
     const newPageSize = size || pageSize;
     const nextPage = newPageSize !== pageSize ? 1 : page;
     fetchCases(nextPage, newPageSize, filters);
   };
 
+  const handleSortChange = (nextOrdering?: string) => {
+    setOrdering(nextOrdering);
+    fetchCases(1, pageSize, filters, nextOrdering ?? null);
+  };
+
+  const handleDisplayPropertiesUpdate = (updatedDisplayProperties: Partial<TCaseDisplayProperties>) => {
+    setCaseDisplayProperties((prev) => ({ ...prev, ...updatedDisplayProperties }));
+  };
+
+  const handleRowSelectChange = (selectedKeysOnCurrentPage: string[]) => {
+    const currentPageIds = (cases || []).map((item) => String(item.id));
+    setSelectedCaseIds((prev) => {
+      const next = new Set(prev.map((id) => String(id)));
+      currentPageIds.forEach((id) => next.delete(id));
+      selectedKeysOnCurrentPage.forEach((id) => next.add(id));
+      return Array.from(next);
+    });
+  };
+
+  const handleSetColumnWidth = (columnKey: string, width: number) => {
+    setColumnWidths((prev) => ({ ...prev, [columnKey]: width }));
+  };
 
   const handleEditCase = (record: any) => {
+    if (!record || !record.id) return;
+    setActiveCase(record);
+    setIsUpdateModalOpen(true);
+  };
+
+  const handleViewCase = (record: TCaseTableRecord) => {
     if (!record || !record.id) return;
     setActiveCase(record);
     setIsUpdateModalOpen(true);
@@ -1031,22 +844,6 @@ export default function TestCasesPage() {
     });
   };
 
-  const renderLabels = (labels?: TLabel[]) => {
-    if (!labels || labels.length === 0) return <span className="text-placeholder">-</span>;
-    return (
-      <div className="flex flex-wrap gap-1">
-        {labels.map((l, idx) => {
-          const text = typeof l === "string" ? l : l?.name || "-";
-          return (
-            <Tag key={typeof l === "string" ? `${l}-${idx}` : `${(l?.id || idx).toString()}-${idx}`} color="cyan">
-              {text}
-            </Tag>
-          );
-        })}
-      </div>
-    );
-  };
-
   // 根据全局枚举输出标签
   const getEnumLabel = (group: "case_state" | "case_type" | "case_priority", value?: number) => {
     if (value === null || value === undefined) return "-";
@@ -1065,204 +862,17 @@ export default function TestCasesPage() {
     return <Tag color={color}>{label}</Tag>;
   };
 
+  const renderReviewTag = (value?: string) => {
+    const rawColor = reviewEnums?.CaseReviewThrough_Result?.[value || ""]?.color || "default";
+    const color = rawColor === "gray" ? "default" : rawColor;
+    return (
+      <Tag color={color} className="!inline-flex justify-center w-[55px]">
+        {value || "-"}
+      </Tag>
+    );
+  };
+
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
-
-  const columns: TableProps<TestCase>["columns"] = [
-    {
-      title: "用例编号",
-      dataIndex: "code",
-      key: "code",
-      width: 110,
-      sorter: true,
-      sortOrder: ordering === "code" ? "ascend" : ordering === "-code" ? "descend" : null,
-      render: (value: string, record: any) => {
-        const codeColWidth = columnWidths["code"] ?? 110;
-        const textMaxWidth = Math.max(40, codeColWidth - 20);
-        return (
-          <button
-            type="button"
-            className="inline-block max-w-full"
-            onClick={() => {
-              if (!record || !record.id) return;
-              setActiveCase(record);
-              setIsUpdateModalOpen(true);
-            }}
-          >
-            <span
-              className="block truncate"
-              style={{ maxWidth: textMaxWidth }}
-              title={value || ""}
-            >
-              {value || "-"}
-            </span>
-          </button>
-        );
-      },
-    },
-    {
-      title: "名称",
-      dataIndex: "name",
-      key: "name",
-      width: 260,
-      render: (_: any, record: any) => {
-        const nameColWidth = columnWidths["name"] ?? 260;
-        const textMaxWidth = Math.max(40, nameColWidth - 20);
-        return (
-          <button
-            type="button"
-            className="inline-block max-w-full"
-            onClick={() => {
-              if (!record || !record.id) return;
-              setActiveCase(record);
-              setIsUpdateModalOpen(true);
-            }}
-          >
-            <span
-              className="block truncate"
-              style={{ maxWidth: textMaxWidth }}
-              title={record?.name || ""}
-            >
-              {record?.name}
-            </span>
-          </button>
-        );
-      },
-    },
-    {
-      title: "评审",
-      dataIndex: "review",
-      key: "review",
-      render: (v: string) => {
-        const rawColor = reviewEnums?.CaseReviewThrough_Result?.[v]?.color || "default";
-        const color = rawColor === "gray" ? "default" : rawColor;
-        return (
-          <Tag color={color} className="!inline-flex justify-center w-[55px]">
-            {v || "-"}
-          </Tag>
-        );
-      },
-      width: 100,
-      // filters: Object.entries((globalEnums.Enums as any)?.case_state || {}).map(([value, label]) => ({
-      //   text: String(label),
-      //   value: Number(value),
-      // })),
-      filterMultiple: true,
-      filteredValue: filters.state ?? null,
-    },
-    {
-      title: "类型",
-      dataIndex: "type",
-      key: "type",
-      render: (v) => renderEnumTag("case_type", v, "magenta"),
-      width: 100,
-      filters: Object.entries((globalEnums.Enums as any)?.case_type || {}).map(([value, label]) => ({
-        text: String(label),
-        value: Number(value),
-      })),
-      filterMultiple: true,
-      filteredValue: filters.type ?? null,
-    },
-    {
-      title: "优先级",
-      dataIndex: "priority",
-      key: "priority",
-      render: (v) => renderEnumTag("case_priority", v, "warning"),
-      width: 80,
-      filters: Object.entries((globalEnums.Enums as any)?.case_priority || {}).map(([value, label]) => ({
-        text: String(label),
-        value: Number(value),
-      })),
-      filterMultiple: true,
-      filteredValue: filters.priority ?? null,
-    },
-    {
-      title: "模块",
-      dataIndex: "module",
-      key: "module",
-      render: (module: TModule | undefined) => module?.name || "",
-      width: 100,
-    },
-    {
-      title: "维护人",
-      dataIndex: "assignee",
-      key: "assignee",
-      render: (assignee: any) =>
-        assignee?.id ? (
-          <MemberDropdown
-            multiple={false}
-            value={assignee?.id ?? null}
-            onChange={() => {}}
-            disabled={true}
-            placeholder={""}
-            className="w-full text-sm"
-            buttonContainerClassName="w-full text-left p-0 cursor-default"
-            buttonVariant="transparent-with-text"
-            buttonClassName="text-sm p-0 hover:bg-transparent hover:bg-inherit"
-            showUserDetails={true}
-            optionsClassName="z-[60]"
-          />
-        ) : (
-          ""
-        ),
-      width: 140,
-    },
-    {
-      title: "标签",
-      dataIndex: "labels",
-      key: "labels",
-      ...getColumnSearchProps("labels", "labels__name__icontains"),
-      render: (labels: any[]) => (
-        <Space size={[0, 8]} wrap>
-          {labels?.map((label: any) => (
-            <Tag key={label.id} color="blue">
-              {label.name}
-            </Tag>
-          ))}
-        </Space>
-      ),
-      width: 170,
-    },
-    {
-      title: "更新时间",
-      dataIndex: "updated_at",
-      key: "updated_at",
-      render: (d) => formatDateTime(d),
-      width: 180,
-      sorter: true,
-      sortOrder: ordering === "updated_at" ? "ascend" : ordering === "-updated_at" ? "descend" : null,
-    },
-    {
-      title: "操作",
-      key: "actions",
-      width: 110,
-      render: (_: any, record: any) => (
-        <Space size={8}>
-          <Button type="text" icon={<EditOutlined />} onClick={() => handleEditCase(record)} />
-          <Button type="text" danger icon={<DeleteOutlined />} onClick={() => handleDeleteCase(record)} />
-        </Space>
-      ),
-    },
-  ];
-
-  const resizableColumns = useMemo(() => {
-    return (columns || []).map((col: any, index: number) => {
-      const columnKey = String(col?.key ?? col?.dataIndex ?? index);
-      const baseWidth = typeof col?.width === "number" ? col.width : undefined;
-      const width = columnWidths[columnKey] ?? baseWidth;
-
-      return {
-        ...col,
-        width,
-        onHeaderCell: () => ({
-          width,
-          minWidth: 80,
-          onResize: (nextWidth: number) => {
-            setColumnWidths((prev) => ({ ...prev, [columnKey]: nextWidth }));
-          },
-        }),
-      };
-    });
-  }, [columns, columnWidths]);
 
 
   if (accessDenied) {
@@ -1386,13 +996,15 @@ export default function TestCasesPage() {
                         fetchCases(1, pageSize, nextFilters);
                       }}
                     />
-                    <button
-                      type="button"
-                      className="h-8 w-8 rounded border border-accent-strong bg-accent-subtle text-accent-primary flex items-center justify-center"
-                      aria-label="列表视图"
-                    >
-                      <UnorderedListOutlined />
-                    </button>
+                    {repositoryId && <FiltersToggle filter={casesFilter} triggerClassName="h-8 w-8" iconButtonSize="xl" />}
+                    {repositoryId && (
+                      <CasesDisplayFilters
+                        displayProperties={caseDisplayProperties}
+                        ordering={ordering}
+                        onDisplayPropertiesChange={handleDisplayPropertiesUpdate}
+                        onOrderByChange={handleSortChange}
+                      />
+                    )}
                     <button
                       type="button"
                       onClick={() => {
@@ -1436,6 +1048,11 @@ export default function TestCasesPage() {
                     </button>
                   </div>
                 </div>
+                {repositoryId && (
+                  <div className="px-3 pb-2 flex-shrink-0">
+                    <FiltersRow filter={casesFilter} />
+                  </div>
+                )}
                 <div className="flex-1 min-h-0 overflow-hidden">
                   {/* 加载/错误/空状态 */}
                   {loading && (
@@ -1458,33 +1075,21 @@ export default function TestCasesPage() {
 
                   {repositoryId && !loading && !error && (
                     <div className="flex flex-col h-full overflow-hidden">
-                      <div className="testhub-cases-table-scroll scrollbar-always-visible flex-1 relative min-w-0 overflow-y-scroll px-0">
-                        <Table
-                          dataSource={cases}
-                          columns={resizableColumns}
-                          rowKey="id"
-                          size="middle"
-                          bordered={true}
-                          onChange={handleTableChange}
-                          components={{ header: { cell: ResizableHeaderCell as any } }}
-                          tableLayout="fixed"
-                          scroll={{ x: "max-content" }}
-                          rowSelection={{
-                            selectedRowKeys: selectedCaseIds,
-                            preserveSelectedRowKeys: true,
-                            onChange: (newSelectedRowKeys) => {
-                              const nextSelectedKeys = (newSelectedRowKeys as (string | number)[]).map((k) => String(k));
-                              const currentPageIds = (cases || []).map((c) => String(c.id));
-
-                              setSelectedCaseIds((prev) => {
-                                const next = new Set(prev.map((k) => String(k)));
-                                for (const id of currentPageIds) next.delete(id);
-                                for (const id of nextSelectedKeys) next.add(id);
-                                return Array.from(next);
-                              });
-                            },
-                          }}
-                          pagination={false}
+                      <div className="flex-1 relative min-w-0 overflow-hidden px-0">
+                        <CasesTable
+                          cases={cases as TCaseTableRecord[]}
+                          selectedCaseIds={selectedCaseIds}
+                          displayProperties={caseDisplayProperties}
+                          columnWidths={columnWidths}
+                          setColumnWidth={handleSetColumnWidth}
+                          onRowSelectChange={handleRowSelectChange}
+                          onViewCase={handleViewCase}
+                          onEdit={handleEditCase}
+                          onDelete={handleDeleteCase}
+                          renderReviewTag={renderReviewTag}
+                          renderTypeTag={(value) => renderEnumTag("case_type", value, "magenta")}
+                          renderPriorityTag={(value) => renderEnumTag("case_priority", value, "warning")}
+                          renderUpdatedAt={(value) => formatDateTime(value || "")}
                         />
                       </div>
                       <div className="flex-shrink-0 border-t border-subtle px-4 py-3 bg-surface-1 flex items-center justify-between">
@@ -1553,29 +1158,6 @@ export default function TestCasesPage() {
                         scrollbar-gutter: stable;
                       }
 
-                      .testhub-cases-table-scroll .ant-table-wrapper,
-                      .testhub-cases-table-scroll .ant-table,
-                      .testhub-cases-table-scroll .ant-table-container {
-                        margin: 0;
-                        padding: 0;
-                      }
-
-                      .testhub-cases-table-scroll .ant-table-body {
-                        overflow-y: visible !important;
-                      }
-
-                      .testhub-cases-table-scroll .ant-table-thead > tr > th {
-                        font-size: 13px !important;
-                        font-weight: 500 !important;
-                        color: var(--text-color-secondary) !important;
-                      }
-                      
-                      .testhub-cases-table-scroll .ant-table-pagination {
-                        margin: 0 !important;
-                        padding: 12px 16px !important;
-                        border-top: 1px solid var(--border-subtle);
-                      }
-
                       .testhub-cases-table-scroll ::-webkit-scrollbar {
                         width: 8px;
                         height: 8px;
@@ -1593,40 +1175,6 @@ export default function TestCasesPage() {
                       .testhub-cases-table-scroll ::-webkit-scrollbar-track {
                         background: color-mix(in oklch, var(--border-subtle) 40%, transparent);
                         border-radius: 4px;
-                      }
-
-                      .testhub-cases-table-scroll .ant-table-container::-webkit-scrollbar,
-                      .testhub-cases-table-scroll .ant-table-content::-webkit-scrollbar,
-                      .testhub-cases-table-scroll .ant-table-body::-webkit-scrollbar {
-                        width: 8px;
-                        height: 8px;
-                      }
-
-                      .testhub-cases-table-scroll .ant-table-container::-webkit-scrollbar-thumb,
-                      .testhub-cases-table-scroll .ant-table-content::-webkit-scrollbar-thumb,
-                      .testhub-cases-table-scroll .ant-table-body::-webkit-scrollbar-thumb {
-                        background-color: #d9d9d9;
-                        border-radius: 4px;
-                      }
-
-                      .testhub-cases-table-scroll .ant-table-container::-webkit-scrollbar-thumb:hover,
-                      .testhub-cases-table-scroll .ant-table-content::-webkit-scrollbar-thumb:hover,
-                      .testhub-cases-table-scroll .ant-table-body::-webkit-scrollbar-thumb:hover {
-                        background-color: #bfbfbf;
-                      }
-
-                      .testhub-cases-table-scroll .ant-table-container::-webkit-scrollbar-track,
-                      .testhub-cases-table-scroll .ant-table-content::-webkit-scrollbar-track,
-                      .testhub-cases-table-scroll .ant-table-body::-webkit-scrollbar-track {
-                        background: color-mix(in oklch, var(--border-subtle) 40%, transparent);
-                        border-radius: 4px;
-                      }
-
-                      .testhub-cases-table-scroll .ant-table-container,
-                      .testhub-cases-table-scroll .ant-table-content,
-                      .testhub-cases-table-scroll .ant-table-body {
-                        scrollbar-width: thin;
-                        scrollbar-color: #d9d9d9 color-mix(in oklch, var(--border-subtle) 40%, transparent);
                       }
                     `,
                   }}
