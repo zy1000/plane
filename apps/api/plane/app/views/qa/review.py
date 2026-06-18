@@ -4,7 +4,7 @@ import uuid
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework import status
-from django.db.models import Count, Q
+from django.db.models import Count, Q, Prefetch
 from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -263,6 +263,15 @@ class CaseReviewView(BaseViewSet):
                     review_records__deleted_at__isnull=True,
                 ),
                 distinct=True,
+            )
+        )
+        query = query.prefetch_related(
+            Prefetch(
+                "review_records",
+                queryset=CaseReviewRecord.objects.filter(deleted_at__isnull=True)
+                .exclude(result=CaseReviewRecord.Result.SUGGEST)
+                .order_by("assignee_id", "-created_at"),
+                to_attr="prefetched_review_records",
             )
         )
         all_param = str(request.query_params.get("all", "")).strip().lower()

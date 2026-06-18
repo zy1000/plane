@@ -5,6 +5,25 @@ import { APIService } from "@/services/api.service";
 
 
 export type ModuleCountResponse = { total: number } & Record<string, number>;
+export type ReviewCaseReviewerStatus = {
+  assignee: string;
+  result: string | null;
+  reviewed: boolean;
+};
+export type ReviewCaseListItem = {
+  id: string;
+  case_id: string;
+  name: string;
+  priority: number;
+  assignees: string[];
+  result: string;
+  created_by: string | null;
+  suggestion_count: number;
+  reviewer_statuses: ReviewCaseReviewerStatus[];
+  unreviewed_assignees: string[];
+  reviewed_count: number;
+  reviewer_count: number;
+};
 
 export class CaseService extends APIService {
   constructor() {
@@ -116,7 +135,7 @@ export class CaseService extends APIService {
       ordering?: string;
       name__icontains?: string;
     }
-  ): Promise<{ data: Array<{ id: string; name: string; priority: number; assignees: string[]; result: string; created_by: string | null; suggestion_count: number }>; count: number }> {
+  ): Promise<{ data: ReviewCaseListItem[]; count: number }> {
     const params = { review_id, ...(queries || {}) } as any;
     return this.get(`/api/workspaces/${workspaceSlug}/test/review/case-list/`, { params })
       .then((response) => ({ data: response?.data.data ?? [], count: Number(response?.data.count || 0) }))
