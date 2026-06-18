@@ -27,7 +27,7 @@ export const CommentBlock = observer(function CommentBlock(props: TCommentBlock)
   return (
     <div
       id={comment.id}
-      className={`relative flex gap-3 ${ends === "top" ? `pb-2` : ends === "bottom" ? `pt-2` : `py-2`}`}
+      className={`relative flex gap-3 ${ends === "top" ? `pb-2.5` : ends === "bottom" ? `pt-2.5` : `py-2.5`}`}
       ref={commentBlockRef}
     >
       <div

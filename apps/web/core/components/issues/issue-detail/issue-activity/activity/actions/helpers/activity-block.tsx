@@ -58,7 +58,7 @@ export function IssueActivityBlockComponent(props: TIssueActivityBlockComponent)
   return (
     <div
       className={`relative flex ${resolvedFooter ? "items-start" : "items-center"} gap-3 text-body-sm-regular ${
-        ends === "top" ? `pb-1.5` : ends === "bottom" ? `pt-1.5` : `py-1.5`
+        ends === "top" ? `pb-2.5` : ends === "bottom" ? `pt-2.5` : `py-2.5`
       }`}
       style={{ fontSize: "85%" }}
     >

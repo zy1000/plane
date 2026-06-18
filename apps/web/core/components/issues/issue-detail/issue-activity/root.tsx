@@ -117,7 +117,7 @@ export const IssueActivity = observer(function IssueActivity(props: TIssueActivi
   if (!project) return <></>;
 
   return (
-    <div className="mt-6 space-y-5">
+    <div className="px-4 pb-4">
       {/* header：底边横线铺满整行，与右侧排序等按钮右缘对齐 */}
       <div className="border-b border-subtle">
         <div className="flex items-center justify-between gap-2">
@@ -144,7 +144,7 @@ export const IssueActivity = observer(function IssueActivity(props: TIssueActivi
       </div>
 
       {/* rendering activity */}
-      <div className="space-y-4">
+      <div className="pt-2">
         <div className="min-h-[200px]">
           <div className="space-y-4">
             {!disabled && showCommentComposer && resolvedSortOrder === E_SORT_ORDER.DESC && renderCommentCreationBox}
