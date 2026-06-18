@@ -39,11 +39,15 @@ export const ReleaseStatusDropdown = observer(function ReleaseStatusDropdown(pro
     void handleReleaseDetailsChange({ status: val });
   };
 
-  const handleReasonConfirm = async (reason: string) => {
+  const handleReasonConfirm = async (reason: string, testHandoffDate?: string | null) => {
     if (!pendingStatus) return;
     try {
       setSubmitting(true);
-      await handleReleaseDetailsChange({ status: pendingStatus, status_change_reason: reason });
+      const payload: TReleaseUpdatePayload = { status: pendingStatus, status_change_reason: reason };
+      if (pendingStatus === "rejected" && testHandoffDate) {
+        payload.test_handoff_date = testHandoffDate;
+      }
+      await handleReleaseDetailsChange(payload);
       setPendingStatus(null);
     } finally {
       setSubmitting(false);
@@ -94,6 +98,9 @@ export const ReleaseStatusDropdown = observer(function ReleaseStatusDropdown(pro
         open={pendingStatus !== null}
         nextStatus={pendingStatus}
         loading={submitting}
+        currentTestHandoffDate={releaseDetails.test_handoff_date ?? null}
+        releaseStartDate={releaseDetails.start_date ?? null}
+        releaseTargetDate={releaseDetails.target_date ?? null}
         onCancel={handleReasonCancel}
         onConfirm={handleReasonConfirm}
       />
