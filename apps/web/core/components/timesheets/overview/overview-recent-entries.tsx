@@ -31,11 +31,12 @@ export function OverviewRecentEntries({ entries, title = "最近填报（本月�
               key={entry.id}
               className="flex items-center gap-3 rounded-md px-2 py-2 text-sm transition-colors hover:bg-layer-1"
             >
-              <div className="min-w-[72px] flex-shrink-0 whitespace-nowrap text-placeholder">
-                {entry.date}
-              </div>
-              <div className="min-w-0 flex-1 truncate text-primary" title={getEntryLabel(entry)}>
-                {getEntryLabel(entry)}
+              <div className="min-w-0 flex flex-1 items-center gap-1">
+                <div className="min-w-0 truncate text-primary" title={getEntryLabel(entry)}>
+                  {getEntryLabel(entry)}
+                </div>
+                <span className="flex-shrink-0 text-placeholder">·</span>
+                <span className="flex-shrink-0 whitespace-nowrap tabular-nums text-placeholder">{entry.date}</span>
               </div>
               <div className="flex-shrink-0 text-placeholder">{formatTimeRange(entry.start_time, entry.end_time)}</div>
               <div className="w-[48px] flex-shrink-0 text-right font-medium text-primary">
