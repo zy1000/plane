@@ -23,6 +23,7 @@ import { RichTextEditor } from "../cases/util";
 import { WorkItemDisplayModal } from "../cases/work-item-display-modal";
 import { ReviewRecordsPanel } from "./review-records";
 import { CaseVersionCompareModal } from "../cases/update-modal/case-version-compare-modal";
+import UpdateModal from "../cases/update-modal";
 import { useTranslation } from "@plane/i18n";
 import { qaCaseErrorContent, qaCaseSetToastError, qaCaseSetToastSuccess, qaCaseSetToastWarning } from "@/utils/qa-case-error";
 
@@ -97,6 +98,7 @@ export default function CaseReview() {
   const [isCurrentUserReviewer, setIsCurrentUserReviewer] = React.useState<boolean>(false);
   const [suggestionCounts, setSuggestionCounts] = React.useState<Record<string, number>>({});
   const [autoNext, setAutoNext] = React.useState<boolean>(true);
+  const [isCaseModalOpen, setIsCaseModalOpen] = React.useState<boolean>(false);
 
   const { preferences: projectPreferences } = useProjectNavigationPreferences();
   const topOffset = projectPreferences.navigationMode === "horizontal" ? 180 : 130;
@@ -278,6 +280,14 @@ export default function CaseReview() {
   const handleRecordsUpdated = () => {
     if (!selectedCaseId) return;
     fetchSuggestionCountForCase(String(selectedCaseId));
+  };
+
+  const handleOpenCase = () => {
+    if (!selectedCaseId) {
+      qaCaseSetToastWarning("缺少用例信息，无法打开");
+      return;
+    }
+    setIsCaseModalOpen(true);
   };
 
   const handleDownloadAttachment = async (attachment: any) => {
@@ -1004,7 +1014,14 @@ export default function CaseReview() {
                           <div className="flex flex-col gap-4 h-[550px] overflow-y-auto vertical-scrollbar scrollbar-sm pb-20">
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0 flex flex-wrap items-center gap-2">
-                            <div className="text-lg font-semibold min-w-0 break-words">{caseDetail?.name ?? "-"}</div>
+                            <button
+                              type="button"
+                              className="text-lg font-semibold min-w-0 break-words text-left hover:text-accent-primary cursor-pointer transition-colors"
+                              onClick={handleOpenCase}
+                              disabled={!selectedCaseId}
+                            >
+                              {caseDetail?.name ?? "-"}
+                            </button>
                             <Tag className="m-0 shrink-0" color="blue">
                               {loadingCaseVersions ? "加载中..." : currentVersionLabel}
                             </Tag>
@@ -1309,6 +1326,17 @@ export default function CaseReview() {
           allowClear
         />
       </Modal>
+      <UpdateModal
+        open={isCaseModalOpen}
+        onClose={() => {
+          setIsCaseModalOpen(false);
+          fetchCases(keyword, selectedModuleId, false, selectedRepositoryId, true);
+          if (selectedCaseId) fetchCaseDetail(String(selectedCaseId));
+        }}
+        caseId={selectedCaseId}
+        workspaceSlug={workspaceSlug ? String(workspaceSlug) : undefined}
+        projectId={projectId ? String(projectId) : undefined}
+      />
     </div>
   );
 }
