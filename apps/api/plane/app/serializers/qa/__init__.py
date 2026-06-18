@@ -113,7 +113,6 @@ class TestPlanCreateUpdateSerializer(ModelSerializer):
             "threshold",
             "cases",
             "cycle",
-            "assignees",
         ]
 
 

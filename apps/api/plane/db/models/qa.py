@@ -362,11 +362,6 @@ class TestPlan(BaseModel):
     cycle = models.ForeignKey("db.Cycle", null=True, blank=True, related_name="plans", on_delete=models.DO_NOTHING)
     modules = models.ManyToManyField("db.Module", blank=True, related_name="plans", db_table="plan_modules_relations")
     releases = models.ManyToManyField("db.Release", blank=True, related_name="plans", db_table="plan_releases_relations")
-    assignees = models.ManyToManyField(
-        settings.AUTH_USER_MODEL,
-        blank=True,
-        related_name="plan_assignee",
-    )
 
     @property
     def state_display(self):
@@ -395,6 +390,13 @@ class PlanCase(BaseModel):
 
     case = models.ForeignKey(TestCase, on_delete=models.CASCADE, related_name="plan_cases")
     plan = models.ForeignKey(TestPlan, on_delete=models.CASCADE, related_name="plan_cases")
+    assignee = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="plan_case_assignees",
+    )
     result = models.CharField(choices=Result.choices, default=Result.NOT_START,
                               verbose_name="PlanCase Execute Result")
     issue = models.ManyToManyField(Issue, related_name="plan_cases")

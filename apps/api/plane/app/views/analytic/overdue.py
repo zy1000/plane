@@ -23,6 +23,7 @@ from plane.db.models import (
     CycleOverdueRecord,
     Issue,
     IssueAssignee,
+    PlanCase,
     ReleaseOverduePhase,
     ReleaseOverdueRecord,
     TestPlan,
@@ -367,7 +368,16 @@ class WorkspaceOverdueAnalyticsEndpoint(BaseAPIView):
 
         test_plan_queryset = (
             test_plan_queryset.select_related("project", "created_by")
-            .prefetch_related("assignees")
+            .prefetch_related(
+                Prefetch(
+                    "plan_cases",
+                    queryset=PlanCase.objects.filter(
+                        deleted_at__isnull=True,
+                        assignee__isnull=False,
+                    ).select_related("assignee"),
+                    to_attr="active_plan_cases_with_assignee",
+                )
+            )
             .order_by("-end_time")
         )
 
@@ -377,7 +387,10 @@ class WorkspaceOverdueAnalyticsEndpoint(BaseAPIView):
             overdue_since_date = plan.end_time + timedelta(days=1) if plan.end_time else None
             assignees: List[Dict[str, str]] = []
             seen_assignee_ids = set()
-            for assignee in plan.assignees.all():
+            for plan_case in getattr(plan, "active_plan_cases_with_assignee", []):
+                assignee = getattr(plan_case, "assignee", None)
+                if assignee is None:
+                    continue
                 assignee_id = str(assignee.id)
                 if assignee_id in seen_assignee_ids:
                     continue

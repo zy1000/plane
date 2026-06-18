@@ -53,7 +53,11 @@ export class PlanService extends APIService {
       });
   }
 
-  async addPlanCases(workspaceSlug: string, projectId: string, data: { plan_id: string; case_ids: string[] }): Promise<any> {
+  async addPlanCases(
+    workspaceSlug: string,
+    projectId: string,
+    data: { plan_id: string; case_ids: string[]; assignee?: string | null }
+  ): Promise<any> {
     return this.post(`/api/workspaces/${workspaceSlug}/test/plan/add-cases/`, data, { params: { project_id: projectId } })
       .then((response) => response?.data)
       .catch((error) => {
@@ -120,40 +124,6 @@ export class PlanService extends APIService {
       });
   }
 
-  async getPlanAssignees(workspaceSlug: string, queries?: any): Promise<any> {
-    return this.get(`/api/workspaces/${workspaceSlug}/test/plane-assignee`, {
-      params: queries,
-    })
-      .then((response) => response?.data)
-      .catch((error) => {
-        throw error?.response?.data;
-      });
-  }
-
-  async createPlanAssignee(workspaceSlug: string, data: any): Promise<any> {
-    return this.post(`/api/workspaces/${workspaceSlug}/test/plane-assignee`, data)
-      .then((response) => response?.data)
-      .catch((error) => {
-        throw error?.response?.data;
-      });
-  }
-
-  async updatePlanAssignee(workspaceSlug: string, assigneeId: string, data: any): Promise<any> {
-    return this.patch(`/api/workspaces/${workspaceSlug}/test/plane-assignee/${assigneeId}/`, data)
-      .then((response) => response?.data)
-      .catch((error) => {
-        throw error?.response?.data;
-      });
-  }
-
-  async deletePlanAssignee(workspaceSlug: string, assigneeId: string): Promise<any> {
-    return this.delete(`/api/workspaces/${workspaceSlug}/test/plane-assignee/${assigneeId}/`)
-      .then((response) => response?.data)
-      .catch((error) => {
-        throw error?.response?.data;
-      });
-  }
-
   async getPlanCases(workspaceSlug: string, queries?: any): Promise<any> {
     return this.get(`/api/workspaces/${workspaceSlug}/test/plane/case/`, {
       params: queries,
@@ -181,12 +151,38 @@ export class PlanService extends APIService {
       page_size?: number;
       repository_id?: string | null;
       module_id?: string | null;
+      assignee_id?: string | null;
       name__icontains?: string;
     }
-  ): Promise<{ data: Array<{ id: string; name: string; priority: number; assignees: string[]; result: string; created_by: string | null }>; count: number }> {
+  ): Promise<{
+    data: Array<{
+      id: string;
+      case: string;
+      name: string;
+      priority: number;
+      assignee: string | null;
+      result: string;
+      created_by: string | null;
+    }>;
+    count: number;
+  }> {
     const params = { plan_id, ...(queries || {}) } as any;
     return this.get(`/api/workspaces/${workspaceSlug}/test/plan/case-list/`, { params })
       .then((response) => ({ data: response?.data.data ?? [], count: Number(response?.data.count || 0) }))
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async updatePlanCaseAssignee(
+    workspaceSlug: string,
+    projectId: string,
+    data: { plan_case_id: string; assignee: string | null }
+  ): Promise<any> {
+    return this.patch(`/api/workspaces/${workspaceSlug}/test/plan/case-assignee/`, data, {
+      params: { project_id: projectId },
+    })
+      .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
       });

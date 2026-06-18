@@ -7,6 +7,7 @@ import type { TableProps } from "antd";
 import { ChevronDown, Layers, Search, X } from "lucide-react";
 import { ModalCore, EModalPosition, EModalWidth } from "@plane/ui";
 import { Button } from "@plane/propel/button";
+import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { CaseService } from "@/services/qa/case.service";
 import { PlanService } from "@/services/qa/plan.service";
 import { useTranslation } from "@plane/i18n";
@@ -72,6 +73,7 @@ export const PlanCasesModal: React.FC<Props> = ({
   const [saving, setSaving] = useState<boolean>(false);
   const [existingIds, setExistingIds] = useState<string[]>([]);
   const [selectedNewIds, setSelectedNewIds] = useState<string[]>([]);
+  const [selectedAssignee, setSelectedAssignee] = useState<string | null>(null);
   const [checkedTreeKeys, setCheckedTreeKeys] = useState<string[]>([]);
   const nodeCaseIdsCacheRef = useRef<Record<string, string[]>>({});
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -127,6 +129,7 @@ export const PlanCasesModal: React.FC<Props> = ({
     setSelectedTreeKey("root");
     setSelectedRepositoryId(null);
     setSelectedModuleId(null);
+    setSelectedAssignee(null);
     if (!isOpen || !workspaceSlug || !planId) return;
     fetchPlanTree();
     fetchCases(1, undefined, undefined);
@@ -420,10 +423,15 @@ export const PlanCasesModal: React.FC<Props> = ({
         qaCaseSetToastWarning("请先选择要关联的用例");
         return;
       }
+      if (!selectedAssignee) {
+        qaCaseSetToastWarning("请选择执行人");
+        return;
+      }
       setSaving(true);
       await planService.addPlanCases(String(workspaceSlug), String(projectId || ""), {
         plan_id: String(planId),
         case_ids: selectedNewIds.map(String),
+        assignee: selectedAssignee,
       });
       qaCaseSetToastSuccess("用例关联已更新");
       closeModal();
@@ -616,8 +624,26 @@ export const PlanCasesModal: React.FC<Props> = ({
 
         {/* Footer */}
         <div className="flex items-center justify-between gap-3 border-t border-subtle bg-surface-1 px-6 py-3">
-          <div className="text-sm text-secondary">
-            已选 <span className="font-medium text-accent-primary">{selectedCount}</span> 个用例
+          <div className="flex items-center gap-4">
+            <div className="text-sm text-secondary">
+              已选 <span className="font-medium text-accent-primary">{selectedCount}</span> 个用例
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-secondary">
+                执行人<span className="text-danger-primary">*</span>
+              </span>
+              <div className="w-64">
+                <MemberDropdown
+                  multiple={false}
+                  projectId={projectId ? String(projectId) : undefined}
+                  value={selectedAssignee}
+                  onChange={(value) => setSelectedAssignee(value ? String(value) : null)}
+                  placeholder="请选择执行人"
+                  buttonVariant="border-with-text"
+                  showUserDetails
+                />
+              </div>
+            </div>
           </div>
           <div className="flex items-center gap-3">
             <Button variant="secondary" onClick={closeModal} size="lg">

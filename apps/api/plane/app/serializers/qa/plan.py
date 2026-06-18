@@ -47,11 +47,12 @@ class PlanCaseListSerializer(ModelSerializer):
                       'assignee' ]
 
     plan = serializers.UUIDField(source="plan_id", read_only=True)
+    assignee = serializers.UUIDField(source="assignee_id", read_only=True)
     case = TestCaseLiteSerializer(read_only=True)
 
     class Meta:
         model = PlanCase
-        fields = ["id", "plan", "case", "result", "created_at", "updated_at"]
+        fields = ["id", "plan", "case", "assignee", "result", "created_at", "updated_at"]
 
 
 class PlanCaseCardSerializer(ModelSerializer):

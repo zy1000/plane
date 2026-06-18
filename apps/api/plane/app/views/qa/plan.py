@@ -223,7 +223,7 @@ class PlanAPIView(BaseAPIView):
     filterset_class = TestPlanFilter
 
     def get_queryset(self):
-        return TestPlan.objects.all().prefetch_related("assignees")
+        return TestPlan.objects.all()
 
     @allow_fine_permission(PermissionKey.QA_PLAN_CREATE)
     def post(self, request, slug, project_id):
@@ -292,6 +292,7 @@ class PlanCaseAPIView(BaseAPIView):
         "plan_id": ["exact", "in"],
         "case__repository_id": ["exact", "in"],
         "case__module_id": ["exact", "in"],
+        "assignee_id": ["exact", "in"],
         "result": ["exact", "in"],
     }
     serializer_class = PlanCaseListSerializer
@@ -303,10 +304,11 @@ class PlanCaseAPIView(BaseAPIView):
     ordering_fields = ["case__updated_at", "case__code"]
 
     def get_queryset(self):
-        return PlanCase.objects.select_related("case").only(
+        return PlanCase.objects.select_related("case", "assignee").only(
             "id",
             "plan_id",
             "case_id",
+            "assignee_id",
             "result",
             "created_at",
             "updated_at",
@@ -472,9 +474,17 @@ class PlanView(BaseViewSet):
     pagination_class = CustomPaginator
 
     def _filtered_plan_case_qs(self, request):
-        query = PlanCase.objects.filter(plan_id=request.query_params["plan_id"])
+        query = PlanCase.objects.select_related("case", "assignee").filter(
+            plan_id=request.query_params["plan_id"]
+        )
         if name := request.query_params.get("name__icontains"):
             query = query.filter(case__name__icontains=name)
+
+        assignee_ids = request.query_params.getlist("assignee_id")
+        if assignee_ids:
+            query = query.filter(assignee_id__in=assignee_ids)
+        elif assignee_id := request.query_params.get("assignee_id"):
+            query = query.filter(assignee_id=assignee_id)
 
         repository_ids = (
             request.query_params.getlist("repository_id")
@@ -549,25 +559,84 @@ class PlanView(BaseViewSet):
         serializer = PlanCaseCardSerializer(instance=paginated_queryset, many=True)
         return list_response(data=serializer.data, count=query.count())
 
+    @action(detail=False, methods=["patch"], url_path="case-assignee")
+    @allow_fine_permission(PermissionKey.QA_PLAN_EDIT)
+    def case_assignee(self, request, slug):
+        plan_case_id = request.data.get("plan_case_id")
+        if not plan_case_id:
+            return Response(
+                {"error": "plan_case_id is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        project_id = request.query_params.get("project_id")
+        queryset = PlanCase.objects.select_related("plan").filter(
+            id=plan_case_id,
+            deleted_at__isnull=True,
+            plan__deleted_at__isnull=True,
+            plan__project__workspace__slug=slug,
+        )
+        if project_id:
+            queryset = queryset.filter(plan__project_id=project_id)
+        plan_case = get_object_or_404(queryset)
+
+        assignee_id = request.data.get("assignee")
+        if assignee_id in ("", None):
+            plan_case.assignee = None
+        else:
+            member_exists = WorkspaceMember.objects.filter(
+                workspace__slug=slug,
+                member_id=assignee_id,
+                deleted_at__isnull=True,
+                is_active=True,
+            ).exists()
+            if not member_exists:
+                return Response(
+                    {"error": "assignee is invalid"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            plan_case.assignee_id = assignee_id
+
+        plan_case.save(update_fields=["assignee", "updated_at"])
+        return Response(PlanCaseCardSerializer(plan_case).data, status=status.HTTP_200_OK)
+
     @action(detail=False, methods=["post"], url_path="execute")
     def execute(self, request, slug):
-        plan_id = request.data["plan_id"]
-        case_ids = request.data["case_id"]
-        result = request.data["result"]
+        plan_id = request.data.get("plan_id")
+        case_ids = request.data.get("case_id")
+        result = request.data.get("result")
         reason = request.data.get("reason")
         steps = request.data.get("steps")
-        assignee = request.data["assignee"]
+        if not plan_id or not case_ids or not result:
+            return Response(
+                {"error": "plan_id, case_id and result are required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        query = TestPlan.objects.get(id=plan_id).assignees.all()
-        plan_executor = query.values_list("id", flat=True)
+        plan = get_object_or_404(
+            TestPlan.objects.filter(
+                id=plan_id,
+                deleted_at__isnull=True,
+                project__workspace__slug=slug,
+            )
+        )
 
         if isinstance(case_ids, str):
             case_ids = [case_ids]
         created_records = []
         for case_id in case_ids:
-
-            plan_case = PlanCase.objects.get(plan_id=plan_id, case_id=case_id)
-            if query.exists() and request.user.id not in plan_executor:
+            plan_case = get_object_or_404(
+                PlanCase.objects.select_related("case"),
+                plan_id=plan.id,
+                case_id=case_id,
+                deleted_at__isnull=True,
+            )
+            if not plan_case.assignee_id:
+                return Response(
+                    status=status.HTTP_403_FORBIDDEN,
+                    data={"msg": f'用例"{plan_case.case.name}"尚未设置执行人'},
+                )
+            if str(plan_case.assignee_id) != str(request.user.id):
                 return Response(
                     status=status.HTTP_403_FORBIDDEN,
                     data={"msg": f'你没有权限执行"{plan_case.case.name}"'},
@@ -580,7 +649,7 @@ class PlanView(BaseViewSet):
                 result=result,
                 reason=reason,
                 steps=steps if steps else plan_case.case.steps,
-                assignee_id=assignee,
+                assignee_id=request.user.id,
                 plan_case=plan_case,
             )
             created_records.append(
@@ -603,15 +672,16 @@ class PlanView(BaseViewSet):
                     epoch=int(timezone.now().timestamp()),
                 )
 
-            plan = TestPlan.objects.get(id=plan_id)
-            # 修改计划状态
-            if not PlanCase.objects.filter(
-                plan_id=plan_id, result=PlanCase.Result.NOT_START
-            ).exists():
-                plan.state = TestPlan.State.COMPLETED
-            else:
-                plan.state = TestPlan.State.PROGRESS
-            plan.save()
+        # 修改计划状态
+        if not PlanCase.objects.filter(
+            plan_id=plan_id,
+            result=PlanCase.Result.NOT_START,
+            deleted_at__isnull=True,
+        ).exists():
+            plan.state = TestPlan.State.COMPLETED
+        else:
+            plan.state = TestPlan.State.PROGRESS
+        plan.save()
         return Response(
             status=status.HTTP_201_CREATED,
             data={"records": created_records},
@@ -869,6 +939,7 @@ class PlanView(BaseViewSet):
     def add_cases(self, request, slug):
         plan_id = request.data.get("plan_id")
         raw_case_ids = request.data.get("case_ids")
+        assignee_id = request.data.get("assignee")
 
         if not plan_id:
             return Response(
@@ -904,6 +975,19 @@ class PlanView(BaseViewSet):
             plan_lookup["project_id"] = project_id
         plan = get_object_or_404(TestPlan, **plan_lookup)
 
+        if assignee_id not in (None, ""):
+            member_exists = WorkspaceMember.objects.filter(
+                workspace__slug=slug,
+                member_id=assignee_id,
+                deleted_at__isnull=True,
+                is_active=True,
+            ).exists()
+            if not member_exists:
+                return Response(
+                    {"error": "assignee is invalid"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
         repo_ids = list(
             TestCaseRepository.objects.filter(
                 project_id=plan.project_id,
@@ -936,13 +1020,15 @@ class PlanView(BaseViewSet):
         ).exclude(deleted_at__isnull=True)
         soft_deleted_case_ids = set(soft_deleted_qs.values_list("case_id", flat=True))
         if soft_deleted_case_ids:
-            soft_deleted_qs.update(deleted_at=None)
+            soft_deleted_qs.update(deleted_at=None, assignee_id=assignee_id)
 
         to_create_case_ids = found_case_ids - existing_case_ids - soft_deleted_case_ids
         if to_create_case_ids:
             PlanCase.objects.bulk_create(
                 [
                     PlanCase(plan=plan, case_id=case_id)
+                    if assignee_id in (None, "")
+                    else PlanCase(plan=plan, case_id=case_id, assignee_id=assignee_id)
                     for case_id in to_create_case_ids
                 ],
                 batch_size=1000,

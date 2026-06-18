@@ -32,7 +32,7 @@ type ReviewCaseRow = {
   case_id: string | number;
   name: string;
   priority: number;
-  assignees: Array<string>;
+  assignee: string | null;
   result: string;
   created_by: string | number | null;
 };
@@ -41,7 +41,7 @@ type PlanCaseRow = {
   case: string | number;
   name: string;
   priority: number;
-  assignees: Array<string>;
+  assignee: string | null;
   result: string;
   created_by: string | number | null;
 };
@@ -78,7 +78,17 @@ export default function TestExecutionPage() {
   const [error, setError] = React.useState<string | null>(null);
   const [cases, setCases] = React.useState<PlanCaseRow[]>([]);
   const [keyword, setKeyword] = React.useState<string>("");
+  const [onlyMyCases, setOnlyMyCases] = React.useState<boolean>(false);
   const [selectedCaseId, setSelectedCaseId] = React.useState<string | undefined>(initialCaseId ?? undefined);
+  const displayCases = React.useMemo(() => {
+    if (!onlyMyCases) return cases;
+    if (!currentUser?.id) return [];
+    const currentUserId = String(currentUser.id);
+    return cases.filter((item) => {
+      if (!item.assignee) return false;
+      return String(item.assignee) === currentUserId;
+    });
+  }, [cases, onlyMyCases, currentUser?.id]);
 
   const [expandedKeys, setExpandedKeys] = React.useState<string[] | undefined>(undefined);
   const [autoExpandParent, setAutoExpandParent] = React.useState<boolean>(true);
@@ -330,6 +340,22 @@ export default function TestExecutionPage() {
   }, [initialCaseId]);
 
   React.useEffect(() => {
+    if (!onlyMyCases) return;
+    if (listLoading) return;
+    if (!selectedCaseId) return;
+    const exists = displayCases.some((item) => String(item.case) === String(selectedCaseId));
+    if (exists) return;
+    if (displayCases.length > 0) {
+      const nextCaseId = String(displayCases[0].case);
+      setSelectedCaseId(nextCaseId);
+      fetchCaseDetail(nextCaseId);
+      return;
+    }
+    setSelectedCaseId(undefined);
+    setCaseDetail(null);
+  }, [displayCases, selectedCaseId, listLoading, onlyMyCases]);
+
+  React.useEffect(() => {
     if (!selectedCaseId) return;
     const container = leftRef.current;
     if (!container) return;
@@ -337,7 +363,7 @@ export default function TestExecutionPage() {
     if (el) {
       (el as HTMLElement).scrollIntoView({ block: "nearest" });
     }
-  }, [selectedCaseId, cases]);
+  }, [selectedCaseId, displayCases]);
 
   const debouncedSearch = React.useMemo(
     () =>
@@ -461,6 +487,7 @@ export default function TestExecutionPage() {
     if (!planTree) return [];
     return [buildTreeNodes(planTree)];
   }, [planTree]);
+
   const handleChangeActual = React.useCallback(
     (idx: number, val: string) => setStepActualResultMap((prev) => ({ ...prev, [idx]: val })),
     []
@@ -508,8 +535,8 @@ export default function TestExecutionPage() {
 
   React.useEffect(() => {
     const row = cases.find((item) => String(item.case) === String(selectedCaseId || ""));
-    const reviewers = Array.isArray(row?.assignees) ? row!.assignees.map((id) => String(id)) : [];
-    const isReviewer = currentUser?.id ? reviewers.includes(String(currentUser.id)) : false;
+    const assigneeId = row?.assignee ? String(row.assignee) : null;
+    const isReviewer = currentUser?.id ? assigneeId === String(currentUser.id) : false;
     setIsCurrentUserReviewer(isReviewer);
   }, [cases, selectedCaseId, currentUser?.id]);
 
@@ -520,25 +547,24 @@ export default function TestExecutionPage() {
   React.useEffect(() => {
     if (!selectedCaseId) return;
     const row = cases.find((item) => String(item.case) === String(selectedCaseId || ""));
-    const reviewers = Array.isArray(row?.assignees) ? row!.assignees.map((id) => String(id)) : [];
-    const isReviewer = currentUser?.id ? reviewers.includes(String(currentUser.id)) : false;
+    const assigneeId = row?.assignee ? String(row.assignee) : null;
+    const isReviewer = currentUser?.id ? assigneeId === String(currentUser.id) : false;
     const map = enumsData?.plan_case_result || {};
     const keys = Object.keys(map).filter((k) => k !== "未执行");
     let def: string | null = null;
     if (isReviewer && keys.includes("通过")) def = "通过";
-    else if (!isReviewer && keys.includes("建议")) def = "建议";
     else def = keys[0] ?? null;
     setReviewValue(def);
     setReason("");
     clearPendingFiles();
   }, [selectedCaseId, cases, currentUser?.id, enumsData?.plan_case_result]);
 
-  const casesRef = React.useRef(cases);
+  const casesRef = React.useRef(displayCases);
   const selectedCaseIdRef = React.useRef(selectedCaseId);
   const autoNextRef = React.useRef(autoNext);
   const pendingFilesRef = React.useRef(pendingFiles);
   React.useEffect(() => {
-    casesRef.current = cases;
+    casesRef.current = displayCases;
     selectedCaseIdRef.current = selectedCaseId;
     autoNextRef.current = autoNext;
     pendingFilesRef.current = pendingFiles;
@@ -668,6 +694,10 @@ export default function TestExecutionPage() {
   }, [debouncedSubmit]);
 
   const handleSubmitReview = () => {
+    if (!isCurrentUserReviewer) {
+      message.warning("当前用例仅执行人可提交执行结果");
+      return;
+    }
     const payload = buildPayload();
     if (!payload) {
       message.warning("缺少必要参数或用户信息，无法提交");
@@ -1023,25 +1053,31 @@ export default function TestExecutionPage() {
             style={{ width: 360, minWidth: 280, maxWidth: 520, maxHeight: `calc(100dvh - ${topOffset}px)` }}
           >
             <div className="p-4 flex flex-col gap-3 flex-1 min-h-0">
-              <Input.Search
-                placeholder="按用例名称搜索"
-                allowClear
-                onSearch={(v) => {
-                  setKeyword(v);
-                  debouncedSearch.cancel();
-                  fetchCases(v);
-                }}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  setKeyword(v);
-                  if (v.trim() === "") {
+              <div className="flex items-center gap-3">
+                <Input.Search
+                  className="flex-1 min-w-0"
+                  placeholder="按用例名称搜索"
+                  allowClear
+                  onSearch={(v) => {
+                    setKeyword(v);
                     debouncedSearch.cancel();
-                    fetchCases("");
-                  } else {
-                    debouncedSearch(v);
-                  }
-                }}
-              />
+                    fetchCases(v);
+                  }}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setKeyword(v);
+                    if (v.trim() === "") {
+                      debouncedSearch.cancel();
+                      fetchCases("");
+                    } else {
+                      debouncedSearch(v);
+                    }
+                  }}
+                />
+                <Checkbox className="shrink-0" checked={onlyMyCases} onChange={(e) => setOnlyMyCases(e.target.checked)}>
+                  我执行的
+                </Checkbox>
+              </div>
               {listLoading ? (
                 <div className="flex items-center justify-center py-12">
                   <Spin />
@@ -1057,12 +1093,13 @@ export default function TestExecutionPage() {
                     className="flex-1 min-h-0 overflow-y-auto vertical-scrollbar scrollbar-sm flex flex-col gap-3 pr-2 pl-1 py-1"
                     style={{ scrollbarGutter: "stable" }}
                   >
-                    {cases.length === 0 ? (
-                      <div className="text-secondary py-12 text-center">暂无数据</div>
+                    {displayCases.length === 0 ? (
+                      <div className="text-secondary py-12 text-center">{onlyMyCases ? "暂无我执行的用例" : "暂无数据"}</div>
                     ) : (
-                      cases.map((item) => {
+                      displayCases.map((item) => {
                         const caseId = String(item.case);
                         const isActive = String(selectedCaseId || "") === caseId;
+                        const assigneeName = item.assignee ? getUserDetails(String(item.assignee))?.display_name || "未知用户" : "未分配";
                         return (
                           <Card
                             key={item.id}
@@ -1075,11 +1112,14 @@ export default function TestExecutionPage() {
                             }}
                             className={`${isActive ? "ring-2 ring-accent-strong" : ""} rounded-md hover:shadow-sm transition-shadow`}
                           >
-                            <div className="flex items-center justify-between">
-                              <div className="text-sm leading-5 font-medium truncate">{item.name}</div>
-                              <Tag color={(enumsData?.plan_case_result || {})[String(item.result)]}>
-                                {item.result || "-"}
-                              </Tag>
+                            <div className="flex flex-col gap-2">
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="text-sm leading-5 font-medium truncate">{item.name}</div>
+                                <Tag color={(enumsData?.plan_case_result || {})[String(item.result)]}>
+                                  {item.result || "-"}
+                                </Tag>
+                              </div>
+                              <div className="text-xs leading-4 text-secondary truncate">执行人: {assigneeName}</div>
                             </div>
                           </Card>
                         );
@@ -1438,7 +1478,7 @@ export default function TestExecutionPage() {
                 <div className="sticky bottom-0 w-full shrink-0 bg-surface-1" style={{ borderTop: "1px solid #f0f0f0" }}>
                   <div className="p-4">
                     <div className="px-0 py-3 flex flex-col gap-3">
-                      <Radio.Group onChange={handleRadioChange} value={reviewValue} disabled={!selectedCaseId}>
+                      <Radio.Group onChange={handleRadioChange} value={reviewValue} disabled={!selectedCaseId || !isCurrentUserReviewer}>
                         {Object.keys(enumsData?.plan_case_result || {})
                           .filter((k) => k !== "未执行")
                           .map((k, idx) => (
@@ -1459,6 +1499,7 @@ export default function TestExecutionPage() {
                           autoSize={{ minRows: 1, maxRows: 1 }}
                           placeholder="请输入原因（双击可全屏输入）"
                           allowClear
+                          disabled={!isCurrentUserReviewer}
                           className="resize-none"
                           onKeyDownCapture={(e) => {
                             if (e.ctrlKey || e.metaKey || e.altKey || e.key === "Escape" || e.key === "Tab") return;
@@ -1466,6 +1507,9 @@ export default function TestExecutionPage() {
                           }}
                         />
                       </div>
+                      {!isCurrentUserReviewer && (
+                        <div className="text-xs text-danger-primary">当前用例仅执行人可提交执行结果</div>
+                      )}
                       {pendingFiles.length > 0 && (
                         <div className="rounded-md border border-subtle bg-layer-1/60 px-3 py-2">
                           <div className="mb-2 flex items-center justify-between gap-3">
@@ -1506,7 +1550,7 @@ export default function TestExecutionPage() {
                           <button
                             type="button"
                             onClick={handleSubmitReview}
-                            disabled={!selectedCaseId || submitLoading}
+                            disabled={!selectedCaseId || submitLoading || !isCurrentUserReviewer}
                             className="text-on-color bg-accent-primary hover:bg-accent-primary-hover focus:text-on-color focus:bg-accent-primary-hover px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             {submitLoading ? "提交中..." : "提交结果"}
@@ -1532,7 +1576,7 @@ export default function TestExecutionPage() {
                             >
                               <button
                                 type="button"
-                                disabled={!selectedCaseId}
+                                disabled={!selectedCaseId || !isCurrentUserReviewer}
                                 className="border border-subtle text-secondary hover:bg-layer-1 px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                               >
                                 <LucideIcons.Paperclip size={13} />

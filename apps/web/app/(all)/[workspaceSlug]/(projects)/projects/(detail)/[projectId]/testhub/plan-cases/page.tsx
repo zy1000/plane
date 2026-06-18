@@ -19,7 +19,7 @@ import type { TreeProps } from "antd";
 import { CaseService } from "@/services/qa/case.service";
 import { PlanService } from "@/services/qa/plan.service";
 import { AppstoreOutlined } from "@ant-design/icons";
-import { FolderOpenDot, Atom } from "lucide-react";
+import { FolderOpenDot, Atom, UserCog, CheckCheck, Unlink, X, Loader2 } from "lucide-react";
 import { formatDateTime, globalEnums } from "../util";
 import { useUser } from "@/hooks/store/user";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
@@ -46,6 +46,7 @@ type TestCase = {
 };
 type PlanCaseItem = {
   id: string;
+  assignee?: string | null;
   result?: string;
   case?: TestCase;
 };
@@ -93,7 +94,10 @@ export default function PlanCasesPage() {
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [selectedCaseIds, setSelectedCaseIds] = useState<string[]>([]);
   const [selectedPlanCaseToCaseIdMap, setSelectedPlanCaseToCaseIdMap] = useState<Record<string, string>>({});
+  const [selectedPlanCaseToAssigneeMap, setSelectedPlanCaseToAssigneeMap] = useState<Record<string, string | null>>({});
   const [bulkExecuteLoading, setBulkExecuteLoading] = useState<boolean>(false);
+  const [bulkAssigneeUpdating, setBulkAssigneeUpdating] = useState<boolean>(false);
+  const [updatingAssigneePlanCaseId, setUpdatingAssigneePlanCaseId] = useState<string | null>(null);
 
   const [planList, setPlanList] = useState<Array<{ id: string; name: string }>>([]);
   const [planListLoading, setPlanListLoading] = useState<boolean>(false);
@@ -116,6 +120,7 @@ export default function PlanCasesPage() {
     ) {
       setSelectedCaseIds([]);
       setSelectedPlanCaseToCaseIdMap({});
+      setSelectedPlanCaseToAssigneeMap({});
     }
     lastSelectionContextKeyRef.current = selectionContextKey;
   }, [selectionContextKey]);
@@ -399,6 +404,7 @@ export default function PlanCasesPage() {
       if (Array.isArray(ids)) {
         setSelectedCaseIds([]);
         setSelectedPlanCaseToCaseIdMap({});
+        setSelectedPlanCaseToAssigneeMap({});
       }
       await fetchPlanTree();
       await fetchCases(
@@ -436,6 +442,15 @@ export default function PlanCasesPage() {
     if (!workspaceSlug || !planId) return;
     if (!currentUser?.id) {
       message.warning("缺少用户信息，无法提交执行结果");
+      return;
+    }
+    const currentUserId = String(currentUser.id);
+    const unauthorizedPlanCases = selectedCaseIds.filter((planCaseId) => {
+      const assigned = selectedPlanCaseToAssigneeMap[String(planCaseId)];
+      return !assigned || String(assigned) !== currentUserId;
+    });
+    if (unauthorizedPlanCases.length > 0) {
+      message.warning("选中用例中包含非本人执行项或未设置执行人的项，请调整后重试");
       return;
     }
     const caseIds = Array.from(
@@ -487,6 +502,7 @@ export default function PlanCasesPage() {
       message.success("批量执行结果提交成功");
       setSelectedCaseIds([]);
       setSelectedPlanCaseToCaseIdMap({});
+      setSelectedPlanCaseToAssigneeMap({});
       await fetchPlanTree();
       await fetchCases(currentPage, pageSize, selectedRepositoryId || undefined, selectedModuleId || undefined);
     } catch (e: any) {
@@ -494,6 +510,91 @@ export default function PlanCasesPage() {
       message.error(msg);
     } finally {
       setBulkExecuteLoading(false);
+    }
+  };
+
+  const handlePlanCaseAssigneeChange = async (planCaseId: string, assignee: string | null) => {
+    if (!workspaceSlug || !projectId) return;
+    try {
+      setUpdatingAssigneePlanCaseId(String(planCaseId));
+      const updated = await planService.updatePlanCaseAssignee(String(workspaceSlug), String(projectId), {
+        plan_case_id: String(planCaseId),
+        assignee,
+      });
+      const nextAssignee = updated?.assignee ?? assignee;
+      setCases((prev) =>
+        (prev || []).map((item) =>
+          String(item.id) === String(planCaseId) ? { ...item, assignee: nextAssignee ? String(nextAssignee) : null } : item
+        )
+      );
+      setSelectedPlanCaseToAssigneeMap((prev) => ({
+        ...(prev || {}),
+        [String(planCaseId)]: nextAssignee ? String(nextAssignee) : null,
+      }));
+      qaCaseSetToastSuccess("执行人已更新");
+    } catch (e: unknown) {
+      qaCaseSetToastError(e, t, "更新执行人失败");
+    } finally {
+      setUpdatingAssigneePlanCaseId(null);
+    }
+  };
+
+  const handleBulkPlanCaseAssigneeChange = async (assignee: string | null) => {
+    if (!workspaceSlug || !projectId) return;
+    const targetPlanCaseIds = Array.from(new Set((selectedCaseIds || []).map((id) => String(id))));
+    if (targetPlanCaseIds.length === 0) {
+      qaCaseSetToastWarning("请先选择用例");
+      return;
+    }
+
+    try {
+      setBulkAssigneeUpdating(true);
+      const settledResults = await Promise.allSettled(
+        targetPlanCaseIds.map((planCaseId) =>
+          planService.updatePlanCaseAssignee(String(workspaceSlug), String(projectId), {
+            plan_case_id: String(planCaseId),
+            assignee,
+          })
+        )
+      );
+
+      const successPlanCaseIds: string[] = [];
+      const failedErrors: unknown[] = [];
+      settledResults.forEach((result, idx) => {
+        if (result.status === "fulfilled") {
+          successPlanCaseIds.push(targetPlanCaseIds[idx]);
+        } else {
+          failedErrors.push(result.reason);
+        }
+      });
+
+      if (successPlanCaseIds.length > 0) {
+        const successIdSet = new Set(successPlanCaseIds.map((id) => String(id)));
+        const nextAssignee = assignee ? String(assignee) : null;
+
+        setCases((prev) =>
+          (prev || []).map((item) => (successIdSet.has(String(item.id)) ? { ...item, assignee: nextAssignee } : item))
+        );
+        setSelectedPlanCaseToAssigneeMap((prev) => {
+          const next = { ...(prev || {}) } as Record<string, string | null>;
+          successPlanCaseIds.forEach((planCaseId) => {
+            next[String(planCaseId)] = nextAssignee;
+          });
+          return next;
+        });
+      }
+
+      if (failedErrors.length === 0) {
+        qaCaseSetToastSuccess("批量更新执行人成功");
+      } else if (successPlanCaseIds.length > 0) {
+        message.warning(`已更新 ${successPlanCaseIds.length} 条，${failedErrors.length} 条失败`);
+      } else {
+        qaCaseSetToastError(failedErrors[0], t, "批量更新执行人失败");
+      }
+    } catch (e: unknown) {
+      qaCaseSetToastError(e, t, "批量更新执行人失败");
+    } finally {
+      setBulkAssigneeUpdating(false);
     }
   };
 
@@ -577,30 +678,26 @@ export default function PlanCasesPage() {
         ),
     },
     {
-      title: "维护人",
-      dataIndex: "assignee",
-      key: "assignee",
-      width: 140,
-      render: (_: any, record: PlanCaseItem) => {
-        const assignee = (record?.case as any)?.assignee;
-        return assignee ? (
-          <MemberDropdown
-            multiple={false}
-            value={assignee ?? null}
-            onChange={() => {}}
-            disabled={true}
-            placeholder={""}
-            className="w-full text-sm"
-            buttonContainerClassName="w-full text-left p-0 cursor-default"
-            buttonVariant="transparent-with-text"
-            buttonClassName="text-sm p-0 hover:bg-transparent hover:bg-inherit"
-            showUserDetails={true}
-            optionsClassName="z-[60]"
-          />
-        ) : (
-          ""
-        );
-      },
+      title: "执行人",
+      dataIndex: "plan_assignee",
+      key: "plan_assignee",
+      width: 160,
+      render: (_: any, record: PlanCaseItem) => (
+        <MemberDropdown
+          multiple={false}
+          value={record?.assignee ?? null}
+          onChange={(value) => handlePlanCaseAssigneeChange(String(record.id), value ? String(value) : null)}
+          disabled={bulkAssigneeUpdating || updatingAssigneePlanCaseId === String(record.id)}
+          projectId={projectId ? String(projectId) : undefined}
+          placeholder="请选择执行人"
+          className="w-full text-sm"
+          buttonContainerClassName="w-full text-left p-0"
+          buttonVariant="transparent-with-text"
+          buttonClassName="text-sm p-0 hover:bg-transparent hover:bg-inherit"
+          showUserDetails={true}
+          optionsClassName="z-[80]"
+        />
+      ),
     },
     {
       title: "类型",
@@ -653,26 +750,42 @@ export default function PlanCasesPage() {
       key: "actions",
       width: 140,
       fixed: "right",
-      render: (_: any, record: PlanCaseItem) => (
-        <Space>
-          <Button
-            size="small"
-            type="link"
-            onClick={() => {
-              const cid = record?.case?.id;
-              if (!cid) return;
-              router.push(
-                `/${workspaceSlug}/projects/${projectId}/testhub/test-execution?case_id=${encodeURIComponent(String(cid))}&plan_id=${encodeURIComponent(String(planId || ""))}`
-              );
-            }}
-          >
-            执行
-          </Button>
-          <Button size="small" type="link" danger onClick={() => onCancelRelation([record.id])}>
-            取关
-          </Button>
-        </Space>
-      ),
+      render: (_: any, record: PlanCaseItem) => {
+        const isAssignedToCurrentUser =
+          Boolean(record?.assignee) &&
+          Boolean(currentUser?.id) &&
+          String(record.assignee) === String(currentUser?.id);
+        const executeDisabledReason = !record?.assignee
+          ? "未设置执行人，无法执行"
+          : !isAssignedToCurrentUser
+            ? "仅该用例执行人可执行"
+            : "";
+        return (
+          <Space>
+            <Tooltip tooltipContent={executeDisabledReason || "执行"}>
+              <span>
+                <Button
+                  size="small"
+                  type="link"
+                  disabled={!isAssignedToCurrentUser}
+                  onClick={() => {
+                    const cid = record?.case?.id;
+                    if (!cid) return;
+                    router.push(
+                      `/${workspaceSlug}/projects/${projectId}/testhub/test-execution?case_id=${encodeURIComponent(String(cid))}&plan_id=${encodeURIComponent(String(planId || ""))}`
+                    );
+                  }}
+                >
+                  执行
+                </Button>
+              </span>
+            </Tooltip>
+            <Button size="small" type="link" danger onClick={() => onCancelRelation([record.id])}>
+              取关
+            </Button>
+          </Space>
+        );
+      },
     },
   ];
 
@@ -862,6 +975,21 @@ export default function PlanCasesPage() {
                               }
                               return next;
                             });
+
+                            setSelectedPlanCaseToAssigneeMap((prev) => {
+                              const next = { ...(prev || {}) } as Record<string, string | null>;
+                              const currentPageSelected = new Set(
+                                nextSelectedKeys.filter((k) => currentPageIds.includes(String(k)))
+                              );
+                              for (const pid of currentPageIds) {
+                                if (!currentPageSelected.has(String(pid))) delete next[String(pid)];
+                              }
+                              for (const pid of Array.from(currentPageSelected)) {
+                                const row = (cases || []).find((r) => String(r.id) === String(pid));
+                                next[String(pid)] = row?.assignee ? String(row.assignee) : null;
+                              }
+                              return next;
+                            });
                           },
                         }}
                       />
@@ -869,18 +997,37 @@ export default function PlanCasesPage() {
                     <div className="flex-shrink-0 border-t border-subtle px-0 py-3 bg-surface-1 flex items-center justify-between">
                       <div className="flex items-center gap-4 text-sm">
                         {selectedCaseIds.length > 0 && (
-                          <div className="flex items-center gap-2">
-                            <span className="text-secondary">已选择 {selectedCaseIds.length} 条</span>
-                            <span
-                              className="cursor-pointer text-sm transition-colors"
-                              style={{ color: "#2a83ff" }}
-                              onClick={() => {
-                                setSelectedCaseIds([]);
-                                setSelectedPlanCaseToCaseIdMap({});
-                              }}
-                            >
-                              清除选择
-                            </span>
+                          <div className="flex items-center gap-0.5">
+                            <div className="flex items-center gap-2 pl-2 pr-1">
+                              <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-accent-primary px-1.5 text-[11px] font-semibold leading-none text-white">
+                                {selectedCaseIds.length}
+                              </span>
+                              <span className="whitespace-nowrap text-xs font-medium text-primary">已选择</span>
+                            </div>
+
+                            <span aria-hidden className="mx-1 h-5 w-px shrink-0 bg-[var(--border-color-subtle)]" />
+
+                            <MemberDropdown
+                              multiple={false}
+                              value={null}
+                              onChange={(value) => handleBulkPlanCaseAssigneeChange(value ? String(value) : null)}
+                              disabled={bulkAssigneeUpdating}
+                              projectId={projectId ? String(projectId) : undefined}
+                              buttonVariant="transparent-with-text"
+                              placement="top-start"
+                              optionsClassName="z-[80]"
+                              button={
+                                <span className="inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-md px-2.5 text-xs font-medium text-secondary transition-colors hover:bg-accent-subtle hover:text-accent-primary">
+                                  {bulkAssigneeUpdating ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  ) : (
+                                    <UserCog className="h-3.5 w-3.5" />
+                                  )}
+                                  {bulkAssigneeUpdating ? "更新中" : "分配执行人"}
+                                </span>
+                              }
+                            />
+
                             <Popconfirm
                               title="确定将选中用例全部标记为执行成功？"
                               onConfirm={onBulkExecuteSelected}
@@ -888,23 +1035,44 @@ export default function PlanCasesPage() {
                               cancelText="取消"
                               okButtonProps={{ loading: bulkExecuteLoading }}
                             >
-                              <span
-                                className="cursor-pointer text-sm transition-colors"
-                                style={{ color: "#2a83ff" }}
+                              <button
+                                type="button"
+                                className="inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-md px-2.5 text-xs font-medium text-accent-primary transition-colors hover:bg-accent-subtle"
                               >
+                                <CheckCheck className="h-3.5 w-3.5" />
                                 执行
-                              </span>
+                              </button>
                             </Popconfirm>
+
                             <Popconfirm
                               title="确定取关选中用例？"
                               onConfirm={() => onCancelRelation(selectedCaseIds)}
                               okText="确定"
                               cancelText="取消"
                             >
-                              <span className="text-red-500 hover:text-red-600 cursor-pointer transition-colors">
+                              <button
+                                type="button"
+                                className="inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-md px-2.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-50"
+                              >
+                                <Unlink className="h-3.5 w-3.5" />
                                 取关
-                              </span>
+                              </button>
                             </Popconfirm>
+
+                            <span aria-hidden className="mx-1 h-5 w-px shrink-0 bg-[var(--border-color-subtle)]" />
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedCaseIds([]);
+                                setSelectedPlanCaseToCaseIdMap({});
+                                setSelectedPlanCaseToAssigneeMap({});
+                              }}
+                              className="inline-flex h-7 items-center gap-1 whitespace-nowrap rounded-md px-2 text-xs font-medium text-secondary transition-colors hover:bg-surface-2 hover:text-primary"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                              清除
+                            </button>
                           </div>
                         )}
                         <span className="text-secondary">

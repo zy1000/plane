@@ -18,7 +18,6 @@ import { FolderOpenDot } from "lucide-react";
 import type { TableProps, InputRef, TableColumnType } from "antd";
 import type { TreeProps } from "antd";
 import type { FilterDropdownProps } from "antd/es/table/interface";
-import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { ChevronDownIcon } from "@plane/propel/icons";
 type PlanModule = {
   id: string;
@@ -33,7 +32,6 @@ type TestPlan = {
   name: string;
   begin_time?: string | null;
   end_time?: string | null;
-  assignees?: any[];
   cases?: any[];
   state?: string | number;
   module?: string | null;
@@ -95,7 +93,7 @@ export default function TestPlanDetailPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [total, setTotal] = useState(0);
-  const [filters, setFilters] = useState<{ name?: string; assigneeName?: string; states?: number[] }>({});
+  const [filters, setFilters] = useState<{ name?: string; states?: number[] }>({});
 
   const [allTotal, setAllTotal] = useState<number | undefined>(undefined);
   const [moduleCounts, setModuleCounts] = useState<Record<string, number>>({});
@@ -219,7 +217,7 @@ export default function TestPlanDetailPage() {
       <div style={{ padding: 8 }} onKeyDown={(e) => e.stopPropagation()}>
         <Input
           ref={searchInput}
-          placeholder={`搜索 ${dataIndex === "name" ? "名称" : dataIndex === "assignees" ? "负责人名称" : "其他"}`}
+          placeholder={`搜索 ${dataIndex === "name" ? "名称" : "其他"}`}
           value={selectedKeys[0]}
           onChange={(e) => setSelectedKeys(e.target.value ? [e.target.value] : [])}
           onPressEnter={() => handleSearch(selectedKeys as string[], dataIndex, close)}
@@ -254,11 +252,7 @@ export default function TestPlanDetailPage() {
         ? filters.name
           ? [filters.name]
           : null
-        : dataIndex === "assignees"
-          ? filters.assigneeName
-            ? [filters.assigneeName]
-            : null
-          : null,
+        : null,
   });
 
   const handleSearch = (selectedKeys: string[], dataIndex: keyof TestPlan | string, close?: () => void) => {
@@ -267,10 +261,8 @@ export default function TestPlanDetailPage() {
     const newFilters = { ...filters };
     if (selectedKeys[0]) {
       if (dataIndex === "name") newFilters.name = selectedKeys[0];
-      if (dataIndex === "assignees") newFilters.assigneeName = selectedKeys[0];
     } else {
       if (dataIndex === "name") delete newFilters.name;
-      if (dataIndex === "assignees") delete newFilters.assigneeName;
     }
     setFilters(newFilters);
     fetchTestPlans(1, pageSize, newFilters);
@@ -282,30 +274,8 @@ export default function TestPlanDetailPage() {
     setSearchText("");
     const newFilters = { ...filters };
     if (dataIndex === "name") delete newFilters.name;
-    if (dataIndex === "assignees") delete newFilters.assigneeName;
     setFilters(newFilters);
     fetchTestPlans(1, pageSize, newFilters);
-  };
-
-  const renderAssignees = (assignees: any[]) => {
-    const assigneeIds = assignees;
-    if (assigneeIds.length === 0) return null;
-
-    return (
-      <MemberDropdown
-        multiple={true}
-        value={assigneeIds}
-        onChange={() => {}}
-        disabled={true}
-        placeholder=""
-        className="w-full text-sm"
-        buttonContainerClassName="w-full text-left p-0 cursor-default"
-        buttonVariant="transparent-with-text"
-        buttonClassName="text-sm p-0 hover:bg-transparent hover:bg-inherit"
-        showUserDetails={true}
-        optionsClassName="z-[60]"
-      />
-    );
   };
 
   const renderState = (state: any) => {
@@ -494,14 +464,6 @@ export default function TestPlanDetailPage() {
       },
     },
     {
-      title: "执行人",
-      dataIndex: "assignees",
-      key: "assignees",
-      width: 220,
-      ...getColumnSearchProps("assignees"),
-      render: (assignees: any[]) => renderAssignees(assignees),
-    },
-    {
       title: "操作",
       key: "actions",
       width: 120,
@@ -542,7 +504,6 @@ export default function TestPlanDetailPage() {
       const moduleParam = typeof moduleOverride !== "undefined" ? moduleOverride : selectedModuleId;
       if (moduleParam) queryParams.module_id = moduleParam;
       if (filterParams.name) queryParams.name__icontains = filterParams.name;
-      if (filterParams.assigneeName) queryParams.assignee_display_name = filterParams.assigneeName;
       if (filterParams.states && filterParams.states.length > 0) queryParams.state__in = filterParams.states.join(",");
       const response: TestPlanResponse = await planService.getPlans(workspaceSlug as string, pid, queryParams);
       setTestPlans(response.data || []);

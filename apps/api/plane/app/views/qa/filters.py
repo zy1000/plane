@@ -5,7 +5,7 @@ from plane.db.models import TestPlan, PlanModule, CaseReview, CaseReviewModule
 
 
 class TestPlanFilter(filters.FilterSet):
-    assignee_display_name = filters.CharFilter(field_name='assignees__display_name', lookup_expr='icontains')
+    assignee_display_name = filters.CharFilter(field_name='plan_cases__assignee__display_name', lookup_expr='icontains')
     module_id = filters.UUIDFilter(method="filter_module_id")
 
     def filter_module_id(self, queryset, name, value):

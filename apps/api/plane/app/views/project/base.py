@@ -68,6 +68,7 @@ from plane.db.models import (
     Module,
     Release,
     ReleaseIssue,
+    PlanCase,
     TestPlan,
     CaseReview,
     TestCaseRepository,
@@ -1407,14 +1408,27 @@ class ProjectAPI(BaseViewSet):
         if not include_all_statuses:
             test_plan_queryset = test_plan_queryset.filter(state=TestPlan.State.PROGRESS)
         test_plan_queryset = (
-            test_plan_queryset.prefetch_related("assignees")
+            test_plan_queryset.prefetch_related(
+                Prefetch(
+                    "plan_cases",
+                    queryset=PlanCase.objects.filter(
+                        deleted_at__isnull=True,
+                        assignee__isnull=False,
+                    ).select_related("assignee"),
+                    to_attr="active_plan_cases_with_assignee",
+                )
+            )
             .annotate(case_count=Count("cases", distinct=True))
             .order_by("begin_time", "name")
         )
 
         test_plan_data = []
         for plan in test_plan_queryset[plan_offset:plan_limit]:
-            first_assignee = plan.assignees.first()
+            first_assignee = None
+            for plan_case in getattr(plan, "active_plan_cases_with_assignee", []):
+                if plan_case.assignee:
+                    first_assignee = plan_case.assignee
+                    break
             test_plan_data.append(
                 {
                     "id": str(plan.id),
