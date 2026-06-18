@@ -80,7 +80,9 @@ export default function CaseReview() {
     plan_case_result?: Record<string, string>;
   }>({});
   const [attachments, setAttachments] = React.useState<any[]>([]);
-  const [activeTab, setActiveTab] = React.useState<"basic" | "requirement" | "work" | "defect" | "history">("basic");
+  const [activeTab, setActiveTab] = React.useState<
+    "basic" | "requirement" | "work" | "defect" | "attachment" | "history"
+  >("basic");
   const [currentCount, setCurrentCount] = React.useState<number>(0);
   const [reviewValue, setReviewValue] = React.useState<"通过" | "不通过" | "建议" | null>("通过");
   const [reason, setReason] = React.useState<string>("");
@@ -978,10 +980,14 @@ export default function CaseReview() {
           </div>
         </Col>
 
-        <Col flex="auto" className="flex flex-col min-h-0" style={{ maxHeight: `calc(100dvh - ${topOffset}px)` }}>
+        <Col
+          flex="auto"
+          className="flex flex-col min-h-0"
+          style={{ height: `calc(100dvh - ${topOffset}px)`, maxHeight: `calc(100dvh - ${topOffset}px)` }}
+        >
           <div className="flex flex-col flex-1 min-h-0">
-            <div className="flex-1 overflow-hidden">
-              <div className="min-w-0 p-4" style={{ scrollPaddingBottom: 16 }}>
+            <div className="min-h-0 flex-1 overflow-hidden">
+              <div className="flex h-full min-w-0 flex-col p-4" style={{ scrollPaddingBottom: 16 }}>
                 {!selectedCaseId ? (
                   <div className="text-secondary py-12 text-center">请从左侧选择一个用例</div>
                 ) : detailLoading ? (
@@ -991,7 +997,7 @@ export default function CaseReview() {
                 ) : !caseDetail ? (
                   <div className="text-secondary py-12 text-center">未获取到用例详情</div>
                 ) : (
-                  <div className="flex flex-col gap-4">
+                  <div className="flex h-full min-h-0 flex-col gap-4">
                     <div className="border-b border-subtle">
                       <nav className="flex flex-wrap gap-4">
                     <button
@@ -1044,6 +1050,18 @@ export default function CaseReview() {
                     </button>
                     <button
                       type="button"
+                      onClick={() => setActiveTab("attachment")}
+                      className={`flex items-center gap-1.5 px-2 py-3 text-sm -mb-px border-b-2 transition-colors ${
+                        activeTab === "attachment"
+                          ? "text-accent-primary border-accent-strong"
+                          : "text-primary border-transparent hover:text-accent-primary"
+                      }`}
+                    >
+                      <LucideIcons.Paperclip size={16} aria-hidden="true" />
+                      附件
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => setActiveTab("history")}
                       className={`flex items-center gap-1.5 px-2 py-3 text-sm -mb-px border-b-2 transition-colors ${
                         activeTab === "history"
@@ -1056,7 +1074,7 @@ export default function CaseReview() {
                     </button>
                       </nav>
                     </div>
-                    <div>
+                    <div className="min-h-0 flex-1 overflow-hidden">
                       <Transition
                         show={activeTab === "basic"}
                         enter="transition duration-150 ease-out"
@@ -1067,7 +1085,7 @@ export default function CaseReview() {
                         leaveTo="transform scale-95 opacity-0"
                       >
                         {activeTab === "basic" && (
-                          <div className="flex flex-col gap-4 h-[550px] overflow-y-auto vertical-scrollbar scrollbar-sm pb-20">
+                          <div className="flex h-full flex-col gap-4 overflow-y-auto vertical-scrollbar scrollbar-sm pb-20">
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0 flex flex-wrap items-center gap-2">
                             <button
@@ -1182,47 +1200,6 @@ export default function CaseReview() {
                           />
                         </div>
 
-                        <div id="attachments-section" className="scroll-mb-16">
-                          <div className="mb-2 flex items-center justify-between">
-                            <span className="flex items-center gap-2 text-sm font-medium text-gray-700">
-                              附件
-                            </span>
-                          </div>
-                          {attachments.length === 0 ? (
-                            <div className="p-3 text-sm text-secondary">暂无附件</div>
-                          ) : (
-                            <Table
-                              size="small"
-                              pagination={false}
-                              rowKey={(r: any) => String(r?.id)}
-                              dataSource={attachments}
-                              columns={[
-                                {
-                                  title: "文件名",
-                                  dataIndex: ["attributes", "name"],
-                                  key: "name",
-                                  render: (_: any, record: any) => (
-                                    <span className="truncate block max-w-[480px]">
-                                      {String(record?.attributes?.name || record?.filename || record?.id)}
-                                    </span>
-                                  ),
-                                },
-                                {
-                                  title: "操作",
-                                  key: "action",
-                                  width: 120,
-                                  render: (_: any, record: any) => (
-                                    <Tooltip title="下载">
-                                      <Button type="link" size="small" onClick={() => handleDownloadAttachment(record)}>
-                                        下载
-                                      </Button>
-                                    </Tooltip>
-                                  ),
-                                },
-                              ]}
-                            />
-                          )}
-                        </div>
                       </div>
                     )}
                   </Transition>
@@ -1237,7 +1214,7 @@ export default function CaseReview() {
                     leaveTo="transform scale-95 opacity-0"
                   >
                     {activeTab === "requirement" && selectedCaseId && (
-                      <div className="-mt-6 h-[550px] overflow-y-auto vertical-scrollbar scrollbar-sm pb-20">
+                      <div className="-mt-6 h-full overflow-y-auto vertical-scrollbar scrollbar-sm pb-20">
                         <WorkItemDisplayModal caseId={String(selectedCaseId)} defaultType="Requirement" />
                       </div>
                     )}
@@ -1253,7 +1230,7 @@ export default function CaseReview() {
                     leaveTo="transform scale-95 opacity-0"
                   >
                     {activeTab === "work" && selectedCaseId && (
-                      <div className="-mt-6 h-[550px] overflow-y-auto vertical-scrollbar scrollbar-sm pb-20">
+                      <div className="-mt-6 h-full overflow-y-auto vertical-scrollbar scrollbar-sm pb-20">
                         <WorkItemDisplayModal caseId={String(selectedCaseId)} defaultType="Task" />
                       </div>
                     )}
@@ -1269,10 +1246,62 @@ export default function CaseReview() {
                     leaveTo="transform scale-95 opacity-0"
                   >
                     {activeTab === "defect" && selectedCaseId && (
-                      <div className="-mt-6 h-[550px] overflow-y-auto vertical-scrollbar scrollbar-sm pb-20">
+                      <div className="-mt-6 h-full overflow-y-auto vertical-scrollbar scrollbar-sm pb-20">
                         <WorkItemDisplayModal caseId={String(selectedCaseId)} defaultType="Bug" />
                       </div>
                     )}
+                      </Transition>
+
+                      <Transition
+                        show={activeTab === "attachment"}
+                        enter="transition duration-150 ease-out"
+                        enterFrom="transform scale-95 opacity-0"
+                        enterTo="transform scale-100 opacity-100"
+                        leave="transition duration-100 ease-in"
+                        leaveFrom="transform scale-100 opacity-100"
+                        leaveTo="transform scale-95 opacity-0"
+                      >
+                        {activeTab === "attachment" && (
+                          <div
+                            id="attachments-section"
+                            className="h-full overflow-y-auto vertical-scrollbar scrollbar-sm scroll-mb-16 pb-20"
+                          >
+                            {attachments.length === 0 ? (
+                              <div className="p-3 text-sm text-secondary">暂无附件</div>
+                            ) : (
+                              <Table
+                                size="small"
+                                pagination={false}
+                                rowKey={(r: any) => String(r?.id)}
+                                dataSource={attachments}
+                                columns={[
+                                  {
+                                    title: "文件名",
+                                    dataIndex: ["attributes", "name"],
+                                    key: "name",
+                                    render: (_: any, record: any) => (
+                                      <span className="truncate block max-w-[480px]">
+                                        {String(record?.attributes?.name || record?.filename || record?.id)}
+                                      </span>
+                                    ),
+                                  },
+                                  {
+                                    title: "操作",
+                                    key: "action",
+                                    width: 120,
+                                    render: (_: any, record: any) => (
+                                      <Tooltip title="下载">
+                                        <Button type="link" size="small" onClick={() => handleDownloadAttachment(record)}>
+                                          下载
+                                        </Button>
+                                      </Tooltip>
+                                    ),
+                                  },
+                                ]}
+                              />
+                            )}
+                          </div>
+                        )}
                       </Transition>
 
                       <Transition
