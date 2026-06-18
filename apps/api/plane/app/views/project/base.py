@@ -924,6 +924,361 @@ class ProjectAPI(BaseViewSet):
     filterset_fields = {"name": ["exact", "icontains", "in"], "id": ["exact"]}
     serializer_class = ProjectListSerializer
 
+    def _get_statistic_project_id(self, request):
+        project_id = request.query_params.get("project_id")
+        if not project_id:
+            return None, Response(
+                {"error": "project_id is required"}, status=status.HTTP_400_BAD_REQUEST
+            )
+        return project_id, None
+
+    def _has_statistic_project_access(self, slug, project_id, user_id):
+        return ProjectMember.objects.filter(
+            workspace__slug=slug,
+            project_id=project_id,
+            member_id=user_id,
+            is_active=True,
+        ).exists()
+
+    def _parse_statistic_date_range(self, request):
+        start_date_param = request.query_params.get("start_date")
+        end_date_param = request.query_params.get("end_date")
+        today = timezone.now().date()
+        try:
+            end_date = date.fromisoformat(end_date_param) if end_date_param else today
+            start_date = (
+                date.fromisoformat(start_date_param)
+                if start_date_param
+                else (end_date - timedelta(days=29))
+            )
+        except ValueError:
+            return None, None, Response(
+                {"error": "invalid start_date/end_date"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if start_date > end_date:
+            return None, None, Response(
+                {"error": "start_date must be <= end_date"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        return start_date, end_date, None
+
+    def _parse_statistic_page_size(self, request):
+        statistic_table_page_size = 6
+        page_size_param = request.query_params.get("page_size")
+        if page_size_param:
+            try:
+                custom_page_size = int(page_size_param)
+                if 1 <= custom_page_size <= 1000:
+                    statistic_table_page_size = custom_page_size
+            except (ValueError, TypeError):
+                pass
+        return statistic_table_page_size
+
+    def _parse_include_all_statuses(self, request):
+        include_all_statuses_param = request.query_params.get("include_all_statuses")
+        return str(include_all_statuses_param).lower() in {"1", "true", "yes", "y"}
+
+    def _parse_positive_page(self, request, page_param_name):
+        page_param = request.query_params.get(page_param_name)
+        try:
+            page = int(page_param) if page_param else 1
+            if page < 1:
+                raise ValueError
+        except ValueError:
+            return None, Response(
+                {"error": f"invalid {page_param_name}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return page, None
+
+    def _build_work_item_stats(self, base_issue_qs):
+        work_item_type_rows = (
+            base_issue_qs.values("type_id", "type__name", "type__logo_props", "state__group")
+            .annotate(count=Count("id"))
+            .order_by()
+        )
+        work_item_stats_map = {}
+        for row in work_item_type_rows:
+            type_id = row.get("type_id") or "none"
+            name = row.get("type__name") or "未指定类型"
+            logo_props = row.get("type__logo_props") or {}
+            group = row.get("state__group") or "unstarted"
+
+            if group == "completed":
+                bucket = "completed"
+            elif group == "started":
+                bucket = "started"
+            else:
+                bucket = "unstarted"
+
+            if type_id not in work_item_stats_map:
+                work_item_stats_map[type_id] = {
+                    "type_id": type_id,
+                    "name": name,
+                    "logo_props": logo_props,
+                    "unstarted": 0,
+                    "started": 0,
+                    "completed": 0,
+                    "cancelled": 0,
+                    "total": 0,
+                }
+
+            count = row.get("count") or 0
+            work_item_stats_map[type_id][bucket] += count
+            work_item_stats_map[type_id]["total"] += count
+            if group == "cancelled":
+                work_item_stats_map[type_id]["cancelled"] += count
+
+        return sorted(work_item_stats_map.values(), key=lambda x: x["total"], reverse=True)
+
+    def _build_overview_statistic_payload(
+        self,
+        request,
+        slug,
+        project_id,
+        base_issue_qs,
+        statistic_table_page_size,
+        include_all_statuses,
+    ):
+        work_item_stats = self._build_work_item_stats(base_issue_qs)
+
+        cycles_queryset = (
+            Cycle.objects.filter(
+                workspace__slug=slug,
+                project_id=project_id,
+                archived_at__isnull=True,
+                project__project_projectmember__member=request.user,
+                project__project_projectmember__is_active=True,
+            )
+            .select_related("owned_by")
+            .annotate(
+                work_item_count=Count(
+                    "issue_cycle__issue__id",
+                    distinct=True,
+                    filter=Q(
+                        issue_cycle__issue__archived_at__isnull=True,
+                        issue_cycle__issue__is_draft=False,
+                        issue_cycle__deleted_at__isnull=True,
+                        issue_cycle__issue__deleted_at__isnull=True,
+                    ),
+                )
+            )
+        )
+        if not include_all_statuses:
+            cycles_queryset = cycles_queryset.filter(
+                status__in=[
+                    Cycle.Status.NOT_STARTED,
+                    Cycle.Status.IN_PROGRESS,
+                    Cycle.Status.TESTING,
+                ]
+            )
+        cycles_queryset = cycles_queryset.order_by("start_date", "name")
+
+        cycles_paginator = CustomPaginator()
+        cycles_paginator.page_size = statistic_table_page_size
+        cycles_paginator.max_page_size = statistic_table_page_size
+        paginated_cycles = cycles_paginator.paginate_queryset(cycles_queryset, request)
+
+        cycles_data = [
+            {
+                "id": str(cycle.id),
+                "name": cycle.name,
+                "start_date": cycle.start_date.isoformat() if cycle.start_date else None,
+                "end_date": cycle.end_date.isoformat() if cycle.end_date else None,
+                "status": cycle.status,
+                "work_item_count": getattr(cycle, "work_item_count", 0) or 0,
+                "owner": (
+                    {
+                        "id": str(cycle.owned_by.id),
+                        "display_name": cycle.owned_by.display_name,
+                    }
+                    if cycle.owned_by
+                    else None
+                ),
+            }
+            for cycle in (paginated_cycles or [])
+        ]
+
+        release_page, error_response = self._parse_positive_page(request, "release_page")
+        if error_response:
+            return None, error_response
+
+        release_page_size = statistic_table_page_size
+        release_offset = (release_page - 1) * release_page_size
+        release_limit = release_offset + release_page_size
+
+        releases_queryset = (
+            Release.objects.filter(
+                project_id=project_id,
+                deleted_at__isnull=True,
+                archived_at__isnull=True,
+            )
+            .select_related("lead")
+            .annotate(
+                work_item_count=Count(
+                    "issue_release__issue__id",
+                    distinct=True,
+                    filter=Q(
+                        issue_release__issue__archived_at__isnull=True,
+                        issue_release__issue__is_draft=False,
+                        issue_release__deleted_at__isnull=True,
+                        issue_release__issue__deleted_at__isnull=True,
+                    ),
+                )
+            )
+        )
+        if not include_all_statuses:
+            releases_queryset = releases_queryset.exclude(
+                status__in=["completed", "cancelled"]
+            )
+        releases_queryset = releases_queryset.order_by("start_date", "name")
+        releases_data = [
+            {
+                "id": str(release.id),
+                "name": release.name,
+                "start_date": release.start_date.isoformat() if release.start_date else None,
+                "end_date": (
+                    release.target_date.isoformat() if release.target_date else None
+                ),
+                "status": release.status,
+                "work_item_count": getattr(release, "work_item_count", 0) or 0,
+                "owner": (
+                    {
+                        "id": str(release.lead.id),
+                        "display_name": release.lead.display_name,
+                    }
+                    if release.lead
+                    else None
+                ),
+            }
+            for release in releases_queryset[release_offset:release_limit]
+        ]
+
+        plan_page, error_response = self._parse_positive_page(request, "plan_page")
+        if error_response:
+            return None, error_response
+
+        plan_page_size = statistic_table_page_size
+        plan_offset = (plan_page - 1) * plan_page_size
+        plan_limit = plan_offset + plan_page_size
+
+        test_plan_queryset = TestPlan.objects.filter(
+            project_id=project_id,
+            deleted_at__isnull=True,
+        )
+        if not include_all_statuses:
+            test_plan_queryset = test_plan_queryset.filter(state=TestPlan.State.PROGRESS)
+        test_plan_queryset = (
+            test_plan_queryset.prefetch_related(
+                Prefetch(
+                    "plan_cases",
+                    queryset=PlanCase.objects.filter(
+                        deleted_at__isnull=True,
+                        assignee__isnull=False,
+                    ).select_related("assignee"),
+                    to_attr="active_plan_cases_with_assignee",
+                )
+            )
+            .annotate(case_count=Count("cases", distinct=True))
+            .order_by("begin_time", "name")
+        )
+
+        test_plan_data = []
+        for plan in test_plan_queryset[plan_offset:plan_limit]:
+            first_assignee = None
+            for plan_case in getattr(plan, "active_plan_cases_with_assignee", []):
+                if plan_case.assignee:
+                    first_assignee = plan_case.assignee
+                    break
+            test_plan_data.append(
+                {
+                    "id": str(plan.id),
+                    "name": plan.name,
+                    "start_date": plan.begin_time.isoformat() if plan.begin_time else None,
+                    "end_date": plan.end_time.isoformat() if plan.end_time else None,
+                    "status": plan.state,
+                    "case_count": getattr(plan, "case_count", 0) or 0,
+                    "owner": (
+                        {
+                            "id": str(first_assignee.id),
+                            "display_name": first_assignee.display_name,
+                        }
+                        if first_assignee
+                        else None
+                    ),
+                }
+            )
+
+        review_page, error_response = self._parse_positive_page(request, "review_page")
+        if error_response:
+            return None, error_response
+
+        review_page_size = statistic_table_page_size
+        review_offset = (review_page - 1) * review_page_size
+        review_limit = review_offset + review_page_size
+
+        case_review_queryset = CaseReview.objects.filter(
+            project_id=project_id,
+            deleted_at__isnull=True,
+        )
+        if not include_all_statuses:
+            case_review_queryset = case_review_queryset.filter(
+                state=CaseReview.State.PROGRESS
+            )
+        case_review_queryset = (
+            case_review_queryset.prefetch_related("assignees")
+            .annotate(case_count=Count("cases", distinct=True))
+            .order_by("started_at", "name")
+        )
+
+        case_review_data = []
+        for review in case_review_queryset[review_offset:review_limit]:
+            first_assignee = review.assignees.first()
+            case_review_data.append(
+                {
+                    "id": str(review.id),
+                    "name": review.name,
+                    "start_date": review.started_at.isoformat() if review.started_at else None,
+                    "end_date": review.ended_at.isoformat() if review.ended_at else None,
+                    "status": review.state,
+                    "case_count": getattr(review, "case_count", 0) or 0,
+                    "owner": (
+                        {
+                            "id": str(first_assignee.id),
+                            "display_name": first_assignee.display_name,
+                        }
+                        if first_assignee
+                        else None
+                    ),
+                }
+            )
+
+        return (
+            {
+                "work_item_stats": work_item_stats,
+                "cycles": {
+                    "count": cycles_queryset.count(),
+                    "data": cycles_data,
+                },
+                "releases": {
+                    "count": releases_queryset.count(),
+                    "data": releases_data,
+                },
+                "test_plans": {
+                    "count": test_plan_queryset.count(),
+                    "data": test_plan_data,
+                },
+                "case_reviews": {
+                    "count": case_review_queryset.count(),
+                    "data": case_review_data,
+                },
+            },
+            None,
+        )
+
     @action(detail=False, methods=["get"], url_path="user-project")
     def get_user_project(self, request, slug):
         project_id = ProjectMember.objects.filter(
@@ -959,57 +1314,19 @@ class ProjectAPI(BaseViewSet):
     @action(detail=False, methods=["get"], url_path="statistic")
     @allow_fine_permission(PermissionKey.PROJECT_ANALYTICS_VIEW)
     def get_statistic(self, request, slug):
-        project_id = request.query_params.get("project_id")
-        if not project_id:
-            return Response(
-                {"error": "project_id is required"}, status=status.HTTP_400_BAD_REQUEST
-            )
+        project_id, error_response = self._get_statistic_project_id(request)
+        if error_response:
+            return error_response
 
-        if not ProjectMember.objects.filter(
-                workspace__slug=slug,
-                project_id=project_id,
-                member_id=request.user.id,
-                is_active=True,
-        ).exists():
+        if not self._has_statistic_project_access(slug, project_id, request.user.id):
             return Response({"error": "forbidden"}, status=status.HTTP_403_FORBIDDEN)
 
-        start_date_param = request.query_params.get("start_date")
-        end_date_param = request.query_params.get("end_date")
+        start_date, end_date, error_response = self._parse_statistic_date_range(request)
+        if error_response:
+            return error_response
 
-        today = timezone.now().date()
-        try:
-            end_date = date.fromisoformat(end_date_param) if end_date_param else today
-            start_date = (
-                date.fromisoformat(start_date_param)
-                if start_date_param
-                else (end_date - timedelta(days=29))
-            )
-        except ValueError:
-            return Response(
-                {"error": "invalid start_date/end_date"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        if start_date > end_date:
-            return Response(
-                {"error": "start_date must be <= end_date"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        statistic_table_page_size = 6
-        page_size_param = request.query_params.get("page_size")
-        if page_size_param:
-            try:
-                custom_page_size = int(page_size_param)
-                if 1 <= custom_page_size <= 1000:
-                    statistic_table_page_size = custom_page_size
-            except (ValueError, TypeError):
-                pass
-
-        include_all_statuses_param = request.query_params.get("include_all_statuses")
-        include_all_statuses = (
-            str(include_all_statuses_param).lower() in {"1", "true", "yes", "y"}
-        )
+        statistic_table_page_size = self._parse_statistic_page_size(request)
+        include_all_statuses = self._parse_include_all_statuses(request)
 
         base_issue_qs = Issue.objects.filter(
             workspace__slug=slug,
@@ -1158,49 +1475,7 @@ class ProjectAPI(BaseViewSet):
             )
             d += timedelta(days=1)
 
-        work_item_type_rows = (
-            base_issue_qs.values(
-                "type_id", "type__name", "type__logo_props", "state__group"
-            )
-            .annotate(count=Count("id"))
-            .order_by()
-        )
-        work_item_stats_map = {}
-        for row in work_item_type_rows:
-            type_id = row.get("type_id") or "none"
-            name = row.get("type__name") or "未指定类型"
-            logo_props = row.get("type__logo_props") or {}
-            group = row.get("state__group") or "unstarted"
-
-            if group == "completed":
-                bucket = "completed"
-            elif group == "started":
-                bucket = "started"
-            else:
-                bucket = "unstarted"
-
-            if type_id not in work_item_stats_map:
-                work_item_stats_map[type_id] = {
-                    "type_id": type_id,
-                    "name": name,
-                    "logo_props": logo_props,
-                    "unstarted": 0,
-                    "started": 0,
-                    "completed": 0,
-                    "cancelled": 0,
-                    "total": 0,
-                }
-
-            count = row.get("count") or 0
-            work_item_stats_map[type_id][bucket] += count
-            work_item_stats_map[type_id]["total"] += count
-            if group == "cancelled":
-                work_item_stats_map[type_id]["cancelled"] += count
-
-        work_item_stats = sorted(
-            work_item_stats_map.values(), key=lambda x: x["total"], reverse=True
-        )
-
+        today = timezone.now().date()
         overdue_issue_qs = base_issue_qs.filter(
             target_date__isnull=False, target_date__lt=today
         ).exclude(state__group__in=["completed", "cancelled"])
@@ -1265,244 +1540,16 @@ class ProjectAPI(BaseViewSet):
         current_time_in_project_tz = timezone.now().astimezone(local_tz)
         current_time_in_utc = current_time_in_project_tz.astimezone(pytz.utc)
 
-        cycles_queryset = (
-            Cycle.objects.filter(
-                workspace__slug=slug,
-                project_id=project_id,
-                archived_at__isnull=True,
-                project__project_projectmember__member=request.user,
-                project__project_projectmember__is_active=True,
-            )
-            .select_related("owned_by")
-            .annotate(
-                work_item_count=Count(
-                    "issue_cycle__issue__id",
-                    distinct=True,
-                    filter=Q(
-                        issue_cycle__issue__archived_at__isnull=True,
-                        issue_cycle__issue__is_draft=False,
-                        issue_cycle__deleted_at__isnull=True,
-                        issue_cycle__issue__deleted_at__isnull=True,
-                    ),
-                )
-            )
-        )
-        if not include_all_statuses:
-            cycles_queryset = cycles_queryset.filter(
-                status__in=[
-                    Cycle.Status.NOT_STARTED,
-                    Cycle.Status.IN_PROGRESS,
-                    Cycle.Status.TESTING,
-                ]
-            )
-        cycles_queryset = cycles_queryset.order_by("start_date", "name")
-
-        cycles_paginator = CustomPaginator()
-        cycles_paginator.page_size = statistic_table_page_size
-        cycles_paginator.max_page_size = statistic_table_page_size
-        paginated_cycles = cycles_paginator.paginate_queryset(cycles_queryset, request)
-
-        cycles_data = [
-            {
-                "id": str(cycle.id),
-                "name": cycle.name,
-                "start_date": (
-                    cycle.start_date.isoformat() if cycle.start_date else None
-                ),
-                "end_date": cycle.end_date.isoformat() if cycle.end_date else None,
-                "status": cycle.status,
-                "work_item_count": getattr(cycle, "work_item_count", 0) or 0,
-                "owner": (
-                    {
-                        "id": str(cycle.owned_by.id),
-                        "display_name": cycle.owned_by.display_name,
-                    }
-                    if cycle.owned_by
-                    else None
-                ),
-            }
-            for cycle in (paginated_cycles or [])
-        ]
-
-        release_page_param = request.query_params.get("release_page")
-        try:
-            release_page = int(release_page_param) if release_page_param else 1
-            if release_page < 1:
-                raise ValueError
-        except ValueError:
-            return Response(
-                {"error": "invalid release_page"}, status=status.HTTP_400_BAD_REQUEST
-            )
-
-        release_page_size = statistic_table_page_size
-        release_offset = (release_page - 1) * release_page_size
-        release_limit = release_offset + release_page_size
-
-        releases_queryset = (
-            Release.objects.filter(
-                project_id=project_id,
-                deleted_at__isnull=True,
-                archived_at__isnull=True,
-            )
-            .select_related("lead")
-            .annotate(
-                work_item_count=Count(
-                    "issue_release__issue__id",
-                    distinct=True,
-                    filter=Q(
-                        issue_release__issue__archived_at__isnull=True,
-                        issue_release__issue__is_draft=False,
-                        issue_release__deleted_at__isnull=True,
-                        issue_release__issue__deleted_at__isnull=True,
-                    ),
-                )
-            )
-        )
-        if not include_all_statuses:
-            releases_queryset = releases_queryset.exclude(
-                status__in=["completed", "cancelled"]
-            )
-        releases_queryset = releases_queryset.order_by("start_date", "name")
-        releases_data = [
-            {
-                "id": str(release.id),
-                "name": release.name,
-                "start_date": (
-                    release.start_date.isoformat() if release.start_date else None
-                ),
-                "end_date": (
-                    release.target_date.isoformat() if release.target_date else None
-                ),
-                "status": release.status,
-                "work_item_count": getattr(release, "work_item_count", 0) or 0,
-                "owner": (
-                    {
-                        "id": str(release.lead.id),
-                        "display_name": release.lead.display_name,
-                    }
-                    if release.lead
-                    else None
-                ),
-            }
-            for release in releases_queryset[release_offset:release_limit]
-        ]
-
-        plan_page_param = request.query_params.get("plan_page")
-        try:
-            plan_page = int(plan_page_param) if plan_page_param else 1
-            if plan_page < 1:
-                raise ValueError
-        except ValueError:
-            return Response(
-                {"error": "invalid plan_page"}, status=status.HTTP_400_BAD_REQUEST
-            )
-
-        plan_page_size = statistic_table_page_size
-        plan_offset = (plan_page - 1) * plan_page_size
-        plan_limit = plan_offset + plan_page_size
-
-        test_plan_queryset = TestPlan.objects.filter(
+        overview_statistic_payload, error_response = self._build_overview_statistic_payload(
+            request=request,
+            slug=slug,
             project_id=project_id,
-            deleted_at__isnull=True,
+            base_issue_qs=base_issue_qs,
+            statistic_table_page_size=statistic_table_page_size,
+            include_all_statuses=include_all_statuses,
         )
-        if not include_all_statuses:
-            test_plan_queryset = test_plan_queryset.filter(state=TestPlan.State.PROGRESS)
-        test_plan_queryset = (
-            test_plan_queryset.prefetch_related(
-                Prefetch(
-                    "plan_cases",
-                    queryset=PlanCase.objects.filter(
-                        deleted_at__isnull=True,
-                        assignee__isnull=False,
-                    ).select_related("assignee"),
-                    to_attr="active_plan_cases_with_assignee",
-                )
-            )
-            .annotate(case_count=Count("cases", distinct=True))
-            .order_by("begin_time", "name")
-        )
-
-        test_plan_data = []
-        for plan in test_plan_queryset[plan_offset:plan_limit]:
-            first_assignee = None
-            for plan_case in getattr(plan, "active_plan_cases_with_assignee", []):
-                if plan_case.assignee:
-                    first_assignee = plan_case.assignee
-                    break
-            test_plan_data.append(
-                {
-                    "id": str(plan.id),
-                    "name": plan.name,
-                    "start_date": (
-                        plan.begin_time.isoformat() if plan.begin_time else None
-                    ),
-                    "end_date": plan.end_time.isoformat() if plan.end_time else None,
-                    "status": plan.state,
-                    "case_count": getattr(plan, "case_count", 0) or 0,
-                    "owner": (
-                        {
-                            "id": str(first_assignee.id),
-                            "display_name": first_assignee.display_name,
-                        }
-                        if first_assignee
-                        else None
-                    ),
-                }
-            )
-
-        review_page_param = request.query_params.get("review_page")
-        try:
-            review_page = int(review_page_param) if review_page_param else 1
-            if review_page < 1:
-                raise ValueError
-        except ValueError:
-            return Response(
-                {"error": "invalid review_page"}, status=status.HTTP_400_BAD_REQUEST
-            )
-
-        review_page_size = statistic_table_page_size
-        review_offset = (review_page - 1) * review_page_size
-        review_limit = review_offset + review_page_size
-
-        case_review_queryset = CaseReview.objects.filter(
-            project_id=project_id,
-            deleted_at__isnull=True,
-        )
-        if not include_all_statuses:
-            case_review_queryset = case_review_queryset.filter(
-                state=CaseReview.State.PROGRESS
-            )
-        case_review_queryset = (
-            case_review_queryset.prefetch_related("assignees")
-            .annotate(case_count=Count("cases", distinct=True))
-            .order_by("started_at", "name")
-        )
-
-        case_review_data = []
-        for review in case_review_queryset[review_offset:review_limit]:
-            first_assignee = review.assignees.first()
-            case_review_data.append(
-                {
-                    "id": str(review.id),
-                    "name": review.name,
-                    "start_date": (
-                        review.started_at.isoformat() if review.started_at else None
-                    ),
-                    "end_date": (
-                        review.ended_at.isoformat() if review.ended_at else None
-                    ),
-                    "status": review.state,
-                    "case_count": getattr(review, "case_count", 0) or 0,
-                    "owner": (
-                        {
-                            "id": str(first_assignee.id),
-                            "display_name": first_assignee.display_name,
-                        }
-                        if first_assignee
-                        else None
-                    ),
-                }
-            )
+        if error_response:
+            return error_response
 
         return Response(
             {
@@ -1514,25 +1561,13 @@ class ProjectAPI(BaseViewSet):
                     "total_cases": total_cases,
                     "total_timesheet_hours": total_timesheet_hours,
                 },
-                "cycles": {
-                    "count": cycles_queryset.count(),
-                    "data": cycles_data,
-                },
-                "releases": {
-                    "count": releases_queryset.count(),
-                    "data": releases_data,
-                },
-                "test_plans": {
-                    "count": test_plan_queryset.count(),
-                    "data": test_plan_data,
-                },
-                "case_reviews": {
-                    "count": case_review_queryset.count(),
-                    "data": case_review_data,
-                },
+                "cycles": overview_statistic_payload["cycles"],
+                "releases": overview_statistic_payload["releases"],
+                "test_plans": overview_statistic_payload["test_plans"],
+                "case_reviews": overview_statistic_payload["case_reviews"],
                 "requirement_daily_status": requirement_daily_status,
                 "defect_daily_created": defect_daily_created,
-                "work_item_stats": work_item_stats,
+                "work_item_stats": overview_statistic_payload["work_item_stats"],
                 "overdue_by_assignee": {
                     "total": overdue_total,
                     "data": overdue_by_assignee,
@@ -1545,3 +1580,34 @@ class ProjectAPI(BaseViewSet):
             },
             status=status.HTTP_200_OK,
         )
+
+    @action(detail=False, methods=["get"], url_path="overview-statistic")
+    def get_overview_statistic(self, request, slug):
+        project_id, error_response = self._get_statistic_project_id(request)
+        if error_response:
+            return error_response
+
+        if not self._has_statistic_project_access(slug, project_id, request.user.id):
+            return Response({"error": "forbidden"}, status=status.HTTP_403_FORBIDDEN)
+
+        statistic_table_page_size = self._parse_statistic_page_size(request)
+        include_all_statuses = self._parse_include_all_statuses(request)
+        base_issue_qs = Issue.objects.filter(
+            workspace__slug=slug,
+            project_id=project_id,
+            archived_at__isnull=True,
+            deleted_at__isnull=True,
+            is_draft=False,
+        ).select_related("type", "state")
+        overview_statistic_payload, error_response = self._build_overview_statistic_payload(
+            request=request,
+            slug=slug,
+            project_id=project_id,
+            base_issue_qs=base_issue_qs,
+            statistic_table_page_size=statistic_table_page_size,
+            include_all_statuses=include_all_statuses,
+        )
+        if error_response:
+            return error_response
+
+        return Response(overview_statistic_payload, status=status.HTTP_200_OK)

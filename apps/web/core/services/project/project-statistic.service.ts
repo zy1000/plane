@@ -111,6 +111,22 @@ export type TProjectStatisticResponse = {
   };
 };
 
+export type TProjectOverviewStatisticResponse = Pick<
+  TProjectStatisticResponse,
+  "cycles" | "releases" | "test_plans" | "case_reviews" | "work_item_stats"
+>;
+
+export type TProjectStatisticParams = {
+  page?: number;
+  release_page?: number;
+  plan_page?: number;
+  review_page?: number;
+  page_size?: number;
+  start_date?: string;
+  end_date?: string;
+  include_all_statuses?: boolean;
+};
+
 export class ProjectStatisticService extends APIService {
   constructor() {
     super(API_BASE_URL);
@@ -119,18 +135,23 @@ export class ProjectStatisticService extends APIService {
   async getStatistic(
     workspaceSlug: string,
     projectId: string,
-    params?: {
-      page?: number;
-      release_page?: number;
-      plan_page?: number;
-      review_page?: number;
-      page_size?: number;
-      start_date?: string;
-      end_date?: string;
-      include_all_statuses?: boolean;
-    }
+    params?: TProjectStatisticParams
   ): Promise<TProjectStatisticResponse> {
     return this.get(`/api/workspaces/${workspaceSlug}/project/statistic/`, {
+      params: { ...params, project_id: projectId },
+    })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async getOverviewStatistic(
+    workspaceSlug: string,
+    projectId: string,
+    params?: TProjectStatisticParams
+  ): Promise<TProjectOverviewStatisticResponse> {
+    return this.get(`/api/workspaces/${workspaceSlug}/project/overview-statistic/`, {
       params: { ...params, project_id: projectId },
     })
       .then((response) => response?.data)

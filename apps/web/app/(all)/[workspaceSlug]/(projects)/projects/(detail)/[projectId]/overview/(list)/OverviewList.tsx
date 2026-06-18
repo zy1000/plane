@@ -116,7 +116,7 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
   const { data: statisticData } = useSWR(
     workspaceSlug && project.id ? `project-statistic-overview-${workspaceSlug}-${project.id}` : null,
     () =>
-      projectStatisticService.getStatistic(workspaceSlug, project.id, {
+      projectStatisticService.getOverviewStatistic(workspaceSlug, project.id, {
         page_size: 20,
         include_all_statuses: true,
       }),

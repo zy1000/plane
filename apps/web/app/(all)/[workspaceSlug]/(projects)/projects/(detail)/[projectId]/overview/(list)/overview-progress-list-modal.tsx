@@ -9,7 +9,7 @@ import { useTranslation } from "@plane/i18n";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
 import { getDate, renderFormattedDate } from "@plane/utils";
 import { getReleaseStatusDetails as getReleaseStatusMeta } from "@/components/releases/release-status-config";
-import { ProjectStatisticService, type TProjectStatisticResponse } from "@/services/project";
+import { ProjectStatisticService, type TProjectOverviewStatisticResponse } from "@/services/project";
 
 const projectStatisticService = new ProjectStatisticService();
 const MODAL_PAGE_SIZE = 20;
@@ -80,7 +80,7 @@ const SECTION_CONFIG: Record<
     nameLabel: string;
     emptyLabel: string;
     pageParamKey: string;
-    dataKey: keyof TProjectStatisticResponse;
+    dataKey: keyof TProjectOverviewStatisticResponse;
     getNavigateUrl: (itemId: string, workspaceSlug: string, projectId: string) => string;
   }
 > = {
@@ -154,10 +154,10 @@ export function OverviewProgressListModal({ open, onClose, section, workspaceSlu
   const config = SECTION_CONFIG[section];
   const Icon = config.icon;
 
-  const { data, isLoading } = useSWR<TProjectStatisticResponse>(
+  const { data, isLoading } = useSWR<TProjectOverviewStatisticResponse>(
     open ? `overview-progress-modal-${section}-${workspaceSlug}-${projectId}-${page}` : null,
     () =>
-      projectStatisticService.getStatistic(workspaceSlug, projectId, {
+      projectStatisticService.getOverviewStatistic(workspaceSlug, projectId, {
         [config.pageParamKey]: page,
         page_size: MODAL_PAGE_SIZE,
         include_all_statuses: true,
