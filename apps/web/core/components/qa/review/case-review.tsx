@@ -23,6 +23,7 @@ import { useProjectNavigationPreferences } from "@/hooks/use-navigation-preferen
 import { RichTextEditor } from "../cases/util";
 import { WorkItemDisplayModal } from "../cases/work-item-display-modal";
 import { ReviewRecordsPanel } from "./review-records";
+import { ReviewCaseFilterBar, useReviewCaseFilter } from "./review-case-filter";
 import { CaseVersionCompareModal } from "../cases/update-modal/case-version-compare-modal";
 import UpdateModal from "../cases/update-modal";
 import { useTranslation } from "@plane/i18n";
@@ -93,6 +94,8 @@ export default function CaseReview() {
   const [suggestionCounts, setSuggestionCounts] = React.useState<Record<string, number>>({});
   const [autoNext, setAutoNext] = React.useState<boolean>(true);
   const [isCaseModalOpen, setIsCaseModalOpen] = React.useState<boolean>(false);
+  const { activeKey: activeFilterKey, setActiveKey: setActiveFilterKey, filters, filteredCases, isFiltering } =
+    useReviewCaseFilter(cases, currentUser?.id ? String(currentUser.id) : undefined);
 
   const { preferences: projectPreferences } = useProjectNavigationPreferences();
   const topOffset = projectPreferences.navigationMode === "horizontal" ? 180 : 130;
@@ -402,7 +405,7 @@ export default function CaseReview() {
     if (!container) return;
     const el = container.querySelector(`[data-case-id="${selectedCaseId}"]`);
     if (el) (el as HTMLElement).scrollIntoView({ block: "nearest" });
-  }, [selectedCaseId, cases]);
+  }, [selectedCaseId, filteredCases]);
 
   React.useEffect(() => {
     const map: Record<string, string> = {
@@ -675,14 +678,14 @@ export default function CaseReview() {
   };
 
   // 用 ref 持有最新值,供 debouncedSubmit 闭包内的自动切换逻辑读取,避免拿到旧 state
-  const casesRef = React.useRef(cases);
+  const casesRef = React.useRef(filteredCases);
   const selectedCaseIdRef = React.useRef(selectedCaseId);
   const autoNextRef = React.useRef(autoNext);
   React.useEffect(() => {
-    casesRef.current = cases;
+    casesRef.current = filteredCases;
     selectedCaseIdRef.current = selectedCaseId;
     autoNextRef.current = autoNext;
-  });
+  }, [filteredCases, selectedCaseId, autoNext]);
 
   // 评审完成后切换到下一条:列表顺移 / 已是最后一条则提示
   const goToNextCase = async () => {
@@ -861,6 +864,7 @@ export default function CaseReview() {
                 }
               }}
             />
+            <ReviewCaseFilterBar filters={filters} activeKey={activeFilterKey} onChange={setActiveFilterKey} />
             {listLoading ? (
               <div className="flex items-center justify-center py-12">
                 <Spin />
@@ -876,10 +880,12 @@ export default function CaseReview() {
                   className="flex-1 min-h-0 overflow-y-auto vertical-scrollbar scrollbar-sm flex flex-col gap-3 pr-5 pl-1 pt-4 pb-2"
                   style={{ scrollbarGutter: "stable" }}
                 >
-                  {cases.length === 0 ? (
-                    <div className="text-secondary py-12 text-center">暂无数据</div>
+                  {filteredCases.length === 0 ? (
+                    <div className="text-secondary py-12 text-center">
+                      {isFiltering && cases.length > 0 ? "暂无匹配的筛选结果" : "暂无数据"}
+                    </div>
                   ) : (
-                    cases.map((item) => {
+                    filteredCases.map((item) => {
                       const caseId = String(item.case_id ?? item.id);
                       const isActive = String(selectedCaseId || "") === caseId;
                       const color = reviewEnums?.CaseReviewThrough_Result?.[item.result]?.color || "default";

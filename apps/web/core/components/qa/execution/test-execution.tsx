@@ -26,6 +26,7 @@ import { CreateUpdateIssueModal } from "@/components/issues/issue-modal/modal";
 import { ExecutionRecordsPanel } from "./execution-records";
 import { usePendingExecutionFiles } from "./use-pending-execution-files";
 import { BugIssueModal } from "@/components/issues/issue-modal/bug-modal";
+import { ExecutionCaseFilterBar, useExecutionCaseFilter } from "./execution-case-filter";
 
 type ReviewCaseRow = {
   id: string | number;
@@ -78,17 +79,7 @@ export default function TestExecutionPage() {
   const [error, setError] = React.useState<string | null>(null);
   const [cases, setCases] = React.useState<PlanCaseRow[]>([]);
   const [keyword, setKeyword] = React.useState<string>("");
-  const [onlyMyCases, setOnlyMyCases] = React.useState<boolean>(false);
   const [selectedCaseId, setSelectedCaseId] = React.useState<string | undefined>(initialCaseId ?? undefined);
-  const displayCases = React.useMemo(() => {
-    if (!onlyMyCases) return cases;
-    if (!currentUser?.id) return [];
-    const currentUserId = String(currentUser.id);
-    return cases.filter((item) => {
-      if (!item.assignee) return false;
-      return String(item.assignee) === currentUserId;
-    });
-  }, [cases, onlyMyCases, currentUser?.id]);
 
   const [expandedKeys, setExpandedKeys] = React.useState<string[] | undefined>(undefined);
   const [autoExpandParent, setAutoExpandParent] = React.useState<boolean>(true);
@@ -105,6 +96,13 @@ export default function TestExecutionPage() {
     case_state?: Record<string, string>;
     plan_case_result?: Record<string, string>;
   }>({});
+  const {
+    activeKey: executionFilterKey,
+    setActiveKey: setExecutionFilterKey,
+    items: executionFilterItems,
+    filteredCases,
+    isFiltering: isExecutionFiltering,
+  } = useExecutionCaseFilter(cases, enumsData.plan_case_result, currentUser?.id);
   const [attachments, setAttachments] = React.useState<any[]>([]);
   const [activeTab, setActiveTab] = React.useState<"basic" | "requirement" | "work" | "defect" | "attachment" | "history">("basic");
   const [currentCount, setCurrentCount] = React.useState<number>(0);
@@ -340,22 +338,6 @@ export default function TestExecutionPage() {
   }, [initialCaseId]);
 
   React.useEffect(() => {
-    if (!onlyMyCases) return;
-    if (listLoading) return;
-    if (!selectedCaseId) return;
-    const exists = displayCases.some((item) => String(item.case) === String(selectedCaseId));
-    if (exists) return;
-    if (displayCases.length > 0) {
-      const nextCaseId = String(displayCases[0].case);
-      setSelectedCaseId(nextCaseId);
-      fetchCaseDetail(nextCaseId);
-      return;
-    }
-    setSelectedCaseId(undefined);
-    setCaseDetail(null);
-  }, [displayCases, selectedCaseId, listLoading, onlyMyCases]);
-
-  React.useEffect(() => {
     if (!selectedCaseId) return;
     const container = leftRef.current;
     if (!container) return;
@@ -363,7 +345,7 @@ export default function TestExecutionPage() {
     if (el) {
       (el as HTMLElement).scrollIntoView({ block: "nearest" });
     }
-  }, [selectedCaseId, displayCases]);
+  }, [selectedCaseId, filteredCases]);
 
   const debouncedSearch = React.useMemo(
     () =>
@@ -559,12 +541,12 @@ export default function TestExecutionPage() {
     clearPendingFiles();
   }, [selectedCaseId, cases, currentUser?.id, enumsData?.plan_case_result]);
 
-  const casesRef = React.useRef(displayCases);
+  const casesRef = React.useRef(filteredCases);
   const selectedCaseIdRef = React.useRef(selectedCaseId);
   const autoNextRef = React.useRef(autoNext);
   const pendingFilesRef = React.useRef(pendingFiles);
   React.useEffect(() => {
-    casesRef.current = displayCases;
+    casesRef.current = filteredCases;
     selectedCaseIdRef.current = selectedCaseId;
     autoNextRef.current = autoNext;
     pendingFilesRef.current = pendingFiles;
@@ -1074,10 +1056,12 @@ export default function TestExecutionPage() {
                     }
                   }}
                 />
-                <Checkbox className="shrink-0" checked={onlyMyCases} onChange={(e) => setOnlyMyCases(e.target.checked)}>
-                  我执行的
-                </Checkbox>
               </div>
+              <ExecutionCaseFilterBar
+                items={executionFilterItems}
+                activeKey={executionFilterKey}
+                onChange={setExecutionFilterKey}
+              />
               {listLoading ? (
                 <div className="flex items-center justify-center py-12">
                   <Spin />
@@ -1093,10 +1077,12 @@ export default function TestExecutionPage() {
                     className="flex-1 min-h-0 overflow-y-auto vertical-scrollbar scrollbar-sm flex flex-col gap-3 pr-2 pl-1 py-1"
                     style={{ scrollbarGutter: "stable" }}
                   >
-                    {displayCases.length === 0 ? (
-                      <div className="text-secondary py-12 text-center">{onlyMyCases ? "暂无我执行的用例" : "暂无数据"}</div>
+                    {filteredCases.length === 0 ? (
+                      <div className="text-secondary py-12 text-center">
+                        {isExecutionFiltering && cases.length > 0 ? "暂无匹配的筛选结果" : "暂无数据"}
+                      </div>
                     ) : (
-                      displayCases.map((item) => {
+                      filteredCases.map((item) => {
                         const caseId = String(item.case);
                         const isActive = String(selectedCaseId || "") === caseId;
                         const assigneeName = item.assignee ? getUserDetails(String(item.assignee))?.display_name || "未知用户" : "未分配";
