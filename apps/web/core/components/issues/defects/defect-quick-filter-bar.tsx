@@ -33,7 +33,7 @@ type Props = {
 
 export const DefectQuickFilterBar: FC<Props> = ({ value, onChange, variant = "content" }) => {
   const mineActive = isMinePreset(value);
-  const segmentBase = "h-7 rounded-md px-3 text-xs font-medium transition-colors";
+  const segmentBase = "h-7 rounded-md px-3 text-body-xs-medium transition-colors";
   const activeClass = "bg-surface-1 text-primary shadow-sm";
   const inactiveClass = "text-secondary hover:text-primary";
   const containerClass =
