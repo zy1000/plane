@@ -25,7 +25,11 @@ import { OverdueByAssigneeCard } from "@/components/common/overdue-by-assignee-c
 import { ProjectDescriptionInput } from "@/components/project/project-description-input";
 import { ProjectActivity } from "@/components/project/project-activity";
 import { useMember } from "@/hooks/store/use-member";
-import { ProjectAnnouncementService, ProjectStatisticService } from "@/services/project";
+import {
+  ProjectAnnouncementService,
+  ProjectStatisticService,
+  type TProjectStatisticResponse,
+} from "@/services/project";
 import {
   AnnouncementDetailModal,
   CreateAnnouncementModal,
@@ -122,6 +126,26 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
       }),
     { keepPreviousData: true }
   );
+
+  const { data: overdueStatisticData, error: overdueStatisticError } = useSWR<TProjectStatisticResponse>(
+    isOverdueModalOpen ? `project-statistic-overdue-${workspaceSlug}-${project.id}` : null,
+    () =>
+      projectStatisticService.getStatistic(workspaceSlug, project.id, {
+        page_size: 20,
+      }),
+    { keepPreviousData: true }
+  );
+
+  const overdueByAssigneeData = useMemo(() => {
+    if (overdueStatisticData?.overdue_by_assignee) return overdueStatisticData.overdue_by_assignee;
+    if (overdueStatisticData || overdueStatisticError) {
+      return {
+        total: 0,
+        data: [],
+      };
+    }
+    return null;
+  }, [overdueStatisticData, overdueStatisticError]);
 
   const fetchAnnouncements = useCallback(async () => {
     if (!workspaceSlug || !project?.id) return;
@@ -662,7 +686,7 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
             <AlertTriangle className="h-4 w-4 shrink-0 text-danger-primary" />
             <span className="text-base font-medium text-primary">延期工作项负责人</span>
             <span className="text-sm text-placeholder">
-              共 {statisticData?.overdue_by_assignee?.total ?? overview.overdue} 条
+              共 {overdueByAssigneeData?.total ?? overview.overdue} 条
             </span>
           </div>
         }
@@ -678,7 +702,7 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
           <div className="min-h-0 flex-1 overflow-hidden px-4 pb-3">
             <OverdueByAssigneeCard
               hideHeader
-              data={statisticData?.overdue_by_assignee}
+              data={overdueByAssigneeData}
               className="h-full min-h-0 bg-surface-1 p-4"
             />
           </div>

@@ -185,7 +185,7 @@ function ProjectStatisticsPage() {
     effectiveProjectId
   );
 
-  const { data: displayData } = useSWR<TProjectStatisticResponse>(
+  const { data: displayData, error: displayDataError } = useSWR<TProjectStatisticResponse>(
     effectiveWorkspaceSlug && effectiveProjectId
       ? `project-statistic-${effectiveWorkspaceSlug}-${effectiveProjectId}`
       : null,
@@ -204,6 +204,17 @@ function ProjectStatisticsPage() {
       },
     }
   );
+
+  const overdueByAssigneeData = useMemo(() => {
+    if (displayData?.overdue_by_assignee) return displayData.overdue_by_assignee;
+    if (displayData || displayDataError) {
+      return {
+        total: 0,
+        data: [],
+      };
+    }
+    return null;
+  }, [displayData, displayDataError]);
 
   const workItemBarData = useMemo(() => {
     const rows = displayData?.work_item_stats ?? [];
@@ -705,7 +716,7 @@ function ProjectStatisticsPage() {
             </div>
             <div>
               <OverdueByAssigneeCard
-                data={displayData?.overdue_by_assignee}
+                data={overdueByAssigneeData}
                 headerExtra={
                   <button
                     type="button"
@@ -852,18 +863,14 @@ function ProjectStatisticsPage() {
         isOpen={overdueExpandOpen}
         onClose={() => setOverdueExpandOpen(false)}
         title="延期工作项负责人"
-        badgeText={
-          displayData?.overdue_by_assignee != null
-            ? `共 ${displayData.overdue_by_assignee.total} 条`
-            : undefined
-        }
+        badgeText={overdueByAssigneeData != null ? `共 ${overdueByAssigneeData.total} 条` : undefined}
         icon={AlertTriangle}
       >
         <div className="flex min-h-0 flex-1 flex-col bg-surface-1">
           <div className="min-h-0 flex-1 overflow-hidden px-4 pb-3">
             <OverdueByAssigneeCard
               hideHeader
-              data={displayData?.overdue_by_assignee}
+              data={overdueByAssigneeData}
               className="h-full min-h-[50vh]"
             />
           </div>
