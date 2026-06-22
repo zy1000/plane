@@ -245,7 +245,13 @@ const IssueRowDetails = observer(function IssueRowDetails(props: IssueRowDetails
         return;
       }
 
-      if (workspaceSlug && issueDetail && issueDetail.project_id) {
+      // 预加载已填充则直接复用，避免展开时重复请求单接口
+      if (
+        workspaceSlug &&
+        issueDetail &&
+        issueDetail.project_id &&
+        subIssuesStore.subIssuesByIssueId(issueDetail.id) === undefined
+      ) {
         await subIssuesStore.fetchSubIssues(workspaceSlug.toString(), issueDetail.project_id, issueDetail.id);
       }
       setExpanded(true);

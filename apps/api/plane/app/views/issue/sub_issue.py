@@ -4,6 +4,7 @@
 
 # Python imports
 import json
+from uuid import UUID
 
 # Django imports
 from django.utils import timezone
@@ -23,12 +24,209 @@ from .utils import is_allowed_to_add_parent
 from .. import BaseAPIView
 from plane.app.serializers import IssueSerializer
 from plane.app.permissions import ProjectEntityPermission
-from plane.db.models import Issue, IssueLink, FileAsset, CycleIssue
+from plane.db.models import Issue, IssueLink, FileAsset, CycleIssue, ProjectMember
 from plane.bgtasks.issue_activities_task import issue_activity
 from plane.utils.timezone_converter import user_timezone_converter
 from collections import defaultdict
 from plane.utils.host import base_host
 from plane.utils.order_queryset import order_issue_queryset
+
+
+class BulkSubIssuesEndpoint(BaseAPIView):
+    permission_classes = [ProjectEntityPermission]
+
+    @method_decorator(gzip_page)
+    def get(self, request, slug, project_id):
+        parent_issue_ids_param = request.query_params.get("parent_issue_ids", "")
+        parent_issue_ids = [
+            parent_issue_id.strip() for parent_issue_id in parent_issue_ids_param.split(",") if parent_issue_id.strip()
+        ]
+
+        if not parent_issue_ids:
+            return Response(
+                {"error": "Parent Issue IDs are required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            parent_issue_ids = [str(UUID(parent_issue_id)) for parent_issue_id in parent_issue_ids]
+        except ValueError:
+            return Response(
+                {"error": "Invalid Parent Issue IDs"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            max_depth = int(request.query_params.get("max_depth", 3))
+        except (TypeError, ValueError):
+            max_depth = 3
+        max_depth = max(1, min(max_depth, 5))
+
+        order_by_param = request.GET.get("order_by", "-created_at")
+        sub_issues_by_parent = {parent_issue_id: [] for parent_issue_id in parent_issue_ids}
+        state_distribution_by_parent = {parent_issue_id: defaultdict(list) for parent_issue_id in parent_issue_ids}
+        visited_parent_ids = set()
+        current_parent_ids = parent_issue_ids
+
+        accessible_project_ids = ProjectMember.objects.filter(
+            workspace__slug=slug, member=request.user, is_active=True
+        ).values_list("project_id", flat=True)
+
+        for depth in range(max_depth):
+            parent_ids = [parent_issue_id for parent_issue_id in current_parent_ids if parent_issue_id not in visited_parent_ids]
+            if not parent_ids:
+                break
+
+            visited_parent_ids.update(parent_ids)
+            parent_queryset = Issue.issue_objects.filter(id__in=parent_ids, workspace__slug=slug)
+            if depth == 0:
+                parent_queryset = parent_queryset.filter(project_id=project_id)
+            else:
+                parent_queryset = parent_queryset.filter(project_id__in=accessible_project_ids)
+            accessible_parent_ids = list(parent_queryset.values_list("id", flat=True))
+
+            if not accessible_parent_ids:
+                break
+
+            sub_issues = (
+                Issue.issue_objects.filter(parent_id__in=accessible_parent_ids, workspace__slug=slug)
+                .select_related("workspace", "project", "state", "parent")
+                .prefetch_related("assignees", "labels", "issue_module__module")
+                .annotate(
+                    cycle_id=Subquery(
+                        CycleIssue.objects.filter(issue=OuterRef("id"), deleted_at__isnull=True).values("cycle_id")[:1]
+                    )
+                )
+                .annotate(
+                    link_count=IssueLink.objects.filter(issue=OuterRef("id"))
+                    .order_by()
+                    .annotate(count=Func(F("id"), function="Count"))
+                    .values("count")
+                )
+                .annotate(
+                    attachment_count=FileAsset.objects.filter(
+                        issue_id=OuterRef("id"),
+                        entity_type=FileAsset.EntityTypeContext.ISSUE_ATTACHMENT,
+                    )
+                    .order_by()
+                    .annotate(count=Func(F("id"), function="Count"))
+                    .values("count")
+                )
+                .annotate(
+                    sub_issues_count=Issue.issue_objects.filter(parent=OuterRef("id"))
+                    .order_by()
+                    .annotate(count=Func(F("id"), function="Count"))
+                    .values("count")
+                )
+                .annotate(
+                    label_ids=Coalesce(
+                        ArrayAgg(
+                            "labels__id",
+                            distinct=True,
+                            filter=Q(~Q(labels__id__isnull=True) & Q(label_issue__deleted_at__isnull=True)),
+                        ),
+                        Value([], output_field=ArrayField(UUIDField())),
+                    ),
+                    assignee_ids=Coalesce(
+                        ArrayAgg(
+                            "assignees__id",
+                            distinct=True,
+                            filter=Q(
+                                ~Q(assignees__id__isnull=True)
+                                & Q(assignees__member_project__is_active=True)
+                                & Q(issue_assignee__deleted_at__isnull=True)
+                            ),
+                        ),
+                        Value([], output_field=ArrayField(UUIDField())),
+                    ),
+                    module_ids=Coalesce(
+                        ArrayAgg(
+                            "issue_module__module_id",
+                            distinct=True,
+                            filter=Q(
+                                ~Q(issue_module__module_id__isnull=True)
+                                & Q(issue_module__module__archived_at__isnull=True)
+                                & Q(issue_module__deleted_at__isnull=True)
+                            ),
+                        ),
+                        Value([], output_field=ArrayField(UUIDField())),
+                    ),
+                    release_ids=Coalesce(
+                        ArrayAgg(
+                            "issue_release__release_id",
+                            distinct=True,
+                            filter=Q(
+                                ~Q(issue_release__release_id__isnull=True)
+                                & Q(issue_release__release__archived_at__isnull=True)
+                                & Q(issue_release__deleted_at__isnull=True)
+                            ),
+                        ),
+                        Value([], output_field=ArrayField(UUIDField())),
+                    ),
+                )
+                .annotate(state_group=F("state__group"))
+                .order_by("-created_at")
+            )
+
+            if order_by_param:
+                # 每一层都基于原始 order_by_param 排序，避免规范化后的值覆盖外层变量、导致深层排序不一致
+                sub_issues, _ = order_issue_queryset(sub_issues, order_by_param)
+
+            sub_issues = sub_issues.values(
+                "id",
+                "name",
+                "state_id",
+                "sort_order",
+                "completed_at",
+                "estimate_point",
+                "priority",
+                "start_date",
+                "target_date",
+                "sequence_id",
+                "type_id",
+                "project_id",
+                "parent_id",
+                "cycle_id",
+                "module_ids",
+                "release_ids",
+                "label_ids",
+                "assignee_ids",
+                "sub_issues_count",
+                "created_at",
+                "updated_at",
+                "created_by",
+                "updated_by",
+                "attachment_count",
+                "link_count",
+                "is_draft",
+                "archived_at",
+                "state_group",
+            )
+            sub_issues = user_timezone_converter(sub_issues, ["created_at", "updated_at"], request.user.user_timezone)
+
+            next_parent_ids = []
+            for sub_issue in sub_issues:
+                parent_id = str(sub_issue["parent_id"])
+                state_group = sub_issue.pop("state_group", None)
+                sub_issues_by_parent.setdefault(parent_id, []).append(sub_issue)
+                state_distribution_by_parent.setdefault(parent_id, defaultdict(list))
+                if state_group:
+                    state_distribution_by_parent[parent_id][state_group].append(str(sub_issue["id"]))
+                if (sub_issue.get("sub_issues_count") or 0) > 0:
+                    next_parent_ids.append(str(sub_issue["id"]))
+
+            current_parent_ids = next_parent_ids
+
+        return Response(
+            {
+                "sub_issues": sub_issues_by_parent,
+                "state_distribution": {
+                    parent_issue_id: dict(distribution)
+                    for parent_issue_id, distribution in state_distribution_by_parent.items()
+                },
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 class SubIssuesEndpoint(BaseAPIView):

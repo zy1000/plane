@@ -19,6 +19,13 @@ export type TIssueSubIssues = {
   sub_issues: TSubIssueResponse;
 };
 
+export type TIssueBulkSubIssues = {
+  state_distribution: TIssueSubIssuesStateDistributionMap;
+  sub_issues: {
+    [issue_id: string]: TIssue[];
+  };
+};
+
 export type TSubIssueResponse = TIssue[] | { [key: string]: TIssue[] };
 
 export type TIssueSubIssuesStateDistributionMap = {

@@ -161,7 +161,8 @@ export const IssueBlock = observer(function IssueBlock(props: IssueBlockProps) {
         return;
       }
 
-      if (workspaceSlug && issue && issue.project_id) {
+      // 预加载已填充则直接复用，避免展开时重复请求单接口
+      if (workspaceSlug && issue && issue.project_id && subIssuesStore.subIssuesByIssueId(issue.id) === undefined) {
         await subIssuesStore.fetchSubIssues(workspaceSlug.toString(), issue.project_id, issue.id);
       }
       setExpanded(true);

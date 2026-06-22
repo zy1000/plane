@@ -9,6 +9,7 @@ from plane.app.views import (
     BulkCreateIssueLabelsEndpoint,
     BulkDeleteIssuesEndpoint,
     BulkExportIssuesEndpoint,
+    BulkSubIssuesEndpoint,
     SubIssuesEndpoint,
     IssueLinkViewSet,
     IssueAttachmentEndpoint,
@@ -118,6 +119,11 @@ urlpatterns = [
         "workspaces/<str:slug>/projects/<uuid:project_id>/issues/bulk-export/",
         BulkExportIssuesEndpoint.as_view(),
         name="bulk-export-issues",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/issues/sub-issues/bulk/",
+        BulkSubIssuesEndpoint.as_view(),
+        name="bulk-sub-issues",
     ),
     ##
     path(

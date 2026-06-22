@@ -15,6 +15,7 @@ import type {
   TIssueActivity,
   TIssueLink,
   TIssueServiceType,
+  TIssueBulkSubIssues,
   TIssuesResponse,
   TIssueSubIssues,
 } from "@plane/types";
@@ -322,6 +323,24 @@ export class IssueService extends APIService {
       `/api/workspaces/${workspaceSlug}/projects/${projectId}/${this.serviceType}/${issueId}/${this.serviceType === EIssueServiceType.EPICS ? "issues" : "sub-issues"}/`,
       { params: queries }
     )
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async bulkSubIssues(
+    workspaceSlug: string,
+    projectId: string,
+    parentIssueIds: string[],
+    queries?: { max_depth?: number; order_by?: string }
+  ): Promise<TIssueBulkSubIssues> {
+    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/${this.serviceType}/sub-issues/bulk/`, {
+      params: {
+        ...queries,
+        parent_issue_ids: parentIssueIds.join(","),
+      },
+    })
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;

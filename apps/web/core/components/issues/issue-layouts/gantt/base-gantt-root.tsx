@@ -135,7 +135,8 @@ export const BaseGanttRoot = observer(function BaseGanttRoot(props: IBaseGanttRo
       }
 
       const issue = issueDetailStore.getIssueById(issueId);
-      if (issue?.project_id) {
+      // 预加载已填充则直接复用，避免展开时重复请求单接口
+      if (issue?.project_id && subIssuesStore.subIssuesByIssueId(issueId) === undefined) {
         await subIssuesStore.fetchSubIssues(workspaceSlug.toString(), issue.project_id, issueId);
       }
 

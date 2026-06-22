@@ -10,6 +10,7 @@ import { computedFn } from "mobx-utils";
 // Plane Imports
 import type {
   TIssue,
+  TIssueBulkSubIssues,
   TIssueSubIssues,
   TIssueSubIssuesStateDistributionMap,
   TIssueSubIssuesIdMap,
@@ -27,6 +28,12 @@ import { ProjectIssueTypeService, projectIssueTypesCache, type TIssueType } from
 
 export interface IIssueSubIssuesStoreActions {
   fetchSubIssues: (workspaceSlug: string, projectId: string, parentIssueId: string) => Promise<TIssueSubIssues>;
+  fetchBulkSubIssues: (
+    workspaceSlug: string,
+    projectId: string,
+    parentIssueIds: string[],
+    maxDepth?: number
+  ) => Promise<TIssueBulkSubIssues>;
   createSubIssues: (
     workspaceSlug: string,
     projectId: string,
@@ -79,6 +86,7 @@ export class IssueSubIssuesStore implements IIssueSubIssuesStore {
   issueService;
 
   private inFlightSubIssuesFetches: Map<string, Promise<TIssueSubIssues>> = new Map();
+  private inFlightBulkSubIssuesFetches: Map<string, Promise<TIssueBulkSubIssues>> = new Map();
 
   constructor(rootStore: IIssueDetail, serviceType: TIssueServiceType) {
     makeObservable(this, {
@@ -90,6 +98,7 @@ export class IssueSubIssuesStore implements IIssueSubIssuesStore {
       // actions
       setSubIssueHelpers: action,
       fetchSubIssues: action,
+      fetchBulkSubIssues: action,
       createSubIssues: action,
       updateSubIssue: action,
       removeSubIssue: action,
@@ -176,6 +185,71 @@ export class IssueSubIssuesStore implements IIssueSubIssuesStore {
       return await requestPromise;
     } finally {
       this.inFlightSubIssuesFetches.delete(requestKey);
+    }
+  };
+
+  fetchBulkSubIssues = async (
+    workspaceSlug: string,
+    projectId: string,
+    parentIssueIds: string[],
+    maxDepth: number = 3
+  ) => {
+    const uniqueParentIssueIds = uniq(parentIssueIds.filter(Boolean));
+    if (uniqueParentIssueIds.length === 0) {
+      return { sub_issues: {}, state_distribution: {} };
+    }
+
+    const requestKey = `${workspaceSlug}_${projectId}_${maxDepth}_${uniqueParentIssueIds.sort().join("_")}`;
+    const inFlight = this.inFlightBulkSubIssuesFetches.get(requestKey);
+    if (inFlight) return inFlight;
+
+    const requestPromise = (async () => {
+      this.loader = "init-loader";
+      try {
+        const response = await this.issueService.bulkSubIssues(workspaceSlug, projectId, uniqueParentIssueIds, {
+          max_depth: maxDepth,
+        });
+        const subIssuesByParent = response?.sub_issues ?? {};
+        const stateDistributionByParent = response?.state_distribution ?? {};
+        const parentIssueIdsWithResponse = uniq([...uniqueParentIssueIds, ...Object.keys(subIssuesByParent)]);
+        const issueList = Object.values(subIssuesByParent).flat() as TIssue[];
+
+        this.rootIssueDetailStore.rootIssueStore.issues.addIssue(issueList);
+
+        if (issueList.length > 0) {
+          const otherProjectIds = uniq(
+            issueList.map((issue) => issue.project_id).filter((id) => !!id && id !== projectId)
+          ) as string[];
+          this.fetchOtherProjectProperties(workspaceSlug, otherProjectIds);
+        }
+
+        runInAction(() => {
+          parentIssueIdsWithResponse.forEach((parentIssueId) => {
+            const subIssues = subIssuesByParent[parentIssueId] ?? [];
+            set(this.subIssuesStateDistribution, parentIssueId, stateDistributionByParent[parentIssueId] ?? {});
+            set(
+              this.subIssues,
+              parentIssueId,
+              subIssues.map((issue) => issue.id)
+            );
+            this.rootIssueDetailStore.rootIssueStore.issues.updateIssue(parentIssueId, {
+              sub_issues_count: subIssues.length,
+            });
+          });
+        });
+
+        return response;
+      } finally {
+        this.loader = undefined;
+      }
+    })();
+
+    this.inFlightBulkSubIssuesFetches.set(requestKey, requestPromise);
+
+    try {
+      return await requestPromise;
+    } finally {
+      this.inFlightBulkSubIssuesFetches.delete(requestKey);
     }
   };
 
