@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { isEqual } from "lodash-es";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
@@ -41,6 +41,8 @@ export type TTypedPageVariant = "requirements" | "defects";
 
 type TTypedProjectLayoutRootProps = {
   variant: TTypedPageVariant;
+  /** 进入页面时的初始布局。typed scope 的布局不持久化，因此每次进入按此初始化一次（会话内用户切换仍生效）。 */
+  defaultLayout?: EIssueLayoutTypes;
 };
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -136,6 +138,7 @@ function TypedIssueLayout(props: { activeLayout: EIssueLayoutTypes | undefined }
 
 export const TypedProjectLayoutRoot = observer(function TypedProjectLayoutRoot({
   variant,
+  defaultLayout,
 }: TTypedProjectLayoutRootProps) {
   const { workspaceSlug: routerWorkspaceSlug, projectId: routerProjectId } = useParams();
   const workspaceSlug = routerWorkspaceSlug ? routerWorkspaceSlug.toString() : undefined;
@@ -201,6 +204,19 @@ export const TypedProjectLayoutRoot = observer(function TypedProjectLayoutRoot({
     }
   }, [storeFilters?.displayFilters?.layout, workspaceSlug, projectId, scope, issuesFilter]);
 
+  // 应用初始布局：typed scope 的布局不会持久化，进入页面时按 defaultLayout 初始化一次。
+  const hasAppliedDefaultLayout = useRef(false);
+  useEffect(() => {
+    if (!workspaceSlug || !projectId) return;
+    if (!defaultLayout) return;
+    if (!storeFilters) return;
+    if (hasAppliedDefaultLayout.current) return;
+    hasAppliedDefaultLayout.current = true;
+    if (storeFilters.displayFilters?.layout !== defaultLayout) {
+      issuesFilter?.applyLocalDisplayFilters(workspaceSlug, projectId, { layout: defaultLayout }, scope);
+    }
+  }, [workspaceSlug, projectId, defaultLayout, storeFilters, scope, issuesFilter]);
+
   const initialWorkItemFilters: IIssueFilters | undefined = useMemo(() => {
     if (!storeFilters) return undefined;
     return {
@@ -248,6 +264,7 @@ export const TypedProjectLayoutRoot = observer(function TypedProjectLayoutRoot({
         filtersToShowByLayout={filtersConfig?.filters ?? ISSUE_DISPLAY_FILTERS_BY_PAGE.issues.filters}
         initialWorkItemFilters={initialWorkItemFilters}
         updateFilters={handleUpdateFilters}
+        filterRowHiddenOnMount
         projectId={projectId}
         workspaceSlug={workspaceSlug}
       >

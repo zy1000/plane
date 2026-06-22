@@ -566,3 +566,124 @@ class ProjectAdvanceAnalyticsChartEndpoint(ProjectAdvanceAnalyticsBaseView):
             )
 
         return Response({"message": "Invalid type"}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class ProjectDefectAnalyticsEndpoint(CustomProjectAdvanceAnalyticsEndpoint):
+    """缺陷专属分析端点。
+
+    所有指标均为「缺陷」口径（type.category.name == 缺陷），用于缺陷页「概览」Tab：
+    汇总 / 逾期·临期 / 状态分布 / 优先级分布 / 近6月新建vs解决趋势 / 负责人缺陷 Top。
+    指标反映项目「此刻」的真实状态，不随 analytics_date_range 收窄。
+    """
+
+    DEFECT_CATEGORY_NAME = "缺陷"
+
+    def _defect_queryset(self, project_id):
+        return Issue.issue_objects.filter(
+            **self.filters["base_filters"],
+            project_id=project_id,
+            type__category__name=self.DEFECT_CATEGORY_NAME,
+        )
+
+    def get_defect_summary(self, queryset) -> Dict[str, int]:
+        today = timezone.now().date()
+        open_state = ~Q(state__group__in=["completed", "cancelled"])
+        agg = queryset.aggregate(
+            total=Count("id"),
+            pending=Count("id", filter=open_state),
+            overdue=Count(
+                "id",
+                filter=Q(target_date__isnull=False, target_date__lt=today) & open_state,
+            ),
+            due_soon=Count(
+                "id",
+                filter=Q(
+                    target_date__isnull=False,
+                    target_date__gte=today,
+                    target_date__lte=today + timedelta(days=7),
+                )
+                & open_state,
+            ),
+        )
+        total = agg["total"] or 0
+        pending = agg["pending"] or 0
+        return {
+            "total": total,
+            "pending": pending,
+            "resolved": max(total - pending, 0),
+            "overdue": agg["overdue"] or 0,
+            "due_soon": agg["due_soon"] or 0,
+        }
+
+    def get_status_distribution(self, queryset) -> List[Dict[str, Any]]:
+        rows = queryset.values("state__group").annotate(count=Count("id"))
+        counts = {row["state__group"]: row["count"] for row in rows if row["state__group"]}
+        groups = ["backlog", "unstarted", "started", "completed", "cancelled"]
+        return [{"group": group, "count": counts.get(group, 0)} for group in groups]
+
+    def get_priority_distribution(self, queryset) -> List[Dict[str, Any]]:
+        rows = queryset.values("priority").annotate(count=Count("id"))
+        counts = {row["priority"]: row["count"] for row in rows if row["priority"]}
+        priorities = ["urgent", "high", "medium", "low", "none"]
+        return [{"priority": priority, "count": counts.get(priority, 0)} for priority in priorities]
+
+    def get_defect_trend(self, queryset, months: int = 6) -> List[Dict[str, Any]]:
+        # 复用父类的「新建 vs 完成」节奏，对缺陷 queryset 计算，并把 completed 语义改为 resolved。
+        trend = self.get_created_completed_trend(queryset, months=months)
+        return [
+            {"month": point["month"], "created": point["created"], "resolved": point["completed"]}
+            for point in trend
+        ]
+
+    def get_defect_member_stats(self, project_id: str) -> List[Dict[str, Any]]:
+        rows = (
+            Issue.issue_objects.filter(
+                project_id=project_id,
+                type__category__name=self.DEFECT_CATEGORY_NAME,
+                assignees__isnull=False,
+            )
+            .values("assignees__id")
+            .annotate(defect_count=Count("id", distinct=True))
+        )
+        defect_counts = {row["assignees__id"]: row["defect_count"] or 0 for row in rows}
+        members = ProjectMember.objects.filter(
+            project_id=project_id,
+            is_active=True,
+            member_id__in=list(defect_counts.keys()),
+        ).select_related("member")
+
+        result = []
+        for pm in members:
+            user = pm.member
+            if hasattr(user, "avatar_asset") and user.avatar_asset:
+                avatar_url = f"/api/assets/v2/static/{user.avatar_asset_id}/"
+            else:
+                avatar_url = user.avatar or ""
+            result.append({
+                "member_id": str(user.id),
+                "display_name": user.display_name or user.email or str(user.id),
+                "avatar_url": avatar_url,
+                "defect_count": defect_counts.get(user.id, 0),
+            })
+        result.sort(key=lambda item: item["defect_count"], reverse=True)
+        return result
+
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
+    def get(self, request: HttpRequest, slug: str, project_id: str) -> Response:
+        self.initialize_workspace(slug, type="analytics")
+        cache_payload = f"defect:{slug}:{project_id}:{request.user.id}"
+        cache_key = f"project_defect_analytics_v1:{hashlib.md5(cache_payload.encode()).hexdigest()}"
+        cached_stats = cache.get(cache_key)
+        if cached_stats is not None:
+            return Response(cached_stats, status=status.HTTP_200_OK)
+
+        queryset = self._defect_queryset(project_id)
+        stats = {
+            "summary": self.get_defect_summary(queryset),
+            "status_distribution": self.get_status_distribution(queryset),
+            "priority_distribution": self.get_priority_distribution(queryset),
+            "trend": self.get_defect_trend(queryset),
+            "member_stats": self.get_defect_member_stats(project_id),
+        }
+        cache.set(cache_key, stats, timeout=60)
+        return Response(stats, status=status.HTTP_200_OK)

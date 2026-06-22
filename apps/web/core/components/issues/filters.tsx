@@ -19,9 +19,10 @@ import { useIssues } from "@/hooks/store/use-issues";
 // plane web imports
 import type { TProject } from "@/plane-web/types";
 import { getProjectScopeFilterConfig } from "@/components/issues/typed-page-filter-config";
-import { getProjectIssueScopeFromPathname } from "@/store/issue/project";
+import { getProjectIssueScopeFromPathname, type TProjectIssueScope } from "@/store/issue/project";
 // local imports
 import { WorkItemsModal } from "../analytics/work-items/modal";
+import { DefectAnalysisModal } from "./defects/defect-analysis-modal";
 import { WorkItemFiltersToggle } from "../work-item-filters/filters-toggle";
 import { WorkItemSearch } from "./work-item-search";
 import {
@@ -37,6 +38,8 @@ type Props = {
   workspaceSlug: string;
   canUserCreateIssue: boolean | undefined;
   storeType?: EIssuesStoreType.PROJECT | EIssuesStoreType.EPIC;
+  scope?: TProjectIssueScope;
+  onFilterToggle?: () => void;
 };
 const LAYOUTS = [
   EIssueLayoutTypes.LIST,
@@ -53,6 +56,8 @@ export const HeaderFilters = observer(function HeaderFilters(props: Props) {
     workspaceSlug,
     canUserCreateIssue,
     storeType = EIssuesStoreType.PROJECT,
+    scope: scopeProp,
+    onFilterToggle,
   } = props;
   // i18n
   const { t } = useTranslation();
@@ -60,7 +65,7 @@ export const HeaderFilters = observer(function HeaderFilters(props: Props) {
   const [analyticsModal, setAnalyticsModal] = useState(false);
   // router — detect typed pages (requirements / defects)
   const pathname = usePathname();
-  const scope = getProjectIssueScopeFromPathname(pathname);
+  const scope = scopeProp ?? getProjectIssueScopeFromPathname(pathname);
   // typed pages use a variant-scoped filter entityId to keep their instances isolated
   const filterEntityId = scope === "issues" ? projectId : `${projectId}_${scope}`;
   // store hooks
@@ -103,12 +108,22 @@ export const HeaderFilters = observer(function HeaderFilters(props: Props) {
 
   return (
     <>
-      <WorkItemsModal
-        isOpen={analyticsModal}
-        onClose={() => setAnalyticsModal(false)}
-        projectDetails={currentProjectDetails ?? undefined}
-        isEpic={storeType === EIssuesStoreType.EPIC}
-      />
+      {scope === "defects" ? (
+        <DefectAnalysisModal
+          isOpen={analyticsModal}
+          onClose={() => setAnalyticsModal(false)}
+          workspaceSlug={workspaceSlug}
+          projectId={projectId}
+          projectDetails={currentProjectDetails ?? undefined}
+        />
+      ) : (
+        <WorkItemsModal
+          isOpen={analyticsModal}
+          onClose={() => setAnalyticsModal(false)}
+          projectDetails={currentProjectDetails ?? undefined}
+          isEpic={storeType === EIssuesStoreType.EPIC}
+        />
+      )}
       {storeType === EIssuesStoreType.PROJECT && <WorkItemSearch entityType={storeType} entityId={filterEntityId} />}
       <div className="hidden @4xl:flex">
         <LayoutSelection
@@ -129,6 +144,7 @@ export const HeaderFilters = observer(function HeaderFilters(props: Props) {
         entityId={filterEntityId}
         initialExpression={scopedIssueFilters?.richFilters}
         filterRowHiddenOnMount={scope === "requirements" || scope === "defects"}
+        onToggleFilter={onFilterToggle}
       />
       <FiltersDropdown
         miniIcon={<SlidersHorizontal className="size-3.5" />}

@@ -7,7 +7,7 @@
 import { observer } from "mobx-react";
 import { useTranslation } from "@plane/i18n";
 import { PageHead } from "@/components/core/page-title";
-import { TypedProjectLayoutRoot } from "@/components/issues/issue-layouts/roots/typed-project-layout-root";
+import { ProjectDefectsRoot } from "@/components/issues/defects/project-defects-root";
 import { useProject } from "@/hooks/store/use-project";
 import type { Route } from "./+types/page";
 
@@ -23,7 +23,7 @@ function ProjectDefectsPage({ params }: Route.ComponentProps) {
     <>
       <PageHead title={pageTitle} />
       <div className="h-full w-full">
-        <TypedProjectLayoutRoot variant="defects" />
+        <ProjectDefectsRoot />
       </div>
     </>
   );

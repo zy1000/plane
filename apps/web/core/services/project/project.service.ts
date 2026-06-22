@@ -20,6 +20,30 @@ import type { TProject, TPartialProject } from "@/plane-web/types";
 // services
 import { APIService } from "@/services/api.service";
 
+export type TDefectAnalyticsStatusSlice = { group: string; count: number };
+export type TDefectAnalyticsPrioritySlice = { priority: string; count: number };
+export type TDefectAnalyticsTrendPoint = { month: string; created: number; resolved: number };
+export type TDefectAnalyticsMemberStat = {
+  member_id: string;
+  display_name: string;
+  avatar_url: string;
+  defect_count: number;
+};
+
+export type TProjectDefectAnalytics = {
+  summary: {
+    total: number;
+    pending: number;
+    resolved: number;
+    overdue: number;
+    due_soon: number;
+  };
+  status_distribution: TDefectAnalyticsStatusSlice[];
+  priority_distribution: TDefectAnalyticsPrioritySlice[];
+  trend: TDefectAnalyticsTrendPoint[];
+  member_stats: TDefectAnalyticsMemberStat[];
+};
+
 export class ProjectService extends APIService {
   constructor() {
     super(API_BASE_URL);
@@ -79,6 +103,14 @@ export class ProjectService extends APIService {
 
   async getProjectAnalyze(workspaceSlug: string, projectId: string): Promise<any[]> {
     return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/analytics/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async getProjectDefectAnalytics(workspaceSlug: string, projectId: string): Promise<TProjectDefectAnalytics> {
+    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/defect-analytics/`)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;

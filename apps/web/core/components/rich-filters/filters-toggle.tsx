@@ -18,6 +18,8 @@ type TFiltersToggleProps<P extends TFilterProperty, E extends TExternalFilter> =
   filter: IFilterInstance<P, E> | undefined;
   triggerClassName?: string;
   iconButtonSize?: "sm" | "base" | "lg" | "xl";
+  enableQuickAddFilter?: boolean;
+  onToggleFilter?: () => void;
 };
 
 const COMMON_CLASSNAME =
@@ -26,15 +28,19 @@ const COMMON_CLASSNAME =
 export const FiltersToggle = observer(function FiltersToggle<P extends TFilterProperty, E extends TExternalFilter>(
   props: TFiltersToggleProps<P, E>
 ) {
-  const { filter, triggerClassName, iconButtonSize = "lg" } = props;
+  const { filter, triggerClassName, iconButtonSize = "lg", enableQuickAddFilter = true, onToggleFilter } = props;
   // derived values
   const hasAnyConditions = (filter?.allConditionsForDisplay.length ?? 0) > 0;
   const isFilterRowVisible = filter?.isVisible ?? false;
   const hasUpdates = filter?.canUpdateView === true && filter?.hasChanges === true;
   const showFilterRowChangesPill = hasUpdates || hasAnyConditions === true;
-  const showAddFilterButton = !hasAnyConditions && !isFilterRowVisible && !hasUpdates;
+  const showAddFilterButton = enableQuickAddFilter && !hasAnyConditions && !isFilterRowVisible && !hasUpdates;
 
   const handleToggleFilter = () => {
+    if (onToggleFilter) {
+      onToggleFilter();
+      return;
+    }
     if (!filter) {
       console.error("Filters toggle error - filter instance not available");
       return;

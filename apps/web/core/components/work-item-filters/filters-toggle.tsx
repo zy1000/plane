@@ -18,15 +18,15 @@ type TWorkItemFiltersToggleProps = {
   entityId: string;
   initialExpression?: TWorkItemFilterExpression;
   filterRowHiddenOnMount?: boolean;
+  onToggleFilter?: () => void;
 };
 
 export const WorkItemFiltersToggle = observer(function WorkItemFiltersToggle(props: TWorkItemFiltersToggleProps) {
-  const { entityType, entityId, initialExpression: initialExpressionProp, filterRowHiddenOnMount } = props;
+  const { entityType, entityId, onToggleFilter } = props;
   // store hooks
   const { getFilter } = useWorkItemFilters();
-  const initialExpression = initialExpressionProp;
   const existingFilter = getFilter(entityType, entityId);
   const filter = existingFilter;
 
-  return <FiltersToggle filter={filter} />;
+  return <FiltersToggle filter={filter} enableQuickAddFilter={false} onToggleFilter={onToggleFilter} />;
 });

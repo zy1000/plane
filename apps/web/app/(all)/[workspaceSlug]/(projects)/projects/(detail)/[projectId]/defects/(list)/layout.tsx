@@ -7,13 +7,12 @@
 import { Outlet } from "react-router";
 import { AppHeader } from "@/components/core/app-header";
 import { ContentWrapper } from "@/components/core/content-wrapper";
-import { ProjectIssuesHeader } from "../../issues/(list)/header";
-import { ProjectIssuesMobileHeader } from "../../issues/(list)/mobile-header";
+import { ProjectDefectsHeader } from "@/components/issues/defects/project-defects-header";
 
 export default function ProjectDefectsLayout() {
   return (
     <>
-      <AppHeader header={<ProjectIssuesHeader />} mobileHeader={<ProjectIssuesMobileHeader />} />
+      <AppHeader header={<ProjectDefectsHeader />} />
       <ContentWrapper>
         <Outlet />
       </ContentWrapper>
