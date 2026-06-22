@@ -98,6 +98,7 @@ export const BugIssueFormRoot: FC<BugIssueFormProps> = observer((props) => {
   const submitBtnRef = useRef<HTMLButtonElement | null>(null);
   const formRef = useRef<HTMLFormElement | null>(null);
   const modalContainerRef = useRef<HTMLDivElement | null>(null);
+  const descriptionHtmlData = initialDescriptionHtml ?? data?.description_html ?? "<p></p>";
 
   const { workspaceSlug, projectId: routeProjectId } = useParams();
 
@@ -135,7 +136,7 @@ export const BugIssueFormRoot: FC<BugIssueFormProps> = observer((props) => {
     defaultValues: getCreateFormValues({
       project_id: defaultProjectId,
       ...data,
-      description_html: data?.description_html ?? initialDescriptionHtml ?? "<p></p>",
+      description_html: descriptionHtmlData,
     }),
     reValidateMode: "onChange",
   });
@@ -191,7 +192,7 @@ export const BugIssueFormRoot: FC<BugIssueFormProps> = observer((props) => {
         getCreateFormValues({
           project_id: projectId,
           ...data,
-          description_html: initialDescriptionHtml ?? data.description_html,
+          description_html: descriptionHtmlData,
         })
       );
     }
@@ -402,7 +403,7 @@ export const BugIssueFormRoot: FC<BugIssueFormProps> = observer((props) => {
                   isDraft={isDraft}
                   issueName={watch("name")}
                   issueId={data?.id}
-                  descriptionHtmlData={initialDescriptionHtml ?? data?.description_html}
+                  descriptionHtmlData={descriptionHtmlData}
                   editorRef={editorRef}
                   submitBtnRef={submitBtnRef}
                   gptAssistantModal={gptAssistantModal}
