@@ -6,6 +6,7 @@
 
 import type { ReactNode } from "react";
 import { ArrowRight } from "lucide-react";
+import { ACTIVITY_LINK_CLASS } from "./activity-link-styles";
 
 type TActivityChangeItem = {
   icon?: ReactNode;
@@ -51,7 +52,7 @@ function ActivityChangeItem(props: TActivityChangeItem) {
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className={`max-w-[280px] truncate font-medium ${tone} hover:underline`}
+      className={`max-w-[280px] truncate ${ACTIVITY_LINK_CLASS}`}
       title={label}
     >
       {label}

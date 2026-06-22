@@ -11,6 +11,7 @@ import { MembersPropertyIcon } from "@plane/propel/icons";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 // components
 import { ActivityChangeFooter, IssueActivityBlockComponent, IssueLink } from "./";
+import { activityInlineLinkClassName } from "./helpers/activity-link-styles";
 
 type TIssueAssigneeActivity = { activityId: string; showIssue?: boolean; ends: "top" | "bottom" | undefined };
 
@@ -51,7 +52,7 @@ export const IssueAssigneeActivity = observer(function IssueAssigneeActivity(pro
           href={`/${activity.workspace_detail?.slug}/profile/${activity.new_identifier ?? activity.old_identifier}`}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center font-medium text-primary capitalize hover:underline"
+          className={activityInlineLinkClassName("capitalize")}
         >
           {activity.new_value && activity.new_value !== "" ? activity.new_value : activity.old_value}
         </a>

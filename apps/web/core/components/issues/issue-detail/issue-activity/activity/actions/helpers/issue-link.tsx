@@ -9,6 +9,7 @@ import { generateWorkItemLink } from "@plane/utils";
 // hooks
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { usePlatformOS } from "@/hooks/use-platform-os";
+import { activityInlineLinkClassName } from "./activity-link-styles";
 
 type TIssueLink = {
   activityId: string;
@@ -42,7 +43,7 @@ export function IssueLink(props: TIssueLink) {
         href={`${activity.issue_detail ? workItemLink : "#"}`}
         target={activity.issue === null ? "_self" : "_blank"}
         rel={activity.issue === null ? "" : "noopener noreferrer"}
-        className="inline-flex items-center gap-1 font-medium text-primary hover:underline"
+        className={activityInlineLinkClassName()}
       >
         {activity.issue_detail
           ? `${activity.project_detail.identifier}-${activity.issue_detail.sequence_id}`

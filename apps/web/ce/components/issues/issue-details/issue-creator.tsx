@@ -8,6 +8,7 @@ import type { FC } from "react";
 import Link from "next/link";
 // hooks
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
+import { activityLinkClassName } from "@/components/issues/issue-detail/issue-activity/activity/actions/helpers/activity-link-styles";
 
 type TIssueUser = {
   activityId: string;
@@ -32,7 +33,7 @@ export function IssueCreatorDisplay(props: TIssueUser) {
       ) : (
         <Link
           href={`/${activity?.workspace_detail?.slug}/profile/${activity?.actor_detail?.id}`}
-          className="font-medium text-primary hover:underline"
+          className={activityLinkClassName()}
         >
           {activity.actor_detail?.display_name}
         </Link>

@@ -780,7 +780,8 @@ const activityDetails: {
             </span>
             {showIssue && (
               <>
-                <IssueLink activity={activity} />
+                {" "}
+                for <IssueLink activity={activity} />
               </>
             )}
           </>

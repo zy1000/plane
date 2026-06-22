@@ -73,8 +73,7 @@ export const DefectOverview: FC<Props> = observer(({ workspaceSlug, projectId })
         isLoading={analytics.isLoading}
         totalDefects={analytics.summary.total}
         pendingDefects={analytics.summary.pending}
-        resolvedDefects={analytics.summary.resolved}
-        pendingRatio={analytics.pendingRatio}
+        stalePendingDefects={analytics.summary.stale_pending}
         overdueDefects={analytics.summary.overdue}
         dueSoonDefects={analytics.summary.due_soon}
       />

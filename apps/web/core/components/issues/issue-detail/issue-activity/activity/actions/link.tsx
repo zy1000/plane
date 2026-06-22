@@ -10,6 +10,7 @@ import { Link2, MessageSquare } from "lucide-react";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 // components
 import { ActivityChangeFooter, IssueActivityBlockComponent, IssueLink } from "./";
+import { activityInlineLinkClassName } from "./helpers/activity-link-styles";
 
 type TIssueLinkActivity = { activityId: string; showIssue?: boolean; ends: "top" | "bottom" | undefined };
 
@@ -54,7 +55,7 @@ export const IssueLinkActivity = observer(function IssueLinkActivity(props: TIss
               href={`${activity.new_value}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 font-medium text-primary hover:underline"
+              className={activityInlineLinkClassName()}
             >
               link
             </a>
@@ -66,7 +67,7 @@ export const IssueLinkActivity = observer(function IssueLinkActivity(props: TIss
               href={`${activity.old_value}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 font-medium text-primary hover:underline"
+              className={activityInlineLinkClassName()}
             >
               link
             </a>
@@ -78,7 +79,7 @@ export const IssueLinkActivity = observer(function IssueLinkActivity(props: TIss
               href={`${activity.old_value}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 font-medium text-primary hover:underline"
+              className={activityInlineLinkClassName()}
             >
               link
             </a>

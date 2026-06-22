@@ -17,6 +17,7 @@ const EMPTY_SUMMARY: TProjectDefectAnalytics["summary"] = {
   total: 0,
   pending: 0,
   resolved: 0,
+  stale_pending: 0,
   overdue: 0,
   due_soon: 0,
 };
@@ -26,7 +27,6 @@ export type TUseProjectDefectAnalytics = {
   error: unknown;
   refetch: () => void;
   summary: TProjectDefectAnalytics["summary"];
-  pendingRatio: number;
   statusDistribution: TDefectAnalyticsStatusSlice[];
   priorityDistribution: TDefectAnalyticsPrioritySlice[];
   trend: TDefectAnalyticsTrendPoint[];
@@ -69,7 +69,6 @@ export function useProjectDefectAnalytics(
       error,
       refetch: () => void mutate(),
       summary,
-      pendingRatio: summary.total > 0 ? Math.round((summary.pending / summary.total) * 100) : 0,
       statusDistribution: data?.status_distribution ?? [],
       priorityDistribution: data?.priority_distribution ?? [],
       trend: data?.trend ?? [],

@@ -1,5 +1,5 @@
 import type { FC, ReactNode } from "react";
-import { AlertTriangle, Bug, CalendarX2, CheckCircle2, Clock, Ratio } from "lucide-react";
+import { AlertTriangle, Bug, CalendarX2, Clock, Hourglass } from "lucide-react";
 import { cn } from "@plane/utils";
 
 type TTone = "neutral" | "danger" | "success" | "warning";
@@ -18,25 +18,23 @@ type Props = {
   isLoading: boolean;
   totalDefects: number;
   pendingDefects: number;
-  resolvedDefects: number;
-  pendingRatio: number;
+  stalePendingDefects: number;
   overdueDefects: number;
   dueSoonDefects: number;
 };
 
 const toneClassNames: Record<TTone, string> = {
-  danger: "bg-red-500/10 text-danger-primary ring-red-500/15",
-  neutral: "bg-surface-2 text-primary ring-subtle",
-  success: "bg-green-500/10 text-green-600 ring-green-500/15",
-  warning: "bg-amber-500/10 text-amber-600 ring-amber-500/15",
+  danger: "text-danger-primary",
+  neutral: "text-secondary",
+  success: "text-green-600",
+  warning: "text-amber-600",
 };
 
 export const DefectSummaryCards: FC<Props> = ({
   isLoading,
   totalDefects,
   pendingDefects,
-  resolvedDefects,
-  pendingRatio,
+  stalePendingDefects,
   overdueDefects,
   dueSoonDefects,
 }) => {
@@ -58,21 +56,12 @@ export const DefectSummaryCards: FC<Props> = ({
       tone: pendingDefects > 0 ? "danger" : "success",
     },
     {
-      key: "resolved",
-      label: "已关闭/已解决",
-      value: resolvedDefects,
-      description: "已完成或已取消的缺陷",
-      icon: <CheckCircle2 className="h-4 w-4" />,
-      tone: "success",
-    },
-    {
-      key: "ratio",
-      label: "待处理占比",
-      value: pendingRatio,
-      suffix: "%",
-      description: "待处理缺陷在全部缺陷中的占比",
-      icon: <Ratio className="h-4 w-4" />,
-      tone: pendingRatio >= 50 ? "warning" : "neutral",
+      key: "stale_pending",
+      label: "超过 7 天未处理",
+      value: stalePendingDefects,
+      description: "创建超过 7 天且未完成/未取消的缺陷",
+      icon: <Hourglass className="h-4 w-4" />,
+      tone: stalePendingDefects > 0 ? "warning" : "neutral",
     },
     {
       key: "overdue",
@@ -93,11 +82,11 @@ export const DefectSummaryCards: FC<Props> = ({
   ];
 
   return (
-    <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+    <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
       {items.map((item) => (
         <div
           key={item.key}
-          className="relative overflow-hidden rounded-xl border border-subtle bg-surface-1 p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-strong hover:shadow-md"
+          className="relative overflow-hidden rounded-xl border border-subtle bg-surface-1 p-4 shadow-sm"
         >
           <div className="absolute -right-8 -top-10 h-24 w-24 rounded-full bg-red-500/[0.04]" />
           <div className="relative flex items-start justify-between gap-3">
@@ -115,7 +104,7 @@ export const DefectSummaryCards: FC<Props> = ({
               </div>
               <div className="mt-2 line-clamp-1 text-xs text-placeholder">{item.description}</div>
             </div>
-            <div className={cn("rounded-lg p-2 ring-1", toneClassNames[item.tone])}>{item.icon}</div>
+            <div className={cn("flex-shrink-0", toneClassNames[item.tone])}>{item.icon}</div>
           </div>
         </div>
       ))}

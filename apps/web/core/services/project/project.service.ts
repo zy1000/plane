@@ -35,6 +35,7 @@ export type TProjectDefectAnalytics = {
     total: number;
     pending: number;
     resolved: number;
+    stale_pending: number;
     overdue: number;
     due_soon: number;
   };

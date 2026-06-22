@@ -586,11 +586,14 @@ class ProjectDefectAnalyticsEndpoint(CustomProjectAdvanceAnalyticsEndpoint):
         )
 
     def get_defect_summary(self, queryset) -> Dict[str, int]:
-        today = timezone.now().date()
+        now = timezone.now()
+        today = now.date()
+        stale_cutoff = now - timedelta(days=7)
         open_state = ~Q(state__group__in=["completed", "cancelled"])
         agg = queryset.aggregate(
             total=Count("id"),
             pending=Count("id", filter=open_state),
+            stale_pending=Count("id", filter=Q(created_at__lt=stale_cutoff) & open_state),
             overdue=Count(
                 "id",
                 filter=Q(target_date__isnull=False, target_date__lt=today) & open_state,
@@ -611,6 +614,7 @@ class ProjectDefectAnalyticsEndpoint(CustomProjectAdvanceAnalyticsEndpoint):
             "total": total,
             "pending": pending,
             "resolved": max(total - pending, 0),
+            "stale_pending": agg["stale_pending"] or 0,
             "overdue": agg["overdue"] or 0,
             "due_soon": agg["due_soon"] or 0,
         }
@@ -672,7 +676,7 @@ class ProjectDefectAnalyticsEndpoint(CustomProjectAdvanceAnalyticsEndpoint):
     def get(self, request: HttpRequest, slug: str, project_id: str) -> Response:
         self.initialize_workspace(slug, type="analytics")
         cache_payload = f"defect:{slug}:{project_id}:{request.user.id}"
-        cache_key = f"project_defect_analytics_v1:{hashlib.md5(cache_payload.encode()).hexdigest()}"
+        cache_key = f"project_defect_analytics_v2:{hashlib.md5(cache_payload.encode()).hexdigest()}"
         cached_stats = cache.get(cache_key)
         if cached_stats is not None:
             return Response(cached_stats, status=status.HTTP_200_OK)

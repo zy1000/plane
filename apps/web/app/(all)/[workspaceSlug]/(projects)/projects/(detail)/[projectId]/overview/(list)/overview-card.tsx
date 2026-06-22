@@ -16,7 +16,7 @@ type Props = {
 };
 
 /**
- * 概览页统一卡片外壳：分层表面 + 柔和 hover 抬升，保证各模块观感一致。
+ * 概览页统一卡片外壳：分层表面，各模块观感一致。
  */
 export const OverviewCard: FC<Props> = ({
   title,
@@ -30,8 +30,7 @@ export const OverviewCard: FC<Props> = ({
 }) => (
   <div
     className={cn(
-      "group flex flex-col overflow-hidden rounded-xl border border-subtle bg-surface-1 transition-all duration-300",
-      "hover:-translate-y-0.5 hover:border-strong hover:shadow-md",
+      "group flex flex-col overflow-hidden rounded-xl border border-subtle bg-surface-1",
       className
     )}
   >

@@ -10,6 +10,7 @@ import { CycleIcon } from "@plane/propel/icons";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 // components
 import { ActivityChangeFooter, IssueActivityBlockComponent } from "./";
+import { activityTruncateLinkClassName } from "./helpers/activity-link-styles";
 
 type TIssueCycleActivity = { activityId: string; ends: "top" | "bottom" | undefined };
 
@@ -59,7 +60,7 @@ export const IssueCycleActivity = observer(function IssueCycleActivity(props: TI
               href={`/${activity.workspace_detail?.slug}/projects/${activity.project}/cycles/${activity.new_identifier}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 truncate font-medium text-primary hover:underline"
+              className={activityTruncateLinkClassName()}
             >
               <span className="truncate">{activity.new_value}</span>
             </a>
@@ -71,7 +72,7 @@ export const IssueCycleActivity = observer(function IssueCycleActivity(props: TI
               href={`/${activity.workspace_detail?.slug}/projects/${activity.project}/cycles/${activity.new_identifier}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 truncate font-medium text-primary hover:underline"
+              className={activityTruncateLinkClassName()}
             >
               <span className="truncate"> {activity.new_value}</span>
             </a>
@@ -83,7 +84,7 @@ export const IssueCycleActivity = observer(function IssueCycleActivity(props: TI
               href={`/${activity.workspace_detail?.slug}/projects/${activity.project}/cycles/${activity.old_identifier}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 truncate font-medium text-primary hover:underline"
+              className={activityTruncateLinkClassName()}
             >
               <span className="truncate"> {activity.new_value}</span>
             </a>
