@@ -26,6 +26,23 @@ def _parse_ids(raw: str):
 class TimeSheetReportViewSet(BaseViewSet):
     model = TimeSheet
     serializer_class = TimeSheetReportListSerializer
+    export_columns = [
+        ("项目编号", "pms_project_name"),
+        ("项目名称", "project_name"),
+        ("工作项", "issue_name"),
+        ("模块", "module_names"),
+        ("测试用例", "case_name"),
+        ("成员", "member_name"),
+        ("工号", "employee_id"),
+        ("部门", "department"),
+        ("日期", "date"),
+        ("开始时间", "start_time"),
+        ("结束时间", "end_time"),
+        ("工时", "hours"),
+        ("类别", "category_name"),
+        ("描述", "description"),
+    ]
+    export_widths = [16, 24, 30, 24, 30, 14, 14, 20, 12, 10, 10, 8, 14, 40]
 
     def get_queryset(self):
         return (
@@ -115,31 +132,47 @@ class TimeSheetReportViewSet(BaseViewSet):
             ).data,
         )
 
-    @action(detail=False, methods=["get"], url_path="export")
-    def export_xlsx(self, request, slug):
-        """导出 xlsx。若提供 ids 则仅导出勾选项，否则导出当前过滤全量。"""
-        queryset = self._apply_filters(request, slug)
-        ids = _parse_ids(request.query_params.get("ids", ""))
-        if ids:
-            queryset = queryset.filter(id__in=ids)
+    def _format_export_value(self, record, key):
+        if key == "pms_project_name":
+            return record.project.pms_project_name or ""
+        if key == "project_name":
+            return record.project.name or ""
+        if key == "issue_name":
+            return record.issue.name if record.issue_id else ""
+        if key == "module_names":
+            return self._get_issue_module_names(record.issue)
+        if key == "case_name":
+            return record.test_case.name if record.test_case_id else ""
+        if key == "member_name":
+            return (
+                getattr(record.member, "display_name", "")
+                or getattr(record.member, "email", "")
+                or ""
+            )
+        if key in ("employee_id", "department"):
+            if not record.member_id:
+                return ""
+            try:
+                extra_info = record.member.extra_info
+            except Exception:
+                return ""
+            return getattr(extra_info, key, "") or ""
+        if key == "category_name":
+            return record.category.name if record.category_id else ""
+        if key == "date":
+            return record.date.strftime("%Y-%m-%d") if record.date else ""
+        if key in ("start_time", "end_time"):
+            value = getattr(record, key, None)
+            if not value:
+                return ""
+            return value.strftime("%H:%M")
+        if key == "hours":
+            return str(record.hours) if record.hours is not None else ""
+        if key == "description":
+            return record.description or ""
+        return ""
 
-        columns = [
-            ("项目编号", "pms_project_name"),
-            ("项目名称", "project_name"),
-            ("工作项", "issue_name"),
-            ("模块", "module_names"),
-            ("测试用例", "case_name"),
-            ("成员", "member_name"),
-            ("工号", "employee_id"),
-            ("部门", "department"),
-            ("日期", "date"),
-            ("开始时间", "start_time"),
-            ("结束时间", "end_time"),
-            ("工时", "hours"),
-            ("类别", "category_name"),
-            ("描述", "description"),
-        ]
-
+    def _build_export_workbook(self, queryset):
         workbook = Workbook()
         ws = workbook.active
         ws.title = "工时报表"
@@ -148,65 +181,30 @@ class TimeSheetReportViewSet(BaseViewSet):
         header_fill = PatternFill("solid", fgColor="4F81BD")
         header_align = Alignment(horizontal="center", vertical="center")
 
-        ws.append([label for label, _ in columns])
-        for col_idx, _ in enumerate(columns, start=1):
+        ws.append([label for label, _ in self.export_columns])
+        for col_idx, _ in enumerate(self.export_columns, start=1):
             cell = ws.cell(row=1, column=col_idx)
             cell.font = header_font
             cell.fill = header_fill
             cell.alignment = header_align
 
-        def format_value(record, key):
-            if key == "pms_project_name":
-                return record.project.pms_project_name or ""
-            if key == "project_name":
-                return record.project.name or ""
-            if key == "issue_name":
-                return record.issue.name if record.issue_id else ""
-            if key == "module_names":
-                return self._get_issue_module_names(record.issue)
-            if key == "case_name":
-                return record.test_case.name if record.test_case_id else ""
-            if key == "member_name":
-                return (
-                    getattr(record.member, "display_name", "")
-                    or getattr(record.member, "email", "")
-                    or ""
-                )
-            if key in ("employee_id", "department"):
-                if not record.member_id:
-                    return ""
-                try:
-                    extra_info = record.member.extra_info
-                except Exception:
-                    return ""
-                return getattr(extra_info, key, "") or ""
-            if key == "category_name":
-                return record.category.name if record.category_id else ""
-            if key == "date":
-                return record.date.strftime("%Y-%m-%d") if record.date else ""
-            if key in ("start_time", "end_time"):
-                value = getattr(record, key, None)
-                if not value:
-                    return ""
-                return value.strftime("%H:%M")
-            if key == "hours":
-                return str(record.hours) if record.hours is not None else ""
-            if key == "description":
-                return record.description or ""
-            return ""
-
         for item in queryset.iterator():
-            ws.append([format_value(item, key) for _, key in columns])
+            ws.append(
+                [self._format_export_value(item, key) for _, key in self.export_columns]
+            )
 
-        widths = [16, 24, 30, 24, 30, 14, 14, 20, 12, 10, 10, 8, 14, 40]
-        for idx, width in enumerate(widths, start=1):
+        for idx, width in enumerate(self.export_widths, start=1):
             ws.column_dimensions[ws.cell(row=1, column=idx).column_letter].width = width
 
+        return workbook
+
+    @staticmethod
+    def _build_xlsx_response(workbook, filename_prefix="timesheet-report"):
         bio = io.BytesIO()
         workbook.save(bio)
         bio.seek(0)
 
-        filename = f"timesheet-report-{timezone.now().strftime('%Y%m%d%H%M%S')}.xlsx"
+        filename = f"{filename_prefix}-{timezone.now().strftime('%Y%m%d%H%M%S')}.xlsx"
         response = FileResponse(
             bio,
             as_attachment=True,
@@ -218,6 +216,17 @@ class TimeSheetReportViewSet(BaseViewSet):
             f"attachment; filename*=UTF-8''{quote(filename)}"
         )
         return response
+
+    @action(detail=False, methods=["get"], url_path="export")
+    def export_xlsx(self, request, slug):
+        """导出 xlsx。若提供 ids 则仅导出勾选项，否则导出当前过滤全量。"""
+        queryset = self._apply_filters(request, slug)
+        ids = _parse_ids(request.query_params.get("ids", ""))
+        if ids:
+            queryset = queryset.filter(id__in=ids)
+
+        workbook = self._build_export_workbook(queryset)
+        return self._build_xlsx_response(workbook)
 
     @staticmethod
     def _resolve_month_range(month_param):
@@ -256,7 +265,9 @@ class TimeSheetReportViewSet(BaseViewSet):
         return {
             "pms_project_name": record.project.pms_project_name or "",
             "issue_name": record.issue.name if record.issue_id else "",
-            "module_names": TimeSheetReportViewSet._get_issue_module_names(record.issue),
+            "module_names": TimeSheetReportViewSet._get_issue_module_names(
+                record.issue
+            ),
             "case_name": record.test_case.name if record.test_case_id else "",
             "member_name": (
                 getattr(member, "display_name", "")
@@ -312,4 +323,31 @@ class TimeSheetReportViewSet(BaseViewSet):
                 "results": results,
             },
             status=status.HTTP_200_OK,
+        )
+
+    @action(detail=False, methods=["get"], url_path="export-excel")
+    def export_excel(self, request):
+        """公开接口（无需鉴权）：按月份与用户名导出用户填报的工时数据，返回 Excel。"""
+        month_param = (request.query_params.get("month") or "").strip()
+        try:
+            first_day, next_month_first = self._resolve_month_range(month_param)
+        except (ValueError, TypeError):
+            return Response(
+                {"error": "month 参数格式不正确，应为 YYYY-MM，例如 2026-06。"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        queryset = self.get_queryset().filter(
+            date__gte=first_day, date__lt=next_month_first
+        )
+
+        user_param = (request.query_params.get("user") or "").strip()
+        if user_param:
+            queryset = queryset.filter(member__display_name__icontains=user_param)
+
+        queryset = queryset.order_by("-date", "-start_time", "-id")
+
+        workbook = self._build_export_workbook(queryset)
+        return self._build_xlsx_response(
+            workbook, filename_prefix="timesheet-report-public"
         )

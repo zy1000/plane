@@ -57,4 +57,14 @@ urlpatterns = [
         ),
         name="timesheet-reports-export-json",
     ),
+    # 公开接口：无需鉴权，直接按 month / user 导出工时数据（Excel）
+    path(
+        "timesheets/reports/export-excel/",
+        TimeSheetReportViewSet.as_view(
+            {"get": "export_excel"},
+            permission_classes=[AllowAny],
+            authentication_classes=[],
+        ),
+        name="timesheet-reports-export-excel",
+    ),
 ]
