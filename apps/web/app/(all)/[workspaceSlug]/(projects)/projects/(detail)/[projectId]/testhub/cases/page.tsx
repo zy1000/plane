@@ -1158,7 +1158,8 @@ export default function TestCasesPage() {
                                 复制到
                               </span>
                               <span
-                                className="text-red-500 hover:text-red-600 cursor-pointer transition-colors text-sm"
+                                className="cursor-pointer text-sm transition-colors"
+                                style={{ color: "#ff4d4f" }}
                                 onClick={confirmDeleteCases}
                               >
                                 删除
