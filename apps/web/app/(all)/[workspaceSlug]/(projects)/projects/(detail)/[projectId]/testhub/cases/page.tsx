@@ -889,9 +889,10 @@ export default function TestCasesPage() {
     const label = record?.latest_execution_result;
     if (!label) return <span className="text-placeholder">-</span>;
 
-    const color = ((globalEnums.Enums as any)?.plan_case_result || {})[label] || "default";
+    const rawColor = ((globalEnums.Enums as any)?.plan_case_result || {})[label] || "default";
+    const color = rawColor === "gray" ? "default" : rawColor;
     const resultTag = (
-      <Tag color={color} className="!mx-0">
+      <Tag color={color} className="!inline-flex justify-center w-[55px]">
         {label}
       </Tag>
     );
