@@ -11,9 +11,13 @@ import { SPREADSHEET_SELECT_GROUP, SPREADSHEET_PROPERTY_LIST } from "@plane/cons
 // types
 import type { TIssue, IIssueDisplayFilterOptions, IIssueDisplayProperties } from "@plane/types";
 // components
-import { MultipleSelectGroup } from "@/components/core/multiple-select";
+import { MultipleSelectGroup, getEntitiesWithSelected } from "@/components/core/multiple-select";
 // hooks
+import { useIssues } from "@/hooks/store/use-issues";
+import { useMultipleSelectStore } from "@/hooks/store/use-multiple-select-store";
 import { useProject } from "@/hooks/store/use-project";
+import { useSubIssuesPreload } from "@/hooks/store/use-sub-issues-preload";
+import { useIssueStoreType } from "@/hooks/use-issue-layout-store";
 // plane web components
 import { IssueBulkOperationsRoot } from "@/plane-web/components/issues/bulk-operations";
 // plane web hooks
@@ -59,8 +63,14 @@ export const SpreadsheetView = observer(function SpreadsheetView(props: Props) {
   const portalRef = useRef<HTMLDivElement | null>(null);
   // store hooks
   const { currentProjectDetails } = useProject();
+  const storeType = useIssueStoreType();
+  const { issueMap } = useIssues(storeType);
+  const { selectedEntityIds, getEntityDetailsFromEntityID } = useMultipleSelectStore();
   // plane web hooks
   const isBulkOperationsEnabled = useBulkOperationStatus();
+
+  // 进入即预加载所有父项的子工作项数据（保持折叠展示）
+  useSubIssuesPreload({ issueIds: issueIds ?? [], issuesMap: issueMap, isEpic });
 
   const isEstimateEnabled: boolean = currentProjectDetails?.estimate !== null;
 
@@ -78,9 +88,11 @@ export const SpreadsheetView = observer(function SpreadsheetView(props: Props) {
       <div ref={portalRef} className="spreadsheet-menu-portal" />
       <MultipleSelectGroup
         containerRef={containerRef}
-        entities={{
-          [SPREADSHEET_SELECT_GROUP]: issueIds,
-        }}
+        entities={getEntitiesWithSelected(
+          { [SPREADSHEET_SELECT_GROUP]: issueIds },
+          selectedEntityIds,
+          getEntityDetailsFromEntityID
+        )}
         disabled={isEpic}
       >
         {(helpers) => (

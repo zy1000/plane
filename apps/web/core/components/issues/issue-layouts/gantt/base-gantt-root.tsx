@@ -20,6 +20,7 @@ import { IssueGanttSidebar } from "@/components/gantt-chart/sidebar/issues/sideb
 // hooks
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useIssues } from "@/hooks/store/use-issues";
+import { useSubIssuesPreload } from "@/hooks/store/use-sub-issues-preload";
 import { useUserPermissions } from "@/hooks/store/user";
 import { useIssueStoreType } from "@/hooks/use-issue-layout-store";
 import { useIssuesActions } from "@/hooks/use-issues-actions";
@@ -50,7 +51,7 @@ export const BaseGanttRoot = observer(function BaseGanttRoot(props: IBaseGanttRo
   const { workspaceSlug, projectId } = useParams();
 
   const storeType = useIssueStoreType() as GanttStoreType;
-  const { issues, issuesFilter } = useIssues(storeType);
+  const { issues, issuesFilter, issueMap } = useIssues(storeType);
   const { fetchIssues, fetchNextIssues, updateIssue } = useIssuesActions(storeType);
   const { initGantt } = useTimeLineChart(GANTT_TIMELINE_TYPE.ISSUE);
   // store hooks
@@ -73,6 +74,9 @@ export const BaseGanttRoot = observer(function BaseGanttRoot(props: IBaseGanttRo
 
   const issuesIds = (issues.groupedIssueIds?.[ALL_ISSUES] as string[]) ?? [];
   const nextPageResults = issues.getPaginationData(undefined, undefined)?.nextPageResults;
+
+  // 进入即预加载所有父项的子工作项数据（保持折叠展示；entities 的已选合并已在 main-content 完成）
+  useSubIssuesPreload({ issueIds: issuesIds, issuesMap: issueMap, isEpic });
 
   const [expandedIssueIds, setExpandedIssueIds] = useState<Set<string>>(() => new Set());
 

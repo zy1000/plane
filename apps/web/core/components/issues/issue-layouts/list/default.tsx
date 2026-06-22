@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { combine } from "@atlaskit/pragmatic-drag-and-drop/combine";
 import { autoScrollForElements } from "@atlaskit/pragmatic-drag-and-drop-auto-scroll/element";
 import { observer } from "mobx-react";
@@ -22,8 +22,10 @@ import type {
   TIssueKanbanFilters,
 } from "@plane/types";
 // components
-import { MultipleSelectGroup } from "@/components/core/multiple-select";
+import { MultipleSelectGroup, getEntitiesWithSelected } from "@/components/core/multiple-select";
 // hooks
+import { useMultipleSelectStore } from "@/hooks/store/use-multiple-select-store";
+import { useSubIssuesPreload } from "@/hooks/store/use-sub-issues-preload";
 import { useIssueStoreType, useTypedPageIssueTypeIds } from "@/hooks/use-issue-layout-store";
 // plane web components
 import { IssueBulkOperationsRoot } from "@/plane-web/components/issues/bulk-operations";
@@ -89,8 +91,27 @@ export const List = observer(function List(props: IList) {
   const typedPageIssueTypeIds = useTypedPageIssueTypeIds();
   // plane web hooks
   const isBulkOperationsEnabled = useBulkOperationStatus();
+  // multiple select store（读取已选项以保护直接勾选的子工作项不被清理）
+  const { selectedEntityIds, getEntityDetailsFromEntityID } = useMultipleSelectStore();
 
   const containerRef = useRef<HTMLDivElement | null>(null);
+
+  // 所有分组的顶层工作项 ID（兼容平铺 / 分组 / 子分组三种结构）
+  const allTopLevelIssueIds = useMemo(() => {
+    const ids = new Set<string>();
+    const collect = (val: unknown) => {
+      if (Array.isArray(val)) {
+        val.forEach((v) => typeof v === "string" && ids.add(v));
+      } else if (val && typeof val === "object") {
+        Object.values(val as Record<string, unknown>).forEach(collect);
+      }
+    };
+    collect(groupedIssueIds);
+    return Array.from(ids);
+  }, [groupedIssueIds]);
+
+  // 进入即预加载所有父项的子工作项数据（保持折叠展示）
+  useSubIssuesPreload({ issueIds: allTopLevelIssueIds, issuesMap, isEpic });
 
   const groups = getGroupByColumns({
     groupBy: group_by as GroupByColumnTypes,
@@ -148,6 +169,9 @@ export const List = observer(function List(props: IList) {
     entities = orderedGroups;
   }
 
+  // 把已选中的子工作项按真实分组并入 entities，避免被 useMultipleSelect 的清理 effect 移除
+  const selectableEntities = getEntitiesWithSelected(entities, selectedEntityIds, getEntityDetailsFromEntityID);
+
   const activeGroup = isGrouped && selectedGroupId ? groups.find((g) => g.id === selectedGroupId) : null;
 
   // In sidebar mode, ensure the active group is never collapsed
@@ -172,7 +196,7 @@ export const List = observer(function List(props: IList) {
         <div className="relative flex min-w-0 flex-1 flex-col">
           <MultipleSelectGroup
             containerRef={containerRef}
-            entities={entities}
+            entities={selectableEntities}
             disabled={isEpic}
           >
             {(helpers) => (
@@ -225,7 +249,7 @@ export const List = observer(function List(props: IList) {
       {groups && (
         <MultipleSelectGroup
           containerRef={containerRef}
-          entities={entities}
+          entities={selectableEntities}
           disabled={isEpic}
         >
           {(helpers) => (
