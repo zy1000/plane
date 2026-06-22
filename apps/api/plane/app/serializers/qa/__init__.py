@@ -370,6 +370,8 @@ class CaseListSerializer(ModelSerializer):
     labels = CaseLabelListSerializer(many=True, read_only=True)
     repository_name = serializers.CharField(source="repository.name", read_only=True)
     version = serializers.SerializerMethodField(read_only=True)
+    latest_execution_result = serializers.SerializerMethodField(read_only=True)
+    latest_execution_plan_id = serializers.SerializerMethodField(read_only=True)
 
     # 保持原有的 review 字段
     review = serializers.SerializerMethodField()
@@ -385,6 +387,45 @@ class CaseListSerializer(ModelSerializer):
             return last_version.version
         else:
             return str(Decimal(str(last_version.version)) + Decimal(str(0.1)))
+
+    def _get_latest_execution_data(self, obj: TestCase) -> dict:
+        cached = getattr(obj, "_latest_execution_data_cache", None)
+        if cached is not None:
+            return cached
+
+        latest_plan_case = (
+            PlanCase.objects.filter(
+                case_id=obj.id,
+                deleted_at__isnull=True,
+                plan__deleted_at__isnull=True,
+            )
+            .order_by("-updated_at", "-created_at")
+            .values("result", "plan_id")
+            .first()
+        )
+        cached = {
+            "result": (
+                latest_plan_case.get("result")
+                if latest_plan_case
+                else PlanCase.Result.NOT_START
+            ),
+            "plan_id": latest_plan_case.get("plan_id") if latest_plan_case else None,
+        }
+        setattr(obj, "_latest_execution_data_cache", cached)
+        return cached
+
+    def get_latest_execution_result(self, obj: TestCase):
+        annotated_result = getattr(obj, "_latest_execution_result", None)
+        if annotated_result is not None:
+            return annotated_result
+        return self._get_latest_execution_data(obj).get("result")
+
+    def get_latest_execution_plan_id(self, obj: TestCase):
+        annotated_plan_id = getattr(obj, "_latest_execution_plan_id", None)
+        if annotated_plan_id is not None:
+            return str(annotated_plan_id)
+        plan_id = self._get_latest_execution_data(obj).get("plan_id")
+        return str(plan_id) if plan_id else None
 
     class Meta:
         model = TestCase

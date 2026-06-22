@@ -1219,13 +1219,33 @@ class CaseAPIView(BaseAPIView):
             .order_by("-created_at")
             .values("result")[:1]
         )
+        latest_execution_subquery = (
+            PlanCase.objects.filter(
+                case_id=OuterRef("pk"),
+                deleted_at__isnull=True,
+                plan__deleted_at__isnull=True,
+                plan__project_id=project_id,
+            )
+            .order_by("-updated_at", "-created_at")
+        )
         queryset = queryset.annotate(
             _review_result=Coalesce(
                 Subquery(review_record_result_subquery, output_field=CharField()),
                 Subquery(review_through_result_subquery, output_field=CharField()),
                 Value(CaseReviewThrough.Result.NOT_START, output_field=CharField()),
                 output_field=CharField(),
-            )
+            ),
+            _latest_execution_result=Coalesce(
+                Subquery(
+                    latest_execution_subquery.values("result")[:1],
+                    output_field=CharField(),
+                ),
+                Value(PlanCase.Result.NOT_START, output_field=CharField()),
+                output_field=CharField(),
+            ),
+            _latest_execution_plan_id=Subquery(
+                latest_execution_subquery.values("plan_id")[:1]
+            ),
         )
 
         review_values: list[str] = []

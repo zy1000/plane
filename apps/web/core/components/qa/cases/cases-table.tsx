@@ -34,6 +34,8 @@ export type TCaseTableRecord = {
   };
   code?: string;
   labels?: TLabel[];
+  latest_execution_plan_id?: string | null;
+  latest_execution_result?: string;
   module?: TModule;
   name: string;
   priority?: number;
@@ -58,6 +60,7 @@ type TCasesTableProps = {
   onEdit: (record: TCaseTableRecord) => void;
   onRowSelectChange: (selectedKeysOnCurrentPage: string[]) => void;
   onViewCase: (record: TCaseTableRecord) => void;
+  renderLastExecutionResult: (record: TCaseTableRecord) => ReactNode;
   renderPriorityTag: (value?: number) => ReactNode;
   renderReviewTag: (value?: string) => ReactNode;
   renderTypeTag: (value?: number) => ReactNode;
@@ -126,6 +129,7 @@ export const CasesTable = ({
   onEdit,
   onRowSelectChange,
   onViewCase,
+  renderLastExecutionResult,
   renderPriorityTag,
   renderReviewTag,
   renderTypeTag,
@@ -211,6 +215,15 @@ export const CasesTable = ({
           {isColumnVisible("review") && (
             <ResizableHead style={getWidthStyle("review", 100)} onResize={(width) => setColumnWidth("review", width)}>
               评审
+            </ResizableHead>
+          )}
+
+          {isColumnVisible("last_execution_result") && (
+            <ResizableHead
+              style={getWidthStyle("last_execution_result", 140)}
+              onResize={(width) => setColumnWidth("last_execution_result", width)}
+            >
+              最近执行结果
             </ResizableHead>
           )}
 
@@ -307,6 +320,14 @@ export const CasesTable = ({
               {isColumnVisible("review") && (
                 <TableCell className="h-12 border-b border-r border-subtle px-page-x py-0" style={getWidthStyle("review", 100)}>
                   {renderReviewTag(record.review)}
+                </TableCell>
+              )}
+              {isColumnVisible("last_execution_result") && (
+                <TableCell
+                  className="h-12 border-b border-r border-subtle px-page-x py-0"
+                  style={getWidthStyle("last_execution_result", 140)}
+                >
+                  {renderLastExecutionResult(record)}
                 </TableCell>
               )}
               {isColumnVisible("type") && (

@@ -14,6 +14,7 @@ export type TCaseDisplayPropertyKey =
   | "code"
   | "name"
   | "review"
+  | "last_execution_result"
   | "type"
   | "priority"
   | "module"
@@ -47,11 +48,12 @@ export const DEFAULT_CASE_DISPLAY_PROPERTIES: TCaseDisplayProperties = {
   code: true,
   name: true,
   review: true,
+  last_execution_result: true,
   type: true,
   priority: true,
   module: true,
   assignee: true,
-  labels: true,
+  labels: false,
   updated_at: true,
 };
 
@@ -59,6 +61,7 @@ const DISPLAY_PROPERTY_OPTIONS: TDisplayPropertyOption[] = [
   { key: "code", label: "用例编号" },
   { key: "name", label: "名称" },
   { key: "review", label: "评审结果" },
+  { key: "last_execution_result", label: "最近执行结果" },
   { key: "type", label: "类型" },
   { key: "priority", label: "优先级" },
   { key: "module", label: "模块" },

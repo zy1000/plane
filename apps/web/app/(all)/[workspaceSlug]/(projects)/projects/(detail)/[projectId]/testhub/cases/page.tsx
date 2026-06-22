@@ -59,6 +59,8 @@ type TestCase = {
   id: string;
   code?: string;
   name: string;
+  latest_execution_plan_id?: string | null;
+  latest_execution_result?: string;
   review?: string;
   remark?: string;
   state?: number;
@@ -816,6 +818,17 @@ export default function TestCasesPage() {
     setIsUpdateModalOpen(true);
   };
 
+  const handleViewLastExecution = (record: TCaseTableRecord) => {
+    const ws = String(workspaceSlug || "");
+    const pid = String(projectId || "");
+    if (!record?.id || !record?.latest_execution_plan_id || !ws || !pid) return;
+    router.push(
+      `/${ws}/projects/${pid}/testhub/test-execution?case_id=${encodeURIComponent(
+        String(record.id)
+      )}&plan_id=${encodeURIComponent(String(record.latest_execution_plan_id))}`
+    );
+  };
+
   const handleDeleteCase = (record: any) => {
     if (!record || !record.id || !workspaceSlug || !projectId) return;
     Modal.confirm({
@@ -869,6 +882,30 @@ export default function TestCasesPage() {
       <Tag color={color} className="!inline-flex justify-center w-[55px]">
         {value || "-"}
       </Tag>
+    );
+  };
+
+  const renderLastExecutionResult = (record: TCaseTableRecord) => {
+    const label = record?.latest_execution_result;
+    if (!label) return <span className="text-placeholder">-</span>;
+
+    const color = ((globalEnums.Enums as any)?.plan_case_result || {})[label] || "default";
+    const resultTag = (
+      <Tag color={color} className="!mx-0">
+        {label}
+      </Tag>
+    );
+
+    if (!record?.latest_execution_plan_id) return resultTag;
+
+    return (
+      <button
+        type="button"
+        className="inline-flex items-center hover:opacity-80"
+        onClick={() => handleViewLastExecution(record)}
+      >
+        {resultTag}
+      </button>
     );
   };
 
@@ -1087,6 +1124,7 @@ export default function TestCasesPage() {
                           onEdit={handleEditCase}
                           onDelete={handleDeleteCase}
                           renderReviewTag={renderReviewTag}
+                          renderLastExecutionResult={renderLastExecutionResult}
                           renderTypeTag={(value) => renderEnumTag("case_type", value, "magenta")}
                           renderPriorityTag={(value) => renderEnumTag("case_priority", value, "warning")}
                           renderUpdatedAt={(value) => formatDateTime(value || "")}
