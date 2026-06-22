@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { isEqual } from "lodash-es";
 import { observer } from "mobx-react";
-import { useParams, usePathname, useSearchParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import useSWR from "swr";
 // plane constants
 import { ISSUE_DISPLAY_FILTERS_BY_PAGE, PROJECT_VIEW_TRACKER_ELEMENTS } from "@plane/constants";
@@ -28,11 +28,10 @@ import { useIssues } from "@/hooks/store/use-issues";
 import { useProjectIssueTypes } from "@/hooks/store/use-project-issue-types";
 import { useUser } from "@/hooks/store/user";
 import { IssuesStoreContext, TypedPageIssueTypeIdsContext } from "@/hooks/use-issue-layout-store";
-import { useAppRouter } from "@/hooks/use-app-router";
 import { type TProjectIssueScope } from "@/store/issue/project";
 // local
 import { PROJECT_DEFECT_FILTER_TOGGLE_EVENT } from "./defect-filter-events";
-import { DefectQuickFilterBar, DEFECT_PRESET_PARAM, getDefectPreset } from "./defect-quick-filter-bar";
+import { DEFECT_PRESET_PARAM, getDefectPreset } from "./defect-quick-filter-bar";
 import type { TDefectPreset } from "./defect-quick-filter-bar";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -162,8 +161,6 @@ export const DefectListRoot = observer(function DefectListRoot() {
   const workspaceSlug = routerWorkspaceSlug ? routerWorkspaceSlug.toString() : undefined;
   const projectId = routerProjectId ? routerProjectId.toString() : undefined;
 
-  const router = useAppRouter();
-  const pathname = usePathname();
   const searchParams = useSearchParams();
   const preset = getDefectPreset(searchParams.get(DEFECT_PRESET_PARAM));
 
@@ -267,17 +264,6 @@ export const DefectListRoot = observer(function DefectListRoot() {
     [workspaceSlug, projectId, categoryConditions, presetConditions, issuesFilter, scope]
   );
 
-  const handlePresetChange = useCallback(
-    (next: TDefectPreset) => {
-      const params = new URLSearchParams(searchParams.toString());
-      if (next === "all") params.delete(DEFECT_PRESET_PARAM);
-      else params.set(DEFECT_PRESET_PARAM, next);
-      const query = params.toString();
-      router.push(query ? `${pathname}?${query}` : pathname);
-    },
-    [searchParams, router, pathname]
-  );
-
   // ── Filters config：缺陷页由预设条掌管 状态组/负责人，故从 HeaderFilters 中移除 ──
   const defectFilterProperties = useMemo<TWorkItemFilterProperty[]>(() => {
     const config = getProjectScopeFilterConfig(scope) as { filters: TWorkItemFilterProperty[] };
@@ -321,7 +307,6 @@ export const DefectListRoot = observer(function DefectListRoot() {
         >
           {({ filter: typedPageFilter }) => (
             <div className="relative flex h-full w-full flex-col overflow-hidden">
-              <DefectQuickFilterBar value={preset} onChange={handlePresetChange} />
               {typedPageFilter && (
                 <DefectFiltersRow entityId={`${projectId}_defects`} filter={typedPageFilter} />
               )}

@@ -1,13 +1,11 @@
 import { useCallback, useState } from "react";
 import { observer } from "mobx-react";
-import { useParams } from "next/navigation";
-import { Bug, Plus } from "lucide-react";
+import { useParams, usePathname, useSearchParams } from "next/navigation";
+import { Plus } from "lucide-react";
 import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 import { Button } from "@plane/propel/button";
 import { EIssuesStoreType } from "@plane/types";
-import { Breadcrumbs, Header } from "@plane/ui";
-import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
-import { CountChip } from "@/components/common/count-chip";
+import { Header } from "@plane/ui";
 import { HeaderFilters } from "@/components/issues/filters";
 import { BugIssueModal } from "@/components/issues/issue-modal/bug-modal";
 import { PROJECT_DEFECTS_REFRESH_EVENT, useProjectDefects } from "@/hooks/store/use-project-defects";
@@ -15,22 +13,24 @@ import { useIssues } from "@/hooks/store/use-issues";
 import { useProject } from "@/hooks/store/use-project";
 import { useUserPermissions } from "@/hooks/store/user";
 import { useAppRouter } from "@/hooks/use-app-router";
-import { CommonProjectBreadcrumbs } from "@/plane-web/components/breadcrumbs/common";
 import { PROJECT_DEFECT_FILTER_TOGGLE_EVENT } from "./defect-filter-events";
+import { DefectQuickFilterBar, DEFECT_PRESET_PARAM, getDefectPreset } from "./defect-quick-filter-bar";
+import type { TDefectPreset } from "./defect-quick-filter-bar";
 
 export const ProjectDefectsHeader = observer(function ProjectDefectsHeader() {
   const router = useAppRouter();
   const { workspaceSlug, projectId } = useParams();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const workspaceSlugValue = workspaceSlug?.toString();
   const projectIdValue = projectId?.toString();
-  const { loader, currentProjectDetails } = useProject();
+  const preset = getDefectPreset(searchParams.get(DEFECT_PRESET_PARAM));
+  const { currentProjectDetails } = useProject();
   const { allowPermissions } = useUserPermissions();
   const { issues } = useIssues(EIssuesStoreType.PROJECT);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const defects = useProjectDefects(workspaceSlugValue, projectIdValue, { includeList: false });
 
-  const defectsHref =
-    workspaceSlugValue && projectIdValue ? `/${workspaceSlugValue}/projects/${projectIdValue}/defects` : "#";
   const canCreateDefect =
     workspaceSlugValue && projectIdValue
       ? allowPermissions(
@@ -48,26 +48,22 @@ export const ProjectDefectsHeader = observer(function ProjectDefectsHeader() {
       })
     );
   }, [projectIdValue]);
+  const handlePresetChange = useCallback(
+    (next: TDefectPreset) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (next === "all") params.delete(DEFECT_PRESET_PARAM);
+      else params.set(DEFECT_PRESET_PARAM, next);
+      const query = params.toString();
+      router.push(query ? `${pathname}?${query}` : pathname);
+    },
+    [searchParams, router, pathname]
+  );
 
   return (
     <Header>
       <Header.LeftItem>
-        <div className="flex items-center gap-2.5">
-          <Breadcrumbs onBack={() => router.back()} isLoading={loader === "init-loader"} className="flex-grow-0">
-            <CommonProjectBreadcrumbs workspaceSlug={workspaceSlugValue} projectId={projectIdValue} />
-            <Breadcrumbs.Item
-              component={
-                <BreadcrumbLink
-                  label="缺陷"
-                  href={defectsHref}
-                  icon={<Bug className="h-4 w-4 text-tertiary" />}
-                  isLast
-                />
-              }
-              isLast
-            />
-          </Breadcrumbs>
-          {!defects.isSummaryLoading && defects.totalDefects > 0 ? <CountChip count={defects.totalDefects} /> : null}
+        <div className="flex max-w-full flex-wrap items-center gap-2.5">
+          <DefectQuickFilterBar value={preset} onChange={handlePresetChange} variant="header" />
         </div>
       </Header.LeftItem>
       <Header.RightItem>
