@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { observer } from "mobx-react";
 import { v4 as uuidv4 } from "uuid";
 // plane imports
@@ -75,33 +75,50 @@ const WorkItemFilterRoot = observer(function WorkItemFilterRoot(props: TWorkItem
     allowedFilters: filtersToShowByLayout ? filtersToShowByLayout : [],
     ...entityConfigProps,
   });
-  // get or create filter instance
-  const workItemLayoutFilter = useMemo(
-    () =>
-      getOrCreateFilter({
-        entityType,
-        entityId: workItemEntityID,
-        initialExpression: initialUserFilters,
-        onExpressionChange: updateFilters,
-        expressionOptions: {
-          saveViewOptions,
-          updateViewOptions,
-        },
-        showOnMount,
-        filterRowHiddenOnMount,
-      }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [entityType, workItemEntityID, saveViewOptions, updateViewOptions, updateFilters]
-  );
+  // Hold the latest creation params in a ref so re-acquiring the instance does
+  // not force the lifecycle effect to re-run on every option/callback change.
+  const latestParams = { initialUserFilters, updateFilters, saveViewOptions, updateViewOptions, showOnMount, filterRowHiddenOnMount };
+  const createParamsRef = useRef(latestParams);
+  createParamsRef.current = latestParams;
 
-  // delete filter instance when component unmounts
-  useEffect(
-    () => () => {
+  // Acquire (or create) the filter instance from the shared store. Idempotent:
+  // returns the already-registered instance or creates and registers a new one.
+  const acquireFilter = useCallback(() => {
+    const params = createParamsRef.current;
+    return getOrCreateFilter({
+      entityType,
+      entityId: workItemEntityID,
+      initialExpression: params.initialUserFilters,
+      onExpressionChange: params.updateFilters,
+      expressionOptions: {
+        saveViewOptions: params.saveViewOptions,
+        updateViewOptions: params.updateViewOptions,
+      },
+      showOnMount: params.showOnMount,
+      filterRowHiddenOnMount: params.filterRowHiddenOnMount,
+    });
+  }, [getOrCreateFilter, entityType, workItemEntityID]);
+
+  const [workItemLayoutFilter, setWorkItemLayoutFilter] = useState(acquireFilter);
+
+  // Lifecycle: re-register the instance on every mount and delete it only on a
+  // real teardown. React StrictMode (dev) runs effects as setup → cleanup →
+  // setup; re-acquiring on setup keeps the shared store populated after the
+  // cleanup's deleteFilter, so external consumers (e.g. the header filter
+  // toggle, which looks the instance up via getFilter) can always find it.
+  useEffect(() => {
+    setWorkItemLayoutFilter(acquireFilter());
+    return () => {
       if (isTemporary !== true && deleteOnUnmount !== true) return;
       deleteFilter(entityType, workItemEntityID);
-    },
-    [deleteFilter, deleteOnUnmount, entityType, isTemporary, workItemEntityID, workItemLayoutFilter]
-  );
+    };
+  }, [acquireFilter, deleteFilter, deleteOnUnmount, entityType, isTemporary, workItemEntityID]);
+
+  // Keep callbacks/options on the live instance in sync when they change.
+  useEffect(() => {
+    workItemLayoutFilter.onExpressionChange = updateFilters;
+    workItemLayoutFilter.updateExpressionOptions({ saveViewOptions, updateViewOptions });
+  }, [workItemLayoutFilter, updateFilters, saveViewOptions, updateViewOptions]);
 
   useEffect(() => {
     workItemLayoutFilter.configManager.setAreConfigsReady(workItemFiltersConfig.areAllConfigsInitialized);
