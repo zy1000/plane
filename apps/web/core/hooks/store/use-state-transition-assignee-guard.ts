@@ -45,7 +45,11 @@ export const useStateTransitionAssigneeGuard = (workspaceSlug: string | undefine
     async (issue: TIssue, nextStateId: string, submit: TSubmitStateTransitionUpdate) => {
       const transitionCheck = await evaluateStateTransition(issue, nextStateId);
       if (!transitionCheck.shouldPromptAssigneeSelection) {
-        await submit({ state_id: nextStateId });
+        try {
+          await submit({ state_id: nextStateId });
+        } catch (error) {
+          showTransitionErrorToast(error);
+        }
         return;
       }
 
@@ -65,7 +69,7 @@ export const useStateTransitionAssigneeGuard = (workspaceSlug: string | undefine
         submit,
       });
     },
-    [evaluateStateTransition]
+    [evaluateStateTransition, showTransitionErrorToast]
   );
 
   const confirmAssigneeSelection = useCallback(
