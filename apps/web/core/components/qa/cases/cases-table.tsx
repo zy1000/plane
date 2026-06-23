@@ -230,18 +230,18 @@ export const CasesTable = ({
             </ResizableHead>
           )}
 
+          {isColumnVisible("module") && (
+            <ResizableHead style={getWidthStyle("module", 120)} onResize={(width) => setColumnWidth("module", width)}>
+              模块
+            </ResizableHead>
+          )}
+
           {isColumnVisible("last_execution_result") && (
             <ResizableHead
               style={getWidthStyle("last_execution_result", 140)}
               onResize={(width) => setColumnWidth("last_execution_result", width)}
             >
               最近执行结果
-            </ResizableHead>
-          )}
-
-          {isColumnVisible("module") && (
-            <ResizableHead style={getWidthStyle("module", 120)} onResize={(width) => setColumnWidth("module", width)}>
-              模块
             </ResizableHead>
           )}
 
@@ -332,17 +332,17 @@ export const CasesTable = ({
                   {renderPriorityTag(record.priority)}
                 </TableCell>
               )}
+              {isColumnVisible("module") && (
+                <TableCell className="h-12 border-b border-r border-subtle px-page-x py-0" style={getWidthStyle("module", 120)}>
+                  {record.module?.name || "-"}
+                </TableCell>
+              )}
               {isColumnVisible("last_execution_result") && (
                 <TableCell
                   className="h-12 border-b border-r border-subtle px-page-x py-0"
                   style={getWidthStyle("last_execution_result", 140)}
                 >
                   {renderLastExecutionResult(record)}
-                </TableCell>
-              )}
-              {isColumnVisible("module") && (
-                <TableCell className="h-12 border-b border-r border-subtle px-page-x py-0" style={getWidthStyle("module", 120)}>
-                  {record.module?.name || "-"}
                 </TableCell>
               )}
 
