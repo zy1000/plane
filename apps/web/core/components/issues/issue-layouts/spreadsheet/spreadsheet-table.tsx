@@ -40,6 +40,10 @@ type Props = {
   isEpic?: boolean;
 };
 
+const DEFAULT_WORK_ITEM_COLUMN_WIDTH = 420;
+const MIN_WORK_ITEM_COLUMN_WIDTH = 320;
+const MAX_WORK_ITEM_COLUMN_WIDTH = 900;
+
 export const SpreadsheetTable = observer(function SpreadsheetTable(props: Props) {
   const {
     displayProperties,
@@ -62,6 +66,7 @@ export const SpreadsheetTable = observer(function SpreadsheetTable(props: Props)
   // states
   const isScrolled = useRef(false);
   const [intersectionElement, setIntersectionElement] = useState<HTMLTableSectionElement | null>(null);
+  const [workItemColumnWidth, setWorkItemColumnWidth] = useState(DEFAULT_WORK_ITEM_COLUMN_WIDTH);
 
   const {
     issues: { getIssueLoader },
@@ -89,6 +94,11 @@ export const SpreadsheetTable = observer(function SpreadsheetTable(props: Props)
       isScrolled.current = scrollLeft > 0;
     }
   }, [containerRef]);
+
+  const handleWorkItemColumnResize = useCallback((nextWidth: number) => {
+    const clampedWidth = Math.max(MIN_WORK_ITEM_COLUMN_WIDTH, Math.min(MAX_WORK_ITEM_COLUMN_WIDTH, Math.round(nextWidth)));
+    setWorkItemColumnWidth(clampedWidth);
+  }, []);
 
   useEffect(() => {
     const currentContainerRef = containerRef.current;
@@ -120,6 +130,8 @@ export const SpreadsheetTable = observer(function SpreadsheetTable(props: Props)
         isEstimateEnabled={isEstimateEnabled}
         spreadsheetColumnsList={spreadsheetColumnsList}
         selectionHelpers={selectionHelpers}
+        workItemColumnWidth={workItemColumnWidth}
+        onWorkItemColumnResize={handleWorkItemColumnResize}
         isEpic={isEpic}
       />
       <tbody>
@@ -138,6 +150,7 @@ export const SpreadsheetTable = observer(function SpreadsheetTable(props: Props)
             isScrolled={isScrolled}
             spreadsheetColumnsList={spreadsheetColumnsList}
             selectionHelpers={selectionHelpers}
+            workItemColumnWidth={workItemColumnWidth}
             isEpic={isEpic}
           />
         ))}

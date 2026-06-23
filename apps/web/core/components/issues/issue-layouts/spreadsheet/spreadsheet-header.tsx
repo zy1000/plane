@@ -4,6 +4,8 @@
  * See the LICENSE file for details.
  */
 
+import type { MouseEvent as ReactMouseEvent } from "react";
+import { useRef } from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 // constants
@@ -25,6 +27,8 @@ interface Props {
   isEstimateEnabled: boolean;
   spreadsheetColumnsList: (keyof IIssueDisplayProperties)[];
   selectionHelpers: TSelectionHelper;
+  workItemColumnWidth: number;
+  onWorkItemColumnResize: (width: number) => void;
   isEpic?: boolean;
 }
 
@@ -37,21 +41,58 @@ export const SpreadsheetHeader = observer(function SpreadsheetHeader(props: Prop
     isEstimateEnabled,
     spreadsheetColumnsList,
     selectionHelpers,
+    workItemColumnWidth,
+    onWorkItemColumnResize,
     isEpic = false,
   } = props;
   // router
   const { projectId } = useParams();
+  const headerRef = useRef<HTMLTableCellElement | null>(null);
   // derived values
   const isGroupSelectionEmpty = selectionHelpers.isGroupSelected(SPREADSHEET_SELECT_GROUP) === "empty";
   // auth
   const canSelectIssues = canEditProperties(projectId?.toString()) && !selectionHelpers.isSelectionDisabled;
+
+  const handleResizeMouseDown = (event: ReactMouseEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+
+    const startX = event.clientX;
+    const startWidth = headerRef.current?.getBoundingClientRect().width ?? workItemColumnWidth;
+
+    const originalCursor = document.body.style.cursor;
+    const originalUserSelect = document.body.style.userSelect;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      onWorkItemColumnResize(startWidth + (moveEvent.clientX - startX));
+    };
+
+    const handleMouseUp = () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+      document.body.style.cursor = originalCursor;
+      document.body.style.userSelect = originalUserSelect;
+    };
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+  };
 
   return (
     <thead className="sticky top-0 left-0 z-[12] border-b-[0.5px] border-subtle">
       <tr>
         {/* Single header column containing both identifier and workitem */}
         <th
-          className="group/list-header relative left-0 z-[15] h-11 w-[360px] min-w-[360px] max-w-[360px] border-r-[0.5px] border-subtle bg-layer-1 text-13 font-medium md:sticky"
+          ref={headerRef}
+          className="group/list-header relative left-0 z-[15] h-11 border-r-[0.5px] border-subtle bg-layer-1 text-13 font-medium md:sticky"
+          style={{
+            width: workItemColumnWidth,
+            minWidth: workItemColumnWidth,
+            maxWidth: workItemColumnWidth,
+          }}
           tabIndex={-1}
         >
           <div className="flex h-full w-full items-center gap-2 px-page-x">
@@ -79,6 +120,13 @@ export const SpreadsheetHeader = observer(function SpreadsheetHeader(props: Prop
               />
             </div>
           )}
+          <div
+            className="absolute right-0 top-0 z-[1] h-full w-2 cursor-col-resize"
+            onMouseDown={handleResizeMouseDown}
+            role="presentation"
+          >
+            <div className="absolute right-0 top-0 h-full w-px bg-transparent transition-colors group-hover/list-header:bg-accent-primary/50" />
+          </div>
         </th>
 
         {spreadsheetColumnsList.map((property) => (

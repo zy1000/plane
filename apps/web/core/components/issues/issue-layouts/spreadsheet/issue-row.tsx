@@ -55,6 +55,7 @@ interface Props {
   spreadsheetColumnsList: (keyof IIssueDisplayProperties)[];
   spacingLeft?: number;
   selectionHelpers: TSelectionHelper;
+  workItemColumnWidth: number;
   shouldRenderByDefault?: boolean;
   isEpic?: boolean;
 }
@@ -74,6 +75,7 @@ export const SpreadsheetIssueRow = observer(function SpreadsheetIssueRow(props: 
     spreadsheetColumnsList,
     spacingLeft = 6,
     selectionHelpers,
+    workItemColumnWidth,
     shouldRenderByDefault,
     isEpic = false,
   } = props;
@@ -124,6 +126,7 @@ export const SpreadsheetIssueRow = observer(function SpreadsheetIssueRow(props: 
           setExpanded={setExpanded}
           spreadsheetColumnsList={spreadsheetColumnsList}
           selectionHelpers={selectionHelpers}
+          workItemColumnWidth={workItemColumnWidth}
           isEpic={isEpic}
         />
       </RenderIfVisible>
@@ -146,6 +149,7 @@ export const SpreadsheetIssueRow = observer(function SpreadsheetIssueRow(props: 
             containerRef={containerRef}
             spreadsheetColumnsList={spreadsheetColumnsList}
             selectionHelpers={selectionHelpers}
+            workItemColumnWidth={workItemColumnWidth}
             shouldRenderByDefault={isExpanded}
           />
         ))}
@@ -168,6 +172,7 @@ interface IssueRowDetailsProps {
   spreadsheetColumnsList: (keyof IIssueDisplayProperties)[];
   spacingLeft?: number;
   selectionHelpers: TSelectionHelper;
+  workItemColumnWidth: number;
   isEpic?: boolean;
 }
 
@@ -187,6 +192,7 @@ const IssueRowDetails = observer(function IssueRowDetails(props: IssueRowDetails
     spreadsheetColumnsList,
     spacingLeft = 6,
     selectionHelpers,
+    workItemColumnWidth,
     isEpic = false,
   } = props;
   // states
@@ -285,7 +291,12 @@ const IssueRowDetails = observer(function IssueRowDetails(props: IssueRowDetails
         id={`issue-${issueId}`}
         ref={cellRef}
         tabIndex={0}
-        className="group/list-block relative left-0 z-10 w-[360px] min-w-[360px] max-w-[360px] bg-surface-1 md:sticky"
+        className="group/list-block relative left-0 z-10 bg-surface-1 md:sticky"
+        style={{
+          width: workItemColumnWidth,
+          minWidth: workItemColumnWidth,
+          maxWidth: workItemColumnWidth,
+        }}
       >
         <ControlLink
           href={workItemLink}

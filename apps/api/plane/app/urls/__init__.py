@@ -31,6 +31,7 @@ from .filestore import urlpatterns as filestore_urls
 from .changelog import urlpatterns as changelog_urls
 from .workflow import urlpatterns as workflow_urls
 from .timesheet import urlpatterns as timesheet_urls
+from .no_auth import urlpatterns as no_auth_urls
 
 urlpatterns = [
     *analytic_urls,
@@ -62,4 +63,5 @@ urlpatterns = [
     *changelog_urls,
     *workflow_urls,
     *timesheet_urls,
+    *no_auth_urls,
 ]
