@@ -170,18 +170,8 @@ class PublicBugReportExportAPIView(BaseAPIView):
 
         return assignee_ids
 
-    def _reconstruct_assignee_before_state(self, issue_activities, target_state_name):
-        transition_at = None
-        for activity in reversed(issue_activities):
-            if activity.get("field") != "state":
-                continue
-
-            state_name = (activity.get("new_value") or "").strip()
-            if state_name == target_state_name:
-                transition_at = activity.get("created_at")
-                break
-
-        if transition_at is None:
+    def _reconstruct_assignee_before_time(self, issue_activities, cutoff_time):
+        if cutoff_time is None:
             return None
 
         assignee_ids = []
@@ -190,7 +180,7 @@ class PublicBugReportExportAPIView(BaseAPIView):
                 continue
 
             activity_time = activity.get("created_at")
-            if activity_time is None or activity_time >= transition_at:
+            if activity_time is None or activity_time >= cutoff_time:
                 continue
 
             old_identifier = self._normalize_identifier(activity.get("old_identifier"))
@@ -208,6 +198,49 @@ class PublicBugReportExportAPIView(BaseAPIView):
                 assignee_ids.remove(old_identifier)
 
         return assignee_ids
+
+    def _reconstruct_assignee_before_state(self, issue_activities, target_state_name):
+        transition_at = None
+        for activity in reversed(issue_activities):
+            if activity.get("field") != "state":
+                continue
+
+            state_name = (activity.get("new_value") or "").strip()
+            if state_name == target_state_name:
+                transition_at = activity.get("created_at")
+                break
+
+        if transition_at is None:
+            return None
+
+        return self._reconstruct_assignee_before_time(issue_activities, transition_at)
+
+    def _reconstruct_assignee_two_steps_before_closed(self, issue_activities):
+        state_activities = [
+            activity for activity in issue_activities if activity.get("field") == "state"
+        ]
+        closed_index = None
+        for idx in range(len(state_activities) - 1, -1, -1):
+            state_name = (state_activities[idx].get("new_value") or "").strip()
+            if state_name == "Closed":
+                closed_index = idx
+                break
+
+        if closed_index is None:
+            return None
+
+        # Closed 之前没有足够两段状态记录时，回退到“进入 Closed 前一刻负责人”
+        if closed_index == 0:
+            return self._reconstruct_assignee_before_state(issue_activities, "Closed")
+
+        previous_state_entered_at = state_activities[closed_index - 1].get("created_at")
+        if previous_state_entered_at is None:
+            return self._reconstruct_assignee_before_state(issue_activities, "Closed")
+
+        return self._reconstruct_assignee_before_time(
+            issue_activities=issue_activities,
+            cutoff_time=previous_state_entered_at,
+        )
 
     @staticmethod
     def _get_current_assignee_names(issue):
@@ -267,10 +300,18 @@ class PublicBugReportExportAPIView(BaseAPIView):
         all_history_assignee_ids = set()
         for issue in trace_issues:
             issue_id = str(issue.id)
-            assignee_ids = self._reconstruct_assignee_before_state(
-                issue_activities=activity_map.get(issue_id, []),
-                target_state_name=issue.state.name,
-            )
+            state_name = issue.state.name
+            issue_activities = activity_map.get(issue_id, [])
+
+            if state_name == "Closed":
+                assignee_ids = self._reconstruct_assignee_two_steps_before_closed(
+                    issue_activities=issue_activities
+                )
+            else:
+                assignee_ids = self._reconstruct_assignee_before_state(
+                    issue_activities=issue_activities,
+                    target_state_name=state_name,
+                )
             history_assignee_ids_map[issue_id] = assignee_ids
             if assignee_ids:
                 all_history_assignee_ids.update(assignee_ids)
@@ -334,6 +375,7 @@ class PublicBugReportExportAPIView(BaseAPIView):
         rows = []
         for index, issue in enumerate(issues, start=1):
             assignees = self._get_current_assignee_names(issue)
+            issue_url = self._build_issue_url(request, issue)
 
             issue_state_name = issue.state.name if issue.state_id and issue.state else ""
             if issue_state_name in self.STATE_TRACE_FROM_ASSIGNEE:
@@ -349,7 +391,7 @@ class PublicBugReportExportAPIView(BaseAPIView):
             rows.append(
                 {
                     "序号": index,
-                    "ID": self._build_issue_key(issue),
+                    "ID": issue_url,
                     "标题": issue.name or "",
                     "技术原因及解决方案": self._get_tech_reason(issue),
                     "项目": issue.project.name if issue.project_id else "",
@@ -358,7 +400,7 @@ class PublicBugReportExportAPIView(BaseAPIView):
                     "创建人": self._resolve_user_name(getattr(issue, "created_by", None)),
                     "产品类型": issue.project.product_type if issue.project_id else "",
                     "状态": issue.state.name if issue.state_id else "",
-                    "地址": self._build_issue_url(request, issue),
+                    "地址": issue_url,
                     "缺陷级别": issue.priority or "",
                 }
             )
