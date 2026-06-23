@@ -10,6 +10,7 @@ type Props = {
   /** 左侧 Hero 区域内的附加内容，如项目静态信息 */
   leftExtra?: ReactNode;
   onOverdueClick?: () => void;
+  onPendingDefectsClick?: () => void;
 };
 
 /** 数字 count-up 动画（easeOutCubic） */
@@ -72,6 +73,7 @@ type TStatChip = {
   icon: typeof Activity;
   tone: "neutral" | "accent" | "success" | "warning" | "danger";
   onActionClick?: () => void;
+  onValueClick?: () => void;
 };
 
 const TONE_CLASSES: Record<TStatChip["tone"], { icon: string; value: string }> = {
@@ -143,14 +145,28 @@ const StatChip: FC<{ chip: TStatChip }> = ({ chip }) => {
       )}
       <Icon className={`h-4 w-4 flex-shrink-0 ${tone.icon}`} />
       <div className="min-w-0">
-        <div className={`text-16 font-semibold leading-tight tabular-nums ${tone.value}`}>{animated}</div>
+        {chip.onValueClick ? (
+          <button
+            type="button"
+            className={`cursor-pointer rounded text-16 font-semibold leading-tight tabular-nums transition-colors hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-strong ${tone.value}`}
+            aria-label={`查看${chip.label}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              chip.onValueClick?.();
+            }}
+          >
+            {animated}
+          </button>
+        ) : (
+          <div className={`text-16 font-semibold leading-tight tabular-nums ${tone.value}`}>{animated}</div>
+        )}
         <div className="truncate text-xs text-placeholder">{chip.label}</div>
       </div>
     </div>
   );
 };
 
-export const ProjectHealthHero: FC<Props> = ({ overview, children, leftExtra, onOverdueClick }) => {
+export const ProjectHealthHero: FC<Props> = ({ overview, children, leftExtra, onOverdueClick, onPendingDefectsClick }) => {
   const { isLoading, completionRate, health, counts, openCount, overdue, dueSoon, pendingDefects } = overview;
 
   const chips = useMemo<TStatChip[]>(
@@ -159,9 +175,15 @@ export const ProjectHealthHero: FC<Props> = ({ overview, children, leftExtra, on
       { label: "进行中", value: openCount, icon: Loader2, tone: "accent" },
       { label: "延期", value: overdue, icon: AlertTriangle, tone: overdue > 0 ? "danger" : "neutral", onActionClick: onOverdueClick },
       { label: "临期 7 天", value: dueSoon, icon: Clock, tone: dueSoon > 0 ? "warning" : "neutral" },
-      { label: "待处理缺陷", value: pendingDefects, icon: Bug, tone: pendingDefects > 0 ? "danger" : "neutral" },
+      {
+        label: "待处理缺陷",
+        value: pendingDefects,
+        icon: Bug,
+        tone: pendingDefects > 0 ? "danger" : "neutral",
+        onValueClick: onPendingDefectsClick,
+      },
     ],
-    [counts.completed, openCount, overdue, onOverdueClick, dueSoon, pendingDefects]
+    [counts.completed, openCount, overdue, onOverdueClick, dueSoon, pendingDefects, onPendingDefectsClick]
   );
 
   if (isLoading) {

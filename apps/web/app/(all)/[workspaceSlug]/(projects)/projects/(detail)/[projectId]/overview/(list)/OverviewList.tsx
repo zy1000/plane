@@ -22,9 +22,11 @@ import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { CustomMenu } from "@plane/ui";
 import { calculateTimeAgo, getDate, renderFormattedDate } from "@plane/utils";
 import { OverdueByAssigneeCard } from "@/components/common/overdue-by-assignee-card";
+import { DEFECT_PRESET_PARAM } from "@/components/issues/defects/defect-quick-filter-bar";
 import { ProjectDescriptionInput } from "@/components/project/project-description-input";
 import { ProjectActivity } from "@/components/project/project-activity";
 import { useMember } from "@/hooks/store/use-member";
+import { useAppRouter } from "@/hooks/use-app-router";
 import {
   ProjectAnnouncementService,
   ProjectStatisticService,
@@ -76,6 +78,7 @@ type TPageView = {
 
 export const OverviewListView: React.FC<TPageView> = observer((props) => {
   const { project, workspaceSlug } = props;
+  const router = useAppRouter();
   const { t } = useTranslation();
   const [isSubmitting, setIsSubmitting] = useState<TNameDescriptionLoader>("submitted");
   const [announcements, setAnnouncements] = useState<TProjectAnnouncement[]>([]);
@@ -116,6 +119,10 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
 
     window.requestAnimationFrame(() => setIsHoursChartReady(true));
   }, []);
+
+  const handlePendingDefectsClick = useCallback(() => {
+    router.push(`/${workspaceSlug}/projects/${project.id}/defects?${DEFECT_PRESET_PARAM}=open`);
+  }, [project.id, router, workspaceSlug]);
 
   const { data: statisticData } = useSWR(
     workspaceSlug && project.id ? `project-statistic-overview-${workspaceSlug}-${project.id}` : null,
@@ -385,6 +392,7 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
           <ProjectHealthHero
             overview={overview}
             onOverdueClick={() => setIsOverdueModalOpen(true)}
+            onPendingDefectsClick={handlePendingDefectsClick}
             leftExtra={<OverviewProjectMeta project={project} />}
           >
             <OverviewFactsRail
