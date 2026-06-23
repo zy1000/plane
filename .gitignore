@@ -170,3 +170,7 @@ AGENTS.md
 docs/release-requirements.md
 docs/release-feature-guide.md
 docs/cycle-requirements.md
+
+.codex/*
+docs/codex-usage-manual.zh.md
+AGENTS.md

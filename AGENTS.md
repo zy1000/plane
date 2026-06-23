@@ -41,9 +41,22 @@
 - For Python backend work, keep project/workspace scoping explicit in querysets and routes.
 - For frontend work, avoid putting request details directly in page components when the logic can live in a service or hook.
 - If new logic exceeds roughly 30 lines or is likely reusable, extract it into a hook, store helper, or shared component.
+- Keep changes surgical: do not refactor adjacent code, comments, or formatting unless directly needed for the request.
+- State assumptions when a request has multiple plausible interpretations; ask only when a reasonable assumption would be risky.
+- Prefer the simplest implementation that satisfies the request; do not add speculative flexibility.
+- Do not read, search, or modify `docs-site/` unless the user explicitly asks to work on the user manual or docs site.
+- When asked to generate a git commit message, write it in Chinese. Use the format `<type>: <简短中文描述>` and keep any body text in Chinese.
+
+## Verification Preferences
+
+- By default, do not run lint, typecheck, test, or dev-server commands after edits unless the user asks for verification or the change is risky enough to require it.
+- Do not end a response by telling the user to run lint, typecheck, or a dev server unless it is directly relevant to an unresolved risk.
+- The available project commands are listed below for cases where explicit verification is requested.
 
 ## High-Value Entry Points
 
+- `.codex/rules`: Raw Cursor rules copied for Codex-side reference
+- `.codex/skills`: Raw Cursor skills copied in Codex skill folder shape
 - `apps/api/AGENTS.md`: Backend API and resource conventions
 - `apps/api/plane/app/serializers/AGENTS.md`: Serializer contract and validation guidance
 - `apps/api/plane/db/models/AGENTS.md`: Model invariants, constraints, and scope propagation guidance
