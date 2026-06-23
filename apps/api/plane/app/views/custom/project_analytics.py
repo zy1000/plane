@@ -589,7 +589,7 @@ class ProjectDefectAnalyticsEndpoint(CustomProjectAdvanceAnalyticsEndpoint):
         now = timezone.now()
         today = now.date()
         stale_cutoff = now - timedelta(days=7)
-        open_state = ~Q(state__group__in=["completed", "cancelled"])
+        open_state = ~Q(state__group__in=["completed", "cancelled"]) & ~Q(state__name="Suspend")
         agg = queryset.aggregate(
             total=Count("id"),
             pending=Count("id", filter=open_state),
@@ -676,7 +676,7 @@ class ProjectDefectAnalyticsEndpoint(CustomProjectAdvanceAnalyticsEndpoint):
     def get(self, request: HttpRequest, slug: str, project_id: str) -> Response:
         self.initialize_workspace(slug, type="analytics")
         cache_payload = f"defect:{slug}:{project_id}:{request.user.id}"
-        cache_key = f"project_defect_analytics_v2:{hashlib.md5(cache_payload.encode()).hexdigest()}"
+        cache_key = f"project_defect_analytics_v3:{hashlib.md5(cache_payload.encode()).hexdigest()}"
         cached_stats = cache.get(cache_key)
         if cached_stats is not None:
             return Response(cached_stats, status=status.HTTP_200_OK)

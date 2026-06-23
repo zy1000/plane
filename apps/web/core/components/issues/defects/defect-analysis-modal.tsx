@@ -42,7 +42,7 @@ export const DefectAnalysisModal = observer(function DefectAnalysisModal(props: 
         }`}
       >
         <div className="flex items-center justify-between gap-4 bg-surface-1 px-5 py-4 text-13">
-          <h3 className="break-words">{projectDetails?.name ? `${projectDetails.name} 缺陷概览` : "缺陷概览"}</h3>
+          <h3 className="break-words">{projectDetails?.name ? `${projectDetails.name} 缺陷分析` : "缺陷分析"}</h3>
           <div className="flex items-center gap-2">
             <button
               type="button"

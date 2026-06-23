@@ -71,10 +71,7 @@ export const DefectQuickFilterBar: FC<Props> = ({ value, onChange, variant = "co
               key={segment.key}
               type="button"
               onClick={() => onChange(segment.key)}
-              className={cn(
-                "h-6 rounded px-2.5 text-xs font-medium transition-colors",
-                value === segment.key ? activeClass : inactiveClass
-              )}
+              className={cn(segmentBase, value === segment.key ? activeClass : inactiveClass)}
             >
               {segment.label}
             </button>

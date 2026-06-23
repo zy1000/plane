@@ -218,15 +218,6 @@ export const CasesTable = ({
             </ResizableHead>
           )}
 
-          {isColumnVisible("last_execution_result") && (
-            <ResizableHead
-              style={getWidthStyle("last_execution_result", 140)}
-              onResize={(width) => setColumnWidth("last_execution_result", width)}
-            >
-              最近执行结果
-            </ResizableHead>
-          )}
-
           {isColumnVisible("type") && (
             <ResizableHead style={getWidthStyle("type", 110)} onResize={(width) => setColumnWidth("type", width)}>
               类型
@@ -236,6 +227,15 @@ export const CasesTable = ({
           {isColumnVisible("priority") && (
             <ResizableHead style={getWidthStyle("priority", 100)} onResize={(width) => setColumnWidth("priority", width)}>
               优先级
+            </ResizableHead>
+          )}
+
+          {isColumnVisible("last_execution_result") && (
+            <ResizableHead
+              style={getWidthStyle("last_execution_result", 140)}
+              onResize={(width) => setColumnWidth("last_execution_result", width)}
+            >
+              最近执行结果
             </ResizableHead>
           )}
 
@@ -322,14 +322,6 @@ export const CasesTable = ({
                   {renderReviewTag(record.review)}
                 </TableCell>
               )}
-              {isColumnVisible("last_execution_result") && (
-                <TableCell
-                  className="h-12 border-b border-r border-subtle px-page-x py-0"
-                  style={getWidthStyle("last_execution_result", 140)}
-                >
-                  {renderLastExecutionResult(record)}
-                </TableCell>
-              )}
               {isColumnVisible("type") && (
                 <TableCell className="h-12 border-b border-r border-subtle px-page-x py-0" style={getWidthStyle("type", 110)}>
                   {renderTypeTag(record.type)}
@@ -338,6 +330,14 @@ export const CasesTable = ({
               {isColumnVisible("priority") && (
                 <TableCell className="h-12 border-b border-r border-subtle px-page-x py-0" style={getWidthStyle("priority", 100)}>
                   {renderPriorityTag(record.priority)}
+                </TableCell>
+              )}
+              {isColumnVisible("last_execution_result") && (
+                <TableCell
+                  className="h-12 border-b border-r border-subtle px-page-x py-0"
+                  style={getWidthStyle("last_execution_result", 140)}
+                >
+                  {renderLastExecutionResult(record)}
                 </TableCell>
               )}
               {isColumnVisible("module") && (
