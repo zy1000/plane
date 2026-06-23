@@ -83,6 +83,15 @@ function stripExactConditions(conditions: TConditionItem[], conditionsToStrip: T
   return conditions.filter((condition) => !conditionsToStrip.some((conditionToStrip) => isEqual(condition, conditionToStrip)));
 }
 
+/** 去掉当前/上一次预设注入的条件，避免它们在切换预设后被当成用户筛选保留下来。 */
+function stripPresetConditions(
+  conditions: TConditionItem[],
+  currentPresetConditions: TConditionItem[],
+  previousPresetConditions: TConditionItem[]
+): TConditionItem[] {
+  return stripExactConditions(stripExactConditions(conditions, previousPresetConditions), currentPresetConditions);
+}
+
 /** 把若干条件组合成表达式：空→{}，单条→单条，多条→AND 组 */
 function composeAnd(conditions: TConditionItem[]): TWorkItemFilterExpression {
   if (conditions.length === 0) return {};
@@ -203,6 +212,8 @@ export const DefectListRoot = observer(function DefectListRoot() {
 
   // ── 三层条件：用户(非托管) + 固定缺陷类别 + 预设(状态/负责人) ───────────────
   const presetConditions = useMemo(() => getPresetConditions(preset, myId), [preset, myId]);
+  const lastAppliedPresetConditionsRef = useRef<TConditionItem[]>([]);
+  const previousPresetConditions = lastAppliedPresetConditionsRef.current;
   // 固定口径：按「工作项类型的类别 = 缺陷」过滤（由后端 type__category__name__in 解析），
   // 不再依赖前端解析出的具体类型 ID，也不作为可见 chip 展示。
   const categoryConditions = useMemo<TConditionItem[]>(
@@ -214,8 +225,8 @@ export const DefectListRoot = observer(function DefectListRoot() {
     [storeFilters?.richFilters]
   );
   const userConditions = useMemo(
-    () => stripExactConditions(storedUserConditions, presetConditions),
-    [storedUserConditions, presetConditions]
+    () => stripPresetConditions(storedUserConditions, presetConditions, previousPresetConditions),
+    [storedUserConditions, presetConditions, previousPresetConditions]
   );
 
   // 写入 store / 真实拉取用：用户 + 缺陷类别 + 预设
@@ -233,9 +244,19 @@ export const DefectListRoot = observer(function DefectListRoot() {
   useEffect(() => {
     if (!workspaceSlug || !projectId) return;
     if (!storeFilters) return;
+    lastAppliedPresetConditionsRef.current = presetConditions;
     if (isEqual(storeFilters?.richFilters ?? {}, fullMergedFilters)) return;
     issuesFilter?.applyLocalRichFilters(workspaceSlug, projectId, fullMergedFilters, scope);
-  }, [workspaceSlug, projectId, fullMergedFilters, scope, storeFilters, storeFilters?.richFilters, issuesFilter]);
+  }, [
+    workspaceSlug,
+    projectId,
+    fullMergedFilters,
+    presetConditions,
+    scope,
+    storeFilters,
+    storeFilters?.richFilters,
+    issuesFilter,
+  ]);
 
   // kanban 分组兜底（沿用 typed root）
   useEffect(() => {

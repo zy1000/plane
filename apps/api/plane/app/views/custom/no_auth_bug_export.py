@@ -63,7 +63,6 @@ class PublicBugReportExportAPIView(BaseAPIView):
         "创建人",
         "产品类型",
         "状态",
-        "地址",
         "缺陷级别",
     ]
     export_widths = {
@@ -76,7 +75,6 @@ class PublicBugReportExportAPIView(BaseAPIView):
         "产品类型": 16,
         "状态": 15,
         "ID": 20,
-        "地址": 60,
     }
 
     @staticmethod
@@ -400,7 +398,6 @@ class PublicBugReportExportAPIView(BaseAPIView):
                     "创建人": self._resolve_user_name(getattr(issue, "created_by", None)),
                     "产品类型": issue.project.product_type if issue.project_id else "",
                     "状态": issue.state.name if issue.state_id else "",
-                    "地址": issue_url,
                     "缺陷级别": issue.priority or "",
                 }
             )
