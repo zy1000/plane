@@ -45,9 +45,9 @@ const OPEN_STATE_GROUPS = "backlog,unstarted,started";
 
 /**
  * 由页面统一掌管的过滤维度，会从用户在 HeaderFilters 中的表达式里剥离，
- * 改由固定的「缺陷类别」约束 + 当前预设条件注入。
+ * 改由固定的「缺陷类别」约束 + 当前预设状态条件注入。
  */
-const MANAGED_CONDITION_PREFIXES = ["type_id__", "type__category__", "state_group__", "assignee_id__"];
+const MANAGED_CONDITION_PREFIXES = ["type_id__", "type__category__", "state_group__"];
 
 // ─── Expression helpers ───────────────────────────────────────────────────────
 
@@ -65,7 +65,7 @@ function flattenToConditions(expr: TWorkItemFilterExpression): TConditionItem[] 
   return [expr as TConditionItem];
 }
 
-/** 去掉表达式中以指定前缀开头的条件（如 `type_id__`、`state_group__`、`assignee_id__`） */
+/** 去掉表达式中以指定前缀开头的条件（如 `type_id__`、`state_group__`） */
 function stripConditionsByPrefixes(
   expr: TWorkItemFilterExpression,
   prefixes: string[]
@@ -154,7 +154,7 @@ const DefectFiltersRow = observer(function DefectFiltersRow(props: {
  * - 仅服务缺陷页：固定缺陷类别 + scope=defects + 默认表格布局。
  * - 当前仍复用共享的 List/Spreadsheet 等布局组件与 ProjectIssues store（增量策略）；
  *   日后需要定制某个具体组件时，再单独 copy 该组件并在此引用即可，不影响工作项/需求页。
- * - 顶部「预设筛选条」掌管 状态组 / 负责人 维度。
+ * - 顶部「预设筛选条」掌管状态组与「我负责的」快捷入口；HeaderFilters 仍支持任意负责人筛选。
  */
 export const DefectListRoot = observer(function DefectListRoot() {
   const { workspaceSlug: routerWorkspaceSlug, projectId: routerProjectId } = useParams();
@@ -264,11 +264,11 @@ export const DefectListRoot = observer(function DefectListRoot() {
     [workspaceSlug, projectId, categoryConditions, presetConditions, issuesFilter, scope]
   );
 
-  // ── Filters config：缺陷页由预设条掌管 状态组/负责人，故从 HeaderFilters 中移除 ──
+  // ── Filters config：缺陷页由预设条掌管状态组，故从 HeaderFilters 中移除 ──
   const defectFilterProperties = useMemo<TWorkItemFilterProperty[]>(() => {
     const config = getProjectScopeFilterConfig(scope) as { filters: TWorkItemFilterProperty[] };
     const base = config?.filters ?? ISSUE_DISPLAY_FILTERS_BY_PAGE.issues.filters;
-    return base.filter((property) => property !== "state_group" && property !== "assignee_id");
+    return base.filter((property) => property !== "state_group");
   }, [scope]);
 
   const initialWorkItemFilters: IIssueFilters | undefined = useMemo(() => {
