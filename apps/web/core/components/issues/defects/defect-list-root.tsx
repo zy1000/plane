@@ -77,6 +77,12 @@ function stripConditionsByPrefixes(
   });
 }
 
+/** 去掉已由预设注入的条件，避免从 store 读回后再次追加同一条件。 */
+function stripExactConditions(conditions: TConditionItem[], conditionsToStrip: TConditionItem[]): TConditionItem[] {
+  if (conditionsToStrip.length === 0) return conditions;
+  return conditions.filter((condition) => !conditionsToStrip.some((conditionToStrip) => isEqual(condition, conditionToStrip)));
+}
+
 /** 把若干条件组合成表达式：空→{}，单条→单条，多条→AND 组 */
 function composeAnd(conditions: TConditionItem[]): TWorkItemFilterExpression {
   if (conditions.length === 0) return {};
@@ -203,9 +209,13 @@ export const DefectListRoot = observer(function DefectListRoot() {
     () => [{ type__category__name__in: DEFECTS_CATEGORY_NAME }],
     []
   );
-  const userConditions = useMemo(
+  const storedUserConditions = useMemo(
     () => stripConditionsByPrefixes(storeFilters?.richFilters ?? {}, MANAGED_CONDITION_PREFIXES),
     [storeFilters?.richFilters]
+  );
+  const userConditions = useMemo(
+    () => stripExactConditions(storedUserConditions, presetConditions),
+    [storedUserConditions, presetConditions]
   );
 
   // 写入 store / 真实拉取用：用户 + 缺陷类别 + 预设
@@ -257,7 +267,10 @@ export const DefectListRoot = observer(function DefectListRoot() {
   const handleUpdateFilters = useCallback(
     async (expression: TWorkItemFilterExpression) => {
       if (!workspaceSlug || !projectId) return;
-      const nextUserConditions = stripConditionsByPrefixes(expression, MANAGED_CONDITION_PREFIXES);
+      const nextUserConditions = stripExactConditions(
+        stripConditionsByPrefixes(expression, MANAGED_CONDITION_PREFIXES),
+        presetConditions
+      );
       const merged = composeAnd([...nextUserConditions, ...categoryConditions, ...presetConditions]);
       issuesFilter?.applyLocalRichFilters(workspaceSlug, projectId, merged, scope);
     },
