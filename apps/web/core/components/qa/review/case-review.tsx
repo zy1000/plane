@@ -993,7 +993,7 @@ export default function CaseReview() {
         >
           <div className="flex flex-col flex-1 min-h-0">
             <div className="min-h-0 flex-1 overflow-hidden">
-              <div className="flex h-full min-w-0 flex-col p-4" style={{ scrollPaddingBottom: 16 }}>
+              <div className="flex h-full min-h-0 min-w-0 flex-col p-4" style={{ scrollPaddingBottom: 16 }}>
                 {!selectedCaseId ? (
                   <div className="text-secondary py-12 text-center">请从左侧选择一个用例</div>
                 ) : detailLoading ? (
@@ -1003,7 +1003,7 @@ export default function CaseReview() {
                 ) : !caseDetail ? (
                   <div className="text-secondary py-12 text-center">未获取到用例详情</div>
                 ) : (
-                  <div className="flex h-full min-h-0 flex-col gap-4">
+                  <div className="flex min-h-0 flex-1 flex-col gap-4">
                     <div className="border-b border-subtle">
                       <nav className="flex flex-wrap gap-4">
                     <button
@@ -1080,7 +1080,7 @@ export default function CaseReview() {
                     </button>
                       </nav>
                     </div>
-                    <div className="min-h-0 flex-1 overflow-hidden">
+                    <div className="min-h-0 flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm">
                       <Transition
                         show={activeTab === "basic"}
                         enter="transition duration-150 ease-out"
@@ -1091,7 +1091,7 @@ export default function CaseReview() {
                         leaveTo="transform scale-95 opacity-0"
                       >
                         {activeTab === "basic" && (
-                          <div className="flex h-full flex-col gap-4 overflow-y-auto vertical-scrollbar scrollbar-sm pb-20">
+                          <div className="flex min-h-full flex-col gap-4 pb-20">
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0 flex flex-wrap items-center gap-2">
                             <button
