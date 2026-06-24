@@ -1,6 +1,6 @@
 import { Checkbox, Dropdown } from "antd";
 import type { MenuProps } from "antd";
-import { Check, ChevronRight, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { Check, ChevronRight, MoreHorizontal, Pencil, SquarePen, Trash2 } from "lucide-react";
 import { useMemo } from "react";
 import type { TAssetExplorerFile, TAssetFolder } from "@/services/asset-explorer.service";
 import type { TAssetExplorerPermissions, TExplorerRow } from "../types";
@@ -18,6 +18,7 @@ type TFolderTableProps = {
   onToggleAll: (rows: TExplorerRow[]) => void;
   onActivateFile: (file: TAssetExplorerFile) => void;
   onOpenFolder: (folderId: number) => void;
+  onRenameFile: (file: TAssetExplorerFile) => void;
   onRenameFolder: (folder: TAssetFolder) => void;
   onDeleteFolder: (folderId: number) => void | Promise<void>;
 };
@@ -34,6 +35,7 @@ export const FolderTable = ({
   onToggleAll,
   onActivateFile,
   onOpenFolder,
+  onRenameFile,
   onRenameFolder,
   onDeleteFolder,
 }: TFolderTableProps) => {
@@ -67,6 +69,22 @@ export const FolderTable = ({
           confirmDeleteFolder(folder.name, () => {
             void onDeleteFolder(folder.id);
           });
+        },
+      });
+    }
+    return items;
+  };
+
+  const buildFileMenu = (file: TAssetExplorerFile): MenuProps["items"] => {
+    const items: NonNullable<MenuProps["items"]> = [];
+    if (permissions.canUpload) {
+      items.push({
+        key: "rename",
+        label: "重命名",
+        icon: <SquarePen className="size-3.5" />,
+        onClick: ({ domEvent }) => {
+          domEvent.stopPropagation();
+          onRenameFile(file);
         },
       });
     }
@@ -123,7 +141,9 @@ export const FolderTable = ({
             const isFile = row.kind === "file";
             const active = isFile && activeFileId === row.file.id;
             const folderMenu = !isFile ? buildFolderMenu(row.folder) : undefined;
+            const fileMenu = isFile ? buildFileMenu(row.file) : undefined;
             const hasFolderMenu = Boolean(folderMenu && folderMenu.length > 0);
+            const hasFileMenu = Boolean(fileMenu && fileMenu.length > 0);
 
             const handleRowClick = () => {
               if (row.kind === "folder") onOpenFolder(row.folder.id);
@@ -214,7 +234,7 @@ export const FolderTable = ({
                 {/* Updated — MinIO absolute format */}
                 <div className="truncate font-mono text-[12px] tabular-nums text-secondary">
                   {row.kind === "file"
-                    ? formatMinIODate(row.file.created_at)
+                    ? formatMinIODate(row.file.updated_at || row.file.created_at)
                     : formatMinIODate(row.folder.updated_at)}
                 </div>
 
@@ -223,8 +243,23 @@ export const FolderTable = ({
                   {row.kind === "folder" ? "—" : formatBytes(row.file.size)}
                 </div>
 
-                {/* Folder context menu (hidden until hover) */}
+                {/* Row context menu (hidden until hover) */}
                 <div className="flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+                  {isFile && hasFileMenu && (
+                    <Dropdown
+                      menu={{ items: fileMenu }}
+                      trigger={["click"]}
+                      placement="bottomRight"
+                    >
+                      <button
+                        type="button"
+                        onClick={(e) => e.stopPropagation()}
+                        className="flex h-7 w-7 items-center justify-center rounded-md text-tertiary opacity-0 transition hover:bg-layer-2 hover:text-primary group-hover:opacity-100"
+                      >
+                        <MoreHorizontal className="size-3.5" />
+                      </button>
+                    </Dropdown>
+                  )}
                   {!isFile && hasFolderMenu && (
                     <Dropdown
                       menu={{ items: folderMenu }}

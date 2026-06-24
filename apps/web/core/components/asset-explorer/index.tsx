@@ -25,14 +25,37 @@ export const AssetExplorer = (props: TAssetExplorerProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const dragCounter = useRef(0);
+  const loadAssetVersionsRef = useRef(explorer.loadAssetVersions);
+  const clearAssetVersionsRef = useRef(explorer.clearAssetVersions);
+  const versionRefreshSignalRef = useRef(props.versionRefreshSignal);
   const [dragActive, setDragActive] = useState(false);
   const [activeFile, setActiveFile] = useState<TAssetExplorerFile | null>(null);
 
   useEffect(() => {
+    loadAssetVersionsRef.current = explorer.loadAssetVersions;
+    clearAssetVersionsRef.current = explorer.clearAssetVersions;
+  }, [explorer.clearAssetVersions, explorer.loadAssetVersions]);
+
+  useEffect(() => {
     if (!activeFile) return;
-    const stillExists = explorer.files.some((f) => f.id === activeFile.id);
-    if (!stillExists) setActiveFile(null);
+    const latest = explorer.files.find((f) => f.id === activeFile.id);
+    if (!latest) setActiveFile(null);
+    else if (latest !== activeFile) setActiveFile(latest);
   }, [explorer.files, activeFile]);
+
+  useEffect(() => {
+    if (!activeFile?.id) {
+      clearAssetVersionsRef.current();
+      return;
+    }
+    void loadAssetVersionsRef.current(activeFile.id);
+  }, [activeFile?.id]);
+
+  useEffect(() => {
+    if (props.versionRefreshSignal === versionRefreshSignalRef.current) return;
+    versionRefreshSignalRef.current = props.versionRefreshSignal;
+    if (activeFile?.id) void loadAssetVersionsRef.current(activeFile.id);
+  }, [activeFile?.id, props.versionRefreshSignal]);
 
   const handleSearch = useCallback(async () => {
     const folderId = explorer.currentFolder?.id ?? explorer.rootFolder?.id;
@@ -139,6 +162,14 @@ export const AssetExplorer = (props: TAssetExplorerProps) => {
       setActiveFile(file);
     },
     []
+  );
+
+  const handleRenameFile = useCallback(
+    (file: TAssetExplorerFile) => {
+      explorer.setRenamingFile(file);
+      explorer.setRenameFileOpen(true);
+    },
+    [explorer]
   );
 
   const handleDeleteFile = useCallback(
@@ -257,6 +288,7 @@ export const AssetExplorer = (props: TAssetExplorerProps) => {
               onToggleAll={explorer.toggleAllRows}
               onActivateFile={handleActivateFile}
               onOpenFolder={handleOpenFolder}
+              onRenameFile={handleRenameFile}
               onRenameFolder={(folder) => {
                 explorer.setRenamingFolder(folder);
                 explorer.setRenameFolderOpen(true);
@@ -296,8 +328,15 @@ export const AssetExplorer = (props: TAssetExplorerProps) => {
           onClose={() => setActiveFile(null)}
           onPreviewFile={handlePreviewFile}
           onEditFile={handleEditFile}
+          onRenameFile={handleRenameFile}
           onDownloadFile={explorer.onDownloadFile}
           onDeleteFile={handleDeleteFile}
+          versions={explorer.assetVersions}
+          onUploadVersion={explorer.onUploadAssetVersion}
+          onRefreshVersions={(file) => explorer.loadAssetVersions(file.id)}
+          onDownloadVersion={explorer.onDownloadAssetVersion}
+          onRenameVersion={explorer.onRenameAssetVersion}
+          onRestoreVersion={explorer.onRestoreAssetVersion}
         />
       </div>
 
@@ -353,7 +392,8 @@ export const AssetExplorer = (props: TAssetExplorerProps) => {
 
       <RenameModal
         open={explorer.renameFolderOpen}
-        folder={explorer.renamingFolder}
+        name={explorer.renamingFolder?.name ?? ""}
+        title="重命名文件夹"
         onCancel={() => {
           explorer.setRenameFolderOpen(false);
           explorer.setRenamingFolder(null);
@@ -364,6 +404,31 @@ export const AssetExplorer = (props: TAssetExplorerProps) => {
             message.success("重命名成功");
           } catch (error: any) {
             message.error(error?.detail || error?.error || error?.message || "重命名失败");
+          }
+        }}
+      />
+
+      <RenameModal
+        open={explorer.renameFileOpen}
+        name={explorer.renamingFile?.name || explorer.renamingFile?.filename || ""}
+        title="重命名文件"
+        loading={explorer.renameFileSaving}
+        onCancel={() => {
+          explorer.setRenameFileOpen(false);
+          explorer.setRenamingFile(null);
+        }}
+        onSubmit={async (name) => {
+          const file = explorer.renamingFile;
+          if (!file) return;
+          try {
+            const updated = await explorer.onRenameAsset(file, name);
+            explorer.setRenameFileOpen(false);
+            explorer.setRenamingFile(null);
+            if (updated && activeFile?.id === file.id) {
+              void explorer.loadAssetVersions(file.id);
+            }
+          } catch {
+            // 错误提示由 hook 统一处理，弹框保持打开便于用户调整名称。
           }
         }}
       />

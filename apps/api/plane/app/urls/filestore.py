@@ -4,6 +4,11 @@ from plane.app.views.asset.file import (
     FilestoreAssetAPIView,
     FilestoreAssetDetailAPIView,
     FilestoreAssetDownloadAPIView,
+    FilestoreAssetVersionDetailAPIView,
+    FilestoreAssetVersionDownloadAPIView,
+    FilestoreAssetVersionListAPIView,
+    FilestoreAssetVersionRestoreAPIView,
+    FilestoreAssetVersionUploadAPIView,
     FilestoreAssetOnlyOfficeCallbackAPIView,
     FilestoreAssetOnlyOfficeConfigAPIView,
     FilestoreAssetOnlyOfficeDownloadProxyAPIView,
@@ -29,6 +34,31 @@ urlpatterns = [
         "workspaces/<str:slug>/projects/<uuid:project_id>/filestore/assets/<uuid:pk>/download/",
         FilestoreAssetDownloadAPIView.as_view(),
         name="project-filestore-asset-download",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/filestore/assets/<uuid:pk>/versions/",
+        FilestoreAssetVersionListAPIView.as_view(),
+        name="project-filestore-asset-versions",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/filestore/assets/<uuid:pk>/versions/upload/",
+        FilestoreAssetVersionUploadAPIView.as_view(),
+        name="project-filestore-asset-version-upload",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/filestore/assets/<uuid:pk>/versions/<str:version_id>/",
+        FilestoreAssetVersionDetailAPIView.as_view(),
+        name="project-filestore-asset-version-detail",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/filestore/assets/<uuid:pk>/versions/<str:version_id>/download/",
+        FilestoreAssetVersionDownloadAPIView.as_view(),
+        name="project-filestore-asset-version-download",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/filestore/assets/<uuid:pk>/versions/<str:version_id>/restore/",
+        FilestoreAssetVersionRestoreAPIView.as_view(),
+        name="project-filestore-asset-version-restore",
     ),
     path(
         "workspaces/<str:slug>/projects/<uuid:project_id>/filestore/assets/<uuid:pk>/onlyoffice/config/",
@@ -111,6 +141,11 @@ urlpatterns = [
         "workspaces/<str:slug>/projects/<uuid:project_id>/filestore/explorer/<uuid:asset_id>/uploaded/",
         FilestoreExplorerViewSet.as_view({"patch": "mark_uploaded"}),
         name="project-filestore-explorer-mark-uploaded",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/filestore/explorer/<uuid:asset_id>/rename/",
+        FilestoreExplorerViewSet.as_view({"patch": "rename_asset"}),
+        name="project-filestore-explorer-rename-asset",
     ),
     path(
         "workspaces/<str:slug>/projects/<uuid:project_id>/filestore/explorer/batch-delete/",

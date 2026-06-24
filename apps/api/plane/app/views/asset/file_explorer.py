@@ -8,13 +8,13 @@ import zipfile
 from django.conf import settings
 from django.db.models import Count, Sum
 from django.http import StreamingHttpResponse
-from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from plane.app.permissions import PermissionKey, allow_fine_permission
 from plane.app.serializers.filestore_explorer import (
+    AssetRenameSerializer,
     BatchCopySerializer,
     BatchDeleteSerializer,
     BatchMoveSerializer,
@@ -33,6 +33,12 @@ from plane.db.models.asset import FilePath
 from plane.settings.storage import S3Storage
 from plane.utils.asset_path import _sanitize_filename
 from plane.utils.asset_upload import presigned_post_for_asset
+from plane.utils.asset_versions import (
+    ensure_uploads_bucket_versioning,
+    mark_asset_physically_deleted,
+    mark_asset_temporarily_deleted,
+    record_latest_object_version,
+)
 from plane.utils.folder_ops import (
     FILESTORE_ENTITY_TYPE,
     FILESTORE_ROOT_ENTITY_TYPE,
@@ -43,6 +49,7 @@ from plane.utils.folder_ops import (
     ensure_filestore_root,
     is_folder_in_filestore_scope,
     move_assets,
+    rename_asset_file,
     rename_user_folder,
 )
 from plane.utils.paginator import CustomPaginator
@@ -59,7 +66,9 @@ def _serialize_asset(asset: FileAsset) -> dict:
         "type": attrs.get("type") or "",
         "attributes": attrs,
         "is_uploaded": bool(asset.is_uploaded),
+        "version_id": asset.version_id,
         "created_at": asset.created_at,
+        "updated_at": asset.updated_at,
         "created_by_id": str(asset.created_by_id) if asset.created_by_id else None,
         "created_by_name": created_by.display_name if created_by else None,
         "created_by_avatar": created_by.avatar_url if created_by else None,
@@ -230,6 +239,12 @@ class FilestoreExplorerViewSet(BaseViewSet):
     @allow_fine_permission(PermissionKey.PROJECT_ASSET_UPLOAD)
     def ensure_root(self, request, slug, project_id):
         project, root = self._root_folder(slug=slug, project_id=project_id)
+        storage = S3Storage(request=request)
+        if not ensure_uploads_bucket_versioning(storage):
+            return Response(
+                {"error": "Failed to enable uploads bucket versioning"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
         return Response(
             {
                 "workspace_id": str(project.workspace_id),
@@ -505,6 +520,13 @@ class FilestoreExplorerViewSet(BaseViewSet):
         )
         size_limit = min(file_size, settings.FILE_SIZE_LIMIT)
 
+        storage = S3Storage(request=request)
+        if not ensure_uploads_bucket_versioning(storage):
+            return Response(
+                {"error": "Failed to enable uploads bucket versioning"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
         asset = FileAsset.objects.create(
             attributes={"name": file_name, "type": file_type, "size": size_limit},
             size=size_limit,
@@ -571,7 +593,72 @@ class FilestoreExplorerViewSet(BaseViewSet):
             asset.attributes = attributes
             update_fields.append("attributes")
         asset.save(update_fields=update_fields)
+        if asset.storage_key:
+            storage = S3Storage(request=request)
+            if not ensure_uploads_bucket_versioning(storage):
+                return Response(
+                    {"error": "Failed to enable uploads bucket versioning"},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
+            record_latest_object_version(
+                asset=asset,
+                storage=storage,
+                created_by_id=request.user.id,
+            )
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=False, methods=["patch"], url_path="(?P<asset_id>[^/.]+)/rename")
+    @allow_fine_permission(PermissionKey.PROJECT_ASSET_UPLOAD)
+    def rename_asset(self, request, slug, project_id, asset_id):
+        serializer = AssetRenameSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        project = self._project_for_scope(slug=slug, project_id=project_id)
+        asset = (
+            FileAsset.objects.filter(
+                pk=asset_id,
+                workspace_id=project.workspace_id,
+                project_id=project.id,
+                entity_type=FILESTORE_ENTITY_TYPE,
+                is_deleted=False,
+                is_uploaded=True,
+            )
+            .select_related("path", "created_by")
+            .first()
+        )
+        if asset is None:
+            return Response(
+                {"error": "Asset not found"}, status=status.HTTP_404_NOT_FOUND
+            )
+        if not self._asset_in_scope(
+            asset,
+            workspace_id=str(project.workspace_id),
+            project_id=str(project.id),
+        ):
+            return Response(
+                {"error": "Asset is out of filestore scope"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        storage = S3Storage(request=request)
+        try:
+            asset = rename_asset_file(
+                asset=asset,
+                new_name=serializer.validated_data["name"],
+                storage=storage,
+                workspace_id=str(project.workspace_id),
+                project_id=str(project.id),
+                updated_by_id=request.user.id,
+            )
+        except FileExistsError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_409_CONFLICT)
+        except ValueError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except RuntimeError as exc:
+            return Response(
+                {"error": str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+        return Response({"asset": _serialize_asset(asset)}, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=["post"], url_path="batch-delete")
     @allow_fine_permission(PermissionKey.PROJECT_ASSET_DELETE)
@@ -600,18 +687,18 @@ class FilestoreExplorerViewSet(BaseViewSet):
         ]
 
         deleted_ids = []
-        object_names = []
+        delete_mode = serializer.validated_data.get("delete_mode", "physical")
+        storage = S3Storage(request=request) if delete_mode == "physical" else None
         for asset in assets:
-            asset.is_deleted = True
-            asset.deleted_at = timezone.now()
-            asset.save(update_fields=["is_deleted", "deleted_at"])
+            if delete_mode == "temporary":
+                mark_asset_temporarily_deleted(asset)
+            else:
+                if not mark_asset_physically_deleted(asset, storage):
+                    return Response(
+                        {"error": "Failed to delete object versions"},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    )
             deleted_ids.append(str(asset.id))
-            if asset.is_uploaded and asset.storage_key:
-                object_names.append(asset.storage_key)
-
-        if object_names:
-            storage = S3Storage(request=request)
-            storage.delete_files(object_names=object_names)
 
         return Response({"deleted_ids": deleted_ids}, status=status.HTTP_200_OK)
 

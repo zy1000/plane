@@ -660,7 +660,19 @@ def rebind_asset_to_path(
         return False
 
     try:
-        storage.delete_files(object_names=[old_key])
+        if hasattr(storage, "delete_all_object_versions"):
+            storage.delete_all_object_versions(old_key)
+            from django.utils import timezone
+
+            asset.versions.filter(deleted_at__isnull=True).update(
+                deleted_at=timezone.now(),
+                is_current=False,
+            )
+            from plane.utils.asset_versions import record_latest_object_version
+
+            record_latest_object_version(asset=asset, storage=storage)
+        else:
+            storage.delete_files(object_names=[old_key])
     except Exception:
         pass
 

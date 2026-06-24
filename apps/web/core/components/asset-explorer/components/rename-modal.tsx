@@ -1,28 +1,40 @@
 import { useEffect, useState } from "react";
 import { Modal } from "antd";
 import { Pencil } from "lucide-react";
-import type { TAssetFolder } from "@/services/asset-explorer.service";
 
 type TRenameModalProps = {
   open: boolean;
-  folder: TAssetFolder | null;
+  name: string;
+  title: string;
+  placeholder?: string;
   loading?: boolean;
   onCancel: () => void;
-  onSubmit: (folderName: string) => Promise<void> | void;
+  onSubmit: (name: string) => Promise<void> | void;
 };
 
-export const RenameModal = ({ open, folder, loading, onCancel, onSubmit }: TRenameModalProps) => {
-  const [folderName, setFolderName] = useState("");
+export const RenameModal = ({
+  open,
+  name,
+  title,
+  placeholder = "请输入名称",
+  loading,
+  onCancel,
+  onSubmit,
+}: TRenameModalProps) => {
+  const [value, setValue] = useState("");
 
   useEffect(() => {
-    setFolderName(folder?.name ?? "");
-  }, [folder?.name, open]);
+    setValue(name ?? "");
+  }, [name, open]);
 
   const handleOk = async () => {
-    const trimmed = folderName.trim();
+    const trimmed = value.trim();
     if (!trimmed) return;
     await onSubmit(trimmed);
   };
+
+  const trimmedValue = value.trim();
+  const unchanged = trimmedValue === (name ?? "").trim();
 
   return (
     <Modal
@@ -34,7 +46,7 @@ export const RenameModal = ({ open, folder, loading, onCancel, onSubmit }: TRena
       okText="保存"
       cancelText="取消"
       confirmLoading={loading}
-      okButtonProps={{ disabled: !folderName.trim() || folderName === folder?.name }}
+      okButtonProps={{ disabled: !trimmedValue || unchanged }}
       width={420}
     >
       <div className="flex flex-col gap-4 pb-1">
@@ -43,17 +55,18 @@ export const RenameModal = ({ open, folder, loading, onCancel, onSubmit }: TRena
             <Pencil className="size-4" />
           </div>
           <div className="flex flex-col">
-            <span className="text-[15px] font-semibold tracking-tight text-primary">重命名文件夹</span>
-            <span className="truncate text-[12px] text-tertiary" title={folder?.name}>
-              原名称：{folder?.name ?? "—"}
+            <span className="text-[15px] font-semibold tracking-tight text-primary">{title}</span>
+            <span className="truncate text-[12px] text-tertiary" title={name}>
+              原名称：{name || "—"}
             </span>
           </div>
         </div>
 
         <input
           autoFocus
-          value={folderName}
-          onChange={(e) => setFolderName(e.target.value)}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder={placeholder}
           maxLength={255}
           onKeyDown={(e) => {
             if (e.key === "Enter") void handleOk();

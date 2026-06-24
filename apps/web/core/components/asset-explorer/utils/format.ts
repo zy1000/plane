@@ -1,21 +1,7 @@
 import { formatCNDateTime } from "@/components/qa/cases/util";
 
 const BYTE_UNITS = ["B", "KiB", "MiB", "GiB", "TiB"] as const;
-const WEEKDAY_EN = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
-const MONTH_EN = [
-  "Jan",
-  "Feb",
-  "Mar",
-  "Apr",
-  "May",
-  "Jun",
-  "Jul",
-  "Aug",
-  "Sep",
-  "Oct",
-  "Nov",
-  "Dec",
-] as const;
+const padDatePart = (value: number): string => String(value).padStart(2, "0");
 
 export const formatBytes = (value?: number | null): string => {
   const bytes = Number(value ?? 0);
@@ -54,25 +40,15 @@ export const getFileExtension = (filename?: string | null): string => {
   return parts.pop()!.toLowerCase();
 };
 
-/**
- * MinIO-style absolute datetime: e.g. "Fri, Sep 26 2025 19:31 (GMT+8)".
- * Uses the user's local timezone.
- */
 export const formatMinIODate = (raw?: string | null): string => {
   if (!raw) return "—";
   const d = new Date(raw);
   if (!Number.isFinite(d.getTime())) return "—";
-  const weekday = WEEKDAY_EN[d.getDay()];
-  const month = MONTH_EN[d.getMonth()];
-  const day = d.getDate();
   const year = d.getFullYear();
-  const hh = String(d.getHours()).padStart(2, "0");
-  const mm = String(d.getMinutes()).padStart(2, "0");
-  const offsetMin = -d.getTimezoneOffset();
-  const sign = offsetMin >= 0 ? "+" : "-";
-  const absMin = Math.abs(offsetMin);
-  const offsetHour = Math.floor(absMin / 60);
-  const offsetMinPart = absMin % 60;
-  const tz = offsetMinPart === 0 ? `GMT${sign}${offsetHour}` : `GMT${sign}${offsetHour}:${String(offsetMinPart).padStart(2, "0")}`;
-  return `${weekday}, ${month} ${day} ${year} ${hh}:${mm} (${tz})`;
+  const month = padDatePart(d.getMonth() + 1);
+  const day = padDatePart(d.getDate());
+  const hour = padDatePart(d.getHours());
+  const minute = padDatePart(d.getMinutes());
+  const second = padDatePart(d.getSeconds());
+  return `${year}-${month}-${day} ${hour}:${minute}:${second}`;
 };

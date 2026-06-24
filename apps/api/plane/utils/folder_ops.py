@@ -11,6 +11,10 @@ from plane.db.models import FileAsset, Project, Workspace
 from plane.db.models.asset import FilePath
 from plane.utils.asset_path import _sanitize_filename
 from plane.utils.asset_upload import build_asset_metadata
+from plane.utils.asset_versions import (
+    physical_delete_asset_versions,
+    record_latest_object_version,
+)
 from plane.utils.file_path import compute_storage_key_for_path
 
 
@@ -282,7 +286,14 @@ def rename_user_folder(
     folder.save(update_fields=["name"])
 
     if copy_plan:
-        storage.delete_files(object_names=[old_key for _, old_key, _ in copy_plan])
+        now = timezone.now()
+        for asset, old_key, _ in copy_plan:
+            storage.delete_all_object_versions(old_key)
+            asset.versions.filter(deleted_at__isnull=True).update(
+                deleted_at=now,
+                is_current=False,
+            )
+            record_latest_object_version(asset=asset, storage=storage)
     return folder
 
 
@@ -307,7 +318,8 @@ def delete_user_folder(
     )
     object_names = [asset.storage_key for asset in assets if asset.storage_key]
     if object_names:
-        storage.delete_files(object_names=object_names)
+        for object_name in object_names:
+            storage.delete_all_object_versions(object_name)
 
     folder.delete()
 
@@ -337,6 +349,105 @@ def _dedup_filename_with_space(
         if candidate not in existing:
             return candidate
         counter += 1
+
+
+def rename_asset_file(
+    *,
+    asset: FileAsset,
+    new_name: str,
+    storage,
+    workspace_id: str,
+    project_id: str,
+    updated_by_id=None,
+) -> FileAsset:
+    if asset.entity_type != FILESTORE_ENTITY_TYPE:
+        raise ValueError("Only filestore file can be renamed")
+    if asset.is_deleted or not asset.is_uploaded:
+        raise ValueError("Asset is not available")
+    if str(asset.workspace_id) != str(workspace_id) or str(asset.project_id) != str(project_id):
+        raise ValueError("Asset is out of filestore scope")
+    if asset.path is None:
+        raise ValueError("Asset path is missing")
+    _assert_filestore_scope(asset.path, workspace_id=workspace_id, project_id=project_id)
+
+    cleaned_name = _sanitize_filename(str(new_name or "").strip()).strip()
+    if not cleaned_name:
+        raise ValueError("File name is required")
+
+    old_filename = asset.filename or _sanitize_filename(
+        (asset.attributes or {}).get("name") if isinstance(asset.attributes, dict) else "file"
+    )
+    if cleaned_name == old_filename:
+        attrs = dict(asset.attributes or {})
+        if asset.filename != cleaned_name or attrs.get("name") != cleaned_name:
+            asset.filename = cleaned_name
+            attrs["name"] = cleaned_name
+            asset.attributes = attrs
+            asset.save(update_fields=["filename", "attributes", "updated_at"])
+        return asset
+
+    if FileAsset.objects.filter(
+        path=asset.path,
+        filename=cleaned_name,
+        is_deleted=False,
+    ).exclude(pk=asset.pk).exists():
+        raise FileExistsError("File name already exists")
+
+    old_key = asset.storage_key
+    new_key = compute_storage_key_for_path(asset.path, cleaned_name)
+    if not old_key or not new_key:
+        raise RuntimeError("Invalid file storage path")
+    if old_key == new_key:
+        return asset
+    asset.versions.filter(deleted_at__isnull=True, object_name="").update(
+        object_name=old_key
+    )
+
+    old_path = asset.path
+    attrs = dict(asset.attributes or {})
+    content_type = attrs.get("type") or None
+
+    asset.filename = cleaned_name
+    attrs["name"] = cleaned_name
+    asset.attributes = attrs
+    metadata = build_asset_metadata(asset)
+
+    try:
+        response = storage.copy_object(
+            object_name=old_key,
+            new_object_name=new_key,
+            metadata=metadata,
+            content_type=content_type,
+        )
+    except Exception as exc:
+        asset.filename = old_filename
+        asset.path = old_path
+        raise RuntimeError("Failed to rename object in storage") from exc
+    if response is None:
+        asset.filename = old_filename
+        asset.path = old_path
+        raise RuntimeError("Failed to rename object in storage")
+
+    asset.path = old_path
+    asset.filename = cleaned_name
+    asset.attributes = attrs
+    try:
+        asset.save(update_fields=["filename", "attributes", "updated_at"])
+    except IntegrityError as exc:
+        asset.filename = old_filename
+        asset.path = old_path
+        try:
+            storage.delete_all_object_versions(new_key)
+        except Exception:
+            pass
+        raise FileExistsError("File name already exists") from exc
+
+    record_latest_object_version(
+        asset=asset,
+        storage=storage,
+        created_by_id=updated_by_id,
+    )
+    return asset
 
 
 def move_assets(
@@ -389,7 +500,7 @@ def move_assets(
         if conflict_asset and on_conflict == "overwrite":
             conflict_key = conflict_asset.storage_key
             if conflict_key:
-                storage.delete_files(object_names=[conflict_key])
+                physical_delete_asset_versions(conflict_asset, storage)
             conflict_asset.is_deleted = True
             conflict_asset.deleted_at = timezone.now()
             conflict_asset.save(update_fields=["is_deleted", "deleted_at"])
@@ -434,7 +545,12 @@ def move_assets(
         asset.path = target_folder
         asset.filename = target_filename
         asset.save(update_fields=["path", "filename"])
-        storage.delete_files(object_names=[old_key])
+        storage.delete_all_object_versions(old_key)
+        asset.versions.filter(deleted_at__isnull=True).update(
+            deleted_at=timezone.now(),
+            is_current=False,
+        )
+        record_latest_object_version(asset=asset, storage=storage)
         moved_ids.append(str(asset.id))
 
     return {"moved_ids": moved_ids, "conflicts": conflicts}
@@ -500,6 +616,11 @@ def copy_assets(
             new_asset.delete()
             continue
 
+        record_latest_object_version(
+            asset=new_asset,
+            storage=storage,
+            created_by_id=created_by_id,
+        )
         copied_ids.append(str(new_asset.id))
 
     return {"copied_ids": copied_ids}

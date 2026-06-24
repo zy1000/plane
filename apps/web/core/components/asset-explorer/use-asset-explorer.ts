@@ -5,6 +5,7 @@ import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { useFileUploadProgress } from "@/hooks/use-file-upload-progress";
 import type {
+  TAssetFileVersion,
   TAssetExplorerFile,
   TAssetFolder,
   TFolderStatsResponse,
@@ -62,6 +63,9 @@ export const useAssetExplorer = (props: TUseAssetExplorer) => {
   const [createFolderOpen, setCreateFolderOpen] = useState(false);
   const [renameFolderOpen, setRenameFolderOpen] = useState(false);
   const [renamingFolder, setRenamingFolder] = useState<TAssetFolder | null>(null);
+  const [renameFileOpen, setRenameFileOpen] = useState(false);
+  const [renamingFile, setRenamingFile] = useState<TAssetExplorerFile | null>(null);
+  const [renameFileSaving, setRenameFileSaving] = useState(false);
 
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerMode, setPickerMode] = useState<"copy" | "move">("copy");
@@ -72,6 +76,8 @@ export const useAssetExplorer = (props: TUseAssetExplorer) => {
 
   const [folderStats, setFolderStats] = useState<TFolderStatsResponse | null>(null);
   const [folderStatsLoading, setFolderStatsLoading] = useState(false);
+  const [assetVersions, setAssetVersions] = useState<TAssetFileVersion[]>([]);
+  const [assetVersionsLoading, setAssetVersionsLoading] = useState(false);
 
   const rows = useMemo<TExplorerRow[]>(
     () => [
@@ -342,6 +348,33 @@ export const useAssetExplorer = (props: TUseAssetExplorer) => {
     [projectId, refresh, renamingFolder, service, workspaceSlug]
   );
 
+  const onRenameAsset = useCallback(
+    async (file: TAssetExplorerFile, name: string): Promise<TAssetExplorerFile | null> => {
+      if (!file?.id) return null;
+      setRenameFileSaving(true);
+      try {
+        const res = await service.renameAsset(workspaceSlug, projectId, file.id, name);
+        const updated = res?.asset ?? null;
+        if (updated) {
+          setFiles((prev) => prev.map((item) => (item.id === updated.id ? { ...item, ...updated } : item)));
+        }
+        message.success("文件已重命名");
+        return updated;
+      } catch (error: any) {
+        const errorText = String(error?.error || error?.detail || error?.message || "").toLowerCase();
+        if (Number(error?.status) === 409 || errorText.includes("already exists")) {
+          message.error("该目录下已存在同名文件");
+        } else {
+          handleActionError(error, "重命名文件失败");
+        }
+        throw error;
+      } finally {
+        setRenameFileSaving(false);
+      }
+    },
+    [handleActionError, projectId, service, workspaceSlug]
+  );
+
   const onDeleteFiles = useCallback(
     async (assetIds: string[]): Promise<boolean> => {
       if (!assetIds.length) return false;
@@ -355,6 +388,95 @@ export const useAssetExplorer = (props: TUseAssetExplorer) => {
       }
     },
     [handleActionError, projectId, refresh, service, workspaceSlug]
+  );
+
+  const loadAssetVersions = useCallback(
+    async (assetId: string) => {
+      if (!workspaceSlug || !projectId || !assetId) return;
+      setAssetVersionsLoading(true);
+      try {
+        const res = await service.listAssetVersions(workspaceSlug, projectId, assetId);
+        setAssetVersions(Array.isArray(res?.versions) ? res.versions : []);
+      } catch (error: any) {
+        handleActionError(error, "加载版本列表失败");
+        setAssetVersions([]);
+      } finally {
+        setAssetVersionsLoading(false);
+      }
+    },
+    [handleActionError, projectId, service, workspaceSlug]
+  );
+
+  const clearAssetVersions = useCallback(() => {
+    setAssetVersions([]);
+    setAssetVersionsLoading(false);
+  }, []);
+
+  const onDownloadAssetVersion = useCallback(
+    async (file: TAssetExplorerFile, version: TAssetFileVersion) => {
+      try {
+        const url = await service.getAssetVersionPresignedURL(
+          workspaceSlug,
+          projectId,
+          file.id,
+          version.version_id,
+          "attachment"
+        );
+        if (url) window.open(url, "_blank", "noopener,noreferrer");
+      } catch (error: any) {
+        handleActionError(error, "下载历史版本失败");
+      }
+    },
+    [handleActionError, projectId, service, workspaceSlug]
+  );
+
+  const onRenameAssetVersion = useCallback(
+    async (file: TAssetExplorerFile, version: TAssetFileVersion, alias: string) => {
+      try {
+        const res = await service.renameAssetVersion(workspaceSlug, projectId, file.id, version.version_id, alias);
+        const updated = res?.version;
+        if (updated) {
+          setAssetVersions((prev) => prev.map((item) => (item.version_id === updated.version_id ? updated : item)));
+        }
+        message.success("版本名称已更新");
+      } catch (error: any) {
+        handleActionError(error, "更新版本名称失败");
+      }
+    },
+    [handleActionError, projectId, service, workspaceSlug]
+  );
+
+  const onUploadAssetVersion = useCallback(
+    async (file: TAssetExplorerFile, replacement: File) => {
+      try {
+        setUploading(true);
+        await trackUpload(replacement, (onProgress) =>
+          service.uploadAssetVersion(workspaceSlug, projectId, file.id, replacement, undefined, onProgress)
+        );
+        message.success("新版本上传成功");
+        await loadAssetVersions(file.id);
+        await refresh();
+      } catch (error: any) {
+        handleActionError(error, "上传新版本失败");
+      } finally {
+        setUploading(false);
+      }
+    },
+    [handleActionError, loadAssetVersions, projectId, refresh, service, trackUpload, workspaceSlug]
+  );
+
+  const onRestoreAssetVersion = useCallback(
+    async (file: TAssetExplorerFile, version: TAssetFileVersion) => {
+      try {
+        await service.restoreAssetVersion(workspaceSlug, projectId, file.id, version.version_id);
+        message.success("版本已回退");
+        await loadAssetVersions(file.id);
+        await refresh();
+      } catch (error: any) {
+        handleActionError(error, "版本回退失败");
+      }
+    },
+    [handleActionError, loadAssetVersions, projectId, refresh, service, workspaceSlug]
   );
 
   const onDeleteFolder = useCallback(
@@ -540,6 +662,8 @@ export const useAssetExplorer = (props: TUseAssetExplorer) => {
     breadcrumbs,
     folderStats,
     folderStatsLoading,
+    assetVersions,
+    assetVersionsLoading,
     loading,
     uploading,
     uploadStatuses,
@@ -559,6 +683,11 @@ export const useAssetExplorer = (props: TUseAssetExplorer) => {
     setRenameFolderOpen,
     renamingFolder,
     setRenamingFolder,
+    renameFileOpen,
+    setRenameFileOpen,
+    renamingFile,
+    setRenamingFile,
+    renameFileSaving,
     pickerOpen,
     setPickerOpen,
     pickerMode,
@@ -571,7 +700,14 @@ export const useAssetExplorer = (props: TUseAssetExplorer) => {
     onUploadFiles,
     onCreateFolder,
     onRenameFolder,
+    onRenameAsset,
     onDeleteFiles,
+    loadAssetVersions,
+    clearAssetVersions,
+    onDownloadAssetVersion,
+    onRenameAssetVersion,
+    onUploadAssetVersion,
+    onRestoreAssetVersion,
     onDeleteFolder,
     onDownloadFile,
     onBatchDownload,

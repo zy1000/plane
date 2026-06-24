@@ -212,6 +212,7 @@ class FileAsset(BaseModel):
     external_source = models.CharField(max_length=255, null=True, blank=True)
     size = models.FloatField(default=0)
     is_uploaded = models.BooleanField(default=False)
+    version_id = models.CharField(max_length=255, null=True, blank=True)
     storage_metadata = models.JSONField(default=dict, null=True, blank=True)
     path = models.ForeignKey(
         FilePath, on_delete=models.CASCADE, null=True, blank=True, related_name="files"
@@ -372,6 +373,49 @@ class FileAsset(BaseModel):
             return f"/api/workspaces/{self.workspace.slug}/test/execution-file/{self.id}/download/"
 
         return None
+
+
+class FileAssetVersion(BaseModel):
+    """A MinIO/S3 object version tracked for a FileAsset."""
+
+    asset = models.ForeignKey(
+        FileAsset,
+        on_delete=models.CASCADE,
+        related_name="versions",
+    )
+    version_id = models.CharField(max_length=255)
+    object_name = models.CharField(max_length=1024, default="", blank=True)
+    alias = models.CharField(max_length=255, null=True, blank=True)
+    filename = models.CharField(max_length=255, default="")
+    content_type = models.CharField(max_length=255, null=True, blank=True)
+    size = models.FloatField(default=0)
+    etag = models.CharField(max_length=255, null=True, blank=True)
+    storage_metadata = models.JSONField(default=dict, null=True, blank=True)
+    is_current = models.BooleanField(default=False)
+
+    class Meta:
+        verbose_name = "File Asset Version"
+        verbose_name_plural = "File Asset Versions"
+        db_table = "file_asset_versions"
+        ordering = ("-created_at",)
+        indexes = [
+            models.Index(fields=["asset", "is_current"], name="fav_asset_current_idx"),
+            models.Index(fields=["version_id"], name="fav_version_id_idx"),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["asset", "version_id"],
+                name="fileassetversion_uniq_asset_version",
+            ),
+            models.UniqueConstraint(
+                fields=["asset"],
+                condition=models.Q(is_current=True, deleted_at__isnull=True),
+                name="fileassetversion_uniq_current_asset",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.asset_id}:{self.version_id}"
 
 
 class File(BaseModel):

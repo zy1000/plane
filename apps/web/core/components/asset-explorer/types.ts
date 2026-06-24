@@ -10,6 +10,7 @@ export type TAssetExplorerProps = {
   workspaceSlug: string;
   projectId: string;
   permissions: TAssetExplorerPermissions;
+  versionRefreshSignal?: number;
   onPreview?: (asset: TAssetExplorerFile) => void | Promise<void>;
   onEdit?: (asset: TAssetExplorerFile) => void | Promise<void>;
 };

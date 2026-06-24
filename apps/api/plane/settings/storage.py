@@ -158,19 +158,23 @@ class S3Storage(S3Boto3Storage):
         http_method="GET",
         disposition="inline",
         filename=None,
+        version_id=None,
     ):
         """Generate a presigned URL to share an S3 object"""
         if expiration is None:
             expiration = self.signed_url_expiration
         content_disposition = self._get_content_disposition(disposition, filename)
+        params = {
+            "Bucket": self.aws_storage_bucket_name,
+            "Key": str(object_name),
+            "ResponseContentDisposition": content_disposition,
+        }
+        if version_id:
+            params["VersionId"] = str(version_id)
         try:
             response = self.s3_client.generate_presigned_url(
                 "get_object",
-                Params={
-                    "Bucket": self.aws_storage_bucket_name,
-                    "Key": str(object_name),
-                    "ResponseContentDisposition": content_disposition,
-                },
+                Params=params,
                 ExpiresIn=expiration,
                 HttpMethod=http_method,
             )
@@ -181,10 +185,13 @@ class S3Storage(S3Boto3Storage):
         # The response contains the presigned URL
         return response
 
-    def get_object_metadata(self, object_name):
+    def get_object_metadata(self, object_name, version_id=None):
         """Get the metadata for an S3 object"""
+        params = {"Bucket": self.aws_storage_bucket_name, "Key": object_name}
+        if version_id:
+            params["VersionId"] = str(version_id)
         try:
-            response = self.s3_client.head_object(Bucket=self.aws_storage_bucket_name, Key=object_name)
+            response = self.s3_client.head_object(**params)
         except ClientError as e:
             log_exception(e)
             return None
@@ -195,7 +202,27 @@ class S3Storage(S3Boto3Storage):
             "LastModified": (response.get("LastModified").isoformat() if response.get("LastModified") else None),
             "ETag": response.get("ETag"),
             "Metadata": response.get("Metadata", {}),
+            "VersionId": response.get("VersionId"),
         }
+
+    def get_bucket_versioning(self):
+        """Get bucket versioning configuration."""
+        try:
+            return self.s3_client.get_bucket_versioning(Bucket=self.aws_storage_bucket_name)
+        except ClientError as e:
+            log_exception(e)
+            return None
+
+    def enable_bucket_versioning(self):
+        """Enable versioning for the configured bucket."""
+        try:
+            return self.s3_client.put_bucket_versioning(
+                Bucket=self.aws_storage_bucket_name,
+                VersioningConfiguration={"Status": "Enabled"},
+            )
+        except ClientError as e:
+            log_exception(e)
+            return None
 
     def copy_object(
         self,
@@ -203,6 +230,7 @@ class S3Storage(S3Boto3Storage):
         new_object_name,
         metadata: Optional[dict] = None,
         content_type: Optional[str] = None,
+        source_version_id: Optional[str] = None,
     ):
         """Copy an S3 object to a new location.
 
@@ -222,9 +250,12 @@ class S3Storage(S3Boto3Storage):
                 # MinIO 在 REPLACE 模式下要求一并指定 ContentType，否则会清掉源对象的
                 if content_type:
                     extra["ContentType"] = content_type
+            copy_source = {"Bucket": self.aws_storage_bucket_name, "Key": object_name}
+            if source_version_id:
+                copy_source["VersionId"] = str(source_version_id)
             response = self.s3_client.copy_object(
                 Bucket=self.aws_storage_bucket_name,
-                CopySource={"Bucket": self.aws_storage_bucket_name, "Key": object_name},
+                CopySource=copy_source,
                 Key=new_object_name,
                 **extra,
             )
@@ -234,10 +265,13 @@ class S3Storage(S3Boto3Storage):
 
         return response
 
-    def get_object(self, object_name: str) -> Optional[dict]:
+    def get_object(self, object_name: str, version_id=None) -> Optional[dict]:
         """Fetch an object from S3/MinIO using boto3 get_object."""
+        params = {"Bucket": self.aws_storage_bucket_name, "Key": str(object_name)}
+        if version_id:
+            params["VersionId"] = str(version_id)
         try:
-            return self.s3_client.get_object(Bucket=self.aws_storage_bucket_name, Key=str(object_name))
+            return self.s3_client.get_object(**params)
         except ClientError as e:
             log_exception(e)
             return None
@@ -276,3 +310,72 @@ class S3Storage(S3Boto3Storage):
         except ClientError as e:
             log_exception(e)
             return False
+
+    def delete_object_version(self, object_name: str, version_id: str) -> bool:
+        """Physically delete one specific object version."""
+        if not object_name or not version_id:
+            return False
+        try:
+            self.s3_client.delete_object(
+                Bucket=self.aws_storage_bucket_name,
+                Key=str(object_name),
+                VersionId=str(version_id),
+            )
+            return True
+        except ClientError as e:
+            log_exception(e)
+            return False
+
+    def delete_object_versions(self, versions: list[dict]) -> bool:
+        """Physically delete many object versions.
+
+        Each item must include ``Key`` and ``VersionId``. This helper is used for
+        versioned buckets where deleting without VersionId would create a delete marker.
+        """
+        objects = [
+            {"Key": str(item["Key"]), "VersionId": str(item["VersionId"])}
+            for item in versions
+            if item.get("Key") and item.get("VersionId")
+        ]
+        if not objects:
+            return True
+        try:
+            for start in range(0, len(objects), 1000):
+                self.s3_client.delete_objects(
+                    Bucket=self.aws_storage_bucket_name,
+                    Delete={"Objects": objects[start : start + 1000], "Quiet": True},
+                )
+            return True
+        except ClientError as e:
+            log_exception(e)
+            return False
+
+    def list_object_versions(self, object_name: str) -> list[dict]:
+        """List object versions and delete markers for one exact key."""
+        if not object_name:
+            return []
+        results: list[dict] = []
+        try:
+            paginator = self.s3_client.get_paginator("list_object_versions")
+            for page in paginator.paginate(Bucket=self.aws_storage_bucket_name, Prefix=str(object_name)):
+                for item in page.get("Versions", []):
+                    if item.get("Key") == str(object_name):
+                        results.append({**item, "IsDeleteMarker": False})
+                for item in page.get("DeleteMarkers", []):
+                    if item.get("Key") == str(object_name):
+                        results.append({**item, "IsDeleteMarker": True})
+        except ClientError as e:
+            log_exception(e)
+            return []
+        return results
+
+    def delete_all_object_versions(self, object_name: str) -> bool:
+        """Physically delete all versions and delete markers for an object key."""
+        versions = self.list_object_versions(object_name)
+        return self.delete_object_versions(
+            [
+                {"Key": item.get("Key"), "VersionId": item.get("VersionId")}
+                for item in versions
+                if item.get("Key") and item.get("VersionId")
+            ]
+        )

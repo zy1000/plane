@@ -12,6 +12,10 @@ class FolderRenameSerializer(serializers.Serializer):
     name = serializers.CharField(required=True, max_length=255)
 
 
+class AssetRenameSerializer(serializers.Serializer):
+    name = serializers.CharField(required=True, max_length=255)
+
+
 class FolderListQuerySerializer(serializers.Serializer):
     folder_id = serializers.IntegerField(required=False)
     page = serializers.IntegerField(required=False, min_value=1)
@@ -43,6 +47,11 @@ class BatchDeleteSerializer(serializers.Serializer):
         child=serializers.UUIDField(),
         required=True,
         allow_empty=False,
+    )
+    delete_mode = serializers.ChoiceField(
+        choices=["physical", "temporary"],
+        required=False,
+        default="physical",
     )
 
 

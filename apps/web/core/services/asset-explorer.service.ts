@@ -21,6 +21,7 @@ export type TAssetExplorerFile = {
   filename: string;
   size: number;
   type: string;
+  version_id?: string | null;
   attributes?: {
     name?: string;
     type?: string;
@@ -28,6 +29,7 @@ export type TAssetExplorerFile = {
     [key: string]: any;
   };
   created_at?: string;
+  updated_at?: string | null;
   created_by_id?: string | null;
   created_by_name?: string | null;
   created_by_avatar?: string | null;
@@ -35,6 +37,24 @@ export type TAssetExplorerFile = {
   parent_folder_id?: number;
   // 搜索结果中携带：相对 filestore 的所在目录路径，形如 "A/B"
   path?: string;
+};
+
+export type TAssetFileVersion = {
+  id: string;
+  version_id: string;
+  alias: string;
+  filename: string;
+  content_type: string;
+  size: number;
+  etag?: string | null;
+  is_current: boolean;
+  created_at?: string;
+  created_by_id?: string | null;
+  created_by_name?: string | null;
+};
+
+export type TAssetVersionListResponse = {
+  versions: TAssetFileVersion[];
 };
 
 export type TAssetListResponse = {
@@ -190,6 +210,30 @@ export class AssetExplorerService extends APIService {
       .then((response) => response?.data ?? { folder: null })
       .catch((error) => {
         throw error?.response?.data;
+      });
+  }
+
+  async renameAsset(
+    workspaceSlug: string,
+    projectId: string,
+    assetId: string,
+    name: string
+  ): Promise<{ asset: TAssetExplorerFile }> {
+    return this.patch(`/api/workspaces/${workspaceSlug}/projects/${projectId}/filestore/explorer/${assetId}/rename/`, { name })
+      .then((response) => response?.data ?? { asset: null })
+      .catch((error) => {
+        const data = error?.response?.data;
+        const status = Number(error?.response?.status ?? 0) || undefined;
+        if (data && typeof data === "object") {
+          if (status !== undefined && (data as Record<string, any>).status === undefined) {
+            (data as Record<string, any>).status = status;
+          }
+          throw data;
+        }
+        if (typeof data === "string") {
+          throw { error: data, status };
+        }
+        throw { error: error?.message || "重命名文件失败", status };
       });
   }
 
@@ -377,6 +421,99 @@ export class AssetExplorerService extends APIService {
           throw { error: data, status };
         }
         throw { error: error?.message || "下载失败", status };
+      });
+  }
+
+  async listAssetVersions(workspaceSlug: string, projectId: string, assetId: string): Promise<TAssetVersionListResponse> {
+    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/filestore/assets/${assetId}/versions/`)
+      .then((response) => response?.data ?? { versions: [] })
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async getAssetVersionPresignedURL(
+    workspaceSlug: string,
+    projectId: string,
+    assetId: string,
+    versionId: string,
+    disposition: "inline" | "attachment" = "attachment"
+  ): Promise<string> {
+    return this.get(
+      `/api/workspaces/${workspaceSlug}/projects/${projectId}/filestore/assets/${assetId}/versions/${encodeURIComponent(
+        versionId
+      )}/download/`,
+      { params: { disposition, redirect: 0 } }
+    )
+      .then((response) => response?.data?.download_url ?? "")
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async renameAssetVersion(
+    workspaceSlug: string,
+    projectId: string,
+    assetId: string,
+    versionId: string,
+    alias: string
+  ): Promise<{ version: TAssetFileVersion }> {
+    return this.patch(
+      `/api/workspaces/${workspaceSlug}/projects/${projectId}/filestore/assets/${assetId}/versions/${encodeURIComponent(
+        versionId
+      )}/`,
+      { alias }
+    )
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async uploadAssetVersion(
+    workspaceSlug: string,
+    projectId: string,
+    assetId: string,
+    file: File,
+    alias?: string,
+    uploadProgressHandler?: AxiosRequestConfig["onUploadProgress"]
+  ): Promise<TAssetFileVersion> {
+    const fileMetaData = await getFileMetaDataForUpload(file);
+    return this.post(`/api/workspaces/${workspaceSlug}/projects/${projectId}/filestore/assets/${assetId}/versions/upload/`, {
+      ...fileMetaData,
+    })
+      .then(async (response) => {
+        const signedURLResponse = response?.data;
+        const fileUploadPayload = generateFileUploadPayload(signedURLResponse, file);
+        await this.fileUploadService.uploadFile(
+          signedURLResponse.upload_data.url,
+          fileUploadPayload,
+          uploadProgressHandler
+        );
+        return this.patch(
+          `/api/workspaces/${workspaceSlug}/projects/${projectId}/filestore/assets/${assetId}/versions/upload/`,
+          { ...fileMetaData, alias }
+        ).then((uploadedResponse) => uploadedResponse?.data?.version as TAssetFileVersion);
+      })
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async restoreAssetVersion(
+    workspaceSlug: string,
+    projectId: string,
+    assetId: string,
+    versionId: string
+  ): Promise<{ current_version: TAssetFileVersion; deleted_version_ids: string[] }> {
+    return this.post(
+      `/api/workspaces/${workspaceSlug}/projects/${projectId}/filestore/assets/${assetId}/versions/${encodeURIComponent(
+        versionId
+      )}/restore/`
+    )
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
       });
   }
 }

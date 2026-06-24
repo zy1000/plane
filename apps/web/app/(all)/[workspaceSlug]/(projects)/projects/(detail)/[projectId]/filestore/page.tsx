@@ -18,11 +18,11 @@ import { ContentWrapper } from "@/components/core/content-wrapper";
 import { PageHead } from "@/components/core/page-title";
 import { Alert, Button, Modal, Space, Table, Tag, Tooltip, Typography, message } from "antd";
 import { ExportOutlined } from "@ant-design/icons";
-import { formatCNDateTime } from "@/components/qa/cases/util";
 import { AssetExplorer } from "@/components/asset-explorer";
+import { formatBytes, formatMinIODate } from "@/components/asset-explorer/utils/format";
 import { XmindPreviewModal, type TXmindPreviewAsset } from "@/components/filestore/xmind-preview-modal";
 import { useUserPermissions } from "@/hooks/store/user";
-import { FilestoreService, type TFilestoreAsset } from "@/services/filestore.service";
+import { FilestoreService, type TFilestoreAsset, type TFilestoreAssetVersion } from "@/services/filestore.service";
 import { isImageSupported } from "@/utils/onlyoffice";
 
 const ONLYOFFICE_SUPPORTED_EXTS = ["doc", "docx", "odt", "rtf", "txt", "xls", "xlsx", "ods", "csv", "ppt", "pptx", "odp", "pdf"];
@@ -71,7 +71,9 @@ function FilestorePage() {
   const [saveStatus, setSaveStatus] = useState<"已保存" | "未保存" | "保存中" | "保存失败">("已保存");
   const [versionsOpen, setVersionsOpen] = useState(false);
   const [versionsLoading, setVersionsLoading] = useState(false);
-  const [versions, setVersions] = useState<Array<Record<string, any>>>([]);
+  const [versions, setVersions] = useState<TFilestoreAssetVersion[]>([]);
+  const [viewingVersionId, setViewingVersionId] = useState("");
+  const [assetVersionRefreshSignal, setAssetVersionRefreshSignal] = useState(0);
   const [xmindPreviewOpen, setXmindPreviewOpen] = useState(false);
   const [xmindAsset, setXmindAsset] = useState<TXmindPreviewAsset | null>(null);
   const [imagePreview, setImagePreview] = useState<{ src: string; name: string } | null>(null);
@@ -81,6 +83,9 @@ function FilestorePage() {
   const latestDocKeyRef = useRef("");
   const latestDirtyRef = useRef(false);
   const lastForceSaveAtRef = useRef(0);
+  const lastCallbackAtRef = useRef("");
+  const lastSavedVersionIdRef = useRef("");
+  const versionRefreshPollTimerRef = useRef<number | null>(null);
   const editorContainerHostRef = useRef<HTMLDivElement>(null);
   const editorRunIdRef = useRef(0);
 
@@ -106,7 +111,69 @@ function FilestorePage() {
     return container;
   }, []);
 
+  const refreshAssetVersions = useCallback(() => {
+    setAssetVersionRefreshSignal((value) => value + 1);
+  }, []);
+
+  const clearVersionRefreshPoll = useCallback(() => {
+    if (versionRefreshPollTimerRef.current) window.clearTimeout(versionRefreshPollTimerRef.current);
+    versionRefreshPollTimerRef.current = null;
+  }, []);
+
+  const pollSavedVersionAfterClose = useCallback(
+    (assetId: string, baselineVersionId: string, baselineCallbackAt: string, attempt = 0) => {
+      if (!workspaceSlug || !projectId || !assetId || attempt >= 30) {
+        clearVersionRefreshPoll();
+        return;
+      }
+
+      clearVersionRefreshPoll();
+      versionRefreshPollTimerRef.current = window.setTimeout(async () => {
+        try {
+          const res = await service.getOnlyOfficeStatus(String(workspaceSlug), String(projectId), assetId);
+          const onlyoffice = res?.onlyoffice ?? {};
+          const status = Number(onlyoffice?.last_callback_status ?? 0);
+          const callbackAt = String(onlyoffice?.last_callback_at ?? "");
+          const savedVersionId = String(onlyoffice?.last_saved_version_id ?? "");
+          const hasNewCallback = Boolean(callbackAt && callbackAt !== baselineCallbackAt);
+
+          if (savedVersionId && savedVersionId !== baselineVersionId) {
+            lastCallbackAtRef.current = callbackAt;
+            lastSavedVersionIdRef.current = savedVersionId;
+            refreshAssetVersions();
+            clearVersionRefreshPoll();
+            return;
+          }
+
+          if (
+            hasNewCallback &&
+            (status === 4 || ["unchanged", "stale_doc_key"].includes(String(onlyoffice?.last_save_skipped ?? "")))
+          ) {
+            lastCallbackAtRef.current = callbackAt;
+            clearVersionRefreshPoll();
+            return;
+          }
+        } catch {
+        }
+
+        pollSavedVersionAfterClose(assetId, baselineVersionId, baselineCallbackAt, attempt + 1);
+      }, 2000);
+    },
+    [clearVersionRefreshPoll, projectId, refreshAssetVersions, service, workspaceSlug]
+  );
+
+  useEffect(
+    () => () => {
+      clearVersionRefreshPoll();
+    },
+    [clearVersionRefreshPoll]
+  );
+
   const closeEditor = useCallback(() => {
+    const shouldRefreshAfterClose = editorMode === "edit" && Boolean(editorAsset?.id);
+    const closingAssetId = String(editorAsset?.id ?? "");
+    const baselineVersionId = lastSavedVersionIdRef.current;
+    const baselineCallbackAt = lastCallbackAtRef.current;
     editorRunIdRef.current += 1;
     destroyEditor();
     latestDocKeyRef.current = "";
@@ -119,9 +186,13 @@ function FilestorePage() {
     setEditorConfig(null);
     setEditorServerUrl("");
     setDocKey("");
+    setViewingVersionId("");
     setEditorError("");
     setSaveStatus("已保存");
-  }, [destroyEditor]);
+    if (shouldRefreshAfterClose) {
+      pollSavedVersionAfterClose(closingAssetId, baselineVersionId, baselineCallbackAt);
+    }
+  }, [destroyEditor, editorAsset?.id, editorMode, pollSavedVersionAfterClose]);
 
   const loadOnlyOfficeScript = useCallback(async (serverUrl: string) => {
     const cleanUrl = String(serverUrl || "").replace(/\/+$/, "");
@@ -225,10 +296,11 @@ function FilestorePage() {
   );
 
   const openEditor = useCallback(
-    async (asset: TFilestoreAssetLike, mode: TOnlyOfficeMode = "edit") => {
+    async (asset: TFilestoreAssetLike, mode: TOnlyOfficeMode = "edit", versionId?: string) => {
       if (!workspaceSlug || !projectId || !asset?.id) return;
       const runId = editorRunIdRef.current + 1;
       editorRunIdRef.current = runId;
+      const sourceVersionId = String(versionId ?? "").trim();
 
       // 先拉取配置，成功后再打开弹框：无权限时直接提示，不做任何打开/关闭弹框的操作。
       let res: Awaited<ReturnType<typeof service.getOnlyOfficeConfig>> | null = null;
@@ -237,7 +309,8 @@ function FilestorePage() {
           String(workspaceSlug),
           String(projectId),
           String(asset.id),
-          mode
+          mode,
+          sourceVersionId || undefined
         );
       } catch (error: any) {
         if (editorRunIdRef.current !== runId) return;
@@ -253,6 +326,16 @@ function FilestorePage() {
       const config = (res.config ?? {}) as Record<string, any>;
       const serverUrl = String(res.document_server_url ?? "");
       const currentDocKey = String(config?.document?.key ?? "");
+      if (mode === "edit") {
+        try {
+          const statusRes = await service.getOnlyOfficeStatus(String(workspaceSlug), String(projectId), String(asset.id));
+          lastCallbackAtRef.current = String(statusRes?.onlyoffice?.last_callback_at ?? "");
+          lastSavedVersionIdRef.current = String(statusRes?.onlyoffice?.last_saved_version_id ?? "");
+        } catch {
+          lastCallbackAtRef.current = "";
+          lastSavedVersionIdRef.current = "";
+        }
+      }
       setEditorAsset(asset);
       setEditorMode(mode);
       setEditorOpen(true);
@@ -261,7 +344,11 @@ function FilestorePage() {
       setEditorConfig(config);
       setEditorServerUrl(serverUrl);
       setDocKey(currentDocKey);
+      setViewingVersionId(sourceVersionId);
+      setSaveStatus("已保存");
       latestDocKeyRef.current = currentDocKey;
+      latestDirtyRef.current = false;
+      forceSavingRef.current = false;
       const containerId = `filestore-onlyoffice-editor-${asset.id}`;
       try {
         await initEditor(serverUrl, config, containerId, mode, runId);
@@ -323,12 +410,41 @@ function FilestorePage() {
     if (!workspaceSlug || !projectId || !editorAsset?.id) return;
     setVersionsLoading(true);
     try {
-      const res = await service.listOnlyOfficeVersions(String(workspaceSlug), String(projectId), String(editorAsset.id));
+      const res = await service.listFilestoreAssetVersions(String(workspaceSlug), String(projectId), String(editorAsset.id));
       setVersions(Array.isArray(res?.versions) ? res.versions : []);
     } finally {
       setVersionsLoading(false);
     }
   }, [editorAsset?.id, projectId, service, workspaceSlug]);
+
+  const viewEditorVersion = useCallback(
+    async (versionId: string) => {
+      if (!editorAsset?.id) return;
+      const nextMode: TOnlyOfficeMode = editorMode === "view" ? "view" : "edit";
+      setVersionsOpen(false);
+      await openEditor(editorAsset, nextMode, versionId);
+    },
+    [editorAsset, editorMode, openEditor]
+  );
+
+  const handleViewEditorVersion = useCallback(
+    async (record: TFilestoreAssetVersion) => {
+      const versionId = String(record?.version_id ?? "").trim();
+      if (!versionId) return;
+      if (latestDirtyRef.current) {
+        Modal.confirm({
+          title: "切换版本",
+          content: "切换版本会放弃当前未保存的修改。",
+          okText: "继续查看",
+          cancelText: "取消",
+          onOk: () => viewEditorVersion(versionId),
+        });
+        return;
+      }
+      await viewEditorVersion(versionId);
+    },
+    [viewEditorVersion]
+  );
 
   useEffect(() => {
     if (!onlyofficeAssetId || !workspaceSlug || !projectId) return;
@@ -344,8 +460,18 @@ function FilestorePage() {
     const statusTimer = window.setInterval(async () => {
       try {
         const res = await service.getOnlyOfficeStatus(String(workspaceSlug), String(projectId), String(editorAsset.id));
+        const lastCallbackStatus = Number(res?.onlyoffice?.last_callback_status ?? 0);
         if (res?.onlyoffice?.last_error) setSaveStatus("保存失败");
-        else if (res?.onlyoffice?.last_saved_at) setSaveStatus("已保存");
+        else if (!latestDirtyRef.current && lastCallbackStatus === 2 && res?.onlyoffice?.last_saved_at) {
+          setSaveStatus("已保存");
+          const savedVersionId = String(res?.onlyoffice?.last_saved_version_id ?? "");
+          if (savedVersionId && savedVersionId !== lastSavedVersionIdRef.current) {
+            lastCallbackAtRef.current = String(res?.onlyoffice?.last_callback_at ?? "");
+            lastSavedVersionIdRef.current = savedVersionId;
+            refreshAssetVersions();
+            if (versionsOpen) void fetchVersions();
+          }
+        }
       } catch {
       }
     }, 5000);
@@ -358,7 +484,7 @@ function FilestorePage() {
       window.clearInterval(statusTimer);
       window.clearInterval(saveTimer);
     };
-  }, [editorAsset?.id, editorMode, editorOpen, projectId, service, triggerForceSave, workspaceSlug]);
+  }, [editorAsset?.id, editorMode, editorOpen, fetchVersions, projectId, refreshAssetVersions, service, triggerForceSave, versionsOpen, workspaceSlug]);
 
   const openEditorInNewTab = useCallback(() => {
     if (!workspaceSlug || !projectId || !editorAsset?.id) return;
@@ -407,6 +533,7 @@ function FilestorePage() {
           workspaceSlug={String(workspaceSlug ?? "")}
           projectId={String(projectId ?? "")}
           permissions={{ canUpload, canDelete, canCreateFolder: canUpload }}
+          versionRefreshSignal={assetVersionRefreshSignal}
           onPreview={canView ? handlePreview : undefined}
           onEdit={canEdit ? handleEdit : undefined}
         />
@@ -433,15 +560,19 @@ function FilestorePage() {
                   {saveStatus}
                 </Tag>
               )}
+              {editorMode === "edit" && viewingVersionId && <Tag color="blue">查看版本</Tag>}
+              {editorMode === "view" && viewingVersionId && <Tag color="blue">历史版本</Tag>}
             </div>
-            {editorMode === "edit" && (
+            {editorAsset?.id && (
               <Space>
                 <Button type="text" onClick={async () => { setVersionsOpen(true); await fetchVersions(); }}>
-                  版本
+                  历史版本
                 </Button>
-                <Tooltip title="新标签页打开">
-                  <Button type="text" icon={<ExportOutlined />} onClick={() => { openEditorInNewTab(); closeEditor(); }} />
-                </Tooltip>
+                {editorMode === "edit" && (
+                  <Tooltip title="新标签页打开">
+                    <Button type="text" icon={<ExportOutlined />} onClick={() => { openEditorInNewTab(); closeEditor(); }} />
+                  </Tooltip>
+                )}
               </Space>
             )}
           </div>
@@ -489,40 +620,57 @@ function FilestorePage() {
         </div>
       </Modal>
 
-      <Modal open={versionsOpen} onCancel={() => setVersionsOpen(false)} footer={null} width={860} title="历史版本" destroyOnClose>
+      <Modal
+        open={versionsOpen}
+        onCancel={() => setVersionsOpen(false)}
+        footer={null}
+        width={920}
+        title="历史版本"
+        destroyOnClose
+        styles={{ body: { minHeight: 500 } }}
+      >
         <Table
-          rowKey={(record) => String(record?.key ?? record?.id ?? "")}
+          rowKey={(record) => String(record?.version_id ?? record?.id ?? "")}
           loading={versionsLoading}
           dataSource={versions}
           pagination={false}
           size="small"
+          scroll={{ y: 440 }}
           columns={[
-            { title: "时间", dataIndex: "saved_at", key: "saved_at", width: 220, render: (v: any) => (v ? formatCNDateTime(v) : "-") },
-            { title: "来源", dataIndex: "by", key: "by", width: 180, render: (v: any) => String(v ?? "-") },
-            { title: "标识", dataIndex: "key", key: "key", render: (v: any) => <Typography.Text ellipsis={{ tooltip: String(v ?? "") }}>{String(v ?? "-")}</Typography.Text> },
+            { title: "时间", dataIndex: "created_at", key: "created_at", width: 180, render: (v: string) => formatMinIODate(v) },
+            {
+              title: "名称",
+              key: "name",
+              render: (_: unknown, record: TFilestoreAssetVersion) => {
+                const name = record.alias || record.filename || record.version_id;
+                const versionId = String(record?.version_id ?? "");
+                const isViewing = viewingVersionId ? viewingVersionId === versionId : Boolean(record?.is_current);
+                return (
+                  <Space size={6}>
+                    <Typography.Text ellipsis={{ tooltip: name }} style={{ maxWidth: 280 }}>
+                      {name}
+                    </Typography.Text>
+                    {record?.is_current && <Tag color="green">最新</Tag>}
+                    {isViewing && <Tag>查看中</Tag>}
+                  </Space>
+                );
+              },
+            },
+            { title: "大小", dataIndex: "size", key: "size", width: 100, render: (v: number) => formatBytes(v) },
+            { title: "来源", dataIndex: "created_by_name", key: "created_by_name", width: 140, render: (v: string | null) => String(v ?? "-") },
             {
               title: "操作",
               key: "actions",
               width: 120,
-              render: (_: any, record: any) => (
-                <Button
-                  size="small"
-                  onClick={async () => {
-                    if (!workspaceSlug || !projectId || !editorAsset?.id) return;
-                    const versionKey = String(record?.key ?? "");
-                    if (!versionKey) return;
-                    try {
-                      await service.restoreOnlyOfficeVersion(String(workspaceSlug), String(projectId), String(editorAsset.id), versionKey);
-                      message.success("已恢复版本");
-                      await fetchVersions();
-                    } catch (error: any) {
-                      message.error(error?.detail || error?.message || "恢复失败");
-                    }
-                  }}
-                >
-                  恢复
-                </Button>
-              ),
+              render: (_: unknown, record: TFilestoreAssetVersion) => {
+                const versionId = String(record?.version_id ?? "");
+                const isViewing = viewingVersionId ? viewingVersionId === versionId : Boolean(record?.is_current);
+                return (
+                  <Button size="small" disabled={isViewing || !versionId} onClick={() => void handleViewEditorVersion(record)}>
+                    {isViewing ? "当前" : "查看"}
+                  </Button>
+                );
+              },
             },
           ]}
         />

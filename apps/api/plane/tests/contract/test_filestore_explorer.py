@@ -31,11 +31,25 @@ class TestFilestoreExplorerAPI:
     def mock_storage(self, monkeypatch):
         monkeypatch.setattr(
             "plane.settings.storage.S3Storage.copy_object",
-            lambda self, object_name, new_object_name, metadata=None, content_type=None: {"ok": True},
+            lambda self, object_name, new_object_name, metadata=None, content_type=None, source_version_id=None: {"ok": True},
         )
         monkeypatch.setattr(
             "plane.settings.storage.S3Storage.delete_files",
             lambda self, object_names: None,
+        )
+        monkeypatch.setattr(
+            "plane.settings.storage.S3Storage.delete_all_object_versions",
+            lambda self, object_name: True,
+        )
+        monkeypatch.setattr(
+            "plane.settings.storage.S3Storage.get_object_metadata",
+            lambda self, object_name, version_id=None: {
+                "ContentType": "text/plain",
+                "ContentLength": 12,
+                "ETag": "etag",
+                "VersionId": f"version:{object_name}",
+                "Metadata": {},
+            },
         )
         monkeypatch.setattr(
             "plane.settings.storage.S3Storage.get_object",
@@ -112,6 +126,60 @@ class TestFilestoreExplorerAPI:
             names = set(archive.namelist())
         assert "report.txt" in names
         assert "report (1).txt" in names
+
+    @pytest.mark.django_db
+    def test_rename_asset_returns_conflict_for_existing_name(
+        self,
+        session_client,
+        create_user,
+        project,
+        root_folder,
+        mock_storage,
+    ):
+        base = f"/api/workspaces/{project.workspace.slug}/projects/{project.id}/filestore/explorer"
+        source_asset = FileAsset.objects.create(
+            workspace_id=project.workspace_id,
+            project_id=project.id,
+            created_by=create_user,
+            entity_type=FileAsset.EntityTypeContext.PROJECT_FILESTORE,
+            path=root_folder,
+            filename="source.txt",
+            attributes={"name": "source.txt", "type": "text/plain", "size": 12},
+            size=12,
+            is_uploaded=True,
+        )
+        FileAsset.objects.create(
+            workspace_id=project.workspace_id,
+            project_id=project.id,
+            created_by=create_user,
+            entity_type=FileAsset.EntityTypeContext.PROJECT_FILESTORE,
+            path=root_folder,
+            filename="existing.txt",
+            attributes={"name": "existing.txt", "type": "text/plain", "size": 12},
+            size=12,
+            is_uploaded=True,
+        )
+
+        conflict_resp = session_client.patch(
+            f"{base}/{source_asset.id}/rename/",
+            {"name": "existing.txt"},
+            format="json",
+        )
+        assert conflict_resp.status_code == 409
+
+        rename_resp = session_client.patch(
+            f"{base}/{source_asset.id}/rename/",
+            {"name": "renamed.txt"},
+            format="json",
+        )
+        assert rename_resp.status_code == 200
+        assert rename_resp.data["asset"]["name"] == "renamed.txt"
+        assert rename_resp.data["asset"]["filename"] == "renamed.txt"
+        assert rename_resp.data["asset"]["updated_at"]
+
+        source_asset.refresh_from_db()
+        assert source_asset.filename == "renamed.txt"
+        assert source_asset.attributes["name"] == "renamed.txt"
 
     @pytest.mark.django_db
     def test_permission_boundary_returns_403(self, session_client, project, root_folder):

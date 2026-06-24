@@ -36,6 +36,24 @@ export type TOnlyOfficeVersionsResponse = {
   versions: Array<Record<string, any>>;
 };
 
+export type TFilestoreAssetVersion = {
+  id: string;
+  version_id: string;
+  alias: string;
+  filename: string;
+  content_type: string;
+  size: number;
+  etag?: string | null;
+  is_current: boolean;
+  created_at?: string;
+  created_by_id?: string | null;
+  created_by_name?: string | null;
+};
+
+export type TFilestoreAssetVersionListResponse = {
+  versions: TFilestoreAssetVersion[];
+};
+
 export class FilestoreService extends APIService {
   private fileUploadService: FileUploadService = new FileUploadService();
 
@@ -121,10 +139,14 @@ export class FilestoreService extends APIService {
     workspaceSlug: string,
     projectId: string,
     assetId: string,
-    mode?: "view" | "edit"
+    mode?: "view" | "edit",
+    versionId?: string
   ): Promise<TOnlyOfficeConfigResponse> {
+    const params: Record<string, string> = {};
+    if (mode) params.mode = mode;
+    if (versionId) params.version_id = versionId;
     return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/filestore/assets/${assetId}/onlyoffice/config/`, {
-      params: mode ? { mode } : undefined,
+      params: Object.keys(params).length > 0 ? params : undefined,
     })
       .then((response) => response?.data ?? { document_server_url: "", config: {} })
       .catch((error) => {
@@ -163,6 +185,35 @@ export class FilestoreService extends APIService {
       { version_key: versionKey }
     )
       .then((response) => response?.data ?? { status: "ok" })
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async listFilestoreAssetVersions(
+    workspaceSlug: string,
+    projectId: string,
+    assetId: string
+  ): Promise<TFilestoreAssetVersionListResponse> {
+    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/filestore/assets/${assetId}/versions/`)
+      .then((response) => response?.data ?? { versions: [] })
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async restoreFilestoreAssetVersion(
+    workspaceSlug: string,
+    projectId: string,
+    assetId: string,
+    versionId: string
+  ): Promise<{ current_version: TFilestoreAssetVersion; deleted_version_ids: string[] }> {
+    return this.post(
+      `/api/workspaces/${workspaceSlug}/projects/${projectId}/filestore/assets/${assetId}/versions/${encodeURIComponent(
+        versionId
+      )}/restore/`
+    )
+      .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
       });
