@@ -604,6 +604,7 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isAr
           {activeTab === "overview" && (
             <ReleaseOverviewTab
               workspaceSlug={workspaceSlug?.toString() ?? ""}
+              workspaceId={workspaceId ?? ""}
               projectId={projectId?.toString() ?? ""}
               releaseId={releaseId}
               releaseDetails={releaseDetails}
@@ -839,35 +840,37 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isAr
                 leaveFrom="opacity-100 translate-y-0 sm:scale-100"
                 leaveTo="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
               >
-                <Dialog.Panel className="relative transform overflow-hidden rounded-lg bg-surface-1 text-left shadow-overlay-100 transition-all sm:my-8 sm:w-full sm:max-w-2xl">
-                  <div className="px-5 py-4">
-                    <div className="flex items-center justify-between">
+                <Dialog.Panel className="relative transform overflow-hidden rounded-lg bg-surface-1 text-left shadow-overlay-100 transition-all sm:my-8 sm:w-full sm:max-w-4xl lg:max-w-5xl">
+                  <div className="flex max-h-[min(85vh,56rem)] min-h-0 flex-col">
+                    <div className="flex shrink-0 items-center justify-between px-5 pt-4">
                       <h3 className="text-lg font-medium">编辑发布日志</h3>
                       <Button variant="secondary" onClick={() => setNoteOpen(false)}>
                         关闭
                       </Button>
                     </div>
-                    <div className="mt-3">
-                      <RichTextEditor
-                        id="release-note-editor"
-                        editable
-                        initialValue={noteHtml ?? ""}
-                        workspaceSlug={workspaceSlug?.toString() ?? ""}
-                        workspaceId={workspaceId ?? ""}
-                        projectId={projectId?.toString() ?? ""}
-                        onChange={(_: any, val: string) => setNoteHtml(val)}
-                        uploadFile={handleNoteEditorUploadFile}
-                        duplicateFile={handleNoteEditorDuplicateFile}
-                        searchMentionCallback={async (payload) =>
-                          await workspaceService.searchEntity(workspaceSlug?.toString() ?? "", {
-                            ...payload,
-                            project_id: projectId?.toString() ?? "",
-                          })
-                        }
-                        containerClassName="min-h-[180px] rounded-md"
-                      />
+                    <div className="min-h-0 flex-1 overflow-hidden px-5 pt-3">
+                      <div className="h-full min-h-0 max-h-[min(64vh,720px)] overflow-y-auto overflow-x-auto rounded-md border border-subtle vertical-scrollbar scrollbar-sm">
+                        <RichTextEditor
+                          id="release-note-editor"
+                          editable
+                          initialValue={noteHtml ?? ""}
+                          workspaceSlug={workspaceSlug?.toString() ?? ""}
+                          workspaceId={workspaceId ?? ""}
+                          projectId={projectId?.toString() ?? ""}
+                          onChange={(_: any, val: string) => setNoteHtml(val)}
+                          uploadFile={handleNoteEditorUploadFile}
+                          duplicateFile={handleNoteEditorDuplicateFile}
+                          searchMentionCallback={async (payload) =>
+                            await workspaceService.searchEntity(workspaceSlug?.toString() ?? "", {
+                              ...payload,
+                              project_id: projectId?.toString() ?? "",
+                            })
+                          }
+                          containerClassName="min-h-[260px] !pb-0"
+                        />
+                      </div>
                     </div>
-                    <div className="mt-4 flex justify-end gap-2">
+                    <div className="mt-3 flex shrink-0 justify-end gap-2 px-5 pb-4">
                       <Button
                         variant="secondary"
                         onClick={() => setNoteOpen(false)}

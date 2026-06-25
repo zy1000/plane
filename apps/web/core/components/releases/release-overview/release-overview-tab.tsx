@@ -29,6 +29,7 @@ import type { IRelease } from "@plane/types";
 import { renderFormattedPayloadDate } from "@plane/utils";
 import { DateDropdown } from "@/components/dropdowns/date";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
+import { RichTextEditor } from "@/components/editor/rich-text";
 import { buildReleaseActivityFeedItems, ReleaseActivityFeed } from "@/components/releases/release-activity";
 import { useReleaseActivity } from "@/hooks/store/use-release-activity";
 import { useReleaseComment } from "@/hooks/store/use-release-comment";
@@ -42,6 +43,7 @@ type Plan = {
 
 type Props = {
   workspaceSlug: string;
+  workspaceId: string;
   projectId: string;
   releaseId: string;
   releaseDetails: IRelease;
@@ -77,9 +79,26 @@ const KEY_FIELD_CLASS = "h-7 w-[148px]";
 const KEY_FIELD_BUTTON_CLASS = "w-full justify-start px-2";
 const KEY_FIELD_LABEL_CLASS = "text-xs font-medium";
 const KEY_FIELD_VALUE_CLASS = "flex h-7 w-[148px] shrink-0 items-center justify-start";
+const EMPTY_RICH_TEXT_HTML = "<p></p>";
+const MEDIA_CONTENT_REGEX =
+  /<(img|image-component|video|iframe|embed|object|svg|audio)\b|data-type=["'](image|imageComponent|video)["']/i;
+
+const isEmptyReleaseRichText = (html?: string | null): boolean => {
+  if (!html) return true;
+  const trimmed = html.trim();
+  if (!trimmed) return true;
+  if (MEDIA_CONTENT_REGEX.test(trimmed)) return false;
+  const text = trimmed
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/gi, " ")
+    .trim();
+  return text.length === 0;
+};
 
 export const ReleaseOverviewTab: React.FC<Props> = observer(({
   workspaceSlug,
+  workspaceId,
   projectId,
   releaseId,
   releaseDetails,
@@ -144,10 +163,11 @@ export const ReleaseOverviewTab: React.FC<Props> = observer(({
     return { acc, total, passed, passPct, plansWithRate };
   }, [plans]);
 
-  const noteText = useMemo(() => {
-    if (!noteHtml) return "";
-    return noteHtml.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-  }, [noteHtml]);
+  const normalizedNoteHtml = useMemo(
+    () => (noteHtml && noteHtml.trim() ? noteHtml : EMPTY_RICH_TEXT_HTML),
+    [noteHtml]
+  );
+  const hasNoteContent = useMemo(() => !isEmptyReleaseRichText(noteHtml), [noteHtml]);
 
   const hasRisk = overdueTotal > 0 || passRateAggregate.acc["阻塞"] > 0 || passRateAggregate.acc["失败"] > 0;
 
@@ -417,7 +437,7 @@ export const ReleaseOverviewTab: React.FC<Props> = observer(({
         />
       </div>
 
-      <div className={`${SECTION_CARD} p-5`}>
+      <div className={`${SECTION_CARD} flex h-[min(56vh,34rem)] min-h-[20rem] flex-col p-5`}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <ScrollText className="h-4 w-4 text-placeholder" aria-hidden />
@@ -427,10 +447,22 @@ export const ReleaseOverviewTab: React.FC<Props> = observer(({
             编辑
           </Button>
         </div>
-        {noteText ? (
-          <p className="mt-3 min-h-52 line-clamp-7 text-sm leading-relaxed text-secondary">{noteText}</p>
+        {hasNoteContent ? (
+          <div className="mt-3 min-h-0 flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm">
+            <RichTextEditor
+              id={`release-note-preview-${releaseId}`}
+              editable={false}
+              initialValue={normalizedNoteHtml}
+              value={normalizedNoteHtml}
+              onChange={() => {}}
+              workspaceSlug={workspaceSlug}
+              workspaceId={workspaceId}
+              projectId={projectId}
+              containerClassName="!h-full !pb-0 !pl-0 text-sm leading-relaxed text-secondary"
+            />
+          </div>
         ) : (
-          <div className="mt-3 grid min-h-52 place-items-center text-sm text-placeholder">
+          <div className="mt-3 grid min-h-0 flex-1 place-items-center text-sm text-placeholder">
             暂无发布日志，点击右上角编辑添加。
           </div>
         )}
