@@ -842,11 +842,8 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isAr
               >
                 <Dialog.Panel className="relative transform overflow-hidden rounded-lg bg-surface-1 text-left shadow-overlay-100 transition-all sm:my-8 sm:w-full sm:max-w-4xl lg:max-w-5xl">
                   <div className="flex max-h-[min(85vh,56rem)] min-h-0 flex-col">
-                    <div className="flex shrink-0 items-center justify-between px-5 pt-4">
+                    <div className="shrink-0 px-5 pt-4">
                       <h3 className="text-lg font-medium">编辑发布日志</h3>
-                      <Button variant="secondary" onClick={() => setNoteOpen(false)}>
-                        关闭
-                      </Button>
                     </div>
                     <div className="min-h-0 flex-1 overflow-hidden px-5 pt-3">
                       <div className="h-full min-h-0 max-h-[min(64vh,720px)] overflow-y-auto overflow-x-auto rounded-md border border-subtle vertical-scrollbar scrollbar-sm">
