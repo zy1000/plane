@@ -1117,6 +1117,15 @@ function UpdateModalBody({ open, onClose, caseId, workspaceSlug: propWorkspaceSl
                   ? { id: String(execDetailRecord.id), steps: execDetailRecord.steps }
                   : null
               }
+              records={execList.map((r) => ({
+                id: String(r.id ?? ""),
+                result: String(r.result ?? ""),
+                reason: (r as any).reason,
+                assignee: (r as any).assignee,
+                created_by: r.created_by ?? null,
+                created_at: r.created_at,
+                steps: r.steps,
+              }))}
               workspaceSlug={workspaceSlug}
             />
             {activeTab === "review" && caseId && (

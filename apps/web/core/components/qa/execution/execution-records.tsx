@@ -19,6 +19,7 @@ type ExecRecord = {
   result: string;
   reason?: string | null;
   assignee?: string | null;
+  created_by?: string | null;
   created_at?: string;
   steps?: StepItem[] | null;
 };
@@ -55,6 +56,7 @@ type ExecutionRecordDetailModalProps = {
   open: boolean;
   onClose: () => void;
   record: ExecutionRecordDetailRecord | null;
+  records?: ExecRecord[];
   workspaceSlug: string | undefined;
 };
 
@@ -74,10 +76,102 @@ const formatFileSizeForDetail = (bytes: number) => {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 };
 
+type ExecutionRecordListProps = {
+  records: ExecRecord[];
+  resultColorMap: Record<string, string>;
+  onOpenDetail: (record: ExecRecord) => void;
+  className?: string;
+  showDetailAction?: boolean;
+};
+
+export const ExecutionRecordList: React.FC<ExecutionRecordListProps> = ({
+  records,
+  resultColorMap,
+  onOpenDetail,
+  className,
+  showDetailAction = true,
+}) => {
+  const { getUserDetails } = useMember();
+
+  const renderResult = (result: string) => {
+    const val = String(result || "");
+    const color = resultColorMap[val] || undefined;
+    return <Tag color={color}>{val || "-"}</Tag>;
+  };
+
+  if (!records || records.length === 0) {
+    return <div className="text-secondary">暂无执行记录</div>;
+  }
+
+  return (
+    <div className={cn("flex flex-col gap-4", className)}>
+      {records.map((r) => {
+        const uid = r.assignee ? String(r.assignee) : r.created_by ? String(r.created_by) : null;
+        const user = uid ? getUserDetails(uid) : undefined;
+        const name = user?.display_name || "未知用户";
+        const time = r.created_at ? renderFormattedDate(r.created_at, "YYYY-MM-DD HH:mm:ss") : "";
+        return (
+          <div
+            key={String(r.id)}
+            className="flex items-start justify-between gap-4 rounded-md bg-surface-1 p-4 shadow-sm"
+          >
+            <div className="flex items-start gap-3 min-w-0">
+              <div className="flex-shrink-0">
+                <MemberDropdown
+                  buttonVariant="transparent-with-text"
+                  multiple={false}
+                  value={uid}
+                  onChange={() => {}}
+                  disabled
+                  placeholder={name}
+                  className="text-sm"
+                  buttonContainerClassName="p-0 cursor-default"
+                  buttonClassName="p-0 hover:bg-transparent hover:bg-inherit"
+                  showUserDetails
+                  optionsClassName="z-[60]"
+                  button={<ButtonAvatars showTooltip={false} userIds={uid} size="lg" />}
+                />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium truncate">{name}</div>
+                {r.reason ? (
+                  <div className="text-sm text-secondary whitespace-pre-wrap break-words">
+                    {String(r.reason)}
+                  </div>
+                ) : null}
+                <div className="text-xs text-placeholder mt-2">{time}</div>
+              </div>
+            </div>
+            <div className="flex-shrink-0">
+              <div className="flex items-center gap-2">
+                {renderResult(r.result)}
+                {showDetailAction ? (
+                  <Tooltip title="详情" mouseEnterDelay={0.2} placement="top">
+                    <button
+                      type="button"
+                      aria-label="查看详情"
+                      aria-haspopup="dialog"
+                      onClick={() => onOpenDetail(r)}
+                      className="p-1 rounded hover:bg-layer-1-hover active:scale-95 focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-500 hover:text-blue-600"
+                    >
+                      <LucideIcons.ListOrdered size={16} aria-hidden="true" />
+                    </button>
+                  </Tooltip>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
 export const ExecutionRecordDetailModal: React.FC<ExecutionRecordDetailModalProps> = ({
   open,
   onClose,
   record,
+  records,
   workspaceSlug,
 }) => {
   const planService = React.useMemo(() => new PlanApiService(), []);
@@ -86,8 +180,13 @@ export const ExecutionRecordDetailModal: React.FC<ExecutionRecordDetailModalProp
   const [attachmentLoading, setAttachmentLoading] = React.useState(false);
   const [uploadLoading, setUploadLoading] = React.useState(false);
   const [attachmentPage, setAttachmentPage] = React.useState(1);
-  const [detailTab, setDetailTab] = React.useState<"steps" | "files">("steps");
+  const [detailTab, setDetailTab] = React.useState<"steps" | "files" | "history">("steps");
+  const [activeRecord, setActiveRecord] = React.useState<ExecutionRecordDetailRecord | null>(record);
   const attachmentPageSize = 10;
+
+  React.useEffect(() => {
+    setActiveRecord(record);
+  }, [record]);
 
   React.useEffect(() => {
     const maxPage = Math.max(1, Math.ceil(attachmentFiles.length / attachmentPageSize));
@@ -102,11 +201,11 @@ export const ExecutionRecordDetailModal: React.FC<ExecutionRecordDetailModalProp
   }, [open, workspaceSlug]);
 
   React.useEffect(() => {
-    if (!open || !record?.id || !workspaceSlug) return;
+    if (!open || !activeRecord?.id || !workspaceSlug) return;
     let cancelled = false;
     setAttachmentLoading(true);
     planService
-      .getExecutionFiles(String(workspaceSlug), record.id)
+      .getExecutionFiles(String(workspaceSlug), activeRecord.id)
       .then((files) => {
         if (!cancelled) setAttachmentFiles(Array.isArray(files) ? (files as FileItem[]) : []);
       })
@@ -119,23 +218,24 @@ export const ExecutionRecordDetailModal: React.FC<ExecutionRecordDetailModalProp
     return () => {
       cancelled = true;
     };
-  }, [open, record?.id, workspaceSlug, planService]);
+  }, [open, activeRecord?.id, workspaceSlug, planService]);
 
   const handleClose = React.useCallback(() => {
     setAttachmentFiles([]);
     setAttachmentPage(1);
     setDetailTab("steps");
+    setActiveRecord(record);
     onClose();
-  }, [onClose]);
+  }, [onClose, record]);
 
   const handleUpload = React.useCallback(
     async (file: File) => {
-      if (!workspaceSlug || !record?.id) return false;
+      if (!workspaceSlug || !activeRecord?.id) return false;
       try {
         setUploadLoading(true);
-        await planService.uploadExecutionFile(String(workspaceSlug), record.id, file);
+        await planService.uploadExecutionFile(String(workspaceSlug), activeRecord.id, file);
         message.success("上传成功");
-        const files = await planService.getExecutionFiles(String(workspaceSlug), record.id);
+        const files = await planService.getExecutionFiles(String(workspaceSlug), activeRecord.id);
         setAttachmentFiles(Array.isArray(files) ? (files as FileItem[]) : []);
       } catch (e: any) {
         message.error(e?.message || e?.error || "上传失败");
@@ -144,21 +244,21 @@ export const ExecutionRecordDetailModal: React.FC<ExecutionRecordDetailModalProp
       }
       return false;
     },
-    [workspaceSlug, record?.id, planService]
+    [workspaceSlug, activeRecord?.id, planService]
   );
 
   const handleDeleteFile = React.useCallback(
     async (fileId: string) => {
-      if (!workspaceSlug || !record?.id) return;
+      if (!workspaceSlug || !activeRecord?.id) return;
       try {
-        await planService.deleteExecutionFile(String(workspaceSlug), record.id, fileId);
+        await planService.deleteExecutionFile(String(workspaceSlug), activeRecord.id, fileId);
         message.success("删除成功");
         setAttachmentFiles((prev) => prev.filter((f) => f.id !== fileId));
       } catch (e: any) {
         message.error(e?.message || e?.error || "删除失败");
       }
     },
-    [workspaceSlug, record?.id, planService]
+    [workspaceSlug, activeRecord?.id, planService]
   );
 
   const handleDownloadFile = React.useCallback(
@@ -273,10 +373,11 @@ export const ExecutionRecordDetailModal: React.FC<ExecutionRecordDetailModalProp
             className="min-w-0 flex-1"
             mode="horizontal"
             selectedKeys={[detailTab]}
-            onClick={({ key }) => setDetailTab(key as "steps" | "files")}
+            onClick={({ key }) => setDetailTab(key as "steps" | "files" | "history")}
             items={[
               { key: "steps", label: "步骤详情" },
               { key: "files", label: "执行附件" },
+              ...(records && records.length > 0 ? [{ key: "history", label: "执行历史" }] : []),
             ]}
           />
           {detailTab === "files" ? (
@@ -303,8 +404,20 @@ export const ExecutionRecordDetailModal: React.FC<ExecutionRecordDetailModalProp
           {detailTab === "steps" ? (
             <div className="h-full overflow-y-scroll vertical-scrollbar scrollbar-sm pr-1">
               <StepsDetailTableInner
-                steps={record ? normalizeStepsForDetail(record.steps) : []}
+                steps={activeRecord ? normalizeStepsForDetail(activeRecord.steps) : []}
                 resultColorMap={resultColorMap}
+              />
+            </div>
+          ) : detailTab === "history" ? (
+            <div className="h-full overflow-y-scroll vertical-scrollbar scrollbar-sm pr-1">
+              <ExecutionRecordList
+                records={records ?? []}
+                resultColorMap={resultColorMap}
+                showDetailAction={false}
+                onOpenDetail={(r) => {
+                  setActiveRecord({ id: String(r.id), steps: r.steps });
+                  setDetailTab("steps");
+                }}
               />
             </div>
           ) : (
@@ -402,7 +515,6 @@ export const ExecutionRecordDetailModal: React.FC<ExecutionRecordDetailModalProp
 export const ExecutionRecordsPanel: React.FC<Props> = (props) => {
   const { workspaceSlug, reviewId, caseId, className = "" } = props;
   const planService = React.useMemo(() => new PlanApiService(), []);
-  const { getUserDetails } = useMember();
   const searchParams = useSearchParams();
   const planId = searchParams.get("plan_id") ?? searchParams.get("planId") ?? "";
 
@@ -478,12 +590,6 @@ export const ExecutionRecordsPanel: React.FC<Props> = (props) => {
     fetchRecords();
   }, [workspaceSlug, reviewId, caseId, planId]);
 
-  const renderResult = (result: string) => {
-    const val = String(result || "");
-    const color = resultColorMap[val] || undefined;
-    return <Tag color={color}>{val || "-"}</Tag>;
-  };
-
   return (
     <>
       <div
@@ -499,67 +605,12 @@ export const ExecutionRecordsPanel: React.FC<Props> = (props) => {
           </div>
         ) : error ? (
           <div className="bg-red-50 border border-red-200 rounded-md p-3 text-red-800">{error}</div>
-        ) : records.length === 0 ? (
-          <div className="text-secondary">暂无执行记录</div>
         ) : (
-          <div className="flex flex-col gap-4">
-            {records.map((r) => {
-              const uid = r.assignee ? String(r.assignee) : null;
-              const user = uid ? getUserDetails(uid) : undefined;
-              const name = user?.display_name || "未知用户";
-              const time = r.created_at ? renderFormattedDate(r.created_at, "YYYY-MM-DD HH:mm:ss") : "";
-              return (
-                <div
-                  key={String(r.id)}
-                  className="flex items-start justify-between gap-4 rounded-md bg-surface-1 p-4 shadow-sm"
-                >
-                  <div className="flex items-start gap-3 min-w-0">
-                    <div className="flex-shrink-0">
-                      <MemberDropdown
-                        buttonVariant="transparent-with-text"
-                        multiple={false}
-                        value={uid}
-                        onChange={() => {}}
-                        disabled
-                        placeholder={name}
-                        className="text-sm"
-                        buttonContainerClassName="p-0 cursor-default"
-                        buttonClassName="p-0 hover:bg-transparent hover:bg-inherit"
-                        showUserDetails
-                        optionsClassName="z-[60]"
-                        button={<ButtonAvatars showTooltip={false} userIds={uid} size="lg" />}
-                      />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium truncate">{name}</div>
-                      {r.reason ? (
-                        <div className="text-sm text-secondary whitespace-pre-wrap break-words">
-                          {String(r.reason)}
-                        </div>
-                      ) : null}
-                      <div className="text-xs text-placeholder mt-2">{time}</div>
-                    </div>
-                  </div>
-                  <div className="flex-shrink-0">
-                    <div className="flex items-center gap-2">
-                      {renderResult(r.result)}
-                      <Tooltip title="详情" mouseEnterDelay={0.2} placement="top">
-                        <button
-                          type="button"
-                          aria-label="查看详情"
-                          aria-haspopup="dialog"
-                          onClick={() => openStepsModal(r)}
-                          className="p-1 rounded hover:bg-layer-1-hover active:scale-95 focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-500 hover:text-blue-600"
-                        >
-                          <LucideIcons.ListOrdered size={16} aria-hidden="true" />
-                        </button>
-                      </Tooltip>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          <ExecutionRecordList
+            records={records}
+            resultColorMap={resultColorMap}
+            onOpenDetail={openStepsModal}
+          />
         )}
       </div>
       <ExecutionRecordDetailModal
@@ -574,6 +625,7 @@ export const ExecutionRecordsPanel: React.FC<Props> = (props) => {
             ? { id: stepsModalRecordId, steps: stepsModalSteps }
             : null
         }
+        records={records}
         workspaceSlug={workspaceSlug}
       />
     </>
