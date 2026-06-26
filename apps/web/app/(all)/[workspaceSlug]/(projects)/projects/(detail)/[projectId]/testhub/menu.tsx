@@ -4,7 +4,7 @@ import { usePathname, useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import React from "react";
 import { cn } from "@plane/utils";
-import { isTMOverviewActive, isTMOverviewMenuActive, isTMPlansActive, isTMPlansMenuActive, isTMReviewsActive, isTMReviewsMenuActive } from "./route-helpers";
+import { isTMOverviewActive, isTMOverviewMenuActive, isTMPlansActive, isTMPlansMenuActive, isTMReviewsActive, isTMReviewsMenuActive, isTMReportsActive, isTMReportsMenuActive } from "./route-helpers";
 import { useTestHub } from "./testhub-context";
 
 type TMenuItem = {
@@ -33,13 +33,19 @@ const MENU_ITEMS: TMenuItem[] = [
     href: (ws, pid) => `/${ws}/projects/${pid}/testhub/reviews`,
     isActive: (pathname, ws, pid) => isTMReviewsMenuActive(pathname, ws, pid),
   },
+  {
+    key: "reports",
+    label: "测试报告",
+    href: (ws, pid) => `/${ws}/projects/${pid}/testhub/reports`,
+    isActive: (pathname, ws, pid) => isTMReportsMenuActive(pathname, ws, pid),
+  },
 ];
 
 export const TestManagementMenuBar = () => {
   const pathname = usePathname();
   const { workspaceSlug, projectId } = useParams();
   const searchParams = useSearchParams();
-  const { triggerOpenNewModal, triggerOpenNewPlanModal, triggerOpenNewReviewModal } = useTestHub();
+  const { triggerOpenNewModal, triggerOpenNewPlanModal, triggerOpenNewReviewModal, triggerOpenNewReportModal } = useTestHub();
   const [repositoryIdFromStorage, setRepositoryIdFromStorage] = React.useState<string | null>(null);
   const [isClient, setIsClient] = React.useState(false);
 
@@ -49,6 +55,7 @@ export const TestManagementMenuBar = () => {
   const isOverviewActive = !!pathname && !!ws && !!pid && isTMOverviewActive(pathname, ws, pid);
   const isPlansActive = !!pathname && !!ws && !!pid && isTMPlansActive(pathname, ws, pid);
   const isReviewsActive = !!pathname && !!ws && !!pid && isTMReviewsActive(pathname, ws, pid);
+  const isReportsActive = !!pathname && !!ws && !!pid && isTMReportsActive(pathname, ws, pid);
 
   React.useEffect(() => {
     setIsClient(true);
@@ -117,6 +124,15 @@ export const TestManagementMenuBar = () => {
             className="ml-2 shrink-0 text-on-color bg-accent-primary hover:bg-accent-primary-hover focus:text-on-color focus:bg-accent-primary-hover px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center disabled:opacity-50 disabled:cursor-not-allowed"
           >
             新建评审
+          </button>
+        )}
+        {isReportsActive && (
+          <button
+            type="button"
+            onClick={triggerOpenNewReportModal}
+            className="ml-2 shrink-0 text-on-color bg-accent-primary hover:bg-accent-primary-hover focus:text-on-color focus:bg-accent-primary-hover px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            新建报告
           </button>
         )}
       </div>

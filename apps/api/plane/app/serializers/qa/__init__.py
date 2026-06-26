@@ -32,10 +32,12 @@ from plane.db.models import (
     PlanModule,
     PlanCase,
     TestCaseVersion,
+    TestReport,
 )
 from plane.utils.qa import re_approval_case
 
 from .plan import *
+from .report import *
 
 
 class CaseLabelListSerializer(serializers.ModelSerializer):

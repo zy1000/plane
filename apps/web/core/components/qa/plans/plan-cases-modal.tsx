@@ -506,15 +506,33 @@ export const PlanCasesModal: React.FC<Props> = ({
 
             {/* Right: search + table */}
             <div className="flex flex-1 flex-col overflow-hidden">
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-subtle px-4 py-3">
-                <Input
-                  placeholder="按用例名称搜索"
-                  allowClear
-                  prefix={<Search className="size-4" />}
-                  value={searchName}
-                  onChange={(e) => handleSearchNameChange(e.target.value)}
-                  className="max-w-xs"
-                />
+              <div className="flex flex-nowrap items-center justify-between gap-3 border-b border-subtle px-4 py-3">
+                <div className="flex flex-nowrap items-center gap-3 min-w-0">
+                  <Input
+                    placeholder="按用例名称搜索"
+                    allowClear
+                    prefix={<Search className="size-4" />}
+                    value={searchName}
+                    onChange={(e) => handleSearchNameChange(e.target.value)}
+                    className="w-48 shrink-0"
+                  />
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-sm text-secondary">
+                      执行人<span className="text-danger-primary">*</span>
+                    </span>
+                    <div className="w-48">
+                      <MemberDropdown
+                        multiple={false}
+                        projectId={projectId ? String(projectId) : undefined}
+                        value={selectedAssignee}
+                        onChange={(value) => setSelectedAssignee(value ? String(value) : null)}
+                        placeholder="请选择执行人"
+                        buttonVariant="border-with-text"
+                        showUserDetails
+                      />
+                    </div>
+                  </div>
+                </div>
                 {selectedCount > 0 && (
                   <div className="flex items-center gap-2 text-sm">
                     <span className="text-secondary">
@@ -624,26 +642,8 @@ export const PlanCasesModal: React.FC<Props> = ({
 
         {/* Footer */}
         <div className="flex items-center justify-between gap-3 border-t border-subtle bg-surface-1 px-6 py-3">
-          <div className="flex items-center gap-4">
-            <div className="text-sm text-secondary">
-              已选 <span className="font-medium text-accent-primary">{selectedCount}</span> 个用例
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-secondary">
-                执行人<span className="text-danger-primary">*</span>
-              </span>
-              <div className="w-64">
-                <MemberDropdown
-                  multiple={false}
-                  projectId={projectId ? String(projectId) : undefined}
-                  value={selectedAssignee}
-                  onChange={(value) => setSelectedAssignee(value ? String(value) : null)}
-                  placeholder="请选择执行人"
-                  buttonVariant="border-with-text"
-                  showUserDetails
-                />
-              </div>
-            </div>
+          <div className="text-sm text-secondary">
+            已选 <span className="font-medium text-accent-primary">{selectedCount}</span> 个用例
           </div>
           <div className="flex items-center gap-3">
             <Button variant="secondary" onClick={closeModal} size="lg">

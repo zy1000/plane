@@ -27,3 +27,12 @@ export const isTMReviewsMenuActive = (pathname: string, workspaceSlug: string, p
   const current = normalizePath(pathname);
   return current.startsWith(`${base}/reviews`) || current.startsWith(`${base}/caseManagementReviewDetail`) || current.startsWith(`${base}/case-review`);
 };
+
+export const isTMReportsActive = (pathname: string, workspaceSlug: string, projectId: string) =>
+  normalizePath(pathname) === normalizePath(`${tmProjectBasePath(workspaceSlug, projectId)}/reports`);
+
+export const isTMReportsMenuActive = (pathname: string, workspaceSlug: string, projectId: string) => {
+  const base = normalizePath(tmProjectBasePath(workspaceSlug, projectId));
+  const current = normalizePath(pathname);
+  return current.startsWith(`${base}/reports`) || current.startsWith(`${base}/report-detail`);
+};

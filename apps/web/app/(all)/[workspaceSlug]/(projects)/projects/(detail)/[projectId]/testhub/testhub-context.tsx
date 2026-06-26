@@ -9,6 +9,8 @@ type TTestHubContext = {
   triggerOpenNewPlanModal: () => void;
   registerOpenNewReviewModal: (fn: () => void) => void;
   triggerOpenNewReviewModal: () => void;
+  registerOpenNewReportModal: (fn: () => void) => void;
+  triggerOpenNewReportModal: () => void;
 };
 
 const TestHubContext = createContext<TTestHubContext>({
@@ -18,12 +20,15 @@ const TestHubContext = createContext<TTestHubContext>({
   triggerOpenNewPlanModal: () => {},
   registerOpenNewReviewModal: () => {},
   triggerOpenNewReviewModal: () => {},
+  registerOpenNewReportModal: () => {},
+  triggerOpenNewReportModal: () => {},
 });
 
 export const TestHubProvider = ({ children }: { children: React.ReactNode }) => {
   const openNewModalRef = useRef<(() => void) | null>(null);
   const openNewPlanModalRef = useRef<(() => void) | null>(null);
   const openNewReviewModalRef = useRef<(() => void) | null>(null);
+  const openNewReportModalRef = useRef<(() => void) | null>(null);
 
   const registerOpenNewModal = (fn: () => void) => {
     openNewModalRef.current = fn;
@@ -46,6 +51,13 @@ export const TestHubProvider = ({ children }: { children: React.ReactNode }) => 
     openNewReviewModalRef.current?.();
   };
 
+  const registerOpenNewReportModal = (fn: () => void) => {
+    openNewReportModalRef.current = fn;
+  };
+  const triggerOpenNewReportModal = () => {
+    openNewReportModalRef.current?.();
+  };
+
   return (
     <TestHubContext.Provider
       value={{
@@ -55,6 +67,8 @@ export const TestHubProvider = ({ children }: { children: React.ReactNode }) => 
         triggerOpenNewPlanModal,
         registerOpenNewReviewModal,
         triggerOpenNewReviewModal,
+        registerOpenNewReportModal,
+        triggerOpenNewReportModal,
       }}
     >
       {children}

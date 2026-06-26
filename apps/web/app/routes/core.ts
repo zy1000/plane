@@ -346,6 +346,14 @@ export const coreRoutes: RouteConfigEntry[] = [
               ":workspaceSlug/projects/:projectId/testhub/case-review",
               "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/case-review/page.tsx"
             ),
+            route(
+              ":workspaceSlug/projects/:projectId/testhub/reports",
+              "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/reports/page.tsx"
+            ),
+            route(
+              ":workspaceSlug/projects/:projectId/testhub/report-detail",
+              "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testhub/report-detail/page.tsx"
+            ),
           ]),
 
           // Project Archives - Issues, Cycles, Modules

@@ -43,12 +43,14 @@ from plane.app.views.qa.review import (
     ReviewListAPIView,
 )
 from plane.app.views.qa.execution_file import PlanCaseRecordFileAPI
+from plane.app.views.qa.report import TestReportAPIView, ReportView
 
 router = SimpleRouter()
 router.register("review", CaseReviewView, basename="review")
 router.register("plan", PlanView, basename="plan")
 router.register("case", CaseAPI, basename="case")
 router.register("execution-file", PlanCaseRecordFileAPI, basename="execution-file")
+router.register("report", ReportView, basename="report")
 
 urlpatterns = [
     path(
@@ -60,6 +62,11 @@ urlpatterns = [
         "workspaces/<str:slug>/projects/<uuid:project_id>/test/plane/",
         PlanAPIView.as_view(),
         name="test-plan",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/test/report/",
+        TestReportAPIView.as_view(),
+        name="test-report",
     ),
     path(
         "workspaces/<str:slug>/test/plan/list/",

@@ -875,7 +875,7 @@ export default function PlanCasesPage() {
                   <div className="inline-flex items-center [&>*:first-child]:rounded-r-none [&>*:last-child]:rounded-l-none">
                     <PlaneButton
                       variant="primary"
-                      size="base"
+                      size="xl"
                       onClick={() => setIsPlanModalOpen(true)}
                     >
                       规划用例
@@ -897,10 +897,10 @@ export default function PlanCasesPage() {
                     >
                       <PlaneButton
                         variant="primary"
-                        size="base"
+                        size="xl"
                         className="px-1"
                       >
-                        <ChevronDownIcon className="h-3.5 w-3.5" />
+                        <ChevronDownIcon className="h-4 w-4" />
                       </PlaneButton>
                     </Dropdown>
                   </div>

@@ -637,3 +637,28 @@ class CaseReviewRecord(BaseModel):
 
     class Meta:
         ordering = ("-created_at",)
+
+
+class TestReport(BaseModel):
+    """测试报告：聚合一个或多个测试计划的执行数据，统计实时计算。"""
+
+    class ReportType(models.TextChoices):
+        PLAN = '计划报告', 'blue'
+        EXTERNAL = '对外报告', 'gold'
+
+    name = models.CharField(max_length=255, verbose_name="TestReport Name")
+    report_type = models.CharField(choices=ReportType.choices, default=ReportType.PLAN,
+                                   verbose_name="TestReport Type")
+    summary_html = models.TextField(blank=True, default="<p></p>", verbose_name="TestReport Summary HTML")
+    summary_json = models.JSONField(blank=True, default=dict, verbose_name="TestReport Summary JSON")
+
+    project = models.ForeignKey('db.Project', null=True, blank=True, on_delete=models.CASCADE,
+                                related_name="project_%(class)s")
+    plans = models.ManyToManyField(TestPlan, blank=True, related_name="reports",
+                                   db_table="test_report_plans")
+
+    class Meta:
+        verbose_name = "TestReport"
+        verbose_name_plural = "TestReport"
+        db_table = "test_report"
+        ordering = ("-created_at",)
