@@ -20,6 +20,7 @@ export type TReportDetailState = {
   refreshDetail: () => Promise<void>;
   refreshAnalysis: () => Promise<void>;
   fetchCases: (page: number, pageSize: number, opts?: { name?: string; result?: string }) => Promise<void>;
+  fetchAllCases: () => Promise<TReportCaseRow[]>;
   saveSummary: (summaryHtml: string, summaryJson: unknown) => Promise<void>;
 };
 
@@ -75,6 +76,20 @@ export const useReportDetail = (
     [workspaceSlug, projectId, reportId]
   );
 
+  const fetchAllCases = useCallback(async () => {
+    if (!workspaceSlug || !projectId || !reportId) return [];
+    try {
+      const res = await reportService.getReportCaseList(workspaceSlug, projectId, {
+        report_id: reportId,
+        all: "true",
+      });
+      return res.data;
+    } catch (error) {
+      setError("获取执行明细失败");
+      throw error;
+    }
+  }, [workspaceSlug, projectId, reportId]);
+
   const saveSummary = useCallback(
     async (summaryHtml: string, summaryJson: unknown) => {
       if (!workspaceSlug || !projectId || !reportId) return;
@@ -114,6 +129,7 @@ export const useReportDetail = (
     refreshDetail,
     refreshAnalysis,
     fetchCases,
+    fetchAllCases,
     saveSummary,
   };
 };

@@ -1,9 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
 import { ArrowLeft, Share2, FileDown } from "lucide-react";
 import { Button } from "@plane/propel/button";
-import { Tag } from "antd";
+import { message, Tag } from "antd";
 import { useWorkspace } from "@/hooks/store/use-workspace";
 import { useProjectPermissions } from "@/hooks/store/use-project-permissions";
 import UnauthorizedImg from "@/app/assets/auth/unauthorized.svg?url";
@@ -12,11 +13,17 @@ import { ReportAnalysisCards } from "./report-analysis-cards";
 import { ReportExecutionChart } from "./report-execution-chart";
 import { ReportSummaryEditor } from "./report-summary-editor";
 import { ReportCaseTable } from "./report-case-table";
+import { exportReportAsPdf } from "./export-report-pdf";
 
 const REPORT_TYPE_COLOR: Record<string, string> = {
   计划报告: "blue",
   对外报告: "gold",
 };
+
+const waitForPaint = () =>
+  new Promise<void>((resolve) => {
+    requestAnimationFrame(() => resolve());
+  });
 
 export default function ReportDetailPage() {
   const { workspaceSlug, projectId } = useParams();
@@ -24,6 +31,7 @@ export default function ReportDetailPage() {
   const router = useRouter();
   const reportId = searchParams.get("reportId");
   const reportName = searchParams.get("name") || (typeof window !== "undefined" ? sessionStorage.getItem("selectedReportName") : "") || "";
+  const [exporting, setExporting] = useState(false);
 
   const { getWorkspaceBySlug } = useWorkspace();
   const workspaceId = workspaceSlug ? getWorkspaceBySlug(workspaceSlug as string)?.id : undefined;
@@ -41,15 +49,38 @@ export default function ReportDetailPage() {
     loading,
     error,
     fetchCases,
+    fetchAllCases,
     saveSummary,
   } = useReportDetail(String(workspaceSlug || ""), String(projectId || ""), reportId);
 
   const canView = permissionsFetched && hasPermission("qa.plan.view");
+  const reportTitle = detail?.name || reportName || "测试报告";
 
   const handleBack = () => {
     const ws = (workspaceSlug as string) || "";
     const pid = (projectId as string) || "";
     router.push(`/${ws}/projects/${pid}/testhub/reports`);
+  };
+
+  const handleExportPdf = async () => {
+    if (!reportId || !detail || exporting) return;
+
+    setExporting(true);
+    try {
+      await waitForPaint();
+      const allCases = await fetchAllCases();
+      await waitForPaint();
+      await exportReportAsPdf({
+        detail,
+        analysis,
+        rows: allCases,
+        filenameBase: reportTitle || `test-report-${reportId}`,
+      });
+    } catch (e: any) {
+      message.error(e?.message || "导出失败");
+    } finally {
+      setExporting(false);
+    }
   };
 
   if (!permissionsFetched) {
@@ -97,7 +128,14 @@ export default function ReportDetailPage() {
             <Share2 className="size-3.5" />
             分享
           </Button>
-          <Button variant="secondary" size="sm" className="!gap-1.5" disabled>
+          <Button
+            variant="secondary"
+            size="sm"
+            className="!gap-1.5"
+            onClick={handleExportPdf}
+            loading={exporting}
+            disabled={exporting || loading || !detail}
+          >
             <FileDown className="size-3.5" />
             导出 PDF
           </Button>
