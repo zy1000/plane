@@ -75,7 +75,7 @@ export type TReportCaseRow = {
 export type TReportListResponse = { data: TReportListItem[]; count: number };
 export type TReportCaseListResponse = { data: TReportCaseRow[]; count: number };
 
-export type TReportCreateUpdatePayload = {
+export type TReportCreatePayload = {
   name: string;
   report_type?: TReportType;
   summary_html?: string;
@@ -83,6 +83,8 @@ export type TReportCreateUpdatePayload = {
   project?: string;
   plans?: string[];
 };
+
+export type TReportUpdatePayload = Partial<TReportCreatePayload> & { id: string };
 
 export class ReportService extends APIService {
   constructor() {
@@ -109,7 +111,7 @@ export class ReportService extends APIService {
       });
   }
 
-  async createReport(workspaceSlug: string, projectId: string, data: TReportCreateUpdatePayload): Promise<TReportDetail> {
+  async createReport(workspaceSlug: string, projectId: string, data: TReportCreatePayload): Promise<TReportDetail> {
     return this.post(`/api/workspaces/${workspaceSlug}/projects/${projectId}/test/report/`, data)
       .then((response) => response?.data)
       .catch((error) => {
@@ -117,11 +119,7 @@ export class ReportService extends APIService {
       });
   }
 
-  async updateReport(
-    workspaceSlug: string,
-    projectId: string,
-    data: TReportCreateUpdatePayload & { id: string }
-  ): Promise<TReportDetail> {
+  async updateReport(workspaceSlug: string, projectId: string, data: TReportUpdatePayload): Promise<TReportDetail> {
     return this.put(`/api/workspaces/${workspaceSlug}/projects/${projectId}/test/report/`, data)
       .then((response) => response?.data)
       .catch((error) => {
@@ -139,11 +137,7 @@ export class ReportService extends APIService {
       });
   }
 
-  async getReportAnalysis(
-    workspaceSlug: string,
-    projectId: string,
-    reportId: string
-  ): Promise<TReportAnalysis> {
+  async getReportAnalysis(workspaceSlug: string, projectId: string, reportId: string): Promise<TReportAnalysis> {
     return this.get(`/api/workspaces/${workspaceSlug}/test/report/analysis/`, {
       params: { report_id: reportId, project_id: projectId },
     })
@@ -156,7 +150,14 @@ export class ReportService extends APIService {
   async getReportCaseList(
     workspaceSlug: string,
     projectId: string,
-    queries: { report_id: string; page?: number; page_size?: number; name__icontains?: string; result?: string; all?: string }
+    queries: {
+      report_id: string;
+      page?: number;
+      page_size?: number;
+      name__icontains?: string;
+      result?: string;
+      all?: string;
+    }
   ): Promise<TReportCaseListResponse> {
     return this.get(`/api/workspaces/${workspaceSlug}/test/report/case-list/`, {
       params: { project_id: projectId, ...queries },
