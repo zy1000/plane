@@ -1,5 +1,5 @@
 import { type FC, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
-import { Activity, AlertTriangle, Bug, CircleCheck, Clock, Loader2 } from "lucide-react";
+import { Activity, AlertTriangle, ArrowUpRight, Bug, CircleCheck, Clock, Loader2 } from "lucide-react";
 import { InfoIcon } from "@plane/propel/icons";
 import { Popover } from "@plane/propel/popover";
 import type { TProjectOverviewData } from "./use-project-overview";
@@ -129,19 +129,37 @@ const StatChip: FC<{ chip: TStatChip }> = ({ chip }) => {
 
   return (
     <div className="relative flex h-full items-center gap-3 rounded-lg border border-subtle bg-layer-1 px-3.5 py-4 text-left transition-colors hover:bg-layer-1-hover">
-      {chip.onActionClick && (
-        <button
-          type="button"
-          className="absolute top-1.5 right-1.5 cursor-pointer rounded p-0.5 text-placeholder transition-colors hover:bg-surface-2 hover:text-primary"
-          aria-label={`查看${chip.label}详情`}
-          title={`查看${chip.label}详情`}
-          onClick={(e) => {
-            e.stopPropagation();
-            chip.onActionClick?.();
-          }}
-        >
-          <InfoIcon className="h-3 w-3" />
-        </button>
+      {(chip.onActionClick || chip.onValueClick) && (
+        <div className="absolute top-1.5 right-1.5 flex items-center gap-0.5">
+          {chip.onActionClick && (
+            <button
+              type="button"
+              className="cursor-pointer rounded p-0.5 text-placeholder transition-colors hover:bg-surface-2 hover:text-primary"
+              aria-label={`查看${chip.label}详情`}
+              title={`查看${chip.label}详情`}
+              onClick={(e) => {
+                e.stopPropagation();
+                chip.onActionClick?.();
+              }}
+            >
+              <InfoIcon className="h-3 w-3" />
+            </button>
+          )}
+          {chip.onValueClick && (
+            <button
+              type="button"
+              className="cursor-pointer rounded p-0.5 text-placeholder transition-colors hover:bg-surface-2 hover:text-primary"
+              aria-label={`跳转到${chip.label}`}
+              title={`跳转到${chip.label}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                chip.onValueClick?.();
+              }}
+            >
+              <ArrowUpRight className="h-3 w-3" />
+            </button>
+          )}
+        </div>
       )}
       <Icon className={`h-4 w-4 flex-shrink-0 ${tone.icon}`} />
       <div className="min-w-0">
