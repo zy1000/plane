@@ -236,7 +236,7 @@ class FilestoreExplorerViewSet(BaseViewSet):
             counter += 1
 
     @action(detail=False, methods=["post"], url_path="ensure-root")
-    @allow_fine_permission(PermissionKey.PROJECT_ASSET_UPLOAD)
+    @allow_fine_permission(PermissionKey.PROJECT_ASSET_VIEW)
     def ensure_root(self, request, slug, project_id):
         project, root = self._root_folder(slug=slug, project_id=project_id)
         storage = S3Storage(request=request)
