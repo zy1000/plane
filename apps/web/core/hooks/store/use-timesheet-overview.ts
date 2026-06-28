@@ -301,26 +301,22 @@ export const useTimesheetOverview = ({ workspaceSlug, memberId }: TUseTimesheetO
     [activeTimesheets]
   );
 
-  const pmsAlerts = useMemo<TPmsAlert[]>(() => {
-    const seen = new Set<string>();
-    const alerts: TPmsAlert[] = [];
+  const pmsAlerts: TPmsAlert[] = [];
+  const seenPmsAlertProjectIds = new Set<string>();
 
-    for (const timesheet of activeTimesheets) {
-      const projectId = timesheet.project;
-      if (!projectId || seen.has(projectId)) continue;
-      seen.add(projectId);
+  for (const timesheet of activeTimesheets) {
+    const projectId = timesheet.project;
+    if (!projectId || seenPmsAlertProjectIds.has(projectId)) continue;
+    seenPmsAlertProjectIds.add(projectId);
 
-      const project = getProjectById(projectId);
-      if (!project?.pms_project_name?.trim()) {
-        alerts.push({
-          projectId,
-          projectName: project?.name ?? projectId,
-        });
-      }
+    const project = getProjectById(projectId);
+    if (!project?.pms_project_name?.trim()) {
+      pmsAlerts.push({
+        projectId,
+        projectName: project?.name ?? projectId,
+      });
     }
-
-    return alerts;
-  }, [activeTimesheets, getProjectById]);
+  }
 
   // --- Alert days ---
   const alertDays = useMemo(() => {
