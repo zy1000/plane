@@ -1706,7 +1706,7 @@ export default {
         overdue: "Overdue",
       },
       insights: {
-        title: "Work insights",
+        title: "Recent work signals",
         overdue: "Overdue",
         overdue_description: "Open items already past their due date.",
         high_priority: "High priority",

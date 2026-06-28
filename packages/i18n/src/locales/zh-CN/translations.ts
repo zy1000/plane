@@ -1838,7 +1838,7 @@ export default {
         overdue: "已逾期",
       },
       insights: {
-        title: "工作洞察",
+        title: "近期工作信号",
         overdue: "已逾期",
         overdue_description: "已经超过截止日期但仍未完成。",
         high_priority: "高优先级",

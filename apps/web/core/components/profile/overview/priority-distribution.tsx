@@ -9,7 +9,7 @@ import { useTranslation } from "@plane/i18n";
 import { BarChart } from "@plane/propel/charts/bar-chart";
 import { EmptyStateCompact } from "@plane/propel/empty-state";
 import type { IUserProfileData } from "@plane/types";
-import { Loader } from "@plane/ui";
+import { Loader, Card } from "@plane/ui";
 import { capitalizeFirstLetter } from "@plane/utils";
 
 type Props = {
@@ -21,16 +21,16 @@ const priorityColors = {
   high: "#ef4444",
   medium: "#f59e0b",
   low: "#16a34a",
-  none: "#e5e5e5",
+  none: "var(--background-color-surface-2)",
 };
 
 export function ProfilePriorityDistribution({ userProfile }: Props) {
   const { t } = useTranslation();
   return (
-    <section className="flex h-full min-h-[438px] flex-col rounded-2xl border border-subtle bg-surface-1 p-5">
+    <div className="flex h-full flex-col space-y-2">
       <h3 className="text-16 font-medium">{t("profile.stats.priority_distribution.title")}</h3>
       {userProfile ? (
-        <div className="mt-4 flex flex-1 items-center rounded-xl bg-surface-2 p-3">
+        <Card className="flex-1">
           {userProfile.priority_distribution.length > 0 ? (
             <BarChart
               className="h-[300px] w-full"
@@ -69,9 +69,9 @@ export function ProfilePriorityDistribution({ userProfile }: Props) {
               title={t("workspace_empty_state.your_work_by_priority.title")}
             />
           )}
-        </div>
+        </Card>
       ) : (
-        <div className="grid flex-1 place-items-center p-7">
+        <div className="grid place-items-center p-7">
           <Loader className="flex items-end gap-12">
             <Loader.Item width="30px" height="200px" />
             <Loader.Item width="30px" height="150px" />
@@ -81,6 +81,6 @@ export function ProfilePriorityDistribution({ userProfile }: Props) {
           </Loader>
         </div>
       )}
-    </section>
+    </div>
   );
 }
