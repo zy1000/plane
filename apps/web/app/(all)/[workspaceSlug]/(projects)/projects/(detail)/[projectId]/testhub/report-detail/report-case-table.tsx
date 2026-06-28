@@ -93,8 +93,7 @@ export const ReportCaseTable = ({ rows, count, loading, onPageChange, onSearch }
 
   return (
     <Card className="p-0">
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <h3 className="text-sm font-medium text-primary">执行明细</h3>
+      <div className="mb-3 flex items-center justify-end gap-2">
         <Input.Search
           allowClear
           size="small"

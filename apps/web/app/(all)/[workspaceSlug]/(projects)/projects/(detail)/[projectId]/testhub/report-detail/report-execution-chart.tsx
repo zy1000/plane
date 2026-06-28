@@ -38,8 +38,7 @@ export const ReportExecutionChart = ({ analysis }: Props) => {
 
   return (
     <Card className="h-full p-4">
-      <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-sm font-medium text-primary">执行分析</h3>
+      <div className="mb-3 flex items-center justify-end">
         <span className="text-xs text-secondary">总数(个) {total}</span>
       </div>
       <div className="grid h-[220px] w-full grid-cols-1 gap-x-4 md:grid-cols-2">

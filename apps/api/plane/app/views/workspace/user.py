@@ -4,7 +4,7 @@
 
 # Python imports
 import copy
-from datetime import date
+from datetime import date, timedelta
 
 from dateutil.relativedelta import relativedelta
 
@@ -396,6 +396,9 @@ class WorkspaceUserActivityEndpoint(BaseAPIView):
 class WorkspaceUserProfileStatsEndpoint(BaseAPIView):
     def get(self, request, slug, user_id):
         filters = issue_filters(request.query_params, "GET")
+        today = timezone.now().date()
+        week_start = today - timedelta(days=today.weekday())
+        week_end = today + timedelta(days=6 - today.weekday())
 
         state_distribution = (
             Issue.issue_objects.filter(
@@ -499,8 +502,87 @@ class WorkspaceUserProfileStatsEndpoint(BaseAPIView):
                 workspace__slug=slug,
                 project__project_projectmember__member=request.user,
                 project__project_projectmember__is_active=True,
-                target_date__lt=timezone.now().date(),
+                target_date__lt=today,
                 target_date__isnull=False,
+            )
+            .filter(**filters)
+            .count()
+        )
+
+        today_pending_issues_count = (
+            Issue.issue_objects.filter(
+                ~Q(state__group__in=["completed", "cancelled"]),
+                (Q(assignees__in=[user_id]) & Q(issue_assignee__deleted_at__isnull=True)),
+                workspace__slug=slug,
+                project__project_projectmember__member=request.user,
+                project__project_projectmember__is_active=True,
+                target_date__isnull=False,
+                target_date__lte=today,
+            )
+            .filter(**filters)
+            .count()
+        )
+
+        week_pending_issues_count = (
+            Issue.issue_objects.filter(
+                ~Q(state__group__in=["completed", "cancelled"]),
+                (Q(assignees__in=[user_id]) & Q(issue_assignee__deleted_at__isnull=True)),
+                workspace__slug=slug,
+                project__project_projectmember__member=request.user,
+                project__project_projectmember__is_active=True,
+                target_date__isnull=False,
+                target_date__lte=week_end,
+            )
+            .filter(**filters)
+            .count()
+        )
+
+        high_priority_pending_issues_count = (
+            Issue.issue_objects.filter(
+                ~Q(state__group__in=["completed", "cancelled"]),
+                (Q(assignees__in=[user_id]) & Q(issue_assignee__deleted_at__isnull=True)),
+                workspace__slug=slug,
+                project__project_projectmember__member=request.user,
+                project__project_projectmember__is_active=True,
+                priority__in=["urgent", "high"],
+            )
+            .filter(**filters)
+            .count()
+        )
+
+        completed_today_issues_count = (
+            Issue.issue_objects.filter(
+                (Q(assignees__in=[user_id]) & Q(issue_assignee__deleted_at__isnull=True)),
+                workspace__slug=slug,
+                project__project_projectmember__member=request.user,
+                project__project_projectmember__is_active=True,
+                completed_at__date=today,
+            )
+            .filter(**filters)
+            .count()
+        )
+
+        completed_this_week_issues_count = (
+            Issue.issue_objects.filter(
+                (Q(assignees__in=[user_id]) & Q(issue_assignee__deleted_at__isnull=True)),
+                workspace__slug=slug,
+                project__project_projectmember__member=request.user,
+                project__project_projectmember__is_active=True,
+                completed_at__date__gte=week_start,
+                completed_at__date__lte=week_end,
+            )
+            .filter(**filters)
+            .count()
+        )
+
+        unscheduled_pending_issues_count = (
+            Issue.issue_objects.filter(
+                ~Q(state__group__in=["completed", "cancelled"]),
+                (Q(assignees__in=[user_id]) & Q(issue_assignee__deleted_at__isnull=True)),
+                workspace__slug=slug,
+                project__project_projectmember__member=request.user,
+                project__project_projectmember__is_active=True,
+                target_date__isnull=True,
             )
             .filter(**filters)
             .count()
@@ -529,6 +611,12 @@ class WorkspaceUserProfileStatsEndpoint(BaseAPIView):
                 "pending_issues": pending_issues_count,
                 "subscribed_issues": subscribed_issues_count,
                 "overdue_issues": overdue_issues_count,
+                "today_pending_issues": today_pending_issues_count,
+                "week_pending_issues": week_pending_issues_count,
+                "high_priority_pending_issues": high_priority_pending_issues_count,
+                "completed_today_issues": completed_today_issues_count,
+                "completed_this_week_issues": completed_this_week_issues_count,
+                "unscheduled_pending_issues": unscheduled_pending_issues_count,
                 "present_cycles": present_cycle,
                 "upcoming_cycles": upcoming_cycles,
             }

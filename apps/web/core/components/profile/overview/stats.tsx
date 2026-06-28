@@ -11,7 +11,7 @@ import { useParams } from "next/navigation";
 import { useTranslation } from "@plane/i18n";
 import { UserCirclePropertyIcon, CreateIcon, LayerStackIcon, OverdueDatePropertyIcon } from "@plane/propel/icons";
 import type { IUserProfileData } from "@plane/types";
-import { Loader, Card, ECardSpacing, ECardDirection } from "@plane/ui";
+import { Loader } from "@plane/ui";
 // types
 
 type Props = {
@@ -51,32 +51,34 @@ export function ProfileStats({ userProfile }: Props) {
   ];
 
   return (
-    <div className="space-y-2">
+    <section className="rounded-2xl border border-subtle bg-surface-1 p-5">
       <h3 className="text-16 font-medium">{t("profile.stats.overview")}</h3>
       {userProfile ? (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-4 grid grid-cols-1 gap-px overflow-hidden rounded-xl border border-subtle bg-surface-2 md:grid-cols-2">
           {overviewCards.map((card) => (
-            <Link key={card.i18n_title} href={`/${workspaceSlug}/profile/${userId}/${card.route}`}>
-              <Card direction={ECardDirection.ROW} spacing={ECardSpacing.SM} className="h-full">
-                <div className="grid h-11 w-11 place-items-center rounded-sm bg-surface-2">
-                  <card.icon className="h-5 w-5" />
-                </div>
-                <div className="space-y-1">
-                  <p className="text-13 text-placeholder">{t(card.i18n_title)}</p>
-                  <p className="text-18 font-semibold">{card.value}</p>
-                </div>
-              </Card>
+            <Link
+              key={card.i18n_title}
+              href={`/${workspaceSlug}/profile/${userId}/${card.route}`}
+              className="flex items-center gap-3 bg-surface-1 p-4 transition-colors hover:bg-surface-2"
+            >
+              <div className="grid size-9 shrink-0 place-items-center rounded-md bg-surface-2">
+                <card.icon className="size-4" />
+              </div>
+              <div className="min-w-0">
+                <p className="truncate text-12 text-placeholder">{t(card.i18n_title)}</p>
+                <p className="text-18 font-semibold text-primary">{card.value}</p>
+              </div>
             </Link>
           ))}
         </div>
       ) : (
-        <Loader className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <Loader.Item height="80px" />
-          <Loader.Item height="80px" />
-          <Loader.Item height="80px" />
-          <Loader.Item height="80px" />
+        <Loader className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+          <Loader.Item height="72px" />
+          <Loader.Item height="72px" />
+          <Loader.Item height="72px" />
+          <Loader.Item height="72px" />
         </Loader>
       )}
-    </div>
+    </section>
   );
 }

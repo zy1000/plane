@@ -123,8 +123,7 @@ export const ReportSummaryEditor = ({
   return (
     <>
       <Card className="flex h-[min(48vh,30rem)] min-h-[16rem] flex-col p-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-medium text-primary">报告总结</h3>
+        <div className="flex items-center justify-end">
           <Button variant="link-neutral" className="text-xs" onClick={handleOpen}>
             编辑
           </Button>

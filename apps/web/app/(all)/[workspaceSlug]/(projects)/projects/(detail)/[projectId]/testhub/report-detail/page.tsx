@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
-import { ArrowLeft, Share2, FileDown } from "lucide-react";
+import { ArrowLeft, FileDown } from "lucide-react";
 import { Button } from "@plane/propel/button";
 import { message, Tag } from "antd";
 import { useWorkspace } from "@/hooks/store/use-workspace";
@@ -124,10 +124,6 @@ export default function ReportDetailPage() {
           )}
         </div>
         <div className="flex flex-shrink-0 items-center gap-2">
-          <Button variant="secondary" size="sm" className="!gap-1.5">
-            <Share2 className="size-3.5" />
-            分享
-          </Button>
           <Button
             variant="secondary"
             size="sm"
@@ -149,7 +145,7 @@ export default function ReportDetailPage() {
         ) : error && !detail ? (
           <div className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-800">{error}</div>
         ) : (
-          <div className="mx-auto flex max-w-[1400px] flex-col gap-4">
+          <div className="flex w-full flex-col gap-4">
             {/* 报告分析 */}
             <section>
               <SectionTitle title="报告分析" />

@@ -156,12 +156,18 @@ export type TOnboardingSteps = {
 export interface IUserProfileData {
   assigned_issues: number;
   completed_issues: number;
+  completed_this_week_issues: number;
+  completed_today_issues: number;
   created_issues: number;
+  high_priority_pending_issues: number;
   overdue_issues: number;
   pending_issues: number;
   priority_distribution: IUserPriorityDistribution[];
   state_distribution: IUserStateDistribution[];
   subscribed_issues: number;
+  today_pending_issues: number;
+  unscheduled_pending_issues: number;
+  week_pending_issues: number;
 }
 
 export interface IUserProfileProjectSegregation {
