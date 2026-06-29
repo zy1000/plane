@@ -92,7 +92,6 @@ export const ProfileProjectContribution = observer(function ProfileProjectContri
             </div>
 
             <div className="min-w-0 space-y-4">
-              <p className="text-13 leading-5 text-secondary">{t("profile.stats.contribution.subtitle")}</p>
               <div className="max-h-[248px] space-y-3 overflow-y-auto pr-1">
                 {projects.map((project) => {
                   const percentage = Math.round((project.value / totalCompletedIssues) * 100);

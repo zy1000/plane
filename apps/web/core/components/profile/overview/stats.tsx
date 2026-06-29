@@ -179,7 +179,6 @@ export function ProfileStats({ userProfile }: Props) {
 
   const responsibilityMetrics: TOverviewMetric[] = [
     {
-      description: t("profile.stats.responsible_cycles_description"),
       icon: CycleIcon,
       key: "responsible_cycles",
       title: t("profile.stats.responsible_cycles"),
@@ -187,7 +186,6 @@ export function ProfileStats({ userProfile }: Props) {
       value: userProfile.responsible_cycles,
     },
     {
-      description: t("profile.stats.responsible_releases_description"),
       icon: Rocket,
       key: "responsible_releases",
       title: t("profile.stats.responsible_releases"),
@@ -234,9 +232,6 @@ export function ProfileStats({ userProfile }: Props) {
               <h4 className="text-14 font-medium text-primary">
                 {t("profile.stats.overview_sections.deadlines.title")}
               </h4>
-              <p className="mt-1 text-11 leading-4 text-secondary">
-                {t("profile.stats.overview_sections.deadlines.description")}
-              </p>
             </div>
             <div className="mt-5 grid grid-cols-1 divide-y divide-subtle sm:grid-cols-3 sm:divide-x sm:divide-y-0">
               {deadlineMetrics.map((metric) => (
@@ -267,9 +262,6 @@ export function ProfileStats({ userProfile }: Props) {
           <section className="border-t border-strong p-5 xl:col-span-5 xl:border-t-0">
             <div>
               <h4 className="text-14 font-medium text-primary">{t("profile.stats.overview_sections.queue.title")}</h4>
-              <p className="mt-1 text-11 leading-4 text-secondary">
-                {t("profile.stats.overview_sections.queue.description")}
-              </p>
             </div>
             <div className="mt-4 divide-y divide-subtle">
               {queueMetrics.map((metric) => (
@@ -323,7 +315,6 @@ export function ProfileStats({ userProfile }: Props) {
                     </span>
                   </div>
                   <p className="mt-3 text-12 font-medium text-primary">{metric.title}</p>
-                  <p className="mt-1 line-clamp-2 text-11 leading-4 text-secondary">{metric.description}</p>
                 </MetricContainer>
               ))}
             </div>

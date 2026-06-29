@@ -80,7 +80,6 @@ export function ProfileSummaryProgress({ userProfile }: Props) {
       <Card variant={ECardVariant.WITHOUT_SHADOW} className="flex min-h-[348px] flex-1 justify-between gap-6">
         <div className="space-y-5">
           <div className="space-y-1">
-            <p className="text-13 text-secondary">{t("profile.stats.progress.subtitle")}</p>
             <div className="flex items-end gap-2">
               <span className="text-32 font-semibold tracking-tight text-primary">
                 {completionPercentage === null ? "--" : `${completionPercentage}%`}
