@@ -75,6 +75,8 @@ from .workspace.user import (
     WorkspaceUserProfileEndpoint,
     WorkspaceUserActivityEndpoint,
     WorkspaceUserProfileStatsEndpoint,
+    WorkspaceUserProfileMetricTreeEndpoint,
+    WorkspaceUserProfileMetricItemsEndpoint,
     UserActivityGraphEndpoint,
     UserIssueCompletedGraphEndpoint,
 )

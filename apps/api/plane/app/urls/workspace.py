@@ -18,6 +18,8 @@ from plane.app.views import (
     UserLastProjectWithWorkspaceEndpoint,
     WorkspaceThemeViewSet,
     WorkspaceUserProfileStatsEndpoint,
+    WorkspaceUserProfileMetricTreeEndpoint,
+    WorkspaceUserProfileMetricItemsEndpoint,
     WorkspaceUserActivityEndpoint,
     WorkspaceUserProfileEndpoint,
     WorkspaceUserProfileIssuesEndpoint,
@@ -194,6 +196,16 @@ urlpatterns = [
         "workspaces/<str:slug>/user-stats/<uuid:user_id>/",
         WorkspaceUserProfileStatsEndpoint.as_view(),
         name="workspace-user-stats",
+    ),
+    path(
+        "workspaces/<str:slug>/user-stats/<uuid:user_id>/metrics/<str:metric>/tree/",
+        WorkspaceUserProfileMetricTreeEndpoint.as_view(),
+        name="workspace-user-metric-tree",
+    ),
+    path(
+        "workspaces/<str:slug>/user-stats/<uuid:user_id>/metrics/<str:metric>/items/",
+        WorkspaceUserProfileMetricItemsEndpoint.as_view(),
+        name="workspace-user-metric-items",
     ),
     path(
         "workspaces/<str:slug>/user-activity/<uuid:user_id>/",

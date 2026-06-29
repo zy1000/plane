@@ -13,11 +13,14 @@ import type {
   IInstanceAdminStatus,
   IUserProfileData,
   IUserProfileProjectSegregation,
+  IProfileMetricItemsResponse,
+  IProfileMetricTreeResponse,
   IUserSettings,
   IUserEmailNotificationSettings,
   TIssuesResponse,
   TUserProfile,
   IEmailCheckResponse,
+  TProfileMetricKey,
 } from "@plane/types";
 import { APIService } from "@/services/api.service";
 // types
@@ -167,6 +170,37 @@ export class UserService extends APIService {
 
   async getUserProfileData(workspaceSlug: string, userId: string): Promise<IUserProfileData> {
     return this.get(`/api/workspaces/${workspaceSlug}/user-stats/${userId}/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async getUserProfileMetricTree(
+    workspaceSlug: string,
+    userId: string,
+    metric: TProfileMetricKey
+  ): Promise<IProfileMetricTreeResponse> {
+    return this.get(`/api/workspaces/${workspaceSlug}/user-stats/${userId}/metrics/${metric}/tree/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async getUserProfileMetricItems(
+    workspaceSlug: string,
+    userId: string,
+    metric: TProfileMetricKey,
+    params: {
+      page: number;
+      page_size: number;
+      plan_id?: string;
+      project_id?: string;
+      review_id?: string;
+    }
+  ): Promise<IProfileMetricItemsResponse> {
+    return this.get(`/api/workspaces/${workspaceSlug}/user-stats/${userId}/metrics/${metric}/items/`, { params })
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;

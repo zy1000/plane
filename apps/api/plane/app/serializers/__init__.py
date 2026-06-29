@@ -167,3 +167,4 @@ from .qa import (
     TestCaseActivitySerializer,
 )
 from .changelog import ChangeLogSerializer, ChangeLogReadRequestSerializer
+from .profile_metric import WorkspaceUserMetricItemSerializer, WorkspaceUserMetricQuerySerializer

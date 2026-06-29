@@ -162,7 +162,12 @@ export interface IUserProfileData {
   high_priority_pending_issues: number;
   overdue_issues: number;
   pending_issues: number;
+  pending_approval_issues: number;
+  pending_execution_cases: number;
+  pending_review_cases: number;
   priority_distribution: IUserPriorityDistribution[];
+  responsible_cycles: number;
+  responsible_releases: number;
   state_distribution: IUserStateDistribution[];
   subscribed_issues: number;
   today_pending_issues: number;
@@ -170,7 +175,124 @@ export interface IUserProfileData {
   week_pending_issues: number;
 }
 
+export type TProfileMetricKey =
+  | "today_pending_issues"
+  | "week_pending_issues"
+  | "overdue_issues"
+  | "unscheduled_pending_issues"
+  | "pending_approval_issues"
+  | "pending_execution_cases"
+  | "pending_review_cases"
+  | "responsible_cycles"
+  | "responsible_releases"
+  | "assigned_issues"
+  | "created_issues"
+  | "subscribed_issues";
+
+export type TProfileMetricTreeNodeType = "project" | "plan" | "review";
+
+export interface IProfileMetricTreeNode {
+  children?: IProfileMetricTreeNode[];
+  count: number;
+  id: string;
+  name: string;
+  project_id: string;
+  type: TProfileMetricTreeNodeType;
+}
+
+export interface IProfileMetricTreeResponse {
+  count: number;
+  nodes: IProfileMetricTreeNode[];
+}
+
+export interface IProfileMetricProject {
+  id: string;
+  identifier: string;
+  name: string;
+}
+
+export interface IProfileMetricUser {
+  avatar_url: string;
+  display_name: string;
+  id: string;
+}
+
+export interface IProfileMetricWorkItem {
+  approval_to_state: {
+    color: string;
+    id: string;
+    name: string;
+  } | null;
+  entity_type: "work_item";
+  id: string;
+  priority: TIssuePriorities;
+  project: IProfileMetricProject;
+  sequence_id: number;
+  state: {
+    color: string;
+    group: TStateGroups;
+    id: string;
+    name: string;
+  } | null;
+  target_date: string | null;
+  title: string;
+}
+
+export interface IProfileMetricCycle {
+  end_date: string | null;
+  entity_type: "cycle";
+  id: string;
+  owner: IProfileMetricUser | null;
+  project: IProfileMetricProject;
+  start_date: string | null;
+  status: string | null;
+  title: string;
+}
+
+export interface IProfileMetricRelease extends Omit<IProfileMetricCycle, "entity_type"> {
+  entity_type: "release";
+}
+
+export interface IProfileMetricExecutionCase {
+  assignee: IProfileMetricUser | null;
+  case_id: string;
+  code: string;
+  entity_type: "execution_case";
+  id: string;
+  plan: { id: string; name: string };
+  priority: string;
+  project: IProfileMetricProject;
+  result: string;
+  title: string;
+}
+
+export interface IProfileMetricReviewCase {
+  case_id: string;
+  code: string;
+  entity_type: "review_case";
+  id: string;
+  is_re_review: boolean;
+  personal_review_status: string;
+  priority: string;
+  project: IProfileMetricProject;
+  review: { id: string; name: string };
+  title: string;
+}
+
+export type TProfileMetricItem =
+  | IProfileMetricWorkItem
+  | IProfileMetricCycle
+  | IProfileMetricRelease
+  | IProfileMetricExecutionCase
+  | IProfileMetricReviewCase;
+
+export interface IProfileMetricItemsResponse {
+  count: number;
+  data: TProfileMetricItem[];
+}
+
 export interface IUserProfileProjectSegregation {
+  can_view_project_contributions: boolean;
   project_data: {
     assigned_issues: number;
     completed_issues: number;
