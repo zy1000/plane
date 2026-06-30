@@ -14,8 +14,13 @@ import {
   ENABLE_PROJECT_STATISTICS_NAV,
   PROJECT_ANALYTICS_VIEW_PERMISSION_KEY,
   PROJECT_ASSET_VIEW_PERMISSION_KEY,
+  PROJECT_MILESTONE_VIEW_PERMISSION_KEY,
   PROJECT_MODULES_VIEW_PERMISSION_KEY,
+  PROJECT_PAGES_VIEW_PERMISSION_KEY,
+  PROJECT_QA_VIEW_PERMISSION_KEYS,
   PROJECT_RELEASES_VIEW_PERMISSION_KEY,
+  PROJECT_SPRINTS_VIEW_PERMISSION_KEY,
+  PROJECT_VIEWS_VIEW_PERMISSION_KEY,
 } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 
@@ -158,6 +163,7 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
         href: `/${workspaceSlug}/projects/${projectId}/cycles`,
         icon: CycleIcon,
         access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
+        permissionKeys: [PROJECT_SPRINTS_VIEW_PERMISSION_KEY],
         shouldRender: project?.cycle_view ?? false,
         sortOrder: 3,
       },
@@ -190,6 +196,7 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
         href: `/${workspaceSlug}/projects/${projectId}/testhub`,
         icon: TestManagementIcon,
         access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
+        permissionKeys: [...PROJECT_QA_VIEW_PERMISSION_KEYS],
         shouldRender: true,
         sortOrder: 4,
       },
@@ -200,7 +207,7 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
         href: `/${workspaceSlug}/projects/${projectId}/views`,
         icon: ViewsIcon,
         access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
-        // 保留入口；无 view.view 时由页面展示 NotAuthorizedView（与迭代页类似）
+        permissionKeys: [PROJECT_VIEWS_VIEW_PERMISSION_KEY],
         shouldRender: true,
         sortOrder: 5,
       },
@@ -211,6 +218,7 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
         href: `/${workspaceSlug}/projects/${projectId}/pages`,
         icon: PageIcon,
         access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
+        permissionKeys: [PROJECT_PAGES_VIEW_PERMISSION_KEY],
         shouldRender: project?.page_view ?? false,
         sortOrder: 6,
       },
@@ -231,6 +239,7 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
         href: `/${workspaceSlug}/projects/${projectId}/milestones`,
         icon: Milestone,
         access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
+        permissionKeys: [PROJECT_MILESTONE_VIEW_PERMISSION_KEY],
         shouldRender: true,
         sortOrder: 8,
       },
@@ -245,7 +254,6 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
         shouldRender: true,
         sortOrder: 9,
       },
-   
     ],
     [project]
   );

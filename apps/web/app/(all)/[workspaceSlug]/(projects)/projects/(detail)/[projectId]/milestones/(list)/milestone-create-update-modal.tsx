@@ -2,10 +2,12 @@
 
 import dayjs from "dayjs";
 import { useEffect, useMemo, useState } from "react";
-import { DatePicker, Form, Input, Modal, Select, Tag, message } from "antd";
+import { DatePicker, Form, Input, Modal, Select, Tag } from "antd";
 import { useParams } from "next/navigation";
+import { useTranslation } from "@plane/i18n";
 
 import { MilestoneService, type IMilestone } from "@/services/milestone.service";
+import { projectSetToastError, projectSetToastSuccess } from "@/utils/project-error-toast";
 
 type Props = {
   open: boolean;
@@ -36,6 +38,7 @@ const STATE_OPTIONS = [
 export function MilestoneCreateUpdateModal(props: Props) {
   const { open, mode, initialValues, onCancel, onSuccess } = props;
   const { workspaceSlug, projectId } = useParams();
+  const { t } = useTranslation();
   const [form] = Form.useForm<FormValues>();
   const [submitting, setSubmitting] = useState(false);
 
@@ -82,12 +85,11 @@ export function MilestoneCreateUpdateModal(props: Props) {
           ? await milestoneService.updateMilestone(ws, pid, String(initialValues.id), payload)
           : await milestoneService.createMilestone(ws, pid, payload);
 
-      message.success(mode === "edit" ? "已保存" : "已创建");
+      projectSetToastSuccess(mode === "edit" ? "已保存" : "已创建");
       onSuccess(res);
       form.resetFields();
-    } catch (e: any) {
-      const msg = e?.detail || e?.error || e?.message || (mode === "edit" ? "保存失败" : "创建失败");
-      message.error(msg);
+    } catch (error) {
+      projectSetToastError(error, t, mode === "edit" ? "保存失败" : "创建失败");
     } finally {
       setSubmitting(false);
     }

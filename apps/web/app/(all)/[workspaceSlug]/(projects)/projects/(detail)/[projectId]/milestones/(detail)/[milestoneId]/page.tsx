@@ -4,15 +4,23 @@ import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Key } from "react";
-import { Modal, Pagination, message } from "antd";
+import { Modal, Pagination } from "antd";
 import type { TableProps } from "antd";
 import type { TSelectionHelper } from "@/hooks/use-multiple-select";
 import { DEFAULT_DISPLAY_PROPERTIES } from "@/store/issue/issue-details/sub_issues_filter.store";
-import { ALL_ISSUES, EUserPermissions, EUserPermissionsLevel, PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
+import {
+  ALL_ISSUES,
+  EUserPermissions,
+  EUserPermissionsLevel,
+  PROJECT_MILESTONE_ISSUE_ADD_PERMISSION_KEY,
+  PROJECT_MILESTONE_ISSUE_REMOVE_PERMISSION_KEY,
+  PROJECT_MILESTONE_ISSUE_VIEW_PERMISSION_KEY,
+} from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { EIssueServiceType } from "@plane/types";
 import { CustomMenu } from "@plane/ui";
 
+import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
 import { PageHead } from "@/components/core/page-title";
 import { IssueBlockRoot } from "@/components/issues/issue-layouts/list/block-root";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
@@ -20,6 +28,7 @@ import { useUserPermissions } from "@/hooks/store/user";
 import { IssueService } from "@/services/issue/issue.service";
 import { MilestoneService } from "@/services/milestone.service";
 import { ProjectIssueTypeService, projectIssueTypesCache } from "@/services/project";
+import { projectSetToastError, projectSetToastSuccess, projectSetToastWarning } from "@/utils/project-error-toast";
 import { MilestoneAddIssuesModal } from "./milestone-add-issues-modal";
 
 const milestoneService = new MilestoneService();
@@ -40,10 +49,28 @@ function ProjectMilestoneIssuesPage() {
   const { t } = useTranslation();
   const listContainerRef = useRef<HTMLDivElement | null>(null);
   const paginationRef = useRef<{ page: number; size: number }>({ page: 1, size: 10 });
+  const tRef = useRef(t);
   const wasPeekOpenRef = useRef(false);
-  const { allowPermissions } = useUserPermissions();
+  const { allowPermissions, allowProjectPermissionKeys } = useUserPermissions();
   const issueService = useMemo(() => new IssueService(EIssueServiceType.ISSUES), []);
   const { peekIssue } = useIssueDetail(EIssueServiceType.ISSUES);
+  const workspaceSlugString = workspaceSlug?.toString();
+  const projectIdString = projectId?.toString();
+  const canViewMilestoneIssues = allowProjectPermissionKeys(
+    [PROJECT_MILESTONE_ISSUE_VIEW_PERMISSION_KEY],
+    workspaceSlugString,
+    projectIdString
+  );
+  const canAddMilestoneIssues = allowProjectPermissionKeys(
+    [PROJECT_MILESTONE_ISSUE_ADD_PERMISSION_KEY],
+    workspaceSlugString,
+    projectIdString
+  );
+  const canRemoveMilestoneIssues = allowProjectPermissionKeys(
+    [PROJECT_MILESTONE_ISSUE_REMOVE_PERMISSION_KEY],
+    workspaceSlugString,
+    projectIdString
+  );
 
   const [loading, setLoading] = useState(false);
   const [issues, setIssues] = useState<TIssueRow[]>([]);
@@ -63,6 +90,10 @@ function ProjectMilestoneIssuesPage() {
 
   const [issueTypesMap, setIssueTypesMap] = useState<Record<string, any> | undefined>(undefined);
 
+  useEffect(() => {
+    tRef.current = t;
+  }, [t]);
+
   const getIssueLabel = useCallback((issue: TIssueRow) => {
     const identifier = issue?.project_detail?.identifier;
     const sequenceId = issue?.sequence_id;
@@ -80,7 +111,7 @@ function ProjectMilestoneIssuesPage() {
 
   const fetchIssues = useCallback(
     async (page: number, size: number) => {
-      if (!workspaceSlug || !projectId || !milestoneId) return;
+      if (!workspaceSlug || !projectId || !milestoneId || !canViewMilestoneIssues) return;
       setLoading(true);
       try {
         const res: any = await milestoneService.getMilestoneIssues(
@@ -93,17 +124,17 @@ function ProjectMilestoneIssuesPage() {
         const normalized = normalizeListResponse(res);
         setIssues(normalized.items);
         setTotal(normalized.total);
-      } catch (e: any) {
-        message.error(e?.detail || e?.error || "获取关联工作项失败");
+      } catch (error) {
+        projectSetToastError(error, tRef.current, "获取关联工作项失败");
       } finally {
         setLoading(false);
       }
     },
-    [workspaceSlug, projectId, milestoneId, normalizeListResponse]
+    [workspaceSlug, projectId, milestoneId, canViewMilestoneIssues, normalizeListResponse]
   );
 
   const fetchAvailableIssues = useCallback(async (page: number, size: number) => {
-    if (!workspaceSlug || !projectId || !milestoneId) return;
+    if (!workspaceSlug || !projectId || !milestoneId || !canViewMilestoneIssues || !canAddMilestoneIssues) return;
     setAvailableLoading(true);
     try {
       const res: any = await milestoneService.getUnselectedIssues(
@@ -120,16 +151,31 @@ function ProjectMilestoneIssuesPage() {
       const normalized = normalizeListResponse(res);
       setAvailableIssues(normalized.items);
       setAvailableTotal(normalized.total);
-    } catch (e: any) {
-      message.error(e?.detail || e?.error || "获取可关联工作项失败");
+    } catch (error) {
+      projectSetToastError(error, tRef.current, "获取可关联工作项失败");
     } finally {
       setAvailableLoading(false);
     }
-  }, [workspaceSlug, projectId, milestoneId, normalizeListResponse, availableTypeId, availableNameQuery]);
+  }, [
+    workspaceSlug,
+    projectId,
+    milestoneId,
+    canAddMilestoneIssues,
+    canViewMilestoneIssues,
+    normalizeListResponse,
+    availableTypeId,
+    availableNameQuery,
+  ]);
 
   useEffect(() => {
+    if (!canViewMilestoneIssues) {
+      setIssues((prev) => (prev.length ? [] : prev));
+      setTotal((prev) => (prev ? 0 : prev));
+      setLoading((prev) => (prev ? false : prev));
+      return;
+    }
     fetchIssues(currentPage, pageSize);
-  }, [fetchIssues, currentPage, pageSize]);
+  }, [canViewMilestoneIssues, fetchIssues, currentPage, pageSize]);
 
   useEffect(() => {
     if (!addModalOpen) return;
@@ -142,15 +188,15 @@ function ProjectMilestoneIssuesPage() {
 
   useEffect(() => {
     const isPeekOpen = Boolean(peekIssue?.issueId);
-    if (wasPeekOpenRef.current && !isPeekOpen) {
+    if (canViewMilestoneIssues && wasPeekOpenRef.current && !isPeekOpen) {
       fetchIssues(paginationRef.current.page, paginationRef.current.size);
     }
     wasPeekOpenRef.current = isPeekOpen;
-  }, [fetchIssues, peekIssue?.issueId]);
+  }, [canViewMilestoneIssues, fetchIssues, peekIssue?.issueId]);
 
   useEffect(() => {
     const fetchIssueTypes = async () => {
-      if (!workspaceSlug || !projectId) return;
+      if (!workspaceSlug || !projectId || !canViewMilestoneIssues || !canAddMilestoneIssues) return;
       const cachedTypes = projectIssueTypesCache.get(projectId.toString());
       if (cachedTypes) {
         setIssueTypesMap(cachedTypes);
@@ -174,7 +220,7 @@ function ProjectMilestoneIssuesPage() {
     };
 
     fetchIssueTypes();
-  }, [workspaceSlug, projectId]);
+  }, [workspaceSlug, projectId, canViewMilestoneIssues, canAddMilestoneIssues]);
 
   const handlePageChange = (page: number, size?: number) => {
     const nextSize = size ?? pageSize;
@@ -200,13 +246,17 @@ function ProjectMilestoneIssuesPage() {
   };
 
   const openAddModal = useCallback(() => {
+    if (!canViewMilestoneIssues || !canAddMilestoneIssues) {
+      projectSetToastError({ error: "您没有所需的项目权限。" }, tRef.current, "您没有所需的项目权限。");
+      return;
+    }
     setAddModalOpen(true);
     setSelectedIssueIds([]);
     setAvailableCurrentPage(1);
     setAvailablePageSize(10);
     setAvailableTypeId(undefined);
     setAvailableNameQuery("");
-  }, []);
+  }, [canViewMilestoneIssues, canAddMilestoneIssues]);
 
   useEffect(() => {
     const handleOpen = () => openAddModal();
@@ -214,11 +264,15 @@ function ProjectMilestoneIssuesPage() {
     return () => window.removeEventListener(OPEN_ADD_ISSUES_MODAL_EVENT, handleOpen);
   }, [openAddModal]);
 
-  const handleAddSelected = async () => {
+  const handleAddSelected = useCallback(async () => {
     if (!workspaceSlug || !projectId || !milestoneId) return;
+    if (!canViewMilestoneIssues || !canAddMilestoneIssues) {
+      projectSetToastError({ error: "您没有所需的项目权限。" }, t, "您没有所需的项目权限。");
+      return;
+    }
     const ids = selectedIssueIds.map(String).filter(Boolean);
     if (ids.length === 0) {
-      message.warning("请选择要关联的工作项");
+      projectSetToastWarning("请选择要关联的工作项");
       return;
     }
     setAvailableLoading(true);
@@ -230,19 +284,11 @@ function ProjectMilestoneIssuesPage() {
       );
       const successCount = results.filter((r) => r.status === "fulfilled").length;
       const failCount = results.length - successCount;
-      if (successCount > 0) message.success(`已关联 ${successCount} 条`);
+      if (successCount > 0) projectSetToastSuccess(`已关联 ${successCount} 条`);
       if (failCount > 0) {
         const firstRejected = results.find((r) => r.status === "rejected");
         const error = firstRejected?.status === "rejected" ? firstRejected.reason : undefined;
-        if (isProjectPermissionError(error)) {
-          message.error(
-            PROJECT_ERROR_MESSAGES.permissionError.i18n_message
-              ? t(PROJECT_ERROR_MESSAGES.permissionError.i18n_message)
-              : t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title)
-          );
-        } else {
-          message.error(`关联失败 ${failCount} 条`);
-        }
+        projectSetToastError(error, t, `关联失败 ${failCount} 条`);
       }
       setAddModalOpen(false);
       setSelectedIssueIds([]);
@@ -250,39 +296,49 @@ function ProjectMilestoneIssuesPage() {
     } finally {
       setAvailableLoading(false);
     }
-  };
+  }, [
+    workspaceSlug,
+    projectId,
+    milestoneId,
+    canViewMilestoneIssues,
+    canAddMilestoneIssues,
+    selectedIssueIds,
+    t,
+    fetchIssues,
+    currentPage,
+    pageSize,
+  ]);
 
-  const handleRemove = async (issueId: string) => {
-    if (!workspaceSlug || !projectId || !milestoneId) return;
-    Modal.confirm({
-      title: "确认移除关联？",
-      okText: "移除",
-      cancelText: "取消",
-      okButtonProps: { danger: true },
-      onOk: async () => {
-        try {
-          await milestoneService.removeMilestoneIssue(
-            String(workspaceSlug),
-            String(projectId),
-            String(milestoneId),
-            String(issueId)
-          );
-          message.success("已移除");
-          fetchIssues(currentPage, pageSize);
-        } catch (e: any) {
-          if (isProjectPermissionError(e)) {
-            message.error(
-              PROJECT_ERROR_MESSAGES.permissionError.i18n_message
-                ? t(PROJECT_ERROR_MESSAGES.permissionError.i18n_message)
-                : t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title)
+  const handleRemove = useCallback(
+    async (issueId: string) => {
+      if (!workspaceSlug || !projectId || !milestoneId) return;
+      if (!canRemoveMilestoneIssues) {
+        projectSetToastError({ error: "您没有所需的项目权限。" }, t, "您没有所需的项目权限。");
+        return;
+      }
+      Modal.confirm({
+        title: "确认移除关联？",
+        okText: "移除",
+        cancelText: "取消",
+        okButtonProps: { danger: true },
+        onOk: async () => {
+          try {
+            await milestoneService.removeMilestoneIssue(
+              String(workspaceSlug),
+              String(projectId),
+              String(milestoneId),
+              String(issueId)
             );
-          } else {
-            message.error(e?.detail || e?.error || "移除失败");
+            projectSetToastSuccess("已移除");
+            fetchIssues(currentPage, pageSize);
+          } catch (error) {
+            projectSetToastError(error, t, "移除失败");
           }
-        }
-      },
-    });
-  };
+        },
+      });
+    },
+    [workspaceSlug, projectId, milestoneId, canRemoveMilestoneIssues, t, fetchIssues, currentPage, pageSize]
+  );
 
   const issuesMap = useMemo(() => {
     const map: Record<string, any> = {};
@@ -313,11 +369,11 @@ function ProjectMilestoneIssuesPage() {
       return allowPermissions(
         [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
         EUserPermissionsLevel.PROJECT,
-        workspaceSlug.toString(),
-        projectId.toString()
+        workspaceSlugString,
+        projectIdString
       );
     },
-    [allowPermissions, workspaceSlug, projectId]
+    [allowPermissions, workspaceSlug, projectId, workspaceSlugString, projectIdString]
   );
 
   const updateIssue = useCallback(
@@ -330,7 +386,7 @@ function ProjectMilestoneIssuesPage() {
         );
         await fetchIssues(paginationRef.current.page, paginationRef.current.size);
       } catch (e: any) {
-        message.error(e?.detail || e?.error || "更新失败");
+        projectSetToastError(e, tRef.current, "更新失败");
         throw e;
       }
     },
@@ -359,6 +415,15 @@ function ProjectMilestoneIssuesPage() {
       .filter((t: any) => Boolean(t?.id))
       .map((t: any) => ({ value: String(t.id), label: String(t.name ?? t.id) }));
   }, [issueTypesMap]);
+
+  if (!canViewMilestoneIssues) {
+    return (
+      <>
+        <PageHead title="Milestone - Work Items" />
+        <NotAuthorizedView section="general" isProjectView className="h-auto" />
+      </>
+    );
+  }
 
   return (
     <div className="flex h-full w-full flex-col gap-3">

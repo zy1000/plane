@@ -7,13 +7,11 @@ import { useEffect, useMemo, useState } from "react";
 // ui
 import { Header, Breadcrumbs } from "@plane/ui";
 import { Button } from "@plane/propel/button";
-import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 // components
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 // hooks
 import { useProject } from "@/hooks/store/use-project";
 import { useAppRouter } from "@/hooks/use-app-router";
-import { useUserPermissions } from "@/hooks/store/user";
 // plane web imports
 import { CommonProjectBreadcrumbs } from "@/plane-web/components/breadcrumbs/common";
 
@@ -27,7 +25,6 @@ export const MilestoneIssuesHeader = observer(function MilestoneIssuesHeader() {
   const { workspaceSlug, projectId, milestoneId } = useParams();
   const [milestoneName, setMilestoneName] = useState<string | null>(null);
   const { currentProjectDetails, loader } = useProject();
-  const { allowPermissions } = useUserPermissions();
 
   const milestoneNameKey = useMemo(() => {
     const ws = String(workspaceSlug ?? "");
@@ -36,16 +33,6 @@ export const MilestoneIssuesHeader = observer(function MilestoneIssuesHeader() {
     if (!ws || !pid || !mid) return null;
     return getMilestoneNameCacheKey(ws, pid, mid);
   }, [workspaceSlug, projectId, milestoneId]);
-
-  const canAddIssues = useMemo(() => {
-    if (!workspaceSlug || !projectId) return false;
-    return allowPermissions(
-      [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-      EUserPermissionsLevel.PROJECT,
-      workspaceSlug.toString(),
-      projectId.toString()
-    );
-  }, [allowPermissions, workspaceSlug, projectId]);
 
   useEffect(() => {
     if (!milestoneNameKey) return;
@@ -75,14 +62,9 @@ export const MilestoneIssuesHeader = observer(function MilestoneIssuesHeader() {
         </Breadcrumbs>
       </Header.LeftItem>
       <Header.RightItem>
-        {canAddIssues ? (
-          <Button
-            variant="primary"
-            onClick={() => window.dispatchEvent(new CustomEvent(OPEN_ADD_ISSUES_MODAL_EVENT))}
-          >
-            关联工作项
-          </Button>
-        ) : null}
+        <Button variant="primary" onClick={() => window.dispatchEvent(new CustomEvent(OPEN_ADD_ISSUES_MODAL_EVENT))}>
+          关联工作项
+        </Button>
       </Header.RightItem>
     </Header>
   );

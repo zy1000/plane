@@ -4,13 +4,15 @@ import { Milestone } from "lucide-react";
 // ui
 import { Header, Breadcrumbs } from "@plane/ui";
 import { Button } from "@plane/propel/button";
-import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import { PROJECT_MILESTONE_CREATE_PERMISSION_KEY } from "@plane/constants";
+import { useTranslation } from "@plane/i18n";
 // components
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 // hooks
 import { useProject } from "@/hooks/store/use-project";
 import { useUserPermissions } from "@/hooks/store/user";
 import { useAppRouter } from "@/hooks/use-app-router";
+import { projectSetToastError } from "@/utils/project-error-toast";
 // plane web imports
 import { CommonProjectBreadcrumbs } from "@/plane-web/components/breadcrumbs/common";
 
@@ -20,12 +22,17 @@ export const MilestonesListHeader = observer(function MilestonesListHeader() {
   // router
   const router = useAppRouter();
   const { workspaceSlug, projectId } = useParams();
+  const { t } = useTranslation();
 
   // store hooks
   const { currentProjectDetails, loader } = useProject();
-  const { allowPermissions } = useUserPermissions();
+  const { allowProjectPermissionKeys } = useUserPermissions();
 
-  const canCreateMilestone = allowPermissions([EUserPermissions.ADMIN, EUserPermissions.MEMBER], EUserPermissionsLevel.PROJECT);
+  const canCreateMilestone = allowProjectPermissionKeys(
+    [PROJECT_MILESTONE_CREATE_PERMISSION_KEY],
+    workspaceSlug?.toString(),
+    projectId?.toString()
+  );
 
   return (
     <Header>
@@ -45,20 +52,20 @@ export const MilestonesListHeader = observer(function MilestonesListHeader() {
           />
         </Breadcrumbs>
       </Header.LeftItem>
-      {canCreateMilestone ? (
-        <Header.RightItem>
-          <Button
-            variant="primary"
-            onClick={() => {
-              window.dispatchEvent(new CustomEvent(OPEN_MILESTONE_MODAL_EVENT, { detail: { mode: "create" } }));
-            }}
-          >
-            添加里程碑
-          </Button>
-        </Header.RightItem>
-      ) : (
-        <></>
-      )}
+      <Header.RightItem>
+        <Button
+          variant="primary"
+          onClick={() => {
+            if (!canCreateMilestone) {
+              projectSetToastError({ error: "您没有所需的项目权限。" }, t, "您没有所需的项目权限。");
+              return;
+            }
+            window.dispatchEvent(new CustomEvent(OPEN_MILESTONE_MODAL_EVENT, { detail: { mode: "create" } }));
+          }}
+        >
+          添加里程碑
+        </Button>
+      </Header.RightItem>
     </Header>
   );
 });

@@ -228,6 +228,9 @@ export const PROJECT_SPRINTS_FILE_DOWNLOAD_PERMISSION_KEY = "sprints.file.downlo
 /** 项目视图列表/详情页权限，与后端 PermissionKey.VIEW_VIEW 一致 */
 export const PROJECT_VIEWS_VIEW_PERMISSION_KEY = "view.view" as const;
 
+/** 项目笔记页权限常量，与后端 PermissionKey.PAGE_VIEW 一致 */
+export const PROJECT_PAGES_VIEW_PERMISSION_KEY = "page.view" as const;
+
 /** 项目模块页权限常量，与后端 PermissionKey.MODULES_VIEW 一致 */
 export const PROJECT_MODULES_VIEW_PERMISSION_KEY = "modules.view" as const;
 /** 与后端 PermissionKey.MODULES_ARCHIVE 一致 */
@@ -243,6 +246,32 @@ export const PROJECT_RELEASES_CREATE_PERMISSION_KEY = "releases.create" as const
 export const PROJECT_RELEASES_ARCHIVE_PERMISSION_KEY = "releases.archive" as const;
 /** 与后端 PermissionKey.RELEASES_ISSUE_MANAGE 一致：发布与工作项的关联管理 */
 export const PROJECT_RELEASES_ISSUE_MANAGE_PERMISSION_KEY = "releases.issue.manage" as const;
+
+/** 项目里程碑页权限常量，与后端 PermissionKey.MILESTONE_VIEW 一致 */
+export const PROJECT_MILESTONE_VIEW_PERMISSION_KEY = "milestone.view" as const;
+export const PROJECT_MILESTONE_CREATE_PERMISSION_KEY = "milestone.create" as const;
+export const PROJECT_MILESTONE_ISSUE_VIEW_PERMISSION_KEY = "milestone.issue.view" as const;
+export const PROJECT_MILESTONE_ISSUE_ADD_PERMISSION_KEY = "milestone.issue.add" as const;
+export const PROJECT_MILESTONE_ISSUE_REMOVE_PERMISSION_KEY = "milestone.issue.remove" as const;
+
+/** 测试管理查看权限常量，与后端 PermissionKey.QA_*_VIEW 一致 */
+export const PROJECT_QA_CASE_VIEW_PERMISSION_KEY = "qa.case.view" as const;
+export const PROJECT_QA_PLAN_VIEW_PERMISSION_KEY = "qa.plan.view" as const;
+export const PROJECT_QA_REVIEW_VIEW_PERMISSION_KEY = "qa.review.view" as const;
+export const PROJECT_QA_MINDMAP_VIEW_PERMISSION_KEY = "qa.mindmap.view" as const;
+
+export const PROJECT_QA_VIEW_PERMISSION_KEYS = [
+  PROJECT_QA_CASE_VIEW_PERMISSION_KEY,
+  PROJECT_QA_PLAN_VIEW_PERMISSION_KEY,
+  PROJECT_QA_REVIEW_VIEW_PERMISSION_KEY,
+  PROJECT_QA_MINDMAP_VIEW_PERMISSION_KEY,
+] as const;
+
+export const PROJECT_ARCHIVES_VIEW_PERMISSION_KEYS = [
+  PROJECT_SPRINTS_VIEW_PERMISSION_KEY,
+  PROJECT_MODULES_VIEW_PERMISSION_KEY,
+  PROJECT_RELEASES_VIEW_PERMISSION_KEY,
+] as const;
 
 /** 兼容旧命名，避免现有调用方失效 */
 export const PROJECT_PUBLISH_VIEW_PERMISSION_KEY = PROJECT_RELEASES_VIEW_PERMISSION_KEY;

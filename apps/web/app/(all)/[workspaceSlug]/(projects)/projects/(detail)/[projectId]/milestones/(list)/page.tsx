@@ -5,15 +5,16 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Button, Input, Pagination, Popconfirm, Select, Table, Tag } from "antd";
 import type { TableProps } from "antd";
-import { PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
+import { PROJECT_MILESTONE_ISSUE_VIEW_PERMISSION_KEY } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
-import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 
 // components
 import { PageHead } from "@/components/core/page-title";
+import { useUserPermissions } from "@/hooks/store/user";
 
 // services
 import { MilestoneService, type IMilestone } from "@/services/milestone.service";
+import { projectSetToastError } from "@/utils/project-error-toast";
 import { MilestoneCreateUpdateModal } from "./milestone-create-update-modal";
 
 const milestoneService = new MilestoneService();
@@ -33,6 +34,12 @@ function ProjectMilestonesPage() {
   const { workspaceSlug, projectId } = useParams();
   const router = useRouter();
   const { t } = useTranslation();
+  const { allowProjectPermissionKeys } = useUserPermissions();
+  const canViewMilestoneIssues = allowProjectPermissionKeys(
+    [PROJECT_MILESTONE_ISSUE_VIEW_PERMISSION_KEY],
+    workspaceSlug?.toString(),
+    projectId?.toString()
+  );
 
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<IMilestone[]>([]);
@@ -77,7 +84,7 @@ function ProjectMilestonesPage() {
         setTotal(res.length);
       }
     } catch (error) {
-      console.error(error);
+      projectSetToastError(error, t, "获取里程碑失败");
     } finally {
       setLoading(false);
     }
@@ -143,8 +150,8 @@ function ProjectMilestonesPage() {
         prev.map((m) => (String(m.id) === String(milestoneId) ? { ...m, state: nextState, state_color: nextColor } : m))
       );
       fetchData(currentPage, pageSize);
-    } catch (e) {
-      console.error(e);
+    } catch (error) {
+      projectSetToastError(error, t, "更新里程碑状态失败");
     } finally {
       setUpdatingStateById((prev) => ({ ...prev, [milestoneId]: false }));
     }
@@ -167,18 +174,7 @@ function ProjectMilestonesPage() {
         fetchData(currentPage, pageSize);
       }
     } catch (error) {
-      console.error(error);
-      const currentError = isProjectPermissionError(error)
-        ? PROJECT_ERROR_MESSAGES.permissionError
-        : {
-            i18n_title: "common.error.label",
-            i18n_message: undefined,
-          };
-      setToast({
-        type: TOAST_TYPE.ERROR,
-        title: t(currentError.i18n_title),
-        message: currentError.i18n_message ? t(currentError.i18n_message) : "删除里程碑失败",
-      });
+      projectSetToastError(error, t, "删除里程碑失败");
     } finally {
       setDeletingById((prev) => ({ ...prev, [milestoneId]: false }));
     }
@@ -241,6 +237,10 @@ function ProjectMilestonesPage() {
               const ws = String(workspaceSlug ?? "");
               const pid = String(projectId ?? "");
               const mid = String(record.id ?? "");
+              if (!canViewMilestoneIssues) {
+                projectSetToastError({ error: "您没有所需的项目权限。" }, t, "您没有所需的项目权限。");
+                return;
+              }
               if (ws && pid && mid) {
                 try {
                   window.sessionStorage.setItem(getMilestoneNameCacheKey(ws, pid, mid), name ?? "");

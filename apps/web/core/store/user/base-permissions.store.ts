@@ -242,11 +242,6 @@ export abstract class BaseUserPermissionStore implements IBaseUserPermissionStor
 
     if (!resolvedWorkspaceSlug || !resolvedProjectId || permissionKeys.length === 0) return false;
 
-    // admin 在后端 _get_user_project_permission_keys 中直接返回全集，
-    // 这里前置短路，避免 permission_keys 接口未返回前的空窗期导致 UI 元素缺失。
-    const projectRole = this.getProjectRoleByWorkspaceSlugAndProjectId(resolvedWorkspaceSlug, resolvedProjectId);
-    if (projectRole === EUserPermissions.ADMIN) return true;
-
     const currentPermissionKeys = this.getProjectPermissionKeysByWorkspaceSlugAndProjectId(
       resolvedWorkspaceSlug,
       resolvedProjectId
