@@ -7,22 +7,33 @@
 import { observer } from "mobx-react";
 // plane imports
 import { START_OF_THE_WEEK_OPTIONS } from "@plane/constants";
+import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import type { EStartOfTheWeek } from "@plane/types";
+import { EStartOfTheWeek } from "@plane/types";
 import { CustomSelect } from "@plane/ui";
 // components
 import { SettingsControlItem } from "@/components/settings/control-item";
 // hooks
 import { useUserProfile } from "@/hooks/store/user";
 
-const getStartOfWeekLabel = (startOfWeek: EStartOfTheWeek) =>
-  START_OF_THE_WEEK_OPTIONS.find((option) => option.value === startOfWeek)?.label;
+const START_OF_WEEK_I18N_KEYS: Record<EStartOfTheWeek, string> = {
+  [EStartOfTheWeek.SUNDAY]: "weekdays.sunday",
+  [EStartOfTheWeek.MONDAY]: "weekdays.monday",
+  [EStartOfTheWeek.TUESDAY]: "weekdays.tuesday",
+  [EStartOfTheWeek.WEDNESDAY]: "weekdays.wednesday",
+  [EStartOfTheWeek.THURSDAY]: "weekdays.thursday",
+  [EStartOfTheWeek.FRIDAY]: "weekdays.friday",
+  [EStartOfTheWeek.SATURDAY]: "weekdays.saturday",
+};
 
 export const StartOfWeekPreference = observer(function StartOfWeekPreference(props: {
   option: { title: string; description: string };
 }) {
   // hooks
   const { data: userProfile, updateUserProfile } = useUserProfile();
+  const { t } = useTranslation();
+
+  const getStartOfWeekLabel = (startOfWeek: EStartOfTheWeek) => t(START_OF_WEEK_I18N_KEYS[startOfWeek]);
 
   const handleStartOfWeekChange = async (val: number) => {
     try {
@@ -50,7 +61,7 @@ export const StartOfWeekPreference = observer(function StartOfWeekPreference(pro
           <>
             {START_OF_THE_WEEK_OPTIONS.map((day) => (
               <CustomSelect.Option key={day.value} value={day.value}>
-                {day.label}
+                {t(START_OF_WEEK_I18N_KEYS[day.value])}
               </CustomSelect.Option>
             ))}
           </>
