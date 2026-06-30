@@ -2353,6 +2353,11 @@ export default {
     archive_module: "Archive Module",
     restore_module: "Restore Module",
     delete_module: "Delete module",
+    delete_confirmation: {
+      before_name: "Are you sure you want to delete module ",
+      after_name:
+        "? All of the data related to the module will be permanently removed. This action cannot be undone.",
+    },
     empty_state: {
       general: {
         title: "Map your project milestones to Modules and track aggregated work easily.",

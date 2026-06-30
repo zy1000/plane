@@ -36,6 +36,8 @@ interface UseCycleMenuItemsProps {
 interface UseModuleMenuItemsProps {
   moduleDetails: IModule | undefined;
   isEditingAllowed: boolean;
+  canEditModule: boolean;
+  canDeleteModule: boolean;
   canArchiveModule: boolean;
   workspaceSlug: string;
   projectId: string;
@@ -164,14 +166,18 @@ export const useCycleMenuItems = (props: UseCycleMenuItemsProps): MenuResult => 
 
 export const useModuleMenuItems = (props: UseModuleMenuItemsProps): MenuResult => {
   const factory = useQuickActionsFactory();
-  const { moduleDetails, isEditingAllowed, canArchiveModule, ...handlers } = props;
+  const { moduleDetails, isEditingAllowed, canEditModule, canDeleteModule, canArchiveModule, ...handlers } = props;
 
   const isArchived = !!moduleDetails?.archived_at;
   const moduleState = moduleDetails?.status?.toLocaleLowerCase();
   const isInArchivableGroup = !!moduleState && ["completed", "cancelled"].includes(moduleState);
 
-  const archiveDisabled = !canArchiveModule || !isInArchivableGroup;
-  const archiveDescription = !canArchiveModule
+  const editDisabled = !isEditingAllowed || !canEditModule;
+  const editDescription = editDisabled ? "您没有编辑模块的权限" : undefined;
+  const deleteDisabled = !isEditingAllowed || !canDeleteModule;
+  const deleteDescription = deleteDisabled ? "您没有删除模块的权限" : undefined;
+  const archiveDisabled = !isEditingAllowed || !canArchiveModule || !isInArchivableGroup;
+  const archiveDescription = !isEditingAllowed || !canArchiveModule
     ? "您没有归档模块的权限"
     : !isInArchivableGroup
       ? "Only completed or cancelled modules can be archived"
@@ -179,16 +185,16 @@ export const useModuleMenuItems = (props: UseModuleMenuItemsProps): MenuResult =
 
   // Assemble final menu items - order defined here
   const items = [
-    factory.createEditMenuItem(handlers.handleEdit, isEditingAllowed && !isArchived),
+    factory.createEditMenuItem(handlers.handleEdit, !isArchived, editDisabled, editDescription),
     factory.createOpenInNewTabMenuItem(handlers.handleOpenInNewTab),
     factory.createCopyLinkMenuItem(handlers.handleCopyLink),
     factory.createArchiveMenuItem(handlers.handleArchive, {
-      shouldRender: isEditingAllowed && !isArchived,
+      shouldRender: !isArchived,
       disabled: archiveDisabled,
       description: archiveDescription,
     }),
     factory.createRestoreMenuItem(handlers.handleRestore, isEditingAllowed && isArchived && canArchiveModule),
-    factory.createDeleteMenuItem(handlers.handleDelete, isEditingAllowed && !isArchived),
+    factory.createDeleteMenuItem(handlers.handleDelete, !isArchived, deleteDisabled, deleteDescription),
   ].filter((item) => item.shouldRender !== false);
 
   return { items, modals: null };

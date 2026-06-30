@@ -7,7 +7,12 @@
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 // plane imports
-import { EUserPermissions, EUserPermissionsLevel, MODULE_TRACKER_ELEMENTS } from "@plane/constants";
+import {
+  EUserPermissions,
+  EUserPermissionsLevel,
+  MODULE_TRACKER_ELEMENTS,
+  PROJECT_MODULES_CREATE_PERMISSION_KEY,
+} from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 // ui
 import { Button } from "@plane/propel/button";
@@ -30,7 +35,7 @@ export const ModulesListHeader = observer(function ModulesListHeader() {
   const { workspaceSlug, projectId } = useParams();
   // store hooks
   const { toggleCreateModuleModal } = useCommandPalette();
-  const { allowPermissions } = useUserPermissions();
+  const { allowPermissions, allowProjectPermissionKeys } = useUserPermissions();
 
   const { loader } = useProject();
 
@@ -41,6 +46,12 @@ export const ModulesListHeader = observer(function ModulesListHeader() {
     [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
     EUserPermissionsLevel.PROJECT
   );
+  const canCreateModule = allowProjectPermissionKeys(
+    [PROJECT_MODULES_CREATE_PERMISSION_KEY],
+    workspaceSlug?.toString(),
+    projectId?.toString()
+  );
+  const isCreateModuleDisabled = !canUserCreateModule || !canCreateModule;
 
   return (
     <Header>
@@ -64,21 +75,18 @@ export const ModulesListHeader = observer(function ModulesListHeader() {
       </Header.LeftItem>
       <Header.RightItem>
         <ModuleViewHeader />
-        {canUserCreateModule ? (
-          <Button
-            variant="primary"
-            data-ph-element={MODULE_TRACKER_ELEMENTS.RIGHT_HEADER_ADD_BUTTON}
-            onClick={() => {
-              toggleCreateModuleModal(true);
-            }}
-            size="lg"
-          >
-            <div className="block sm:hidden">{t("add")}</div>
-            <div className="hidden sm:block">{t("project_module.add_module")}</div>
-          </Button>
-        ) : (
-          <></>
-        )}
+        <Button
+          variant="primary"
+          data-ph-element={MODULE_TRACKER_ELEMENTS.RIGHT_HEADER_ADD_BUTTON}
+          disabled={isCreateModuleDisabled}
+          onClick={() => {
+            toggleCreateModuleModal(true);
+          }}
+          size="lg"
+        >
+          <div className="block sm:hidden">{t("add")}</div>
+          <div className="hidden sm:block">{t("project_module.add_module")}</div>
+        </Button>
       </Header.RightItem>
     </Header>
   );

@@ -8,7 +8,13 @@ import { useState } from "react";
 import { observer } from "mobx-react";
 import { MoreHorizontal } from "lucide-react";
 // plane imports
-import { EUserPermissions, EUserPermissionsLevel, PROJECT_MODULES_ARCHIVE_PERMISSION_KEY } from "@plane/constants";
+import {
+  EUserPermissions,
+  EUserPermissionsLevel,
+  PROJECT_MODULES_ARCHIVE_PERMISSION_KEY,
+  PROJECT_MODULES_DELETE_PERMISSION_KEY,
+  PROJECT_MODULES_EDIT_PERMISSION_KEY,
+} from "@plane/constants";
 import { IconButton } from "@plane/propel/icon-button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TContextMenuItem } from "@plane/ui";
@@ -57,6 +63,8 @@ export const ModuleQuickActions = observer(function ModuleQuickActions(props: Pr
     workspaceSlug,
     projectId
   );
+  const canEditModule = allowProjectPermissionKeys([PROJECT_MODULES_EDIT_PERMISSION_KEY], workspaceSlug, projectId);
+  const canDeleteModule = allowProjectPermissionKeys([PROJECT_MODULES_DELETE_PERMISSION_KEY], workspaceSlug, projectId);
 
   const moduleLink = `${workspaceSlug}/projects/${projectId}/modules/${moduleId}`;
   const handleCopyText = () =>
@@ -94,6 +102,8 @@ export const ModuleQuickActions = observer(function ModuleQuickActions(props: Pr
     projectId,
     moduleId,
     isEditingAllowed,
+    canEditModule,
+    canDeleteModule,
     canArchiveModule,
     handleEdit: () => setEditModal(true),
     handleArchive: () => setArchiveModuleModal(true),

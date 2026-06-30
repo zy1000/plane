@@ -233,6 +233,12 @@ export const PROJECT_PAGES_VIEW_PERMISSION_KEY = "page.view" as const;
 
 /** 项目模块页权限常量，与后端 PermissionKey.MODULES_VIEW 一致 */
 export const PROJECT_MODULES_VIEW_PERMISSION_KEY = "modules.view" as const;
+/** 与后端 PermissionKey.MODULES_CREATE 一致 */
+export const PROJECT_MODULES_CREATE_PERMISSION_KEY = "modules.create" as const;
+/** 与后端 PermissionKey.MODULES_EDIT 一致 */
+export const PROJECT_MODULES_EDIT_PERMISSION_KEY = "modules.edit" as const;
+/** 与后端 PermissionKey.MODULES_DELETE 一致 */
+export const PROJECT_MODULES_DELETE_PERMISSION_KEY = "modules.delete" as const;
 /** 与后端 PermissionKey.MODULES_ARCHIVE 一致 */
 export const PROJECT_MODULES_ARCHIVE_PERMISSION_KEY = "modules.archive" as const;
 /** 与后端 PermissionKey.MODULES_ISSUE_MANAGE 一致：模块与工作项的关联管理 */

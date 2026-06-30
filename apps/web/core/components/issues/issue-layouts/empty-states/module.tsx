@@ -8,7 +8,12 @@ import { useState } from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 // plane imports
-import { EUserPermissionsLevel, PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
+import {
+  EUserPermissionsLevel,
+  PROJECT_ERROR_MESSAGES,
+  PROJECT_MODULES_ISSUE_MANAGE_PERMISSION_KEY,
+  isProjectPermissionError,
+} from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { EmptyStateDetailed } from "@plane/propel/empty-state";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
@@ -35,13 +40,19 @@ export const ModuleEmptyState = observer(function ModuleEmptyState() {
   // store hooks
   const { issues } = useIssues(EIssuesStoreType.MODULE);
   const { toggleCreateIssueModal } = useCommandPalette();
-  const { allowPermissions } = useUserPermissions();
+  const { allowPermissions, allowProjectPermissionKeys } = useUserPermissions();
   // derived values
   const moduleWorkItemFilter = useWorkItemFilterInstance(EIssuesStoreType.MODULE, moduleId);
   const canPerformEmptyStateActions = allowPermissions(
     [EUserProjectRoles.ADMIN, EUserProjectRoles.MEMBER],
     EUserPermissionsLevel.PROJECT
   );
+  const canManageModuleIssues = allowProjectPermissionKeys(
+    [PROJECT_MODULES_ISSUE_MANAGE_PERMISSION_KEY],
+    workspaceSlug,
+    projectId
+  );
+  const areWorkItemActionsDisabled = !canPerformEmptyStateActions || !canManageModuleIssues;
 
   const handleAddIssuesToModule = async (data: ISearchIssueResponse[]) => {
     if (!workspaceSlug || !projectId || !moduleId) return;
@@ -111,13 +122,13 @@ export const ModuleEmptyState = observer(function ModuleEmptyState() {
                 onClick: () => {
                   toggleCreateIssueModal(true, EIssuesStoreType.MODULE);
                 },
-                disabled: !canPerformEmptyStateActions,
+                disabled: areWorkItemActionsDisabled,
                 variant: "primary",
               },
               {
                 label: t("project_empty_state.module_work_items.cta_secondary"),
                 onClick: () => setModuleIssuesListModal(true),
-                disabled: !canPerformEmptyStateActions,
+                disabled: areWorkItemActionsDisabled,
                 variant: "secondary",
               },
             ]}

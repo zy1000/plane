@@ -21,10 +21,12 @@ import { CustomSelect } from "@plane/ui";
 type Props = {
   control: Control<IModule, any>;
   error?: FieldError;
+  className?: string;
+  buttonClassName?: string;
   tabIndex?: number;
 };
 
-export function ModuleStatusSelect({ control, error, tabIndex }: Props) {
+export function ModuleStatusSelect({ control, error, className, buttonClassName, tabIndex }: Props) {
   const { t } = useTranslation();
   return (
     <Controller
@@ -35,6 +37,8 @@ export function ModuleStatusSelect({ control, error, tabIndex }: Props) {
         const selectedValue = MODULE_STATUS.find((s) => s.value === value);
         return (
           <CustomSelect
+            className={className}
+            buttonClassName={buttonClassName}
             value={value}
             label={
               <div

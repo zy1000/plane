@@ -2467,6 +2467,10 @@ export default {
     archive_module: "归档模块",
     restore_module: "恢复模块",
     delete_module: "删除模块",
+    delete_confirmation: {
+      before_name: "确定要删除模块",
+      after_name: "吗？与该模块相关的所有数据将被永久删除。此操作无法撤销。",
+    },
     empty_state: {
       general: {
         title: "将项目里程碑映射到模块，轻松跟踪汇总工作。",

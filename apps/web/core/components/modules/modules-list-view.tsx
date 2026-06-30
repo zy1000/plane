@@ -7,7 +7,11 @@
 import { observer } from "mobx-react";
 import { useParams, useSearchParams } from "next/navigation";
 // components
-import { EUserPermissionsLevel, MODULE_TRACKER_ELEMENTS } from "@plane/constants";
+import {
+  EUserPermissionsLevel,
+  MODULE_TRACKER_ELEMENTS,
+  PROJECT_MODULES_CREATE_PERMISSION_KEY,
+} from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { EmptyStateDetailed } from "@plane/propel/empty-state";
 import { EUserProjectRoles } from "@plane/types";
@@ -35,13 +39,18 @@ export const ModulesListView = observer(function ModulesListView() {
   const { toggleCreateModuleModal } = useCommandPalette();
   const { getProjectModuleIds, getFilteredModuleIds, loader } = useModule();
   const { currentProjectDisplayFilters: displayFilters } = useModuleFilter();
-  const { allowPermissions } = useUserPermissions();
+  const { allowPermissions, allowProjectPermissionKeys } = useUserPermissions();
   // derived values
   const projectModuleIds = projectId ? getProjectModuleIds(projectId.toString()) : undefined;
   const filteredModuleIds = projectId ? getFilteredModuleIds(projectId.toString()) : undefined;
   const canPerformEmptyStateActions = allowPermissions(
     [EUserProjectRoles.ADMIN, EUserProjectRoles.MEMBER],
     EUserPermissionsLevel.PROJECT
+  );
+  const canCreateModule = allowProjectPermissionKeys(
+    [PROJECT_MODULES_CREATE_PERMISSION_KEY],
+    workspaceSlug?.toString(),
+    projectId?.toString()
   );
 
   if (loader || !projectModuleIds || !filteredModuleIds)
@@ -63,7 +72,7 @@ export const ModulesListView = observer(function ModulesListView() {
           {
             label: t("project_empty_state.modules.cta_primary"),
             onClick: () => toggleCreateModuleModal(true),
-            disabled: !canPerformEmptyStateActions,
+            disabled: !canPerformEmptyStateActions || !canCreateModule,
             variant: "primary",
             "data-ph-element": MODULE_TRACKER_ELEMENTS.EMPTY_STATE_ADD_BUTTON,
           },

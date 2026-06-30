@@ -15,6 +15,7 @@ import {
   EUserPermissionsLevel,
   WORK_ITEM_TRACKER_ELEMENTS,
   PROJECT_ERROR_MESSAGES,
+  PROJECT_MODULES_ISSUE_MANAGE_PERMISSION_KEY,
   isProjectPermissionError,
 } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
@@ -71,7 +72,7 @@ export const ModuleIssuesHeader = observer(function ModuleIssuesHeader() {
   const { updateFilters } = useIssuesActions(EIssuesStoreType.MODULE);
   const { projectModuleIds, getModuleById } = useModule();
   const { toggleCreateIssueModal } = useCommandPalette();
-  const { allowPermissions } = useUserPermissions();
+  const { allowPermissions, allowProjectPermissionKeys } = useUserPermissions();
   const { currentProjectDetails, loader } = useProject();
   const { setValue, storedValue } = useLocalStorage("module_sidebar_collapsed", "false");
   const isSidebarCollapsed = storedValue ? storedValue === "true" : false;
@@ -81,6 +82,12 @@ export const ModuleIssuesHeader = observer(function ModuleIssuesHeader() {
     [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
     EUserPermissionsLevel.PROJECT
   );
+  const canManageModuleIssues = allowProjectPermissionKeys(
+    [PROJECT_MODULES_ISSUE_MANAGE_PERMISSION_KEY],
+    workspaceSlug?.toString(),
+    projectId?.toString()
+  );
+  const isAddWorkItemsDisabled = !canUserCreateIssue || !canManageModuleIssues;
   const workItemsCount = getGroupIssueCount(undefined, undefined, false);
 
   const toggleSidebar = () => {
@@ -265,43 +272,44 @@ export const ModuleIssuesHeader = observer(function ModuleIssuesHeader() {
               />
             </FiltersDropdown>
 
-            {canUserCreateIssue && (
-              <>
-                <Button onClick={() => setAnalyticsModal(true)} variant="secondary" size="lg">
-                  <span className="hidden @4xl:flex">{t("common.analytics")}</span>
-                  <span className="@4xl:hidden">
-                    <ChartNoAxesColumn className="size-3.5" />
-                  </span>
-                </Button>
-                <CustomMenu
-                  placement="bottom-end"
-                  customButton={
-                    <span
-                      className={cn(getButtonStyling("primary", "lg"), "cursor-pointer")}
-                      data-ph-element={WORK_ITEM_TRACKER_ELEMENTS.HEADER_ADD_BUTTON.MODULE}
-                    >
-                      {t("issue.add.label")}
-                      <ChevronDown className="size-4 shrink-0" strokeWidth={2} />
-                    </span>
-                  }
+            <Button onClick={() => setAnalyticsModal(true)} variant="secondary" size="lg">
+              <span className="hidden @4xl:flex">{t("common.analytics")}</span>
+              <span className="@4xl:hidden">
+                <ChartNoAxesColumn className="size-3.5" />
+              </span>
+            </Button>
+            <CustomMenu
+              placement="bottom-end"
+              disabled={isAddWorkItemsDisabled}
+              customButton={
+                <span
+                  className={cn(
+                    getButtonStyling("primary", "lg"),
+                    isAddWorkItemsDisabled ? "cursor-not-allowed opacity-60" : "cursor-pointer"
+                  )}
+                  data-ph-element={WORK_ITEM_TRACKER_ELEMENTS.HEADER_ADD_BUTTON.MODULE}
+                  aria-disabled={isAddWorkItemsDisabled}
                 >
-                  <CustomMenu.MenuItem
-                    onClick={() => {
-                      toggleCreateIssueModal(true, EIssuesStoreType.MODULE);
-                    }}
-                  >
-                    <span className="flex items-center justify-start gap-2">{t("create_work_item")}</span>
-                  </CustomMenu.MenuItem>
-                  <CustomMenu.MenuItem
-                    onClick={() => {
-                      setOpenExistingIssueListModal(true);
-                    }}
-                  >
-                    <span className="flex items-center justify-start gap-2">{t("issue.add.existing")}</span>
-                  </CustomMenu.MenuItem>
-                </CustomMenu>
-              </>
-            )}
+                  {t("issue.add.label")}
+                  <ChevronDown className="size-4 shrink-0" strokeWidth={2} />
+                </span>
+              }
+            >
+              <CustomMenu.MenuItem
+                onClick={() => {
+                  toggleCreateIssueModal(true, EIssuesStoreType.MODULE);
+                }}
+              >
+                <span className="flex items-center justify-start gap-2">{t("create_work_item")}</span>
+              </CustomMenu.MenuItem>
+              <CustomMenu.MenuItem
+                onClick={() => {
+                  setOpenExistingIssueListModal(true);
+                }}
+              >
+                <span className="flex items-center justify-start gap-2">{t("issue.add.existing")}</span>
+              </CustomMenu.MenuItem>
+            </CustomMenu>
             <IconButton
               variant="tertiary"
               size="lg"
