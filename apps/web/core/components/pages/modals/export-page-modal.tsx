@@ -17,6 +17,7 @@ import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { CustomSelect, EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
 // components
 import { PDFDocument } from "@/components/editor/pdf";
+import { downloadPageBlob, getPageDownloadFileName } from "@/components/pages/helpers/download";
 // hooks
 import { useParseEditorContent } from "@/hooks/use-parse-editor-content";
 
@@ -121,27 +122,12 @@ export function ExportPageModal(props: Props) {
   const selectedPageFormat = watch("page_format");
   const selectedContentVariety = watch("content_variety");
   const isPDFSelected = selectedExportFormat === "pdf";
-  const fileName = pageTitle
-    ?.toLowerCase()
-    ?.replace(/[^a-z0-9-_]/g, "-")
-    .replace(/-+/g, "-");
   // handle modal close
   const handleClose = () => {
     onClose();
     setTimeout(() => {
       reset();
     }, 300);
-  };
-
-  const initiateDownload = (blob: Blob, filename: string) => {
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = filename;
-    link.click();
-    setTimeout(() => {
-      URL.revokeObjectURL(url);
-    }, 1000);
   };
 
   // handle export as a PDF
@@ -154,7 +140,14 @@ export function ExportPageModal(props: Props) {
       });
 
       const blob = await pdf(<PDFDocument content={parsedPageContent} pageFormat={selectedPageFormat} />).toBlob();
-      initiateDownload(blob, `${fileName}-${selectedPageFormat.toString().toLowerCase()}.pdf`);
+      downloadPageBlob(
+        blob,
+        getPageDownloadFileName({
+          extension: "pdf",
+          pageTitle,
+          suffix: selectedPageFormat.toString().toLowerCase(),
+        })
+      );
     } catch (error) {
       throw new Error(`Error in exporting as a PDF: ${error}`);
     }
@@ -169,7 +162,13 @@ export function ExportPageModal(props: Props) {
       });
 
       const blob = new Blob([parsedMarkdownContent], { type: "text/markdown" });
-      initiateDownload(blob, `${fileName}.md`);
+      downloadPageBlob(
+        blob,
+        getPageDownloadFileName({
+          extension: "md",
+          pageTitle,
+        })
+      );
     } catch (error) {
       throw new Error(`Error in exporting as markdown: ${error}`);
     }

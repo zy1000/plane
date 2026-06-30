@@ -20,6 +20,7 @@ import type { EPageStoreType } from "@/plane-web/hooks/store";
 import type { TPageInstance } from "@/store/pages/base-page";
 // local imports
 import { PageActions } from "../dropdowns";
+import { PageListDownloadControl } from "./download-control";
 
 type Props = {
   page: TPageInstance;
@@ -73,6 +74,9 @@ export const BlockItemAction = observer(function BlockItemAction(props: Props) {
           selected={is_favorite}
         />
       )}
+
+      {/* download */}
+      <PageListDownloadControl page={page} storeType={storeType} />
 
       {/* quick actions dropdown */}
       <PageActions
