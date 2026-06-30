@@ -18,9 +18,11 @@ import { SettingsContentWrapper } from "@/components/settings/content-wrapper";
 import { useProject } from "@/hooks/store/use-project";
 import { useUserPermissions } from "@/hooks/store/user";
 // local imports
+import type { Route } from "./+types/page";
 import { LabelsProjectSettingsHeader } from "./header";
 
-function LabelsSettingsPage() {
+function LabelsSettingsPage({ params }: Route.ComponentProps) {
+  const { workspaceSlug, projectId } = params;
   // store hooks
   const { currentProjectDetails } = useProject();
   const { workspaceUserInfo, allowProjectPermissionKeys } = useUserPermissions();
@@ -30,7 +32,7 @@ function LabelsSettingsPage() {
   const scrollableContainerRef = useRef<HTMLDivElement | null>(null);
 
   // derived values
-  const canView = allowProjectPermissionKeys(PROJECT_SETTINGS.labels.permissionKeys ?? []);
+  const canView = allowProjectPermissionKeys(PROJECT_SETTINGS.labels.permissionKeys ?? [], workspaceSlug, projectId);
 
   // Enable Auto Scroll for Labels list
   useEffect(() => {

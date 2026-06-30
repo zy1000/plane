@@ -37,7 +37,7 @@ export const PROJECT_SETTINGS: Record<TProjectSettingsTabs, TProjectSettingsItem
     i18n_label: "common.members",
     href: `/members`,
     access: [EUserProjectRoles.ADMIN, EUserProjectRoles.MEMBER, EUserProjectRoles.GUEST],
-    permissionKeys: ["project.member.view"],
+    permissionKeys: ["project.member.view", "project.settings.view"],
     highlight: (pathname: string, baseUrl: string) => pathname === `${baseUrl}/members/`,
   },
   roles: {
@@ -45,7 +45,7 @@ export const PROJECT_SETTINGS: Record<TProjectSettingsTabs, TProjectSettingsItem
     i18n_label: "project_settings.roles.label",
     href: `/roles`,
     access: [EUserProjectRoles.ADMIN, EUserProjectRoles.MEMBER, EUserProjectRoles.GUEST],
-    permissionKeys: ["project.role.view"],
+    permissionKeys: ["project.role.view", "project.settings.view"],
     highlight: (pathname: string, baseUrl: string) => pathname === `${baseUrl}/roles/`,
   },
   features_cycles: {
@@ -98,7 +98,7 @@ export const PROJECT_SETTINGS: Record<TProjectSettingsTabs, TProjectSettingsItem
     i18n_label: "common.states",
     href: `/states`,
     access: [EUserProjectRoles.ADMIN, EUserProjectRoles.MEMBER],
-    permissionKeys: ["state.view"],
+    permissionKeys: ["state.view", "project.settings.view"],
     highlight: (pathname: string, baseUrl: string) => pathname === `${baseUrl}/states/`,
   },
   issue_types: {
@@ -115,7 +115,7 @@ export const PROJECT_SETTINGS: Record<TProjectSettingsTabs, TProjectSettingsItem
     i18n_label: "common.labels",
     href: `/labels`,
     access: [EUserProjectRoles.ADMIN, EUserProjectRoles.MEMBER],
-    permissionKeys: ["label.view"],
+    permissionKeys: ["label.view", "project.settings.view"],
     highlight: (pathname: string, baseUrl: string) => pathname === `${baseUrl}/labels/`,
   },
   estimates: {
@@ -123,7 +123,7 @@ export const PROJECT_SETTINGS: Record<TProjectSettingsTabs, TProjectSettingsItem
     i18n_label: "common.estimates",
     href: `/estimates`,
     access: [EUserProjectRoles.ADMIN],
-    permissionKeys: ["estimate.view"],
+    permissionKeys: ["estimate.view", "project.settings.view"],
     highlight: (pathname: string, baseUrl: string) => pathname === `${baseUrl}/estimates/`,
   },
   automations: {
@@ -140,7 +140,7 @@ export const PROJECT_SETTINGS: Record<TProjectSettingsTabs, TProjectSettingsItem
     i18n_label: "project_settings.workflow.label",
     href: `/workflow`,
     access: [EUserProjectRoles.ADMIN],
-    permissionKeys: ["workflow.view"],
+    permissionKeys: ["workflow.view", "project.settings.view"],
     highlight: (pathname: string, baseUrl: string) => pathname === `${baseUrl}/workflow/`,
   },
   pms_sync: {

@@ -25,18 +25,24 @@ export const PowerKOpenProjectSettingsMenu = observer(function PowerKOpenProject
   // plane hooks
   const { t } = useTranslation();
   // store hooks
-  const { allowPermissions } = useUserPermissions();
+  const { allowPermissions, allowProjectPermissionKeys } = useUserPermissions();
   // derived values
   const settingsList = Object.values(PROJECT_SETTINGS).filter(
     (setting) =>
       context.params.workspaceSlug &&
       context.params.projectId &&
-      allowPermissions(
-        setting.access,
-        EUserPermissionsLevel.PROJECT,
-        context.params.workspaceSlug?.toString(),
-        context.params.projectId?.toString()
-      )
+      (setting.permissionKeys?.length
+        ? allowProjectPermissionKeys(
+            setting.permissionKeys,
+            context.params.workspaceSlug.toString(),
+            context.params.projectId.toString()
+          )
+        : allowPermissions(
+            setting.access,
+            EUserPermissionsLevel.PROJECT,
+            context.params.workspaceSlug.toString(),
+            context.params.projectId.toString()
+          ))
   );
   const settingsListWithIcons = settingsList.map((setting) => ({
     ...setting,

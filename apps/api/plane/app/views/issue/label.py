@@ -40,7 +40,7 @@ class LabelViewSet(BaseViewSet):
         )
 
 
-    @allow_fine_permission(PermissionKey.LABEL_VIEW)
+    @allow_fine_permission(PermissionKey.LABEL_VIEW, PermissionKey.PROJECT_SETTINGS_VIEW)
     def list(self, request, *args, **kwargs):
         return super().list(request, *args, **kwargs)
 

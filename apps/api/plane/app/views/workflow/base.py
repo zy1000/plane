@@ -60,7 +60,7 @@ class WorkflowAPIView(BaseAPIView):
     def get_project_queryset(self, project_id):
         return Workflow.objects.filter(project_id=project_id)
 
-    @allow_fine_permission(PermissionKey.WORKFLOW_VIEW)
+    @allow_fine_permission(PermissionKey.WORKFLOW_VIEW, PermissionKey.PROJECT_SETTINGS_VIEW)
     def get(self, request, slug, project_id):
         workflows = self.filter_queryset(self.get_project_queryset(project_id))
         serializer = self.serializer_class(instance=workflows, many=True)
@@ -251,7 +251,7 @@ class WorkflowTransitionAPIView(BaseAPIView):
             data = self._with_principals(data, transition, dimension, field_name)
         return self._with_required_field_ids(data, transition)
 
-    @allow_fine_permission(PermissionKey.WORKFLOW_VIEW)
+    @allow_fine_permission(PermissionKey.WORKFLOW_VIEW, PermissionKey.PROJECT_SETTINGS_VIEW)
     def get(self, request, slug, project_id, workflow_id):
         transitions = self.get_workflow_queryset(
             project_id, workflow_id

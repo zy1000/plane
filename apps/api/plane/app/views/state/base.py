@@ -42,7 +42,7 @@ class StateViewSet(BaseViewSet):
             .distinct()
         )
 
-    @allow_fine_permission(PermissionKey.STATE_VIEW)
+    @allow_fine_permission(PermissionKey.STATE_VIEW, PermissionKey.PROJECT_SETTINGS_VIEW)
     def retrieve(self, request, *args, **kwargs):
         return super().retrieve(request, *args, **kwargs)
 
@@ -78,7 +78,7 @@ class StateViewSet(BaseViewSet):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-    @allow_fine_permission(PermissionKey.STATE_VIEW)
+    @allow_fine_permission(PermissionKey.STATE_VIEW, PermissionKey.PROJECT_SETTINGS_VIEW)
     def list(self, request, slug, project_id):
         issue_type_id = request.GET.get("issue_type_id", None)
         query = self.get_queryset().filter(issue_type_id=issue_type_id)
