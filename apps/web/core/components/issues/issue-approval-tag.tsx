@@ -2,6 +2,7 @@
 import React, { useState } from "react";
 import { Dialog, Transition } from "@headlessui/react";
 import { Clock, CheckCircle2, XCircle, ArrowRight, X, Loader2 } from "lucide-react";
+import { Button } from "@plane/propel/button";
 import { Avatar } from "@plane/ui";
 import { message } from "antd";
 import { useUser } from "@/hooks/store/user";
@@ -272,9 +273,10 @@ interface IssueApprovalTagProps {
   workspaceSlug: string;
   projectId: string;
   issueId: string;
+  variant?: "tag" | "button";
 }
 
-export function IssueApprovalTag({ workspaceSlug, projectId, issueId }: IssueApprovalTagProps) {
+export function IssueApprovalTag({ workspaceSlug, projectId, issueId, variant = "tag" }: IssueApprovalTagProps) {
   const [isOpen, setIsOpen] = useState(false);
   const { data: currentUser } = useUser();
   const { records, hasPendingApproval, isLoading, invalidate } = useIssueApprovalStatus(workspaceSlug, projectId, issueId);
@@ -315,7 +317,20 @@ export function IssueApprovalTag({ workspaceSlug, projectId, issueId }: IssueApp
 
   return (
     <>
-      {hasPendingApproval && (
+      {hasPendingApproval && variant === "button" ? (
+        <Button
+          type="button"
+          variant="secondary"
+          size="lg"
+          onClick={handleOpen}
+          aria-label="查看审批"
+          prependIcon={<Clock />}
+          className="hover:opacity-80"
+          style={tagStyle(STATUS_COLOR.pending)}
+        >
+          <span className="hidden sm:block">待审批</span>
+        </Button>
+      ) : hasPendingApproval ? (
         <button
           type="button"
           onClick={handleOpen}
@@ -325,7 +340,7 @@ export function IssueApprovalTag({ workspaceSlug, projectId, issueId }: IssueApp
           <Clock className="h-2.5 w-2.5" />
           待审批
         </button>
-      )}
+      ) : null}
 
       <Transition.Root show={isOpen} as={React.Fragment}>
         <Dialog as="div" className="relative z-50" onClose={() => setIsOpen(false)}>
