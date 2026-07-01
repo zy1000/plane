@@ -17,7 +17,13 @@ import scrollIntoView from "smooth-scroll-into-view-if-needed";
 import { Settings, Share2, LogOut, MoreHorizontal } from "lucide-react";
 import { Disclosure, Transition } from "@headlessui/react";
 // plane imports
-import { EUserPermissions, EUserPermissionsLevel, MEMBER_TRACKER_ELEMENTS } from "@plane/constants";
+import {
+  EUserPermissions,
+  EUserPermissionsLevel,
+  MEMBER_TRACKER_ELEMENTS,
+  PROJECT_PUBLISH_CREATE_PERMISSION_KEY,
+  PROJECT_PUBLISH_VIEW_PERMISSION_KEY,
+} from "@plane/constants";
 import { useOutsideClickDetector } from "@plane/hooks";
 import { useTranslation } from "@plane/i18n";
 import { Logo } from "@plane/propel/emoji-icon-picker";
@@ -131,6 +137,15 @@ export const SidebarProjectsListItem = observer(function SidebarProjectsListItem
     workspaceSlug.toString(),
     project?.id
   );
+  const canPublishProject =
+    allowProjectPermissionKeys(
+      [PROJECT_PUBLISH_VIEW_PERMISSION_KEY, PROJECT_PUBLISH_CREATE_PERMISSION_KEY],
+      workspaceSlug.toString(),
+      project?.id
+    ) ||
+    (project?.permission_keys ?? []).some(
+      (key) => key === PROJECT_PUBLISH_VIEW_PERMISSION_KEY || key === PROJECT_PUBLISH_CREATE_PERMISSION_KEY
+    );
   const isAccordionMode = projectPreferences.navigationMode === "ACCORDION";
 
   const handleLeaveProject = () => {
@@ -391,7 +406,7 @@ export const SidebarProjectsListItem = observer(function SidebarProjectsListItem
                   )} */}
 
                   {/* publish project settings */}
-                  {isAdmin && (
+                  {canPublishProject && (
                     <CustomMenu.MenuItem onClick={() => setPublishModal(true)}>
                       <div className="relative flex flex-shrink-0 items-center justify-start gap-2">
                         <div className="flex h-4 w-4 cursor-pointer items-center justify-center rounded-sm text-secondary transition-all duration-300 hover:bg-layer-1">

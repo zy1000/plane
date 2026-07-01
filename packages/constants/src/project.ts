@@ -283,6 +283,6 @@ export const PROJECT_ARCHIVES_VIEW_PERMISSION_KEYS = [
   PROJECT_RELEASES_VIEW_PERMISSION_KEY,
 ] as const;
 
-/** 兼容旧命名，避免现有调用方失效 */
-export const PROJECT_PUBLISH_VIEW_PERMISSION_KEY = PROJECT_RELEASES_VIEW_PERMISSION_KEY;
-export const PROJECT_PUBLISH_CREATE_PERMISSION_KEY = PROJECT_RELEASES_CREATE_PERMISSION_KEY;
+/** 项目公开发布权限常量，与后端 PermissionKey.PROJECT_PUBLISH_* 一致 */
+export const PROJECT_PUBLISH_VIEW_PERMISSION_KEY = "project.publish.view" as const;
+export const PROJECT_PUBLISH_CREATE_PERMISSION_KEY = "project.publish.create" as const;

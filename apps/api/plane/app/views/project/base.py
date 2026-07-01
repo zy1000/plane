@@ -162,23 +162,41 @@ class ProjectViewSet(BaseViewSet):
             .distinct()
         )
 
+    def _get_project_row_value(self, project_row, field):
+        if isinstance(project_row, dict):
+            value = project_row.get(field)
+        elif field == "project_lead":
+            value = getattr(project_row, "project_lead_id", None)
+        elif field == "created_by":
+            value = getattr(project_row, "created_by_id", None)
+        else:
+            value = getattr(project_row, field, None)
+        return str(value) if value is not None else None
+
     def _get_permission_keys_by_project(self, slug, project_rows):
         if not project_rows:
             return {}
 
-        project_ids = [row["id"] for row in project_rows]
+        project_ids = [
+            self._get_project_row_value(row, "id")
+            for row in project_rows
+            if self._get_project_row_value(row, "id")
+        ]
         permission_keys_by_project = {project_id: set() for project_id in project_ids}
-        user_id = self.request.user.id
+        user_id = str(self.request.user.id)
 
         is_instance_admin = _is_instance_admin(self.request.user)
         if is_instance_admin:
             privileged_project_ids = set(project_ids)
         else:
             privileged_project_ids = {
-                row["id"]
+                self._get_project_row_value(row, "id")
                 for row in project_rows
-                if row.get("project_lead") == user_id
-                   or row.get("created_by") == user_id
+                if self._get_project_row_value(row, "id")
+                and (
+                    self._get_project_row_value(row, "project_lead") == user_id
+                    or self._get_project_row_value(row, "created_by") == user_id
+                )
             }
 
         if privileged_project_ids:
@@ -189,7 +207,7 @@ class ProjectViewSet(BaseViewSet):
 
             for project_id, issue_type_id in issue_type_rows:
                 issue_type_keys = issue_type_permission_keys.setdefault(
-                    project_id, set()
+                    str(project_id), set()
                 )
                 for action, _ in ISSUE_TYPE_PERMISSION_ACTIONS:
                     issue_type_keys.add(
@@ -223,7 +241,7 @@ class ProjectViewSet(BaseViewSet):
             return permission_keys_by_project
 
         member_project_map = {
-            member["id"]: member["project_id"] for member in project_members
+            member["id"]: str(member["project_id"]) for member in project_members
         }
 
         member_role_rows = list(
@@ -270,6 +288,24 @@ class ProjectViewSet(BaseViewSet):
 
         return permission_keys_by_project
 
+    def _serialize_projects_with_permission_keys(self, slug, projects, fields=None):
+        project_rows = list(projects)
+        permission_keys_by_project = self._get_permission_keys_by_project(
+            slug, project_rows
+        )
+        serialized_projects = [
+            dict(project)
+            for project in ProjectListSerializer(
+                project_rows, many=True, fields=fields if fields else None
+            ).data
+        ]
+        for index, row in enumerate(serialized_projects):
+            project_id = self._get_project_row_value(project_rows[index], "id")
+            row["permission_keys"] = list(
+                permission_keys_by_project.get(project_id, set())
+            )
+        return serialized_projects
+
     @allow_permission(
         allowed_roles=[ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE"
     )
@@ -306,14 +342,14 @@ class ProjectViewSet(BaseViewSet):
                 order_by=request.GET.get("order_by", "-created_at"),
                 request=request,
                 queryset=(projects),
-                on_results=lambda projects: ProjectListSerializer(
-                    projects, many=True
-                ).data,
+                on_results=lambda projects: self._serialize_projects_with_permission_keys(
+                    slug, projects
+                ),
             )
 
-        projects = ProjectListSerializer(
-            projects, many=True, fields=fields if fields else None
-        ).data
+        projects = self._serialize_projects_with_permission_keys(
+            slug, projects, fields=fields
+        )
         return Response(projects, status=status.HTTP_200_OK)
 
     @allow_permission(
@@ -518,7 +554,7 @@ class ProjectViewSet(BaseViewSet):
         )
         for row in project_rows:
             row["permission_keys"] = list(
-                permission_keys_by_project.get(row["id"], set())
+                permission_keys_by_project.get(str(row["id"]), set())
             )
         return Response(project_rows, status=status.HTTP_200_OK)
 
