@@ -7,6 +7,7 @@ import * as LucideIcons from "lucide-react";
 type Option = { value: string; label: React.ReactNode; title?: string; disabled?: boolean };
 
 type CaseMetaFormProps = {
+  disabled?: boolean;
   projectId?: string;
   code?: string;
   onCodeChange?: (v: string) => void;
@@ -38,6 +39,7 @@ type CaseMetaFormProps = {
 
 export function CaseMetaForm(props: CaseMetaFormProps) {
   const {
+    disabled = false,
     projectId,
     code,
     onCodeChange,
@@ -66,6 +68,7 @@ export function CaseMetaForm(props: CaseMetaFormProps) {
   const [labelInput, setLabelInput] = useState("");
 
   const handleCreateLabel = () => {
+    if (disabled) return;
     const name = labelInput.trim();
     if (name && onCreateLabel) {
       onCreateLabel(name);
@@ -74,6 +77,7 @@ export function CaseMetaForm(props: CaseMetaFormProps) {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (disabled) return;
     if (e.key === "Enter") {
       e.preventDefault();
       handleCreateLabel();
@@ -82,18 +86,20 @@ export function CaseMetaForm(props: CaseMetaFormProps) {
 
   return (
     <div className="mb-5">
-      <div className="grid grid-cols-5 gap-2 ml-[10px]">
+      <div className="ml-[10px] grid grid-cols-5 gap-2">
         <div>
-          <label className="mb-1 block text-sm font-medium text-secondary ml-[10px]">维护人</label>
-          <div className="w-full rounded-md border border-transparent text-sm hover:border-accent-subtle ring-1 ring-transparent focus-within:border-accent-subtle focus-within:ring-accent-subtle transition-colors">
+          <label className="mb-1 ml-[10px] block text-sm font-medium text-secondary">维护人</label>
+          <div className="w-full rounded-md border border-transparent text-sm ring-1 ring-transparent transition-colors focus-within:border-accent-subtle focus-within:ring-accent-subtle hover:border-accent-subtle">
             <MemberDropdown
               multiple={false}
               projectId={projectId ? String(projectId) : undefined}
               value={assignee ?? null}
               onChange={(val) => {
+                if (disabled) return;
                 onAssigneeChange(val);
                 setTimeout(() => onAssigneeBlur(), 0);
               }}
+              disabled={disabled}
               placeholder="请选择维护人"
               className="w-full text-sm"
               buttonContainerClassName="w-full text-left"
@@ -107,27 +113,29 @@ export function CaseMetaForm(props: CaseMetaFormProps) {
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-secondary ml-[6px]">用例编号</label>
-          <div className="w-full rounded-md border border-transparent text-sm hover:border-accent-subtle ring-1 ring-transparent focus-within:border-accent-subtle focus-within:ring-accent-subtle transition-colors">
+          <label className="mb-1 ml-[6px] block text-sm font-medium text-secondary">用例编号</label>
+          <div className="w-full rounded-md border border-transparent text-sm ring-1 ring-transparent transition-colors focus-within:border-accent-subtle focus-within:ring-accent-subtle hover:border-accent-subtle">
             <input
               value={code ?? ""}
               onChange={(e) => onCodeChange?.(e.target.value)}
               onBlur={onCodeBlur}
+              disabled={disabled}
               placeholder="例如：ABC-123"
-              className="w-full text-sm px-2 py-1 bg-transparent outline-none"
+              className="w-full bg-transparent px-2 py-1 text-sm outline-none disabled:cursor-not-allowed disabled:text-secondary"
             />
           </div>
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-secondary ml-[6px]">用例类型</label>
-          <div className="w-full rounded-md border border-transparent text-sm hover:border-accent-subtle ring-1 ring-transparent focus-within:border-accent-subtle focus-within:ring-accent-subtle transition-colors">
+          <label className="mb-1 ml-[6px] block text-sm font-medium text-secondary">用例类型</label>
+          <div className="w-full rounded-md border border-transparent text-sm ring-1 ring-transparent transition-colors focus-within:border-accent-subtle focus-within:ring-accent-subtle hover:border-accent-subtle">
             <Select
               placeholder="请选择用例类型"
               options={caseTypeOptions}
               value={typeValue}
               onChange={onTypeChange}
               onBlur={onTypeBlur}
+              disabled={disabled}
               showSearch
               suffixIcon={null}
               variant="borderless"
@@ -142,14 +150,15 @@ export function CaseMetaForm(props: CaseMetaFormProps) {
           </div>
         </div>
         <div>
-          <label className="mb-1 block text-sm font-medium text-secondary ml-[10px]">优先级</label>
-          <div className="w-full rounded-md border border-transparent text-sm hover:border-accent-subtle ring-1 ring-transparent focus-within:border-accent-subtle focus-within:ring-accent-subtle transition-colors">
+          <label className="mb-1 ml-[10px] block text-sm font-medium text-secondary">优先级</label>
+          <div className="w-full rounded-md border border-transparent text-sm ring-1 ring-transparent transition-colors focus-within:border-accent-subtle focus-within:ring-accent-subtle hover:border-accent-subtle">
             <Select
               placeholder="请选择优先级"
               options={casePriorityOptions}
               value={priorityValue}
               onChange={onPriorityChange}
               onBlur={onPriorityBlur}
+              disabled={disabled}
               showSearch
               suffixIcon={null}
               variant="borderless"
@@ -165,10 +174,11 @@ export function CaseMetaForm(props: CaseMetaFormProps) {
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-secondary ml-[10px]">标签</label>
+          <label className="mb-1 ml-[10px] block text-sm font-medium text-secondary">标签</label>
           <div
-            className="flex flex-wrap items-center gap-2 min-h-[32px] p-1 border border-transparent focus-within:border-subtle rounded cursor-text bg-white transition-colors"
+            className="flex min-h-[32px] cursor-text flex-wrap items-center gap-2 rounded border border-transparent bg-white p-1 transition-colors focus-within:border-subtle"
             onClick={() => {
+              if (disabled) return;
               const input = document.getElementById("meta-label-input");
               input?.focus();
             }}
@@ -176,13 +186,16 @@ export function CaseMetaForm(props: CaseMetaFormProps) {
             {labelList.map((label) => (
               <div
                 key={label.id}
-                className="flex items-center gap-1 bg-accent-subtle text-accent-primary px-2 py-0.5 rounded text-xs border border-accent-subtle group"
+                className="group flex items-center gap-1 rounded border border-accent-subtle bg-accent-subtle px-2 py-0.5 text-xs text-accent-primary"
               >
                 <span>{label.name}</span>
                 <span
-                  className="cursor-pointer opacity-50 group-hover:opacity-100 hover:text-danger-primary transition-opacity"
+                  className={`opacity-50 transition-opacity ${
+                    disabled ? "cursor-not-allowed" : "cursor-pointer group-hover:opacity-100 hover:text-danger-primary"
+                  }`}
                   onClick={(e) => {
                     e.stopPropagation();
+                    if (disabled) return;
                     onDeleteLabel?.(label.id);
                   }}
                 >
@@ -197,8 +210,9 @@ export function CaseMetaForm(props: CaseMetaFormProps) {
               onChange={(e) => setLabelInput(e.target.value)}
               onKeyDown={handleKeyDown}
               onBlur={handleCreateLabel}
+              disabled={disabled}
               placeholder={labelList.length === 0 ? "输入标签名称" : ""}
-              className="flex-1 min-w-[60px] outline-none text-sm bg-transparent"
+              className="min-w-[60px] flex-1 bg-transparent text-sm outline-none disabled:cursor-not-allowed disabled:text-secondary"
             />
           </div>
         </div>

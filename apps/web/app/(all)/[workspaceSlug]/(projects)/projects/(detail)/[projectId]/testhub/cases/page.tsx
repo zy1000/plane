@@ -28,6 +28,7 @@ import { isProjectPermissionError } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { qaCaseSetToastError, qaCaseSetToastSuccess, qaCaseSetToastWarning } from "@/utils/qa-case-error";
 import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
+import { useUserPermissions } from "@/hooks/store/user";
 import { FiltersRow } from "@/components/rich-filters/filters-row";
 import { FiltersToggle } from "@/components/rich-filters/filters-toggle";
 import { CasesDisplayFilters, DEFAULT_CASE_DISPLAY_PROPERTIES } from "@/components/qa/cases/cases-display-filters";
@@ -87,6 +88,10 @@ type TCasesFilters = {
 } & TCasesFilterQueryParams;
 
 const EMPTY_CASE_FILTER_EXPRESSION: TCaseFilterExpression = {};
+const QA_CASE_CREATE_PERMISSION_KEY = "qa.case.create" as const;
+const QA_CASE_EDIT_PERMISSION_KEY = "qa.case.edit" as const;
+const QA_CASE_DELETE_PERMISSION_KEY = "qa.case.delete" as const;
+const QA_CASE_IMPORT_EXPORT_PERMISSION_KEY = "qa.case.import_export" as const;
 
 // 独立的输入组件，避免 Tree 渲染导致输入法中断
 const ModuleInput = ({
@@ -130,6 +135,25 @@ export default function TestCasesPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { updateQueryParams } = useQueryParams();
+  const { allowProjectPermissionKeys } = useUserPermissions();
+  const workspaceSlugString = String(workspaceSlug || "");
+  const projectIdString = String(projectId || "");
+  const canCreateCase = allowProjectPermissionKeys(
+    [QA_CASE_CREATE_PERMISSION_KEY],
+    workspaceSlugString,
+    projectIdString
+  );
+  const canEditCase = allowProjectPermissionKeys([QA_CASE_EDIT_PERMISSION_KEY], workspaceSlugString, projectIdString);
+  const canDeleteCase = allowProjectPermissionKeys(
+    [QA_CASE_DELETE_PERMISSION_KEY],
+    workspaceSlugString,
+    projectIdString
+  );
+  const canImportExportCase = allowProjectPermissionKeys(
+    [QA_CASE_IMPORT_EXPORT_PERMISSION_KEY],
+    workspaceSlugString,
+    projectIdString
+  );
   const repositoryIdFromUrl = searchParams.get("repositoryId");
   const moduleIdFromUrl = searchParams.get("moduleId");
   const [repositoryId, setRepositoryId] = useState<string | null>(repositoryIdFromUrl);
@@ -229,10 +253,7 @@ export default function TestCasesPage() {
   const lastSelectionContextKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (
-      lastSelectionContextKeyRef.current !== null &&
-      lastSelectionContextKeyRef.current !== selectionContextKey
-    ) {
+    if (lastSelectionContextKeyRef.current !== null && lastSelectionContextKeyRef.current !== selectionContextKey) {
       setSelectedCaseIds([]);
     }
     lastSelectionContextKeyRef.current = selectionContextKey;
@@ -355,6 +376,7 @@ export default function TestCasesPage() {
 
   // 新增：添加行为 - 在当前节点下插入临时输入框
   const handleAddUnderNode = (parentId: string | "all") => {
+    if (!canCreateCase) return;
     if (!repositoryId) return;
     setCreatingParentId(parentId);
 
@@ -369,6 +391,10 @@ export default function TestCasesPage() {
 
   // 新增：输入框失焦或回车时调用创建接口
   const handleCreateBlurOrEnter = async (parentId: string | "all", inputValue: string) => {
+    if (!canCreateCase) {
+      setCreatingParentId(null);
+      return;
+    }
     const name = inputValue.trim();
     if (!name || !workspaceSlug || !repositoryId) {
       setCreatingParentId(null);
@@ -395,6 +421,7 @@ export default function TestCasesPage() {
   // 新增：删除确认弹窗与删除逻辑
   // 修改：仅接收模块 id，删除单个模块（及其子模块和用例）
   const confirmDeleteNode = (moduleId: string, nodeName: string) => {
+    if (!canDeleteCase) return;
     Modal.confirm({
       title: "确认删除",
       content: "将删除该模块及其所有子模块和用例，操作不可撤销。请确认是否继续？",
@@ -419,6 +446,7 @@ export default function TestCasesPage() {
   };
 
   const startRenameNode = (moduleId: string, currentName: string) => {
+    if (!canEditCase) return;
     setCreatingParentId(null);
     setRenamingModuleId(moduleId);
     setExpandedKeys((prev) => {
@@ -429,6 +457,10 @@ export default function TestCasesPage() {
   };
 
   const handleRenameBlurOrEnter = async (moduleId: string, inputValue: string) => {
+    if (!canEditCase) {
+      setRenamingModuleId(null);
+      return;
+    }
     const name = inputValue.trim();
     if (!name || !workspaceSlug) {
       setRenamingModuleId(null);
@@ -446,6 +478,7 @@ export default function TestCasesPage() {
 
   // 修改 fetchCases：支持 module_id 过滤
   const confirmDeleteCases = () => {
+    if (!canDeleteCase) return;
     if (selectedCaseIds.length === 0) return;
     const deletingCount = selectedCaseIds.length;
 
@@ -484,7 +517,7 @@ export default function TestCasesPage() {
       setError(null);
       setAccessDenied(false);
 
-      const effectiveOrdering = orderingParam === undefined ? ordering : orderingParam ?? undefined;
+      const effectiveOrdering = orderingParam === undefined ? ordering : (orderingParam ?? undefined);
       const queryParams: any = {
         page,
         page_size: size,
@@ -605,7 +638,12 @@ export default function TestCasesPage() {
       {
         key: "add",
         label: (
-          <Button type="text" size="small" onClick={() => handleAddUnderNode(nodeId || "all")}>
+          <Button
+            type="text"
+            size="small"
+            disabled={!canCreateCase}
+            onClick={() => handleAddUnderNode(nodeId || "all")}
+          >
             添加
           </Button>
         ),
@@ -613,7 +651,7 @@ export default function TestCasesPage() {
       {
         key: "rename",
         label: (
-          <Button type="text" size="small" onClick={() => startRenameNode(actualId, title)}>
+          <Button type="text" size="small" disabled={!canEditCase} onClick={() => startRenameNode(actualId, title)}>
             重命名
           </Button>
         ),
@@ -624,7 +662,9 @@ export default function TestCasesPage() {
           <Button
             type="text"
             size="small"
+            disabled={!canCreateCase}
             onClick={() => {
+              if (!canCreateCase) return;
               if (actualId && actualId !== "all") {
                 setCopyingModule({ id: actualId, name: title });
               }
@@ -637,16 +677,22 @@ export default function TestCasesPage() {
       {
         key: "delete",
         label: (
-          <Button type="text" danger size="small" onClick={() => confirmDeleteNode(nodeId || "all", title)}>
+          <Button
+            type="text"
+            danger
+            size="small"
+            disabled={!canDeleteCase}
+            onClick={() => confirmDeleteNode(nodeId || "all", title)}
+          >
             删除
           </Button>
         ),
       },
     ];
     return (
-      <div className="group flex items-center justify-between gap-2 w-full">
+      <div className="group flex w-full items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <span className="inline-flex items-center justify-center w-5 h-5 text-secondary">
+          <span className="inline-flex h-5 w-5 items-center justify-center text-secondary">
             <FolderOpenDot size={14} />
           </span>
           <span className="text-sm text-primary">{title}</span>
@@ -659,7 +705,7 @@ export default function TestCasesPage() {
                 type="text"
                 icon={<EllipsisOutlined />}
                 size="small"
-                className="opacity-0 group-hover:opacity-100 transition-opacity"
+                className="opacity-0 transition-opacity group-hover:opacity-100"
               ></Button>
             </Dropdown>
           )}
@@ -722,9 +768,9 @@ export default function TestCasesPage() {
     {
       // 修改：根节点“全部用例”仅显示添加，不显示删除
       title: (
-        <div className="group flex items-center justify-between gap-2 w-full">
+        <div className="group flex w-full items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <span className="inline-flex items-center justify-center w-5 h-5 text-secondary">
+            <span className="inline-flex h-5 w-5 items-center justify-center text-secondary">
               <AppstoreOutlined />
             </span>
             <span className="text-sm font-medium text-primary">全部用例</span>
@@ -739,7 +785,12 @@ export default function TestCasesPage() {
                     {
                       key: "add",
                       label: (
-                        <Button type="text" size="small" onClick={() => handleAddUnderNode("all")}>
+                        <Button
+                          type="text"
+                          size="small"
+                          disabled={!canCreateCase}
+                          onClick={() => handleAddUnderNode("all")}
+                        >
                           添加
                         </Button>
                       ),
@@ -751,7 +802,7 @@ export default function TestCasesPage() {
                   type="text"
                   size="small"
                   icon={<EllipsisOutlined />}
-                  className="opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="opacity-0 transition-opacity group-hover:opacity-100"
                 ></Button>
               </Dropdown>
             )}
@@ -807,6 +858,7 @@ export default function TestCasesPage() {
   };
 
   const handleEditCase = (record: any) => {
+    if (!canEditCase) return;
     if (!record || !record.id) return;
     setActiveCase(record);
     setIsUpdateModalOpen(true);
@@ -830,6 +882,7 @@ export default function TestCasesPage() {
   };
 
   const handleDeleteCase = (record: any) => {
+    if (!canDeleteCase) return;
     if (!record || !record.id || !workspaceSlug || !projectId) return;
     Modal.confirm({
       title: "确认删除用例",
@@ -879,7 +932,7 @@ export default function TestCasesPage() {
     const rawColor = reviewEnums?.CaseReviewThrough_Result?.[value || ""]?.color || "default";
     const color = rawColor === "gray" ? "default" : rawColor;
     return (
-      <Tag color={color} className="!inline-flex justify-center w-[55px]">
+      <Tag color={color} className="!inline-flex w-[55px] justify-center">
         {value || "-"}
       </Tag>
     );
@@ -892,7 +945,7 @@ export default function TestCasesPage() {
     const rawColor = ((globalEnums.Enums as any)?.plan_case_result || {})[label] || "default";
     const color = rawColor === "gray" ? "default" : rawColor;
     const resultTag = (
-      <Tag color={color} className="!inline-flex justify-center w-[55px]">
+      <Tag color={color} className="!inline-flex w-[55px] justify-center">
         {label}
       </Tag>
     );
@@ -912,7 +965,6 @@ export default function TestCasesPage() {
 
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
 
-
   if (accessDenied) {
     return <NotAuthorizedView section="general" isProjectView className="h-auto" />;
   }
@@ -925,13 +977,13 @@ export default function TestCasesPage() {
         <div className="flex h-full w-full flex-col">
           <Row wrap={false} className="flex-1 overflow-hidden pb-0" gutter={[0, 16]}>
             <Col
-              className="relative flex flex-col h-full border-r border-subtle"
+              className="relative flex h-full flex-col border-r border-subtle"
               flex="0 0 auto"
               style={{ width: leftWidth, minWidth: 200, maxWidth: 300 }}
             >
               <div
                 onMouseDown={onMouseDownResize}
-                className="absolute right-0 top-0 h-full w-2"
+                className="absolute top-0 right-0 h-full w-2"
                 style={{ cursor: "col-resize", zIndex: 10 }}
               />
               <style
@@ -954,16 +1006,13 @@ export default function TestCasesPage() {
               `,
                 }}
               />
-              <div className="flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm pt-3">
+              <div className="vertical-scrollbar scrollbar-sm flex-1 overflow-y-auto pt-3">
                 <Tree
                   showLine={false}
                   defaultExpandAll
                   switcherIcon={(nodeProps) => (
-                    <span className="inline-flex items-center justify-center w-5 h-5 text-secondary">
-                      <ChevronDownIcon
-                      className={`size-4 transition-transform rotate-0`}
-                      strokeWidth={2.5}
-                    />
+                    <span className="inline-flex h-5 w-5 items-center justify-center text-secondary">
+                      <ChevronDownIcon className={`size-4 rotate-0 transition-transform`} strokeWidth={2.5} />
                     </span>
                   )}
                   onSelect={onSelect}
@@ -972,14 +1021,14 @@ export default function TestCasesPage() {
                   autoExpandParent={autoExpandParent}
                   treeData={treeData}
                   selectedKeys={selectedModuleId ? [selectedModuleId] : ["all"]}
-                  className="py-2 pl-2 custom-tree-indent"
+                  className="custom-tree-indent py-2 pl-2"
                 />
               </div>
             </Col>
             {/* 右侧表格 */}
             <Col flex="auto" className="h-full overflow-hidden">
               <div className="flex h-full flex-col">
-                <div className="px-3 pt-2 pb-2 sm:pt-2 flex items-center justify-between flex-shrink-0">
+                <div className="flex flex-shrink-0 items-center justify-between px-3 pt-2 pb-2 sm:pt-2">
                   <div>
                     <Breadcrumbs>
                       <Breadcrumbs.Item
@@ -1034,7 +1083,9 @@ export default function TestCasesPage() {
                         fetchCases(1, pageSize, nextFilters);
                       }}
                     />
-                    {repositoryId && <FiltersToggle filter={casesFilter} triggerClassName="h-8 w-8" iconButtonSize="xl" />}
+                    {repositoryId && (
+                      <FiltersToggle filter={casesFilter} triggerClassName="h-8 w-8" iconButtonSize="xl" />
+                    )}
                     {repositoryId && (
                       <CasesDisplayFilters
                         displayProperties={caseDisplayProperties}
@@ -1055,43 +1106,52 @@ export default function TestCasesPage() {
                         router.push(`/${ws}/projects/${pid}/testhub/cases/mind?${params.toString()}`);
                       }}
                       disabled={!repositoryId}
-                      className="h-8 w-8 rounded border border-subtle text-secondary hover:text-primary hover:bg-layer-1 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="flex h-8 w-8 items-center justify-center rounded border border-subtle text-secondary hover:bg-layer-1 hover:text-primary disabled:cursor-not-allowed disabled:opacity-50"
                       aria-label="脑图视图"
                     >
                       <ShareAltOutlined />
                     </button>
                     <button
                       type="button"
-                      onClick={() => setIsCreateModalOpen(true)}
-                      disabled={!repositoryId}
-                      className="text-on-color bg-accent-primary hover:bg-accent-primary-hover focus:text-on-color focus:bg-accent-primary-hover px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                      onClick={() => {
+                        if (!repositoryId || !canCreateCase) return;
+                        setIsCreateModalOpen(true);
+                      }}
+                      disabled={!repositoryId || !canCreateCase}
+                      className="flex items-center justify-center gap-1.5 rounded bg-accent-primary px-3 py-1.5 text-xs font-medium whitespace-nowrap text-on-color transition-all hover:bg-accent-primary-hover focus:bg-accent-primary-hover focus:text-on-color disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       新建用例
                     </button>
                     <button
                       type="button"
-                      onClick={() => setIsImportModalOpen(true)}
-                      disabled={!repositoryId}
-                      className="text-accent-primary bg-transparent border border-accent-strong hover:bg-accent-subtle focus:text-accent-primary focus:bg-accent-subtle-hover px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                      onClick={() => {
+                        if (!repositoryId || !canImportExportCase) return;
+                        setIsImportModalOpen(true);
+                      }}
+                      disabled={!repositoryId || !canImportExportCase}
+                      className="flex items-center justify-center gap-1.5 rounded border border-accent-strong bg-transparent px-3 py-1.5 text-xs font-medium whitespace-nowrap text-accent-primary transition-all hover:bg-accent-subtle focus:bg-accent-subtle-hover focus:text-accent-primary disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       导入
                     </button>
                     <button
                       type="button"
-                      onClick={() => setIsExportModalOpen(true)}
-                      disabled={!repositoryId}
-                      className="text-accent-primary bg-transparent border border-accent-strong hover:bg-accent-subtle focus:text-accent-primary focus:bg-accent-subtle-hover px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                      onClick={() => {
+                        if (!repositoryId || !canImportExportCase) return;
+                        setIsExportModalOpen(true);
+                      }}
+                      disabled={!repositoryId || !canImportExportCase}
+                      className="flex items-center justify-center gap-1.5 rounded border border-accent-strong bg-transparent px-3 py-1.5 text-xs font-medium whitespace-nowrap text-accent-primary transition-all hover:bg-accent-subtle focus:bg-accent-subtle-hover focus:text-accent-primary disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       导出
                     </button>
                   </div>
                 </div>
                 {repositoryId && (
-                  <div className="px-3 pb-2 flex-shrink-0">
+                  <div className="flex-shrink-0 px-3 pb-2">
                     <FiltersRow filter={casesFilter} />
                   </div>
                 )}
-                <div className="flex-1 min-h-0 overflow-hidden">
+                <div className="min-h-0 flex-1 overflow-hidden">
                   {/* 加载/错误/空状态 */}
                   {loading && (
                     <div className="flex items-center justify-center py-12">
@@ -1100,7 +1160,7 @@ export default function TestCasesPage() {
                   )}
 
                   {error && (
-                    <div className="bg-red-50 border border-red-200 rounded-md p-4 mb-4">
+                    <div className="bg-red-50 border-red-200 mb-4 rounded-md border p-4">
                       <div className="text-red-800 text-sm">{error}</div>
                     </div>
                   )}
@@ -1112,9 +1172,11 @@ export default function TestCasesPage() {
                   )}
 
                   {repositoryId && !loading && !error && (
-                    <div className="flex flex-col h-full overflow-hidden">
-                      <div className="flex-1 relative min-w-0 overflow-hidden px-0">
+                    <div className="flex h-full flex-col overflow-hidden">
+                      <div className="relative min-w-0 flex-1 overflow-hidden px-0">
                         <CasesTable
+                          canDelete={canDeleteCase}
+                          canEdit={canEditCase}
                           cases={cases as TCaseTableRecord[]}
                           selectedCaseIds={selectedCaseIds}
                           displayProperties={caseDisplayProperties}
@@ -1131,7 +1193,7 @@ export default function TestCasesPage() {
                           renderUpdatedAt={(value) => formatDateTime(value || "")}
                         />
                       </div>
-                      <div className="flex-shrink-0 border-t border-subtle px-4 py-3 bg-surface-1 flex items-center justify-between">
+                      <div className="flex flex-shrink-0 items-center justify-between border-t border-subtle bg-surface-1 px-4 py-3">
                         <div className="flex items-center gap-4 text-sm">
                           {selectedCaseIds.length > 0 && (
                             <div className="flex items-center gap-2">
@@ -1144,21 +1206,33 @@ export default function TestCasesPage() {
                                 清除选择
                               </span>
                               <span
-                                className="cursor-pointer text-sm transition-colors"
+                                className={`text-sm transition-colors ${
+                                  canEditCase ? "cursor-pointer" : "cursor-not-allowed opacity-50"
+                                }`}
                                 style={{ color: "#2a83ff" }}
-                                onClick={() => setIsMoveModalOpen(true)}
+                                onClick={() => {
+                                  if (!canEditCase) return;
+                                  setIsMoveModalOpen(true);
+                                }}
                               >
                                 移动到
                               </span>
                               <span
-                                className="cursor-pointer text-sm transition-colors"
+                                className={`text-sm transition-colors ${
+                                  canCreateCase ? "cursor-pointer" : "cursor-not-allowed opacity-50"
+                                }`}
                                 style={{ color: "#2a83ff" }}
-                                onClick={() => setIsCopyModalOpen(true)}
+                                onClick={() => {
+                                  if (!canCreateCase) return;
+                                  setIsCopyModalOpen(true);
+                                }}
                               >
                                 复制到
                               </span>
                               <span
-                                className="cursor-pointer text-sm transition-colors"
+                                className={`text-sm transition-colors ${
+                                  canDeleteCase ? "cursor-pointer" : "cursor-not-allowed opacity-50"
+                                }`}
                                 style={{ color: "#ff4d4f" }}
                                 onClick={confirmDeleteCases}
                               >
@@ -1269,6 +1343,7 @@ export default function TestCasesPage() {
       )}
       <UpdateModal
         open={isUpdateModalOpen}
+        canEdit={canEditCase}
         onClose={() => {
           setActiveCase(null);
           fetchModules();

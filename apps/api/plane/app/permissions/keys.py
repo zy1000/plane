@@ -162,6 +162,11 @@ class PermissionKey(str, Enum):
     QA_REVIEW_CREATE = "qa.review.create"
     QA_REVIEW_EDIT = "qa.review.edit"
     QA_REVIEW_DELETE = "qa.review.delete"
+    QA_REPORT_VIEW = "qa.report.view"
+    QA_REPORT_CREATE = "qa.report.create"
+    QA_REPORT_EDIT = "qa.report.edit"
+    QA_REPORT_DELETE = "qa.report.delete"
+    QA_REPORT_EXPORT = "qa.report.export"
     QA_MINDMAP_VIEW = "qa.mindmap.view"
     QA_MINDMAP_EDIT = "qa.mindmap.edit"
 

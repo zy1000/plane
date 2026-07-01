@@ -160,9 +160,7 @@ export const PROJECT_ERROR_MESSAGES = {
  */
 export function isProjectPermissionError(error: unknown): boolean {
   const raw =
-    typeof error === "object" && error !== null && "error" in error
-      ? (error as { error?: unknown }).error
-      : undefined;
+    typeof error === "object" && error !== null && "error" in error ? (error as { error?: unknown }).error : undefined;
   const msg = raw === undefined || raw === null ? "" : String(raw).trim();
   if (!msg) return false;
   if (msg === "You don't have the required permissions.") return true;
@@ -179,9 +177,7 @@ export function isWorkItemDeletePermissionError(error: unknown): boolean {
   if (isProjectPermissionError(error)) return true;
 
   const raw =
-    typeof error === "object" && error !== null && "error" in error
-      ? (error as { error?: unknown }).error
-      : undefined;
+    typeof error === "object" && error !== null && "error" in error ? (error as { error?: unknown }).error : undefined;
   const msg = raw === undefined || raw === null ? "" : String(raw).trim();
   if (!msg) return false;
 
@@ -268,12 +264,14 @@ export const PROJECT_MILESTONE_ISSUE_REMOVE_PERMISSION_KEY = "milestone.issue.re
 export const PROJECT_QA_CASE_VIEW_PERMISSION_KEY = "qa.case.view" as const;
 export const PROJECT_QA_PLAN_VIEW_PERMISSION_KEY = "qa.plan.view" as const;
 export const PROJECT_QA_REVIEW_VIEW_PERMISSION_KEY = "qa.review.view" as const;
+export const PROJECT_QA_REPORT_VIEW_PERMISSION_KEY = "qa.report.view" as const;
 export const PROJECT_QA_MINDMAP_VIEW_PERMISSION_KEY = "qa.mindmap.view" as const;
 
 export const PROJECT_QA_VIEW_PERMISSION_KEYS = [
   PROJECT_QA_CASE_VIEW_PERMISSION_KEY,
   PROJECT_QA_PLAN_VIEW_PERMISSION_KEY,
   PROJECT_QA_REVIEW_VIEW_PERMISSION_KEY,
+  PROJECT_QA_REPORT_VIEW_PERMISSION_KEY,
   PROJECT_QA_MINDMAP_VIEW_PERMISSION_KEY,
 ] as const;
 

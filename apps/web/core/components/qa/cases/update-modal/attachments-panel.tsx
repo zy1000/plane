@@ -7,8 +7,9 @@ import { convertBytesToSize, renderFormattedDate } from "@plane/utils";
 
 type AttachmentsPanelProps = {
   attachmentsLoading: boolean;
+  canEdit?: boolean;
   caseAttachments: any[];
-  fileInputRef: React.RefObject<HTMLInputElement | null>;
+  fileInputRef: React.RefObject<HTMLInputElement>;
   onPickAttachments: () => void;
   onFilesChosen: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onDownloadAttachment: (attachment: any) => void;
@@ -18,6 +19,7 @@ type AttachmentsPanelProps = {
 export function AttachmentsPanel(props: AttachmentsPanelProps) {
   const {
     attachmentsLoading,
+    canEdit = true,
     caseAttachments,
     fileInputRef,
     onPickAttachments,
@@ -30,7 +32,7 @@ export function AttachmentsPanel(props: AttachmentsPanelProps) {
     <section
       aria-labelledby="attachments-title"
       aria-busy={attachmentsLoading}
-      className="rounded-b-md border-subtle px-6 py-6 transition-colors ring-1 ring-transparent focus-within:border-accent-subtle focus-within:ring-accent-subtle"
+      className="rounded-b-md border-subtle px-6 py-6 ring-1 ring-transparent transition-colors focus-within:border-accent-subtle focus-within:ring-accent-subtle"
       role="group"
     >
       <div className="mb-3 flex items-center justify-between">
@@ -41,7 +43,10 @@ export function AttachmentsPanel(props: AttachmentsPanelProps) {
           <Button
             type="text"
             aria-label="上传附件"
-            icon={<LucideIcons.Upload size={16} className="text-secondary hover:text-accent-primary" aria-hidden="true" />}
+            disabled={!canEdit}
+            icon={
+              <LucideIcons.Upload size={16} className="text-secondary hover:text-accent-primary" aria-hidden="true" />
+            }
             onClick={onPickAttachments}
           />
         </Tooltip>
@@ -176,6 +181,7 @@ export function AttachmentsPanel(props: AttachmentsPanelProps) {
                       type="text"
                       danger
                       aria-label="删除附件"
+                      disabled={!canEdit}
                       icon={
                         <LucideIcons.Trash2
                           size={16}

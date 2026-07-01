@@ -18,6 +18,7 @@ type Props = {
   projectId: string;
   reportId: string;
   summaryHtml: string;
+  canEdit?: boolean;
   onSave: (summaryHtml: string, summaryJson: unknown) => Promise<void>;
 };
 
@@ -46,6 +47,7 @@ export const ReportSummaryEditor = ({
   projectId,
   reportId,
   summaryHtml,
+  canEdit = true,
   onSave,
 }: Props) => {
   const { t } = useTranslation();
@@ -95,6 +97,7 @@ export const ReportSummaryEditor = ({
   );
 
   const handleOpen = () => {
+    if (!canEdit) return;
     setHtml(normalizedSummaryHtml);
     setJson(null);
     setEditorKey((prev) => prev + 1);
@@ -107,6 +110,7 @@ export const ReportSummaryEditor = ({
   };
 
   const handleSave = async () => {
+    if (!canEdit) return;
     if (saving || !isDirty) return;
     try {
       setSaving(true);
@@ -124,7 +128,7 @@ export const ReportSummaryEditor = ({
     <>
       <Card className="flex h-[min(48vh,30rem)] min-h-[16rem] flex-col p-4">
         <div className="flex items-center justify-end">
-          <Button variant="link-neutral" className="text-xs" onClick={handleOpen}>
+          <Button variant="link-neutral" className="text-xs" onClick={handleOpen} disabled={!canEdit}>
             编辑
           </Button>
         </div>
@@ -144,7 +148,7 @@ export const ReportSummaryEditor = ({
           </div>
         ) : (
           <div className="mt-3 grid min-h-0 flex-1 place-items-center text-sm text-placeholder">
-            暂无报告总结，点击右上角编辑添加。
+            {canEdit ? "暂无报告总结，点击右上角编辑添加。" : "暂无报告总结"}
           </div>
         )}
       </Card>
@@ -210,7 +214,12 @@ export const ReportSummaryEditor = ({
                       <Button variant="secondary" onClick={handleClose} disabled={saving}>
                         取消
                       </Button>
-                      <Button variant="primary" onClick={handleSave} loading={saving} disabled={saving || !isDirty}>
+                      <Button
+                        variant="primary"
+                        onClick={handleSave}
+                        loading={saving}
+                        disabled={saving || !isDirty || !canEdit}
+                      >
                         确定
                       </Button>
                     </div>

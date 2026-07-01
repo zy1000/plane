@@ -25,6 +25,11 @@ const REPORT_TYPE_COLOR: Record<string, string> = {
   对外报告: "gold",
 };
 
+const QA_REPORT_VIEW_PERMISSION_KEY = "qa.report.view" as const;
+const QA_REPORT_CREATE_PERMISSION_KEY = "qa.report.create" as const;
+const QA_REPORT_EDIT_PERMISSION_KEY = "qa.report.edit" as const;
+const QA_REPORT_DELETE_PERMISSION_KEY = "qa.report.delete" as const;
+
 export default function TestReportsPage() {
   const { t } = useTranslation();
   const { workspaceSlug, projectId } = useParams();
@@ -35,6 +40,10 @@ export default function TestReportsPage() {
     String(workspaceSlug || ""),
     String(projectId || "")
   );
+  const canViewReports = permissionsFetched && hasPermission(QA_REPORT_VIEW_PERMISSION_KEY);
+  const canCreateReport = permissionsFetched && hasPermission(QA_REPORT_CREATE_PERMISSION_KEY);
+  const canEditReport = permissionsFetched && hasPermission(QA_REPORT_EDIT_PERMISSION_KEY);
+  const canDeleteReport = permissionsFetched && hasPermission(QA_REPORT_DELETE_PERMISSION_KEY);
 
   const [reports, setReports] = useState<TReportListItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -44,8 +53,11 @@ export default function TestReportsPage() {
   const [editingReport, setEditingReport] = useState<TReportListItem | null>(null);
   const { registerOpenNewReportModal } = useTestHub();
   useEffect(() => {
-    registerOpenNewReportModal(() => setShowCreateModal(true));
-  }, [registerOpenNewReportModal]);
+    registerOpenNewReportModal(() => {
+      if (!canCreateReport) return;
+      setShowCreateModal(true);
+    });
+  }, [canCreateReport, registerOpenNewReportModal]);
 
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
@@ -54,7 +66,8 @@ export default function TestReportsPage() {
   const searchInput = useRef<InputRef>(null);
 
   const repositoryId =
-    searchParams.get("repositoryId") || (typeof window !== "undefined" ? sessionStorage.getItem("selectedRepositoryId") : null);
+    searchParams.get("repositoryId") ||
+    (typeof window !== "undefined" ? sessionStorage.getItem("selectedRepositoryId") : null);
   const repositoryName = typeof window !== "undefined" ? sessionStorage.getItem("selectedRepositoryName") : "";
   const decodedRepositoryName = repositoryName || "";
 
@@ -74,6 +87,7 @@ export default function TestReportsPage() {
 
   const fetchReports = async (page = currentPage, size = pageSize, filterParams = filters) => {
     if (!workspaceSlug || !projectId) return;
+    if (!canViewReports) return;
     try {
       setLoading(true);
       setError(null);
@@ -94,10 +108,10 @@ export default function TestReportsPage() {
   useEffect(() => {
     if (!workspaceSlug || !projectId) return;
     if (!permissionsFetched) return;
-    if (!hasPermission("qa.plan.view")) return;
+    if (!canViewReports) return;
     fetchReports(1, pageSize);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workspaceSlug, projectId, permissionsFetched, hasPermission, pageSize]);
+  }, [workspaceSlug, projectId, permissionsFetched, canViewReports, pageSize]);
 
   const getColumnSearchProps = (dataIndex: string): TableColumnType<TReportListItem> => ({
     filterDropdown: ({ setSelectedKeys, selectedKeys, confirm, clearFilters, close }: FilterDropdownProps) => (
@@ -111,10 +125,20 @@ export default function TestReportsPage() {
           style={{ marginBottom: 8, display: "block" }}
         />
         <Space>
-          <Button type="primary" onClick={() => handleSearch(selectedKeys as string[], dataIndex, close)} icon={<SearchOutlined />} size="small" style={{ width: 90 }}>
+          <Button
+            type="primary"
+            onClick={() => handleSearch(selectedKeys as string[], dataIndex, close)}
+            icon={<SearchOutlined />}
+            size="small"
+            style={{ width: 90 }}
+          >
             搜索
           </Button>
-          <Button onClick={() => clearFilters && handleReset(clearFilters, dataIndex)} size="small" style={{ width: 90 }}>
+          <Button
+            onClick={() => clearFilters && handleReset(clearFilters, dataIndex)}
+            size="small"
+            style={{ width: 90 }}
+          >
             重置
           </Button>
         </Space>
@@ -144,6 +168,7 @@ export default function TestReportsPage() {
   };
 
   const openEditModal = async (report: TReportListItem) => {
+    if (!canEditReport) return;
     setEditingReport(report);
     setShowEditModal(true);
     try {
@@ -155,6 +180,7 @@ export default function TestReportsPage() {
   };
 
   const confirmDelete = (report: TReportListItem) => {
+    if (!canDeleteReport) return;
     Modal.confirm({
       title: "确认删除",
       content: "确定要删除该测试报告吗？此操作不可撤销。",
@@ -186,7 +212,12 @@ export default function TestReportsPage() {
     };
     const segments = orderKeys.map((k) => {
       const count = Number(passRate?.[k] || 0);
-      return { key: k, count, color: categoryColor[k] || "#d9d9d9", widthPct: totalCount > 0 ? (count / totalCount) * 100 : 0 };
+      return {
+        key: k,
+        count,
+        color: categoryColor[k] || "#d9d9d9",
+        widthPct: totalCount > 0 ? (count / totalCount) * 100 : 0,
+      };
     });
     const tooltipContent = (
       <div className={styles.legend}>
@@ -263,7 +294,7 @@ export default function TestReportsPage() {
         const display = planNames.join("、");
         return (
           <Tooltip title={display} mouseEnterDelay={0.25}>
-            <span className="truncate inline-block max-w-[220px] align-bottom text-primary">{display}</span>
+            <span className="inline-block max-w-[220px] truncate align-bottom text-primary">{display}</span>
           </Tooltip>
         );
       },
@@ -312,8 +343,23 @@ export default function TestReportsPage() {
       width: 120,
       render: (_, record) => (
         <Space size="small">
-          <Button type="text" size="small" icon={<EditOutlined />} aria-label="编辑" onClick={() => openEditModal(record)} />
-          <Button type="text" size="small" danger icon={<DeleteOutlined />} aria-label="删除" onClick={() => confirmDelete(record)} />
+          <Button
+            type="text"
+            size="small"
+            icon={<EditOutlined />}
+            aria-label="编辑"
+            disabled={!canEditReport}
+            onClick={() => openEditModal(record)}
+          />
+          <Button
+            type="text"
+            size="small"
+            danger
+            icon={<DeleteOutlined />}
+            aria-label="删除"
+            disabled={!canDeleteReport}
+            onClick={() => confirmDelete(record)}
+          />
         </Space>
       ),
     },
@@ -325,17 +371,15 @@ export default function TestReportsPage() {
     fetchReports(nextPage, newPageSize, filters);
   };
 
-  const canViewReports = permissionsFetched && hasPermission("qa.plan.view");
-
   return (
     <>
       <PageHead title={`测试报告 - ${decodedRepositoryName}`} />
       {!permissionsFetched ? (
-        <div className="flex h-full w-full min-h-[50vh] items-center justify-center">
+        <div className="flex h-full min-h-[50vh] w-full items-center justify-center">
           <div className="text-secondary">加载中...</div>
         </div>
       ) : !canViewReports ? (
-        <div className="flex h-full w-full min-h-[50vh] flex-col items-center justify-center gap-y-5 text-center">
+        <div className="flex h-full min-h-[50vh] w-full flex-col items-center justify-center gap-y-5 text-center">
           <div className="h-44 w-72">
             <img src={UnauthorizedImg} className="h-[176px] w-[288px] object-contain" alt="unauthorized" />
           </div>
@@ -346,12 +390,12 @@ export default function TestReportsPage() {
           <div className="flex h-full w-full flex-col">
             <div className="flex-1 overflow-hidden p-0">
               {error && (
-                <div className="bg-red-50 border border-red-200 rounded-md p-4 mb-4">
+                <div className="bg-red-50 border-red-200 mb-4 rounded-md border p-4">
                   <div className="text-red-800 text-sm">{error}</div>
                 </div>
               )}
-              <div className="flex flex-col h-full overflow-hidden">
-                <div className="testhub-reports-table-scroll flex-1 relative overflow-y-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-[var(--scrollbar-thumb)] [&::-webkit-scrollbar-thumb]:rounded-full">
+              <div className="flex h-full flex-col overflow-hidden">
+                <div className="testhub-reports-table-scroll relative flex-1 overflow-y-auto [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[var(--scrollbar-thumb)] [&::-webkit-scrollbar-track]:bg-transparent">
                   <Table
                     dataSource={reports}
                     columns={columns}
@@ -362,7 +406,7 @@ export default function TestReportsPage() {
                     scroll={{ x: 1100 }}
                   />
                 </div>
-                <div className="flex-shrink-0 border-t border-subtle px-4 py-3 bg-surface-1 flex items-center justify-between">
+                <div className="flex flex-shrink-0 items-center justify-between border-t border-subtle bg-surface-1 px-4 py-3">
                   <div className="flex items-center gap-4 text-sm">
                     <span className="text-secondary">
                       {total > 0
@@ -403,7 +447,7 @@ export default function TestReportsPage() {
         </div>
       )}
 
-      {canViewReports && (
+      {canCreateReport && (
         <CreateUpdateReportModal
           isOpen={showCreateModal}
           handleClose={() => setShowCreateModal(false)}
@@ -414,7 +458,7 @@ export default function TestReportsPage() {
         />
       )}
 
-      {canViewReports && (
+      {canEditReport && (
         <CreateUpdateReportModal
           key={editingReport?.id || "edit"}
           isOpen={showEditModal}

@@ -49,6 +49,10 @@ import UnauthorizedImg from "@/app/assets/auth/unauthorized.svg?url";
 import { useTranslation } from "@plane/i18n";
 import { qaCaseSetToastError } from "@/utils/qa-case-error";
 
+const QA_PLAN_CREATE_PERMISSION_KEY = "qa.plan.create" as const;
+const QA_PLAN_EDIT_PERMISSION_KEY = "qa.plan.edit" as const;
+const QA_PLAN_DELETE_PERMISSION_KEY = "qa.plan.delete" as const;
+
 export default function TestPlanDetailPage() {
   const { t } = useTranslation();
   const { workspaceSlug, projectId } = useParams();
@@ -65,6 +69,9 @@ export default function TestPlanDetailPage() {
     String(workspaceSlug || ""),
     String(projectId || "")
   );
+  const canCreatePlan = permissionsFetched && hasPermission(QA_PLAN_CREATE_PERMISSION_KEY);
+  const canEditPlan = permissionsFetched && hasPermission(QA_PLAN_EDIT_PERMISSION_KEY);
+  const canDeletePlan = permissionsFetched && hasPermission(QA_PLAN_DELETE_PERMISSION_KEY);
 
   const [testPlans, setTestPlans] = useState<TestPlan[]>([]);
   const [loading, setLoading] = useState(true);
@@ -75,8 +82,11 @@ export default function TestPlanDetailPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const { registerOpenNewPlanModal } = useTestHub();
   useEffect(() => {
-    registerOpenNewPlanModal(() => setShowCreateModal(true));
-  }, [registerOpenNewPlanModal]);
+    registerOpenNewPlanModal(() => {
+      if (!canCreatePlan) return;
+      setShowCreateModal(true);
+    });
+  }, [canCreatePlan, registerOpenNewPlanModal]);
   const planService = new PlanService();
   const [leftWidth, setLeftWidth] = useState<number>(300);
   const isDraggingRef = useRef<boolean>(false);
@@ -207,7 +217,10 @@ export default function TestPlanDetailPage() {
       setAllTotal(typeof t === "number" ? t : Number(t || 0));
       setModuleCounts(countsMap as Record<string, number>);
       const data: any[] = await planService.getPlanModules(workspaceSlug as string, pid);
-      const updatedModules = batchUpdateModuleCounts(Array.isArray(data) ? data : [], countsMap as Record<string, number>);
+      const updatedModules = batchUpdateModuleCounts(
+        Array.isArray(data) ? data : [],
+        countsMap as Record<string, number>
+      );
       setModules(updatedModules);
     } catch {}
   };
@@ -247,12 +260,7 @@ export default function TestPlanDetailPage() {
     onFilterDropdownOpenChange: (visible) => {
       if (visible) setTimeout(() => searchInput.current?.select(), 100);
     },
-    filteredValue:
-      dataIndex === "name"
-        ? filters.name
-          ? [filters.name]
-          : null
-        : null,
+    filteredValue: dataIndex === "name" ? (filters.name ? [filters.name] : null) : null,
   });
 
   const handleSearch = (selectedKeys: string[], dataIndex: keyof TestPlan | string, close?: () => void) => {
@@ -286,7 +294,7 @@ export default function TestPlanDetailPage() {
   };
 
   const renderPassRate = (passRate: any, record: TestPlan) => {
-    const orderKeys = ["成功", "失败", "阻塞",'无效', "未执行"];
+    const orderKeys = ["成功", "失败", "阻塞", "无效", "未执行"];
     const totalCount = orderKeys.reduce((s, k) => s + Number(passRate?.[k] || 0), 0);
     const passed = Number(passRate?.["成功"] || 0);
     const percent = totalCount > 0 ? Math.floor((passed / totalCount) * 100) : 0;
@@ -366,6 +374,7 @@ export default function TestPlanDetailPage() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingPlan, setEditingPlan] = useState<TestPlan | null>(null);
   const openEditModal = (plan: TestPlan) => {
+    if (!canEditPlan) return;
     setEditingPlan(plan);
     setShowEditModal(true);
   };
@@ -392,6 +401,7 @@ export default function TestPlanDetailPage() {
   }, [showEditModal]);
 
   const confirmDelete = (plan: TestPlan) => {
+    if (!canDeletePlan) return;
     Modal.confirm({
       title: "确认删除",
       content: "确定要删除该测试计划吗？此操作不可撤销。",
@@ -400,7 +410,11 @@ export default function TestPlanDetailPage() {
       okButtonProps: { danger: true },
       onOk: async () => {
         try {
-          await planService.deletePlan(workspaceSlug as string, Array.isArray(projectId) ? projectId[0] : projectId as string, [plan.id]);
+          await planService.deletePlan(
+            workspaceSlug as string,
+            Array.isArray(projectId) ? projectId[0] : (projectId as string),
+            [plan.id]
+          );
           await fetchTestPlans(currentPage, pageSize, filters, selectedModuleId ?? undefined);
           await fetchModules();
         } catch (e: unknown) {
@@ -436,7 +450,13 @@ export default function TestPlanDetailPage() {
         </Button>
       ),
     },
-    { title: "用例数", dataIndex: "case_count", key: "case_count", width: 90, render: (case_count: number) => (case_count ? case_count : 0) },
+    {
+      title: "用例数",
+      dataIndex: "case_count",
+      key: "case_count",
+      width: 90,
+      render: (case_count: number) => (case_count ? case_count : 0),
+    },
     { title: "状态", dataIndex: "state", key: "state", width: 120, render: (state: any) => renderState(state as any) },
     {
       title: "通过率",
@@ -474,6 +494,7 @@ export default function TestPlanDetailPage() {
             size="small"
             icon={<EditOutlined />}
             aria-label="编辑"
+            disabled={!canEditPlan}
             onClick={() => openEditModal(record)}
           />
           <Button
@@ -482,6 +503,7 @@ export default function TestPlanDetailPage() {
             danger
             icon={<DeleteOutlined />}
             aria-label="删除"
+            disabled={!canDeletePlan}
             onClick={() => confirmDelete(record)}
           />
         </Space>
@@ -532,6 +554,7 @@ export default function TestPlanDetailPage() {
   };
 
   const handleAddUnderNode = (parentId: string | "all") => {
+    if (!canCreatePlan) return;
     setRenamingModuleId(null);
     setCreatingParentId(parentId);
     setExpandedKeys((prev) => {
@@ -542,6 +565,10 @@ export default function TestPlanDetailPage() {
   };
 
   const handleCreateBlurOrEnter = async (parentId: string | "all", inputValue: string) => {
+    if (!canCreatePlan) {
+      setCreatingParentId(null);
+      return;
+    }
     const name = inputValue.trim();
     if (!name || !workspaceSlug || !projectId) {
       setCreatingParentId(null);
@@ -561,6 +588,7 @@ export default function TestPlanDetailPage() {
   };
 
   const startRenameNode = (moduleId: string, currentName: string) => {
+    if (!canEditPlan) return;
     setCreatingParentId(null);
     setRenamingModuleId(moduleId);
     setExpandedKeys((prev) => (prev.includes(moduleId) ? prev : [...prev, moduleId]));
@@ -568,6 +596,10 @@ export default function TestPlanDetailPage() {
   };
 
   const handleRenameBlurOrEnter = async (moduleId: string, inputValue: string) => {
+    if (!canEditPlan) {
+      setRenamingModuleId(null);
+      return;
+    }
     const name = inputValue.trim();
     if (!name || !workspaceSlug) {
       setRenamingModuleId(null);
@@ -583,6 +615,7 @@ export default function TestPlanDetailPage() {
   };
 
   const confirmDeleteModule = (node: PlanModule) => {
+    if (!canDeletePlan) return;
     Modal.confirm({
       title: "删除模块",
       content: `确定删除模块“${node.name}”吗？删除后不可恢复。`,
@@ -630,7 +663,7 @@ export default function TestPlanDetailPage() {
       {
         key: "add",
         label: (
-          <Button type="text" size="small" onClick={() => handleAddUnderNode(nodeId)}>
+          <Button type="text" size="small" disabled={!canCreatePlan} onClick={() => handleAddUnderNode(nodeId)}>
             添加
           </Button>
         ),
@@ -640,7 +673,7 @@ export default function TestPlanDetailPage() {
             {
               key: "rename",
               label: (
-                <Button type="text" size="small" onClick={() => startRenameNode(nodeId, title)}>
+                <Button type="text" size="small" disabled={!canEditPlan} onClick={() => startRenameNode(nodeId, title)}>
                   重命名
                 </Button>
               ),
@@ -648,7 +681,13 @@ export default function TestPlanDetailPage() {
             {
               key: "delete",
               label: (
-                <Button type="text" danger size="small" onClick={() => confirmDeleteModule(node)}>
+                <Button
+                  type="text"
+                  danger
+                  size="small"
+                  disabled={!canDeletePlan}
+                  onClick={() => confirmDeleteModule(node)}
+                >
                   删除
                 </Button>
               ),
@@ -658,9 +697,9 @@ export default function TestPlanDetailPage() {
     ];
 
     return (
-      <div className="group flex items-center justify-between gap-2 w-full">
+      <div className="group flex w-full items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <span className="inline-flex items-center justify-center w-5 h-5 text-secondary">
+          <span className="inline-flex h-5 w-5 items-center justify-center text-secondary">
             <FolderOpenDot size={14} />
           </span>
           <span className="text-sm text-primary">{title}</span>
@@ -677,7 +716,7 @@ export default function TestPlanDetailPage() {
               type="text"
               size="small"
               icon={<EllipsisOutlined />}
-              className="opacity-0 group-hover:opacity-100 transition-opacity"
+              className="opacity-0 transition-opacity group-hover:opacity-100"
             />
           </Dropdown>
         </div>
@@ -749,9 +788,9 @@ export default function TestPlanDetailPage() {
   const treeData = [
     {
       title: (
-        <div className="group flex items-center justify-between gap-2 w-full">
+        <div className="group flex w-full items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <span className="inline-flex items-center justify-center w-5 h-5 text-secondary">
+            <span className="inline-flex h-5 w-5 items-center justify-center text-secondary">
               <AppstoreOutlined />
             </span>
             <span className="text-sm font-medium text-primary">全部计划</span>
@@ -767,7 +806,12 @@ export default function TestPlanDetailPage() {
                   {
                     key: "add",
                     label: (
-                      <Button type="text" size="small" onClick={() => handleAddUnderNode("all")}>
+                      <Button
+                        type="text"
+                        size="small"
+                        disabled={!canCreatePlan}
+                        onClick={() => handleAddUnderNode("all")}
+                      >
                         添加
                       </Button>
                     ),
@@ -779,7 +823,7 @@ export default function TestPlanDetailPage() {
                 type="text"
                 size="small"
                 icon={<EllipsisOutlined />}
-                className="opacity-0 group-hover:opacity-100 transition-opacity"
+                className="opacity-0 transition-opacity group-hover:opacity-100"
               />
             </Dropdown>
           </div>
@@ -817,6 +861,7 @@ export default function TestPlanDetailPage() {
   };
 
   const onDrop: TreeProps["onDrop"] = async (info) => {
+    if (!canEditPlan) return;
     const dragKey = String(info.dragNode?.key);
     const dropKey = String(info.node?.key);
     if (!workspaceSlug) return;
@@ -846,34 +891,34 @@ export default function TestPlanDetailPage() {
     <>
       <PageHead title={`测试计划 - ${decodedRepositoryName}`} />
       {!permissionsFetched ? (
-        <div className="flex h-full w-full min-h-[50vh] items-center justify-center">
+        <div className="flex h-full min-h-[50vh] w-full items-center justify-center">
           <div className="text-secondary">加载中...</div>
         </div>
       ) : !canViewPlans ? (
-        <div className="flex h-full w-full min-h-[50vh] flex-col items-center justify-center gap-y-5 text-center">
+        <div className="flex h-full min-h-[50vh] w-full flex-col items-center justify-center gap-y-5 text-center">
           <div className="h-44 w-72">
             <img src={UnauthorizedImg} className="h-[176px] w-[288px] object-contain" alt="unauthorized" />
           </div>
           <h1 className="text-xl font-medium text-primary">您没有查看此页面的权限</h1>
         </div>
       ) : (
-      <div className="h-full w-full">
-        <div className="flex h-full w-full flex-col">
-          <div className="flex-1 overflow-hidden p-0">
-            <div className="flex h-[calc(100%-0px)] w-full">
-              <div
-                className="relative flex flex-col h-full border-r border-subtle min-w-[200px] max-w-[300px]"
-                style={{ width: leftWidth }}
-              >
+        <div className="h-full w-full">
+          <div className="flex h-full w-full flex-col">
+            <div className="flex-1 overflow-hidden p-0">
+              <div className="flex h-[calc(100%-0px)] w-full">
                 <div
-                  onMouseDown={onMouseDownResize}
-                  className="absolute right-0 top-0 h-full w-2"
-                  style={{ cursor: "col-resize", zIndex: 10 }}
-                />
-                <div className="flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm pt-2">
-                  <style
-                    dangerouslySetInnerHTML={{
-                      __html: `
+                  className="relative flex h-full max-w-[300px] min-w-[200px] flex-col border-r border-subtle"
+                  style={{ width: leftWidth }}
+                >
+                  <div
+                    onMouseDown={onMouseDownResize}
+                    className="absolute top-0 right-0 h-full w-2"
+                    style={{ cursor: "col-resize", zIndex: 10 }}
+                  />
+                  <div className="vertical-scrollbar scrollbar-sm flex-1 overflow-y-auto pt-2">
+                    <style
+                      dangerouslySetInnerHTML={{
+                        __html: `
                     .custom-tree-indent .ant-tree-indent-unit {
                       width: 10px !important;
                     }
@@ -889,92 +934,89 @@ export default function TestPlanDetailPage() {
                       padding-inline: 0px !important;
                     }
                   `,
-                    }}
-                  />
-                  <Tree
-                    blockNode
-                    draggable
-                    showIcon={false}
-                    switcherIcon={(nodeProps) => (
-                      <span className="inline-flex items-center justify-center w-5 h-5 text-secondary">
-                        <ChevronDownIcon
-                          className={`size-4 transition-transform rotate-0`}
-                          strokeWidth={2.5}
-                        />
-                      </span>
-                    )}
-                    treeData={treeData as any}
-                    selectedKeys={[selectedModuleId ?? "all"]}
-                    expandedKeys={expandedKeys}
-                    autoExpandParent={autoExpandParent}
-                    onExpand={onExpand}
-                    onSelect={onSelect}
-                    onDrop={onDrop}
-                    className="py-2 pl-2 custom-tree-indent testhub-plan-module-tree"
+                      }}
+                    />
+                    <Tree
+                      blockNode
+                      draggable={canEditPlan}
+                      showIcon={false}
+                      switcherIcon={(nodeProps) => (
+                        <span className="inline-flex h-5 w-5 items-center justify-center text-secondary">
+                          <ChevronDownIcon className={`size-4 rotate-0 transition-transform`} strokeWidth={2.5} />
+                        </span>
+                      )}
+                      treeData={treeData as any}
+                      selectedKeys={[selectedModuleId ?? "all"]}
+                      expandedKeys={expandedKeys}
+                      autoExpandParent={autoExpandParent}
+                      onExpand={onExpand}
+                      onSelect={onSelect}
+                      onDrop={onDrop}
+                      className="custom-tree-indent testhub-plan-module-tree py-2 pl-2"
+                    />
+                  </div>
+                  <div
+                    className="absolute top-0 right-0 h-full w-[6px] cursor-col-resize"
+                    onMouseDown={onMouseDownResize}
                   />
                 </div>
-                <div
-                  className="absolute top-0 right-0 w-[6px] h-full cursor-col-resize"
-                  onMouseDown={onMouseDownResize}
-                />
-              </div>
-              <div className="flex-1 overflow-hidden p-0">
-                {loading && (
-                  <div className="flex items-center justify-center py-12">
-                    <div className="text-secondary">加载中...</div>
-                  </div>
-                )}
-                {error && (
-                  <div className="bg-red-50 border border-red-200 rounded-md p-4 mb-4">
-                    <div className="text-red-800 text-sm">{error}</div>
-                  </div>
-                )}
-                {!loading && !error && (
-                  <div className="flex flex-col h-full overflow-hidden">
-                    <div
-                      className={`testhub-plans-table-scroll flex-1 relative overflow-y-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar]:block [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-[var(--scrollbar-thumb)] [&::-webkit-scrollbar-thumb]:rounded-full ${
-                        pageSize === 100 ? "testhub-plans-scrollbar-strong" : ""
-                      }`}
-                    >
-                      <Table
-                        dataSource={testPlans}
-                        columns={columns}
-                        loading={loading}
-                        rowKey="id"
-                        bordered={true}
-                        onChange={handleTableChange}
-                        pagination={false}
-                        scroll={{ x: 1210 }}
-                      />
+                <div className="flex-1 overflow-hidden p-0">
+                  {loading && (
+                    <div className="flex items-center justify-center py-12">
+                      <div className="text-secondary">加载中...</div>
                     </div>
-                    <div className="flex-shrink-0 border-t border-subtle px-4 py-3 bg-surface-1 flex items-center justify-between">
-                      <div className="flex items-center gap-4 text-sm">
-                        <span className="text-secondary">
-                          {total > 0
-                            ? `第 ${(currentPage - 1) * pageSize + 1}-${Math.min(
-                                currentPage * pageSize,
-                                total
-                              )} 条，共 ${total} 条`
-                            : ""}
-                        </span>
+                  )}
+                  {error && (
+                    <div className="bg-red-50 border-red-200 mb-4 rounded-md border p-4">
+                      <div className="text-red-800 text-sm">{error}</div>
+                    </div>
+                  )}
+                  {!loading && !error && (
+                    <div className="flex h-full flex-col overflow-hidden">
+                      <div
+                        className={`testhub-plans-table-scroll relative flex-1 overflow-y-auto [&::-webkit-scrollbar]:block [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[var(--scrollbar-thumb)] [&::-webkit-scrollbar-track]:bg-transparent ${
+                          pageSize === 100 ? "testhub-plans-scrollbar-strong" : ""
+                        }`}
+                      >
+                        <Table
+                          dataSource={testPlans}
+                          columns={columns}
+                          loading={loading}
+                          rowKey="id"
+                          bordered={true}
+                          onChange={handleTableChange}
+                          pagination={false}
+                          scroll={{ x: 1210 }}
+                        />
                       </div>
-                      <Pagination
-                        simple
-                        current={currentPage}
-                        pageSize={pageSize}
-                        total={total}
-                        showSizeChanger
-                        pageSizeOptions={["10", "20", "50", "100"]}
-                        onChange={handlePaginationChange}
-                        onShowSizeChange={handlePaginationChange}
-                        size="small"
-                      />
+                      <div className="flex flex-shrink-0 items-center justify-between border-t border-subtle bg-surface-1 px-4 py-3">
+                        <div className="flex items-center gap-4 text-sm">
+                          <span className="text-secondary">
+                            {total > 0
+                              ? `第 ${(currentPage - 1) * pageSize + 1}-${Math.min(
+                                  currentPage * pageSize,
+                                  total
+                                )} 条，共 ${total} 条`
+                              : ""}
+                          </span>
+                        </div>
+                        <Pagination
+                          simple
+                          current={currentPage}
+                          pageSize={pageSize}
+                          total={total}
+                          showSizeChanger
+                          pageSizeOptions={["10", "20", "50", "100"]}
+                          onChange={handlePaginationChange}
+                          onShowSizeChange={handlePaginationChange}
+                          size="small"
+                        />
+                      </div>
                     </div>
-                  </div>
-                )}
-                <style
-                  dangerouslySetInnerHTML={{
-                    __html: `
+                  )}
+                  <style
+                    dangerouslySetInnerHTML={{
+                      __html: `
                       .testhub-plans-table-scroll{
                         scrollbar-gutter: stable both-edges;
                       }
@@ -1066,62 +1108,62 @@ export default function TestPlanDetailPage() {
                         padding-inline: 4px !important;
                       }
                     `,
-                  }}
-                />
+                    }}
+                  />
+                </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
       )}
 
-      {canViewPlans && (
-      <CreateUpdatePlanModal
-        isOpen={showCreateModal}
-        handleClose={() => {
-          setShowCreateModal(false);
-          refreshAll();
-        }}
-        workspaceSlug={workspaceSlug as string}
-        projectId={projectId as string}
-        repositoryId={String(repositoryId || "")}
-        repositoryName={decodedRepositoryName}
-        mode="create"
-        autoSelectDefaultModule={false}
-        initialData={selectedModuleId ? ({ module: selectedModuleId } as any) : null}
-        onSuccess={refreshAll}
-      />
+      {canViewPlans && canCreatePlan && (
+        <CreateUpdatePlanModal
+          isOpen={showCreateModal}
+          handleClose={() => {
+            setShowCreateModal(false);
+            refreshAll();
+          }}
+          workspaceSlug={workspaceSlug as string}
+          projectId={projectId as string}
+          repositoryId={String(repositoryId || "")}
+          repositoryName={decodedRepositoryName}
+          mode="create"
+          autoSelectDefaultModule={false}
+          initialData={selectedModuleId ? ({ module: selectedModuleId } as any) : null}
+          onSuccess={refreshAll}
+        />
       )}
 
-      {canViewPlans && (
-      <CreateUpdatePlanModal
-        key={editingPlan?.id || "edit"}
-        isOpen={showEditModal}
-        handleClose={() => {
-          setShowEditModal(false);
-          setEditingPlan(null);
-          refreshAll();
-        }}
-        workspaceSlug={workspaceSlug as string}
-        projectId={projectId as string}
-        repositoryId={String(repositoryId || "")}
-        repositoryName={decodedRepositoryName}
-        mode="edit"
-        planId={editingPlan?.id}
-        initialData={
-          editingPlan
-            ? ({
-                ...editingPlan,
-                module:
-                  (editingPlan as any)?.module_id ??
-                  (editingPlan as any)?.module?.id ??
-                  (editingPlan as any)?.module ??
-                  null,
-              } as any)
-            : null
-        }
-        onSuccess={refreshAll}
-      />
+      {canViewPlans && canEditPlan && (
+        <CreateUpdatePlanModal
+          key={editingPlan?.id || "edit"}
+          isOpen={showEditModal}
+          handleClose={() => {
+            setShowEditModal(false);
+            setEditingPlan(null);
+            refreshAll();
+          }}
+          workspaceSlug={workspaceSlug as string}
+          projectId={projectId as string}
+          repositoryId={String(repositoryId || "")}
+          repositoryName={decodedRepositoryName}
+          mode="edit"
+          planId={editingPlan?.id}
+          initialData={
+            editingPlan
+              ? ({
+                  ...editingPlan,
+                  module:
+                    (editingPlan as any)?.module_id ??
+                    (editingPlan as any)?.module?.id ??
+                    (editingPlan as any)?.module ??
+                    null,
+                } as any)
+              : null
+          }
+          onSuccess={refreshAll}
+        />
       )}
     </>
   );

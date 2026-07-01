@@ -17,8 +17,15 @@ import UpdateModal from "@/components/qa/cases/update-modal";
 import TestCaseSelectionModal from "@/components/qa/review/TestCaseSelectionModal";
 import { useUser } from "@/hooks/store/user";
 import { useTranslation } from "@plane/i18n";
-import { qaCaseErrorContent, qaCaseSetToastError, qaCaseSetToastSuccess, qaCaseSetToastWarning } from "@/utils/qa-case-error";
+import {
+  qaCaseErrorContent,
+  qaCaseSetToastError,
+  qaCaseSetToastSuccess,
+  qaCaseSetToastWarning,
+} from "@/utils/qa-case-error";
+import { useProjectPermissions } from "@/hooks/store/use-project-permissions";
 
+const QA_REVIEW_EDIT_PERMISSION_KEY = "qa.review.edit" as const;
 
 type ReviewCaseRow = {
   id: string;
@@ -41,6 +48,11 @@ export default function CaseManagementReviewDetailPage() {
     repositoryIdFromUrl || (typeof window !== "undefined" ? sessionStorage.getItem("selectedRepositoryId") : null);
   const reviewName = typeof window !== "undefined" ? sessionStorage.getItem("selectedReviewName") : "";
   const router = useRouter();
+  const { fetched: permissionsFetched, hasPermission } = useProjectPermissions(
+    String(workspaceSlug || ""),
+    String(projectId || "")
+  );
+  const canEditReview = permissionsFetched && hasPermission(QA_REVIEW_EDIT_PERMISSION_KEY);
 
   const caseService = useMemo(() => new CaseApiService(), []);
   const reviewService = useMemo(() => new ReviewApiService(), []);
@@ -78,10 +90,7 @@ export default function CaseManagementReviewDetailPage() {
   const lastSelectionContextKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (
-      lastSelectionContextKeyRef.current !== null &&
-      lastSelectionContextKeyRef.current !== selectionContextKey
-    ) {
+    if (lastSelectionContextKeyRef.current !== null && lastSelectionContextKeyRef.current !== selectionContextKey) {
       setSelectedCaseIds([]);
       setSelectedCaseMap({});
     }
@@ -156,7 +165,7 @@ export default function CaseManagementReviewDetailPage() {
     try {
       // setLoading(true);
       setError(null);
-      const effectiveOrdering = orderingParam === undefined ? ordering : orderingParam ?? undefined;
+      const effectiveOrdering = orderingParam === undefined ? ordering : (orderingParam ?? undefined);
       const listParams = {
         page,
         page_size: size,
@@ -211,7 +220,6 @@ export default function CaseManagementReviewDetailPage() {
     setSelectedModuleId(null);
   }, [repositoryId, reviewId]);
 
-
   useEffect(() => {
     if (!workspaceSlug || !projectId) return;
     setReviewListLoading(true);
@@ -234,11 +242,9 @@ export default function CaseManagementReviewDetailPage() {
 
   const renderNodeTitle = (title: string, icon: ReactNode, count?: number, fontMedium?: boolean) => {
     return (
-      <div className="group flex items-center justify-between gap-2 w-full">
+      <div className="group flex w-full items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <span className="inline-flex items-center justify-center w-5 h-5 text-secondary">
-            {icon}
-          </span>
+          <span className="inline-flex h-5 w-5 items-center justify-center text-secondary">{icon}</span>
           <span className={`text-sm text-primary ${fontMedium ? "font-medium" : ""}`}>{title}</span>
         </div>
         <div className="flex items-center gap-2">
@@ -297,7 +303,12 @@ export default function CaseManagementReviewDetailPage() {
       const children = Array.isArray(node?.children) ? node.children : [];
 
       return {
-        title: renderNodeTitle(node?.name ?? "-", icon, undefined, kind === "root" || kind === "repository_modules_all"),
+        title: renderNodeTitle(
+          node?.name ?? "-",
+          icon,
+          undefined,
+          kind === "root" || kind === "repository_modules_all"
+        ),
         key,
         kind,
         repositoryId,
@@ -347,7 +358,7 @@ export default function CaseManagementReviewDetailPage() {
         <Button
           type="link"
           size="small"
-          className="p-0 h-auto !text-primary hover:!text-primary"
+          className="h-auto p-0 !text-primary hover:!text-primary"
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -372,7 +383,7 @@ export default function CaseManagementReviewDetailPage() {
         <Button
           type="link"
           size="small"
-          className="p-0 h-auto !text-primary hover:!text-primary"
+          className="h-auto p-0 !text-primary hover:!text-primary"
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -394,13 +405,13 @@ export default function CaseManagementReviewDetailPage() {
       title: "用例库",
       dataIndex: "repository",
       key: "repository",
-      render: (v: string | null) => (v ?? ""),
+      render: (v: string | null) => v ?? "",
     },
     {
       title: "模块",
       dataIndex: "module",
       key: "module",
-      render: (v: string | null) => (v ?? ""),
+      render: (v: string | null) => v ?? "",
     },
     {
       title: "用例等级",
@@ -479,7 +490,9 @@ export default function CaseManagementReviewDetailPage() {
             type="link"
             size="small"
             danger
+            disabled={!canEditReview}
             onClick={async () => {
+              if (!canEditReview) return;
               if (!workspaceSlug || !reviewId) return;
               try {
                 await reviewService.CaseCancel(workspaceSlug as string, projectId as string, { ids: [record.id] });
@@ -517,16 +530,16 @@ export default function CaseManagementReviewDetailPage() {
 
   return (
     <>
-      <div className="flex flex-col pt-4 px-4 pb-0 w-full h-full overflow-hidden">
+      <div className="flex h-full w-full flex-col overflow-hidden px-4 pt-4 pb-0">
         <PageHead title="评审详情" />
-        <div className="w-full flex-1 min-h-0 flex rounded-md border border-subtle overflow-hidden">
+        <div className="flex min-h-0 w-full flex-1 overflow-hidden rounded-md border border-subtle">
           <div
-            className="relative h-full min-h-0 border-r border-subtle overflow-y-auto flex-shrink-0 pt-4 pl-4"
+            className="relative h-full min-h-0 flex-shrink-0 overflow-y-auto border-r border-subtle pt-4 pl-4"
             style={{ width: leftWidth, minWidth: 200, maxWidth: 320 }}
           >
             <div
               onMouseDown={onMouseDownResize}
-              className="absolute right-0 top-0 h-full w-2"
+              className="absolute top-0 right-0 h-full w-2"
               style={{ cursor: "col-resize", zIndex: 10 }}
             />
             <style
@@ -553,11 +566,8 @@ export default function CaseManagementReviewDetailPage() {
               showLine={false}
               defaultExpandAll
               switcherIcon={(nodeProps) => (
-                <span className="inline-flex items-center justify-center w-5 h-5 text-secondary">
-                  <ChevronDownIcon
-                    className={`size-4 transition-transform rotate-0`}
-                    strokeWidth={2.5}
-                  />
+                <span className="inline-flex h-5 w-5 items-center justify-center text-secondary">
+                  <ChevronDownIcon className={`size-4 rotate-0 transition-transform`} strokeWidth={2.5} />
                 </span>
               )}
               onSelect={onSelect}
@@ -566,12 +576,12 @@ export default function CaseManagementReviewDetailPage() {
               autoExpandParent={autoExpandParent}
               treeData={treeData as any}
               selectedKeys={treeData.length > 0 ? [selectedTreeKey] : []}
-              className="py-2 pl-2 custom-tree-indent"
+              className="custom-tree-indent py-2 pl-2"
             />
           </div>
-          <div className="flex-1 overflow-hidden min-w-0">
-            <div className="flex flex-col h-full min-h-0 overflow-hidden min-w-0">
-              <div className="pl-7 pr-4 py-3 flex items-center justify-between flex-shrink-0">
+          <div className="min-w-0 flex-1 overflow-hidden">
+            <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
+              <div className="flex flex-shrink-0 items-center justify-between py-3 pr-4 pl-7">
                 <div>
                   <Breadcrumbs className="grow-0">
                     <Breadcrumbs.Item
@@ -591,7 +601,7 @@ export default function CaseManagementReviewDetailPage() {
                             loading={reviewListLoading}
                             showSearch
                             optionFilterProp="label"
-                            className="min-w-[200px] h-full !cursor-pointer [&_.ant-select-selector]:!p-0 [&_.ant-select-selector]:!h-full [&_.ant-select-selector]:!min-h-full [&_.ant-select-selector]:!items-center [&_.ant-select-selector]:!cursor-pointer [&_.ant-select-selection-wrap]:!h-full [&_.ant-select-selection-wrap]:!items-center [&_.ant-select-selection-wrap]:!flex [&_.ant-select-selection-search]:!h-full [&_.ant-select-selection-search-input]:!h-full [&_.ant-select-selection-item]:!leading-4 [&_.ant-select-selection-item]:!text-sm [&_.ant-select-selection-item]:!text-primary [&_.ant-select-selection-placeholder]:!leading-4 [&_.ant-select-selection-placeholder]:!text-sm [&_.ant-select-selection-placeholder]:!text-secondary"
+                            className="h-full min-w-[200px] !cursor-pointer [&_.ant-select-selection-item]:!text-sm [&_.ant-select-selection-item]:!leading-4 [&_.ant-select-selection-item]:!text-primary [&_.ant-select-selection-placeholder]:!text-sm [&_.ant-select-selection-placeholder]:!leading-4 [&_.ant-select-selection-placeholder]:!text-secondary [&_.ant-select-selection-search]:!h-full [&_.ant-select-selection-search-input]:!h-full [&_.ant-select-selection-wrap]:!flex [&_.ant-select-selection-wrap]:!h-full [&_.ant-select-selection-wrap]:!items-center [&_.ant-select-selector]:!h-full [&_.ant-select-selector]:!min-h-full [&_.ant-select-selector]:!cursor-pointer [&_.ant-select-selector]:!items-center [&_.ant-select-selector]:!p-0"
                             variant="borderless"
                             suffixIcon={null}
                             showArrow={false}
@@ -606,29 +616,31 @@ export default function CaseManagementReviewDetailPage() {
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
+                    disabled={!canEditReview}
                     onClick={() => {
+                      if (!canEditReview) return;
                       setIsCaseSelectionOpen(true);
                     }}
-                    className="text-on-color bg-accent-primary hover:bg-accent-primary-hover focus:text-on-color focus:bg-accent-primary-hover px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center"
+                    className="flex items-center justify-center gap-1.5 rounded bg-accent-primary px-3 py-1.5 text-xs font-medium whitespace-nowrap text-on-color transition-all hover:bg-accent-primary-hover focus:bg-accent-primary-hover focus:text-on-color disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     关联用例
                   </button>
                 </div>
               </div>
-              <div className="flex-1 min-h-0 overflow-hidden pt-0 px-4 pb-4 min-w-0">
+              <div className="min-h-0 min-w-0 flex-1 overflow-hidden px-4 pt-0 pb-4">
                 {loading && (
                   <div className="flex items-center justify-center py-12">
                     <div className="text-secondary">加载中...</div>
                   </div>
                 )}
                 {error && (
-                  <div className="bg-red-50 border border-red-200 rounded-md p-4 mb-4">
+                  <div className="bg-red-50 border-red-200 mb-4 rounded-md border p-4">
                     <div className="text-red-800 text-sm">{error}</div>
                   </div>
                 )}
                 {!loading && !error && (
-                  <div className="flex flex-col h-full overflow-hidden min-w-0">
-                    <div className="testhub-review-detail-table-scroll flex-1 relative overflow-y-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar]:block [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-[var(--scrollbar-thumb)] [&::-webkit-scrollbar-thumb]:rounded-full">
+                  <div className="flex h-full min-w-0 flex-col overflow-hidden">
+                    <div className="testhub-review-detail-table-scroll relative flex-1 overflow-y-auto [&::-webkit-scrollbar]:block [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[var(--scrollbar-thumb)] [&::-webkit-scrollbar-track]:bg-transparent">
                       <Table
                         dataSource={reviewCases}
                         columns={columns as any}
@@ -668,7 +680,7 @@ export default function CaseManagementReviewDetailPage() {
                         }}
                       />
                     </div>
-                    <div className="flex-shrink-0 border-t border-subtle px-4 py-3 bg-surface-1 flex items-center justify-between">
+                    <div className="flex flex-shrink-0 items-center justify-between border-t border-subtle bg-surface-1 px-4 py-3">
                       <div className="flex items-center gap-4 text-sm">
                         {selectedCaseIds.length > 0 && (
                           <div className="flex items-center gap-2">
@@ -688,10 +700,8 @@ export default function CaseManagementReviewDetailPage() {
                               onConfirm={async () => {
                                 if (!workspaceSlug || !reviewId) return;
                                 try {
-                                  const caseIds = selectedCaseIds
-                                    .map((id) => selectedCaseMap[id])
-                                    .filter((id) => !!id);
-                                  
+                                  const caseIds = selectedCaseIds.map((id) => selectedCaseMap[id]).filter((id) => !!id);
+
                                   if (caseIds.length === 0) return;
 
                                   await caseService.submitCaseReview(workspaceSlug as string, {
@@ -700,7 +710,7 @@ export default function CaseManagementReviewDetailPage() {
                                     result: "通过",
                                     assignee: currentUser?.id ? String(currentUser.id) : undefined,
                                   });
-                                  
+
                                   qaCaseSetToastSuccess("已批量通过用例");
                                   setSelectedCaseIds([]);
                                   setSelectedCaseMap({});
@@ -712,19 +722,20 @@ export default function CaseManagementReviewDetailPage() {
                               okText="确定"
                               cancelText="取消"
                             >
-                              <span
-                                className="cursor-pointer text-sm transition-colors"
-                                style={{ color: "#2a83ff" }}
-                              >
+                              <span className="cursor-pointer text-sm transition-colors" style={{ color: "#2a83ff" }}>
                                 通过
                               </span>
                             </Popconfirm>
                             <Popconfirm
                               title="确定取消关联选中用例？"
+                              disabled={!canEditReview}
                               onConfirm={async () => {
+                                if (!canEditReview) return;
                                 if (!workspaceSlug || !reviewId) return;
                                 try {
-                                  await reviewService.CaseCancel(workspaceSlug as string, projectId as string, { ids: selectedCaseIds });
+                                  await reviewService.CaseCancel(workspaceSlug as string, projectId as string, {
+                                    ids: selectedCaseIds,
+                                  });
                                   qaCaseSetToastSuccess("已批量取消关联");
                                   setSelectedCaseIds([]);
                                   setSelectedCaseMap({});
@@ -736,7 +747,13 @@ export default function CaseManagementReviewDetailPage() {
                               okText="确定"
                               cancelText="取消"
                             >
-                              <span className="text-red-500 hover:text-red-600 cursor-pointer text-sm transition-colors">
+                              <span
+                                className={`text-sm transition-colors ${
+                                  canEditReview
+                                    ? "text-red-500 hover:text-red-600 cursor-pointer"
+                                    : "text-red-300 cursor-not-allowed"
+                                }`}
+                              >
                                 取关
                               </span>
                             </Popconfirm>
@@ -807,7 +824,7 @@ export default function CaseManagementReviewDetailPage() {
         }}
         caseId={activeCaseId}
       />
-      {isCaseSelectionOpen && (
+      {canEditReview && isCaseSelectionOpen && (
         <TestCaseSelectionModal
           open={isCaseSelectionOpen}
           onClose={() => setIsCaseSelectionOpen(false)}
@@ -815,9 +832,13 @@ export default function CaseManagementReviewDetailPage() {
           projectId={projectId ? String(projectId) : undefined}
           reviewId={reviewId ? String(reviewId) : undefined}
           onConfirm={async (ids) => {
+            if (!canEditReview) return;
             if (!workspaceSlug || !reviewId) return;
             try {
-              await reviewService.addReviewCases(String(workspaceSlug), String(projectId), { review_id: String(reviewId), case_ids: ids || [] });
+              await reviewService.addReviewCases(String(workspaceSlug), String(projectId), {
+                review_id: String(reviewId),
+                case_ids: ids || [],
+              });
               qaCaseSetToastSuccess("已关联所选用例");
               setIsCaseSelectionOpen(false);
               fetchReviewTree();

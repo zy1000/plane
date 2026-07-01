@@ -27,6 +27,7 @@ import styles from "./update-modal.module.css";
 import { ExecutionRecordDetailModal } from "../execution/execution-records";
 import { TestCaseActivityTab } from "./test-case-activity/test-case-activity-tab";
 import { useTranslation } from "@plane/i18n";
+import { useUserPermissions } from "@/hooks/store/user";
 import {
   qaCaseErrorContent,
   qaCaseSetToastError,
@@ -34,15 +35,25 @@ import {
   qaCaseSetToastWarning,
 } from "@/utils/qa-case-error";
 
+const QA_CASE_EDIT_PERMISSION_KEY = "qa.case.edit" as const;
+
 type UpdateModalProps = {
   open: boolean;
   onClose: () => void;
+  canEdit?: boolean;
   caseId?: string; // 改为传入case ID而不是完整数据
   workspaceSlug?: string;
   projectId?: string;
 };
 
-function UpdateModalBody({ open, onClose, caseId, workspaceSlug: propWorkspaceSlug, projectId: propProjectId }: UpdateModalProps) {
+function UpdateModalBody({
+  open,
+  onClose,
+  canEdit,
+  caseId,
+  workspaceSlug: propWorkspaceSlug,
+  projectId: propProjectId,
+}: UpdateModalProps) {
   const { t } = useTranslation();
 
   const [activeTab, setActiveTab] = useState<string>("basic");
@@ -51,6 +62,10 @@ function UpdateModalBody({ open, onClose, caseId, workspaceSlug: propWorkspaceSl
   const workspaceSlug = propWorkspaceSlug || params.workspaceSlug;
   const projectId = propProjectId || params.projectId;
   const projectIdStr = projectId ? String(projectId) : "";
+  const { allowProjectPermissionKeys } = useUserPermissions();
+  const canEditCase =
+    canEdit ??
+    allowProjectPermissionKeys([QA_CASE_EDIT_PERMISSION_KEY], workspaceSlug ? String(workspaceSlug) : "", projectIdStr);
   const caseService = React.useMemo(() => new CaseService(), []);
   const reviewService = React.useMemo(() => new ReviewApiService(), []);
   const loadSeqRef = React.useRef<number>(0);
@@ -66,6 +81,7 @@ function UpdateModalBody({ open, onClose, caseId, workspaceSlug: propWorkspaceSl
   const [codeValue, setCodeValue] = React.useState<string>("");
 
   const handleBlurTitle = async () => {
+    if (!canEditCase) return;
     const newName = title?.trim();
     const oldName = (caseData?.name ?? "").trim();
     if (!workspaceSlug || !caseId || !projectIdStr) return;
@@ -80,6 +96,7 @@ function UpdateModalBody({ open, onClose, caseId, workspaceSlug: propWorkspaceSl
   };
 
   const handleBlurCode = async () => {
+    if (!canEditCase) return;
     const newCode = (codeValue ?? "").trim();
     const oldCode = String(caseData?.code ?? "");
     if (!workspaceSlug || !caseId || !projectIdStr) return;
@@ -93,6 +110,7 @@ function UpdateModalBody({ open, onClose, caseId, workspaceSlug: propWorkspaceSl
   };
 
   const handleCreateLabel = async (name: string) => {
+    if (!canEditCase) return;
     // 允许 repository_id 为空，因为可能不是必须的
     if (!name || !workspaceSlug || !caseId) return;
     try {
@@ -110,6 +128,7 @@ function UpdateModalBody({ open, onClose, caseId, workspaceSlug: propWorkspaceSl
   };
 
   const handleDeleteLabel = async (labelId: string) => {
+    if (!canEditCase) return;
     if (!workspaceSlug || !caseId) return;
     try {
       await caseService.deletelabel(workspaceSlug, labelId, caseId);
@@ -235,6 +254,7 @@ function UpdateModalBody({ open, onClose, caseId, workspaceSlug: propWorkspaceSl
   };
 
   const handleOpenSelectModal = async (type: "Requirement" | "Task" | "Bug") => {
+    if (!canEditCase) return;
     setForceTypeName(type);
     if (workspaceSlug && caseId) {
       try {
@@ -257,6 +277,7 @@ function UpdateModalBody({ open, onClose, caseId, workspaceSlug: propWorkspaceSl
   };
 
   const handleWorkItemConfirm = async (issues: any[]) => {
+    if (!canEditCase) return;
     try {
       if (!workspaceSlug || !caseId || !projectIdStr) return;
       const issueIds = (issues || []).map((i) => i.id);
@@ -275,7 +296,10 @@ function UpdateModalBody({ open, onClose, caseId, workspaceSlug: propWorkspaceSl
   const [attachmentUploading, setAttachmentUploading] = React.useState<Record<string, boolean>>({});
   const [attachmentsLoading, setAttachmentsLoading] = React.useState<boolean>(false);
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
-  const handlePickAttachments = () => fileInputRef.current?.click();
+  const handlePickAttachments = () => {
+    if (!canEditCase) return;
+    fileInputRef.current?.click();
+  };
 
   const fetchAttachments = async (seq?: number) => {
     if (!workspaceSlug || !caseId) return;
@@ -298,6 +322,7 @@ function UpdateModalBody({ open, onClose, caseId, workspaceSlug: propWorkspaceSl
   const [attachmentAssetMap, setAttachmentAssetMap] = useState<Record<string, string>>({});
 
   const handleRemoveAttachment = async (idx: number) => {
+    if (!canEditCase) return;
     const file = attachmentFiles[idx];
     if (!file) return;
     const key = `${file.name}-${file.size}-${file.lastModified}`;
@@ -328,6 +353,7 @@ function UpdateModalBody({ open, onClose, caseId, workspaceSlug: propWorkspaceSl
   };
 
   const uploadAttachmentViaProjectAssetEndpoint = async (file: File) => {
+    if (!canEditCase) return;
     try {
       if (!workspaceSlug || !projectIdStr) {
         qaCaseSetToastWarning("缺少必要参数(workspaceSlug, projectId)，无法上传附件");
@@ -338,11 +364,14 @@ function UpdateModalBody({ open, onClose, caseId, workspaceSlug: propWorkspaceSl
 
       // 1. 获取签名（固定 entity_type 为 CASE_ATTACHMENT）
       const meta = await getFileMetaDataForUpload(file);
-      const presignResp = await caseService.post(`/api/assets/v2/workspaces/${workspaceSlug}/projects/${projectIdStr}/`, {
-        ...meta,
-        entity_type: "CASE_ATTACHMENT",
-        entity_identifier: "",
-      });
+      const presignResp = await caseService.post(
+        `/api/assets/v2/workspaces/${workspaceSlug}/projects/${projectIdStr}/`,
+        {
+          ...meta,
+          entity_type: "CASE_ATTACHMENT",
+          entity_identifier: "",
+        }
+      );
       const signed = presignResp?.data ?? presignResp;
 
       // 2. 直传到对象存储
@@ -350,7 +379,9 @@ function UpdateModalBody({ open, onClose, caseId, workspaceSlug: propWorkspaceSl
       await fileUploadService.uploadFile(signed.upload_data.url, payload);
 
       // 3. 标记已上传
-      await caseService.patch(`/api/assets/v2/workspaces/${workspaceSlug}/projects/${projectIdStr}/${signed.asset_id}/`);
+      await caseService.patch(
+        `/api/assets/v2/workspaces/${workspaceSlug}/projects/${projectIdStr}/${signed.asset_id}/`
+      );
       // 4. 记录case_id
       await caseService.putAssetCaseId(String(workspaceSlug), String(signed.asset_id), {
         case_id: String(caseId),
@@ -375,6 +406,7 @@ function UpdateModalBody({ open, onClose, caseId, workspaceSlug: propWorkspaceSl
   };
 
   const handleFilesChosen = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!canEditCase) return;
     const files = Array.from(e.target.files || []);
     if (files.length) {
       setAttachmentFiles((prev) => [...prev, ...files]);
@@ -388,6 +420,7 @@ function UpdateModalBody({ open, onClose, caseId, workspaceSlug: propWorkspaceSl
 
   // 新增：删除附件
   const handleRemoveCaseAttachment = async (attachmentId: string) => {
+    if (!canEditCase) return;
     if (!workspaceSlug || !caseId) return;
     if (!attachmentId) return;
     try {
@@ -427,8 +460,6 @@ function UpdateModalBody({ open, onClose, caseId, workspaceSlug: propWorkspaceSl
         return "default";
     }
   };
-
-
 
   // 新增：四个下拉框的本地值状态（从 caseData 同步，类型统一为字符串）
   const [assignee, setAssignee] = React.useState<string | undefined>(undefined);
@@ -495,9 +526,9 @@ function UpdateModalBody({ open, onClose, caseId, workspaceSlug: propWorkspaceSl
     }
   };
 
-  const [reviewEnums, setReviewEnums] = React.useState<Record<string, Record<string, { label: string; color: string }>>>(
-    {}
-  );
+  const [reviewEnums, setReviewEnums] = React.useState<
+    Record<string, Record<string, { label: string; color: string }>>
+  >({});
   const fetchReviewEnums = async (seq?: number) => {
     if (!workspaceSlug) return;
     try {
@@ -532,7 +563,9 @@ function UpdateModalBody({ open, onClose, caseId, workspaceSlug: propWorkspaceSl
         setLatestExec(null);
         return;
       }
-      const sorted = [...list].sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+      const sorted = [...list].sort(
+        (a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+      );
       setLatestExec(sorted[0]);
     } catch {
       if (seq && seq !== loadSeqRef.current) return;
@@ -680,9 +713,9 @@ function UpdateModalBody({ open, onClose, caseId, workspaceSlug: propWorkspaceSl
           // 使用 Tooltip + 省略样式，保证选项和选择框回显一致
           label: (
             <Tooltip title={name} placement="top">
-              <span className="flex items-center gap-1 min-w-0">
+              <span className="flex min-w-0 items-center gap-1">
                 <LucideIcons.User size={14} className="text-gray-500 shrink-0" />
-                <span className="truncate max-w-[160px]">{name}</span>
+                <span className="max-w-[160px] truncate">{name}</span>
               </span>
             </Tooltip>
           ),
@@ -695,6 +728,7 @@ function UpdateModalBody({ open, onClose, caseId, workspaceSlug: propWorkspaceSl
 
   // 新增：失焦更新（各字段）
   const handleBlurAssignee = async () => {
+    if (!canEditCase) return;
     if (!workspaceSlug || !caseId || !projectIdStr) return;
     if (assignee === normalizeId(caseData?.assignee)) return;
     try {
@@ -706,6 +740,7 @@ function UpdateModalBody({ open, onClose, caseId, workspaceSlug: propWorkspaceSl
   };
 
   const handleUpdateAssine = async (v: any) => {
+    if (!canEditCase) return;
     if (!workspaceSlug || !caseId || !projectIdStr) return;
 
     if (v === normalizeId(caseData?.assignee)) return;
@@ -719,6 +754,7 @@ function UpdateModalBody({ open, onClose, caseId, workspaceSlug: propWorkspaceSl
   };
 
   const handleBlurState = async () => {
+    if (!canEditCase) return;
     if (!workspaceSlug || !caseId || !projectIdStr) return;
     if (stateValue === normalizeId(caseData?.state)) return;
     try {
@@ -730,6 +766,7 @@ function UpdateModalBody({ open, onClose, caseId, workspaceSlug: propWorkspaceSl
   };
 
   const handleBlurType = async () => {
+    if (!canEditCase) return;
     if (!workspaceSlug || !caseId || !projectIdStr) return;
     if (typeValue === normalizeId(caseData?.type)) return;
     try {
@@ -741,6 +778,7 @@ function UpdateModalBody({ open, onClose, caseId, workspaceSlug: propWorkspaceSl
   };
 
   const handleBlurPriority = async () => {
+    if (!canEditCase) return;
     if (!workspaceSlug || !caseId || !projectIdStr) return;
     if (priorityValue === normalizeId(caseData?.priority)) return;
     try {
@@ -751,8 +789,6 @@ function UpdateModalBody({ open, onClose, caseId, workspaceSlug: propWorkspaceSl
     }
   };
 
-
-
   const handleSaveBasicInfo = async (data: {
     precondition: string;
     steps: any[];
@@ -761,6 +797,7 @@ function UpdateModalBody({ open, onClose, caseId, workspaceSlug: propWorkspaceSl
     textResult: string;
     remark: string;
   }) => {
+    if (!canEditCase) return;
     if (!workspaceSlug || !caseId || !projectIdStr) return;
 
     const payload: any = {};
@@ -829,7 +866,7 @@ function UpdateModalBody({ open, onClose, caseId, workspaceSlug: propWorkspaceSl
         data-prevent-outside-click="true"
       >
         <div className="absolute inset-0 bg-black/40" onClick={onClose} aria-hidden="true" />
-        <div className="relative z-10 w-[85vw] h-[90vh] max-h-[90vh] overflow-hidden rounded-lg bg-white shadow-lg flex items-center justify-center">
+        <div className="relative z-10 flex h-[90vh] max-h-[90vh] w-[85vw] items-center justify-center overflow-hidden rounded-lg bg-white shadow-lg">
           {!initialReady || initialLoading ? (
             <Spin size="large" />
           ) : (
@@ -849,14 +886,15 @@ function UpdateModalBody({ open, onClose, caseId, workspaceSlug: propWorkspaceSl
       data-prevent-outside-click="true"
     >
       <div className="absolute inset-0 bg-black/40" onClick={onClose} aria-hidden="true" />
-      <div className="relative z-10 w-[85vw] h-[90vh] max-h-[90vh] overflow-hidden rounded-lg bg-white shadow-lg flex flex-col">
+      <div className="relative z-10 flex h-[90vh] max-h-[90vh] w-[85vw] flex-col overflow-hidden rounded-lg bg-white shadow-lg">
         <ModalHeader onClose={onClose} caseId={String(caseId ?? "")} />
         {/* 内容区域：左右布局 */}
-        <div className="flex flex-1 min-h-0">
+        <div className="flex min-h-0 flex-1">
           {/* 左侧：2/3宽度 */}
-          <div className="w-[73%] px-6 py-4 h-full overflow-y-auto">
-            <TitleInput value={title} onChange={setTitle} onBlur={handleBlurTitle} />
+          <div className="h-full w-[73%] overflow-y-auto px-6 py-4">
+            <TitleInput disabled={!canEditCase} value={title} onChange={setTitle} onBlur={handleBlurTitle} />
             <CaseMetaForm
+              disabled={!canEditCase}
               projectId={projectId ? String(projectId) : undefined}
               code={codeValue}
               onCodeChange={setCodeValue}
@@ -883,15 +921,15 @@ function UpdateModalBody({ open, onClose, caseId, workspaceSlug: propWorkspaceSl
             />
             {/* Menu 导航 */}
             <div className="mt-3">
-              <div className="mx-2 border-b border-gray-200 flex items-center justify-between">
+              <div className="border-gray-200 mx-2 flex items-center justify-between border-b">
                 <nav className="flex gap-4">
                   <button
                     type="button"
                     onClick={() => setActiveTab("basic")}
-                    className={`px-2 py-3 text-sm leading-5 font-medium -mb-px border-b-2 transition-colors ${
+                    className={`-mb-px border-b-2 px-2 py-3 text-sm leading-5 font-medium transition-colors ${
                       activeTab === "basic"
-                        ? "text-accent-primary border-accent-strong"
-                        : "text-secondary border-transparent hover:text-accent-primary"
+                        ? "border-accent-strong text-accent-primary"
+                        : "border-transparent text-secondary hover:text-accent-primary"
                     }`}
                   >
                     基本信息
@@ -899,10 +937,10 @@ function UpdateModalBody({ open, onClose, caseId, workspaceSlug: propWorkspaceSl
                   <button
                     type="button"
                     onClick={() => setActiveTab("requirement")}
-                    className={`px-2 py-3 text-sm leading-5 font-medium -mb-px border-b-2 transition-colors ${
+                    className={`-mb-px border-b-2 px-2 py-3 text-sm leading-5 font-medium transition-colors ${
                       activeTab === "requirement"
-                        ? "text-accent-primary border-accent-strong"
-                        : "text-secondary border-transparent hover:text-accent-primary"
+                        ? "border-accent-strong text-accent-primary"
+                        : "border-transparent text-secondary hover:text-accent-primary"
                     }`}
                   >
                     需求
@@ -910,10 +948,10 @@ function UpdateModalBody({ open, onClose, caseId, workspaceSlug: propWorkspaceSl
                   <button
                     type="button"
                     onClick={() => setActiveTab("work")}
-                    className={`px-2 py-3 text-sm leading-5 font-medium -mb-px border-b-2 transition-colors ${
+                    className={`-mb-px border-b-2 px-2 py-3 text-sm leading-5 font-medium transition-colors ${
                       activeTab === "work"
-                        ? "text-accent-primary border-accent-strong"
-                        : "text-secondary border-transparent hover:text-accent-primary"
+                        ? "border-accent-strong text-accent-primary"
+                        : "border-transparent text-secondary hover:text-accent-primary"
                     }`}
                   >
                     工作项
@@ -921,10 +959,10 @@ function UpdateModalBody({ open, onClose, caseId, workspaceSlug: propWorkspaceSl
                   <button
                     type="button"
                     onClick={() => setActiveTab("defect")}
-                    className={`px-2 py-3 text-sm leading-5 font-medium -mb-px border-b-2 transition-colors ${
+                    className={`-mb-px border-b-2 px-2 py-3 text-sm leading-5 font-medium transition-colors ${
                       activeTab === "defect"
-                        ? "text-accent-primary border-accent-strong"
-                        : "text-secondary border-transparent hover:text-accent-primary"
+                        ? "border-accent-strong text-accent-primary"
+                        : "border-transparent text-secondary hover:text-accent-primary"
                     }`}
                   >
                     缺陷
@@ -932,10 +970,10 @@ function UpdateModalBody({ open, onClose, caseId, workspaceSlug: propWorkspaceSl
                   <button
                     type="button"
                     onClick={() => setActiveTab("execution")}
-                    className={`px-2 py-3 text-sm leading-5 font-medium -mb-px border-b-2 transition-colors ${
+                    className={`-mb-px border-b-2 px-2 py-3 text-sm leading-5 font-medium transition-colors ${
                       activeTab === "execution"
-                        ? "text-accent-primary border-accent-strong"
-                        : "text-secondary border-transparent hover:text-accent-primary"
+                        ? "border-accent-strong text-accent-primary"
+                        : "border-transparent text-secondary hover:text-accent-primary"
                     }`}
                   >
                     执行
@@ -943,10 +981,10 @@ function UpdateModalBody({ open, onClose, caseId, workspaceSlug: propWorkspaceSl
                   <button
                     type="button"
                     onClick={() => setActiveTab("review")}
-                    className={`px-2 py-3 text-sm leading-5 font-medium -mb-px border-b-2 transition-colors ${
+                    className={`-mb-px border-b-2 px-2 py-3 text-sm leading-5 font-medium transition-colors ${
                       activeTab === "review"
-                        ? "text-accent-primary border-accent-strong"
-                        : "text-secondary border-transparent hover:text-accent-primary"
+                        ? "border-accent-strong text-accent-primary"
+                        : "border-transparent text-secondary hover:text-accent-primary"
                     }`}
                   >
                     评审历史
@@ -954,10 +992,10 @@ function UpdateModalBody({ open, onClose, caseId, workspaceSlug: propWorkspaceSl
                   <button
                     type="button"
                     onClick={() => setActiveTab("attachments")}
-                    className={`px-2 py-3 text-sm leading-5 font-medium -mb-px border-b-2 transition-colors ${
+                    className={`-mb-px border-b-2 px-2 py-3 text-sm leading-5 font-medium transition-colors ${
                       activeTab === "attachments"
-                        ? "text-accent-primary border-accent-strong"
-                        : "text-secondary border-transparent hover:text-accent-primary"
+                        ? "border-accent-strong text-accent-primary"
+                        : "border-transparent text-secondary hover:text-accent-primary"
                     }`}
                   >
                     附件
@@ -968,7 +1006,8 @@ function UpdateModalBody({ open, onClose, caseId, workspaceSlug: propWorkspaceSl
                     <button
                       type="button"
                       onClick={() => handleOpenSelectModal("Requirement")}
-                      className="text-on-color bg-accent-primary hover:bg-accent-primary-hover px-3 py-1.5 font-medium text-xs rounded whitespace-nowrap transition-all"
+                      disabled={!canEditCase}
+                      className="rounded bg-accent-primary px-3 py-1.5 text-xs font-medium whitespace-nowrap text-on-color transition-all hover:bg-accent-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       添加需求
                     </button>
@@ -977,7 +1016,8 @@ function UpdateModalBody({ open, onClose, caseId, workspaceSlug: propWorkspaceSl
                     <button
                       type="button"
                       onClick={() => handleOpenSelectModal("Task")}
-                      className="text-on-color bg-accent-primary hover:bg-accent-primary-hover px-3 py-1.5 font-medium text-xs rounded whitespace-nowrap transition-all"
+                      disabled={!canEditCase}
+                      className="rounded bg-accent-primary px-3 py-1.5 text-xs font-medium whitespace-nowrap text-on-color transition-all hover:bg-accent-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       添加工作项
                     </button>
@@ -986,7 +1026,8 @@ function UpdateModalBody({ open, onClose, caseId, workspaceSlug: propWorkspaceSl
                     <button
                       type="button"
                       onClick={() => handleOpenSelectModal("Bug")}
-                      className="text-on-color bg-accent-primary hover:bg-accent-primary-hover px-3 py-1.5 font-medium text-xs rounded whitespace-nowrap transition-all"
+                      disabled={!canEditCase}
+                      className="rounded bg-accent-primary px-3 py-1.5 text-xs font-medium whitespace-nowrap text-on-color transition-all hover:bg-accent-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       添加缺陷
                     </button>
@@ -1000,6 +1041,7 @@ function UpdateModalBody({ open, onClose, caseId, workspaceSlug: propWorkspaceSl
             {activeTab === "basic" && (
               <BasicInfoPanel
                 caseId={caseId}
+                canEdit={canEditCase}
                 preconditionValue={preconditionValue ?? ""}
                 stepsValue={stepsValue}
                 modeValue={modeValue}
@@ -1020,7 +1062,7 @@ function UpdateModalBody({ open, onClose, caseId, workspaceSlug: propWorkspaceSl
             )}
             {activeTab === "execution" && caseId && (
               <div>
-                <div className="rounded  border-gray-200 overflow-hidden">
+                <div className="border-gray-200 overflow-hidden rounded">
                   <div className="overflow-x-auto">
                     <Table
                       size="middle"
@@ -1035,9 +1077,7 @@ function UpdateModalBody({ open, onClose, caseId, workspaceSlug: propWorkspaceSl
                         showQuickJumper: true,
                         pageSizeOptions: execPageSizeOptions.map(String),
                         showTotal: (t, range) => `第 ${range[0]}-${range[1]} 条，共 ${t} 条`,
-                        selectComponentClass: (props: any) => (
-                          <Select {...props} dropdownStyle={{ zIndex: 1200 }} />
-                        ),
+                        selectComponentClass: (props: any) => <Select {...props} dropdownStyle={{ zIndex: 1200 }} />,
                         onChange: (p) => setExecPage(p),
                         onShowSizeChange: (_c, s) => {
                           setExecPageSize(s);
@@ -1101,8 +1141,8 @@ function UpdateModalBody({ open, onClose, caseId, workspaceSlug: propWorkspaceSl
                       ]}
                     />
                   </div>
-            
-                  {execError && <div className="px-3 py-2 text-sm text-red-600">{execError}</div>}
+
+                  {execError && <div className="text-red-600 px-3 py-2 text-sm">{execError}</div>}
                 </div>
               </div>
             )}
@@ -1130,7 +1170,7 @@ function UpdateModalBody({ open, onClose, caseId, workspaceSlug: propWorkspaceSl
             />
             {activeTab === "review" && caseId && (
               <div>
-                <div className="rounded  border-gray-200 overflow-hidden">
+                <div className="border-gray-200 overflow-hidden rounded">
                   <div className="overflow-x-auto">
                     <Table
                       size="middle"
@@ -1145,9 +1185,7 @@ function UpdateModalBody({ open, onClose, caseId, workspaceSlug: propWorkspaceSl
                         showQuickJumper: true,
                         pageSizeOptions: reviewPageSizeOptions.map(String),
                         showTotal: (t, range) => `第 ${range[0]}-${range[1]} 条，共 ${t} 条`,
-                        selectComponentClass: (props: any) => (
-                          <Select {...props} dropdownStyle={{ zIndex: 1200 }} />
-                        ),
+                        selectComponentClass: (props: any) => <Select {...props} dropdownStyle={{ zIndex: 1200 }} />,
                         onChange: (p) => setReviewPage(p),
                         onShowSizeChange: (_c, s) => {
                           setReviewPageSize(s);
@@ -1162,7 +1200,7 @@ function UpdateModalBody({ open, onClose, caseId, workspaceSlug: propWorkspaceSl
                           width: 200,
                           render: (v: string | null | undefined) => (
                             <Tooltip title={v || "-"} zIndex={1300}>
-                              <span className="truncate block max-w-[200px]">{v || "-"}</span>
+                              <span className="block max-w-[200px] truncate">{v || "-"}</span>
                             </Tooltip>
                           ),
                         },
@@ -1182,7 +1220,7 @@ function UpdateModalBody({ open, onClose, caseId, workspaceSlug: propWorkspaceSl
                             const text = isPassed && !v ? "OK" : v || "-";
                             return (
                               <Tooltip title={text} zIndex={1300}>
-                                <span className="truncate block max-w-[420px]">{text}</span>
+                                <span className="block max-w-[420px] truncate">{text}</span>
                               </Tooltip>
                             );
                           },
@@ -1219,7 +1257,7 @@ function UpdateModalBody({ open, onClose, caseId, workspaceSlug: propWorkspaceSl
                     />
                   </div>
 
-                  {reviewError && <div className="px-3 py-2 text-sm text-red-600">{reviewError}</div>}
+                  {reviewError && <div className="text-red-600 px-3 py-2 text-sm">{reviewError}</div>}
                 </div>
               </div>
             )}
@@ -1250,6 +1288,7 @@ function UpdateModalBody({ open, onClose, caseId, workspaceSlug: propWorkspaceSl
             {activeTab === "attachments" && (
               <AttachmentsPanel
                 attachmentsLoading={attachmentsLoading}
+                canEdit={canEditCase}
                 caseAttachments={caseAttachments}
                 fileInputRef={fileInputRef}
                 onPickAttachments={handlePickAttachments}
@@ -1274,7 +1313,7 @@ function UpdateModalBody({ open, onClose, caseId, workspaceSlug: propWorkspaceSl
         <div className="flex justify-end gap-2 border-t px-4 py-3">
           <button
             type="button"
-            className="rounded bg-gray-100 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-200"
+            className="bg-gray-100 text-gray-700 hover:bg-gray-200 rounded px-3 py-1.5 text-sm"
             onClick={onClose}
           >
             关闭

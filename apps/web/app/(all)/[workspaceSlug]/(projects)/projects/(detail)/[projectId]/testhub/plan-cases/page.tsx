@@ -24,8 +24,16 @@ import { formatDateTime, globalEnums } from "../util";
 import { useUser } from "@/hooks/store/user";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { useTranslation } from "@plane/i18n";
-import { qaCaseErrorContent, qaCaseSetToastError, qaCaseSetToastSuccess, qaCaseSetToastWarning } from "@/utils/qa-case-error";
+import {
+  qaCaseErrorContent,
+  qaCaseSetToastError,
+  qaCaseSetToastSuccess,
+  qaCaseSetToastWarning,
+} from "@/utils/qa-case-error";
 import { ChevronDownIcon } from "@plane/propel/icons";
+import { useProjectPermissions } from "@/hooks/store/use-project-permissions";
+
+const QA_PLAN_EDIT_PERMISSION_KEY = "qa.plan.edit" as const;
 
 type TLabel = { id?: string; name?: string } | string;
 type TestCase = {
@@ -68,6 +76,11 @@ export default function PlanCasesPage() {
   const planService = useRef(new PlanService()).current;
   const caseService = useRef(new CaseService()).current;
   const { data: currentUser } = useUser();
+  const { fetched: permissionsFetched, hasPermission } = useProjectPermissions(
+    String(workspaceSlug || ""),
+    String(projectId || "")
+  );
+  const canEditPlan = permissionsFetched && hasPermission(QA_PLAN_EDIT_PERMISSION_KEY);
 
   const [expandedKeys, setExpandedKeys] = useState<string[] | undefined>(undefined);
   const [autoExpandParent, setAutoExpandParent] = useState<boolean>(true);
@@ -114,10 +127,7 @@ export default function PlanCasesPage() {
   const lastSelectionContextKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (
-      lastSelectionContextKeyRef.current !== null &&
-      lastSelectionContextKeyRef.current !== selectionContextKey
-    ) {
+    if (lastSelectionContextKeyRef.current !== null && lastSelectionContextKeyRef.current !== selectionContextKey) {
       setSelectedCaseIds([]);
       setSelectedPlanCaseToCaseIdMap({});
       setSelectedPlanCaseToAssigneeMap({});
@@ -181,7 +191,7 @@ export default function PlanCasesPage() {
     if (!workspaceSlug || !planId) return;
     try {
       setError(null);
-      const effectiveOrdering = orderingParam === undefined ? ordering : orderingParam ?? undefined;
+      const effectiveOrdering = orderingParam === undefined ? ordering : (orderingParam ?? undefined);
       const effectiveResults =
         resultsParam === undefined ? selectedResults : resultsParam === null ? undefined : resultsParam;
       const params: any = {
@@ -267,7 +277,7 @@ export default function PlanCasesPage() {
             : sorterOrder === "descend"
               ? "-case__code"
               : undefined
-        : undefined;
+          : undefined;
 
     setOrdering(nextOrdering);
     fetchCases(
@@ -322,11 +332,9 @@ export default function PlanCasesPage() {
 
   const renderNodeTitle = (title: string, icon: ReactNode, count?: number, fontMedium?: boolean) => {
     return (
-      <div className="group flex items-center justify-between gap-2 w-full">
+      <div className="group flex w-full items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <span className="inline-flex items-center justify-center w-5 h-5 text-secondary">
-            {icon}
-          </span>
+          <span className="inline-flex h-5 w-5 items-center justify-center text-secondary">{icon}</span>
           <span className={`text-sm text-primary ${fontMedium ? "font-medium" : ""}`}>{title}</span>
         </div>
         <div className="flex items-center gap-2">
@@ -407,12 +415,7 @@ export default function PlanCasesPage() {
         setSelectedPlanCaseToAssigneeMap({});
       }
       await fetchPlanTree();
-      await fetchCases(
-        1,
-        pageSize,
-        selectedRepositoryId || undefined,
-        selectedModuleId || undefined
-      );
+      await fetchCases(1, pageSize, selectedRepositoryId || undefined, selectedModuleId || undefined);
       qaCaseSetToastSuccess("取消关联成功");
     } catch (e: unknown) {
       const fallback = "取消关联失败";
@@ -487,7 +490,7 @@ export default function PlanCasesPage() {
             actual_result: String(s?.actual_result ?? ""),
             exec_result: successLabel,
           }));
-          return { case_id: String(cid)};
+          return { case_id: String(cid) };
         })
       );
 
@@ -524,7 +527,9 @@ export default function PlanCasesPage() {
       const nextAssignee = updated?.assignee ?? assignee;
       setCases((prev) =>
         (prev || []).map((item) =>
-          String(item.id) === String(planCaseId) ? { ...item, assignee: nextAssignee ? String(nextAssignee) : null } : item
+          String(item.id) === String(planCaseId)
+            ? { ...item, assignee: nextAssignee ? String(nextAssignee) : null }
+            : item
         )
       );
       setSelectedPlanCaseToAssigneeMap((prev) => ({
@@ -610,12 +615,12 @@ export default function PlanCasesPage() {
         return (
           <span className="block truncate" title={code || ""}>
             <Button
-            type="text"
-            className="p-0 h-auto text-primary hover:text-primary hover:bg-transparent"
-            onClick={() => handleOpenCaseDetail(cid)}
-          >
-            {code}
-          </Button>
+              type="text"
+              className="h-auto p-0 text-primary hover:bg-transparent hover:text-primary"
+              onClick={() => handleOpenCaseDetail(cid)}
+            >
+              {code}
+            </Button>
           </span>
         );
       },
@@ -635,12 +640,12 @@ export default function PlanCasesPage() {
         return (
           <Button
             type="text"
-            className="p-0 h-auto text-primary hover:text-primary hover:bg-transparent"
+            className="h-auto p-0 text-primary hover:bg-transparent hover:text-primary"
             onClick={() => handleOpenCaseDetail(cid)}
           >
-         <span className="block max-w-[220px] truncate text-inherit" title={name || ""}>
-            {name || "-"}
-          </span>
+            <span className="block max-w-[220px] truncate text-inherit" title={name || ""}>
+              {name || "-"}
+            </span>
           </Button>
         );
       },
@@ -653,9 +658,7 @@ export default function PlanCasesPage() {
       render: (_: any, record: PlanCaseItem) =>
         record?.case?.repository_name ? (
           <Tooltip tooltipContent={record.case.repository_name}>
-            <span className="block max-w-[140px] truncate text-inherit">
-              {record.case.repository_name}
-            </span>
+            <span className="block max-w-[140px] truncate text-inherit">{record.case.repository_name}</span>
           </Tooltip>
         ) : (
           "-"
@@ -669,9 +672,7 @@ export default function PlanCasesPage() {
       render: (_: any, record: PlanCaseItem) =>
         record?.case?.module ? (
           <Tooltip tooltipContent={record.case.module}>
-            <span className="block max-w-[120px] truncate text-inherit">
-              {record.case.module}
-            </span>
+            <span className="block max-w-[120px] truncate text-inherit">{record.case.module}</span>
           </Tooltip>
         ) : (
           "-"
@@ -752,9 +753,7 @@ export default function PlanCasesPage() {
       fixed: "right",
       render: (_: any, record: PlanCaseItem) => {
         const isAssignedToCurrentUser =
-          Boolean(record?.assignee) &&
-          Boolean(currentUser?.id) &&
-          String(record.assignee) === String(currentUser?.id);
+          Boolean(record?.assignee) && Boolean(currentUser?.id) && String(record.assignee) === String(currentUser?.id);
         const actionLabel = isAssignedToCurrentUser ? "执行" : "查看";
         return (
           <Space>
@@ -788,14 +787,14 @@ export default function PlanCasesPage() {
     <div className="h-full w-full">
       <PageHead title="计划用例" description={repositoryName || ""} />
       <div className="flex h-full w-full flex-col">
-        <div className="flex-1 min-h-0 flex overflow-hidden">
+        <div className="flex min-h-0 flex-1 overflow-hidden">
           <div
-            className="relative h-full min-h-0 border-r border-subtle overflow-y-auto flex-shrink-0 pt-3 pl-3"
+            className="relative h-full min-h-0 flex-shrink-0 overflow-y-auto border-r border-subtle pt-3 pl-3"
             style={{ width: leftWidth, minWidth: 200, maxWidth: 320 }}
           >
             <div
               onMouseDown={onMouseDownResize}
-              className="absolute right-0 top-0 h-full w-2"
+              className="absolute top-0 right-0 h-full w-2"
               style={{ cursor: "col-resize", zIndex: 10 }}
             />
             <style
@@ -822,11 +821,8 @@ export default function PlanCasesPage() {
               showLine={false}
               defaultExpandAll
               switcherIcon={(nodeProps) => (
-                <span className="inline-flex items-center justify-center w-5 h-5 text-secondary">
-                  <ChevronDownIcon
-                    className={`size-4 transition-transform rotate-0`}
-                    strokeWidth={2.5}
-                  />
+                <span className="inline-flex h-5 w-5 items-center justify-center text-secondary">
+                  <ChevronDownIcon className={`size-4 rotate-0 transition-transform`} strokeWidth={2.5} />
                 </span>
               )}
               onSelect={onSelect}
@@ -835,22 +831,25 @@ export default function PlanCasesPage() {
               autoExpandParent={autoExpandParent}
               treeData={treeData}
               selectedKeys={treeData.length > 0 ? [selectedTreeKey] : []}
-              className="pb-2 pr-2 custom-tree-indent"
+              className="custom-tree-indent pr-2 pb-2"
             />
           </div>
-          <div className="flex-1 h-full min-h-0 overflow-hidden min-w-0">
-            <div className="flex h-full flex-col min-w-0">
-              <div className="px-0 py-3 flex items-center justify-between flex-shrink-0">
+          <div className="h-full min-h-0 min-w-0 flex-1 overflow-hidden">
+            <div className="flex h-full min-w-0 flex-col">
+              <div className="flex flex-shrink-0 items-center justify-between px-0 py-3">
                 <div>
                   <Breadcrumbs>
                     <Breadcrumbs.Item
                       component={
-                        <BreadcrumbLink href={`/${workspaceSlug}/projects/${projectId}/testhub/plans`} label="测试计划" />
+                        <BreadcrumbLink
+                          href={`/${workspaceSlug}/projects/${projectId}/testhub/plans`}
+                          label="测试计划"
+                        />
                       }
                     />
                     <Breadcrumbs.Item
                       component={
-                        <div className="flex items-center h-full">
+                        <div className="flex h-full items-center">
                           <Select
                             value={planId || undefined}
                             placeholder="选择测试计划"
@@ -859,7 +858,7 @@ export default function PlanCasesPage() {
                             showSearch
                             optionFilterProp="label"
                             style={{ height: "100%" }}
-                            className="min-w-[200px] h-full cursor-pointer [&_.ant-select-selector]:!p-0 [&_.ant-select-selector]:!h-full [&_.ant-select-selector]:!min-h-full [&_.ant-select-selector]:!items-center [&_.ant-select-selector]:!cursor-pointer [&_.ant-select-selection-wrap]:!h-full [&_.ant-select-selection-wrap]:!items-center [&_.ant-select-selection-wrap]:!flex [&_.ant-select-selection-search]:!h-full [&_.ant-select-selection-search-input]:!h-full [&_.ant-select-selection-item]:!leading-4 [&_.ant-select-selection-item]:!text-sm [&_.ant-select-selection-item]:!text-primary [&_.ant-select-selection-placeholder]:!leading-4 [&_.ant-select-selection-placeholder]:!text-sm [&_.ant-select-selection-placeholder]:!text-secondary"
+                            className="h-full min-w-[200px] cursor-pointer [&_.ant-select-selection-item]:!text-sm [&_.ant-select-selection-item]:!leading-4 [&_.ant-select-selection-item]:!text-primary [&_.ant-select-selection-placeholder]:!text-sm [&_.ant-select-selection-placeholder]:!leading-4 [&_.ant-select-selection-placeholder]:!text-secondary [&_.ant-select-selection-search]:!h-full [&_.ant-select-selection-search-input]:!h-full [&_.ant-select-selection-wrap]:!flex [&_.ant-select-selection-wrap]:!h-full [&_.ant-select-selection-wrap]:!items-center [&_.ant-select-selector]:!h-full [&_.ant-select-selector]:!min-h-full [&_.ant-select-selector]:!cursor-pointer [&_.ant-select-selector]:!items-center [&_.ant-select-selector]:!p-0"
                             variant="borderless"
                             suffixIcon={null}
                             showArrow={false}
@@ -876,14 +875,19 @@ export default function PlanCasesPage() {
                     <PlaneButton
                       variant="primary"
                       size="xl"
-                      onClick={() => setIsPlanModalOpen(true)}
+                      disabled={!canEditPlan}
+                      onClick={() => {
+                        if (!canEditPlan) return;
+                        setIsPlanModalOpen(true);
+                      }}
                     >
                       规划用例
                     </PlaneButton>
                     <Dropdown
                       menu={{
-                        items: dropdownItems,
+                        items: dropdownItems.map((item) => ({ ...item, disabled: !canEditPlan })),
                         onClick: ({ key }) => {
+                          if (!canEditPlan) return;
                           if (key === "by_work_item") {
                             setIsPlanModalOpen(true);
                           } else if (key === "by_iteration") {
@@ -893,20 +897,17 @@ export default function PlanCasesPage() {
                           }
                         },
                       }}
+                      disabled={!canEditPlan}
                       trigger={["click"]}
                     >
-                      <PlaneButton
-                        variant="primary"
-                        size="xl"
-                        className="px-1"
-                      >
+                      <PlaneButton variant="primary" size="xl" disabled={!canEditPlan} className="px-1">
                         <ChevronDownIcon className="h-4 w-4" />
                       </PlaneButton>
                     </Dropdown>
                   </div>
                   <Button
                     type="default"
-                    className="px-3 text-accent-primary bg-transparent border border-accent-strong hover:bg-accent-subtle focus:text-accent-primary focus:bg-accent-subtle-hover px-3 py-1.5 font-medium text-xs rounded flex items-center gap-1.5 whitespace-nowrap transition-all justify-center disabled:opacity-50 disabled:cursor-not-allowed mr-4"
+                    className="mr-4 flex items-center justify-center gap-1.5 rounded border border-accent-strong bg-transparent px-3 py-1.5 text-xs font-medium whitespace-nowrap text-accent-primary transition-all hover:bg-accent-subtle focus:bg-accent-subtle-hover focus:text-accent-primary disabled:cursor-not-allowed disabled:opacity-50"
                     onClick={() => setIsExportModalOpen(true)}
                     disabled={!planId}
                   >
@@ -914,21 +915,21 @@ export default function PlanCasesPage() {
                   </Button>
                 </div>
               </div>
-              <div className="flex-1 min-h-0 overflow-hidden px-0 pb-3 min-w-0">
+              <div className="min-h-0 min-w-0 flex-1 overflow-hidden px-0 pb-3">
                 {loading && (
                   <div className="flex items-center justify-center py-12">
                     <div className="text-secondary">加载中...</div>
                   </div>
                 )}
                 {error && (
-                  <div className="bg-red-50 border border-red-200 rounded-md p-4 mb-4">
+                  <div className="bg-red-50 border-red-200 mb-4 rounded-md border p-4">
                     <div className="text-red-800 text-sm">{error}</div>
                   </div>
                 )}
                 {!loading && !error && (
-                  <div className="flex flex-col h-full overflow-hidden min-w-0">
+                  <div className="flex h-full min-w-0 flex-col overflow-hidden">
                     <div
-                      className={`testhub-plan-cases-table-scroll flex-1 relative px-0 overflow-y-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar]:block [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-[var(--scrollbar-thumb)] [&::-webkit-scrollbar-thumb]:rounded-full ${
+                      className={`testhub-plan-cases-table-scroll relative flex-1 overflow-y-auto px-0 [&::-webkit-scrollbar]:block [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[var(--scrollbar-thumb)] [&::-webkit-scrollbar-track]:bg-transparent ${
                         pageSize === 100 ? "testhub-plan-cases-scrollbar-strong" : ""
                       }`}
                     >
@@ -989,15 +990,15 @@ export default function PlanCasesPage() {
                         }}
                       />
                     </div>
-                    <div className="flex-shrink-0 border-t border-subtle px-0 py-3 bg-surface-1 flex items-center justify-between">
+                    <div className="flex flex-shrink-0 items-center justify-between border-t border-subtle bg-surface-1 px-0 py-3">
                       <div className="flex items-center gap-4 text-sm">
                         {selectedCaseIds.length > 0 && (
                           <div className="flex items-center gap-0.5">
-                            <div className="flex items-center gap-2 pl-2 pr-1">
-                              <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-accent-primary px-1.5 text-[11px] font-semibold leading-none text-white">
+                            <div className="flex items-center gap-2 pr-1 pl-2">
+                              <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-accent-primary px-1.5 text-[11px] leading-none font-semibold text-white">
                                 {selectedCaseIds.length}
                               </span>
-                              <span className="whitespace-nowrap text-xs font-medium text-primary">已选择</span>
+                              <span className="text-xs font-medium whitespace-nowrap text-primary">已选择</span>
                             </div>
 
                             <span aria-hidden className="mx-1 h-5 w-px shrink-0 bg-[var(--border-color-subtle)]" />
@@ -1012,7 +1013,7 @@ export default function PlanCasesPage() {
                               placement="top-start"
                               optionsClassName="z-[80]"
                               button={
-                                <span className="inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-md px-2.5 text-xs font-medium text-secondary transition-colors hover:bg-accent-subtle hover:text-accent-primary">
+                                <span className="inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium whitespace-nowrap text-secondary transition-colors hover:bg-accent-subtle hover:text-accent-primary">
                                   {bulkAssigneeUpdating ? (
                                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
                                   ) : (
@@ -1032,7 +1033,7 @@ export default function PlanCasesPage() {
                             >
                               <button
                                 type="button"
-                                className="inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-md px-2.5 text-xs font-medium text-accent-primary transition-colors hover:bg-accent-subtle"
+                                className="inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium whitespace-nowrap text-accent-primary transition-colors hover:bg-accent-subtle"
                               >
                                 <CheckCheck className="h-3.5 w-3.5" />
                                 执行
@@ -1047,7 +1048,7 @@ export default function PlanCasesPage() {
                             >
                               <button
                                 type="button"
-                                className="inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-md px-2.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-50"
+                                className="text-red-600 hover:bg-red-50 inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium whitespace-nowrap transition-colors"
                               >
                                 <Unlink className="h-3.5 w-3.5" />
                                 取关
@@ -1063,7 +1064,7 @@ export default function PlanCasesPage() {
                                 setSelectedPlanCaseToCaseIdMap({});
                                 setSelectedPlanCaseToAssigneeMap({});
                               }}
-                              className="inline-flex h-7 items-center gap-1 whitespace-nowrap rounded-md px-2 text-xs font-medium text-secondary transition-colors hover:bg-surface-2 hover:text-primary"
+                              className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-xs font-medium whitespace-nowrap text-secondary transition-colors hover:bg-surface-2 hover:text-primary"
                             >
                               <X className="h-3.5 w-3.5" />
                               清除
@@ -1176,43 +1177,47 @@ export default function PlanCasesPage() {
           </div>
         </div>
       </div>
-      <PlanCasesModal
-        isOpen={isPlanModalOpen}
-        onClose={() => setIsPlanModalOpen(false)}
-        workspaceSlug={String(workspaceSlug)}
-        projectId={String(projectId || "")}
-        repositoryId={String(repositoryId)}
-        repositoryName={repositoryName || ""}
-        planId={String(planId || "")}
-        initialSelectedCaseIds={(cases || []).map((c) => c?.case?.id).filter((id): id is string => Boolean(id))}
-        onClosed={() => {
-          // 关闭后刷新列表，保留当前查询参数与筛选
-          fetchPlanTree();
-          fetchCases(currentPage, pageSize, selectedRepositoryId || undefined, selectedModuleId || undefined);
-        }}
-      />
-      <PlanIterationModal
-        isOpen={isIterationModalOpen}
-        onClose={() => setIsIterationModalOpen(false)}
-        workspaceSlug={String(workspaceSlug)}
-        projectId={String(projectId)}
-        planId={String(planId || "")}
-        onClosed={() => {
-          fetchPlanTree();
-          fetchCases(currentPage, pageSize, selectedRepositoryId || undefined, selectedModuleId || undefined);
-        }}
-      />
-      <PlanReleaseModal
-        isOpen={isReleaseModalOpen}
-        onClose={() => setIsReleaseModalOpen(false)}
-        workspaceSlug={String(workspaceSlug)}
-        projectId={String(projectId)}
-        planId={String(planId || "")}
-        onClosed={() => {
-          fetchPlanTree();
-          fetchCases(currentPage, pageSize, selectedRepositoryId || undefined, selectedModuleId || undefined);
-        }}
-      />
+      {canEditPlan && (
+        <>
+          <PlanCasesModal
+            isOpen={isPlanModalOpen}
+            onClose={() => setIsPlanModalOpen(false)}
+            workspaceSlug={String(workspaceSlug)}
+            projectId={String(projectId || "")}
+            repositoryId={String(repositoryId)}
+            repositoryName={repositoryName || ""}
+            planId={String(planId || "")}
+            initialSelectedCaseIds={(cases || []).map((c) => c?.case?.id).filter((id): id is string => Boolean(id))}
+            onClosed={() => {
+              // 关闭后刷新列表，保留当前查询参数与筛选
+              fetchPlanTree();
+              fetchCases(currentPage, pageSize, selectedRepositoryId || undefined, selectedModuleId || undefined);
+            }}
+          />
+          <PlanIterationModal
+            isOpen={isIterationModalOpen}
+            onClose={() => setIsIterationModalOpen(false)}
+            workspaceSlug={String(workspaceSlug)}
+            projectId={String(projectId)}
+            planId={String(planId || "")}
+            onClosed={() => {
+              fetchPlanTree();
+              fetchCases(currentPage, pageSize, selectedRepositoryId || undefined, selectedModuleId || undefined);
+            }}
+          />
+          <PlanReleaseModal
+            isOpen={isReleaseModalOpen}
+            onClose={() => setIsReleaseModalOpen(false)}
+            workspaceSlug={String(workspaceSlug)}
+            projectId={String(projectId)}
+            planId={String(planId || "")}
+            onClosed={() => {
+              fetchPlanTree();
+              fetchCases(currentPage, pageSize, selectedRepositoryId || undefined, selectedModuleId || undefined);
+            }}
+          />
+        </>
+      )}
       <PlanCasesExportModal
         open={isExportModalOpen}
         onClose={() => setIsExportModalOpen(false)}

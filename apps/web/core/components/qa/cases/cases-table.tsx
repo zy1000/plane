@@ -53,6 +53,8 @@ type TResizableHeadProps = {
 };
 
 type TCasesTableProps = {
+  canDelete?: boolean;
+  canEdit?: boolean;
   cases: TCaseTableRecord[];
   columnWidths: Record<string, number>;
   displayProperties: TCaseDisplayProperties;
@@ -69,13 +71,7 @@ type TCasesTableProps = {
   setColumnWidth: (key: string, width: number) => void;
 };
 
-const ResizableHead = ({
-  children,
-  className,
-  minWidth = 80,
-  onResize,
-  style,
-}: TResizableHeadProps) => {
+const ResizableHead = ({ children, className, minWidth = 80, onResize, style }: TResizableHeadProps) => {
   const thRef = useRef<HTMLTableCellElement>(null);
 
   const handleMouseDown = (event: ReactMouseEvent<HTMLDivElement>) => {
@@ -104,7 +100,7 @@ const ResizableHead = ({
     <TableHead
       ref={thRef}
       className={cn(
-        "relative h-12 border-b border-r border-subtle px-page-x py-0 text-13 font-medium text-secondary align-middle",
+        "relative h-12 border-r border-b border-subtle px-page-x py-0 align-middle text-13 font-medium text-secondary",
         className
       )}
       style={style}
@@ -112,7 +108,7 @@ const ResizableHead = ({
       {children}
       {onResize && (
         <div
-          className="absolute right-0 top-0 h-full w-2 cursor-col-resize"
+          className="absolute top-0 right-0 h-full w-2 cursor-col-resize"
           onMouseDown={handleMouseDown}
           role="presentation"
         />
@@ -122,6 +118,8 @@ const ResizableHead = ({
 };
 
 export const CasesTable = ({
+  canDelete = true,
+  canEdit = true,
   cases,
   columnWidths,
   displayProperties,
@@ -185,12 +183,12 @@ export const CasesTable = ({
 
   return (
     <Table
-      className="min-w-full table-fixed border-separate border-spacing-0 border-l border-t border-subtle"
+      className="min-w-full table-fixed border-separate border-spacing-0 border-t border-l border-subtle"
       wrapperClassName="h-full overflow-auto testhub-cases-table-scroll scrollbar-always-visible"
     >
       <TableHeader className="sticky top-0 z-[2] bg-layer-1">
         <TableRow>
-          <TableHead className="h-12 w-10 min-w-10 border-b border-r border-subtle px-0 py-0">
+          <TableHead className="h-12 w-10 min-w-10 border-r border-b border-subtle px-0 py-0">
             <div className="flex h-12 w-full items-center justify-center">
               <Checkbox
                 checked={allSelectedOnCurrentPage}
@@ -225,7 +223,10 @@ export const CasesTable = ({
           )}
 
           {isColumnVisible("priority") && (
-            <ResizableHead style={getWidthStyle("priority", 100)} onResize={(width) => setColumnWidth("priority", width)}>
+            <ResizableHead
+              style={getWidthStyle("priority", 100)}
+              onResize={(width) => setColumnWidth("priority", width)}
+            >
               优先级
             </ResizableHead>
           )}
@@ -246,7 +247,10 @@ export const CasesTable = ({
           )}
 
           {isColumnVisible("assignee") && (
-            <ResizableHead style={getWidthStyle("assignee", 150)} onResize={(width) => setColumnWidth("assignee", width)}>
+            <ResizableHead
+              style={getWidthStyle("assignee", 150)}
+              onResize={(width) => setColumnWidth("assignee", width)}
+            >
               维护人
             </ResizableHead>
           )}
@@ -280,7 +284,7 @@ export const CasesTable = ({
 
           return (
             <TableRow key={recordId} className="group h-12 bg-surface-1 transition-colors hover:bg-surface-2">
-              <TableCell className="h-12 w-10 min-w-10 border-b border-r border-subtle px-0 py-0">
+              <TableCell className="h-12 w-10 min-w-10 border-r border-b border-subtle px-0 py-0">
                 <div className="flex h-12 w-full items-center justify-center">
                   <Checkbox
                     checked={selectedKeySet.has(recordId)}
@@ -290,7 +294,10 @@ export const CasesTable = ({
               </TableCell>
 
               {isColumnVisible("code") && (
-                <TableCell className="h-12 border-b border-r border-subtle px-page-x py-0" style={getWidthStyle("code", 160)}>
+                <TableCell
+                  className="h-12 border-r border-b border-subtle px-page-x py-0"
+                  style={getWidthStyle("code", 160)}
+                >
                   <button
                     type="button"
                     className="block truncate text-left hover:text-accent-primary hover:underline"
@@ -304,7 +311,10 @@ export const CasesTable = ({
               )}
 
               {isColumnVisible("name") && (
-                <TableCell className="h-12 border-b border-r border-subtle px-page-x py-0" style={getWidthStyle("name", 340)}>
+                <TableCell
+                  className="h-12 border-r border-b border-subtle px-page-x py-0"
+                  style={getWidthStyle("name", 340)}
+                >
                   <button
                     type="button"
                     className="block truncate text-left hover:text-accent-primary hover:underline"
@@ -318,28 +328,40 @@ export const CasesTable = ({
               )}
 
               {isColumnVisible("review") && (
-                <TableCell className="h-12 border-b border-r border-subtle px-page-x py-0" style={getWidthStyle("review", 100)}>
+                <TableCell
+                  className="h-12 border-r border-b border-subtle px-page-x py-0"
+                  style={getWidthStyle("review", 100)}
+                >
                   {renderReviewTag(record.review)}
                 </TableCell>
               )}
               {isColumnVisible("type") && (
-                <TableCell className="h-12 border-b border-r border-subtle px-page-x py-0" style={getWidthStyle("type", 110)}>
+                <TableCell
+                  className="h-12 border-r border-b border-subtle px-page-x py-0"
+                  style={getWidthStyle("type", 110)}
+                >
                   {renderTypeTag(record.type)}
                 </TableCell>
               )}
               {isColumnVisible("priority") && (
-                <TableCell className="h-12 border-b border-r border-subtle px-page-x py-0" style={getWidthStyle("priority", 100)}>
+                <TableCell
+                  className="h-12 border-r border-b border-subtle px-page-x py-0"
+                  style={getWidthStyle("priority", 100)}
+                >
                   {renderPriorityTag(record.priority)}
                 </TableCell>
               )}
               {isColumnVisible("module") && (
-                <TableCell className="h-12 border-b border-r border-subtle px-page-x py-0" style={getWidthStyle("module", 120)}>
+                <TableCell
+                  className="h-12 border-r border-b border-subtle px-page-x py-0"
+                  style={getWidthStyle("module", 120)}
+                >
                   {record.module?.name || "-"}
                 </TableCell>
               )}
               {isColumnVisible("last_execution_result") && (
                 <TableCell
-                  className="h-12 border-b border-r border-subtle px-page-x py-0"
+                  className="h-12 border-r border-b border-subtle px-page-x py-0"
                   style={getWidthStyle("last_execution_result", 140)}
                 >
                   {renderLastExecutionResult(record)}
@@ -347,7 +369,10 @@ export const CasesTable = ({
               )}
 
               {isColumnVisible("assignee") && (
-                <TableCell className="h-12 border-b border-r border-subtle px-page-x py-0" style={getWidthStyle("assignee", 150)}>
+                <TableCell
+                  className="h-12 border-r border-b border-subtle px-page-x py-0"
+                  style={getWidthStyle("assignee", 150)}
+                >
                   {record.assignee?.id ? (
                     <MemberDropdown
                       multiple={false}
@@ -369,24 +394,31 @@ export const CasesTable = ({
               )}
 
               {isColumnVisible("labels") && (
-                <TableCell className="h-12 border-b border-r border-subtle px-page-x py-0" style={getWidthStyle("labels", 130)}>
+                <TableCell
+                  className="h-12 border-r border-b border-subtle px-page-x py-0"
+                  style={getWidthStyle("labels", 130)}
+                >
                   {renderLabels(record.labels)}
                 </TableCell>
               )}
               {isColumnVisible("updated_at") && (
-                <TableCell className="h-12 border-b border-r border-subtle px-page-x py-0" style={getWidthStyle("updated_at", 180)}>
+                <TableCell
+                  className="h-12 border-r border-b border-subtle px-page-x py-0"
+                  style={getWidthStyle("updated_at", 180)}
+                >
                   {renderUpdatedAt(record.updated_at)}
                 </TableCell>
               )}
 
               <TableCell
-                className="sticky right-0 z-[1] h-12 border-b border-l border-r border-subtle bg-surface-1 px-page-x py-0 group-hover:bg-surface-2"
+                className="sticky right-0 z-[1] h-12 border-r border-b border-l border-subtle bg-surface-1 px-page-x py-0 group-hover:bg-surface-2"
                 style={getWidthStyle("actions", 110)}
               >
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    className="text-secondary transition-colors hover:text-primary"
+                    className="text-secondary transition-colors hover:text-primary disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={!canEdit}
                     onClick={() => onEdit(record)}
                     aria-label="编辑用例"
                   >
@@ -394,7 +426,8 @@ export const CasesTable = ({
                   </button>
                   <button
                     type="button"
-                    className="text-red-500 transition-colors hover:text-red-600"
+                    className="text-red-500 hover:text-red-600 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={!canDelete}
                     onClick={() => onDelete(record)}
                     aria-label="删除用例"
                   >

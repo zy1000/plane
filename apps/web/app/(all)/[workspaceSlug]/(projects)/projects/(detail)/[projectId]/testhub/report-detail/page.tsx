@@ -20,6 +20,10 @@ const REPORT_TYPE_COLOR: Record<string, string> = {
   对外报告: "gold",
 };
 
+const QA_REPORT_VIEW_PERMISSION_KEY = "qa.report.view" as const;
+const QA_REPORT_EDIT_PERMISSION_KEY = "qa.report.edit" as const;
+const QA_REPORT_EXPORT_PERMISSION_KEY = "qa.report.export" as const;
+
 const waitForPaint = () =>
   new Promise<void>((resolve) => {
     requestAnimationFrame(() => resolve());
@@ -30,7 +34,10 @@ export default function ReportDetailPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const reportId = searchParams.get("reportId");
-  const reportName = searchParams.get("name") || (typeof window !== "undefined" ? sessionStorage.getItem("selectedReportName") : "") || "";
+  const reportName =
+    searchParams.get("name") ||
+    (typeof window !== "undefined" ? sessionStorage.getItem("selectedReportName") : "") ||
+    "";
   const [exporting, setExporting] = useState(false);
 
   const { getWorkspaceBySlug } = useWorkspace();
@@ -40,20 +47,13 @@ export default function ReportDetailPage() {
     String(workspaceSlug || ""),
     String(projectId || "")
   );
+  const canView = permissionsFetched && hasPermission(QA_REPORT_VIEW_PERMISSION_KEY);
+  const canEditReport = permissionsFetched && hasPermission(QA_REPORT_EDIT_PERMISSION_KEY);
+  const canExportReport = permissionsFetched && hasPermission(QA_REPORT_EXPORT_PERMISSION_KEY);
 
-  const {
-    detail,
-    analysis,
-    cases,
-    caseCount,
-    loading,
-    error,
-    fetchCases,
-    fetchAllCases,
-    saveSummary,
-  } = useReportDetail(String(workspaceSlug || ""), String(projectId || ""), reportId);
+  const { detail, analysis, cases, caseCount, loading, error, fetchCases, fetchAllCases, saveSummary } =
+    useReportDetail(String(workspaceSlug || ""), String(projectId || ""), canView ? reportId : null);
 
-  const canView = permissionsFetched && hasPermission("qa.plan.view");
   const reportTitle = detail?.name || reportName || "测试报告";
 
   const handleBack = () => {
@@ -63,6 +63,7 @@ export default function ReportDetailPage() {
   };
 
   const handleExportPdf = async () => {
+    if (!canExportReport) return;
     if (!reportId || !detail || exporting) return;
 
     setExporting(true);
@@ -83,9 +84,14 @@ export default function ReportDetailPage() {
     }
   };
 
+  const handleSaveSummary = async (summaryHtml: string, summaryJson: unknown) => {
+    if (!canEditReport) return;
+    await saveSummary(summaryHtml, summaryJson);
+  };
+
   if (!permissionsFetched) {
     return (
-      <div className="flex h-full w-full min-h-[50vh] items-center justify-center">
+      <div className="flex h-full min-h-[50vh] w-full items-center justify-center">
         <div className="text-secondary">加载中...</div>
       </div>
     );
@@ -93,7 +99,7 @@ export default function ReportDetailPage() {
 
   if (!canView) {
     return (
-      <div className="flex h-full w-full min-h-[50vh] flex-col items-center justify-center gap-y-5 text-center">
+      <div className="flex h-full min-h-[50vh] w-full flex-col items-center justify-center gap-y-5 text-center">
         <div className="h-44 w-72">
           <img src={UnauthorizedImg} className="h-[176px] w-[288px] object-contain" alt="unauthorized" />
         </div>
@@ -104,9 +110,7 @@ export default function ReportDetailPage() {
 
   if (!reportId) {
     return (
-      <div className="flex h-full w-full min-h-[50vh] items-center justify-center text-secondary">
-        缺少报告 ID
-      </div>
+      <div className="flex h-full min-h-[50vh] w-full items-center justify-center text-secondary">缺少报告 ID</div>
     );
   }
 
@@ -130,7 +134,7 @@ export default function ReportDetailPage() {
             className="!gap-1.5"
             onClick={handleExportPdf}
             loading={exporting}
-            disabled={exporting || loading || !detail}
+            disabled={exporting || loading || !detail || !canExportReport}
           >
             <FileDown className="size-3.5" />
             导出 PDF
@@ -143,7 +147,7 @@ export default function ReportDetailPage() {
         {loading && !detail ? (
           <div className="flex h-full min-h-[40vh] items-center justify-center text-secondary">加载中...</div>
         ) : error && !detail ? (
-          <div className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-800">{error}</div>
+          <div className="border-red-200 bg-red-50 text-red-800 rounded-md border p-4 text-sm">{error}</div>
         ) : (
           <div className="flex w-full flex-col gap-4">
             {/* 报告分析 */}
@@ -167,7 +171,8 @@ export default function ReportDetailPage() {
                 projectId={String(projectId || "")}
                 reportId={reportId}
                 summaryHtml={detail?.summary_html ?? ""}
-                onSave={saveSummary}
+                canEdit={canEditReport}
+                onSave={handleSaveSummary}
               />
             </section>
 

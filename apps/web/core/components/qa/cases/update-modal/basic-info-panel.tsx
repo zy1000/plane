@@ -13,6 +13,7 @@ import { WorkspaceService } from "@/services/workspace.service";
 
 type BasicInfoPanelProps = {
   caseId?: string;
+  canEdit?: boolean;
   preconditionValue: string;
   stepsValue: { description?: string; result?: string }[];
   modeValue: number;
@@ -33,6 +34,7 @@ type BasicInfoPanelProps = {
 export function BasicInfoPanel(props: BasicInfoPanelProps) {
   const {
     caseId,
+    canEdit = true,
     preconditionValue,
     stepsValue,
     modeValue,
@@ -96,6 +98,12 @@ export function BasicInfoPanel(props: BasicInfoPanelProps) {
   };
 
   React.useEffect(() => {
+    if (!canEdit && isEditing) {
+      setIsEditing(false);
+    }
+  }, [canEdit, isEditing]);
+
+  React.useEffect(() => {
     if (!isEditing) {
       setLocalPrecondition(preconditionValue);
       setLocalSteps(stepsValue);
@@ -107,6 +115,7 @@ export function BasicInfoPanel(props: BasicInfoPanelProps) {
   }, [preconditionValue, stepsValue, modeValue, textDescriptionValue, textResultValue, remarkValue]);
 
   const handleSave = async () => {
+    if (!canEdit) return;
     await onSave({
       precondition: localPrecondition,
       steps: localSteps,
@@ -129,16 +138,18 @@ export function BasicInfoPanel(props: BasicInfoPanelProps) {
   };
 
   return (
-    <div className="space-y-8 rounded-b-md border-subtle px-6 py-6 transition-colors ring-1 ring-transparent">
+    <div className="space-y-8 rounded-b-md border-subtle px-6 py-6 ring-1 ring-transparent transition-colors">
       <div>
         <div className="mb-3 flex items-center justify-between">
-          <label className="flex items-center gap-2 text-sm font-semibold text-secondary">
-            前置条件
-          </label>
+          <label className="flex items-center gap-2 text-sm font-semibold text-secondary">前置条件</label>
           {!isEditing && (
             <Button
               type="link"
-              onClick={() => setIsEditing(true)}
+              disabled={!canEdit}
+              onClick={() => {
+                if (!canEdit) return;
+                setIsEditing(true);
+              }}
               className="transition-all"
             >
               <EditOutlined />
@@ -148,8 +159,8 @@ export function BasicInfoPanel(props: BasicInfoPanelProps) {
         </div>
         <RichTextEditor
           id="qa-precondition-editor"
-          placeholder='请输入前置条件'
-          editable={isEditing}
+          placeholder="请输入前置条件"
+          editable={isEditing && canEdit}
           initialValue={localPrecondition ?? ""}
           value={isEditing ? undefined : (localPrecondition ?? "")}
           workspaceSlug={workspaceSlug ?? ""}
@@ -175,6 +186,7 @@ export function BasicInfoPanel(props: BasicInfoPanelProps) {
                 <label className="flex items-center gap-2 text-sm font-semibold text-secondary">文本描述</label>
                 <Dropdown
                   trigger={["click"]}
+                  disabled={!canEdit}
                   overlayStyle={{ zIndex: 1200 }}
                   menu={{
                     selectable: true,
@@ -191,6 +203,7 @@ export function BasicInfoPanel(props: BasicInfoPanelProps) {
                   <Button
                     type="text"
                     size="small"
+                    disabled={!canEdit}
                     className="px-0 text-sm font-medium text-tertiary hover:text-secondary"
                   >
                     更改类型 <DownOutlined />
@@ -199,8 +212,8 @@ export function BasicInfoPanel(props: BasicInfoPanelProps) {
               </div>
               <RichTextEditor
                 id="qa-text-description-editor"
-                editable={isEditing}
-                placeholder='请输入文本描述'
+                editable={isEditing && canEdit}
+                placeholder="请输入文本描述"
                 initialValue={localTextDescription ?? ""}
                 value={isEditing ? undefined : (localTextDescription ?? "")}
                 workspaceSlug={workspaceSlug ?? ""}
@@ -222,8 +235,8 @@ export function BasicInfoPanel(props: BasicInfoPanelProps) {
               <label className="mb-3 flex items-center gap-2 text-sm font-semibold text-secondary">预期结果</label>
               <RichTextEditor
                 id="qa-text-result-editor"
-                editable={isEditing}
-                placeholder='请输入预期结果'
+                editable={isEditing && canEdit}
+                placeholder="请输入预期结果"
                 initialValue={localTextResult ?? ""}
                 value={isEditing ? undefined : (localTextResult ?? "")}
                 workspaceSlug={workspaceSlug ?? ""}
@@ -248,6 +261,7 @@ export function BasicInfoPanel(props: BasicInfoPanelProps) {
               <label className="flex items-center gap-2 text-sm font-semibold text-secondary">测试步骤</label>
               <Dropdown
                 trigger={["click"]}
+                disabled={!canEdit}
                 overlayStyle={{ zIndex: 1200 }}
                 menu={{
                   selectable: true,
@@ -264,24 +278,28 @@ export function BasicInfoPanel(props: BasicInfoPanelProps) {
                 <Button
                   type="text"
                   size="small"
+                  disabled={!canEdit}
                   className="px-0 text-sm font-medium text-tertiary hover:text-secondary"
                 >
                   更改类型 <DownOutlined />
                 </Button>
               </Dropdown>
             </div>
-            <StepsEditor value={localSteps} onChange={setLocalSteps} editable={isEditing} aria-label="测试步骤" />
+            <StepsEditor
+              value={localSteps}
+              onChange={setLocalSteps}
+              editable={isEditing && canEdit}
+              aria-label="测试步骤"
+            />
           </>
         )}
       </div>
       <div>
-        <label className="mb-3 flex items-center gap-2 text-sm font-semibold text-secondary">
-          备注
-        </label>
+        <label className="mb-3 flex items-center gap-2 text-sm font-semibold text-secondary">备注</label>
         <RichTextEditor
           id="qa-remark-editor"
-          editable={isEditing}
-          placeholder='请输入备注'
+          editable={isEditing && canEdit}
+          placeholder="请输入备注"
           initialValue={localRemark ?? ""}
           value={isEditing ? undefined : (localRemark ?? "")}
           workspaceSlug={workspaceSlug ?? ""}
