@@ -56,6 +56,11 @@ export const StateItem = observer(function StateItem(props: TStateItem) {
     stateCount: totalStates,
     state: state,
     setUpdateStateModal: setUpdateStateModal,
+    stateOperationsCallbacks: {
+      markStateAsDefault: stateOperationsCallbacks.markStateAsDefault,
+      deleteState: stateOperationsCallbacks.deleteState,
+    },
+    shouldTrackEvents,
   };
 
   const handleStateSequence = useCallback(
@@ -159,19 +164,7 @@ export const StateItem = observer(function StateItem(props: TStateItem) {
           stateItemClassName
         )}
       >
-        {disabled ? (
-          <StateItemTitle {...commonStateItemListProps} disabled />
-        ) : (
-          <StateItemTitle
-            {...commonStateItemListProps}
-            disabled={false}
-            stateOperationsCallbacks={{
-              markStateAsDefault: stateOperationsCallbacks.markStateAsDefault,
-              deleteState: stateOperationsCallbacks.deleteState,
-            }}
-            shouldTrackEvents={shouldTrackEvents}
-          />
-        )}
+        <StateItemTitle {...commonStateItemListProps} disabled={disabled} />
       </div>
       {/* draggable drop bottom indicator */}
       <DropIndicator isVisible={isDraggedOver && closestEdge === "bottom"} />

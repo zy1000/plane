@@ -16,16 +16,17 @@ type TStateMarksAsDefault = {
   stateId: string;
   isDefault: boolean;
   markStateAsDefaultCallback: TStateOperationsCallbacks["markStateAsDefault"];
+  disabled?: boolean;
 };
 
 export const StateMarksAsDefault = observer(function StateMarksAsDefault(props: TStateMarksAsDefault) {
-  const { stateId, isDefault, markStateAsDefaultCallback } = props;
+  const { stateId, isDefault, markStateAsDefaultCallback, disabled = false } = props;
   const { t } = useTranslation();
   // states
   const [isLoading, setIsLoading] = useState(false);
 
   const handleMarkAsDefault = async () => {
-    if (!stateId || isDefault) return;
+    if (!stateId || isDefault || disabled) return;
     setIsLoading(true);
 
     try {
@@ -55,9 +56,10 @@ export const StateMarksAsDefault = observer(function StateMarksAsDefault(props: 
     <button
       className={cn(
         "text-11 whitespace-nowrap transition-colors",
-        isDefault ? "text-tertiary" : "text-secondary hover:text-primary"
+        isDefault || disabled ? "text-tertiary" : "text-secondary hover:text-primary",
+        disabled && "cursor-not-allowed text-placeholder"
       )}
-      disabled={isDefault || isLoading}
+      disabled={isDefault || isLoading || disabled}
       onClick={handleMarkAsDefault}
     >
       {isLoading ? "Marking as default" : isDefault ? `Default` : `Mark as default`}

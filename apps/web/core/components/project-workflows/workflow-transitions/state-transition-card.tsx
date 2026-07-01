@@ -100,19 +100,18 @@ export const StateTransitionCard: FC<TStateTransitionCardProps> = ({
             />
           ))}
 
-          {isEditable && (
-            <button
-              type="button"
-              onClick={() => {
-                if (!isExpanded) setIsExpanded(true);
-                onCreate(state);
-              }}
-              className="flex items-center gap-1.5 text-xs text-secondary transition-colors hover:text-accent-primary"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Add flow
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => {
+              if (!isExpanded) setIsExpanded(true);
+              onCreate(state);
+            }}
+            disabled={!isEditable}
+            className="flex items-center gap-1.5 text-xs text-secondary transition-colors hover:text-accent-primary disabled:cursor-not-allowed disabled:text-placeholder disabled:hover:text-placeholder"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Add flow
+          </button>
         </div>
       )}
     </div>

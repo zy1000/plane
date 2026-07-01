@@ -46,7 +46,7 @@ export const WorkflowCard: FC<TWorkflowCardProps> = ({
   };
 
   const handleDelete = async () => {
-    if (isDeleting) return;
+    if (!isEditable || isDeleting) return;
     setIsDeleting(true);
     try {
       await onDelete(workflow.id);
@@ -62,23 +62,18 @@ export const WorkflowCard: FC<TWorkflowCardProps> = ({
   return (
     <div
       className={cn(
-        "group flex items-center justify-between gap-4 rounded-lg border border-subtle bg-surface-1 px-4 py-3.5 transition-shadow hover:shadow-sm cursor-pointer"
+        "group flex cursor-pointer items-center justify-between gap-4 rounded-lg border border-subtle bg-surface-1 px-4 py-3.5 transition-shadow hover:shadow-sm"
       )}
       onClick={handleCardClick}
     >
       {/* left: name + description */}
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold text-primary">{workflow.name}</p>
-        {workflow.description && (
-          <p className="mt-0.5 truncate text-xs text-secondary">{workflow.description}</p>
-        )}
+        {workflow.description && <p className="mt-0.5 truncate text-xs text-secondary">{workflow.description}</p>}
       </div>
 
       {/* right: badges + toggle + menu */}
-      <div
-        className="flex flex-shrink-0 items-center gap-2"
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div className="flex flex-shrink-0 items-center gap-2" onClick={(e) => e.stopPropagation()}>
         {workflow.is_active && (
           <span className="inline-flex items-center rounded-sm bg-accent-subtle px-2 py-0.5 text-xs font-medium text-accent-primary">
             活动
@@ -92,28 +87,31 @@ export const WorkflowCard: FC<TWorkflowCardProps> = ({
           size="sm"
         />
 
-        {isEditable && (
-          <CustomMenu ellipsis placement="bottom-end">
-            <CustomMenu.MenuItem onClick={() => navigate(`/${workspaceSlug}/settings/projects/${projectId}/workflow/${workflow.id}`)}>
-              <span className="flex items-center gap-2 text-sm">
-                <Settings className="h-3.5 w-3.5" />
-                配置流转
-              </span>
-            </CustomMenu.MenuItem>
-            <CustomMenu.MenuItem onClick={() => onEdit(workflow)}>
-              <span className="flex items-center gap-2 text-sm">
-                <Pencil className="h-3.5 w-3.5" />
-                编辑
-              </span>
-            </CustomMenu.MenuItem>
-            <CustomMenu.MenuItem onClick={handleDelete}>
-              <span className="flex items-center gap-2 text-sm text-danger-primary">
-                <Trash2 className="h-3.5 w-3.5" />
-                删除
-              </span>
-            </CustomMenu.MenuItem>
-          </CustomMenu>
-        )}
+        <CustomMenu ellipsis placement="bottom-end">
+          <CustomMenu.MenuItem
+            onClick={() => navigate(`/${workspaceSlug}/settings/projects/${projectId}/workflow/${workflow.id}`)}
+            disabled={!isEditable}
+          >
+            <span className="flex items-center gap-2 text-sm">
+              <Settings className="h-3.5 w-3.5" />
+              配置流转
+            </span>
+          </CustomMenu.MenuItem>
+          <CustomMenu.MenuItem onClick={() => onEdit(workflow)} disabled={!isEditable}>
+            <span className="flex items-center gap-2 text-sm">
+              <Pencil className="h-3.5 w-3.5" />
+              编辑
+            </span>
+          </CustomMenu.MenuItem>
+          <CustomMenu.MenuItem onClick={handleDelete} disabled={!isEditable || isDeleting}>
+            <span
+              className={cn("flex items-center gap-2 text-sm", isEditable ? "text-danger-primary" : "text-placeholder")}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              删除
+            </span>
+          </CustomMenu.MenuItem>
+        </CustomMenu>
       </div>
     </div>
   );

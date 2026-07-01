@@ -5,16 +5,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  ShieldCheck,
-  Building2,
-  FolderKanban,
-  Search,
-  CheckSquare,
-  Square,
-  MinusSquare,
-  Check,
-} from "lucide-react";
+import { ShieldCheck, Building2, FolderKanban, Search, CheckSquare, Square, MinusSquare, Check } from "lucide-react";
 import { PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
 import type { IPermission, IWorkspaceRole } from "@plane/types";
 import { useTranslation } from "@plane/i18n";
@@ -138,10 +129,7 @@ export function PermissionsPanel({
   }, [permissions, boundKeySet]);
 
   // 只展示有权限数据的 scope tab
-  const visibleScopeGroups = useMemo(
-    () => scopeGroups.filter((g) => g.totalPermissions > 0),
-    [scopeGroups]
-  );
+  const visibleScopeGroups = useMemo(() => scopeGroups.filter((g) => g.totalPermissions > 0), [scopeGroups]);
 
   // 当 permissions 变化（角色切换）时，自动切到第一个有数据的 scope
   const prevRoleId = useRef<string | null>(null);
@@ -213,10 +201,7 @@ export function PermissionsPanel({
       .filter((g) => g.categories.length > 0);
   }, [isSearching, scopeGroups, searchQuery]);
 
-  const totalSearchHits = useMemo(
-    () => crossScopeResults.reduce((sum, g) => sum + g.total, 0),
-    [crossScopeResults]
-  );
+  const totalSearchHits = useMemo(() => crossScopeResults.reduce((sum, g) => sum + g.total, 0), [crossScopeResults]);
 
   // Per-category match counts for the left nav during search (current scope only)
   const categoryMatchCounts = useMemo<Map<string, number>>(() => {
@@ -299,7 +284,7 @@ export function PermissionsPanel({
         <div className="flex size-12 items-center justify-center rounded-full bg-layer-1">
           <ShieldCheck className="size-5 text-placeholder" />
         </div>
-        <p className="text-13 font-medium leading-4 text-tertiary">请在左侧选择一个角色以管理其权限</p>
+        <p className="text-13 leading-4 font-medium text-tertiary">请在左侧选择一个角色以管理其权限</p>
       </div>
     );
   }
@@ -330,11 +315,11 @@ export function PermissionsPanel({
   // --- Empty permissions ---
   if (permissions.length === 0) {
     return (
-      <div className="flex h-full flex-1 flex-col items-center justify-center gap-3 py-16 px-6 text-center">
+      <div className="flex h-full flex-1 flex-col items-center justify-center gap-3 px-6 py-16 text-center">
         <div className="flex size-10 items-center justify-center rounded-full border border-dashed border-subtle">
           <ShieldCheck className="size-4 text-placeholder" />
         </div>
-        <p className="text-13 font-medium leading-4 text-secondary">暂无可用权限</p>
+        <p className="text-13 leading-4 font-medium text-secondary">暂无可用权限</p>
       </div>
     );
   }
@@ -352,7 +337,7 @@ export function PermissionsPanel({
     <div className="flex h-full flex-1 flex-col overflow-hidden">
       {isSearching && (
         <div className="flex shrink-0 justify-end border-b border-subtle px-5 py-1.5">
-          <span className="text-13 font-medium leading-4 text-tertiary">
+          <span className="text-13 leading-4 font-medium text-tertiary">
             全部 <span className="text-primary tabular-nums">{totalSearchHits}</span> 项
           </span>
         </div>
@@ -361,7 +346,7 @@ export function PermissionsPanel({
       {/* ── Two-Pane Body ── */}
       <div className="flex min-h-0 flex-1 overflow-hidden">
         {/* Left: Category Nav */}
-        <div className="vertical-scrollbar scrollbar-sm flex w-[310px] shrink-0 flex-col overflow-y-auto border-r border-subtle py-2 [scrollbar-gutter:stable]">
+        <div className="vertical-scrollbar flex scrollbar-sm w-[310px] shrink-0 flex-col overflow-y-auto border-r border-subtle py-2 [scrollbar-gutter:stable]">
           {visibleScopeGroups.length > 1 && (
             <div className="mb-2 flex gap-1 px-2">
               {visibleScopeGroups.map((group) => {
@@ -373,7 +358,7 @@ export function PermissionsPanel({
                     type="button"
                     onClick={() => handleActiveScopeChange(group.scope)}
                     className={cn(
-                      "flex min-w-0 flex-1 items-center justify-center gap-1 rounded-md px-2 py-1.5 text-13 font-medium leading-4 transition-colors duration-150",
+                      "flex min-w-0 flex-1 items-center justify-center gap-1 rounded-md px-2 py-1.5 text-13 leading-4 font-medium transition-colors duration-150",
                       isActive
                         ? "bg-accent-primary/10 text-accent-primary"
                         : "text-tertiary hover:bg-layer-1-hover hover:text-secondary"
@@ -387,7 +372,7 @@ export function PermissionsPanel({
             </div>
           )}
           {!currentScopeGroup || currentScopeGroup.categories.length === 0 ? (
-            <p className="px-4 py-3 text-13 font-medium leading-4 text-tertiary">暂无分类</p>
+            <p className="px-4 py-3 text-13 leading-4 font-medium text-tertiary">暂无分类</p>
           ) : (
             currentScopeGroup.categories.map(({ category, permissions: catPerms, boundCount }) => {
               const isActive = !isSearching && effectiveActiveCategory === category;
@@ -407,13 +392,11 @@ export function PermissionsPanel({
                     hasNoMatch && "opacity-35"
                   )}
                 >
-                  {isActive && (
-                    <span className="absolute inset-y-1.5 left-0 w-0.5 rounded-r-full bg-accent-primary" />
-                  )}
+                  {isActive && <span className="absolute inset-y-1.5 left-0 w-0.5 rounded-r-full bg-accent-primary" />}
                   <div className="flex items-center justify-between gap-2">
                     <span
                       className={cn(
-                        "min-w-0 flex-1 truncate text-13 font-medium leading-4",
+                        "min-w-0 flex-1 truncate text-13 leading-4 font-medium",
                         isActive ? "text-accent-primary" : "text-primary"
                       )}
                     >
@@ -421,7 +404,7 @@ export function PermissionsPanel({
                     </span>
                     <span
                       className={cn(
-                        "shrink-0 tabular-nums text-13 font-medium leading-4",
+                        "shrink-0 text-13 leading-4 font-medium tabular-nums",
                         isSearching
                           ? matchCount && matchCount > 0
                             ? "text-accent-primary"
@@ -474,7 +457,7 @@ export function PermissionsPanel({
                   <div className="mb-2 flex size-9 items-center justify-center rounded-full bg-layer-1">
                     <Search className="size-4 text-placeholder" />
                   </div>
-                  <p className="text-13 font-medium leading-4 text-tertiary">没有匹配的权限项</p>
+                  <p className="text-13 leading-4 font-medium text-tertiary">没有匹配的权限项</p>
                 </div>
               ) : (
                 <div className="flex flex-col gap-5 pt-4">
@@ -483,15 +466,15 @@ export function PermissionsPanel({
                       {/* Scope divider */}
                       <div className="mb-2 flex items-center gap-2">
                         <Icon className="size-3.5 text-tertiary" />
-                        <span className="text-13 font-medium leading-4 text-tertiary">{label}</span>
-                        <div className="h-px flex-1 bg-subtle" />
+                        <span className="text-13 leading-4 font-medium text-tertiary">{label}</span>
+                        <div className="bg-subtle h-px flex-1" />
                       </div>
 
                       {/* Categories under this scope */}
                       <div className="flex flex-col gap-3">
                         {categories.map(({ category, permissions: matchedPerms }) => (
                           <div key={category}>
-                            <p className="mb-1 px-1 text-13 font-medium leading-4 text-tertiary">{category}</p>
+                            <p className="mb-1 px-1 text-13 leading-4 font-medium text-tertiary">{category}</p>
                             <ul className="overflow-hidden rounded-lg border border-subtle">
                               {matchedPerms.map((perm) => {
                                 const isBound = boundKeySet.has(perm.key);
@@ -518,7 +501,7 @@ export function PermissionsPanel({
                                         onChange={() => handleTogglePermission(perm.key)}
                                       />
                                       <span
-                                        className="pointer-events-none flex size-3.5 items-center justify-center rounded border border-black/60 bg-transparent peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-disabled:opacity-50"
+                                        className="peer-focus-visible:ring-ring pointer-events-none flex size-3.5 items-center justify-center rounded border border-black/60 bg-transparent peer-focus-visible:ring-2 peer-disabled:opacity-50"
                                         aria-hidden
                                       >
                                         <Check
@@ -530,7 +513,7 @@ export function PermissionsPanel({
                                     <div className="min-w-0 flex-1">
                                       <p
                                         className={cn(
-                                          "text-13 font-medium leading-4",
+                                          "text-13 leading-4 font-medium",
                                           isBound ? "text-primary" : "text-secondary"
                                         )}
                                       >
@@ -552,45 +535,43 @@ export function PermissionsPanel({
           ) : !activeCategoryGroup ? (
             /* ── No category selected ── */
             <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center">
-              <p className="text-13 font-medium leading-4 text-tertiary">请在左侧选择一个分类</p>
+              <p className="text-13 leading-4 font-medium text-tertiary">请在左侧选择一个分类</p>
             </div>
           ) : (
             /* ── Normal Category Detail ── */
             <>
               <div className="flex shrink-0 items-center gap-3 border-b border-subtle px-5 py-3">
                 <div className="min-w-0 flex-1">
-                  <h4 className="truncate text-13 font-medium leading-4 text-primary">
+                  <h4 className="truncate text-13 leading-4 font-medium text-primary">
                     {activeCategoryGroup.category}
                   </h4>
-                  <p className="text-13 font-medium leading-4 tabular-nums text-tertiary">
+                  <p className="text-13 leading-4 font-medium text-tertiary tabular-nums">
                     已启用 {activeCategoryGroup.boundCount} / {activeCategoryGroup.permissions.length} 项权限
                   </p>
                 </div>
-                {isAdmin && (
-                  <button
-                    type="button"
-                    onClick={() => void handleToggleCategoryAll(activeCategoryGroup.permissions)}
-                    disabled={Boolean(togglingKey)}
-                    className={cn(
-                      "flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-13 font-medium leading-4 transition-colors duration-150",
-                      activeCatAllBound
-                        ? "border-green-200 bg-green-50 text-green-700 hover:bg-green-100"
-                        : activeCatSomeBound
-                          ? "border-accent-primary/20 bg-accent-primary/5 text-accent-primary hover:bg-accent-primary/10"
-                          : "border-subtle bg-surface-1 text-secondary hover:bg-layer-1-hover",
-                      togglingKey && "pointer-events-none opacity-50"
-                    )}
-                  >
-                    {activeCatAllBound ? (
-                      <CheckSquare className="size-3.5" />
-                    ) : activeCatSomeBound ? (
-                      <MinusSquare className="size-3.5" />
-                    ) : (
-                      <Square className="size-3.5" />
-                    )}
-                    <span>{activeCatAllBound ? "取消全选" : "全选"}</span>
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={() => void handleToggleCategoryAll(activeCategoryGroup.permissions)}
+                  disabled={!isAdmin || Boolean(togglingKey)}
+                  className={cn(
+                    "flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-13 leading-4 font-medium transition-colors duration-150",
+                    activeCatAllBound
+                      ? "border-green-200 bg-green-50 text-green-700 hover:bg-green-100"
+                      : activeCatSomeBound
+                        ? "border-accent-primary/20 bg-accent-primary/5 text-accent-primary hover:bg-accent-primary/10"
+                        : "border-subtle bg-surface-1 text-secondary hover:bg-layer-1-hover",
+                    (!isAdmin || togglingKey) && "pointer-events-none cursor-not-allowed opacity-50"
+                  )}
+                >
+                  {activeCatAllBound ? (
+                    <CheckSquare className="size-3.5" />
+                  ) : activeCatSomeBound ? (
+                    <MinusSquare className="size-3.5" />
+                  ) : (
+                    <Square className="size-3.5" />
+                  )}
+                  <span>{activeCatAllBound ? "取消全选" : "全选"}</span>
+                </button>
               </div>
 
               <div className="vertical-scrollbar scrollbar-sm flex-1 overflow-y-auto px-5 pb-5 [scrollbar-gutter:stable]">
@@ -619,19 +600,16 @@ export function PermissionsPanel({
                             onChange={() => handleTogglePermission(perm.key)}
                           />
                           <span
-                            className="pointer-events-none flex size-3.5 items-center justify-center rounded border border-black/60 bg-transparent peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-disabled:opacity-50"
+                            className="peer-focus-visible:ring-ring pointer-events-none flex size-3.5 items-center justify-center rounded border border-black/60 bg-transparent peer-focus-visible:ring-2 peer-disabled:opacity-50"
                             aria-hidden
                           >
-                            <Check
-                              className={cn("size-2.5 text-black", !isBound && "opacity-0")}
-                              strokeWidth={2.5}
-                            />
+                            <Check className={cn("size-2.5 text-black", !isBound && "opacity-0")} strokeWidth={2.5} />
                           </span>
                         </div>
                         <div className="min-w-0 flex-1">
                           <p
                             className={cn(
-                              "text-13 font-medium leading-4 transition-colors duration-150",
+                              "text-13 leading-4 font-medium transition-colors duration-150",
                               isBound ? "text-primary" : "text-secondary"
                             )}
                           >

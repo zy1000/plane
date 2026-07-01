@@ -6,10 +6,9 @@
 
 import { useMemo, useState } from "react";
 import { observer } from "mobx-react";
-import { useParams } from "next/navigation";
 import { ArchiveRestore } from "lucide-react";
 // plane imports
-import { PROJECT_AUTOMATION_MONTHS, EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import { PROJECT_AUTOMATION_MONTHS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import type { IProject } from "@plane/types";
 import { CustomSelect, Loader, ToggleSwitch } from "@plane/ui";
@@ -18,32 +17,22 @@ import { SelectMonthModal } from "@/components/automation";
 import { SettingsControlItem } from "@/components/settings/control-item";
 // hooks
 import { useProject } from "@/hooks/store/use-project";
-import { useUserPermissions } from "@/hooks/store/user";
 
 type Props = {
   handleChange: (formData: Partial<IProject>) => Promise<void>;
+  canEdit?: boolean;
 };
 
 const initialValues: Partial<IProject> = { archive_in: 1 };
 
 export const AutoArchiveAutomation = observer(function AutoArchiveAutomation(props: Props) {
-  const { handleChange } = props;
-  // router
-  const { workspaceSlug } = useParams();
+  const { handleChange, canEdit = true } = props;
   // states
   const [monthModal, setmonthModal] = useState(false);
   // store hooks
-  const { allowPermissions } = useUserPermissions();
   const { t } = useTranslation();
 
   const { currentProjectDetails } = useProject();
-
-  const isAdmin = allowPermissions(
-    [EUserPermissions.ADMIN],
-    EUserPermissionsLevel.PROJECT,
-    workspaceSlug?.toString(),
-    currentProjectDetails?.id
-  );
 
   const autoArchiveStatus = useMemo(() => {
     if (currentProjectDetails?.archive_in === undefined) return false;
@@ -76,7 +65,7 @@ export const AutoArchiveAutomation = observer(function AutoArchiveAutomation(pro
             title={t("project_settings.automations.auto-archive.title")}
             description={t("project_settings.automations.auto-archive.description")}
             control={
-              <ToggleSwitch value={autoArchiveStatus} onChange={handleToggleArchive} size="sm" disabled={!isAdmin} />
+              <ToggleSwitch value={autoArchiveStatus} onChange={handleToggleArchive} size="sm" disabled={!canEdit} />
             }
           />
         </div>
@@ -95,7 +84,7 @@ export const AutoArchiveAutomation = observer(function AutoArchiveAutomation(pro
                     }`}
                     onChange={(val: number) => void handleChange({ archive_in: val })}
                     input
-                    disabled={!isAdmin}
+                    disabled={!canEdit}
                   >
                     <>
                       {PROJECT_AUTOMATION_MONTHS.map((month) => (

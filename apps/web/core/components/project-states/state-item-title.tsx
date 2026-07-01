@@ -20,19 +20,13 @@ type TBaseStateItemTitleProps = {
   state: IState;
   shouldShowDescription?: boolean;
   setUpdateStateModal: (value: SetStateAction<boolean>) => void;
-};
-
-type TEnabledStateItemTitleProps = TBaseStateItemTitleProps & {
-  disabled: false;
   stateOperationsCallbacks: Pick<TStateOperationsCallbacks, "markStateAsDefault" | "deleteState">;
   shouldTrackEvents: boolean;
 };
 
-type TDisabledStateItemTitleProps = TBaseStateItemTitleProps & {
-  disabled: true;
+export type TStateItemTitleProps = TBaseStateItemTitleProps & {
+  disabled: boolean;
 };
-
-export type TStateItemTitleProps = TEnabledStateItemTitleProps | TDisabledStateItemTitleProps;
 
 export const StateItemTitle = observer(function StateItemTitle(props: TStateItemTitleProps) {
   const { stateCount, setUpdateStateModal, disabled, state, shouldShowDescription = true } = props;
@@ -61,34 +55,35 @@ export const StateItemTitle = observer(function StateItemTitle(props: TStateItem
           {shouldShowDescription && <p className="text-11 text-secondary">{state.description}</p>}
         </div>
       </div>
-      {!disabled && (
-        <div className="hidden items-center gap-2 group-hover:flex">
-          {/* state mark as default option */}
-          <div className="flex-shrink-0 text-11 transition-all">
-            <StateMarksAsDefault
-              stateId={state.id}
-              isDefault={state.default ? true : false}
-              markStateAsDefaultCallback={props.stateOperationsCallbacks.markStateAsDefault}
-            />
-          </div>
-          {/* state edit options */}
-          <div className="flex items-center gap-1 transition-all">
-            <button
-              className="flex h-5 w-5 flex-shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-sm text-secondary transition-colors hover:bg-layer-1 hover:text-primary"
-              onClick={() => setUpdateStateModal(true)}
-              data-ph-element={STATE_TRACKER_ELEMENTS.STATE_LIST_EDIT_BUTTON}
-            >
-              <EditIcon className="h-3 w-3" />
-            </button>
-            <StateDelete
-              totalStates={stateCount}
-              state={state}
-              deleteStateCallback={props.stateOperationsCallbacks.deleteState}
-              shouldTrackEvents={props.shouldTrackEvents}
-            />
-          </div>
+      <div className="hidden items-center gap-2 group-hover:flex">
+        {/* state mark as default option */}
+        <div className="flex-shrink-0 text-11 transition-all">
+          <StateMarksAsDefault
+            stateId={state.id}
+            isDefault={state.default ? true : false}
+            markStateAsDefaultCallback={props.stateOperationsCallbacks.markStateAsDefault}
+            disabled={disabled}
+          />
         </div>
-      )}
+        {/* state edit options */}
+        <div className="flex items-center gap-1 transition-all">
+          <button
+            className="flex h-5 w-5 flex-shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-sm text-secondary transition-colors hover:bg-layer-1 hover:text-primary disabled:cursor-not-allowed disabled:text-placeholder disabled:hover:bg-transparent"
+            onClick={() => setUpdateStateModal(true)}
+            disabled={disabled}
+            data-ph-element={STATE_TRACKER_ELEMENTS.STATE_LIST_EDIT_BUTTON}
+          >
+            <EditIcon className="h-3 w-3" />
+          </button>
+          <StateDelete
+            totalStates={stateCount}
+            state={state}
+            deleteStateCallback={props.stateOperationsCallbacks.deleteState}
+            shouldTrackEvents={props.shouldTrackEvents}
+            disabled={disabled}
+          />
+        </div>
+      </div>
     </div>
   );
 });

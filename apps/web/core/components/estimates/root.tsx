@@ -95,6 +95,7 @@ export const EstimateRoot = observer(function EstimateRoot(props: TEstimateRoot)
               actions={[
                 {
                   label: t("settings_empty_state.estimates.cta_primary"),
+                  disabled: !isAdmin,
                   onClick: () => setIsEstimateCreateModalOpen(true),
                 },
               ]}

@@ -72,43 +72,45 @@ export function LabelItemBlock(props: ILabelItemBlock) {
         <LabelName color={label.color} name={label.name} isGroup={isLabelGroup ?? false} />
       </div>
 
-      {!disabled && (
-        <div
-          ref={actionSectionRef}
-          className={`absolute right-2.5 flex items-center gap-2 px-4 ${
-            isMenuActive || isLabelGroup
-              ? "opacity-100"
-              : "opacity-0 group-hover:pointer-events-auto group-hover:opacity-100"
-          } ${isLabelGroup && "-top-0.5"}`}
-        >
-          <CustomMenu ellipsis menuButtonOnClick={() => setIsMenuActive(!isMenuActive)} useCaptureForOutsideClick>
-            {customMenuItems.map(
-              ({ isVisible, onClick, CustomIcon, text, key }) =>
-                isVisible && (
-                  <CustomMenu.MenuItem key={key} onClick={() => onClick(label)}>
-                    <span className="flex items-center justify-start gap-2">
-                      <CustomIcon className="size-4" />
-                      <span>{text}</span>
-                    </span>
-                  </CustomMenu.MenuItem>
-                )
-            )}
-          </CustomMenu>
-          {!isLabelGroup && (
-            <div className="py-0.5">
-              <button
-                className="flex size-5 items-center justify-center rounded-sm hover:bg-layer-1"
-                onClick={() => {
-                  handleLabelDelete(label);
-                }}
-                data-ph-element={PROJECT_SETTINGS_TRACKER_ELEMENTS.LABELS_DELETE_BUTTON}
-              >
-                <CloseIcon className="size-3.5 flex-shrink-0 text-tertiary" />
-              </button>
-            </div>
+      <div
+        ref={actionSectionRef}
+        className={`absolute right-2.5 flex items-center gap-2 px-4 ${
+          isMenuActive || isLabelGroup
+            ? "opacity-100"
+            : "opacity-0 group-hover:pointer-events-auto group-hover:opacity-100"
+        } ${isLabelGroup && "-top-0.5"}`}
+      >
+        <CustomMenu ellipsis menuButtonOnClick={() => setIsMenuActive(!isMenuActive)} useCaptureForOutsideClick>
+          {customMenuItems.map(
+            ({ isVisible, onClick, CustomIcon, text, key }) =>
+              isVisible && (
+                <CustomMenu.MenuItem key={key} onClick={() => onClick(label)} disabled={disabled}>
+                  <span className="flex items-center justify-start gap-2">
+                    <CustomIcon className="size-4" />
+                    <span>{text}</span>
+                  </span>
+                </CustomMenu.MenuItem>
+              )
           )}
-        </div>
-      )}
+        </CustomMenu>
+        {!isLabelGroup && (
+          <div className="py-0.5">
+            <button
+              className={cn(
+                "flex size-5 items-center justify-center rounded-sm hover:bg-layer-1",
+                disabled && "cursor-not-allowed opacity-50 hover:bg-transparent"
+              )}
+              onClick={() => {
+                handleLabelDelete(label);
+              }}
+              disabled={disabled}
+              data-ph-element={PROJECT_SETTINGS_TRACKER_ELEMENTS.LABELS_DELETE_BUTTON}
+            >
+              <CloseIcon className="size-3.5 flex-shrink-0 text-tertiary" />
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

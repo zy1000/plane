@@ -45,10 +45,7 @@ const TITLE_BY_BOX: Record<TViewBox, string> = {
   fields: "必填字段",
 };
 
-const PRINCIPAL_DEFAULT: Record<
-  "initiator" | "assignee" | "approver",
-  { label: string; description: string }
-> = {
+const PRINCIPAL_DEFAULT: Record<"initiator" | "assignee" | "approver", { label: string; description: string }> = {
   initiator: { label: "全部成员", description: "未配置发起人时默认全员可发起" },
   assignee: { label: "不约束", description: "未配置负责人规则时默认不限制" },
   approver: { label: "无需审批", description: "未配置审批人时默认为直接通过" },
@@ -211,7 +208,7 @@ export const WorkflowViewPanel: FC<TWorkflowViewPanelProps> = ({
 
       return (
         <div className="space-y-1.5">
-          <p className="text-[11px] font-medium uppercase tracking-wide text-tertiary">{title}</p>
+          <p className="text-[11px] font-medium tracking-wide text-tertiary uppercase">{title}</p>
           {ids.map(renderPrincipalItem)}
         </div>
       );
@@ -254,11 +251,12 @@ export const WorkflowViewPanel: FC<TWorkflowViewPanelProps> = ({
           <ArrowRight className="h-4 w-4" />
         </button>
         <h3 className="text-sm font-medium text-primary">{TITLE_BY_BOX[box]}</h3>
-        {isEditable && onEdit && (
+        {onEdit && (
           <button
             type="button"
             onClick={onEdit}
-            className="ml-auto flex h-6 w-6 flex-shrink-0 items-center justify-center rounded text-secondary transition-colors hover:bg-layer-1 hover:text-primary"
+            disabled={!isEditable}
+            className="ml-auto flex h-6 w-6 flex-shrink-0 items-center justify-center rounded text-secondary transition-colors hover:bg-layer-1 hover:text-primary disabled:cursor-not-allowed disabled:text-placeholder disabled:hover:bg-transparent"
             aria-label="编辑流转"
           >
             <Pencil className="h-3.5 w-3.5" />
@@ -266,9 +264,7 @@ export const WorkflowViewPanel: FC<TWorkflowViewPanelProps> = ({
         )}
       </div>
 
-      <div className="flex-1 overflow-y-auto p-3">
-        {renderBody()}
-      </div>
+      <div className="flex-1 overflow-y-auto p-3">{renderBody()}</div>
     </div>
   );
 };

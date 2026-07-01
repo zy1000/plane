@@ -90,9 +90,7 @@ export const ProjectMemberList = observer(function ProjectMemberList(props: TPro
         workspaceSlug={workspaceSlug}
       />
       <div className="flex items-center justify-between gap-4 overflow-x-hidden border-b border-subtle py-2">
-        {showHeading && (
-          <div className="text-14 font-semibold">{sectionHeading ?? t("common.members")}</div>
-        )}
+        {showHeading && <div className="text-14 font-semibold">{sectionHeading ?? t("common.members")}</div>}
         <div className="ml-auto flex items-center gap-2">
           <div className="flex items-center justify-start gap-1.5 rounded-md border border-subtle bg-surface-1 px-2 py-1">
             <SearchIcon className="h-3.5 w-3.5" />
@@ -109,17 +107,16 @@ export const ProjectMemberList = observer(function ProjectMemberList(props: TPro
             handleUpdate={handleRoleFilterUpdate}
             memberType="project"
           />
-          {canInviteProjectMembers && (
-            <Button
-              variant="primary"
-              onClick={() => {
-                setInviteModal(true);
-              }}
-              data-ph-element={MEMBER_TRACKER_ELEMENTS.HEADER_ADD_BUTTON}
-            >
-              {t("add_member")}
-            </Button>
-          )}
+          <Button
+            variant="primary"
+            onClick={() => {
+              setInviteModal(true);
+            }}
+            disabled={!canInviteProjectMembers}
+            data-ph-element={MEMBER_TRACKER_ELEMENTS.HEADER_ADD_BUTTON}
+          >
+            {t("add_member")}
+          </Button>
         </div>
       </div>
       {!projectMemberIds ? (

@@ -6,7 +6,6 @@
 
 import { useEffect, useState } from "react";
 // plane imports
-import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 import type { EUserProjectRoles, IWorkspaceMember } from "@plane/types";
 import { renderFormattedDate } from "@plane/utils";
 // components
@@ -37,7 +36,7 @@ export const useProjectColumns = (props: TUseProjectColumnsProps) => {
 
   // store hooks
   const { data: currentUser } = useUser();
-  const { allowPermissions, allowProjectPermissionKeys } = useUserPermissions();
+  const { allowProjectPermissionKeys } = useUserPermissions();
   const {
     project: {
       filters: { getFilters, updateFilters },
@@ -45,9 +44,13 @@ export const useProjectColumns = (props: TUseProjectColumnsProps) => {
   } = useMember();
   const { roles, isLoading: isRolesLoading, fetchRoles } = useProjectRoles(workspaceSlug, projectId);
   // derived values
-  const isAdmin = allowPermissions(
-    [EUserPermissions.ADMIN],
-    EUserPermissionsLevel.PROJECT,
+  const canLeaveProject = allowProjectPermissionKeys(
+    ["project.member.leave"],
+    workspaceSlug.toString(),
+    projectId.toString()
+  );
+  const canRemoveProjectMember = allowProjectPermissionKeys(
+    ["project.member.remove"],
     workspaceSlug.toString(),
     projectId.toString()
   );
@@ -84,7 +87,8 @@ export const useProjectColumns = (props: TUseProjectColumnsProps) => {
         <NameColumn
           rowData={rowData}
           workspaceSlug={workspaceSlug}
-          isAdmin={isAdmin}
+          canLeaveProject={canLeaveProject}
+          canRemoveProjectMember={canRemoveProjectMember}
           currentUser={currentUser}
           setRemoveMemberModal={setRemoveMemberModal}
         />

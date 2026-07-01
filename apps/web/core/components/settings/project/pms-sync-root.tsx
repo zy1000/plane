@@ -50,10 +50,11 @@ const fromRow = (row: TProjectPmsInfo): FormState => ({
 type Props = {
   workspaceSlug: string;
   projectId: string;
+  canEdit?: boolean;
 };
 
 export function ProjectPmsSyncSettingsRoot(props: Props) {
-  const { workspaceSlug, projectId } = props;
+  const { workspaceSlug, projectId, canEdit = true } = props;
   const { t } = useTranslation();
   const { items, isLoading, create, update, remove, sync } = useProjectPmsInfo(workspaceSlug, projectId);
 
@@ -69,16 +70,21 @@ export function ProjectPmsSyncSettingsRoot(props: Props) {
   const tk = useCallback((key: string) => t(`project_settings.pms_sync.${key}` as never), [t]);
 
   const openCreate = useCallback(() => {
+    if (!canEdit) return;
     setEditingId(null);
     setForm(emptyForm());
     setFormOpen(true);
-  }, []);
+  }, [canEdit]);
 
-  const openEdit = useCallback((row: TProjectPmsInfo) => {
-    setEditingId(row.id);
-    setForm(fromRow(row));
-    setFormOpen(true);
-  }, []);
+  const openEdit = useCallback(
+    (row: TProjectPmsInfo) => {
+      if (!canEdit) return;
+      setEditingId(row.id);
+      setForm(fromRow(row));
+      setFormOpen(true);
+    },
+    [canEdit]
+  );
 
   const closeForm = useCallback(() => {
     setFormOpen(false);
@@ -97,6 +103,7 @@ export function ProjectPmsSyncSettingsRoot(props: Props) {
   }, [form]);
 
   const handleSave = useCallback(async () => {
+    if (!canEdit) return;
     if (!validate()) {
       setToast({
         type: TOAST_TYPE.ERROR,
@@ -134,10 +141,10 @@ export function ProjectPmsSyncSettingsRoot(props: Props) {
       });
       setIsSaving(false);
     }
-  }, [closeForm, create, editingId, form, tk, update, validate]);
+  }, [canEdit, closeForm, create, editingId, form, tk, update, validate]);
 
   const handleConfirmDelete = useCallback(async () => {
-    if (!deleteTarget) return;
+    if (!deleteTarget || !canEdit) return;
     setIsDeleting(true);
     try {
       await remove(deleteTarget.id);
@@ -156,9 +163,10 @@ export function ProjectPmsSyncSettingsRoot(props: Props) {
     } finally {
       setIsDeleting(false);
     }
-  }, [deleteTarget, remove, tk]);
+  }, [canEdit, deleteTarget, remove, tk]);
 
   const handleSync = useCallback(async () => {
+    if (!canEdit) return;
     setIsSyncing(true);
     setSyncFailedIssues([]);
     try {
@@ -188,7 +196,7 @@ export function ProjectPmsSyncSettingsRoot(props: Props) {
     } finally {
       setIsSyncing(false);
     }
-  }, [sync, tk]);
+  }, [canEdit, sync, tk]);
 
   const sortedItems = useMemo(() => [...items].sort((a, b) => b.id - a.id), [items]);
 
@@ -206,6 +214,7 @@ export function ProjectPmsSyncSettingsRoot(props: Props) {
               prependIcon={<RefreshCw className="h-3.5 w-3.5" />}
               loading={isSyncing}
               onClick={() => void handleSync()}
+              disabled={!canEdit}
             >
               {tk("sync_action")}
             </Button>
@@ -216,6 +225,7 @@ export function ProjectPmsSyncSettingsRoot(props: Props) {
               size="sm"
               prependIcon={<Plus className="h-3.5 w-3.5" />}
               onClick={openCreate}
+              disabled={!canEdit}
             >
               {tk("add")}
             </Button>
@@ -241,34 +251,37 @@ export function ProjectPmsSyncSettingsRoot(props: Props) {
             <table className="w-full min-w-[720px] border-collapse text-left text-caption-md-regular">
               <thead>
                 <tr className="border-b border-subtle bg-layer-1">
-                  <th className="whitespace-nowrap px-4 py-3 font-medium text-tertiary">{tk("sub_project")}</th>
-                  <th className="whitespace-nowrap px-4 py-3 font-medium text-tertiary">{tk("project_code")}</th>
-                  <th className="whitespace-nowrap px-4 py-3 font-medium text-tertiary">{tk("meter_type")}</th>
-                  <th className="whitespace-nowrap px-4 py-3 font-medium text-tertiary">{tk("software_version")}</th>
-                  <th className="whitespace-nowrap px-4 py-3 font-medium text-tertiary">{tk("tool_version")}</th>
-                  <th className="whitespace-nowrap px-4 py-3 font-medium text-tertiary">{tk("reproduce")}</th>
-                  <th className="whitespace-nowrap px-4 py-3 text-right font-medium text-tertiary">{tk("actions")}</th>
+                  <th className="px-4 py-3 font-medium whitespace-nowrap text-tertiary">{tk("sub_project")}</th>
+                  <th className="px-4 py-3 font-medium whitespace-nowrap text-tertiary">{tk("project_code")}</th>
+                  <th className="px-4 py-3 font-medium whitespace-nowrap text-tertiary">{tk("meter_type")}</th>
+                  <th className="px-4 py-3 font-medium whitespace-nowrap text-tertiary">{tk("software_version")}</th>
+                  <th className="px-4 py-3 font-medium whitespace-nowrap text-tertiary">{tk("tool_version")}</th>
+                  <th className="px-4 py-3 font-medium whitespace-nowrap text-tertiary">{tk("reproduce")}</th>
+                  <th className="px-4 py-3 text-right font-medium whitespace-nowrap text-tertiary">{tk("actions")}</th>
                 </tr>
               </thead>
               <tbody>
                 {sortedItems.map((row) => (
                   <tr
                     key={row.id}
-                    className="border-b border-subtle last:border-0 transition-colors duration-200 hover:bg-layer-1 motion-reduce:transition-none"
+                    className="border-b border-subtle transition-colors duration-200 last:border-0 hover:bg-layer-1 motion-reduce:transition-none"
                   >
                     <td className="max-w-[160px] truncate px-4 py-3 font-medium text-primary">{row.sub_project}</td>
-                    <td className="whitespace-nowrap px-4 py-3 text-secondary tabular-nums">{row.project_code}</td>
-                    <td className="whitespace-nowrap px-4 py-3 text-secondary">{getPmsMeterTypeLabel(row.meter_type)}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-secondary tabular-nums">{row.project_code}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-secondary">
+                      {getPmsMeterTypeLabel(row.meter_type)}
+                    </td>
                     <td className="max-w-[120px] truncate px-4 py-3 text-secondary">{row.software_version}</td>
                     <td className="max-w-[120px] truncate px-4 py-3 text-secondary">{row.tool_version}</td>
-                    <td className="whitespace-nowrap px-4 py-3 text-secondary">{row.reproduce}</td>
-                    <td className="whitespace-nowrap px-4 py-3 text-right">
+                    <td className="px-4 py-3 whitespace-nowrap text-secondary">{row.reproduce}</td>
+                    <td className="px-4 py-3 text-right whitespace-nowrap">
                       <div className="flex justify-end gap-0.5">
                         <IconButton
                           variant="ghost"
                           size="sm"
                           icon={Pencil}
                           onClick={() => openEdit(row)}
+                          disabled={!canEdit}
                           aria-label={tk("edit_action")}
                         />
                         <IconButton
@@ -278,6 +291,7 @@ export function ProjectPmsSyncSettingsRoot(props: Props) {
                           icon={Trash2}
                           iconClassName="text-tertiary group-hover:text-danger-primary"
                           onClick={() => setDeleteTarget(row)}
+                          disabled={!canEdit}
                           aria-label={tk("delete_action")}
                         />
                       </div>
@@ -307,26 +321,17 @@ export function ProjectPmsSyncSettingsRoot(props: Props) {
                 >
                   #{f.sequence_id} {f.name}
                 </Link>
-                <p className="mt-1 break-words text-caption-sm-regular text-secondary">{f.error}</p>
+                <p className="mt-1 text-caption-sm-regular break-words text-secondary">{f.error}</p>
               </li>
             ))}
           </ul>
         </div>
       )}
 
-      <ModalCore
-        isOpen={formOpen}
-        handleClose={closeForm}
-        position={EModalPosition.CENTER}
-        width={EModalWidth.XXL}
-      >
+      <ModalCore isOpen={formOpen} handleClose={closeForm} position={EModalPosition.CENTER} width={EModalWidth.XXL}>
         <div className="border-b border-subtle px-5 py-4">
-          <h3 className="text-base font-semibold text-primary">
-            {editingId == null ? tk("create") : tk("edit")}
-          </h3>
-          <p className="mt-1 text-caption-md-regular text-secondary">
-            {tk("description")}
-          </p>
+          <h3 className="text-base font-semibold text-primary">{editingId == null ? tk("create") : tk("edit")}</h3>
+          <p className="mt-1 text-caption-md-regular text-secondary">{tk("description")}</p>
         </div>
         <div className="max-h-[min(70vh,560px)] overflow-y-auto px-5 py-4">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -358,7 +363,7 @@ export function ProjectPmsSyncSettingsRoot(props: Props) {
               <span className="text-caption-md-medium text-tertiary">{tk("meter_type")}</span>
               <CustomSelect
                 value={form.meter_type}
-                onChange={(v) => setForm((f) => ({ ...f, meter_type: String(v) }))}
+                onChange={(v: string | number) => setForm((f) => ({ ...f, meter_type: String(v) }))}
                 label={getPmsMeterTypeLabel(form.meter_type)}
                 buttonClassName="border border-subtle bg-layer-2 !shadow-none !rounded-md w-full"
                 input
@@ -374,7 +379,7 @@ export function ProjectPmsSyncSettingsRoot(props: Props) {
               <span className="text-caption-md-medium text-tertiary">{tk("reproduce")}</span>
               <CustomSelect
                 value={form.reproduce}
-                onChange={(v) => setForm((f) => ({ ...f, reproduce: String(v) }))}
+                onChange={(v: string | number) => setForm((f) => ({ ...f, reproduce: String(v) }))}
                 label={form.reproduce}
                 buttonClassName="border border-subtle bg-layer-2 !shadow-none !rounded-md w-full"
                 input
@@ -416,7 +421,14 @@ export function ProjectPmsSyncSettingsRoot(props: Props) {
           <Button variant="neutral-primary" size="sm" type="button" onClick={closeForm} disabled={isSaving}>
             {tk("cancel")}
           </Button>
-          <Button variant="primary" size="sm" type="button" onClick={() => void handleSave()} loading={isSaving}>
+          <Button
+            variant="primary"
+            size="sm"
+            type="button"
+            onClick={() => void handleSave()}
+            loading={isSaving}
+            disabled={!canEdit}
+          >
             {editingId == null ? tk("create") : tk("save")}
           </Button>
         </div>

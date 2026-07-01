@@ -102,7 +102,7 @@ export function RolesSidebar({
 
   if (isLoading) {
     return (
-      <div className="flex h-full w-1/4 min-w-52 max-w-72 flex-col border-r border-subtle">
+      <div className="flex h-full w-1/4 max-w-72 min-w-52 flex-col border-r border-subtle">
         <div className="flex items-center justify-between gap-2 border-b border-subtle px-4 py-3">
           <div className="flex items-center gap-2">
             <div className="h-4 w-12 animate-pulse rounded bg-layer-transparent-hover" />
@@ -122,45 +122,45 @@ export function RolesSidebar({
   }
 
   return (
-    <div className="flex h-full w-1/4 min-w-52 max-w-72 flex-col border-r border-subtle">
+    <div className="flex h-full w-1/4 max-w-72 min-w-52 flex-col border-r border-subtle">
       {/* Header */}
       <div className="flex shrink-0 flex-col gap-2 border-b border-subtle px-4 py-3">
         <div className="flex items-center justify-between gap-2">
-          <h4 className="flex items-center gap-2 !text-13 !font-medium !leading-4 text-primary">
+          <h4 className="flex items-center gap-2 !text-13 !leading-4 !font-medium text-primary">
             角色
-            <CountChip count={totalRoleCount} className="h-4 !text-13 !font-medium !leading-4" />
+            <CountChip count={totalRoleCount} className="h-4 !text-13 !leading-4 !font-medium" />
           </h4>
-          {isAdmin && (
-            <div className="flex items-center gap-0.5">
-              {onImport ? (
-                <button
-                  type="button"
-                  onClick={onImport}
-                  className="flex size-6 cursor-pointer items-center justify-center rounded-md text-placeholder transition-colors duration-200 hover:bg-layer-1-hover hover:text-primary"
-                  aria-label="从模板导入"
-                  title="从模板导入"
-                >
-                  <DownloadIcon className="size-3.5" />
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setShowCreateModal(true)}
-                  className="flex size-6 cursor-pointer items-center justify-center rounded-md text-placeholder transition-colors duration-200 hover:bg-layer-1-hover hover:text-primary"
-                  aria-label="新建角色"
-                  title="新建角色"
-                >
-                  <PlusIcon className="size-3.5" />
-                </button>
-              )}
-            </div>
-          )}
+          <div className="flex items-center gap-0.5">
+            {onImport ? (
+              <button
+                type="button"
+                onClick={onImport}
+                disabled={!isAdmin}
+                className="flex size-6 cursor-pointer items-center justify-center rounded-md text-placeholder transition-colors duration-200 hover:bg-layer-1-hover hover:text-primary disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-placeholder"
+                aria-label="从模板导入"
+                title="从模板导入"
+              >
+                <DownloadIcon className="size-3.5" />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowCreateModal(true)}
+                disabled={!isAdmin}
+                className="flex size-6 cursor-pointer items-center justify-center rounded-md text-placeholder transition-colors duration-200 hover:bg-layer-1-hover hover:text-primary disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-placeholder"
+                aria-label="新建角色"
+                title="新建角色"
+              >
+                <PlusIcon className="size-3.5" />
+              </button>
+            )}
+          </div>
         </div>
         {/* Search */}
         <div className="flex items-center gap-1.5 rounded-md border border-subtle bg-surface-1 px-2.5 py-1.5">
           <SearchIcon className="h-3.5 w-3.5 shrink-0 text-placeholder" />
           <input
-            className="min-w-0 flex-1 border-none bg-transparent text-13 font-medium leading-4 outline-none placeholder:text-placeholder"
+            className="min-w-0 flex-1 border-none bg-transparent text-13 leading-4 font-medium outline-none placeholder:text-placeholder"
             placeholder="搜索角色..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -171,24 +171,23 @@ export function RolesSidebar({
       {/* Roles List */}
       <div className="vertical-scrollbar scrollbar-sm flex-1 overflow-y-auto p-1.5 [scrollbar-gutter:stable]">
         {filteredRoles.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+          <div className="flex flex-col items-center justify-center px-4 py-12 text-center">
             <div className="mb-3 flex size-10 items-center justify-center rounded-full bg-layer-1">
               <ShieldCheck className="size-4 text-placeholder" />
             </div>
             {isSearchNoResults ? (
-              <p className="text-13 font-medium leading-4 text-tertiary">没有匹配的角色</p>
+              <p className="text-13 leading-4 font-medium text-tertiary">没有匹配的角色</p>
             ) : (
               <>
-                <p className="text-13 font-medium leading-4 text-tertiary">暂无角色</p>
-                {isAdmin && (
-                  <button
-                    type="button"
-                    onClick={() => setShowCreateModal(true)}
-                    className="mt-2 cursor-pointer text-13 font-medium leading-4 text-custom-primary-100 transition-colors hover:underline"
-                  >
-                    点击新建
-                  </button>
-                )}
+                <p className="text-13 leading-4 font-medium text-tertiary">暂无角色</p>
+                <button
+                  type="button"
+                  onClick={() => setShowCreateModal(true)}
+                  disabled={!isAdmin}
+                  className="text-custom-primary-100 mt-2 cursor-pointer text-13 leading-4 font-medium transition-colors hover:underline disabled:cursor-not-allowed disabled:text-placeholder disabled:no-underline"
+                >
+                  点击新建
+                </button>
               </>
             )}
           </div>
@@ -202,9 +201,7 @@ export function RolesSidebar({
                   onClick={() => onSelectRole(role.id)}
                   className={cn(
                     "group relative flex cursor-pointer flex-col gap-0.5 rounded-md px-3 py-2.5 transition-colors duration-150",
-                    isSelected
-                      ? "bg-accent-primary/8 text-accent-primary"
-                      : "hover:bg-layer-1-hover"
+                    isSelected ? "bg-accent-primary/8 text-accent-primary" : "hover:bg-layer-1-hover"
                   )}
                 >
                   <div className="flex items-start justify-between gap-2">
@@ -214,7 +211,7 @@ export function RolesSidebar({
                       />
                       <p
                         className={cn(
-                          "min-w-0 flex-1 truncate !text-13 !font-medium !leading-4",
+                          "min-w-0 flex-1 truncate !text-13 !leading-4 !font-medium",
                           isSelected ? "text-accent-primary" : "text-primary"
                         )}
                       >
@@ -222,44 +219,44 @@ export function RolesSidebar({
                       </p>
                     </div>
                     {/* Admin actions — visible on hover */}
-                    {isAdmin && (
-                      <div
-                        className={cn(
-                          "flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity duration-150",
-                          "group-hover:opacity-100",
-                          isSelected && "opacity-100"
-                        )}
+                    <div
+                      className={cn(
+                        "flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity duration-150",
+                        "group-hover:opacity-100",
+                        isSelected && "opacity-100"
+                      )}
+                    >
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditingRole(role);
+                        }}
+                        disabled={!isAdmin}
+                        className="flex size-5 cursor-pointer items-center justify-center rounded text-placeholder transition-colors duration-150 hover:bg-layer-1-hover hover:text-primary disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-placeholder"
+                        aria-label="编辑角色"
+                        title="编辑"
                       >
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setEditingRole(role);
-                          }}
-                          className="flex size-5 cursor-pointer items-center justify-center rounded text-placeholder transition-colors duration-150 hover:bg-layer-1-hover hover:text-primary"
-                          aria-label="编辑角色"
-                          title="编辑"
-                        >
-                          <PencilIcon className="size-3" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setPendingDelete(role);
-                          }}
-                          className="flex size-5 cursor-pointer items-center justify-center rounded text-placeholder transition-colors duration-150 hover:bg-red-500/10 hover:text-red-600"
-                          aria-label="删除角色"
-                          title="删除"
-                        >
-                          <Trash2Icon className="size-3" />
-                        </button>
-                      </div>
-                    )}
+                        <PencilIcon className="size-3" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setPendingDelete(role);
+                        }}
+                        disabled={!isAdmin}
+                        className="hover:bg-red-500/10 hover:text-red-600 flex size-5 cursor-pointer items-center justify-center rounded text-placeholder transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-placeholder"
+                        aria-label="删除角色"
+                        title="删除"
+                      >
+                        <Trash2Icon className="size-3" />
+                      </button>
+                    </div>
                   </div>
                   {/* Description */}
                   {role.description?.trim() && (
-                    <p className="truncate pl-5 text-13 font-medium leading-4 text-tertiary">{role.description}</p>
+                    <p className="truncate pl-5 text-13 leading-4 font-medium text-tertiary">{role.description}</p>
                   )}
                 </li>
               );
@@ -269,13 +266,14 @@ export function RolesSidebar({
       </div>
 
       {/* New Role Button (bottom) */}
-      {isAdmin && roles.length > 0 && (
+      {roles.length > 0 && (
         <div className="shrink-0 border-t border-subtle p-2">
           <Button
             variant="ghost"
             prependIcon={<PlusIcon />}
             onClick={() => setShowCreateModal(true)}
             className="w-full justify-center"
+            disabled={!isAdmin}
           >
             新建角色
           </Button>
@@ -283,11 +281,7 @@ export function RolesSidebar({
       )}
 
       {/* Modals */}
-      <RoleFormModal
-        isOpen={showCreateModal}
-        onClose={() => setShowCreateModal(false)}
-        onSubmit={handleCreate}
-      />
+      <RoleFormModal isOpen={showCreateModal} onClose={() => setShowCreateModal(false)} onSubmit={handleCreate} />
       <RoleFormModal
         isOpen={Boolean(editingRole)}
         role={editingRole}
@@ -303,8 +297,7 @@ export function RolesSidebar({
         content={
           pendingDelete ? (
             <>
-              确定要删除角色{" "}
-              <span className="font-semibold text-primary">「{pendingDelete.name}」</span>{" "}
+              确定要删除角色 <span className="font-semibold text-primary">「{pendingDelete.name}」</span>{" "}
               吗？此操作不可恢复。
             </>
           ) : null

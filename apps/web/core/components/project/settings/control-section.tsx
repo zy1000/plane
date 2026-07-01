@@ -21,12 +21,13 @@ import { DeleteProjectModal } from "../delete-project-modal";
 
 type Props = {
   projectId: string;
+  disabled?: boolean;
 };
 
 export const GeneralProjectSettingsControlSection = observer(function GeneralProjectSettingsControlSection(
   props: Props
 ) {
-  const { projectId } = props;
+  const { projectId, disabled = false } = props;
   // states
   const [selectProject, setSelectedProject] = useState<string | null>(null);
   const [archiveProject, setArchiveProject] = useState<boolean>(false);
@@ -62,7 +63,7 @@ export const GeneralProjectSettingsControlSection = observer(function GeneralPro
           title={t("project_settings.general.archive_project.title")}
           description={t("project_settings.general.archive_project.description")}
           control={
-            <Button variant="secondary" onClick={() => setArchiveProject(true)}>
+            <Button variant="secondary" onClick={() => setArchiveProject(true)} disabled={disabled}>
               {t("project_settings.general.archive_project.button")}
             </Button>
           }
@@ -77,6 +78,7 @@ export const GeneralProjectSettingsControlSection = observer(function GeneralPro
               variant="error-outline"
               onClick={() => setSelectedProject(currentProjectDetails.id ?? null)}
               data-ph-element={PROJECT_TRACKER_ELEMENTS.DELETE_PROJECT_BUTTON}
+              disabled={disabled}
             >
               {t("project_settings.general.delete_project.button")}
             </Button>

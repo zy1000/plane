@@ -20,12 +20,14 @@ type TEstimateListItem = {
 export const EstimateListItemButtons = observer(function EstimateListItemButtons(props: TEstimateListItem) {
   const { estimateId, isAdmin, isEditable, onDeleteClick } = props;
 
-  if (!isAdmin || !isEditable) return <></>;
+  if (!isEditable) return <></>;
+
   return (
     <div className="relative flex items-center gap-1">
       <button
-        className="relative flex h-6 w-6 flex-shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-sm transition-colors hover:bg-layer-1"
+        className="relative flex h-6 w-6 flex-shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-sm transition-colors hover:bg-layer-1 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
         onClick={() => onDeleteClick && onDeleteClick(estimateId)}
+        disabled={!isAdmin}
         data-ph-element={PROJECT_SETTINGS_TRACKER_ELEMENTS.ESTIMATES_LIST_ITEM}
       >
         <TrashIcon width={12} height={12} />

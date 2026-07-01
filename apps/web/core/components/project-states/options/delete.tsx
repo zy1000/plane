@@ -24,10 +24,11 @@ type TStateDelete = {
   state: IState;
   deleteStateCallback: TStateOperationsCallbacks["deleteState"];
   shouldTrackEvents?: boolean;
+  disabled?: boolean;
 };
 
 export const StateDelete = observer(function StateDelete(props: TStateDelete) {
-  const { totalStates, state, deleteStateCallback } = props;
+  const { totalStates, state, deleteStateCallback, disabled = false } = props;
   const { t } = useTranslation();
   // hooks
   const { isMobile } = usePlatformOS();
@@ -35,7 +36,7 @@ export const StateDelete = observer(function StateDelete(props: TStateDelete) {
   const [isDeleteModal, setIsDeleteModal] = useState(false);
   const [isDelete, setIsDelete] = useState(false);
   // derived values
-  const isDeleteDisabled = state.default ? true : totalStates === 1 ? true : false;
+  const isDeleteDisabled = disabled || state.default || totalStates === 1;
 
   const handleDeleteState = async () => {
     if (isDeleteDisabled) return;
@@ -109,7 +110,13 @@ export const StateDelete = observer(function StateDelete(props: TStateDelete) {
       >
         <Tooltip
           tooltipContent={
-            state.default ? "Cannot delete the default state." : totalStates === 1 ? `Cannot have an empty group.` : ``
+            disabled
+              ? "You do not have permission to delete this state."
+              : state.default
+                ? "Cannot delete the default state."
+                : totalStates === 1
+                  ? `Cannot have an empty group.`
+                  : ``
           }
           isMobile={isMobile}
           disabled={!isDeleteDisabled}

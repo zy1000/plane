@@ -48,7 +48,7 @@ const IssueTypeSidebarItem: FC<TIssueTypeSidebarItemProps> = ({ issueType, isSel
       className={cn(
         "group flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left transition-all duration-150",
         isSelected
-          ? "bg-accent-primary/10 text-accent-primary font-medium"
+          ? "bg-accent-primary/10 font-medium text-accent-primary"
           : "text-secondary hover:bg-layer-1 hover:text-primary"
       )}
     >
@@ -80,8 +80,14 @@ export const ProjectWorkflowRoot: FC<TProjectWorkflowRootProps> = ({ workspaceSl
   const { t } = useTranslation();
   const { issueTypes, isLoading: issueTypesLoading } = useProjectIssueTypes(workspaceSlug, projectId);
   const { allowProjectPermissionKeys } = useUserPermissions();
-  const { fetchWorkflows, createWorkflow, updateWorkflow, deleteWorkflow, getWorkflowsByIssueTypeId, isLoadingForIssueType } =
-    useProjectWorkflows(workspaceSlug, projectId);
+  const {
+    fetchWorkflows,
+    createWorkflow,
+    updateWorkflow,
+    deleteWorkflow,
+    getWorkflowsByIssueTypeId,
+    isLoadingForIssueType,
+  } = useProjectWorkflows(workspaceSlug, projectId);
 
   const [selectedIssueTypeId, setSelectedIssueTypeId] = useState<string | undefined>(undefined);
   const [modalState, setModalState] = useState<{ isOpen: boolean; workflow?: TWorkflow }>({ isOpen: false });
@@ -177,7 +183,7 @@ export const ProjectWorkflowRoot: FC<TProjectWorkflowRootProps> = ({ workspaceSl
             ))}
           </div>
         </aside>
-        <div className="w-px flex-shrink-0 bg-border-subtle" />
+        <div className="bg-border-subtle w-px flex-shrink-0" />
         <div className="min-w-0 flex-1">
           <WorkflowListSkeleton />
         </div>
@@ -187,8 +193,8 @@ export const ProjectWorkflowRoot: FC<TProjectWorkflowRootProps> = ({ workspaceSl
 
   if (!issueTypes || issueTypes.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-12 text-center text-secondary gap-3">
-        <GitPullRequest className="rotate-90 size-10 text-tertiary" strokeWidth={1.2} />
+      <div className="flex flex-col items-center justify-center gap-3 py-12 text-center text-secondary">
+        <GitPullRequest className="size-10 rotate-90 text-tertiary" strokeWidth={1.2} />
         <p className="text-sm">该项目暂无工作项类型，请先创建工作项类型。</p>
       </div>
     );
@@ -199,7 +205,7 @@ export const ProjectWorkflowRoot: FC<TProjectWorkflowRootProps> = ({ workspaceSl
       <div className="flex gap-6">
         {/* left sidebar: issue type list */}
         <aside className="flex w-44 flex-shrink-0 flex-col gap-0.5">
-          <p className="mb-1.5 px-2.5 text-xs font-medium uppercase tracking-wider text-tertiary">工作项类型</p>
+          <p className="tracking-wider mb-1.5 px-2.5 text-xs font-medium text-tertiary uppercase">工作项类型</p>
           {issueTypes.map((issueType) => (
             <IssueTypeSidebarItem
               key={issueType.id}
@@ -211,7 +217,7 @@ export const ProjectWorkflowRoot: FC<TProjectWorkflowRootProps> = ({ workspaceSl
         </aside>
 
         {/* vertical divider */}
-        <div className="w-px flex-shrink-0 bg-border-subtle" />
+        <div className="bg-border-subtle w-px flex-shrink-0" />
 
         {/* right content: workflows for selected issue type */}
         <div className="min-w-0 flex-1">
@@ -219,12 +225,13 @@ export const ProjectWorkflowRoot: FC<TProjectWorkflowRootProps> = ({ workspaceSl
             <p className="text-sm font-medium text-secondary">
               {selectedIssueType ? `${selectedIssueType.name} 的工作流` : "工作流"}
             </p>
-            {isEditable && selectedIssueTypeId && (
+            {selectedIssueTypeId && (
               <Button
                 variant="primary"
                 size="sm"
                 prependIcon={<Plus className="h-3.5 w-3.5" />}
                 onClick={() => setModalState({ isOpen: true, workflow: undefined })}
+                disabled={!isEditable}
               >
                 新建工作流
               </Button>
@@ -234,8 +241,8 @@ export const ProjectWorkflowRoot: FC<TProjectWorkflowRootProps> = ({ workspaceSl
           {isLoadingWorkflows ? (
             <WorkflowListSkeleton />
           ) : workflows.length === 0 ? (
-            <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-subtle py-12 text-center gap-3">
-              <GitPullRequest className="rotate-90 size-8 text-tertiary" strokeWidth={1.2} />
+            <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-subtle py-12 text-center">
+              <GitPullRequest className="size-8 rotate-90 text-tertiary" strokeWidth={1.2} />
               <div>
                 <p className="text-sm font-medium text-secondary">暂无工作流</p>
                 <p className="mt-1 text-xs text-tertiary">
@@ -248,17 +255,17 @@ export const ProjectWorkflowRoot: FC<TProjectWorkflowRootProps> = ({ workspaceSl
               {[...workflows]
                 .sort((a, b) => (b.is_active ? 1 : 0) - (a.is_active ? 1 : 0))
                 .map((workflow) => (
-                <WorkflowCard
-                  key={workflow.id}
-                  workflow={workflow}
-                  workspaceSlug={workspaceSlug}
-                  projectId={projectId}
-                  isEditable={isEditable}
-                  onToggleActive={handleToggleActive}
-                  onEdit={handleEdit}
-                  onDelete={handleDelete}
-                />
-              ))}
+                  <WorkflowCard
+                    key={workflow.id}
+                    workflow={workflow}
+                    workspaceSlug={workspaceSlug}
+                    projectId={projectId}
+                    isEditable={isEditable}
+                    onToggleActive={handleToggleActive}
+                    onEdit={handleEdit}
+                    onDelete={handleDelete}
+                  />
+                ))}
             </div>
           )}
         </div>

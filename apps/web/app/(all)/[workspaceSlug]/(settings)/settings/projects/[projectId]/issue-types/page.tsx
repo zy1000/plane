@@ -36,7 +36,16 @@ import { useOutsideClickDetector } from "@plane/hooks";
 import { useTranslation } from "@plane/i18n";
 import { LUCIDE_ICONS_LIST } from "@plane/propel/emoji-icon-picker";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import { AlertModalCore, Button, EModalPosition, EModalWidth, Input, ModalCore, TextArea, ToggleSwitch } from "@plane/ui";
+import {
+  AlertModalCore,
+  Button,
+  EModalPosition,
+  EModalWidth,
+  Input,
+  ModalCore,
+  TextArea,
+  ToggleSwitch,
+} from "@plane/ui";
 // components
 import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
 import { PageHead } from "@/components/core/page-title";
@@ -49,7 +58,11 @@ import { useProject } from "@/hooks/store/use-project";
 import { useProjectIssueTypeFields } from "@/hooks/store/use-project-issue-type-fields";
 import { useProjectIssueTypes } from "@/hooks/store/use-project-issue-types";
 import { useUserPermissions } from "@/hooks/store/user";
-import type { TIssueType, TTypeExtraField, TTypeExtraFieldPayload } from "@/services/project/project-issue-type.service";
+import type {
+  TIssueType,
+  TTypeExtraField,
+  TTypeExtraFieldPayload,
+} from "@/services/project/project-issue-type.service";
 // local imports
 import type { Route } from "./+types/page";
 import { IssueTypesProjectSettingsHeader } from "./header";
@@ -117,7 +130,7 @@ function formatTextIsParagraphForForm(field: TTypeExtraField): boolean {
  */
 const getSelectionMode = (options: TTypeExtraField["options"]): "single" | "multiple" => {
   if (!options || typeof options !== "object" || Array.isArray(options)) return "single";
-  const raw = (options as { selection_mode?: unknown; selectionMode?: unknown; multiple?: unknown });
+  const raw = options as { selection_mode?: unknown; selectionMode?: unknown; multiple?: unknown };
   const selectionMode = raw.selection_mode ?? raw.selectionMode;
   if (selectionMode === "multiple" || selectionMode === "multi") return "multiple";
   if (raw.multiple === true) return "multiple";
@@ -141,7 +154,8 @@ const getLucideIcon = (iconName?: string) =>
       DEFAULT_TYPE_ICON_OPTION.icon)
     : DEFAULT_TYPE_ICON_OPTION.icon;
 
-const isUtilityClass = (value?: string) => !!value && !value.startsWith("#") && !value.startsWith("rgb") && !value.startsWith("hsl");
+const isUtilityClass = (value?: string) =>
+  !!value && !value.startsWith("#") && !value.startsWith("rgb") && !value.startsWith("hsl");
 
 const getTypeIconOption = (issueType?: Partial<TIssueType>) => {
   const iconProps = issueType?.logo_props?.icon;
@@ -339,7 +353,7 @@ function WorkItemTypeIconPicker({
         <Icon className="size-5" style={{ color: selectedColor }} strokeWidth={2} />
       </button>
       {isOpen && (
-        <div className="absolute left-0 top-full z-50 mt-1 w-80 rounded-lg border border-subtle bg-surface-1 p-3 shadow-raised-200">
+        <div className="absolute top-full left-0 z-50 mt-1 w-80 rounded-lg border border-subtle bg-surface-1 p-3 shadow-raised-200">
           <div className="mb-3 flex h-9 items-center gap-2 rounded-lg bg-surface-2 px-3">
             <Search className="size-4 text-tertiary" />
             <input
@@ -399,9 +413,7 @@ function WorkItemTypeIconPicker({
   );
 }
 
-type TDeleteTarget =
-  | { kind: "issueType"; issueType: TIssueType }
-  | { kind: "field"; field: TTypeExtraField };
+type TDeleteTarget = { kind: "issueType"; issueType: TIssueType } | { kind: "field"; field: TTypeExtraField };
 
 type TFieldFormState = {
   name: string;
@@ -464,7 +476,8 @@ function formatSelectOptionsForForm(field: TTypeExtraField): string[] {
   const options = field.options;
   if (!options || typeof options !== "object" || Array.isArray(options)) return [""];
 
-  const rawOptions = (options as { choices?: unknown; options?: unknown; values?: unknown }).choices ??
+  const rawOptions =
+    (options as { choices?: unknown; options?: unknown; values?: unknown }).choices ??
     (options as { options?: unknown }).options ??
     (options as { values?: unknown }).values;
   if (!Array.isArray(rawOptions)) return [""];
@@ -518,7 +531,9 @@ function FieldTypeSelect({
   const [popoverWidth, setPopoverWidth] = useState<number | undefined>(undefined);
   const selectedOption = getFieldTypeOption(value);
   const SelectedIcon = selectedOption.icon;
-  const filteredOptions = FIELD_TYPE_OPTIONS.filter((option) => option.label.toLowerCase().includes(query.toLowerCase()));
+  const filteredOptions = FIELD_TYPE_OPTIONS.filter((option) =>
+    option.label.toLowerCase().includes(query.toLowerCase())
+  );
 
   const { styles, attributes } = usePopper(referenceElement, popperElement, {
     placement: "bottom-start",
@@ -571,7 +586,9 @@ function FieldTypeSelect({
           <SelectedIcon className="size-3.5 text-tertiary" />
           {selectedOption.label}
         </span>
-        <ChevronDown className={`size-3.5 text-tertiary transition-transform ${isOpen && !disabled ? "rotate-180" : ""}`} />
+        <ChevronDown
+          className={`size-3.5 text-tertiary transition-transform ${isOpen && !disabled ? "rotate-180" : ""}`}
+        />
       </button>
       {isOpen &&
         !disabled &&
@@ -637,10 +654,7 @@ function SelectExtraFieldDefaultSingle({
   const [popperElement, setPopperElement] = useState<HTMLDivElement | null>(null);
   const [popoverWidth, setPopoverWidth] = useState<number | undefined>(undefined);
 
-  const rows = useMemo(
-    () => [{ key: "", label: "不设置" }, ...options.map((o) => ({ key: o, label: o }))],
-    [options]
-  );
+  const rows = useMemo(() => [{ key: "", label: "不设置" }, ...options.map((o) => ({ key: o, label: o }))], [options]);
   const filteredRows = useMemo(
     () => rows.filter((row) => row.label.toLowerCase().includes(query.toLowerCase())),
     [rows, query]
@@ -670,7 +684,7 @@ function SelectExtraFieldDefaultSingle({
       <button
         ref={setReferenceElement}
         type="button"
-        className="flex h-9 w-full items-center justify-between gap-2 rounded-md border border-subtle bg-surface-1 px-3 text-left text-sm text-primary shadow-sm transition hover:border-accent-primary/40"
+        className="hover:border-accent-primary/40 flex h-9 w-full items-center justify-between gap-2 rounded-md border border-subtle bg-surface-1 px-3 text-left text-sm text-primary shadow-sm transition"
         onClick={() => setIsOpen((prev) => !prev)}
       >
         <span className="min-w-0 flex-1 truncate">{selectedLabel}</span>
@@ -776,7 +790,7 @@ function SelectExtraFieldDefaultMultiple({
       <button
         ref={setReferenceElement}
         type="button"
-        className="flex h-9 w-full items-center justify-between gap-2 rounded-md border border-subtle bg-surface-1 px-3 text-left text-sm text-primary shadow-sm transition hover:border-accent-primary/40"
+        className="hover:border-accent-primary/40 flex h-9 w-full items-center justify-between gap-2 rounded-md border border-subtle bg-surface-1 px-3 text-left text-sm text-primary shadow-sm transition"
         onClick={() => setIsOpen((prev) => !prev)}
       >
         <span className="min-w-0 flex-1 truncate" title={values.length > 0 ? buttonSummary : undefined}>
@@ -1007,7 +1021,9 @@ function InlineFieldForm({
                               select_options: nextOptions.length > 0 ? nextOptions : [""],
                               select_default_value:
                                 form.select_default_value === removedOption ? "" : form.select_default_value,
-                              select_default_values: form.select_default_values.filter((value) => value !== removedOption),
+                              select_default_values: form.select_default_values.filter(
+                                (value) => value !== removedOption
+                              ),
                             });
                           }}
                           aria-label="删除选项"
@@ -1210,7 +1226,9 @@ function WorkItemTypeModal({
             size="sm"
             type="submit"
             loading={isSubmitting}
-            disabled={isSubmitting || !name.trim() || categoryId === null || categoryId === undefined || categoryId === ""}
+            disabled={
+              isSubmitting || !name.trim() || categoryId === null || categoryId === undefined || categoryId === ""
+            }
           >
             {editingIssueType ? t("update") : t("project_settings.issue_types.add")}
           </Button>
@@ -1232,10 +1250,13 @@ function IssueTypesSettingsPage({ params }: Route.ComponentProps) {
     updateIssueType,
     deleteIssueType,
   } = useProjectIssueTypes(workspaceSlug, projectId);
-  const { fields, isLoading: fieldsLoading, createField, updateField, deleteField } = useProjectIssueTypeFields(
-    workspaceSlug,
-    projectId
-  );
+  const {
+    fields,
+    isLoading: fieldsLoading,
+    createField,
+    updateField,
+    deleteField,
+  } = useProjectIssueTypeFields(workspaceSlug, projectId);
   // translation
   const { t } = useTranslation();
   const [expandedId, setExpandedId] = useState<string | undefined>();
@@ -1276,8 +1297,11 @@ function IssueTypesSettingsPage({ params }: Route.ComponentProps) {
   }, [isTypeModalOpen]);
   // derived values
   const settingsDetails = PROJECT_SETTINGS.issue_types;
-  const pageTitle = currentProjectDetails?.name ? `${currentProjectDetails.name} - ${t(settingsDetails.i18n_label)}` : undefined;
+  const pageTitle = currentProjectDetails?.name
+    ? `${currentProjectDetails.name} - ${t(settingsDetails.i18n_label)}`
+    : undefined;
   const canView = allowProjectPermissionKeys(settingsDetails.permissionKeys ?? [], workspaceSlug, projectId);
+  const canEdit = allowProjectPermissionKeys(settingsDetails.editPermissionKeys ?? [], workspaceSlug, projectId);
   const fieldsByIssueTypeId = useMemo(() => {
     const groupedFields: Record<string, TTypeExtraField[]> = {};
     (fields ?? []).forEach((field) => {
@@ -1294,12 +1318,14 @@ function IssueTypesSettingsPage({ params }: Route.ComponentProps) {
   };
 
   const openCreateFieldForm = (issueTypeId: string) => {
+    if (!canEdit) return;
     setAddingFieldFor(issueTypeId);
     setEditingField(undefined);
     setFieldForm(DEFAULT_FIELD_FORM);
   };
 
   const openEditFieldForm = (field: TTypeExtraField) => {
+    if (!canEdit) return;
     setAddingFieldFor(field.issue_type_id);
     setEditingField(field);
     setFieldForm({
@@ -1324,7 +1350,13 @@ function IssueTypesSettingsPage({ params }: Route.ComponentProps) {
   }, [addingFieldFor]);
 
   const issueTypeIdsKey = useMemo(
-    () => (issueTypes?.length ? [...issueTypes].map((t) => t.id).sort().join(",") : ""),
+    () =>
+      issueTypes?.length
+        ? [...issueTypes]
+            .map((t) => t.id)
+            .sort()
+            .join(",")
+        : "",
     [issueTypes]
   );
 
@@ -1340,6 +1372,7 @@ function IssueTypesSettingsPage({ params }: Route.ComponentProps) {
   }, [issueTypeIdsKey, issueTypes]);
 
   const handleCreateIssueType = async (data: Partial<TIssueType>) => {
+    if (!canEdit) return;
     setIsTypeSubmitting(true);
     try {
       const createdIssueType = await createIssueType(data);
@@ -1359,7 +1392,7 @@ function IssueTypesSettingsPage({ params }: Route.ComponentProps) {
   };
 
   const handleUpdateIssueType = async (data: Partial<TIssueType>) => {
-    if (!editingIssueType) return;
+    if (!editingIssueType || !canEdit) return;
     setIsTypeSubmitting(true);
     try {
       await updateIssueType(editingIssueType.id, data);
@@ -1376,7 +1409,7 @@ function IssueTypesSettingsPage({ params }: Route.ComponentProps) {
   };
 
   const handleToggleIssueType = async (issueType: TIssueType, isActive: boolean) => {
-    if (issueType.is_default) return;
+    if (issueType.is_default || !canEdit) return;
 
     try {
       await updateIssueType(issueType.id, { is_active: isActive });
@@ -1390,11 +1423,12 @@ function IssueTypesSettingsPage({ params }: Route.ComponentProps) {
   };
 
   const requestDeleteIssueType = (issueType: TIssueType) => {
-    if (issueType.is_default) return;
+    if (issueType.is_default || !canEdit) return;
     setDeleteTarget({ kind: "issueType", issueType });
   };
 
   const handleSubmitField = async (issueTypeId: string) => {
+    if (!canEdit) return;
     const name = fieldForm.name.trim();
     if (!name) return;
 
@@ -1497,7 +1531,10 @@ function IssueTypesSettingsPage({ params }: Route.ComponentProps) {
       setToast({
         type: TOAST_TYPE.ERROR,
         title: editingField ? "更新失败" : "创建失败",
-        message: getApiErrorMessage(error, editingField ? "无法更新自定义属性，请稍后重试。" : "无法创建自定义属性，请检查名称是否重复。"),
+        message: getApiErrorMessage(
+          error,
+          editingField ? "无法更新自定义属性，请稍后重试。" : "无法创建自定义属性，请检查名称是否重复。"
+        ),
       });
     } finally {
       setIsFieldSubmitting(false);
@@ -1505,11 +1542,12 @@ function IssueTypesSettingsPage({ params }: Route.ComponentProps) {
   };
 
   const requestDeleteField = (field: TTypeExtraField) => {
+    if (!canEdit) return;
     setDeleteTarget({ kind: "field", field });
   };
 
   const handleConfirmDelete = async () => {
-    if (!deleteTarget) return;
+    if (!deleteTarget || !canEdit) return;
     setIsDeleting(true);
     try {
       if (deleteTarget.kind === "issueType") {
@@ -1556,6 +1594,7 @@ function IssueTypesSettingsPage({ params }: Route.ComponentProps) {
                 setEditingIssueType(undefined);
                 setIsTypeModalOpen(true);
               }}
+              disabled={!canEdit}
             >
               {t("project_settings.issue_types.add")}
             </Button>
@@ -1578,6 +1617,7 @@ function IssueTypesSettingsPage({ params }: Route.ComponentProps) {
                   setEditingIssueType(undefined);
                   setIsTypeModalOpen(true);
                 }}
+                disabled={!canEdit}
               >
                 {t("project_settings.issue_types.add")}
               </Button>
@@ -1589,9 +1629,7 @@ function IssueTypesSettingsPage({ params }: Route.ComponentProps) {
                 const typeFields = fieldsByIssueTypeId[issueType.id] ?? [];
                 const categoryDisplayName =
                   issueType.category_name?.trim() ||
-                  (issueType.category_id !== null &&
-                  issueType.category_id !== undefined &&
-                  issueType.category_id !== ""
+                  (issueType.category_id !== null && issueType.category_id !== undefined && issueType.category_id !== ""
                     ? issueTypeCategoryNameById.get(String(issueType.category_id))
                     : undefined);
 
@@ -1602,178 +1640,188 @@ function IssueTypesSettingsPage({ params }: Route.ComponentProps) {
                         isExpanded ? "bg-layer-1-hover" : "hover:bg-layer-1-hover"
                       }`}
                     >
-                    <div className="flex items-center justify-between gap-4 py-3">
-                    <button
-                      type="button"
-                      className="flex min-w-0 flex-1 items-center gap-3 text-left"
-                      onClick={() => setExpandedId(isExpanded ? undefined : issueType.id)}
-                    >
-                      <ChevronDown
-                        className={`size-4 shrink-0 text-tertiary transition-transform duration-200 ${isExpanded ? "" : "-rotate-90"}`}
-                      />
-                      <WorkItemTypeIcon issueType={issueType} />
-                      <span className="min-w-0">
-                        <span className="block truncate text-sm font-semibold text-primary">{issueType.name}</span>
-                        {issueType.description?.trim() ? (
-                          <span className="block truncate text-xs text-secondary">{issueType.description.trim()}</span>
-                        ) : null}
-                      </span>
-                    </button>
-                    <div className="flex shrink-0 items-center gap-3">
-                      {categoryDisplayName ? (
-                        <StatusBadge tone="neutral">{categoryDisplayName}</StatusBadge>
-                      ) : null}
-                      {issueType.is_default ? <StatusBadge tone="blue">默认</StatusBadge> : null}
-                      {issueType.is_active === false ? (
-                        <StatusBadge tone="danger">已禁用</StatusBadge>
-                      ) : !issueType.is_default ? (
-                        <StatusBadge tone="success">活动</StatusBadge>
-                      ) : null}
-                      {!issueType.is_default && (
-                        <ToggleSwitch
-                          value={issueType.is_active !== false}
-                          onChange={(value) => handleToggleIssueType(issueType, value)}
-                          size="sm"
-                        />
-                      )}
-                      <MoreMenu
-                        items={[
-                          {
-                            label: t("edit"),
-                            icon: <Pencil className="size-3.5 shrink-0 text-tertiary" strokeWidth={2} />,
-                            onClick: () => {
-                              setEditingIssueType(issueType);
-                              setIsTypeModalOpen(true);
-                            },
-                          },
-                          {
-                            label: "删除",
-                            disabled: issueType.is_default,
-                            tone: "danger",
-                            icon: <Trash2 className="size-3.5 shrink-0" strokeWidth={2} />,
-                            onClick: () => requestDeleteIssueType(issueType),
-                          },
-                        ]}
-                      />
-                    </div>
-                  </div>
+                      <div className="flex items-center justify-between gap-4 py-3">
+                        <button
+                          type="button"
+                          className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                          onClick={() => setExpandedId(isExpanded ? undefined : issueType.id)}
+                        >
+                          <ChevronDown
+                            className={`size-4 shrink-0 text-tertiary transition-transform duration-200 ${isExpanded ? "" : "-rotate-90"}`}
+                          />
+                          <WorkItemTypeIcon issueType={issueType} />
+                          <span className="min-w-0">
+                            <span className="block truncate text-sm font-semibold text-primary">{issueType.name}</span>
+                            {issueType.description?.trim() ? (
+                              <span className="block truncate text-xs text-secondary">
+                                {issueType.description.trim()}
+                              </span>
+                            ) : null}
+                          </span>
+                        </button>
+                        <div className="flex shrink-0 items-center gap-3">
+                          {categoryDisplayName ? <StatusBadge tone="neutral">{categoryDisplayName}</StatusBadge> : null}
+                          {issueType.is_default ? <StatusBadge tone="blue">默认</StatusBadge> : null}
+                          {issueType.is_active === false ? (
+                            <StatusBadge tone="danger">已禁用</StatusBadge>
+                          ) : !issueType.is_default ? (
+                            <StatusBadge tone="success">活动</StatusBadge>
+                          ) : null}
+                          {!issueType.is_default && (
+                            <ToggleSwitch
+                              value={issueType.is_active !== false}
+                              onChange={(value) => handleToggleIssueType(issueType, value)}
+                              size="sm"
+                              disabled={!canEdit}
+                            />
+                          )}
+                          <MoreMenu
+                            items={[
+                              {
+                                label: t("edit"),
+                                icon: <Pencil className="size-3.5 shrink-0 text-tertiary" strokeWidth={2} />,
+                                disabled: !canEdit,
+                                onClick: () => {
+                                  setEditingIssueType(issueType);
+                                  setIsTypeModalOpen(true);
+                                },
+                              },
+                              {
+                                label: "删除",
+                                disabled: issueType.is_default || !canEdit,
+                                tone: "danger",
+                                icon: <Trash2 className="size-3.5 shrink-0" strokeWidth={2} />,
+                                onClick: () => requestDeleteIssueType(issueType),
+                              },
+                            ]}
+                          />
+                        </div>
+                      </div>
 
-                    <div
-                      className={`grid transition-all duration-300 ease-in-out ${
-                        isExpanded ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
-                      }`}
-                    >
-                      <div className="min-h-0 overflow-hidden">
-                        <div className="border-t border-subtle">
-                        {addingFieldFor === issueType.id || typeFields.length > 0 ? (
-                          <div className="p-4">
-                            <div className="mb-3 text-sm font-medium text-primary">属性</div>
+                      <div
+                        className={`grid transition-all duration-300 ease-in-out ${
+                          isExpanded ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+                        }`}
+                      >
+                        <div className="min-h-0 overflow-hidden">
+                          <div className="border-t border-subtle">
+                            {addingFieldFor === issueType.id || typeFields.length > 0 ? (
+                              <div className="p-4">
+                                <div className="mb-3 text-sm font-medium text-primary">属性</div>
 
-                            {(typeFields.length > 0 || addingFieldFor === issueType.id) && (
-                              <div className="mb-4 space-y-2">
-                                {typeFields.map((field) => {
-                                  const isEditingThisRow =
-                                    addingFieldFor === issueType.id && editingField?.id === field.id;
-                                  if (isEditingThisRow) {
-                                    return (
-                                      <div key={field.id} ref={inlineFormRef}>
+                                {(typeFields.length > 0 || addingFieldFor === issueType.id) && (
+                                  <div className="mb-4 space-y-2">
+                                    {typeFields.map((field) => {
+                                      const isEditingThisRow =
+                                        addingFieldFor === issueType.id && editingField?.id === field.id;
+                                      if (isEditingThisRow) {
+                                        return (
+                                          <div key={field.id} ref={inlineFormRef}>
+                                            <InlineFieldForm
+                                              form={fieldForm}
+                                              isSubmitting={isFieldSubmitting}
+                                              submitLabel="更新"
+                                              fieldTypeLocked
+                                              onChange={setFieldForm}
+                                              onCancel={resetFieldForm}
+                                              onSubmit={() => handleSubmitField(issueType.id)}
+                                            />
+                                          </div>
+                                        );
+                                      }
+                                      return (
+                                        <div
+                                          key={field.id}
+                                          className="hover:border-primary/40 flex items-center gap-3 rounded-md border border-strong px-3 py-2.5 text-sm transition hover:bg-layer-1-hover"
+                                        >
+                                          <GripVertical className="size-4 shrink-0 text-tertiary" />
+                                          <span className="min-w-0 flex-1 truncate font-medium text-primary">
+                                            {field.name}
+                                          </span>
+                                          <span className="text-xs text-secondary">{getFieldRowLabel(field)}</span>
+                                          {field.is_active === false ? (
+                                            <StatusBadge tone="danger">已禁用</StatusBadge>
+                                          ) : (
+                                            <StatusBadge tone="success">活动</StatusBadge>
+                                          )}
+                                          <MoreMenu
+                                            items={[
+                                              {
+                                                label: "编辑",
+                                                icon: (
+                                                  <Pencil className="size-3.5 shrink-0 text-tertiary" strokeWidth={2} />
+                                                ),
+                                                disabled: !canEdit,
+                                                onClick: () => openEditFieldForm(field),
+                                              },
+                                              {
+                                                label: "删除",
+                                                disabled: !canEdit,
+                                                tone: "danger",
+                                                icon: <Trash2 className="size-3.5 shrink-0" strokeWidth={2} />,
+                                                onClick: () => requestDeleteField(field),
+                                              },
+                                            ]}
+                                          />
+                                        </div>
+                                      );
+                                    })}
+                                    {addingFieldFor === issueType.id && !editingField && (
+                                      <div ref={inlineFormRef}>
                                         <InlineFieldForm
                                           form={fieldForm}
                                           isSubmitting={isFieldSubmitting}
-                                          submitLabel="更新"
-                                          fieldTypeLocked
+                                          submitLabel="创建"
                                           onChange={setFieldForm}
                                           onCancel={resetFieldForm}
                                           onSubmit={() => handleSubmitField(issueType.id)}
                                         />
                                       </div>
-                                    );
-                                  }
-                                  return (
-                                    <div
-                                      key={field.id}
-                                      className="flex items-center gap-3 rounded-md border border-strong px-3 py-2.5 text-sm transition hover:border-primary/40 hover:bg-layer-1-hover"
-                                    >
-                                      <GripVertical className="size-4 shrink-0 text-tertiary" />
-                                      <span className="min-w-0 flex-1 truncate font-medium text-primary">{field.name}</span>
-                                      <span className="text-xs text-secondary">{getFieldRowLabel(field)}</span>
-                                      {field.is_active === false ? (
-                                        <StatusBadge tone="danger">已禁用</StatusBadge>
-                                      ) : (
-                                        <StatusBadge tone="success">活动</StatusBadge>
-                                      )}
-                                      <MoreMenu
-                                        items={[
-                                          {
-                                            label: "编辑",
-                                            icon: <Pencil className="size-3.5 shrink-0 text-tertiary" strokeWidth={2} />,
-                                            onClick: () => openEditFieldForm(field),
-                                          },
-                                          {
-                                            label: "删除",
-                                            tone: "danger",
-                                            icon: <Trash2 className="size-3.5 shrink-0" strokeWidth={2} />,
-                                            onClick: () => requestDeleteField(field),
-                                          },
-                                        ]}
-                                      />
-                                    </div>
-                                  );
-                                })}
-                                {addingFieldFor === issueType.id && !editingField && (
-                                  <div ref={inlineFormRef}>
-                                    <InlineFieldForm
-                                      form={fieldForm}
-                                      isSubmitting={isFieldSubmitting}
-                                      submitLabel="创建"
-                                      onChange={setFieldForm}
-                                      onCancel={resetFieldForm}
-                                      onSubmit={() => handleSubmitField(issueType.id)}
-                                    />
+                                    )}
                                   </div>
                                 )}
+
+                                {addingFieldFor !== issueType.id && (
+                                  <Button
+                                    variant="neutral-primary"
+                                    size="sm"
+                                    prependIcon={<Plus className="size-3" />}
+                                    onClick={() => openCreateFieldForm(issueType.id)}
+                                    disabled={!canEdit}
+                                  >
+                                    添加新属性
+                                  </Button>
+                                )}
+                                {fieldsLoading && <p className="mt-2 text-xs text-secondary">正在同步属性...</p>}
+                              </div>
+                            ) : (
+                              <div className="mb-3 flex w-full flex-col items-center justify-center rounded-md bg-surface-1 py-10 text-center">
+                                <div className="border-accent-primary/40 flex size-14 items-center justify-center rounded-lg border bg-accent-primary/10 text-accent-primary">
+                                  <Layers className="size-7" strokeWidth={2} />
+                                </div>
+                                <h3 className="mt-4 text-sm font-semibold text-primary">添加自定义属性</h3>
+                                <p className="mt-1 text-sm text-secondary">
+                                  您为此工作项类型添加的新属性将显示在此处。
+                                </p>
+                                <Button
+                                  variant="neutral-primary"
+                                  size="sm"
+                                  className="mt-4"
+                                  prependIcon={<Plus className="size-3" />}
+                                  onClick={() => openCreateFieldForm(issueType.id)}
+                                  disabled={!canEdit}
+                                >
+                                  添加新属性
+                                </Button>
+                                {fieldsLoading && <p className="mt-2 text-xs text-secondary">正在同步属性...</p>}
                               </div>
                             )}
-
-                            {addingFieldFor !== issueType.id && (
-                              <Button
-                                variant="neutral-primary"
-                                size="sm"
-                                prependIcon={<Plus className="size-3" />}
-                                onClick={() => openCreateFieldForm(issueType.id)}
-                              >
-                                添加新属性
-                              </Button>
-                            )}
-                            {fieldsLoading && <p className="mt-2 text-xs text-secondary">正在同步属性...</p>}
                           </div>
-                        ) : (
-                          <div className="mb-3 flex w-full flex-col items-center justify-center rounded-md bg-surface-1 py-10 text-center">
-                            <div className="flex size-14 items-center justify-center rounded-lg border border-accent-primary/40 bg-accent-primary/10 text-accent-primary">
-                              <Layers className="size-7" strokeWidth={2} />
-                            </div>
-                            <h3 className="mt-4 text-sm font-semibold text-primary">添加自定义属性</h3>
-                            <p className="mt-1 text-sm text-secondary">
-                              您为此工作项类型添加的新属性将显示在此处。
-                            </p>
-                            <Button
-                              variant="neutral-primary"
-                              size="sm"
-                              className="mt-4"
-                              prependIcon={<Plus className="size-3" />}
-                              onClick={() => openCreateFieldForm(issueType.id)}
-                            >
-                              添加新属性
-                            </Button>
-                            {fieldsLoading && <p className="mt-2 text-xs text-secondary">正在同步属性...</p>}
-                          </div>
-                        )}
+                        </div>
                       </div>
                     </div>
                   </div>
-                  </div>
-                </div>
-              );
+                );
               })}
             </div>
           )}

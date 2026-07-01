@@ -12,7 +12,7 @@ import { Disclosure } from "@headlessui/react";
 import { MEMBER_TRACKER_ELEMENTS } from "@plane/constants";
 import type { EUserProjectRoles, IProjectRole, IUser, IWorkspaceMember } from "@plane/types";
 import { CustomMenu } from "@plane/ui";
-import { getFileURL } from "@plane/utils";
+import { cn, getFileURL } from "@plane/utils";
 // helpers
 import { SYSTEM_USER_AVATAR_FALLBACK_COLOR } from "@/helpers/user-avatar.helper";
 // local imports
@@ -28,7 +28,8 @@ export interface RowData {
 type NameProps = {
   rowData: RowData;
   workspaceSlug: string;
-  isAdmin: boolean;
+  canLeaveProject: boolean;
+  canRemoveProjectMember: boolean;
   currentUser: IUser | undefined;
   setRemoveMemberModal: (rowData: RowData) => void;
 };
@@ -43,9 +44,11 @@ type AccountTypeProps = {
 };
 
 export function NameColumn(props: NameProps) {
-  const { rowData, workspaceSlug, isAdmin, currentUser, setRemoveMemberModal } = props;
+  const { rowData, workspaceSlug, canLeaveProject, canRemoveProjectMember, currentUser, setRemoveMemberModal } = props;
   // derived values
   const { avatar_url, display_name, email, first_name, id, last_name } = rowData.member;
+  const isCurrentUser = id === currentUser?.id;
+  const isActionDisabled = isCurrentUser ? !canLeaveProject : !canRemoveProjectMember;
 
   return (
     <Disclosure>
@@ -75,25 +78,25 @@ export function NameColumn(props: NameProps) {
               )}
               {first_name} {last_name}
             </div>
-            {(isAdmin || id === currentUser?.id) && (
-              <CustomMenu
-                ellipsis
-                buttonClassName="p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
-                optionsClassName="p-1.5"
-                placement="bottom-end"
-              >
-                <CustomMenu.MenuItem>
-                  <div
-                    className="flex cursor-pointer items-center gap-x-1 font-medium text-danger-primary"
-                    data-ph-element={MEMBER_TRACKER_ELEMENTS.PROJECT_MEMBER_TABLE_CONTEXT_MENU}
-                    onClick={() => setRemoveMemberModal(rowData)}
-                  >
-                    <CircleMinus className="size-3.5 flex-shrink-0" />
-                    {rowData.member?.id === currentUser?.id ? "Leave " : "Remove "}
-                  </div>
-                </CustomMenu.MenuItem>
-              </CustomMenu>
-            )}
+            <CustomMenu
+              ellipsis
+              buttonClassName="p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+              optionsClassName="p-1.5"
+              placement="bottom-end"
+            >
+              <CustomMenu.MenuItem disabled={isActionDisabled} onClick={() => setRemoveMemberModal(rowData)}>
+                <div
+                  className={cn(
+                    "flex items-center gap-x-1 font-medium",
+                    isActionDisabled ? "cursor-not-allowed text-placeholder" : "cursor-pointer text-danger-primary"
+                  )}
+                  data-ph-element={MEMBER_TRACKER_ELEMENTS.PROJECT_MEMBER_TABLE_CONTEXT_MENU}
+                >
+                  <CircleMinus className="size-3.5 flex-shrink-0" />
+                  {isCurrentUser ? "Leave " : "Remove "}
+                </div>
+              </CustomMenu.MenuItem>
+            </CustomMenu>
           </div>
         </div>
       )}

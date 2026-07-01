@@ -32,6 +32,11 @@ function PmsSyncSettingsPage({ params }: Route.ComponentProps) {
     : undefined;
 
   const canView = allowProjectPermissionKeys(PROJECT_SETTINGS.pms_sync.permissionKeys ?? [], workspaceSlug, projectId);
+  const canEdit = allowProjectPermissionKeys(
+    PROJECT_SETTINGS.pms_sync.editPermissionKeys ?? [],
+    workspaceSlug,
+    projectId
+  );
 
   if (workspaceUserInfo && !canView) {
     return <NotAuthorizedView section="settings" isProjectView className="h-auto" />;
@@ -46,7 +51,7 @@ function PmsSyncSettingsPage({ params }: Route.ComponentProps) {
           description={t("project_settings.pms_sync.description" as never)}
         />
         <div className="mt-8">
-          <ProjectPmsSyncSettingsRoot workspaceSlug={workspaceSlug} projectId={projectId} />
+          <ProjectPmsSyncSettingsRoot workspaceSlug={workspaceSlug} projectId={projectId} canEdit={canEdit} />
         </div>
       </div>
     </SettingsContentWrapper>

@@ -29,7 +29,11 @@ function ProjectSettingsPage({ params }: Route.ComponentProps) {
   const { allowProjectPermissionKeys, workspaceUserInfo } = useUserPermissions();
   // derived values
   const canView = allowProjectPermissionKeys(PROJECT_SETTINGS.general.permissionKeys ?? [], workspaceSlug, projectId);
-  const canEdit = allowProjectPermissionKeys(PROJECT_SETTINGS.general.editPermissionKeys ?? [], workspaceSlug, projectId);
+  const canEdit = allowProjectPermissionKeys(
+    PROJECT_SETTINGS.general.editPermissionKeys ?? [],
+    workspaceSlug,
+    projectId
+  );
 
   const pageTitle = currentProjectDetails?.name ? `${currentProjectDetails?.name} - General Settings` : undefined;
 
@@ -51,7 +55,7 @@ function ProjectSettingsPage({ params }: Route.ComponentProps) {
         ) : (
           <ProjectDetailsFormLoader />
         )}
-        {canEdit && <GeneralProjectSettingsControlSection projectId={projectId} />}
+        <GeneralProjectSettingsControlSection projectId={projectId} disabled={!canEdit} />
       </div>
     </SettingsContentWrapper>
   );

@@ -77,7 +77,7 @@ export const TransitionFlowRow: FC<TTransitionFlowRowProps> = ({
   }, [showMenu]);
 
   const handleDelete = async () => {
-    if (isDeleting) return;
+    if (!isEditable || isDeleting) return;
     setIsDeleting(true);
     setShowMenu(false);
     try {
@@ -89,56 +89,58 @@ export const TransitionFlowRow: FC<TTransitionFlowRowProps> = ({
 
   const getBoxClassName = (active: boolean) =>
     cn(
-      "flex h-9 w-full items-center gap-2 rounded-md border px-3 text-sm transition-colors cursor-pointer",
+      "flex h-9 w-full cursor-pointer items-center gap-2 rounded-md border px-3 text-sm transition-colors",
       active ? "border-accent-primary bg-accent-subtle/10" : "border-subtle bg-surface-1 hover:bg-surface-2"
     );
 
   return (
-    <div
-      className={cn(
-        "relative rounded-md border border-subtle bg-surface-1 transition-colors",
-        showMenu && "z-30"
-      )}
-    >
-      {isEditable && (
-        <div ref={menuRef} className="absolute top-2 right-2 z-10">
-          <button
-            type="button"
-            onClick={() => setShowMenu((prev) => !prev)}
-            className="flex h-7 w-7 items-center justify-center rounded text-tertiary transition-colors hover:bg-layer-1 hover:text-primary"
-          >
-            <MoreHorizontal className="h-4 w-4" />
-          </button>
-          {showMenu && (
-            <div className="absolute right-0 top-full z-20 mt-1 min-w-[100px] overflow-hidden rounded-md border border-subtle bg-surface-1 shadow-lg">
-              <button
-                type="button"
-                onClick={onEdit}
-                className="flex w-full items-center gap-2 px-3 py-2 text-sm text-primary transition-colors hover:bg-layer-1"
-              >
-                编辑
-              </button>
-              <button
-                type="button"
-                onClick={handleDelete}
-                disabled={isDeleting}
-                className="flex w-full items-center gap-2 px-3 py-2 text-sm text-danger-primary transition-colors hover:bg-danger-subtle disabled:opacity-50"
-              >
-                删除
-              </button>
-            </div>
-          )}
-        </div>
-      )}
+    <div className={cn("relative rounded-md border border-subtle bg-surface-1 transition-colors", showMenu && "z-30")}>
+      <div ref={menuRef} className="absolute top-2 right-2 z-10">
+        <button
+          type="button"
+          onClick={() => setShowMenu((prev) => !prev)}
+          className="flex h-7 w-7 items-center justify-center rounded text-tertiary transition-colors hover:bg-layer-1 hover:text-primary"
+        >
+          <MoreHorizontal className="h-4 w-4" />
+        </button>
+        {showMenu && (
+          <div className="absolute top-full right-0 z-20 mt-1 min-w-[100px] overflow-hidden rounded-md border border-subtle bg-surface-1 shadow-lg">
+            <button
+              type="button"
+              onClick={onEdit}
+              disabled={!isEditable}
+              className="flex w-full items-center gap-2 px-3 py-2 text-sm text-primary transition-colors hover:bg-layer-1 disabled:cursor-not-allowed disabled:text-placeholder disabled:hover:bg-transparent"
+            >
+              编辑
+            </button>
+            <button
+              type="button"
+              onClick={handleDelete}
+              disabled={!isEditable || isDeleting}
+              className="flex w-full items-center gap-2 px-3 py-2 text-sm text-danger-primary transition-colors hover:bg-danger-subtle disabled:cursor-not-allowed disabled:text-placeholder disabled:hover:bg-transparent"
+            >
+              删除
+            </button>
+          </div>
+        )}
+      </div>
 
-      <div className="px-3 pt-2.5 pb-3 pr-9">
+      <div className="px-3 pt-2.5 pr-9 pb-3">
         <div className="grid grid-cols-5 gap-2">
           <div>
             <p className="mb-1 text-xs text-tertiary">目标状态</p>
-            <button type="button" onClick={() => onViewBox("state")} className={getBoxClassName(activeViewBox === "state")}>
+            <button
+              type="button"
+              onClick={() => onViewBox("state")}
+              className={getBoxClassName(activeViewBox === "state")}
+            >
               {selectedToState ? (
                 <>
-                  <StateGroupIcon stateGroup={selectedToState.group} color={selectedToState.color} size={EIconSize.SM} />
+                  <StateGroupIcon
+                    stateGroup={selectedToState.group}
+                    color={selectedToState.color}
+                    size={EIconSize.SM}
+                  />
                   <span className="flex-1 truncate text-left text-primary">{selectedToState.name}</span>
                 </>
               ) : (
@@ -194,7 +196,9 @@ export const TransitionFlowRow: FC<TTransitionFlowRowProps> = ({
               {transition.extra_field_ids.length === 0 ? (
                 <span className="flex-1 text-left text-tertiary">无需必填</span>
               ) : (
-                <span className="flex-1 truncate text-left text-primary">{transition.extra_field_ids.length} 个字段</span>
+                <span className="flex-1 truncate text-left text-primary">
+                  {transition.extra_field_ids.length} 个字段
+                </span>
               )}
             </button>
           </div>

@@ -34,7 +34,11 @@ function AutomationSettingsPage({ params }: Route.ComponentProps) {
   const { t } = useTranslation();
 
   // derived values
-  const canView = allowProjectPermissionKeys(PROJECT_SETTINGS.automations.permissionKeys ?? [], workspaceSlug, projectId);
+  const canView = allowProjectPermissionKeys(
+    PROJECT_SETTINGS.automations.permissionKeys ?? [],
+    workspaceSlug,
+    projectId
+  );
   const canEdit = allowProjectPermissionKeys(
     PROJECT_SETTINGS.automations.editPermissionKeys ?? [],
     workspaceSlug,
@@ -71,8 +75,8 @@ function AutomationSettingsPage({ params }: Route.ComponentProps) {
           description={t("project_settings.automations.description")}
         />
         <div className="mt-6">
-          <AutoArchiveAutomation handleChange={handleChange} />
-          <AutoCloseAutomation handleChange={handleChange} />
+          <AutoArchiveAutomation handleChange={handleChange} canEdit={canEdit} />
+          <AutoCloseAutomation handleChange={handleChange} canEdit={canEdit} />
         </div>
       </section>
       <CustomAutomationsRoot projectId={projectId} workspaceSlug={workspaceSlug} />

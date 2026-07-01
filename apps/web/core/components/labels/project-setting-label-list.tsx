@@ -49,6 +49,7 @@ export const ProjectSettingsLabelList = observer(function ProjectSettingsLabelLi
   };
 
   const newLabel = () => {
+    if (!isEditable) return;
     setIsUpdating(false);
     setLabelForm(true);
   };
@@ -83,11 +84,9 @@ export const ProjectSettingsLabelList = observer(function ProjectSettingsLabelLi
         title={t("project_settings.labels.heading")}
         description={t("project_settings.labels.description")}
         control={
-          isEditable && (
-            <Button variant="primary" size="lg" onClick={newLabel}>
-              {t("common.add_label")}
-            </Button>
-          )
+          <Button variant="primary" size="lg" onClick={newLabel} disabled={!isEditable}>
+            {t("common.add_label")}
+          </Button>
         }
       />
       <div className="mt-6 w-full">
@@ -116,6 +115,7 @@ export const ProjectSettingsLabelList = observer(function ProjectSettingsLabelLi
               actions={[
                 {
                   label: t("settings_empty_state.labels.cta_primary"),
+                  disabled: !isEditable,
                   onClick: () => {
                     newLabel();
                   },

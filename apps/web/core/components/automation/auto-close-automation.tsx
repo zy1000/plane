@@ -6,10 +6,9 @@
 
 import { useMemo, useState } from "react";
 import { observer } from "mobx-react";
-import { useParams } from "next/navigation";
 import { ArchiveX } from "lucide-react";
 // plane imports
-import { PROJECT_AUTOMATION_MONTHS, EUserPermissions, EUserPermissionsLevel, EIconSize } from "@plane/constants";
+import { PROJECT_AUTOMATION_MONTHS, EIconSize } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { StateGroupIcon, StatePropertyIcon } from "@plane/propel/icons";
 import type { IProject } from "@plane/types";
@@ -19,22 +18,19 @@ import { SettingsControlItem } from "@/components/settings/control-item";
 // hooks
 import { useProject } from "@/hooks/store/use-project";
 import { useProjectState } from "@/hooks/store/use-project-state";
-import { useUserPermissions } from "@/hooks/store/user";
 
 type Props = {
   handleChange: (formData: Partial<IProject>) => Promise<void>;
+  canEdit?: boolean;
 };
 
 export const AutoCloseAutomation = observer(function AutoCloseAutomation(props: Props) {
-  const { handleChange } = props;
-  // router
-  const { workspaceSlug } = useParams();
+  const { handleChange, canEdit = true } = props;
   // states
   const [monthModal, setmonthModal] = useState(false);
   // store hooks
   const { currentProjectDetails } = useProject();
   const { projectStates } = useProjectState();
-  const { allowPermissions } = useUserPermissions();
   const { t } = useTranslation();
 
   // const stateGroups = projectStateStore.groupedProjectStates ?? undefined;
@@ -63,13 +59,6 @@ export const AutoCloseAutomation = observer(function AutoCloseAutomation(props: 
     close_in: 1,
     default_state: defaultState,
   };
-
-  const isAdmin = allowPermissions(
-    [EUserPermissions.ADMIN],
-    EUserPermissionsLevel.PROJECT,
-    workspaceSlug?.toString(),
-    currentProjectDetails?.id
-  );
 
   const autoCloseStatus = useMemo(() => {
     if (currentProjectDetails?.close_in === undefined) return false;
@@ -104,7 +93,7 @@ export const AutoCloseAutomation = observer(function AutoCloseAutomation(props: 
                   }
                 }}
                 size="sm"
-                disabled={!isAdmin}
+                disabled={!canEdit}
               />
             }
           />
@@ -126,7 +115,7 @@ export const AutoCloseAutomation = observer(function AutoCloseAutomation(props: 
                       }`}
                       onChange={(val: number) => void handleChange({ close_in: val })}
                       input
-                      disabled={!isAdmin}
+                      disabled={!canEdit}
                     >
                       <>
                         {PROJECT_AUTOMATION_MONTHS.map((month) => (
@@ -177,7 +166,7 @@ export const AutoCloseAutomation = observer(function AutoCloseAutomation(props: 
                       }
                       onChange={(val: string) => void handleChange({ default_state: val })}
                       options={options}
-                      disabled={!multipleOptions}
+                      disabled={!canEdit || !multipleOptions}
                       input
                     />
                   </div>

@@ -72,10 +72,7 @@ const ProjectRolesPage = observer(function ProjectRolesPage({ params }: Route.Co
   } = useWorkspaceRoles(workspaceSlug, "project_template");
 
   useSWR(canView ? `PROJECT_ROLES_${workspaceSlug}_${projectId}` : null, canView ? fetchRoles : null);
-  useSWR(
-    showImportModal ? `WORKSPACE_TEMPLATES_${workspaceSlug}` : null,
-    showImportModal ? fetchTemplates : null
-  );
+  useSWR(showImportModal ? `WORKSPACE_TEMPLATES_${workspaceSlug}` : null, showImportModal ? fetchTemplates : null);
 
   useEffect(() => {
     if (roles.length > 0 && !selectedRoleId) {
@@ -145,7 +142,7 @@ const ProjectRolesPage = observer(function ProjectRolesPage({ params }: Route.Co
 
       {/* Header row */}
       <div className="mb-4">
-        <p className="text-13 font-medium leading-4 text-tertiary">
+        <p className="text-13 leading-4 font-medium text-tertiary">
           管理此项目内生效的自定义角色，可从工作区模板导入或手动创建
         </p>
       </div>
@@ -153,7 +150,7 @@ const ProjectRolesPage = observer(function ProjectRolesPage({ params }: Route.Co
       <section
         className={cn(
           "flex h-[calc(100svh-12rem)] min-h-[520px] w-full overflow-hidden rounded-lg border border-subtle bg-surface-1",
-          { "opacity-60 pointer-events-none": !canView }
+          { "pointer-events-none opacity-60": !canView }
         )}
       >
         {/* Left: Project roles sidebar — 复用工作区角色侧边栏，角色 type 无关 */}
@@ -170,7 +167,7 @@ const ProjectRolesPage = observer(function ProjectRolesPage({ params }: Route.Co
           }}
           onUpdate={handleUpdate}
           onDelete={handleDeleteRole}
-          onImport={isAdmin ? () => setShowImportModal(true) : undefined}
+          onImport={() => setShowImportModal(true)}
         />
 
         {/* Right: Permissions panel */}
@@ -179,36 +176,36 @@ const ProjectRolesPage = observer(function ProjectRolesPage({ params }: Route.Co
             <div className="flex shrink-0 items-center gap-4 border-b border-subtle bg-surface-1 px-6 py-3">
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <h2 className="truncate text-13 font-medium leading-4 text-primary">{selectedRole.name}</h2>
+                  <h2 className="truncate text-13 leading-4 font-medium text-primary">{selectedRole.name}</h2>
                   {!searchQuery && activeScopeSummary.totalPermissions > 0 && (
-                    <span className="shrink-0 rounded-full bg-accent-primary/10 px-2 py-0.5 text-13 font-medium leading-4 text-accent-primary tabular-nums">
+                    <span className="shrink-0 rounded-full bg-accent-primary/10 px-2 py-0.5 text-13 leading-4 font-medium text-accent-primary tabular-nums">
                       {activeScopeSummary.totalBound}/{activeScopeSummary.totalPermissions}
                     </span>
                   )}
                   {(selectedRole as unknown as { source_template_name?: string | null }).source_template_name && (
-                    <span className="shrink-0 rounded-full bg-accent-primary/10 px-2 py-0.5 text-13 font-medium leading-4 text-accent-primary">
+                    <span className="shrink-0 rounded-full bg-accent-primary/10 px-2 py-0.5 text-13 leading-4 font-medium text-accent-primary">
                       来自：{(selectedRole as unknown as { source_template_name?: string | null }).source_template_name}
                     </span>
                   )}
                 </div>
                 {(selectedRole as unknown as { description?: string }).description?.trim() && (
-                  <p className="truncate text-13 font-medium leading-4 text-tertiary">
+                  <p className="truncate text-13 leading-4 font-medium text-tertiary">
                     {(selectedRole as unknown as { description?: string }).description}
                   </p>
                 )}
               </div>
               <div
                 className={cn(
-                  "flex w-52 shrink-0 items-center gap-1.5 rounded-md border py-1.5 pl-2.5 pr-1.5 transition-colors duration-150",
+                  "flex w-52 shrink-0 items-center gap-1.5 rounded-md border py-1.5 pr-1.5 pl-2.5 transition-colors duration-150",
                   searchQuery
                     ? "border-accent-primary/40 bg-accent-primary/4"
-                    : "border-subtle bg-surface-2 focus-within:border-accent-primary/40 focus-within:bg-surface-1"
+                    : "focus-within:border-accent-primary/40 border-subtle bg-surface-2 focus-within:bg-surface-1"
                 )}
               >
                 <Search className={cn("size-3.5 shrink-0", searchQuery ? "text-accent-primary" : "text-placeholder")} />
                 <input
                   type="text"
-                  className="min-w-0 flex-1 border-none bg-transparent text-13 font-medium leading-4 outline-none placeholder:text-placeholder"
+                  className="min-w-0 flex-1 border-none bg-transparent text-13 leading-4 font-medium outline-none placeholder:text-placeholder"
                   placeholder="搜索权限..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
@@ -233,8 +230,8 @@ const ProjectRolesPage = observer(function ProjectRolesPage({ params }: Route.Co
               permissionKeys={rolePermissionState?.data?.permission_keys ?? []}
               isLoading={Boolean(
                 selectedRoleId &&
-                  !rolePermissionState?.data &&
-                  (rolePermissionState?.isLoading || !rolePermissionState?.loaded)
+                !rolePermissionState?.data &&
+                (rolePermissionState?.isLoading || !rolePermissionState?.loaded)
               )}
               isAdmin={isAdmin}
               searchQuery={searchQuery}
