@@ -24,6 +24,7 @@ import { useProject } from "@/hooks/store/use-project";
 import { useUser } from "@/hooks/store/user";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 // local imports
+import { IssueApprovalTag } from "../issue-approval-tag";
 import { IssueSubscription } from "../issue-detail/subscription";
 import { WorkItemDetailQuickActions } from "../issue-layouts/quick-action-dropdowns";
 import { NameDescriptionUpdateStatus } from "../issue-update-status";
@@ -203,7 +204,15 @@ export const IssuePeekOverviewHeader = observer(function IssuePeekOverviewHeader
         <NameDescriptionUpdateStatus isSubmitting={isSubmitting} />
         <div className="flex items-center gap-2">
           {currentUser && !isArchived && (
-            <IssueSubscription workspaceSlug={workspaceSlug} projectId={projectId} issueId={issueId} />
+            <>
+              <IssueSubscription workspaceSlug={workspaceSlug} projectId={projectId} issueId={issueId} />
+              <IssueApprovalTag
+                workspaceSlug={workspaceSlug}
+                projectId={projectId}
+                issueId={issueId}
+                variant="button"
+              />
+            </>
           )}
           <Tooltip tooltipContent={t("common.actions.copy_link")} isMobile={isMobile}>
             <IconButton variant="secondary" size="lg" onClick={handleCopyText} icon={CopyLinkIcon} />
