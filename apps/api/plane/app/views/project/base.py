@@ -650,7 +650,7 @@ class ProjectViewSet(BaseViewSet):
 
         workspace = Workspace.objects.get(slug=slug)
 
-        project = Project.objects.get(pk=pk)
+        project = Project.objects.get(pk=pk, workspace=workspace)
         intake_view = request.data.get("inbox_view", project.intake_view)
         current_instance = json.dumps(
             ProjectSerializer(project).data, cls=DjangoJSONEncoder
@@ -1312,7 +1312,7 @@ class ProjectAPI(BaseViewSet):
         )
 
     @action(detail=False, methods=["get"], url_path="statistic")
-    @allow_fine_permission(PermissionKey.PROJECT_ANALYTICS_VIEW)
+    @allow_fine_permission(PermissionKey.PROJECT_OVERVIEW_VIEW)
     def get_statistic(self, request, slug):
         project_id, error_response = self._get_statistic_project_id(request)
         if error_response:
@@ -1582,6 +1582,7 @@ class ProjectAPI(BaseViewSet):
         )
 
     @action(detail=False, methods=["get"], url_path="overview-statistic")
+    @allow_fine_permission(PermissionKey.PROJECT_OVERVIEW_VIEW)
     def get_overview_statistic(self, request, slug):
         project_id, error_response = self._get_statistic_project_id(request)
         if error_response:

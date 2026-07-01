@@ -15,7 +15,12 @@ import {
   Trash2,
   Users,
 } from "lucide-react";
-import { PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
+import {
+  PROJECT_ANNOUNCEMENT_CREATE_PERMISSION_KEY,
+  PROJECT_ANNOUNCEMENT_DELETE_PERMISSION_KEY,
+  PROJECT_ERROR_MESSAGES,
+  isProjectPermissionError,
+} from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import type { IProject, TNameDescriptionLoader } from "@plane/types";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
@@ -26,6 +31,7 @@ import { DEFECT_PRESET_PARAM } from "@/components/issues/defects/defect-quick-fi
 import { ProjectDescriptionInput } from "@/components/project/project-description-input";
 import { ProjectActivity } from "@/components/project/project-activity";
 import { useMember } from "@/hooks/store/use-member";
+import { useUserPermissions } from "@/hooks/store/user";
 import { useAppRouter } from "@/hooks/use-app-router";
 import {
   ProjectAnnouncementService,
@@ -57,7 +63,7 @@ const announcementService = new ProjectAnnouncementService();
 const projectStatisticService = new ProjectStatisticService();
 
 const iconButtonClass =
-  "cursor-pointer rounded-md p-1 text-placeholder transition-colors hover:bg-surface-2 hover:text-primary";
+  "cursor-pointer rounded-md p-1 text-placeholder transition-colors hover:bg-surface-2 hover:text-primary disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-placeholder";
 
 /** 工作项类型环形图配色（无类型自带颜色时按序兜底） */
 const WORK_ITEM_TYPE_PALETTE = [
@@ -101,10 +107,21 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
     getUserDetails,
     project: { getProjectMemberIds },
   } = useMember();
+  const { allowProjectPermissionKeys } = useUserPermissions();
 
   const overview = useProjectOverview(workspaceSlug, project.id);
   const projectMemberIds = getProjectMemberIds(project.id, true);
   const memberCount = projectMemberIds?.length ?? overview.memberStats.length;
+  const canCreateAnnouncements = allowProjectPermissionKeys(
+    [PROJECT_ANNOUNCEMENT_CREATE_PERMISSION_KEY],
+    workspaceSlug,
+    project.id
+  );
+  const canDeleteAnnouncements = allowProjectPermissionKeys(
+    [PROJECT_ANNOUNCEMENT_DELETE_PERMISSION_KEY],
+    workspaceSlug,
+    project.id
+  );
 
   const handleHoursModalOpenChange = useCallback((open: boolean) => {
     if (!open) {
@@ -310,8 +327,13 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
                     closeOnSelect
                   >
                     <CustomMenu.MenuItem
-                      className="flex items-center gap-2 text-danger-primary"
-                      onClick={() => confirmDeleteAnnouncement(item.id)}
+                      className={`flex items-center gap-2 ${
+                        canDeleteAnnouncements ? "text-danger-primary" : "text-placeholder"
+                      }`}
+                      disabled={!canDeleteAnnouncements}
+                      onClick={() => {
+                        if (canDeleteAnnouncements) confirmDeleteAnnouncement(item.id);
+                      }}
                     >
                       <Trash2 className="size-3 flex-shrink-0" />
                       <span>删除</span>
@@ -475,6 +497,7 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
                     className={iconButtonClass}
                     aria-label="新增公告"
                     title="新增公告"
+                    disabled={!canCreateAnnouncements}
                     onClick={() => setIsCreateModalOpen(true)}
                   >
                     <Plus className="h-3.5 w-3.5" />
@@ -597,9 +620,10 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
             </div>
             <button
               type="button"
-              className="shrink-0 cursor-pointer rounded-md p-1 text-placeholder transition-colors hover:bg-surface-2 hover:text-primary"
+              className="shrink-0 cursor-pointer rounded-md p-1 text-placeholder transition-colors hover:bg-surface-2 hover:text-primary disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-placeholder"
               aria-label="新增公告"
               title="新增公告"
+              disabled={!canCreateAnnouncements}
               onClick={() => setIsCreateModalOpen(true)}
             >
               <Plus className="h-3.5 w-3.5" />

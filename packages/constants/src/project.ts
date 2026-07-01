@@ -204,15 +204,19 @@ export enum EProjectFeatureKey {
 /** 邀请项目成员，与后端 PermissionKey.PROJECT_MEMBER_INVITE 一致 */
 export const PROJECT_MEMBER_INVITE_PERMISSION_KEY = "project.member.invite" as const;
 
+/** 项目概览页（/projects/:id/overview），底层 key 兼容旧 PermissionKey.PROJECT_ANALYTICS_VIEW */
+export const PROJECT_OVERVIEW_VIEW_PERMISSION_KEY = "project.analytics.view" as const;
+
+/** 项目公告权限常量，与后端 PermissionKey.PROJECT_ANNOUNCEMENT_* 一致 */
+export const PROJECT_ANNOUNCEMENT_CREATE_PERMISSION_KEY = "project.announcement.create" as const;
+export const PROJECT_ANNOUNCEMENT_DELETE_PERMISSION_KEY = "project.announcement.delete" as const;
+
 /** 项目文件/资产页权限常量，与后端 PermissionKey.PROJECT_ASSET_* 一致 */
 export const PROJECT_ASSET_VIEW_PERMISSION_KEY = "project.asset.view" as const;
 export const PROJECT_ASSET_UPLOAD_PERMISSION_KEY = "project.asset.upload" as const;
 export const PROJECT_ASSET_EDIT_PERMISSION_KEY = "project.asset.edit" as const;
 export const PROJECT_ASSET_DELETE_PERMISSION_KEY = "project.asset.delete" as const;
 export const PROJECT_ASSET_DOWNLOAD_PERMISSION_KEY = "project.asset.download" as const;
-
-/** 项目统计页（/projects/:id/statistics），与后端 PermissionKey.PROJECT_ANALYTICS_VIEW 一致 */
-export const PROJECT_ANALYTICS_VIEW_PERMISSION_KEY = "project.analytics.view" as const;
 
 /** 迭代权限常量，与后端 PermissionKey.SPRINTS_* 一致 */
 export const PROJECT_SPRINTS_VIEW_PERMISSION_KEY = "sprints.view" as const;
@@ -282,6 +286,3 @@ export const PROJECT_ARCHIVES_VIEW_PERMISSION_KEYS = [
 /** 兼容旧命名，避免现有调用方失效 */
 export const PROJECT_PUBLISH_VIEW_PERMISSION_KEY = PROJECT_RELEASES_VIEW_PERMISSION_KEY;
 export const PROJECT_PUBLISH_CREATE_PERMISSION_KEY = PROJECT_RELEASES_CREATE_PERMISSION_KEY;
-
-/** 暂时隐藏项目「统计」导航入口；页面与路由保留，恢复时改为 true */
-export const ENABLE_PROJECT_STATISTICS_NAV = false;

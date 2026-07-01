@@ -9,7 +9,7 @@ from django.utils import timezone
 from django.core.cache import cache
 from datetime import timedelta
 from plane.app.views.base import BaseAPIView
-from plane.app.permissions import ROLE, allow_permission
+from plane.app.permissions import ROLE, PermissionKey, allow_fine_permission, allow_permission
 from plane.db.models import (
     Project,
     Issue,
@@ -231,7 +231,7 @@ class CustomProjectAdvanceAnalyticsEndpoint(ProjectAdvanceAnalyticsBaseView):
             })
         return result
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
+    @allow_fine_permission(PermissionKey.PROJECT_OVERVIEW_VIEW)
     def get(self, request: HttpRequest, slug: str, project_id: str) -> Response:
         self.initialize_workspace(slug, type="analytics")
         query_signature = "&".join(

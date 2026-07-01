@@ -7,7 +7,7 @@ import uuid
 import pytest
 from rest_framework import status
 
-from plane.db.models import Project, ProjectMember, User, WorkspaceMember
+from plane.db.models import Project, ProjectMember, ProjectMemberRole, ProjectRole, User, WorkspaceMember
 
 
 @pytest.mark.contract
@@ -34,8 +34,22 @@ class TestProjectStatisticPermission:
         )
         return owner_user
 
+    @staticmethod
+    def bind_project_permission(project, project_member, permission_key: str):
+        role = ProjectRole.objects.create(
+            project=project,
+            name=f"Role {uuid.uuid4().hex[:8]}",
+            permissions={"permission_keys": [permission_key]},
+        )
+        ProjectMemberRole.objects.create(
+            project=project,
+            member=project_member,
+            role=role,
+        )
+        return role
+
     @pytest.mark.django_db
-    def test_overview_statistic_allows_project_member_without_analytics_permission(
+    def test_overview_statistic_requires_project_overview_permission(
         self,
         session_client,
         workspace,
@@ -56,6 +70,38 @@ class TestProjectStatisticPermission:
             role=5,
             is_active=True,
         )
+
+        response = session_client.get(
+            self.get_project_overview_statistic_url(workspace.slug),
+            {"project_id": str(project.id)},
+        )
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert response.json() == {"error": "您没有所需的项目权限。"}
+
+    @pytest.mark.django_db
+    def test_overview_statistic_allows_project_member_with_overview_permission(
+        self,
+        session_client,
+        workspace,
+        create_user,
+    ):
+        owner_user = self.create_project_owner_user(workspace)
+        project = Project.objects.create(
+            name="Overview Statistic Allowed Project",
+            identifier=f"OSA{uuid.uuid4().hex[:4]}",
+            workspace=workspace,
+            created_by=owner_user,
+            updated_by=owner_user,
+            project_lead=owner_user,
+        )
+        project_member = ProjectMember.objects.create(
+            project=project,
+            member=create_user,
+            role=5,
+            is_active=True,
+        )
+        self.bind_project_permission(project, project_member, "project.analytics.view")
 
         response = session_client.get(
             self.get_project_overview_statistic_url(workspace.slug),
@@ -103,10 +149,10 @@ class TestProjectStatisticPermission:
         )
 
         assert response.status_code == status.HTTP_403_FORBIDDEN
-        assert response.json() == {"error": "forbidden"}
+        assert response.json() == {"error": "您没有所需的项目权限。"}
 
     @pytest.mark.django_db
-    def test_statistic_requires_project_analytics_permission(
+    def test_statistic_requires_project_overview_permission(
         self,
         session_client,
         workspace,

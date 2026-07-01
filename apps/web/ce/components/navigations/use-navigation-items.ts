@@ -9,12 +9,11 @@ import { useMemo, useCallback } from "react";
 import {
   EUserPermissions,
   EUserPermissionsLevel,
-  ENABLE_PROJECT_STATISTICS_NAV,
-  PROJECT_ANALYTICS_VIEW_PERMISSION_KEY,
   PROJECT_ARCHIVES_VIEW_PERMISSION_KEYS,
   PROJECT_ASSET_VIEW_PERMISSION_KEY,
   PROJECT_MILESTONE_VIEW_PERMISSION_KEY,
   PROJECT_MODULES_VIEW_PERMISSION_KEY,
+  PROJECT_OVERVIEW_VIEW_PERMISSION_KEY,
   PROJECT_PAGES_VIEW_PERMISSION_KEY,
   PROJECT_QA_VIEW_PERMISSION_KEYS,
   PROJECT_RELEASES_VIEW_PERMISSION_KEY,
@@ -24,7 +23,7 @@ import {
 import { CycleIcon, IntakeIcon, ModuleIcon, PageIcon, TestManagementIcon, ViewsIcon, WorkItemsIcon } from "@plane/propel/icons";
 import type { EUserProjectRoles, IPartialProject } from "@plane/types";
 import type { TNavigationItem } from "@/components/navigation/tab-navigation-root";
-import { ArchiveIcon, BarChart3, BookOpenText, Bug, Folder, Milestone, Rocket, Rss } from "lucide-react";
+import { ArchiveIcon, BookOpenText, Bug, Folder, Milestone, Rocket, Rss } from "lucide-react";
 
 type UseNavigationItemsProps = {
   workspaceSlug: string;
@@ -56,19 +55,9 @@ export const useNavigationItems = ({
         href: `/${workspaceSlug}/projects/${projectId}/overview`,
         icon: Rss,
         access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
+        permissionKeys: [PROJECT_OVERVIEW_VIEW_PERMISSION_KEY],
         shouldRender: true,
         sortOrder: 0,
-      },
-      {
-        i18n_key: "sidebar.statistics",
-        key: "statistics",
-        name: "统计",
-        href: `/${workspaceSlug}/projects/${projectId}/statistics`,
-        icon: BarChart3,
-        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
-        permissionKeys: [PROJECT_ANALYTICS_VIEW_PERMISSION_KEY],
-        shouldRender: ENABLE_PROJECT_STATISTICS_NAV,
-        sortOrder: 0.5,
       },
       {
         i18n_key: "sidebar.work_items",

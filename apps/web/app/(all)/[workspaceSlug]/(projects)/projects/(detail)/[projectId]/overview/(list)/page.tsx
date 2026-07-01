@@ -3,10 +3,11 @@
 import { observer } from "mobx-react";
 import { useParams, useSearchParams } from "next/navigation";
 // plane imports
-import { EUserPermissionsLevel } from "@plane/constants";
+import { EUserPermissionsLevel, PROJECT_OVERVIEW_VIEW_PERMISSION_KEY } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { EUserProjectRoles, type TPageNavigationTabs } from "@plane/types";
 // components
+import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
 import { PageHead } from "@/components/core/page-title";
 import { DetailedEmptyState } from "@/components/empty-state/detailed-empty-state-root";
 import { PagesListRoot } from "@/components/pages/list/root";
@@ -31,7 +32,7 @@ const ProjectPagesPage = observer(() => {
   const { t } = useTranslation();
   // store hooks
   const { getProjectById, currentProjectDetails } = useProject();
-  const { allowPermissions } = useUserPermissions();
+  const { allowPermissions, allowProjectPermissionKeys, workspaceUserInfo } = useUserPermissions();
   // derived values
   const project = getProjectById(projectId.toString());
   if (!project) return;
@@ -41,6 +42,18 @@ const ProjectPagesPage = observer(() => {
 
 
   if (!workspaceSlug || !projectId) return <></>;
+
+  const workspaceSlugString = workspaceSlug.toString();
+  const projectIdString = projectId.toString();
+  const canViewOverview = allowProjectPermissionKeys(
+    [PROJECT_OVERVIEW_VIEW_PERMISSION_KEY],
+    workspaceSlugString,
+    projectIdString
+  );
+
+  if (workspaceUserInfo && !canViewOverview) {
+    return <NotAuthorizedView section="general" isProjectView className="h-auto" />;
+  }
 
   // No access to cycle
   if (currentProjectDetails?.page_view === false)
@@ -53,7 +66,7 @@ const ProjectPagesPage = observer(() => {
           primaryButton={{
             text: t("disabled_project.empty_state.page.primary_button.text"),
             onClick: () => {
-              router.push(`/${workspaceSlug}/settings/projects/${projectId}/features`);
+              router.push(`/${workspaceSlugString}/settings/projects/${projectIdString}/features`);
             },
             disabled: !canPerformEmptyStateActions,
           }}
@@ -64,7 +77,7 @@ const ProjectPagesPage = observer(() => {
     <>
       <PageHead title={pageTitle} />
 
-      <OverviewListView key={project.id} project={project} workspaceSlug={workspaceSlug.toString()} />
+      <OverviewListView key={project.id} project={project} workspaceSlug={workspaceSlugString} />
     </>
   );
 });

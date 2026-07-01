@@ -55,7 +55,8 @@ class PermissionKey(str, Enum):
     PROJECT_PUBLISH_CREATE = "project.publish.create"
     PROJECT_PUBLISH_EDIT = "project.publish.edit"
     PROJECT_PUBLISH_DELETE = "project.publish.delete"
-    PROJECT_ANNOUNCEMENT_EDIT = "project.announcement.edit"
+    PROJECT_ANNOUNCEMENT_CREATE = "project.announcement.create"
+    PROJECT_ANNOUNCEMENT_DELETE = "project.announcement.delete"
     # 工作项 CRUD/归档权限按 IssueType 动态衍生为 project.issue_type.<id_hex>.<action>，
     # 见 plane.db.models.issue_type.build_issue_type_permission_key。
     ISSUE_COMMENT_CREATE = "issue.comment.create"
@@ -140,6 +141,8 @@ class PermissionKey(str, Enum):
     WORKFLOW_EDIT = "workflow.edit"
     WORKFLOW_DELETE = "workflow.delete"
     WORKFLOW_CONFIG = "workflow.config"
+    PROJECT_OVERVIEW_VIEW = "project.analytics.view"
+    # Backward-compatible alias for the former project analytics naming.
     PROJECT_ANALYTICS_VIEW = "project.analytics.view"
     PROJECT_ASSET_VIEW = "project.asset.view"
     PROJECT_ASSET_UPLOAD = "project.asset.upload"

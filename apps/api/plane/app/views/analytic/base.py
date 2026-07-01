@@ -19,7 +19,7 @@ from rest_framework import status
 from rest_framework.response import Response
 
 # Module imports
-from plane.app.permissions import WorkSpaceAdminPermission
+from plane.app.permissions import PermissionKey, WorkSpaceAdminPermission, allow_fine_permission
 from plane.app.serializers import AnalyticViewSerializer
 from plane.app.views.base import BaseAPIView, BaseViewSet
 from plane.bgtasks.analytic_plot_export import analytic_export_task
@@ -488,6 +488,7 @@ class ProjectStatsEndpoint(BaseAPIView):
 
 class ProjectStatisticsEndpoint(BaseAPIView):
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
+    @allow_fine_permission(PermissionKey.PROJECT_OVERVIEW_VIEW)
     def get(self, request, slug, project_id):
         from plane.db.models.page import ProjectPage
         from plane.db.models.view import IssueView

@@ -15,23 +15,32 @@ class AnnouncementAPIView(BaseAPIView):
     pagination_class = CustomPaginator
 
     def get(self, request, slug: str, project_id: str) -> Response:
-        query = self.queryset.filter(project_id=project_id)
+        query = self.queryset.filter(
+            project_id=project_id,
+            project__workspace__slug=slug,
+        )
         paginator = self.pagination_class()
         paginated_queryset = paginator.paginate_queryset(query, request)
         serializer = ProjectAnnouncementListSerializer(paginated_queryset, many=True)
         return list_response(data=serializer.data, count=query.count())
 
-    @allow_fine_permission(PermissionKey.PROJECT_ANNOUNCEMENT_EDIT)
+    @allow_fine_permission(PermissionKey.PROJECT_ANNOUNCEMENT_CREATE)
     def post(self, request, slug: str, project_id: str) -> Response:
-        serializer = ProjectAnnouncementCreateSerializer(data=request.data)
+        serializer = ProjectAnnouncementCreateSerializer(
+            data={**request.data, "project": str(project_id)}
+        )
         serializer.is_valid(raise_exception=True)
         repository = serializer.save()
         serializer = ProjectAnnouncementListSerializer(instance=repository)
 
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-    @allow_fine_permission(PermissionKey.PROJECT_ANNOUNCEMENT_EDIT)
+    @allow_fine_permission(PermissionKey.PROJECT_ANNOUNCEMENT_DELETE)
     def delete(self, request, slug: str, project_id: str) -> Response:
-        announcement_ids = request.data.pop('ids')
-        self.queryset.filter(id__in=announcement_ids).delete(soft=False)
+        announcement_ids = request.data.get("ids", [])
+        self.queryset.filter(
+            id__in=announcement_ids,
+            project_id=project_id,
+            project__workspace__slug=slug,
+        ).delete(soft=False)
         return Response(status=status.HTTP_204_NO_CONTENT)

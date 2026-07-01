@@ -11,11 +11,10 @@ import { useParams, usePathname } from "next/navigation";
 import {
   EUserPermissionsLevel,
   EUserPermissions,
-  ENABLE_PROJECT_STATISTICS_NAV,
-  PROJECT_ANALYTICS_VIEW_PERMISSION_KEY,
   PROJECT_ASSET_VIEW_PERMISSION_KEY,
   PROJECT_MILESTONE_VIEW_PERMISSION_KEY,
   PROJECT_MODULES_VIEW_PERMISSION_KEY,
+  PROJECT_OVERVIEW_VIEW_PERMISSION_KEY,
   PROJECT_PAGES_VIEW_PERMISSION_KEY,
   PROJECT_QA_VIEW_PERMISSION_KEYS,
   PROJECT_RELEASES_VIEW_PERMISSION_KEY,
@@ -43,7 +42,7 @@ import { useAppTheme } from "@/hooks/store/use-app-theme";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useProject } from "@/hooks/store/use-project";
 import { useUserPermissions } from "@/hooks/store/user";
-import { BarChart3, Rss, Milestone, Folder, Rocket } from "lucide-react";
+import { Rss, Milestone, Folder, Rocket } from "lucide-react";
 
 export type TNavigationItem = {
   name: string;
@@ -102,19 +101,9 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
         href: `/${workspaceSlug}/projects/${projectId}/overview`,
         icon: Rss,
         access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
+        permissionKeys: [PROJECT_OVERVIEW_VIEW_PERMISSION_KEY],
         shouldRender: true,
         sortOrder: 0,
-      },
-      {
-        i18n_key: "sidebar.statistics",
-        key: "statistics",
-        name: "统计",
-        href: `/${workspaceSlug}/projects/${projectId}/statistics`,
-        icon: BarChart3,
-        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
-        permissionKeys: [PROJECT_ANALYTICS_VIEW_PERMISSION_KEY],
-        shouldRender: ENABLE_PROJECT_STATISTICS_NAV,
-        sortOrder: 0.5,
       },
       {
         i18n_key: "timesheets",
