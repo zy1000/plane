@@ -13,10 +13,9 @@ import { ChartNoAxesColumn, ChevronDown, PanelRight, Rocket, SlidersHorizontal }
 import {
   EIssueFilterType,
   ISSUE_DISPLAY_FILTERS_BY_PAGE,
-  EUserPermissions,
-  EUserPermissionsLevel,
   WORK_ITEM_TRACKER_ELEMENTS,
   PROJECT_ERROR_MESSAGES,
+  PROJECT_RELEASES_ISSUE_MANAGE_PERMISSION_KEY,
   isProjectPermissionError,
 } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
@@ -41,7 +40,11 @@ import {
   LayoutSelection,
   MobileLayoutSelection,
 } from "@/components/issues/issue-layouts/filters";
-import { RELEASE_DETAIL_TABS, DEFAULT_RELEASE_DETAIL_TAB, getReleaseDetailTabStorageKey } from "@/components/releases/release-overview";
+import {
+  RELEASE_DETAIL_TABS,
+  DEFAULT_RELEASE_DETAIL_TAB,
+  getReleaseDetailTabStorageKey,
+} from "@/components/releases/release-overview";
 import type { ReleaseDetailTabKey } from "@/components/releases/release-overview";
 import { ReleaseQuickActions } from "@/components/releases/release-quick-actions";
 import { WorkItemFiltersToggle } from "@/components/work-item-filters/filters-toggle";
@@ -77,24 +80,23 @@ export const ReleaseIssuesHeader = observer(function ReleaseIssuesHeader() {
   const { updateFilters } = useIssuesActions(EIssuesStoreType.RELEASE);
   const { getProjectReleaseIds, getReleaseById } = useRelease();
   const { toggleCreateIssueModal } = useCommandPalette();
-  const { allowPermissions } = useUserPermissions();
+  const { allowProjectPermissionKeys } = useUserPermissions();
   const { currentProjectDetails, loader } = useProject();
   const { setValue, storedValue } = useLocalStorage("release_sidebar_collapsed", "false");
   const isSidebarCollapsed = storedValue ? storedValue === "true" : false;
   const activeLayout = issueFilters?.displayFilters?.layout;
   const releaseDetails = releaseId ? getReleaseById(releaseId) : undefined;
-  const { setValue: setStoredReleaseDetailTab, storedValue: storedReleaseDetailTab } =
-    useLocalStorage<ReleaseDetailTabKey | "scope" | "note">(
-      getReleaseDetailTabStorageKey(releaseId ?? "unknown"),
-      DEFAULT_RELEASE_DETAIL_TAB_KEY
-    );
+  const { setValue: setStoredReleaseDetailTab, storedValue: storedReleaseDetailTab } = useLocalStorage<
+    ReleaseDetailTabKey | "scope" | "note"
+  >(getReleaseDetailTabStorageKey(releaseId ?? "unknown"), DEFAULT_RELEASE_DETAIL_TAB_KEY);
   const activeReleaseDetailTab: ReleaseDetailTabKey =
     storedReleaseDetailTab === "scope" || storedReleaseDetailTab === "note"
       ? "materials"
       : (storedReleaseDetailTab ?? DEFAULT_RELEASE_DETAIL_TAB_KEY);
-  const canUserCreateIssue = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-    EUserPermissionsLevel.PROJECT
+  const canManageReleaseIssues = allowProjectPermissionKeys(
+    [PROJECT_RELEASES_ISSUE_MANAGE_PERMISSION_KEY],
+    workspaceSlugValue ?? "",
+    projectIdValue ?? ""
   );
   const projectReleaseIds = projectIdValue ? getProjectReleaseIds(projectIdValue) : undefined;
 
@@ -172,7 +174,7 @@ export const ReleaseIssuesHeader = observer(function ReleaseIssuesHeader() {
     .filter((option) => option !== undefined) as ICustomSearchSelectOption[];
 
   const handleAddExistingIssuesToRelease = async (data: ISearchIssueResponse[]) => {
-    if (!workspaceSlugValue || !projectIdValue || !releaseId) return;
+    if (!workspaceSlugValue || !projectIdValue || !releaseId || !canManageReleaseIssues) return;
 
     const issueIds = data.map((i) => i.id);
 
@@ -256,14 +258,10 @@ export const ReleaseIssuesHeader = observer(function ReleaseIssuesHeader() {
                     {tab.isActive && (
                       <span className="pointer-events-none absolute bottom-[-4px] left-1/2 z-20 h-0.5 w-[80%] -translate-x-1/2 rounded-t-md bg-black transition-all duration-300" />
                     )}
-                    <button
-                      type="button"
-                      className="cursor-pointer outline-none"
-                      onClick={tab.onClick}
-                    >
+                    <button type="button" className="cursor-pointer outline-none" onClick={tab.onClick}>
                       <div
                         className={cn(
-                          "relative flex items-center gap-2 rounded-md px-2 py-1.5 text-13 font-medium transition-colors z-10",
+                          "relative z-10 flex items-center gap-2 rounded-md px-2 py-1.5 text-13 font-medium transition-colors",
                           tab.isActive ? "text-primary" : "text-primary hover:text-primary"
                         )}
                       >
@@ -327,50 +325,47 @@ export const ReleaseIssuesHeader = observer(function ReleaseIssuesHeader() {
               </FiltersDropdown>
             </div>
 
-            {canUserCreateIssue ? (
-              <>
-                <Button
-                  className="hidden md:block"
-                  onClick={() => setAnalyticsModal(true)}
-                  variant="secondary"
-                  size="lg"
+            <Button className="hidden md:block" onClick={() => setAnalyticsModal(true)} variant="secondary" size="lg">
+              <span className="hidden @4xl:flex">{t("common.analytics")}</span>
+              <span className="@4xl:hidden">
+                <ChartNoAxesColumn className="size-3.5" />
+              </span>
+            </Button>
+            <CustomMenu
+              placement="bottom-end"
+              disabled={!canManageReleaseIssues}
+              customButton={
+                <span
+                  className={cn(
+                    getButtonStyling("primary", "lg"),
+                    "hidden sm:inline-flex",
+                    canManageReleaseIssues ? "cursor-pointer" : "cursor-not-allowed opacity-60"
+                  )}
+                  data-ph-element={WORK_ITEM_TRACKER_ELEMENTS.HEADER_ADD_BUTTON.RELEASE}
+                  aria-disabled={!canManageReleaseIssues}
                 >
-                  <span className="hidden @4xl:flex">{t("common.analytics")}</span>
-                  <span className="@4xl:hidden">
-                    <ChartNoAxesColumn className="size-3.5" />
-                  </span>
-                </Button>
-                <CustomMenu
-                  placement="bottom-end"
-                  customButton={
-                    <span
-                      className={cn(getButtonStyling("primary", "lg"), "cursor-pointer hidden sm:inline-flex")}
-                      data-ph-element={WORK_ITEM_TRACKER_ELEMENTS.HEADER_ADD_BUTTON.RELEASE}
-                    >
-                      {t("issue.add.label")}
-                      <ChevronDown className="size-4 shrink-0" strokeWidth={2} />
-                    </span>
-                  }
-                >
-                  <CustomMenu.MenuItem
-                    onClick={() => {
-                      toggleCreateIssueModal(true, EIssuesStoreType.RELEASE);
-                    }}
-                  >
-                    <span className="flex items-center justify-start gap-2">{t("create_work_item")}</span>
-                  </CustomMenu.MenuItem>
-                  <CustomMenu.MenuItem
-                    onClick={() => {
-                      setOpenExistingIssueListModal(true);
-                    }}
-                  >
-                    <span className="flex items-center justify-start gap-2">{t("issue.add.existing")}</span>
-                  </CustomMenu.MenuItem>
-                </CustomMenu>
-              </>
-            ) : (
-              <></>
-            )}
+                  {t("issue.add.label")}
+                  <ChevronDown className="size-4 shrink-0" strokeWidth={2} />
+                </span>
+              }
+            >
+              <CustomMenu.MenuItem
+                onClick={() => {
+                  if (!canManageReleaseIssues) return;
+                  toggleCreateIssueModal(true, EIssuesStoreType.RELEASE);
+                }}
+              >
+                <span className="flex items-center justify-start gap-2">{t("create_work_item")}</span>
+              </CustomMenu.MenuItem>
+              <CustomMenu.MenuItem
+                onClick={() => {
+                  if (!canManageReleaseIssues) return;
+                  setOpenExistingIssueListModal(true);
+                }}
+              >
+                <span className="flex items-center justify-start gap-2">{t("issue.add.existing")}</span>
+              </CustomMenu.MenuItem>
+            </CustomMenu>
             <IconButton
               variant="tertiary"
               size="lg"

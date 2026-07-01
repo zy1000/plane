@@ -15,6 +15,7 @@ import {
   EUserPermissions,
   EUserPermissionsLevel,
   IS_FAVORITE_MENU_OPEN,
+  PROJECT_RELEASES_EDIT_PERMISSION_KEY,
 } from "@plane/constants";
 import { useLocalStorage } from "@plane/hooks";
 import { WorkItemsIcon } from "@plane/propel/icons";
@@ -28,10 +29,7 @@ import { ButtonAvatars } from "@/components/dropdowns/member/avatar";
 import { DEFAULT_RELEASE_DETAIL_TAB, getReleaseDetailTabStorageKey } from "@/components/releases/release-overview";
 import { ReleaseOverdueTags } from "@/components/releases/release-overdue-tags";
 import { ReleaseQuickActions } from "@/components/releases/release-quick-actions";
-import {
-  getReleaseOverdueToneTextClass,
-  getReleaseRowTone,
-} from "@/components/releases/release-status-config";
+import { getReleaseOverdueToneTextClass, getReleaseRowTone } from "@/components/releases/release-status-config";
 import { ReleaseStatusDropdown } from "@/components/releases/release-status-dropdown";
 import { formatReleaseUpdateError } from "@/components/releases/use-release-error-message";
 import { useMember } from "@/hooks/store/use-member";
@@ -52,23 +50,29 @@ export const ReleaseCardItem = observer(function ReleaseCardItem(props: Props) {
   const { workspaceSlug, projectId } = useParams();
   const searchParams = useSearchParams();
   const pathname = usePathname();
-  const { allowPermissions } = useUserPermissions();
+  const { allowPermissions, allowProjectPermissionKeys } = useUserPermissions();
   const { getReleaseById, addReleaseToFavorites, removeReleaseFromFavorites, updateReleaseDetails } = useRelease();
   const { getUserDetails } = useMember();
   const { setValue: toggleFavoriteMenu, storedValue } = useLocalStorage<boolean>(IS_FAVORITE_MENU_OPEN, false);
   const releaseDetails = getReleaseById(releaseId);
-  const isEditingAllowed = allowPermissions(
+  const canUseFavorite = allowPermissions(
     [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
     EUserPermissionsLevel.PROJECT
   );
-  const isDisabled = !isEditingAllowed || !!releaseDetails?.archived_at;
+  const workspaceSlugValue = workspaceSlug?.toString() ?? "";
+  const projectIdValue = projectId?.toString() ?? "";
+  const canEditRelease =
+    !!workspaceSlugValue &&
+    !!projectIdValue &&
+    allowProjectPermissionKeys([PROJECT_RELEASES_EDIT_PERMISSION_KEY], workspaceSlugValue, projectIdValue);
+  const isDisabled = !canEditRelease || !!releaseDetails?.archived_at;
   const renderIcon = Boolean(releaseDetails?.start_date) || Boolean(releaseDetails?.target_date);
   const { isMobile } = usePlatformOS();
 
   const handleAddToFavorites = (e: React.MouseEvent<HTMLButtonElement>) => {
     e.stopPropagation();
     e.preventDefault();
-    if (!workspaceSlug || !projectId) return;
+    if (!workspaceSlug || !projectId || !canEditRelease) return;
 
     const p = addReleaseToFavorites(workspaceSlug.toString(), projectId.toString(), releaseId).then(() => {
       if (!storedValue) toggleFavoriteMenu(true);
@@ -154,11 +158,12 @@ export const ReleaseCardItem = observer(function ReleaseCardItem(props: Props) {
     releaseDetails.cancelled_issues;
 
   const completedIssues = releaseDetails.completed_issues;
-  const issueCount = !totalIssues || totalIssues === 0
-    ? `0 work items`
-    : totalIssues === completedIssues
-      ? `${totalIssues} Work item${totalIssues > 1 ? `s` : ``}`
-      : `${completedIssues}/${totalIssues} Work items`;
+  const issueCount =
+    !totalIssues || totalIssues === 0
+      ? `0 work items`
+      : totalIssues === completedIssues
+        ? `${totalIssues} Work item${totalIssues > 1 ? `s` : ``}`
+        : `${completedIssues}/${totalIssues} Work items`;
 
   const leadDetails = releaseDetails.lead_id ? getUserDetails(releaseDetails.lead_id) : undefined;
 
@@ -183,11 +188,9 @@ export const ReleaseCardItem = observer(function ReleaseCardItem(props: Props) {
         <Card>
           <div>
             <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2 min-w-0">
+              <div className="flex min-w-0 items-center gap-2">
                 <Tooltip tooltipContent={releaseDetails.name} position="top" isMobile={isMobile}>
-                  <span className={cn("truncate text-14 font-medium", overdueToneClass)}>
-                    {releaseDetails.name}
-                  </span>
+                  <span className={cn("truncate text-14 font-medium", overdueToneClass)}>{releaseDetails.name}</span>
                 </Tooltip>
                 <ReleaseOverdueTags
                   releaseDetails={releaseDetails}
@@ -251,7 +254,7 @@ export const ReleaseCardItem = observer(function ReleaseCardItem(props: Props) {
         </Card>
       </Link>
       <div className="absolute right-4 bottom-[18px] flex items-center gap-1.5">
-        {isEditingAllowed && (
+        {canUseFavorite && (
           <FavoriteStar
             onClick={(e) => {
               if (releaseDetails.is_favorite) handleRemoveFromFavorites(e);

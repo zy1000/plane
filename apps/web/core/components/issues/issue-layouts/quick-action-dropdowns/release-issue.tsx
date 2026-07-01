@@ -8,7 +8,12 @@ import { useState } from "react";
 import { omit } from "lodash-es";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
-import { ARCHIVABLE_STATE_GROUPS, EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import {
+  ARCHIVABLE_STATE_GROUPS,
+  EUserPermissions,
+  EUserPermissionsLevel,
+  PROJECT_RELEASES_ISSUE_MANAGE_PERMISSION_KEY,
+} from "@plane/constants";
 import type { TIssue } from "@plane/types";
 import { EIssuesStoreType } from "@plane/types";
 import { ContextMenu, CustomMenu } from "@plane/ui";
@@ -43,9 +48,9 @@ export const ReleaseIssueQuickActions = observer(function ReleaseIssueQuickActio
   const [deleteIssueModal, setDeleteIssueModal] = useState(false);
   const [archiveIssueModal, setArchiveIssueModal] = useState(false);
   const [duplicateWorkItemModal, setDuplicateWorkItemModal] = useState(false);
-  const { workspaceSlug, releaseId } = useParams();
+  const { workspaceSlug, projectId, releaseId } = useParams();
   const { issuesFilter } = useIssues(EIssuesStoreType.RELEASE);
-  const { allowPermissions } = useUserPermissions();
+  const { allowPermissions, allowProjectPermissionKeys } = useUserPermissions();
   const { getStateById } = useProjectState();
   const { getProjectIdentifierById } = useProject();
   const stateDetails = getStateById(issue.state_id);
@@ -55,6 +60,15 @@ export const ReleaseIssueQuickActions = observer(function ReleaseIssueQuickActio
   const isArchivingAllowed = handleArchive && isEditingAllowed;
   const isInArchivableGroup = !!stateDetails && ARCHIVABLE_STATE_GROUPS.includes(stateDetails?.group);
   const isDeletingAllowed = isEditingAllowed;
+  const canManageReleaseIssues =
+    !!workspaceSlug &&
+    !!projectId &&
+    allowProjectPermissionKeys(
+      [PROJECT_RELEASES_ISSUE_MANAGE_PERMISSION_KEY],
+      workspaceSlug.toString(),
+      projectId.toString()
+    ) &&
+    !readOnly;
 
   const activeLayout = `${issuesFilter.issueFilters?.displayFilters?.layout} layout`;
 
@@ -75,6 +89,7 @@ export const ReleaseIssueQuickActions = observer(function ReleaseIssueQuickActio
     isEditingAllowed,
     isArchivingAllowed,
     isDeletingAllowed,
+    canManageReleaseIssues,
     isInArchivableGroup,
     setIssueToEdit,
     setCreateUpdateIssueModal,

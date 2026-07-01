@@ -9,11 +9,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
-import { EUserPermissionsLevel, MODULE_TRACKER_ELEMENTS } from "@plane/constants";
+import { MODULE_TRACKER_ELEMENTS, PROJECT_RELEASES_CREATE_PERMISSION_KEY } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { EmptyStateDetailed } from "@plane/propel/empty-state";
 import type { TReleaseGroupByOption } from "@plane/types";
-import { EUserProjectRoles } from "@plane/types";
 import { ContentWrapper, Row, ERowVariant } from "@plane/ui";
 import { ListLayout } from "@/components/core/list";
 import { ReleasesListGanttChartView } from "@/components/releases/gantt-chart/releases-list-layout";
@@ -36,14 +35,16 @@ export const ReleasesListView = observer(function ReleasesListView() {
   const { toggleCreateReleaseModal } = useCommandPalette();
   const { getProjectReleaseIds, getFilteredReleaseIds, loader } = useRelease();
   const { currentProjectDisplayFilters: displayFilters } = useReleaseFilter();
-  const { allowPermissions } = useUserPermissions();
+  const { allowProjectPermissionKeys } = useUserPermissions();
 
   const projectReleaseIds = projectId ? getProjectReleaseIds(projectId.toString()) : undefined;
   const filteredReleaseIds = projectId ? getFilteredReleaseIds(projectId.toString()) : undefined;
-  const canPerformEmptyStateActions = allowPermissions(
-    [EUserProjectRoles.ADMIN, EUserProjectRoles.MEMBER],
-    EUserPermissionsLevel.PROJECT
-  );
+  const workspaceSlugValue = workspaceSlug?.toString() ?? "";
+  const projectIdValue = projectId?.toString() ?? "";
+  const canPerformEmptyStateActions =
+    !!workspaceSlugValue &&
+    !!projectIdValue &&
+    allowProjectPermissionKeys([PROJECT_RELEASES_CREATE_PERMISSION_KEY], workspaceSlugValue, projectIdValue);
 
   const rawGroupBy = displayFilters?.group_by;
   const groupBy: TReleaseGroupByOption =
@@ -103,7 +104,7 @@ export const ReleasesListView = observer(function ReleasesListView() {
   const useGroupedListLayout = isListLayout && groupBy !== "none";
   const visibleReleaseIds = useGroupedListLayout
     ? selectedGroupId
-      ? releaseIdsByGroup[selectedGroupId] ?? []
+      ? (releaseIdsByGroup[selectedGroupId] ?? [])
       : []
     : filteredReleaseIds;
 
@@ -135,7 +136,7 @@ export const ReleasesListView = observer(function ReleasesListView() {
             </ListLayout>
           )}
           {displayFilters?.layout === "board" && (
-            <Row className="3xl:grid-cols-4 vertical-scrollbar scrollbar-lg grid size-full auto-rows-max grid-cols-1 gap-6 overflow-y-auto py-page-y transition-all lg:grid-cols-2 xl:grid-cols-3">
+            <Row className="3xl:grid-cols-4 vertical-scrollbar grid scrollbar-lg size-full auto-rows-max grid-cols-1 gap-6 overflow-y-auto py-page-y transition-all lg:grid-cols-2 xl:grid-cols-3">
               {filteredReleaseIds.map((releaseId) => (
                 <ReleaseCardItem key={releaseId} releaseId={releaseId} />
               ))}
@@ -146,7 +147,10 @@ export const ReleasesListView = observer(function ReleasesListView() {
               <ReleasesListGanttChartView />
             </div>
           )}
-          <ReleasePeekOverview projectId={projectId?.toString() ?? ""} workspaceSlug={workspaceSlug?.toString() ?? ""} />
+          <ReleasePeekOverview
+            projectId={projectId?.toString() ?? ""}
+            workspaceSlug={workspaceSlug?.toString() ?? ""}
+          />
         </div>
       )}
       {useGroupedListLayout && (

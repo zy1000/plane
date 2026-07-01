@@ -84,6 +84,8 @@ class PermissionKey(str, Enum):
     RELEASES_EDIT = "releases.edit"
     RELEASES_DELETE = "releases.delete"
     RELEASES_ISSUE_MANAGE = "releases.issue.manage"
+    RELEASES_CYCLE_MANAGE = "releases.cycle.manage"
+    RELEASES_PLAN_MANAGE = "releases.plan.manage"
     RELEASES_FILE_UPLOAD = "releases.file.upload"
     RELEASES_FILE_DELETE = "releases.file.delete"
     RELEASES_FILE_DOWNLOAD = "releases.file.download"

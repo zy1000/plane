@@ -8,11 +8,7 @@
 
 import React from "react";
 import type { TFileUploadStatus } from "@/hooks/use-file-upload-progress";
-import {
-  ReleaseCyclesSection,
-  ReleaseFilesSection,
-  ReleasePlansSection,
-} from "./release-scope-tab";
+import { ReleaseCyclesSection, ReleaseFilesSection, ReleasePlansSection } from "./release-scope-tab";
 
 type Cycle = {
   id: string;
@@ -55,6 +51,11 @@ type Props = {
   filesDeletingId: string | null;
   filesDownloadingId: string | null;
   filesUploadStatuses?: TFileUploadStatus[];
+  canManageReleaseCycles: boolean;
+  canManageReleasePlans: boolean;
+  canUploadReleaseFile: boolean;
+  canDeleteReleaseFile: boolean;
+  canDownloadReleaseFile: boolean;
   onOpenCycleAssociate: () => void;
   onCancelCycleAssociation: (cycleId: string) => Promise<void> | void;
   onOpenPlanAssociate: () => void;
@@ -81,6 +82,11 @@ export const ReleaseMaterialsTab: React.FC<Props> = ({
   filesDeletingId,
   filesDownloadingId,
   filesUploadStatuses,
+  canManageReleaseCycles,
+  canManageReleasePlans,
+  canUploadReleaseFile,
+  canDeleteReleaseFile,
+  canDownloadReleaseFile,
   onOpenCycleAssociate,
   onCancelCycleAssociation,
   onOpenPlanAssociate,
@@ -99,6 +105,9 @@ export const ReleaseMaterialsTab: React.FC<Props> = ({
       filesDeletingId={filesDeletingId}
       filesDownloadingId={filesDownloadingId}
       uploadStatuses={filesUploadStatuses}
+      canUploadReleaseFile={canUploadReleaseFile}
+      canDeleteReleaseFile={canDeleteReleaseFile}
+      canDownloadReleaseFile={canDownloadReleaseFile}
       onTriggerUploadFile={onTriggerUploadFile}
       onDeleteFile={onDeleteFile}
       onDownloadFile={onDownloadFile}
@@ -109,6 +118,7 @@ export const ReleaseMaterialsTab: React.FC<Props> = ({
       cycles={cycles}
       cyclesLoading={cyclesLoading}
       cyclesError={cyclesError}
+      canManageReleaseCycles={canManageReleaseCycles}
       onOpenCycleAssociate={onOpenCycleAssociate}
       onCancelCycleAssociation={onCancelCycleAssociation}
     />
@@ -119,6 +129,7 @@ export const ReleaseMaterialsTab: React.FC<Props> = ({
       plansLoading={plansLoading}
       plansError={plansError}
       cancelingPlanId={cancelingPlanId}
+      canManageReleasePlans={canManageReleasePlans}
       onOpenPlanAssociate={onOpenPlanAssociate}
       onCancelPlanAssociation={onCancelPlanAssociation}
     />

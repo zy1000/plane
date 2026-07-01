@@ -4,6 +4,6 @@
  * See the LICENSE file for details.
  */
 
-export { ReleaseCommentsSection } from "./release-comments-section";
+export { ReleaseCommentComposer, ReleaseCommentsSection } from "./release-comments-section";
 export { ReleaseCommentCreate } from "./release-comment-create";
 export { ReleaseCommentCard } from "./release-comment-card";

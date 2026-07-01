@@ -52,7 +52,8 @@ interface UseModuleMenuItemsProps {
 
 interface UseReleaseMenuItemsProps {
   releaseDetails: IRelease | undefined;
-  isEditingAllowed: boolean;
+  canEditRelease: boolean;
+  canDeleteRelease: boolean;
   canArchiveRelease: boolean;
   workspaceSlug: string;
   projectId: string;
@@ -121,7 +122,12 @@ export const useCycleMenuItems = (props: UseCycleMenuItemsProps): MenuResult => 
 
   // Assemble final menu items - order defined here
   const items = [
-    factory.createEditMenuItem(handlers.handleEdit, isEditingAllowed && !isCompleted && !isArchived, editDisabled, editDescription),
+    factory.createEditMenuItem(
+      handlers.handleEdit,
+      isEditingAllowed && !isCompleted && !isArchived,
+      editDisabled,
+      editDescription
+    ),
     factory.createOpenInNewTabMenuItem(handlers.handleOpenInNewTab),
     factory.createCopyLinkMenuItem(handlers.handleCopyLink),
     {
@@ -158,7 +164,12 @@ export const useCycleMenuItems = (props: UseCycleMenuItemsProps): MenuResult => 
       description: archiveDescription,
     }),
     factory.createRestoreMenuItem(handlers.handleRestore, isEditingAllowed && isArchived && canArchiveSprint),
-    factory.createDeleteMenuItem(handlers.handleDelete, isEditingAllowed && !isCompleted && !isArchived, deleteDisabled, deleteDescription),
+    factory.createDeleteMenuItem(
+      handlers.handleDelete,
+      isEditingAllowed && !isCompleted && !isArchived,
+      deleteDisabled,
+      deleteDescription
+    ),
   ].filter((item) => item.shouldRender !== false);
 
   return { items, modals: null };
@@ -177,11 +188,12 @@ export const useModuleMenuItems = (props: UseModuleMenuItemsProps): MenuResult =
   const deleteDisabled = !isEditingAllowed || !canDeleteModule;
   const deleteDescription = deleteDisabled ? "您没有删除模块的权限" : undefined;
   const archiveDisabled = !isEditingAllowed || !canArchiveModule || !isInArchivableGroup;
-  const archiveDescription = !isEditingAllowed || !canArchiveModule
-    ? "您没有归档模块的权限"
-    : !isInArchivableGroup
-      ? "Only completed or cancelled modules can be archived"
-      : undefined;
+  const archiveDescription =
+    !isEditingAllowed || !canArchiveModule
+      ? "您没有归档模块的权限"
+      : !isInArchivableGroup
+        ? "Only completed or cancelled modules can be archived"
+        : undefined;
 
   // Assemble final menu items - order defined here
   const items = [
@@ -202,30 +214,35 @@ export const useModuleMenuItems = (props: UseModuleMenuItemsProps): MenuResult =
 
 export const useReleaseMenuItems = (props: UseReleaseMenuItemsProps): MenuResult => {
   const factory = useQuickActionsFactory();
-  const { releaseDetails, isEditingAllowed, canArchiveRelease, ...handlers } = props;
+  const { releaseDetails, canEditRelease, canDeleteRelease, canArchiveRelease, ...handlers } = props;
 
   const isArchived = !!releaseDetails?.archived_at;
   const releaseState = releaseDetails?.status?.toLocaleLowerCase();
   const isInArchivableGroup = !!releaseState && ["completed", "cancelled"].includes(releaseState);
 
+  const editDisabled = !canEditRelease;
+  const editDescription = editDisabled ? "您没有编辑发布的权限" : undefined;
+  const deleteDisabled = !canDeleteRelease;
+  const deleteDescription = deleteDisabled ? "您没有删除发布的权限" : undefined;
   const archiveDisabled = !canArchiveRelease || !isInArchivableGroup;
   const archiveDescription = !canArchiveRelease
     ? "您没有归档发布的权限"
     : !isInArchivableGroup
       ? "Only completed or cancelled releases can be archived"
       : undefined;
+  const restoreDescription = !canArchiveRelease ? "您没有恢复发布的权限" : undefined;
 
   const items = [
-    factory.createEditMenuItem(handlers.handleEdit, isEditingAllowed && !isArchived),
+    factory.createEditMenuItem(handlers.handleEdit, !isArchived, editDisabled, editDescription),
     factory.createOpenInNewTabMenuItem(handlers.handleOpenInNewTab),
     factory.createCopyLinkMenuItem(handlers.handleCopyLink),
     factory.createArchiveMenuItem(handlers.handleArchive, {
-      shouldRender: isEditingAllowed && !isArchived,
+      shouldRender: !isArchived,
       disabled: archiveDisabled,
       description: archiveDescription,
     }),
-    factory.createRestoreMenuItem(handlers.handleRestore, isEditingAllowed && isArchived && canArchiveRelease),
-    factory.createDeleteMenuItem(handlers.handleDelete, isEditingAllowed && !isArchived),
+    factory.createRestoreMenuItem(handlers.handleRestore, isArchived, !canArchiveRelease, restoreDescription),
+    factory.createDeleteMenuItem(handlers.handleDelete, !isArchived, deleteDisabled, deleteDescription),
   ].filter((item) => item.shouldRender !== false);
 
   return { items, modals: null };

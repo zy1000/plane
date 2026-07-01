@@ -10,7 +10,7 @@ import { useParams } from "next/navigation";
 import { Controller, useForm } from "react-hook-form";
 import { Info, SquareUser } from "lucide-react";
 import { Disclosure, Transition } from "@headlessui/react";
-import { EUserPermissions, EUserPermissionsLevel, EEstimateSystem } from "@plane/constants";
+import { EEstimateSystem, PROJECT_RELEASES_EDIT_PERMISSION_KEY } from "@plane/constants";
 // plane types
 import { useTranslation } from "@plane/i18n";
 import {
@@ -62,12 +62,15 @@ export const ReleaseAnalyticsSidebar = observer(function ReleaseAnalyticsSidebar
   const [selectedLinkToUpdate, setSelectedLinkToUpdate] = useState<ILinkDetails | null>(null);
   // router
   const { workspaceSlug, projectId } = useParams();
+  const workspaceSlugValue = workspaceSlug?.toString() ?? "";
+  const projectIdValue = projectId?.toString() ?? "";
 
   // store hooks
   const { t } = useTranslation();
-  const { allowPermissions } = useUserPermissions();
+  const { allowProjectPermissionKeys } = useUserPermissions();
 
-  const { getReleaseById, updateReleaseDetails, createReleaseLink, updateReleaseLink, deleteReleaseLink } = useRelease();
+  const { getReleaseById, updateReleaseDetails, createReleaseLink, updateReleaseLink, deleteReleaseLink } =
+    useRelease();
   const { areEstimateEnabledByProjectId, currentActiveEstimateId, estimateById } = useProjectEstimates();
 
   // derived values
@@ -75,13 +78,19 @@ export const ReleaseAnalyticsSidebar = observer(function ReleaseAnalyticsSidebar
   const areEstimateEnabled = projectId && areEstimateEnabledByProjectId(projectId.toString());
   const estimateType = areEstimateEnabled && currentActiveEstimateId && estimateById(currentActiveEstimateId);
   const isEstimatePointValid = estimateType && estimateType?.type == EEstimateSystem.POINTS ? true : false;
+  const isEditingAllowed = allowProjectPermissionKeys(
+    [PROJECT_RELEASES_EDIT_PERMISSION_KEY],
+    workspaceSlugValue,
+    projectIdValue
+  );
+  const canEditReleaseDetails = isEditingAllowed && !isArchived;
 
   const { reset, control } = useForm({
     defaultValues,
   });
 
   const submitChanges = async (data: Partial<IRelease>) => {
-    if (!workspaceSlug || !projectId || !releaseId) return;
+    if (!workspaceSlug || !projectId || !releaseId || !canEditReleaseDetails) return;
     try {
       await updateReleaseDetails(workspaceSlug.toString(), projectId.toString(), releaseId.toString(), data);
     } catch (err) {
@@ -95,19 +104,19 @@ export const ReleaseAnalyticsSidebar = observer(function ReleaseAnalyticsSidebar
   };
 
   const handleCreateLink = async (formData: ModuleLink) => {
-    if (!workspaceSlug || !projectId || !releaseId) return;
+    if (!workspaceSlug || !projectId || !releaseId || !canEditReleaseDetails) return;
     const payload = { metadata: {}, ...formData };
     await createReleaseLink(workspaceSlug.toString(), projectId.toString(), releaseId.toString(), payload);
   };
 
   const handleUpdateLink = async (formData: ModuleLink, linkId: string) => {
-    if (!workspaceSlug || !projectId) return;
+    if (!workspaceSlug || !projectId || !canEditReleaseDetails) return;
     const payload = { metadata: {}, ...formData };
     await updateReleaseLink(workspaceSlug.toString(), projectId.toString(), releaseId.toString(), linkId, payload);
   };
 
   const handleDeleteLink = async (linkId: string) => {
-    if (!workspaceSlug || !projectId) return;
+    if (!workspaceSlug || !projectId || !canEditReleaseDetails) return;
     try {
       await deleteReleaseLink(workspaceSlug.toString(), projectId.toString(), releaseId.toString(), linkId);
       setToast({
@@ -125,7 +134,8 @@ export const ReleaseAnalyticsSidebar = observer(function ReleaseAnalyticsSidebar
   };
 
   const handleDateChange = async (startDate: Date | undefined, targetDate: Date | undefined) => {
-    submitChanges({
+    if (!canEditReleaseDetails) return;
+    await submitChanges({
       start_date: startDate ? renderFormattedPayloadDate(startDate) : null,
       target_date: targetDate ? renderFormattedPayloadDate(targetDate) : null,
     });
@@ -144,6 +154,7 @@ export const ReleaseAnalyticsSidebar = observer(function ReleaseAnalyticsSidebar
   }, [releaseDetails, reset]);
 
   const handleEditLink = (link: ILinkDetails) => {
+    if (!canEditReleaseDetails) return;
     setSelectedLinkToUpdate(link);
     setModuleLinkModal(true);
   };
@@ -175,11 +186,6 @@ export const ReleaseAnalyticsSidebar = observer(function ReleaseAnalyticsSidebar
     releaseDetails.total_estimate_points === 0
       ? "0 work items"
       : `${releaseDetails.completed_estimate_points}/${releaseDetails.total_estimate_points}`;
-
-  const isEditingAllowed = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-    EUserPermissionsLevel.PROJECT
-  );
 
   return (
     <div className="relative">
@@ -217,7 +223,7 @@ export const ReleaseAnalyticsSidebar = observer(function ReleaseAnalyticsSidebar
                   customButton={
                     <span
                       className={`flex h-6 w-20 items-center justify-center rounded-xs text-center text-11 ${
-                        isEditingAllowed && !isArchived ? "cursor-pointer" : "cursor-not-allowed"
+                        canEditReleaseDetails ? "cursor-pointer" : "cursor-not-allowed"
                       }`}
                       style={{
                         color: releaseStatusMeta.color,
@@ -231,17 +237,17 @@ export const ReleaseAnalyticsSidebar = observer(function ReleaseAnalyticsSidebar
                   onChange={(value: any) => {
                     submitChanges({ status: value });
                   }}
-                  disabled={!isEditingAllowed || isArchived}
+                  disabled={!canEditReleaseDetails}
                 >
                   {allowedStatusOptions.map((status) => {
                     const StatusIcon = status.icon;
                     return (
-                    <CustomSelect.Option key={status.value} value={status.value}>
-                      <div className="flex items-center gap-2">
-                        <StatusIcon className="h-4 w-4" style={{ color: status.color }} />
-                        {status.label}
-                      </div>
-                    </CustomSelect.Option>
+                      <CustomSelect.Option key={status.value} value={status.value}>
+                        <div className="flex items-center gap-2">
+                          <StatusIcon className="h-4 w-4" style={{ color: status.color }} />
+                          {status.label}
+                        </div>
+                      </CustomSelect.Option>
                     );
                   })}
                 </CustomSelect>
@@ -293,7 +299,7 @@ export const ReleaseAnalyticsSidebar = observer(function ReleaseAnalyticsSidebar
                             from: t("start_date"),
                             to: t("end_date"),
                           }}
-                          disabled={!isEditingAllowed || isArchived}
+                          disabled={!canEditReleaseDetails}
                         />
                       );
                     }}
@@ -321,7 +327,7 @@ export const ReleaseAnalyticsSidebar = observer(function ReleaseAnalyticsSidebar
                     multiple={false}
                     buttonVariant="background-with-text"
                     placeholder={t("lead")}
-                    disabled={!isEditingAllowed || isArchived}
+                    disabled={!canEditReleaseDetails}
                     icon={SquareUser}
                   />
                 </div>
@@ -347,7 +353,7 @@ export const ReleaseAnalyticsSidebar = observer(function ReleaseAnalyticsSidebar
                     projectId={projectId?.toString() ?? ""}
                     buttonVariant={value && value?.length > 0 ? "transparent-without-text" : "background-with-text"}
                     buttonClassName={value && value.length > 0 ? "hover:bg-transparent px-0" : ""}
-                    disabled={!isEditingAllowed || isArchived}
+                    disabled={!canEditReleaseDetails}
                   />
                 </div>
               )}
@@ -415,26 +421,33 @@ export const ReleaseAnalyticsSidebar = observer(function ReleaseAnalyticsSidebar
                   <Transition show={open}>
                     <Disclosure.Panel>
                       <div className="mt-2 flex min-h-72 w-full flex-col space-y-3 overflow-y-auto">
-                        {isEditingAllowed && releaseDetails.link_release && releaseDetails.link_release.length > 0 ? (
+                        {releaseDetails.link_release && releaseDetails.link_release.length > 0 ? (
                           <>
-                            {isEditingAllowed && !isArchived && (
-                              <div className="flex w-full items-center justify-end">
-                                <button
-                                  className="flex items-center gap-1.5 text-13 font-medium text-accent-primary"
-                                  onClick={() => setModuleLinkModal(true)}
-                                >
-                                  <PlusIcon className="h-3 w-3" />
-                                  {t("add_link")}
-                                </button>
-                              </div>
-                            )}
+                            <div className="flex w-full items-center justify-end">
+                              <button
+                                type="button"
+                                className={`flex items-center gap-1.5 text-13 font-medium ${
+                                  canEditReleaseDetails
+                                    ? "text-accent-primary"
+                                    : "cursor-not-allowed text-tertiary opacity-60"
+                                }`}
+                                disabled={!canEditReleaseDetails}
+                                onClick={() => {
+                                  if (!canEditReleaseDetails) return;
+                                  setModuleLinkModal(true);
+                                }}
+                              >
+                                <PlusIcon className="h-3 w-3" />
+                                {t("add_link")}
+                              </button>
+                            </div>
 
                             {releaseId && (
                               <ReleaseLinksList
                                 releaseId={releaseId}
                                 handleEditLink={handleEditLink}
                                 handleDeleteLink={handleDeleteLink}
-                                disabled={!isEditingAllowed || isArchived}
+                                disabled={!canEditReleaseDetails}
                               />
                             )}
                           </>
@@ -444,15 +457,22 @@ export const ReleaseAnalyticsSidebar = observer(function ReleaseAnalyticsSidebar
                               <Info className="h-3.5 w-3.5 stroke-[1.5] text-tertiary" />
                               <span className="p-0.5 text-11 text-tertiary">{t("common.no_links_added_yet")}</span>
                             </div>
-                            {isEditingAllowed && !isArchived && (
-                              <button
-                                className="flex items-center gap-1.5 text-13 font-medium text-accent-primary"
-                                onClick={() => setModuleLinkModal(true)}
-                              >
-                                <PlusIcon className="h-3 w-3" />
-                                {t("add_link")}
-                              </button>
-                            )}
+                            <button
+                              type="button"
+                              className={`flex items-center gap-1.5 text-13 font-medium ${
+                                canEditReleaseDetails
+                                  ? "text-accent-primary"
+                                  : "cursor-not-allowed text-tertiary opacity-60"
+                              }`}
+                              disabled={!canEditReleaseDetails}
+                              onClick={() => {
+                                if (!canEditReleaseDetails) return;
+                                setModuleLinkModal(true);
+                              }}
+                            >
+                              <PlusIcon className="h-3 w-3" />
+                              {t("add_link")}
+                            </button>
                           </div>
                         )}
                       </div>

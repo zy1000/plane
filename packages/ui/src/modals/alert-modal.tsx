@@ -23,6 +23,7 @@ type Props = {
   handleClose: () => void;
   handleSubmit: () => void;
   hideIcon?: boolean;
+  isSubmitDisabled?: boolean;
   isSubmitting: boolean;
   isOpen: boolean;
   position?: EModalPosition;
@@ -58,6 +59,7 @@ export function AlertModalCore(props: Props) {
     handleClose,
     handleSubmit,
     hideIcon = false,
+    isSubmitDisabled = false,
     isSubmitting,
     isOpen,
     position = EModalPosition.CENTER,
@@ -96,7 +98,13 @@ export function AlertModalCore(props: Props) {
         <Button variant="secondary" onClick={handleClose}>
           {secondaryButtonText}
         </Button>
-        <Button variant={BUTTON_VARIANTS[variant]} tabIndex={1} onClick={handleSubmit} loading={isSubmitting}>
+        <Button
+          variant={BUTTON_VARIANTS[variant]}
+          tabIndex={1}
+          onClick={handleSubmit}
+          loading={isSubmitting}
+          disabled={isSubmitDisabled}
+        >
           {isSubmitting ? primaryButtonText.loading : primaryButtonText.default}
         </Button>
       </div>

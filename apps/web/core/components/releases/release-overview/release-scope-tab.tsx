@@ -64,29 +64,38 @@ const SectionHeader: React.FC<{
   onAction?: () => void;
   actionLoading?: boolean;
   actionDisabled?: boolean;
-}> = ({ icon, title, count, actionIcon, actionLabel, onAction, actionLoading, actionDisabled }) => (
-  <div className="flex items-center justify-between px-5 py-4">
-    <div className="flex min-w-0 items-center gap-2">
-      {icon}
-      <h2 className="text-sm font-semibold text-primary">{title}</h2>
-      <span className="rounded-full bg-layer-2 px-2 py-0.5 text-[11px] font-medium tabular-nums text-placeholder">
-        {count}
-      </span>
+}> = ({ icon, title, count, actionIcon, actionLabel, onAction, actionLoading, actionDisabled }) => {
+  const isActionDisabled = !!actionDisabled || !!actionLoading;
+
+  return (
+    <div className="flex items-center justify-between px-5 py-4">
+      <div className="flex min-w-0 items-center gap-2">
+        {icon}
+        <h2 className="text-sm font-semibold text-primary">{title}</h2>
+        <span className="rounded-full bg-layer-2 px-2 py-0.5 text-[11px] font-medium text-placeholder tabular-nums">
+          {count}
+        </span>
+      </div>
+      {actionLabel && onAction && (
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => {
+            if (isActionDisabled) return;
+            onAction();
+          }}
+          loading={actionLoading}
+          disabled={isActionDisabled}
+          aria-disabled={isActionDisabled}
+          className={cn(isActionDisabled && "cursor-not-allowed opacity-60")}
+        >
+          {actionIcon}
+          <span className="ml-1">{actionLabel}</span>
+        </Button>
+      )}
     </div>
-    {actionLabel && onAction && (
-      <Button
-        variant="secondary"
-        size="sm"
-        onClick={onAction}
-        loading={actionLoading}
-        disabled={actionDisabled}
-      >
-        {actionIcon}
-        <span className="ml-1">{actionLabel}</span>
-      </Button>
-    )}
-  </div>
-);
+  );
+};
 
 type CyclesSectionProps = {
   workspaceSlug: string;
@@ -94,6 +103,7 @@ type CyclesSectionProps = {
   cycles: Cycle[];
   cyclesLoading: boolean;
   cyclesError: string | null;
+  canManageReleaseCycles: boolean;
   onOpenCycleAssociate: () => void;
   onCancelCycleAssociation: (cycleId: string) => Promise<void> | void;
   className?: string;
@@ -105,6 +115,7 @@ export const ReleaseCyclesSection: React.FC<CyclesSectionProps> = ({
   cycles,
   cyclesLoading,
   cyclesError,
+  canManageReleaseCycles,
   onOpenCycleAssociate,
   onCancelCycleAssociation,
   className,
@@ -118,7 +129,11 @@ export const ReleaseCyclesSection: React.FC<CyclesSectionProps> = ({
         count={cycles.length}
         actionIcon={<Plus className="h-3.5 w-3.5" aria-hidden />}
         actionLabel="关联迭代"
-        onAction={onOpenCycleAssociate}
+        onAction={() => {
+          if (!canManageReleaseCycles) return;
+          onOpenCycleAssociate();
+        }}
+        actionDisabled={!canManageReleaseCycles}
       />
       <div className={SECTION_BODY}>
         {cyclesLoading ? (
@@ -134,8 +149,8 @@ export const ReleaseCyclesSection: React.FC<CyclesSectionProps> = ({
                 <tr className={TABLE_HEAD_CLASS}>
                   <th className="w-2/5 px-2 py-2 text-sm font-medium text-primary">迭代</th>
                   <th className="w-1/5 px-2 py-2 text-sm font-medium text-primary">状态</th>
-                  <th className="w-1/4 px-2 py-2 text-sm font-medium tabular-nums text-primary">日期</th>
-                  <th className="w-[120px] pl-10 pr-2 py-2 text-left text-sm font-medium text-primary">操作</th>
+                  <th className="w-1/4 px-2 py-2 text-sm font-medium text-primary tabular-nums">日期</th>
+                  <th className="w-[120px] py-2 pr-2 pl-10 text-left text-sm font-medium text-primary">操作</th>
                 </tr>
               </thead>
               <tbody>
@@ -146,9 +161,7 @@ export const ReleaseCyclesSection: React.FC<CyclesSectionProps> = ({
                         <button
                           type="button"
                           className="cursor-pointer truncate text-left text-sm text-primary hover:underline"
-                          onClick={() =>
-                            router.push(`/${workspaceSlug}/projects/${projectId}/cycles/${c.id}/overview`)
-                          }
+                          onClick={() => router.push(`/${workspaceSlug}/projects/${projectId}/cycles/${c.id}/overview`)}
                         >
                           {c.name}
                         </button>
@@ -159,17 +172,23 @@ export const ReleaseCyclesSection: React.FC<CyclesSectionProps> = ({
                     <td className="px-2 py-2 text-sm text-primary">
                       <CycleStatusTag cycle={c} />
                     </td>
-                    <td className="whitespace-nowrap px-2 py-2 text-sm tabular-nums text-primary">
+                    <td className="px-2 py-2 text-sm whitespace-nowrap text-primary tabular-nums">
                       {formatReleaseOverviewDateRange(c.start_date, c.end_date)}
                     </td>
-                    <td className="pl-10 pr-2 py-2 text-left">
+                    <td className="py-2 pr-2 pl-10 text-left">
                       <Popconfirm
                         title="确定取消该迭代的关联吗？"
                         okText="取消关联"
                         cancelText="取消"
+                        disabled={!canManageReleaseCycles}
                         onConfirm={() => void onCancelCycleAssociation(c.id)}
                       >
-                        <Button variant="link-neutral" className="p-0" aria-label="取消关联">
+                        <Button
+                          variant="link-neutral"
+                          className="p-0"
+                          disabled={!canManageReleaseCycles}
+                          aria-label="取消关联"
+                        >
                           <Unlink className="h-3.5 w-3.5" />
                         </Button>
                       </Popconfirm>
@@ -192,6 +211,7 @@ type PlansSectionProps = {
   plansLoading: boolean;
   plansError: string | null;
   cancelingPlanId: string | null;
+  canManageReleasePlans: boolean;
   onOpenPlanAssociate: () => void;
   onCancelPlanAssociation: (planId: string) => Promise<void> | void;
   className?: string;
@@ -204,6 +224,7 @@ export const ReleasePlansSection: React.FC<PlansSectionProps> = ({
   plansLoading,
   plansError,
   cancelingPlanId,
+  canManageReleasePlans,
   onOpenPlanAssociate,
   onCancelPlanAssociation,
   className,
@@ -217,7 +238,11 @@ export const ReleasePlansSection: React.FC<PlansSectionProps> = ({
         count={plans.length}
         actionIcon={<Plus className="h-3.5 w-3.5" aria-hidden />}
         actionLabel="关联测试计划"
-        onAction={onOpenPlanAssociate}
+        onAction={() => {
+          if (!canManageReleasePlans) return;
+          onOpenPlanAssociate();
+        }}
+        actionDisabled={!canManageReleasePlans}
       />
       <div className={SECTION_BODY}>
         {plansLoading ? (
@@ -234,8 +259,8 @@ export const ReleasePlansSection: React.FC<PlansSectionProps> = ({
                   <th className="w-1/3 px-2 py-2 text-sm font-medium text-primary">测试计划</th>
                   <th className="w-1/6 px-2 py-2 text-sm font-medium text-primary">状态</th>
                   <th className="w-1/6 px-2 py-2 text-sm font-medium text-primary">通过率</th>
-                  <th className="w-1/4 px-2 py-2 text-sm font-medium tabular-nums text-primary">日期</th>
-                  <th className="w-[120px] pl-10 pr-2 py-2 text-left text-sm font-medium text-primary">操作</th>
+                  <th className="w-1/4 px-2 py-2 text-sm font-medium text-primary tabular-nums">日期</th>
+                  <th className="w-[120px] py-2 pr-2 pl-10 text-left text-sm font-medium text-primary">操作</th>
                 </tr>
               </thead>
               <tbody>
@@ -247,15 +272,13 @@ export const ReleasePlansSection: React.FC<PlansSectionProps> = ({
                           type="button"
                           className="cursor-pointer truncate text-left text-sm text-primary hover:underline"
                           onClick={() =>
-                            router.push(
-                              `/${workspaceSlug}/projects/${projectId}/testhub/plan-cases?planId=${p.id}`
-                            )
+                            router.push(`/${workspaceSlug}/projects/${projectId}/testhub/plan-cases?planId=${p.id}`)
                           }
                         >
                           {p.name ?? "-"}
                         </button>
                       ) : (
-                        p.name ?? "-"
+                        (p.name ?? "-")
                       )}
                     </td>
                     <td className="px-2 py-2">
@@ -264,21 +287,22 @@ export const ReleasePlansSection: React.FC<PlansSectionProps> = ({
                     <td className="px-2 py-2">
                       <PlanPassRate passRate={p.pass_rate} />
                     </td>
-                    <td className="whitespace-nowrap px-2 py-2 text-sm tabular-nums text-primary">
+                    <td className="px-2 py-2 text-sm whitespace-nowrap text-primary tabular-nums">
                       {formatReleaseOverviewDateRange(p.begin_time, p.end_time)}
                     </td>
-                    <td className="pl-10 pr-2 py-2 text-left" onClick={(e) => e.stopPropagation()}>
+                    <td className="py-2 pr-2 pl-10 text-left" onClick={(e) => e.stopPropagation()}>
                       <Popconfirm
                         title="确定取消该测试计划的关联吗？"
                         okText="取消关联"
                         cancelText="取消"
+                        disabled={!canManageReleasePlans}
                         onConfirm={() => void onCancelPlanAssociation(p.id)}
                       >
                         <Button
                           variant="link-neutral"
                           className="p-0"
                           loading={cancelingPlanId === p.id}
-                          disabled={cancelingPlanId === p.id}
+                          disabled={cancelingPlanId === p.id || !canManageReleasePlans}
                           aria-label="取消关联"
                         >
                           <Unlink className="h-3.5 w-3.5" />
@@ -303,6 +327,9 @@ type FilesSectionProps = {
   filesUploading: boolean;
   filesDeletingId: string | null;
   filesDownloadingId: string | null;
+  canUploadReleaseFile?: boolean;
+  canDeleteReleaseFile?: boolean;
+  canDownloadReleaseFile?: boolean;
   onTriggerUploadFile: () => void;
   onDeleteFile: (fileId: string) => Promise<void> | void;
   onDownloadFile: (fileId: string, fileName: string) => Promise<void> | void;
@@ -317,6 +344,9 @@ export const ReleaseFilesSection: React.FC<FilesSectionProps> = ({
   filesUploading,
   filesDeletingId,
   filesDownloadingId,
+  canUploadReleaseFile = true,
+  canDeleteReleaseFile = true,
+  canDownloadReleaseFile = true,
   onTriggerUploadFile,
   onDeleteFile,
   onDownloadFile,
@@ -332,7 +362,7 @@ export const ReleaseFilesSection: React.FC<FilesSectionProps> = ({
       actionLabel="上传附件"
       onAction={onTriggerUploadFile}
       actionLoading={filesUploading}
-      actionDisabled={filesUploading}
+      actionDisabled={filesUploading || !canUploadReleaseFile}
     />
     <div className={SECTION_BODY}>
       <FileUploadProgressList uploadStatuses={uploadStatuses} className="mb-2 flex flex-col gap-1" />
@@ -343,55 +373,69 @@ export const ReleaseFilesSection: React.FC<FilesSectionProps> = ({
       ) : files.length === 0 && uploadStatuses.length === 0 ? (
         <TableEmpty hint="暂无附件" />
       ) : (
-        <div className="min-h-0 flex-1 overflow-x-auto overflow-y-auto vertical-scrollbar scrollbar-sm">
+        <div className="vertical-scrollbar scrollbar-sm min-h-0 flex-1 overflow-x-auto overflow-y-auto">
           <table className="min-w-full table-fixed">
             <thead>
               <tr className={TABLE_HEAD_CLASS}>
                 <th className="w-2/5 px-2 py-2 text-sm font-medium text-primary">附件</th>
                 <th className="w-1/5 px-2 py-2 text-sm font-medium text-primary">大小</th>
                 <th className="w-1/4 px-2 py-2 text-sm font-medium text-primary">上传时间</th>
-                <th className="w-[140px] pl-10 pr-2 py-2 text-left text-sm font-medium text-primary">操作</th>
+                <th className="w-[140px] py-2 pr-2 pl-10 text-left text-sm font-medium text-primary">操作</th>
               </tr>
             </thead>
             <tbody>
-              {files.map((file) => (
-                <tr key={file.id} className="border-b border-subtle last:border-b-0 hover:bg-layer-1">
-                  <td className="truncate px-2 py-2 text-sm text-primary" title={file.name}>
-                    <span className="truncate">{file.name}</span>
-                  </td>
-                  <td className="px-2 py-2 text-sm text-primary">{formatFileSize(Number(file.size ?? 0))}</td>
-                  <td className="px-2 py-2 text-sm text-primary">
-                    <ReadonlyDate value={file.created_at} formatToken="yyyy-MM-dd" hideIcon={true} />
-                  </td>
-                  <td className="pl-10 pr-2 py-2">
-                    <div className="flex items-center justify-start gap-2">
-                      <Button
-                        variant="link-neutral"
-                        className="p-0"
-                        disabled={filesDownloadingId === file.id}
-                        onClick={() => onDownloadFile(file.id, file.name)}
-                      >
-                        <Download className="h-3.5 w-3.5" />
-                      </Button>
-                      <Popconfirm
-                        title="确认删除该附件？"
-                        okText="删除"
-                        cancelText="取消"
-                        onConfirm={() => void onDeleteFile(file.id)}
-                      >
+              {files.map((file) => {
+                const isDeleteDisabled = filesDeletingId === file.id || !canDeleteReleaseFile;
+
+                return (
+                  <tr key={file.id} className="border-b border-subtle last:border-b-0 hover:bg-layer-1">
+                    <td className="truncate px-2 py-2 text-sm text-primary" title={file.name}>
+                      <span className="truncate">{file.name}</span>
+                    </td>
+                    <td className="px-2 py-2 text-sm text-primary">{formatFileSize(Number(file.size ?? 0))}</td>
+                    <td className="px-2 py-2 text-sm text-primary">
+                      <ReadonlyDate value={file.created_at} formatToken="yyyy-MM-dd" hideIcon={true} />
+                    </td>
+                    <td className="py-2 pr-2 pl-10">
+                      <div className="flex items-center justify-start gap-2">
                         <Button
-                          variant="link-danger"
+                          variant="link-neutral"
                           className="p-0"
-                          disabled={filesDeletingId === file.id}
-                          loading={filesDeletingId === file.id}
+                          disabled={filesDownloadingId === file.id || !canDownloadReleaseFile}
+                          onClick={() => onDownloadFile(file.id, file.name)}
                         >
-                          <Trash2 className="h-3.5 w-3.5 text-danger-primary" />
+                          <Download className="h-3.5 w-3.5" />
                         </Button>
-                      </Popconfirm>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                        <Popconfirm
+                          title="确认删除该附件？"
+                          okText="删除"
+                          cancelText="取消"
+                          disabled={isDeleteDisabled}
+                          onConfirm={() => {
+                            if (isDeleteDisabled) return;
+                            void onDeleteFile(file.id);
+                          }}
+                        >
+                          <Button
+                            variant={canDeleteReleaseFile ? "link-danger" : "link-neutral"}
+                            className={cn("p-0", isDeleteDisabled && "cursor-not-allowed opacity-50")}
+                            disabled={isDeleteDisabled}
+                            loading={filesDeletingId === file.id}
+                            aria-disabled={isDeleteDisabled}
+                          >
+                            <Trash2
+                              className={cn(
+                                "h-3.5 w-3.5",
+                                canDeleteReleaseFile ? "text-danger-primary" : "text-placeholder"
+                              )}
+                            />
+                          </Button>
+                        </Popconfirm>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -416,6 +460,11 @@ type Props = {
   filesUploading: boolean;
   filesDeletingId: string | null;
   filesDownloadingId: string | null;
+  canManageReleaseCycles: boolean;
+  canManageReleasePlans: boolean;
+  canUploadReleaseFile: boolean;
+  canDeleteReleaseFile: boolean;
+  canDownloadReleaseFile: boolean;
   onOpenCycleAssociate: () => void;
   onCancelCycleAssociation: (cycleId: string) => Promise<void> | void;
   onOpenPlanAssociate: () => void;
@@ -441,6 +490,11 @@ export const ReleaseScopeTab: React.FC<Props> = ({
   filesUploading,
   filesDeletingId,
   filesDownloadingId,
+  canManageReleaseCycles,
+  canManageReleasePlans,
+  canUploadReleaseFile,
+  canDeleteReleaseFile,
+  canDownloadReleaseFile,
   onOpenCycleAssociate,
   onCancelCycleAssociation,
   onOpenPlanAssociate,
@@ -456,6 +510,7 @@ export const ReleaseScopeTab: React.FC<Props> = ({
       cycles={cycles}
       cyclesLoading={cyclesLoading}
       cyclesError={cyclesError}
+      canManageReleaseCycles={canManageReleaseCycles}
       onOpenCycleAssociate={onOpenCycleAssociate}
       onCancelCycleAssociation={onCancelCycleAssociation}
     />
@@ -466,6 +521,7 @@ export const ReleaseScopeTab: React.FC<Props> = ({
       plansLoading={plansLoading}
       plansError={plansError}
       cancelingPlanId={cancelingPlanId}
+      canManageReleasePlans={canManageReleasePlans}
       onOpenPlanAssociate={onOpenPlanAssociate}
       onCancelPlanAssociation={onCancelPlanAssociation}
     />
@@ -477,6 +533,9 @@ export const ReleaseScopeTab: React.FC<Props> = ({
       filesUploading={filesUploading}
       filesDeletingId={filesDeletingId}
       filesDownloadingId={filesDownloadingId}
+      canUploadReleaseFile={canUploadReleaseFile}
+      canDeleteReleaseFile={canDeleteReleaseFile}
+      canDownloadReleaseFile={canDownloadReleaseFile}
       onTriggerUploadFile={onTriggerUploadFile}
       onDeleteFile={onDeleteFile}
       onDownloadFile={onDownloadFile}

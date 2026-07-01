@@ -7,7 +7,11 @@
 import { useState } from "react";
 import { observer } from "mobx-react";
 import { MoreHorizontal } from "lucide-react";
-import { EUserPermissions, EUserPermissionsLevel, PROJECT_RELEASES_ARCHIVE_PERMISSION_KEY } from "@plane/constants";
+import {
+  PROJECT_RELEASES_ARCHIVE_PERMISSION_KEY,
+  PROJECT_RELEASES_DELETE_PERMISSION_KEY,
+  PROJECT_RELEASES_EDIT_PERMISSION_KEY,
+} from "@plane/constants";
 import { IconButton } from "@plane/propel/icon-button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TContextMenuItem } from "@plane/ui";
@@ -35,13 +39,14 @@ export const ReleaseQuickActions = observer(function ReleaseQuickActions(props: 
   const [editModal, setEditModal] = useState(false);
   const [archiveModal, setArchiveModal] = useState(false);
   const [deleteModal, setDeleteModal] = useState(false);
-  const { allowPermissions, allowProjectPermissionKeys } = useUserPermissions();
+  const { allowProjectPermissionKeys } = useUserPermissions();
   const { getReleaseById, restoreRelease } = useRelease();
 
   const releaseDetails = getReleaseById(releaseId);
-  const isEditingAllowed = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-    EUserPermissionsLevel.PROJECT,
+  const isArchived = !!releaseDetails?.archived_at;
+  const canEditRelease = allowProjectPermissionKeys([PROJECT_RELEASES_EDIT_PERMISSION_KEY], workspaceSlug, projectId);
+  const canDeleteRelease = allowProjectPermissionKeys(
+    [PROJECT_RELEASES_DELETE_PERMISSION_KEY],
     workspaceSlug,
     projectId
   );
@@ -63,6 +68,7 @@ export const ReleaseQuickActions = observer(function ReleaseQuickActions(props: 
   const handleOpenInNewTab = () => window.open(`/${releaseLink}`, "_blank");
 
   const handleRestoreRelease = async () => {
+    if (!canArchiveRelease || !isArchived) return;
     try {
       await restoreRelease(workspaceSlug, projectId, releaseId);
       setToast({
@@ -85,12 +91,22 @@ export const ReleaseQuickActions = observer(function ReleaseQuickActions(props: 
     workspaceSlug,
     projectId,
     releaseId,
-    isEditingAllowed,
+    canEditRelease,
+    canDeleteRelease,
     canArchiveRelease,
-    handleEdit: () => setEditModal(true),
-    handleArchive: () => setArchiveModal(true),
+    handleEdit: () => {
+      if (!canEditRelease || isArchived) return;
+      setEditModal(true);
+    },
+    handleArchive: () => {
+      if (!canArchiveRelease || isArchived) return;
+      setArchiveModal(true);
+    },
     handleRestore: handleRestoreRelease,
-    handleDelete: () => setDeleteModal(true),
+    handleDelete: () => {
+      if (!canDeleteRelease || isArchived) return;
+      setDeleteModal(true);
+    },
     handleCopyLink: handleCopyText,
     handleOpenInNewTab,
   });

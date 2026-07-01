@@ -37,6 +37,7 @@ type Props = {
   projectId: string;
   releaseId: string;
   disabled?: boolean;
+  canCreateComment?: boolean;
   onRemove: (commentId: string) => Promise<unknown>;
   onReply: (data: ReplyPayload) => Promise<TReleaseComment | undefined>;
 };
@@ -52,6 +53,7 @@ export const ReleaseCommentCard = observer(function ReleaseCommentCard(props: Pr
     projectId,
     releaseId,
     disabled = false,
+    canCreateComment = true,
     onRemove,
     onReply,
   } = props;
@@ -70,6 +72,7 @@ export const ReleaseCommentCard = observer(function ReleaseCommentCard(props: Pr
   );
   const isAuthor = currentUser?.id === comment.actor;
   const canDelete = isAuthor && !disabled;
+  const canReply = !disabled && canCreateComment;
   const isReply = depth > 0;
 
   const getCommentActorName = (targetComment: TReleaseComment | undefined) => {
@@ -145,7 +148,7 @@ export const ReleaseCommentCard = observer(function ReleaseCommentCard(props: Pr
           >
             <span className="whitespace-nowrap">{calculateTimeAgo(comment.created_at)}</span>
           </Tooltip>
-          {!disabled && (
+          {canReply && (
             <button
               type="button"
               onClick={() => setIsReplyOpen((prev) => !prev)}
@@ -182,6 +185,7 @@ export const ReleaseCommentCard = observer(function ReleaseCommentCard(props: Pr
               showCancel
               onCancel={() => setIsReplyOpen(false)}
               onSubmit={async (data) => {
+                if (!canReply) return undefined;
                 const created = await onReply(data);
                 setIsReplyOpen(false);
                 return created;
@@ -199,7 +203,7 @@ export const ReleaseCommentCard = observer(function ReleaseCommentCard(props: Pr
         <Avatar
           size="sm"
           name={displayName}
-          src={getFileURL(avatarUrl ?? undefined)}
+          src={avatarUrl ? getFileURL(avatarUrl) : undefined}
           className="shrink-0"
           fallbackBackgroundColor={getUserAvatarFallbackBackgroundColor()}
         />
@@ -240,7 +244,7 @@ export const ReleaseCommentCard = observer(function ReleaseCommentCard(props: Pr
         >
           <span className="whitespace-nowrap">{calculateTimeAgo(comment.created_at)}</span>
         </Tooltip>
-        {!disabled && (
+        {canReply && (
           <button
             type="button"
             onClick={() => setIsReplyOpen((prev) => !prev)}
@@ -274,6 +278,7 @@ export const ReleaseCommentCard = observer(function ReleaseCommentCard(props: Pr
             showCancel
             onCancel={() => setIsReplyOpen(false)}
             onSubmit={async (data) => {
+              if (!canReply) return undefined;
               const created = await onReply(data);
               setIsReplyOpen(false);
               setAreRepliesExpanded(true);
@@ -297,6 +302,7 @@ export const ReleaseCommentCard = observer(function ReleaseCommentCard(props: Pr
               projectId={projectId}
               releaseId={releaseId}
               disabled={disabled}
+              canCreateComment={canCreateComment}
               onRemove={onRemove}
               onReply={onReply}
             />

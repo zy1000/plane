@@ -7,12 +7,17 @@
 import { useState } from "react";
 import { observer } from "mobx-react";
 import { useParams, useSearchParams } from "next/navigation";
-import { PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
+import {
+  PROJECT_ERROR_MESSAGES,
+  PROJECT_RELEASES_DELETE_PERMISSION_KEY,
+  isProjectPermissionError,
+} from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { IRelease } from "@plane/types";
 import { AlertModalCore } from "@plane/ui";
 import { useRelease } from "@/hooks/store/use-release";
+import { useUserPermissions } from "@/hooks/store/user";
 import { useAppRouter } from "@/hooks/use-app-router";
 
 type Props = {
@@ -29,7 +34,16 @@ export const DeleteReleaseModal = observer(function DeleteReleaseModal(props: Pr
   const searchParams = useSearchParams();
   const peekRelease = searchParams.get("peekRelease");
   const { deleteRelease } = useRelease();
+  const { allowProjectPermissionKeys } = useUserPermissions();
   const { t } = useTranslation();
+  const canDeleteRelease =
+    !!workspaceSlug &&
+    !!projectId &&
+    allowProjectPermissionKeys(
+      [PROJECT_RELEASES_DELETE_PERMISSION_KEY],
+      workspaceSlug.toString(),
+      projectId.toString()
+    );
 
   const handleClose = () => {
     onClose();
@@ -37,7 +51,7 @@ export const DeleteReleaseModal = observer(function DeleteReleaseModal(props: Pr
   };
 
   const handleDeletion = async () => {
-    if (!workspaceSlug || !projectId) return;
+    if (!workspaceSlug || !projectId || !canDeleteRelease) return;
 
     setIsDeleteLoading(true);
 
@@ -68,6 +82,7 @@ export const DeleteReleaseModal = observer(function DeleteReleaseModal(props: Pr
     <AlertModalCore
       handleClose={handleClose}
       handleSubmit={handleDeletion}
+      isSubmitDisabled={!canDeleteRelease}
       isSubmitting={isDeleteLoading}
       isOpen={isOpen}
       title="Delete release"

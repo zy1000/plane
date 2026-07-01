@@ -6,9 +6,14 @@ import useSWR from "swr";
 import { Modal } from "antd";
 import { Button } from "@plane/propel/button";
 import {
-  EUserPermissions,
-  EUserPermissionsLevel,
   PROJECT_ERROR_MESSAGES,
+  PROJECT_RELEASES_COMMENT_CREATE_PERMISSION_KEY,
+  PROJECT_RELEASES_CYCLE_MANAGE_PERMISSION_KEY,
+  PROJECT_RELEASES_EDIT_PERMISSION_KEY,
+  PROJECT_RELEASES_FILE_DELETE_PERMISSION_KEY,
+  PROJECT_RELEASES_FILE_DOWNLOAD_PERMISSION_KEY,
+  PROJECT_RELEASES_FILE_UPLOAD_PERMISSION_KEY,
+  PROJECT_RELEASES_PLAN_MANAGE_PERMISSION_KEY,
   isProjectPermissionError,
 } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
@@ -60,10 +65,12 @@ const DEFAULT_TAB = DEFAULT_RELEASE_DETAIL_TAB;
 export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isArchived, isOpen, showTabs = true }) => {
   const { t } = useTranslation();
   const { workspaceSlug, projectId } = useParams();
+  const workspaceSlugValue = workspaceSlug?.toString() ?? "";
+  const projectIdValue = projectId?.toString() ?? "";
   const { getReleaseById, fetchReleaseDetails, updateReleaseDetails } = useRelease();
   const releaseDetails = getReleaseById(releaseId);
   const { getWorkspaceBySlug } = useWorkspace();
-  const { allowPermissions } = useUserPermissions();
+  const { allowProjectPermissionKeys } = useUserPermissions();
   const workspaceId = workspaceSlug ? getWorkspaceBySlug(workspaceSlug.toString())?.id : undefined;
   const { uploadEditorAsset, duplicateEditorAsset } = useEditorAsset();
   const workspaceService = useMemo(() => new WorkspaceService(), []);
@@ -82,6 +89,47 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isAr
   const daysLeft = typeof rawDays === "number" ? Math.max(0, rawDays) : undefined;
 
   const releaseService = useMemo(() => new ReleaseService(), []);
+  const isReleaseArchived = Boolean(isArchived);
+  const canEditRelease = allowProjectPermissionKeys(
+    [PROJECT_RELEASES_EDIT_PERMISSION_KEY],
+    workspaceSlugValue,
+    projectIdValue
+  );
+  const canManageReleaseCycles = allowProjectPermissionKeys(
+    [PROJECT_RELEASES_CYCLE_MANAGE_PERMISSION_KEY],
+    workspaceSlugValue,
+    projectIdValue
+  );
+  const canManageReleasePlans = allowProjectPermissionKeys(
+    [PROJECT_RELEASES_PLAN_MANAGE_PERMISSION_KEY],
+    workspaceSlugValue,
+    projectIdValue
+  );
+  const canUploadReleaseFile = allowProjectPermissionKeys(
+    [PROJECT_RELEASES_FILE_UPLOAD_PERMISSION_KEY],
+    workspaceSlugValue,
+    projectIdValue
+  );
+  const canDeleteReleaseFile = allowProjectPermissionKeys(
+    [PROJECT_RELEASES_FILE_DELETE_PERMISSION_KEY],
+    workspaceSlugValue,
+    projectIdValue
+  );
+  const canDownloadReleaseFile = allowProjectPermissionKeys(
+    [PROJECT_RELEASES_FILE_DOWNLOAD_PERMISSION_KEY],
+    workspaceSlugValue,
+    projectIdValue
+  );
+  const canCreateReleaseComment = allowProjectPermissionKeys(
+    [PROJECT_RELEASES_COMMENT_CREATE_PERMISSION_KEY],
+    workspaceSlugValue,
+    projectIdValue
+  );
+  const canEditReleaseDetails = canEditRelease && !isReleaseArchived;
+  const canManageReleaseCyclesAction = canManageReleaseCycles && !isReleaseArchived;
+  const canManageReleasePlansAction = canManageReleasePlans && !isReleaseArchived;
+  const canUploadReleaseFileAction = canUploadReleaseFile && !isReleaseArchived;
+  const canDeleteReleaseFileAction = canDeleteReleaseFile && !isReleaseArchived;
 
   const [cycles, setCycles] = useState<any[]>([]);
   const [cyclesLoading, setCyclesLoading] = useState(false);
@@ -132,14 +180,8 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isAr
     workspaceSlug && projectId && releaseId
       ? `release-overdue-by-assignee-${workspaceSlug}-${projectId}-${releaseId}`
       : null;
-  const { data: releaseOverdueByAssignee, mutate: mutateReleaseOverdueByAssignee } = useSWR(
-    releaseOverdueSwrKey,
-    () =>
-      releaseService.getReleaseOverdueByAssignee(
-        workspaceSlug!.toString(),
-        projectId!.toString(),
-        releaseId
-      )
+  const { data: releaseOverdueByAssignee, mutate: mutateReleaseOverdueByAssignee } = useSWR(releaseOverdueSwrKey, () =>
+    releaseService.getReleaseOverdueByAssignee(workspaceSlug!.toString(), projectId!.toString(), releaseId)
   );
 
   const resolveReleaseFileApiErrorMessage = (error: unknown, fallbackMessage: string): string => {
@@ -211,7 +253,7 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isAr
   };
 
   const openPlanAssociateModal = async () => {
-    if (!workspaceSlug || !projectId || !releaseId) return;
+    if (!workspaceSlug || !projectId || !releaseId || !canManageReleasePlansAction) return;
     setPlanAssociateOpen(true);
     setSelectedPlanIds([]);
     setSelectablePlansLoading(true);
@@ -232,7 +274,8 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isAr
   };
 
   const handleConfirmAssociatePlans = async () => {
-    if (!workspaceSlug || !projectId || !releaseId || selectedPlanIds.length === 0) return;
+    if (!workspaceSlug || !projectId || !releaseId || selectedPlanIds.length === 0 || !canManageReleasePlansAction)
+      return;
     try {
       setAssociatingPlans(true);
       await releaseService.associateReleasePlans(
@@ -261,15 +304,12 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isAr
   };
 
   const handleCancelPlanAssociation = async (planId: string) => {
-    if (!workspaceSlug || !projectId || !releaseId) return;
+    if (!workspaceSlug || !projectId || !releaseId || !canManageReleasePlansAction) return;
     try {
       setCancelingPlanId(planId);
-      await releaseService.cancelReleasePlanAssociation(
-        workspaceSlug.toString(),
-        projectId.toString(),
-        releaseId,
-        [planId]
-      );
+      await releaseService.cancelReleasePlanAssociation(workspaceSlug.toString(), projectId.toString(), releaseId, [
+        planId,
+      ]);
       setToast({ type: TOAST_TYPE.SUCCESS, title: "已取消关联", message: "测试计划已取消关联" });
       void fetchPlans();
     } catch (e: any) {
@@ -306,12 +346,10 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isAr
       let total = 0;
       let page = 1;
       for (;;) {
-        const res = await releaseService.getReleaseFileList(
-          workspaceSlug.toString(),
-          projectId.toString(),
-          releaseId,
-          { page, page_size: RELEASE_FILES_PAGE_SIZE }
-        );
+        const res = await releaseService.getReleaseFileList(workspaceSlug.toString(), projectId.toString(), releaseId, {
+          page,
+          page_size: RELEASE_FILES_PAGE_SIZE,
+        });
         const list = Array.isArray(res?.data) ? res.data : [];
         if (page === 1) {
           total = Number(res?.count ?? 0);
@@ -338,7 +376,10 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isAr
   };
 
   const handleUploadReleaseFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    if (!workspaceSlug || !projectId || !releaseId) return;
+    if (!workspaceSlug || !projectId || !releaseId || !canUploadReleaseFileAction) {
+      event.target.value = "";
+      return;
+    }
     const file = event.target.files?.[0];
     if (!file) return;
     try {
@@ -363,9 +404,10 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isAr
   };
 
   const handleDeleteReleaseFile = async (fileId: string) => {
+    if (!workspaceSlug || !projectId || !canDeleteReleaseFileAction) return;
     try {
       setReleaseFilesDeletingId(fileId);
-      await releaseService.deleteReleaseFile(workspaceSlug!.toString(), projectId!.toString(), fileId);
+      await releaseService.deleteReleaseFile(workspaceSlug.toString(), projectId.toString(), fileId);
       setToast({ type: TOAST_TYPE.SUCCESS, title: "删除成功", message: "文件已删除" });
       await fetchReleaseFiles();
     } catch (e: unknown) {
@@ -376,13 +418,10 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isAr
   };
 
   const handleDownloadReleaseFile = async (fileId: string, _fileName: string) => {
+    if (!workspaceSlug || !projectId || !canDownloadReleaseFile) return;
     try {
       setReleaseFilesDownloadingId(fileId);
-      const url = await releaseService.downloadReleaseFile(
-        workspaceSlug!.toString(),
-        projectId!.toString(),
-        fileId
-      );
+      const url = await releaseService.downloadReleaseFile(workspaceSlug.toString(), projectId.toString(), fileId);
       window.open(url, "_blank", "noopener,noreferrer");
     } catch (e: unknown) {
       showReleaseFileApiError(e, "下载失败", "请稍后重试");
@@ -436,6 +475,7 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isAr
   }, [fetchReleaseDetails, isOpen, releaseId, projectId, workspaceSlug]);
 
   const handleNoteEditorUploadFile = async (blockId: string | undefined, file: File) => {
+    if (!canEditReleaseDetails) throw new Error("Not allowed");
     if (!workspaceSlug || !projectId) throw new Error("Missing context");
     const { asset_id } = await uploadEditorAsset({
       blockId: blockId ?? "",
@@ -451,6 +491,7 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isAr
   };
 
   const handleNoteEditorDuplicateFile = async (assetId: string) => {
+    if (!canEditReleaseDetails) throw new Error("Not allowed");
     if (!workspaceSlug || !projectId) throw new Error("Missing context");
     const { asset_id } = await duplicateEditorAsset({
       assetId,
@@ -463,12 +504,13 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isAr
   };
 
   const handleNoteOpen = () => {
+    if (!canEditReleaseDetails) return;
     setNoteHtml(releaseDetails?.note || "");
     setNoteOpen(true);
   };
 
   const handleNoteSubmit = async () => {
-    if (!workspaceSlug || !projectId || !releaseId) return;
+    if (!workspaceSlug || !projectId || !releaseId || !canEditReleaseDetails) return;
     try {
       setNoteSubmitting(true);
       await releaseService.updateNote(workspaceSlug.toString(), projectId.toString(), releaseId, noteHtml);
@@ -483,7 +525,7 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isAr
   };
 
   const handleReleaseDetailsChange = async (payload: TReleaseUpdatePayload) => {
-    if (!workspaceSlug || !projectId) return;
+    if (!workspaceSlug || !projectId || !canEditReleaseDetails) return;
 
     await updateReleaseDetails(workspaceSlug.toString(), projectId.toString(), releaseId, payload)
       .then(() => {
@@ -521,6 +563,7 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isAr
   };
 
   const handleAssociateConfirm = async () => {
+    if (!canManageReleaseCyclesAction) return;
     if (!workspaceSlug || !projectId || !releaseId || selectedCycleIds.length === 0) {
       handleAssociateClose();
       return;
@@ -539,7 +582,7 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isAr
   };
 
   const handleCancelAssociation = async (cycleId: string) => {
-    if (!workspaceSlug || !projectId || !releaseId) return;
+    if (!workspaceSlug || !projectId || !releaseId || !canManageReleaseCyclesAction) return;
     try {
       await releaseService.cancelCycleAssociation(workspaceSlug.toString(), projectId.toString(), {
         release_id: releaseId,
@@ -562,10 +605,6 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isAr
   const completedIssues = Number(stats?.state_distribution?.completed ?? 0);
   const cancelledIssues = Number(stats?.state_distribution?.cancelled ?? 0);
   const progress = totalIssues > 0 ? Math.floor((completedIssues / totalIssues) * 100) : 0;
-  const isEditingAllowed = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-    EUserPermissionsLevel.PROJECT
-  );
 
   const releaseTabs: ReleaseTabItem[] = useMemo(
     () => [
@@ -578,7 +617,7 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isAr
 
   if (!releaseDetails) {
     return (
-      <div className="h-full w-full overflow-y-auto vertical-scrollbar scrollbar-sm">
+      <div className="vertical-scrollbar scrollbar-sm h-full w-full overflow-y-auto">
         <div className="flex flex-col gap-5 px-6 py-4">
           <Loader className="max-w-xl">
             <Loader.Item height="16px" />
@@ -591,7 +630,7 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isAr
   }
 
   return (
-    <div className="h-full w-full overflow-y-auto vertical-scrollbar scrollbar-sm">
+    <div className="vertical-scrollbar scrollbar-sm h-full w-full overflow-y-auto">
       <div className="flex min-h-full flex-col gap-4 px-6 py-4">
         {showTabs && <ReleasePageTabs tabs={releaseTabs} activeTab={activeTab} onChange={(key) => setStoredTab(key)} />}
 
@@ -608,7 +647,8 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isAr
               projectId={projectId?.toString() ?? ""}
               releaseId={releaseId}
               releaseDetails={releaseDetails}
-              isStatusDisabled={!isEditingAllowed || Boolean(isArchived)}
+              isStatusDisabled={!canEditReleaseDetails}
+              isEditDisabled={!canEditReleaseDetails}
               totalIssues={totalIssues}
               backlogIssues={backlogIssues}
               inProgressIssues={inProgressIssues}
@@ -646,14 +686,23 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isAr
               filesDeletingId={releaseFilesDeletingId}
               filesDownloadingId={releaseFilesDownloadingId}
               filesUploadStatuses={releaseFileUploadStatuses}
+              canManageReleaseCycles={canManageReleaseCyclesAction}
+              canManageReleasePlans={canManageReleasePlansAction}
+              canUploadReleaseFile={canUploadReleaseFileAction}
+              canDeleteReleaseFile={canDeleteReleaseFileAction}
+              canDownloadReleaseFile={canDownloadReleaseFile}
               onOpenCycleAssociate={() => {
+                if (!canManageReleaseCyclesAction) return;
                 setAssociateOpen(true);
                 fetchSelectable(1, selectPageSize);
               }}
               onCancelCycleAssociation={handleCancelAssociation}
               onOpenPlanAssociate={() => void openPlanAssociateModal()}
               onCancelPlanAssociation={handleCancelPlanAssociation}
-              onTriggerUploadFile={() => fileInputRef.current?.click()}
+              onTriggerUploadFile={() => {
+                if (!canUploadReleaseFileAction) return;
+                fileInputRef.current?.click();
+              }}
               onDeleteFile={handleDeleteReleaseFile}
               onDownloadFile={handleDownloadReleaseFile}
             />
@@ -677,13 +726,20 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isAr
               workspaceSlug={workspaceSlug?.toString() ?? ""}
               projectId={projectId?.toString() ?? ""}
               releaseId={releaseId}
+              canCreateComment={canCreateReleaseComment}
             />
           )}
         </div>
       </div>
 
       {/* 隐藏的附件上传 input：保留在父组件以便 ScopeTab 的“上传”按钮触发 */}
-      <input ref={fileInputRef} type="file" className="hidden" onChange={handleUploadReleaseFile} />
+      <input
+        ref={fileInputRef}
+        type="file"
+        className="hidden"
+        disabled={!canUploadReleaseFileAction}
+        onChange={handleUploadReleaseFile}
+      />
 
       {/* 关联迭代弹层 */}
       <Transition.Root show={associateOpen} as={Fragment}>
@@ -720,12 +776,10 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isAr
                     </div>
                     <div className="mt-3">
                       {selectLoading && (
-                        <div className="flex items-center justify-center py-8 text-sm text-secondary">
-                          加载中...
-                        </div>
+                        <div className="flex items-center justify-center py-8 text-sm text-secondary">加载中...</div>
                       )}
                       {selectError && (
-                        <div className="bg-red-50 border border-red-200 rounded-md p-3 text-sm text-red-800">
+                        <div className="bg-red-50 border-red-200 text-red-800 rounded-md border p-3 text-sm">
                           {selectError}
                         </div>
                       )}
@@ -733,10 +787,10 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isAr
                         <div className="overflow-x-auto">
                           <table className="min-w-full table-fixed">
                             <thead>
-                              <tr className="text-left text-xs text-secondary border-b border-subtle">
+                              <tr className="border-b border-subtle text-left text-xs text-secondary">
                                 <th className="w-10 px-2 py-2"></th>
                                 <th className="w-2/5 px-2 py-2 text-sm font-medium text-primary">名称</th>
-                                <th className="w-2/5 px-2 py-2 text-sm font-medium tabular-nums text-primary">日期</th>
+                                <th className="w-2/5 px-2 py-2 text-sm font-medium text-primary tabular-nums">日期</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -756,7 +810,9 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isAr
                                         type="checkbox"
                                         className="size-4"
                                         checked={checked}
+                                        disabled={!canManageReleaseCyclesAction}
                                         onChange={(e) => {
+                                          if (!canManageReleaseCyclesAction) return;
                                           const v = e.target.checked;
                                           setSelectedCycleIds((prev) => {
                                             if (v) return Array.from(new Set([...prev, c.id]));
@@ -768,7 +824,7 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isAr
                                     <td className="px-2 py-2">
                                       <span className="truncate text-sm text-primary">{c.name}</span>
                                     </td>
-                                    <td className="whitespace-nowrap px-2 py-2 text-sm tabular-nums text-primary">
+                                    <td className="px-2 py-2 text-sm whitespace-nowrap text-primary tabular-nums">
                                       {formatReleaseOverviewDateRange(c.start_date, c.end_date)}
                                     </td>
                                   </tr>
@@ -803,7 +859,11 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isAr
                       <Button variant="secondary" onClick={handleAssociateClose}>
                         取消
                       </Button>
-                      <Button variant="primary" onClick={handleAssociateConfirm} disabled={selectedCycleIds.length === 0}>
+                      <Button
+                        variant="primary"
+                        onClick={handleAssociateConfirm}
+                        disabled={selectedCycleIds.length === 0 || !canManageReleaseCyclesAction}
+                      >
                         确定
                       </Button>
                     </div>
@@ -846,7 +906,7 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isAr
                       <h3 className="text-lg font-medium">编辑发布日志</h3>
                     </div>
                     <div className="min-h-0 flex-1 overflow-hidden px-5 pt-3">
-                      <div className="h-full min-h-0 max-h-[min(64vh,720px)] overflow-y-auto overflow-x-auto rounded-md border border-subtle vertical-scrollbar scrollbar-sm">
+                      <div className="vertical-scrollbar scrollbar-sm h-full max-h-[min(64vh,720px)] min-h-0 overflow-x-auto overflow-y-auto rounded-md border border-subtle">
                         <RichTextEditor
                           id="release-note-editor"
                           editable
@@ -868,14 +928,14 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isAr
                       </div>
                     </div>
                     <div className="mt-3 flex shrink-0 justify-end gap-2 px-5 pb-4">
-                      <Button
-                        variant="secondary"
-                        onClick={() => setNoteOpen(false)}
-                        disabled={noteSubmitting}
-                      >
+                      <Button variant="secondary" onClick={() => setNoteOpen(false)} disabled={noteSubmitting}>
                         取消
                       </Button>
-                      <Button onClick={handleNoteSubmit} disabled={noteSubmitting} loading={noteSubmitting}>
+                      <Button
+                        onClick={handleNoteSubmit}
+                        disabled={noteSubmitting || !canEditReleaseDetails}
+                        loading={noteSubmitting}
+                      >
                         确定
                       </Button>
                     </div>
@@ -896,7 +956,7 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isAr
         okText="确定"
         cancelText="取消"
         okButtonProps={{
-          disabled: selectedPlanIds.length === 0 || selectablePlansLoading,
+          disabled: selectedPlanIds.length === 0 || selectablePlansLoading || !canManageReleasePlansAction,
           loading: associatingPlans,
         }}
         width={720}
@@ -906,11 +966,11 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isAr
           {selectablePlansLoading ? (
             <div className="flex items-center justify-center py-8 text-sm text-secondary">加载中...</div>
           ) : selectablePlansError ? (
-            <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+            <div className="border-red-200 bg-red-50 text-red-800 rounded-md border p-3 text-sm">
               {selectablePlansError}
             </div>
           ) : (
-            <div className="max-h-[min(480px,60vh)] overflow-y-auto overflow-x-auto vertical-scrollbar scrollbar-sm">
+            <div className="vertical-scrollbar scrollbar-sm max-h-[min(480px,60vh)] overflow-x-auto overflow-y-auto">
               <table className="min-w-full table-fixed">
                 <thead>
                   <tr className="text-left text-xs text-secondary [&>th]:sticky [&>th]:top-0 [&>th]:z-10 [&>th]:bg-surface-1 [&>th]:shadow-[inset_0_-1px_0_var(--border-subtle)]">
@@ -918,11 +978,10 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isAr
                       <input
                         type="checkbox"
                         className="size-4"
-                        checked={
-                          selectablePlans.length > 0 &&
-                          selectedPlanIds.length === selectablePlans.length
-                        }
+                        checked={selectablePlans.length > 0 && selectedPlanIds.length === selectablePlans.length}
+                        disabled={!canManageReleasePlansAction}
                         onChange={(e) => {
+                          if (!canManageReleasePlansAction) return;
                           if (e.target.checked) setSelectedPlanIds(selectablePlans.map((p: any) => p.id));
                           else setSelectedPlanIds([]);
                         }}
@@ -930,7 +989,7 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isAr
                     </th>
                     <th className="w-2/5 px-2 py-2 text-sm font-medium text-primary">名称</th>
                     <th className="w-1/5 px-2 py-2 text-sm font-medium text-primary">状态</th>
-                    <th className="w-2/5 px-2 py-2 text-sm font-medium tabular-nums text-primary">日期</th>
+                    <th className="w-2/5 px-2 py-2 text-sm font-medium text-primary tabular-nums">日期</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -950,7 +1009,9 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isAr
                               type="checkbox"
                               className="size-4"
                               checked={checked}
+                              disabled={!canManageReleasePlansAction}
                               onChange={(e) => {
+                                if (!canManageReleasePlansAction) return;
                                 const v = e.target.checked;
                                 setSelectedPlanIds((prev) => {
                                   if (v) return Array.from(new Set([...prev, plan.id]));
@@ -963,7 +1024,7 @@ export const ReleaseDetailContent: React.FC<Props> = observer(({ releaseId, isAr
                             {plan.name ?? "-"}
                           </td>
                           <td className="px-2 py-2 text-sm text-primary">{plan.state ?? "-"}</td>
-                          <td className="whitespace-nowrap px-2 py-2 text-sm tabular-nums text-primary">
+                          <td className="px-2 py-2 text-sm whitespace-nowrap text-primary tabular-nums">
                             {formatReleaseOverviewDateRange(plan.begin_time, plan.end_time)}
                           </td>
                         </tr>

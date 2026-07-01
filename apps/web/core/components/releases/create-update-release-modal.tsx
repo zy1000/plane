@@ -5,7 +5,12 @@
  */
 
 import { observer } from "mobx-react";
-import { PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
+import {
+  PROJECT_ERROR_MESSAGES,
+  PROJECT_RELEASES_CREATE_PERMISSION_KEY,
+  PROJECT_RELEASES_EDIT_PERMISSION_KEY,
+  isProjectPermissionError,
+} from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { IRelease } from "@plane/types";
@@ -13,6 +18,7 @@ import { EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
 import { ReleaseForm } from "@/components/releases/release-form";
 import { formatReleaseUpdateError } from "@/components/releases/use-release-error-message";
 import { useRelease } from "@/hooks/store/use-release";
+import { useUserPermissions } from "@/hooks/store/user";
 import useKeypress from "@/hooks/use-keypress";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 
@@ -28,13 +34,20 @@ export const CreateUpdateReleaseModal = observer(function CreateUpdateReleaseMod
   const { isOpen, onClose, data, workspaceSlug, projectId } = props;
   const { t } = useTranslation();
   const { createRelease, updateReleaseDetails } = useRelease();
+  const { allowProjectPermissionKeys } = useUserPermissions();
   const { isMobile } = usePlatformOS();
+  const canSubmit = allowProjectPermissionKeys(
+    [data ? PROJECT_RELEASES_EDIT_PERMISSION_KEY : PROJECT_RELEASES_CREATE_PERMISSION_KEY],
+    workspaceSlug,
+    projectId
+  );
 
   const handleClose = () => {
     onClose();
   };
 
   const handleCreate = async (payload: Partial<IRelease>) => {
+    if (!canSubmit) return;
     if (!workspaceSlug || !projectId) return;
     await createRelease(workspaceSlug.toString(), projectId.toString(), payload)
       .then(() => {
@@ -65,6 +78,7 @@ export const CreateUpdateReleaseModal = observer(function CreateUpdateReleaseMod
   };
 
   const handleUpdate = async (payload: Partial<IRelease>) => {
+    if (!canSubmit) return;
     if (!workspaceSlug || !projectId || !data) return;
     await updateReleaseDetails(workspaceSlug.toString(), projectId.toString(), data.id, payload)
       .then(() => {
@@ -96,6 +110,7 @@ export const CreateUpdateReleaseModal = observer(function CreateUpdateReleaseMod
   };
 
   const handleFormSubmit = async (formData: Partial<IRelease>) => {
+    if (!canSubmit) return;
     if (!workspaceSlug || !projectId) return;
     if (!data) await handleCreate(formData);
     else await handleUpdate(formData);
@@ -115,6 +130,7 @@ export const CreateUpdateReleaseModal = observer(function CreateUpdateReleaseMod
         projectId={projectId}
         data={data}
         isMobile={isMobile}
+        isSubmitDisabled={!canSubmit}
       />
     </ModalCore>
   );

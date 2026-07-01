@@ -247,11 +247,23 @@ export const PROJECT_MODULES_ISSUE_MANAGE_PERMISSION_KEY = "modules.issue.manage
 /** 项目发布页权限常量，与后端 PermissionKey.RELEASES_VIEW / RELEASES_CREATE 一致 */
 export const PROJECT_RELEASES_VIEW_PERMISSION_KEY = "releases.view" as const;
 export const PROJECT_RELEASES_CREATE_PERMISSION_KEY = "releases.create" as const;
+export const PROJECT_RELEASES_EDIT_PERMISSION_KEY = "releases.edit" as const;
+export const PROJECT_RELEASES_DELETE_PERMISSION_KEY = "releases.delete" as const;
 
 /** 发布归档/恢复权限常量，与后端 PermissionKey.RELEASES_ARCHIVE 一致 */
 export const PROJECT_RELEASES_ARCHIVE_PERMISSION_KEY = "releases.archive" as const;
 /** 与后端 PermissionKey.RELEASES_ISSUE_MANAGE 一致：发布与工作项的关联管理 */
 export const PROJECT_RELEASES_ISSUE_MANAGE_PERMISSION_KEY = "releases.issue.manage" as const;
+/** 与后端 PermissionKey.RELEASES_CYCLE_MANAGE 一致：发布与迭代的关联管理 */
+export const PROJECT_RELEASES_CYCLE_MANAGE_PERMISSION_KEY = "releases.cycle.manage" as const;
+/** 与后端 PermissionKey.RELEASES_PLAN_MANAGE 一致：发布与测试计划的关联管理 */
+export const PROJECT_RELEASES_PLAN_MANAGE_PERMISSION_KEY = "releases.plan.manage" as const;
+/** 发布附件权限常量，与后端 PermissionKey.RELEASES_FILE_* 一致 */
+export const PROJECT_RELEASES_FILE_UPLOAD_PERMISSION_KEY = "releases.file.upload" as const;
+export const PROJECT_RELEASES_FILE_DELETE_PERMISSION_KEY = "releases.file.delete" as const;
+export const PROJECT_RELEASES_FILE_DOWNLOAD_PERMISSION_KEY = "releases.file.download" as const;
+/** 发布评论权限常量，与后端 PermissionKey.RELEASES_COMMENT_CREATE 一致 */
+export const PROJECT_RELEASES_COMMENT_CREATE_PERMISSION_KEY = "releases.comment.create" as const;
 
 /** 项目里程碑页权限常量，与后端 PermissionKey.MILESTONE_VIEW 一致 */
 export const PROJECT_MILESTONE_VIEW_PERMISSION_KEY = "milestone.view" as const;

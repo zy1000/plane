@@ -15,7 +15,7 @@ import { cn } from "@plane/utils";
 import { ActivityOperatorFilterRoot } from "@/components/issues/issue-detail/issue-activity/operator-filter-root";
 import { ActivitySortRoot } from "@/components/issues/issue-detail/issue-activity/sort-root";
 import { buildReleaseActivityFeedItems, ReleaseActivityFeed } from "@/components/releases/release-activity";
-import { ReleaseCommentsSection } from "@/components/releases/release-comments";
+import { ReleaseCommentComposer, ReleaseCommentsSection } from "@/components/releases/release-comments";
 import { useReleaseActivity } from "@/hooks/store/use-release-activity";
 import { useReleaseComment } from "@/hooks/store/use-release-comment";
 
@@ -25,6 +25,7 @@ type Props = {
   workspaceSlug: string;
   projectId: string;
   releaseId: string;
+  canCreateComment: boolean;
 };
 
 const SECTION_CARD = "rounded-xl border border-subtle bg-surface-1";
@@ -36,118 +37,137 @@ const SUB_TABS: { key: SubTabKey; label: string }[] = [
   { key: "transition", label: "转换" },
 ];
 
-export const ReleaseActivityTab: React.FC<Props> = observer(({ workspaceSlug, projectId, releaseId }) => {
-  const [active, setActive] = useState<SubTabKey>("all");
-  const [sortOrder, setSortOrder] = useState<E_SORT_ORDER>(E_SORT_ORDER.ASC);
-  const [selectedOperatorIds, setSelectedOperatorIds] = useState<string[]>([]);
+export const ReleaseActivityTab: React.FC<Props> = observer(
+  ({ workspaceSlug, projectId, releaseId, canCreateComment }) => {
+    const [active, setActive] = useState<SubTabKey>("all");
+    const [sortOrder, setSortOrder] = useState<E_SORT_ORDER>(E_SORT_ORDER.ASC);
+    const [selectedOperatorIds, setSelectedOperatorIds] = useState<string[]>([]);
 
-  const { getActivitiesByReleaseId } = useReleaseActivity();
-  const allActivities = getActivitiesByReleaseId(releaseId);
-  const { getCommentsByReleaseId, fetchComments } = useReleaseComment();
-  const comments = getCommentsByReleaseId(releaseId);
+    const { getActivitiesByReleaseId } = useReleaseActivity();
+    const allActivities = getActivitiesByReleaseId(releaseId);
+    const { getCommentsByReleaseId, fetchComments } = useReleaseComment();
+    const comments = getCommentsByReleaseId(releaseId);
 
-  useSWR(
-    workspaceSlug && projectId && releaseId
-      ? ["release-comments-for-activity-tab", workspaceSlug, projectId, releaseId]
-      : null,
-    () => fetchComments(workspaceSlug, projectId, releaseId)
-  );
+    useSWR(
+      workspaceSlug && projectId && releaseId
+        ? ["release-comments-for-activity-tab", workspaceSlug, projectId, releaseId]
+        : null,
+      () => fetchComments(workspaceSlug, projectId, releaseId)
+    );
 
-  const allTabActivities = useMemo<TReleaseActivity[]>(
-    () => buildReleaseActivityFeedItems(allActivities, comments),
-    [allActivities, comments]
-  );
+    const allTabActivities = useMemo<TReleaseActivity[]>(
+      () => buildReleaseActivityFeedItems(allActivities, comments),
+      [allActivities, comments]
+    );
 
-  const operatorIds = useMemo(() => {
-    const set = new Set<string>();
-    allActivities.forEach((activity) => {
-      if (activity.actor) set.add(activity.actor);
-    });
-    comments.forEach((comment) => {
-      if (comment.actor) set.add(comment.actor);
-    });
-    return Array.from(set);
-  }, [allActivities, comments]);
+    const operatorIds = useMemo(() => {
+      const set = new Set<string>();
+      allActivities.forEach((activity) => {
+        if (activity.actor) set.add(activity.actor);
+      });
+      comments.forEach((comment) => {
+        if (comment.actor) set.add(comment.actor);
+      });
+      return Array.from(set);
+    }, [allActivities, comments]);
 
-  const toggleSortOrder = () =>
-    setSortOrder((prev) => (prev === E_SORT_ORDER.ASC ? E_SORT_ORDER.DESC : E_SORT_ORDER.ASC));
+    const toggleSortOrder = () =>
+      setSortOrder((prev) => (prev === E_SORT_ORDER.ASC ? E_SORT_ORDER.DESC : E_SORT_ORDER.ASC));
 
-  const isFeedTab = active !== "comment";
+    const isFeedTab = active !== "comment";
 
-  const filterFn = useMemo(() => {
-    const fieldFilter =
-      active === "activity"
-        ? (field: string | null) => field !== "comment"
-        : active === "transition"
-          ? (field: string | null) => field === "status"
-          : null;
-    const operatorSet = new Set(selectedOperatorIds);
+    const filterFn = useMemo(() => {
+      const fieldFilter =
+        active === "activity"
+          ? (field: string | null) => field !== "comment"
+          : active === "transition"
+            ? (field: string | null) => field === "status"
+            : null;
+      const operatorSet = new Set(selectedOperatorIds);
 
-    if (!fieldFilter && operatorSet.size === 0) return undefined;
-    return (activity: TReleaseActivity) => {
-      if (fieldFilter && !fieldFilter(activity.field)) return false;
-      if (operatorSet.size > 0 && (!activity.actor || !operatorSet.has(activity.actor))) return false;
-      return true;
-    };
-  }, [active, selectedOperatorIds]);
+      if (!fieldFilter && operatorSet.size === 0) return undefined;
+      return (activity: TReleaseActivity) => {
+        if (fieldFilter && !fieldFilter(activity.field)) return false;
+        if (operatorSet.size > 0 && (!activity.actor || !operatorSet.has(activity.actor))) return false;
+        return true;
+      };
+    }, [active, selectedOperatorIds]);
 
-  return (
-    <section className={`${SECTION_CARD} flex h-[calc(100vh-9rem)] flex-col`}>
-      <div className="flex items-center justify-between gap-2 border-b border-subtle px-5">
-        <div className="flex items-center gap-1" role="tablist" aria-label="动态记录筛选">
-          {SUB_TABS.map((tab) => {
-            const isActive = tab.key === active;
-            return (
-              <button
-                key={tab.key}
-                type="button"
-                role="tab"
-                aria-selected={isActive}
-                className={cn(
-                  "inline-flex cursor-pointer items-center gap-1 border-b-2 px-2 py-2.5 text-14 font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-accent-primary",
-                  isActive
-                    ? "border-accent-primary text-primary"
-                    : "border-transparent text-placeholder hover:text-secondary"
-                )}
-                onClick={() => setActive(tab.key)}
-              >
-                {tab.label}
-              </button>
-            );
-          })}
+    return (
+      <section className={`${SECTION_CARD} flex h-[calc(100vh-9rem)] flex-col`}>
+        <div className="flex items-center justify-between gap-2 border-b border-subtle px-5">
+          <div className="flex items-center gap-1" role="tablist" aria-label="动态记录筛选">
+            {SUB_TABS.map((tab) => {
+              const isActive = tab.key === active;
+              return (
+                <button
+                  key={tab.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={isActive}
+                  className={cn(
+                    "focus-visible:ring-accent-primary inline-flex cursor-pointer items-center gap-1 border-b-2 px-2 py-2.5 text-14 font-medium transition-colors outline-none focus-visible:ring-2",
+                    isActive
+                      ? "border-accent-primary text-primary"
+                      : "border-transparent text-placeholder hover:text-secondary"
+                  )}
+                  onClick={() => setActive(tab.key)}
+                >
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {isFeedTab && (
+            <div className="flex shrink-0 items-center gap-2">
+              <ActivityOperatorFilterRoot
+                operatorIds={operatorIds}
+                selectedOperatorIds={selectedOperatorIds}
+                onChange={setSelectedOperatorIds}
+              />
+              <ActivitySortRoot sortOrder={sortOrder} toggleSort={toggleSortOrder} />
+            </div>
+          )}
         </div>
 
-        {isFeedTab && (
-          <div className="flex shrink-0 items-center gap-2">
-            <ActivityOperatorFilterRoot
-              operatorIds={operatorIds}
-              selectedOperatorIds={selectedOperatorIds}
-              onChange={setSelectedOperatorIds}
-            />
-            <ActivitySortRoot sortOrder={sortOrder} toggleSort={toggleSortOrder} />
-          </div>
-        )}
-      </div>
-
-      <div className="min-h-0 flex-1 overflow-hidden">
-        {active === "comment" ? (
-          <ReleaseCommentsSection workspaceSlug={workspaceSlug} projectId={projectId} releaseId={releaseId} />
-        ) : (
-          <div className="vertical-scrollbar scrollbar-sm h-full overflow-y-auto px-6 py-5">
-            <ReleaseActivityFeed
+        <div className="min-h-0 flex-1 overflow-hidden">
+          {active === "comment" ? (
+            <ReleaseCommentsSection
               workspaceSlug={workspaceSlug}
               projectId={projectId}
               releaseId={releaseId}
-              activities={active === "all" ? allTabActivities : undefined}
-              filterFn={filterFn}
-              sortOrder={sortOrder}
-              emptyHint={
-                active === "activity" ? "暂无活动记录" : active === "transition" ? "暂无状态转换记录" : "暂无动态"
-              }
+              canCreateComment={canCreateComment}
             />
-          </div>
-        )}
-      </div>
-    </section>
-  );
-});
+          ) : (
+            <div className="flex h-full min-h-0 flex-col">
+              <div className="vertical-scrollbar scrollbar-sm min-h-0 flex-1 overflow-y-auto px-6 py-5">
+                <ReleaseActivityFeed
+                  workspaceSlug={workspaceSlug}
+                  projectId={projectId}
+                  releaseId={releaseId}
+                  activities={active === "all" ? allTabActivities : undefined}
+                  filterFn={filterFn}
+                  sortOrder={sortOrder}
+                  emptyHint={
+                    active === "activity" ? "暂无活动记录" : active === "transition" ? "暂无状态转换记录" : "暂无动态"
+                  }
+                />
+              </div>
+              {active === "all" && (
+                <div className="relative z-[2] shrink-0 border-t border-subtle bg-surface-1 px-6 py-3">
+                  <ReleaseCommentComposer
+                    workspaceSlug={workspaceSlug}
+                    projectId={projectId}
+                    releaseId={releaseId}
+                    disabled={!canCreateComment}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </section>
+    );
+  }
+);

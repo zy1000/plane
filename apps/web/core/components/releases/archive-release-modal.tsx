@@ -5,10 +5,12 @@
  */
 
 import { useState } from "react";
+import { PROJECT_RELEASES_ARCHIVE_PERMISSION_KEY } from "@plane/constants";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
 import { useRelease } from "@/hooks/store/use-release";
+import { useUserPermissions } from "@/hooks/store/user";
 import { useAppRouter } from "@/hooks/use-app-router";
 
 type Props = {
@@ -24,8 +26,14 @@ export function ArchiveReleaseModal(props: Props) {
   const router = useAppRouter();
   const [isArchiving, setIsArchiving] = useState(false);
   const { getReleaseNameById, archiveRelease } = useRelease();
+  const { allowProjectPermissionKeys } = useUserPermissions();
 
   const releaseName = getReleaseNameById(releaseId);
+  const canArchiveRelease = allowProjectPermissionKeys(
+    [PROJECT_RELEASES_ARCHIVE_PERMISSION_KEY],
+    workspaceSlug,
+    projectId
+  );
 
   const onClose = () => {
     setIsArchiving(false);
@@ -33,6 +41,7 @@ export function ArchiveReleaseModal(props: Props) {
   };
 
   const handleArchive = async () => {
+    if (!canArchiveRelease) return;
     setIsArchiving(true);
     await archiveRelease(workspaceSlug, projectId, releaseId)
       .then(() => {
@@ -65,7 +74,14 @@ export function ArchiveReleaseModal(props: Props) {
           <Button variant="secondary" size="lg" onClick={onClose}>
             Cancel
           </Button>
-          <Button variant="primary" size="lg" tabIndex={1} onClick={handleArchive} loading={isArchiving}>
+          <Button
+            variant="primary"
+            size="lg"
+            tabIndex={1}
+            onClick={handleArchive}
+            loading={isArchiving}
+            disabled={isArchiving || !canArchiveRelease}
+          >
             {isArchiving ? "Archiving" : "Archive"}
           </Button>
         </div>

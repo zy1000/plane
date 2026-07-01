@@ -1069,7 +1069,7 @@ class ReleaseUserPropertiesEndpoint(BaseAPIView):
 class ReleaseAPI(BaseViewSet):
     pagination_class = CustomPaginator
 
-    @allow_fine_permission(PermissionKey.RELEASES_EDIT)
+    @allow_fine_permission(PermissionKey.RELEASES_CYCLE_MANAGE)
     @action(detail=False, methods=["post"], url_path="associate-cycle")
     def associate_cycle(self, request, slug, project_id):
         release_id = request.data.get("release_id")
@@ -1153,7 +1153,7 @@ class ReleaseAPI(BaseViewSet):
             status=status.HTTP_201_CREATED,
         )
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
+    @allow_fine_permission(PermissionKey.RELEASES_CYCLE_MANAGE)
     @action(detail=False, methods=["get"], url_path="select-cycle-list")
     def select_cycle_list(self, request, slug, project_id):
         query = Cycle.objects.filter(workspace__slug=slug, project=project_id, release__isnull=True)
@@ -1170,7 +1170,7 @@ class ReleaseAPI(BaseViewSet):
         serializer = CycleSerializer(query, many=True)
         return Response(data=serializer.data)
 
-    @allow_fine_permission(PermissionKey.RELEASES_EDIT)
+    @allow_fine_permission(PermissionKey.RELEASES_CYCLE_MANAGE)
     @action(detail=False, methods=["post"], url_path="cancel-cycle")
     def cancel_cycle(self, request, slug, project_id):
         release_id = request.data.get("release_id")
@@ -1308,6 +1308,7 @@ class ReleaseAPI(BaseViewSet):
             )
         return Response(result, status=status.HTTP_200_OK)
 
+    @allow_fine_permission(PermissionKey.RELEASES_PLAN_MANAGE)
     @action(detail=False, methods=["get"], url_path="select-plan-list")
     def select_plan_list(self, request, slug, project_id):
         """返回当前项目下尚未关联到指定 release 的测试计划（用于发布 -> 关联测试计划弹窗）。"""
@@ -1323,7 +1324,7 @@ class ReleaseAPI(BaseViewSet):
         serializer = PlanListSerializer(plans, many=True)
         return Response({"data": serializer.data, "count": plans.count()}, status=status.HTTP_200_OK)
 
-    @allow_fine_permission(PermissionKey.RELEASES_EDIT)
+    @allow_fine_permission(PermissionKey.RELEASES_PLAN_MANAGE)
     @action(detail=False, methods=["post"], url_path="associate-plans")
     def associate_plans(self, request, slug, project_id):
         release_id = request.data.get("release_id")
@@ -1362,7 +1363,7 @@ class ReleaseAPI(BaseViewSet):
 
         return Response({"release_id": str(release_id), "updated": len(plans)}, status=status.HTTP_200_OK)
 
-    @allow_fine_permission(PermissionKey.RELEASES_EDIT)
+    @allow_fine_permission(PermissionKey.RELEASES_PLAN_MANAGE)
     @action(detail=False, methods=["post"], url_path="cancel-plan-association")
     def cancel_plan_association(self, request, slug, project_id):
         release_id = request.data.get("release_id")

@@ -19,20 +19,71 @@ type Props = {
   projectId: string;
   releaseId: string;
   disabled?: boolean;
+  canCreateComment?: boolean;
   emptyHint?: string;
 };
 
+type ReleaseCommentComposerProps = {
+  workspaceSlug: string;
+  projectId: string;
+  releaseId: string;
+  disabled?: boolean;
+  placeholder?: string;
+  autoFocus?: boolean;
+};
+
+export const ReleaseCommentComposer = observer(function ReleaseCommentComposer(props: ReleaseCommentComposerProps) {
+  const {
+    workspaceSlug,
+    projectId,
+    releaseId,
+    disabled = false,
+    placeholder = "发表评论...",
+    autoFocus = false,
+  } = props;
+  const { getWorkspaceBySlug } = useWorkspace();
+  const workspaceId = getWorkspaceBySlug(workspaceSlug)?.id ?? "";
+  const { createComment } = useReleaseComment();
+
+  const handleCreate = async (data: { comment_html: string; comment_json?: unknown; parent?: string | null }) => {
+    if (disabled) return undefined;
+    return createComment(workspaceSlug, projectId, releaseId, {
+      comment_html: data.comment_html,
+      comment_json: (data.comment_json ?? undefined) as Record<string, unknown> | undefined,
+      parent: data.parent ?? null,
+    });
+  };
+
+  return (
+    <ReleaseCommentCreate
+      workspaceSlug={workspaceSlug}
+      workspaceId={workspaceId}
+      projectId={projectId}
+      releaseId={releaseId}
+      placeholder={disabled ? "你没有发表评论的权限" : placeholder}
+      autoFocus={autoFocus}
+      disabled={disabled}
+      onSubmit={handleCreate}
+    />
+  );
+});
+
 export const ReleaseCommentsSection = observer(function ReleaseCommentsSection(props: Props) {
-  const { workspaceSlug, projectId, releaseId, disabled = false, emptyHint = "暂无评论，留下第一条想法吧" } = props;
+  const {
+    workspaceSlug,
+    projectId,
+    releaseId,
+    disabled = false,
+    canCreateComment = true,
+    emptyHint = "暂无评论，留下第一条想法吧",
+  } = props;
   const { getWorkspaceBySlug } = useWorkspace();
   const workspaceId = getWorkspaceBySlug(workspaceSlug)?.id ?? "";
   const { getCommentsByReleaseId, fetchComments, createComment, removeComment } = useReleaseComment();
   const comments = getCommentsByReleaseId(releaseId);
 
   const { isLoading } = useSWR(
-    workspaceSlug && projectId && releaseId
-      ? ["release-comments", workspaceSlug, projectId, releaseId]
-      : null,
+    workspaceSlug && projectId && releaseId ? ["release-comments", workspaceSlug, projectId, releaseId] : null,
     () => fetchComments(workspaceSlug, projectId, releaseId)
   );
 
@@ -44,13 +95,16 @@ export const ReleaseCommentsSection = observer(function ReleaseCommentsSection(p
   }, [workspaceSlug, projectId, releaseId]);
 
   const { roots, childrenByParent, commentsById } = useMemo(() => buildCommentTree(comments), [comments]);
+  const canAddComment = !disabled && canCreateComment;
 
-  const handleCreate = async (data: { comment_html: string; comment_json?: unknown; parent?: string | null }) =>
-    createComment(workspaceSlug, projectId, releaseId, {
+  const handleCreate = async (data: { comment_html: string; comment_json?: unknown; parent?: string | null }) => {
+    if (!canAddComment) return undefined;
+    return createComment(workspaceSlug, projectId, releaseId, {
       comment_html: data.comment_html,
       comment_json: (data.comment_json ?? undefined) as Record<string, unknown> | undefined,
       parent: data.parent ?? null,
     });
+  };
 
   const handleRemove = async (commentId: string) => {
     await removeComment(workspaceSlug, projectId, releaseId, commentId);
@@ -81,6 +135,7 @@ export const ReleaseCommentsSection = observer(function ReleaseCommentsSection(p
                 projectId={projectId}
                 releaseId={releaseId}
                 disabled={disabled}
+                canCreateComment={canCreateComment}
                 onRemove={handleRemove}
                 onReply={handleCreate}
               />
@@ -89,19 +144,16 @@ export const ReleaseCommentsSection = observer(function ReleaseCommentsSection(p
         )}
       </div>
 
-      {!disabled && (
-        <div className="relative z-[2] shrink-0 border-t border-subtle bg-surface-1 px-6 py-3">
-          <ReleaseCommentCreate
-            workspaceSlug={workspaceSlug}
-            workspaceId={workspaceId}
-            projectId={projectId}
-            releaseId={releaseId}
-            placeholder="发表评论..."
-            autoFocus
-            onSubmit={handleCreate}
-          />
-        </div>
-      )}
+      <div className="relative z-[2] shrink-0 border-t border-subtle bg-surface-1 px-6 py-3">
+        <ReleaseCommentComposer
+          workspaceSlug={workspaceSlug}
+          projectId={projectId}
+          releaseId={releaseId}
+          placeholder={canAddComment ? "发表评论..." : "你没有发表评论的权限"}
+          autoFocus
+          disabled={!canAddComment}
+        />
+      </div>
     </div>
   );
 });

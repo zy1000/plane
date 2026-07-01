@@ -13,6 +13,7 @@ import {
   EUserPermissionsLevel,
   IS_FAVORITE_MENU_OPEN,
   PROJECT_ERROR_MESSAGES,
+  PROJECT_RELEASES_EDIT_PERMISSION_KEY,
   isProjectPermissionError,
 } from "@plane/constants";
 import { useLocalStorage } from "@plane/hooks";
@@ -42,7 +43,7 @@ type Props = {
 export const ReleaseListItemAction = observer(function ReleaseListItemAction(props: Props) {
   const { releaseId, releaseDetails, parentRef } = props;
   const { workspaceSlug, projectId } = useParams();
-  const { allowPermissions } = useUserPermissions();
+  const { allowPermissions, allowProjectPermissionKeys } = useUserPermissions();
   const { addReleaseToFavorites, removeReleaseFromFavorites, updateReleaseDetails } = useRelease();
   const { currentProjectDisplayFilters } = useReleaseFilter();
   const { t } = useTranslation();
@@ -56,11 +57,17 @@ export const ReleaseListItemAction = observer(function ReleaseListItemAction(pro
   const showMembersProperty = displayProperties.members !== false;
   const { setValue: toggleFavoriteMenu, storedValue } = useLocalStorage<boolean>(IS_FAVORITE_MENU_OPEN, false);
 
-  const isEditingAllowed = allowPermissions(
+  const canUseFavorite = allowPermissions(
     [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
     EUserPermissionsLevel.PROJECT
   );
-  const isDisabled = !isEditingAllowed || !!releaseDetails?.archived_at;
+  const workspaceSlugValue = workspaceSlug?.toString() ?? "";
+  const projectIdValue = projectId?.toString() ?? "";
+  const canEditRelease =
+    !!workspaceSlugValue &&
+    !!projectIdValue &&
+    allowProjectPermissionKeys([PROJECT_RELEASES_EDIT_PERMISSION_KEY], workspaceSlugValue, projectIdValue);
+  const isDisabled = !canEditRelease || !!releaseDetails?.archived_at;
   const renderIcon = Boolean(releaseDetails.start_date) || Boolean(releaseDetails.target_date);
   const dateButtonContainerClassName = `h-6 w-full flex ${isDisabled ? "cursor-not-allowed" : "cursor-pointer"} items-center gap-1.5 text-tertiary border-[0.5px] border-strong rounded-sm text-11`;
   const startEndDateButtonClassName = "bg-[#f0fdf4] hover:bg-[#ecfdf3] focus:bg-[#ecfdf3] active:bg-[#ecfdf3]";
@@ -75,7 +82,7 @@ export const ReleaseListItemAction = observer(function ReleaseListItemAction(pro
   const handleAddToFavorites = (e: React.MouseEvent<HTMLButtonElement>) => {
     e.stopPropagation();
     e.preventDefault();
-    if (!workspaceSlug || !projectId) return;
+    if (!workspaceSlug || !projectId || !canEditRelease) return;
 
     const p = addReleaseToFavorites(workspaceSlug.toString(), projectId.toString(), releaseId).then(() => {
       if (!storedValue) toggleFavoriteMenu(true);
@@ -230,7 +237,7 @@ export const ReleaseListItemAction = observer(function ReleaseListItemAction(pro
         </div>
       )}
 
-      {isEditingAllowed && !releaseDetails.archived_at && (
+      {canUseFavorite && !releaseDetails.archived_at && (
         <FavoriteStar
           onClick={(e) => {
             if (releaseDetails.is_favorite) handleRemoveFromFavorites(e);

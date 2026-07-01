@@ -24,6 +24,7 @@ type Props = {
   projectId: string;
   data?: IRelease;
   isMobile?: boolean;
+  isSubmitDisabled?: boolean;
 };
 
 const defaultValues: Partial<IRelease> = {
@@ -36,7 +37,15 @@ const defaultValues: Partial<IRelease> = {
 };
 
 export function ReleaseForm(props: Props) {
-  const { handleFormSubmit, handleClose, isUpdate, projectId, data, isMobile = false } = props;
+  const {
+    handleFormSubmit,
+    handleClose,
+    isUpdate,
+    projectId,
+    data,
+    isMobile = false,
+    isSubmitDisabled = false,
+  } = props;
   const {
     formState: { errors, isSubmitting, dirtyFields },
     handleSubmit,
@@ -60,6 +69,7 @@ export function ReleaseForm(props: Props) {
   const { t } = useTranslation();
 
   const handleCreateUpdate = async (formData: Partial<IRelease>) => {
+    if (isSubmitDisabled) return;
     const status = formData.status ?? data?.status ?? "not-started";
     await handleFormSubmit({ ...formData, status }, dirtyFields);
     reset({ ...defaultValues });
@@ -245,7 +255,14 @@ export function ReleaseForm(props: Props) {
         <Button variant="secondary" size="lg" onClick={handleClose} tabIndex={getIndex("cancel")}>
           {t("cancel")}
         </Button>
-        <Button variant="primary" size="lg" type="submit" loading={isSubmitting} tabIndex={getIndex("submit")}>
+        <Button
+          variant="primary"
+          size="lg"
+          type="submit"
+          loading={isSubmitting}
+          disabled={isSubmitting || isSubmitDisabled}
+          tabIndex={getIndex("submit")}
+        >
           {isUpdate
             ? isSubmitting
               ? t("updating")

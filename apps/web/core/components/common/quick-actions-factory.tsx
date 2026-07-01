@@ -63,12 +63,21 @@ export const useQuickActionsFactory = () => {
       shouldRender: opts.shouldRender,
     }),
 
-    createRestoreMenuItem: (handler: () => void, shouldRender: boolean = true): TContextMenuItem => ({
+    createRestoreMenuItem: (
+      handler: () => void,
+      shouldRender: boolean = true,
+      disabled?: boolean,
+      description?: string
+    ): TContextMenuItem => ({
       key: "restore",
       title: t("restore"),
       icon: ArchiveRestoreIcon,
       action: handler,
       shouldRender,
+      disabled,
+      description,
+      className: description ? "items-start" : undefined,
+      iconClassName: description ? "mt-1" : undefined,
     }),
 
     createDeleteMenuItem: (

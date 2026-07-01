@@ -60,6 +60,7 @@ export interface MenuItemFactoryProps {
   isEditingAllowed: boolean;
   isArchivingAllowed?: boolean;
   isDeletingAllowed: boolean;
+  canManageReleaseIssues?: boolean;
   isRestoringAllowed?: boolean;
   isInArchivableGroup?: boolean;
   issueTypeDetail?: { is_active?: boolean };
@@ -134,7 +135,9 @@ export const useIssueActionHandlers = (props: MenuItemFactoryProps) => {
         setToast({
           type: TOAST_TYPE.ERROR,
           title: isPermissionError ? t(currentError.i18n_title) : currentError.i18n_title,
-          message: isPermissionError ? currentError.i18n_message && t(currentError.i18n_message) : currentError.i18n_message,
+          message: isPermissionError
+            ? currentError.i18n_message && t(currentError.i18n_message)
+            : currentError.i18n_message,
         });
       });
   };
@@ -157,6 +160,7 @@ export const useMenuItemFactory = (props: MenuItemFactoryProps) => {
     isEditingAllowed,
     isArchivingAllowed = false,
     isDeletingAllowed,
+    canManageReleaseIssues = isEditingAllowed,
     isRestoringAllowed = false,
     isInArchivableGroup = false,
     issueTypeDetail,
@@ -266,9 +270,14 @@ export const useMenuItemFactory = (props: MenuItemFactoryProps) => {
     title: "Remove from release",
     icon: XCircle,
     action: () => {
+      if (!canManageReleaseIssues) return;
       void runRemoveFromView("Remove from release", "Could not remove work item from release. Please try again.");
     },
-    shouldRender: isEditingAllowed,
+    shouldRender: true,
+    disabled: !canManageReleaseIssues,
+    description: !canManageReleaseIssues ? "您没有管理发布工作项的权限" : undefined,
+    className: !canManageReleaseIssues ? "items-start" : undefined,
+    iconClassName: !canManageReleaseIssues ? "mt-1" : undefined,
   });
 
   const createArchiveMenuItem = (): TContextMenuItem => ({

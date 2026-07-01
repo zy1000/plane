@@ -7,12 +7,16 @@
 import { useState } from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
-import { EUserPermissionsLevel, PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
+import {
+  PROJECT_ERROR_MESSAGES,
+  PROJECT_RELEASES_ISSUE_MANAGE_PERMISSION_KEY,
+  isProjectPermissionError,
+} from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { EmptyStateDetailed } from "@plane/propel/empty-state";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { ISearchIssueResponse } from "@plane/types";
-import { EIssuesStoreType, EUserProjectRoles } from "@plane/types";
+import { EIssuesStoreType } from "@plane/types";
 import { ExistingIssuesListModal } from "@/components/core/modals/existing-issues-list-modal";
 import { useCommandPalette } from "@/hooks/store/use-command-palette";
 import { useIssues } from "@/hooks/store/use-issues";
@@ -28,15 +32,15 @@ export const ReleaseEmptyState = observer(function ReleaseEmptyState() {
   const { t } = useTranslation();
   const { issues } = useIssues(EIssuesStoreType.RELEASE);
   const { toggleCreateIssueModal } = useCommandPalette();
-  const { allowPermissions } = useUserPermissions();
+  const { allowProjectPermissionKeys } = useUserPermissions();
   const releaseWorkItemFilter = useWorkItemFilterInstance(EIssuesStoreType.RELEASE, releaseId);
-  const canPerformEmptyStateActions = allowPermissions(
-    [EUserProjectRoles.ADMIN, EUserProjectRoles.MEMBER],
-    EUserPermissionsLevel.PROJECT
-  );
+  const canManageReleaseIssues =
+    !!workspaceSlug &&
+    !!projectId &&
+    allowProjectPermissionKeys([PROJECT_RELEASES_ISSUE_MANAGE_PERMISSION_KEY], workspaceSlug, projectId);
 
   const handleAddIssuesToRelease = async (data: ISearchIssueResponse[]) => {
-    if (!workspaceSlug || !projectId || !releaseId) return;
+    if (!workspaceSlug || !projectId || !releaseId || !canManageReleaseIssues) return;
 
     const issueIds = data.map((i) => i.id);
     await issues
@@ -87,7 +91,7 @@ export const ReleaseEmptyState = observer(function ReleaseEmptyState() {
               {
                 label: "Clear filters",
                 onClick: releaseWorkItemFilter?.clearFilters,
-                disabled: !canPerformEmptyStateActions || !releaseWorkItemFilter,
+                disabled: !releaseWorkItemFilter,
                 variant: "secondary",
               },
             ]}
@@ -101,15 +105,19 @@ export const ReleaseEmptyState = observer(function ReleaseEmptyState() {
               {
                 label: t("project_empty_state.release_work_items.cta_primary"),
                 onClick: () => {
+                  if (!canManageReleaseIssues) return;
                   toggleCreateIssueModal(true, EIssuesStoreType.RELEASE);
                 },
-                disabled: !canPerformEmptyStateActions,
+                disabled: !canManageReleaseIssues,
                 variant: "primary",
               },
               {
                 label: t("project_empty_state.release_work_items.cta_secondary"),
-                onClick: () => setReleaseIssuesListModal(true),
-                disabled: !canPerformEmptyStateActions,
+                onClick: () => {
+                  if (!canManageReleaseIssues) return;
+                  setReleaseIssuesListModal(true);
+                },
+                disabled: !canManageReleaseIssues,
                 variant: "secondary",
               },
             ]}
