@@ -15,13 +15,17 @@ import {
   Plus,
   Users,
 } from "lucide-react";
-import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import {
+  PROJECT_SPRINTS_COMMENT_CREATE_PERMISSION_KEY,
+  PROJECT_SPRINTS_EDIT_PERMISSION_KEY,
+  PROJECT_SPRINTS_PLAN_MANAGE_PERMISSION_KEY,
+} from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { BarChart } from "@plane/propel/charts/bar-chart";
 import type { ICycle, TProgressSnapshot } from "@plane/types";
 import { EIssuesStoreType } from "@plane/types";
 import { Loader, Button } from "@plane/ui";
-import { getDate, toFilterArray } from "@plane/utils";
+import { cn, getDate, toFilterArray } from "@plane/utils";
 import { CycleActivityTab } from "@/components/cycles/cycle-activity-tab";
 import { CycleDescriptionFullscreenModal } from "@/components/cycles/cycle-description-fullscreen-modal";
 import { CycleRichTextEditor, isEmptyCycleRichText } from "@/components/cycles/cycle-rich-text-editor";
@@ -76,7 +80,7 @@ export const CycleDisplayContent = observer(function CycleDisplayContent(props: 
   const peekCycle = searchParams.get("peekCycle") || undefined;
   const { getCycleById, fetchCycleDetails } = useCycle();
   const { getFilter, updateFilterValueFromSidebar } = useWorkItemFilters();
-  const { allowPermissions } = useUserPermissions();
+  const { allowProjectPermissionKeys } = useUserPermissions();
   const [cycleDescriptionModalOpen, setCycleDescriptionModalOpen] = useState(false);
   const [cycleDescriptionModalInitialEdit, setCycleDescriptionModalInitialEdit] = useState(false);
 
@@ -86,12 +90,24 @@ export const CycleDisplayContent = observer(function CycleDisplayContent(props: 
   const selectedAssignees = cycleFilter?.findFirstConditionByPropertyAndOperator("assignee_id", "in");
   const selectedAssigneeIds = toFilterArray(selectedAssignees?.value || []) as string[];
   const isEditable = Boolean(!peekCycle) && cycleFilter !== undefined;
-  const canEditCycleDescription =
-    Boolean(!peekCycle) &&
-    allowPermissions([EUserPermissions.ADMIN, EUserPermissions.MEMBER], EUserPermissionsLevel.PROJECT);
 
   const rawCycleDetails = getCycleById(cycleId);
   const cycleDetails = validateCycleSnapshot(rawCycleDetails);
+  const canEditSprint = allowProjectPermissionKeys([PROJECT_SPRINTS_EDIT_PERMISSION_KEY], workspaceSlug, projectId);
+  const canManageCyclePlans = allowProjectPermissionKeys(
+    [PROJECT_SPRINTS_PLAN_MANAGE_PERMISSION_KEY],
+    workspaceSlug,
+    projectId
+  );
+  const canCreateCycleComment = allowProjectPermissionKeys(
+    [PROJECT_SPRINTS_COMMENT_CREATE_PERMISSION_KEY],
+    workspaceSlug,
+    projectId
+  );
+  const isCycleArchived = Boolean(cycleDetails?.archived_at);
+  const canEditCycleDetails = canEditSprint && !isCycleArchived;
+  const canManageCyclePlansAction = canManageCyclePlans && !isCycleArchived;
+  const canEditCycleDescription = Boolean(!peekCycle) && canEditCycleDetails;
   const totalIssues = cycleDetails?.total_issues ?? 0;
   const completedIssues = cycleDetails?.completed_issues ?? 0;
   const startedIssues = cycleDetails?.started_issues ?? 0;
@@ -209,19 +225,23 @@ export const CycleDisplayContent = observer(function CycleDisplayContent(props: 
                 <span className="text-sm font-medium text-primary">迭代说明</span>
               </div>
               <div className="flex items-center gap-1">
-                {canEditCycleDescription ? (
-                  <button
-                    type="button"
-                    className="cursor-pointer rounded-md p-1 text-placeholder transition-colors hover:bg-surface-2 hover:text-primary"
-                    onClick={() => {
-                      setCycleDescriptionModalInitialEdit(true);
-                      setCycleDescriptionModalOpen(true);
-                    }}
-                    aria-label="编辑迭代描述"
-                  >
-                    <Pencil className="h-3.5 w-3.5" />
-                  </button>
-                ) : null}
+                <button
+                  type="button"
+                  className={cn(
+                    "rounded-md p-1 text-placeholder transition-colors hover:bg-surface-2 hover:text-primary",
+                    canEditCycleDescription ? "cursor-pointer" : "cursor-not-allowed opacity-50"
+                  )}
+                  disabled={!canEditCycleDescription}
+                  aria-disabled={!canEditCycleDescription}
+                  onClick={() => {
+                    if (!canEditCycleDescription) return;
+                    setCycleDescriptionModalInitialEdit(true);
+                    setCycleDescriptionModalOpen(true);
+                  }}
+                  aria-label="编辑迭代描述"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </button>
                 <button
                   type="button"
                   className="grid h-6 w-6 place-items-center rounded transition-colors hover:bg-surface-2"
@@ -327,7 +347,16 @@ export const CycleDisplayContent = observer(function CycleDisplayContent(props: 
               <span className="text-sm font-medium text-primary">测试计划</span>
               <span className="text-xs text-placeholder">{cyclePlans.length}</span>
             </div>
-            <Button variant="link-neutral" className="p-0" onClick={openPlanAssociateModal} aria-label="关联测试计划">
+            <Button
+              variant="link-neutral"
+              className="p-0"
+              onClick={() => {
+                if (!canManageCyclePlansAction) return;
+                void openPlanAssociateModal();
+              }}
+              disabled={!canManageCyclePlansAction}
+              aria-label="关联测试计划"
+            >
               <Plus className="h-3.5 w-3.5" />
             </Button>
           </div>
@@ -337,7 +366,9 @@ export const CycleDisplayContent = observer(function CycleDisplayContent(props: 
             <div className="min-h-0 flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm">
               <CycleTestPlansTable
                 cyclePlans={cyclePlans}
+                projectId={projectId}
                 cancelingPlanId={cancelingPlanId}
+                canManageCyclePlans={canManageCyclePlansAction}
                 onOpenPlan={(planId) =>
                   router.push(`/${workspaceSlug}/projects/${projectId}/testhub/plan-cases?planId=${planId}`)
                 }
@@ -347,7 +378,12 @@ export const CycleDisplayContent = observer(function CycleDisplayContent(props: 
           )}
         </div>
 
-        <CycleActivityTab workspaceSlug={workspaceSlug} projectId={projectId} cycleId={cycleId} />
+        <CycleActivityTab
+          workspaceSlug={workspaceSlug}
+          projectId={projectId}
+          cycleId={cycleId}
+          canCreateComment={canCreateCycleComment}
+        />
       </div>
 
       <CycleDescriptionFullscreenModal
@@ -368,6 +404,7 @@ export const CycleDisplayContent = observer(function CycleDisplayContent(props: 
         open={planAssociateOpen}
         onCancel={closePlanAssociateModal}
         onConfirm={handleConfirmAssociatePlans}
+        canManageCyclePlans={canManageCyclePlansAction}
         selectedPlanIds={selectedPlanIds}
         setSelectedPlanIds={setSelectedPlanIds}
         selectablePlans={selectablePlans}

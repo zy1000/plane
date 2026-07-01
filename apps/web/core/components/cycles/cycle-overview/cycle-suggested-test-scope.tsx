@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { observer } from "mobx-react";
 import { ClipboardList, Maximize2, Pencil } from "lucide-react";
+import { cn } from "@plane/utils";
 import { CycleRichTextEditor, isEmptyCycleRichText } from "@/components/cycles/cycle-rich-text-editor";
 import { CycleSuggestedTestScopeFullscreenModal } from "@/components/cycles/cycle-overview/cycle-suggested-test-scope-fullscreen-modal";
 
@@ -27,19 +28,23 @@ export const CycleSuggestedTestScope = observer(function CycleSuggestedTestScope
           <span className="text-sm font-medium text-primary">建议测试范围</span>
         </div>
         <div className="flex items-center gap-1">
-          {canEdit ? (
-            <button
-              type="button"
-              className="cursor-pointer rounded-md p-1 text-placeholder transition-colors hover:bg-surface-2 hover:text-primary"
-              onClick={() => {
-                setModalInitialEdit(true);
-                setModalOpen(true);
-              }}
-              aria-label="编辑建议测试范围"
-            >
-              <Pencil className="h-3.5 w-3.5" />
-            </button>
-          ) : null}
+          <button
+            type="button"
+            className={cn(
+              "rounded-md p-1 text-placeholder transition-colors hover:bg-surface-2 hover:text-primary",
+              canEdit ? "cursor-pointer" : "cursor-not-allowed opacity-50"
+            )}
+            disabled={!canEdit}
+            aria-disabled={!canEdit}
+            onClick={() => {
+              if (!canEdit) return;
+              setModalInitialEdit(true);
+              setModalOpen(true);
+            }}
+            aria-label="编辑建议测试范围"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </button>
           <button
             type="button"
             className="grid h-6 w-6 place-items-center rounded transition-colors hover:bg-surface-2"

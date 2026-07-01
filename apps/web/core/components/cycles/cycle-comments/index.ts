@@ -4,6 +4,6 @@
  * See the LICENSE file for details.
  */
 
-export { CycleCommentsSection } from "./cycle-comments-section";
+export { CycleCommentComposer, CycleCommentsSection } from "./cycle-comments-section";
 export { CycleCommentCreate } from "./cycle-comment-create";
 export { CycleCommentCard } from "./cycle-comment-card";

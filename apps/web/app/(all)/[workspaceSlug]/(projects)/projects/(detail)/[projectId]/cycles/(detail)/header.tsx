@@ -82,6 +82,8 @@ export const CycleIssuesHeader = observer(function CycleIssuesHeader() {
   const { currentProjectDetails, loader } = useProject();
   const { isMobile } = usePlatformOS();
   const { allowPermissions, allowProjectPermissionKeys } = useUserPermissions();
+  const workspaceSlugValue = workspaceSlug?.toString() ?? "";
+  const projectIdValue = projectId?.toString() ?? "";
 
   const activeLayout = issueFilters?.displayFilters?.layout;
 
@@ -123,7 +125,13 @@ export const CycleIssuesHeader = observer(function CycleIssuesHeader() {
     [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
     EUserPermissionsLevel.PROJECT
   );
-  const canManageSprintIssues = allowProjectPermissionKeys([PROJECT_SPRINTS_ISSUE_MANAGE_PERMISSION_KEY]);
+  const canManageSprintIssues = allowProjectPermissionKeys(
+    [PROJECT_SPRINTS_ISSUE_MANAGE_PERMISSION_KEY],
+    workspaceSlugValue,
+    projectIdValue
+  );
+  const canCreateIssueInCycle = canUserCreateIssue && canManageSprintIssues;
+  const canOpenCycleIssueActionMenu = canManageSprintIssues;
 
   const switcherOptions = currentProjectCycleIds
     ?.map((id) => {
@@ -182,6 +190,7 @@ export const CycleIssuesHeader = observer(function CycleIssuesHeader() {
 
   const handleAddExistingIssuesToCycle = async (data: ISearchIssueResponse[]) => {
     if (!workspaceSlug || !projectId || !cycleId) return;
+    if (!canManageSprintIssues) return showPermissionError();
 
     const issueIds = data.map((i) => i.id);
 
@@ -347,46 +356,48 @@ export const CycleIssuesHeader = observer(function CycleIssuesHeader() {
                 />
               </FiltersDropdown>
 
-              {canUserCreateIssue && (
-                <>
-                  <Button onClick={() => setAnalyticsModal(true)} variant="secondary" size="lg">
-                    <span className="hidden @4xl:flex">{t("common.analytics")}</span>
-                    <span className="@4xl:hidden">
-                      <ChartNoAxesColumn className="size-3.5" />
-                    </span>
-                  </Button>
-                  {!isCompletedCycle && (
-                    <CustomMenu
-                      placement="bottom-end"
-                      customButton={
-                        <span
-                          className={cn(getButtonStyling("primary", "lg"), "cursor-pointer")}
-                          data-ph-element={WORK_ITEM_TRACKER_ELEMENTS.HEADER_ADD_BUTTON.CYCLE}
-                        >
-                          {t("issue.add.label")}
-                          <ChevronDown className="size-4 shrink-0" strokeWidth={2} />
-                        </span>
-                      }
+              <Button onClick={() => setAnalyticsModal(true)} variant="secondary" size="lg">
+                <span className="hidden @4xl:flex">{t("common.analytics")}</span>
+                <span className="@4xl:hidden">
+                  <ChartNoAxesColumn className="size-3.5" />
+                </span>
+              </Button>
+              {!isCompletedCycle && (
+                <CustomMenu
+                  placement="bottom-end"
+                  disabled={!canOpenCycleIssueActionMenu}
+                  customButton={
+                    <span
+                      className={cn(
+                        getButtonStyling("primary", "lg"),
+                        canOpenCycleIssueActionMenu ? "cursor-pointer" : "cursor-not-allowed opacity-60"
+                      )}
+                      data-ph-element={WORK_ITEM_TRACKER_ELEMENTS.HEADER_ADD_BUTTON.CYCLE}
                     >
-                      <CustomMenu.MenuItem
-                        onClick={() => {
-                          if (!canManageSprintIssues) return showPermissionError();
-                          toggleCreateIssueModal(true, EIssuesStoreType.CYCLE);
-                        }}
-                      >
-                        <span className="flex items-center justify-start gap-2">{t("create_work_item")}</span>
-                      </CustomMenu.MenuItem>
-                      <CustomMenu.MenuItem
-                        onClick={() => {
-                          if (!canManageSprintIssues) return showPermissionError();
-                          setOpenExistingIssueListModal(true);
-                        }}
-                      >
-                        <span className="flex items-center justify-start gap-2">{t("issue.add.existing")}</span>
-                      </CustomMenu.MenuItem>
-                    </CustomMenu>
-                  )}
-                </>
+                      {t("issue.add.label")}
+                      <ChevronDown className="size-4 shrink-0" strokeWidth={2} />
+                    </span>
+                  }
+                >
+                  <CustomMenu.MenuItem
+                    onClick={() => {
+                      if (!canCreateIssueInCycle) return showPermissionError();
+                      toggleCreateIssueModal(true, EIssuesStoreType.CYCLE);
+                    }}
+                    disabled={!canCreateIssueInCycle}
+                  >
+                    <span className="flex items-center justify-start gap-2">{t("create_work_item")}</span>
+                  </CustomMenu.MenuItem>
+                  <CustomMenu.MenuItem
+                    onClick={() => {
+                      if (!canManageSprintIssues) return showPermissionError();
+                      setOpenExistingIssueListModal(true);
+                    }}
+                    disabled={!canManageSprintIssues}
+                  >
+                    <span className="flex items-center justify-start gap-2">{t("issue.add.existing")}</span>
+                  </CustomMenu.MenuItem>
+                </CustomMenu>
               )}
               <IconButton
                 variant="tertiary"

@@ -60,6 +60,7 @@ export interface MenuItemFactoryProps {
   isEditingAllowed: boolean;
   isArchivingAllowed?: boolean;
   isDeletingAllowed: boolean;
+  canManageCycleIssues?: boolean;
   canManageReleaseIssues?: boolean;
   isRestoringAllowed?: boolean;
   isInArchivableGroup?: boolean;
@@ -160,6 +161,7 @@ export const useMenuItemFactory = (props: MenuItemFactoryProps) => {
     isEditingAllowed,
     isArchivingAllowed = false,
     isDeletingAllowed,
+    canManageCycleIssues = isEditingAllowed,
     canManageReleaseIssues = isEditingAllowed,
     isRestoringAllowed = false,
     isInArchivableGroup = false,
@@ -250,9 +252,14 @@ export const useMenuItemFactory = (props: MenuItemFactoryProps) => {
     title: "Remove from cycle",
     icon: XCircle,
     action: () => {
+      if (!canManageCycleIssues) return;
       void runRemoveFromView("Remove from cycle", "Could not remove work item from cycle. Please try again.");
     },
-    shouldRender: isEditingAllowed,
+    shouldRender: true,
+    disabled: !canManageCycleIssues,
+    description: !canManageCycleIssues ? "您没有管理迭代工作项的权限" : undefined,
+    className: !canManageCycleIssues ? "items-start" : undefined,
+    iconClassName: !canManageCycleIssues ? "mt-1" : undefined,
   });
 
   const createRemoveFromModuleMenuItem = (): TContextMenuItem => ({

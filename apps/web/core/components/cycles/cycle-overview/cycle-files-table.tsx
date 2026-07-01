@@ -3,6 +3,7 @@
 import { Popconfirm } from "antd";
 import { Download, Trash2 } from "lucide-react";
 import { Button } from "@plane/ui";
+import { cn } from "@plane/utils";
 import type { TCycleFile } from "@/components/cycles/cycle-overview/use-cycle-files";
 
 const formatFileSize = (bytes: number) => {
@@ -17,6 +18,8 @@ type TCycleFilesTableProps = {
   files: TCycleFile[];
   filesDownloadingId: string | null;
   filesDeletingId: string | null;
+  canDeleteCycleFile?: boolean;
+  canDownloadCycleFile?: boolean;
   onDownloadFile: (fileId: string) => void;
   onDeleteFile: (fileId: string) => void;
 };
@@ -25,6 +28,8 @@ export const CycleFilesTable = ({
   files,
   filesDownloadingId,
   filesDeletingId,
+  canDeleteCycleFile = true,
+  canDownloadCycleFile = true,
   onDownloadFile,
   onDeleteFile,
 }: TCycleFilesTableProps) => (
@@ -38,37 +43,60 @@ export const CycleFilesTable = ({
       </tr>
     </thead>
     <tbody>
-      {files.map((file) => (
-        <tr key={file.id} className="border-b border-subtle hover:bg-layer-1">
-          <td className="truncate px-2 py-2 text-sm text-primary" title={file.name}>
-            <span className="truncate">{file.name}</span>
-          </td>
-          <td className="px-2 py-2 text-sm text-primary">{formatFileSize(file.size)}</td>
-          <td className="px-2 py-2 text-sm text-primary">{file.created_at ? new Date(file.created_at).toLocaleDateString() : "-"}</td>
-          <td className="px-2 py-2 text-left">
-            <div className="flex items-center justify-start gap-2">
-              <Button
-                variant="link-neutral"
-                className="p-0"
-                disabled={filesDownloadingId === file.id}
-                onClick={() => onDownloadFile(file.id)}
-              >
-                <Download className="h-3.5 w-3.5" />
-              </Button>
-              <Popconfirm title="确认删除该附件？" okText="删除" cancelText="取消" onConfirm={() => onDeleteFile(file.id)}>
+      {files.map((file) => {
+        const isDownloadDisabled = filesDownloadingId === file.id || !canDownloadCycleFile;
+        const isDeleteDisabled = filesDeletingId === file.id || !canDeleteCycleFile;
+
+        return (
+          <tr key={file.id} className="border-b border-subtle hover:bg-layer-1">
+            <td className="truncate px-2 py-2 text-sm text-primary" title={file.name}>
+              <span className="truncate">{file.name}</span>
+            </td>
+            <td className="px-2 py-2 text-sm text-primary">{formatFileSize(file.size)}</td>
+            <td className="px-2 py-2 text-sm text-primary">
+              {file.created_at ? new Date(file.created_at).toLocaleDateString() : "-"}
+            </td>
+            <td className="px-2 py-2 text-left">
+              <div className="flex items-center justify-start gap-2">
                 <Button
-                  variant="link-danger"
-                  className="p-0"
-                  disabled={filesDeletingId === file.id}
-                  loading={filesDeletingId === file.id}
+                  variant="link-neutral"
+                  className={cn("p-0", isDownloadDisabled && "cursor-not-allowed opacity-50")}
+                  disabled={isDownloadDisabled}
+                  aria-disabled={isDownloadDisabled}
+                  onClick={() => {
+                    if (isDownloadDisabled) return;
+                    onDownloadFile(file.id);
+                  }}
                 >
-                  <Trash2 className="h-3.5 w-3.5" />
+                  <Download className={cn("h-3.5 w-3.5", !canDownloadCycleFile && "text-placeholder")} />
                 </Button>
-              </Popconfirm>
-            </div>
-          </td>
-        </tr>
-      ))}
+                <Popconfirm
+                  title="确认删除该附件？"
+                  okText="删除"
+                  cancelText="取消"
+                  disabled={isDeleteDisabled}
+                  onConfirm={() => {
+                    if (isDeleteDisabled) return;
+                    onDeleteFile(file.id);
+                  }}
+                >
+                  <Button
+                    variant={canDeleteCycleFile ? "link-danger" : "link-neutral"}
+                    className={cn("p-0", isDeleteDisabled && "cursor-not-allowed opacity-50")}
+                    disabled={isDeleteDisabled}
+                    loading={filesDeletingId === file.id}
+                    aria-disabled={isDeleteDisabled}
+                  >
+                    <Trash2
+                      className={cn("h-3.5 w-3.5", canDeleteCycleFile ? "text-danger-primary" : "text-placeholder")}
+                    />
+                  </Button>
+                </Popconfirm>
+              </div>
+            </td>
+          </tr>
+        );
+      })}
     </tbody>
   </table>
 );

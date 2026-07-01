@@ -9,7 +9,12 @@ import { omit } from "lodash-es";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 // plane imports
-import { ARCHIVABLE_STATE_GROUPS, EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import {
+  ARCHIVABLE_STATE_GROUPS,
+  EUserPermissions,
+  EUserPermissionsLevel,
+  PROJECT_SPRINTS_ISSUE_MANAGE_PERMISSION_KEY,
+} from "@plane/constants";
 import type { TIssue } from "@plane/types";
 import { EIssuesStoreType } from "@plane/types";
 import { ContextMenu, CustomMenu } from "@plane/ui";
@@ -52,7 +57,7 @@ export const CycleIssueQuickActions = observer(function CycleIssueQuickActions(p
   // router
   const { workspaceSlug, cycleId } = useParams();
   const { issuesFilter } = useIssues(EIssuesStoreType.CYCLE);
-  const { allowPermissions } = useUserPermissions();
+  const { allowPermissions, allowProjectPermissionKeys } = useUserPermissions();
   const { getStateById } = useProjectState();
   const { getProjectIdentifierById } = useProject();
   // derived values
@@ -64,6 +69,14 @@ export const CycleIssueQuickActions = observer(function CycleIssueQuickActions(p
   const isArchivingAllowed = handleArchive && isEditingAllowed;
   const isInArchivableGroup = !!stateDetails && ARCHIVABLE_STATE_GROUPS.includes(stateDetails?.group);
   const isDeletingAllowed = isEditingAllowed;
+  const canManageCycleIssues =
+    !!workspaceSlug &&
+    !!issue.project_id &&
+    allowProjectPermissionKeys(
+      [PROJECT_SPRINTS_ISSUE_MANAGE_PERMISSION_KEY],
+      workspaceSlug.toString(),
+      issue.project_id
+    );
 
   const activeLayout = `${issuesFilter.issueFilters?.displayFilters?.layout} layout`;
 
@@ -85,6 +98,7 @@ export const CycleIssueQuickActions = observer(function CycleIssueQuickActions(p
     isEditingAllowed,
     isArchivingAllowed,
     isDeletingAllowed,
+    canManageCycleIssues,
     isInArchivableGroup,
     setIssueToEdit,
     setCreateUpdateIssueModal,

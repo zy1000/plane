@@ -3,7 +3,7 @@
 import { Popconfirm } from "antd";
 import { Unlink } from "lucide-react";
 import { Button } from "@plane/ui";
-import { getDate } from "@plane/utils";
+import { cn, getDate } from "@plane/utils";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 
 export const formatPlanDate = (value?: string | null) => {
@@ -16,7 +16,10 @@ export const formatPlanDate = (value?: string | null) => {
 export const getPassRate = (passRate: any) => {
   if (typeof passRate === "number") return `${passRate}%`;
   if (!passRate || typeof passRate !== "object") return "0%";
-  const total = Object.values(passRate).reduce((sum, count) => sum + Number(count || 0), 0);
+  const total = Object.values(passRate as Record<string, unknown>).reduce<number>(
+    (sum, count) => sum + Number(count || 0),
+    0
+  );
   const passed = Number(passRate?.["成功"] || passRate?.success || 0);
   const percent = total > 0 ? Math.floor((passed / total) * 100) : 0;
   return `${percent}%`;
@@ -24,7 +27,10 @@ export const getPassRate = (passRate: any) => {
 
 export const getBlockRate = (passRate: any) => {
   if (!passRate || typeof passRate !== "object") return "0%";
-  const total = Object.values(passRate).reduce((sum, count) => sum + Number(count || 0), 0);
+  const total = Object.values(passRate as Record<string, unknown>).reduce<number>(
+    (sum, count) => sum + Number(count || 0),
+    0
+  );
   const blocked = Number(passRate?.["阻塞"] || passRate?.block || 0);
   const percent = total > 0 ? Math.floor((blocked / total) * 100) : 0;
   return `${percent}%`;
@@ -51,6 +57,7 @@ type TCycleTestPlansTableProps = {
   cyclePlans: any[];
   projectId: string;
   cancelingPlanId: string | null;
+  canManageCyclePlans: boolean;
   onOpenPlan: (planId: string) => void;
   onCancelPlanAssociation: (planId: string) => void;
 };
@@ -59,6 +66,7 @@ export const CycleTestPlansTable = ({
   cyclePlans,
   projectId,
   cancelingPlanId,
+  canManageCyclePlans,
   onOpenPlan,
   onCancelPlanAssociation,
 }: TCycleTestPlansTableProps) => (
@@ -78,6 +86,7 @@ export const CycleTestPlansTable = ({
     <tbody>
       {cyclePlans.map((plan: any) => {
         const assigneeIds = getPlanAssigneeIds(plan.assignees);
+        const isCancelDisabled = cancelingPlanId === plan.id || !canManageCyclePlans;
         return (
           <tr key={plan.id ?? plan.name} className="border-b border-subtle hover:bg-layer-1">
             <td className="truncate px-2 py-2 text-sm text-primary" title={plan.name ?? "-"}>
@@ -124,18 +133,21 @@ export const CycleTestPlansTable = ({
                   title="确定取消该测试计划的关联吗？"
                   okText="取消关联"
                   cancelText="取消"
+                  disabled={isCancelDisabled}
                   onConfirm={() => {
+                    if (isCancelDisabled) return;
                     if (plan.id) onCancelPlanAssociation(plan.id);
                   }}
                 >
                   <Button
-                    variant="link-neutral"
-                    className="p-0"
+                    variant={canManageCyclePlans ? "link-neutral" : "link-neutral"}
+                    className={cn("p-0", isCancelDisabled && "cursor-not-allowed opacity-50")}
                     loading={cancelingPlanId === plan.id}
-                    disabled={cancelingPlanId === plan.id}
+                    disabled={isCancelDisabled}
+                    aria-disabled={isCancelDisabled}
                     aria-label="取消关联"
                   >
-                    <Unlink className="h-3.5 w-3.5" />
+                    <Unlink className={cn("h-3.5 w-3.5", !canManageCyclePlans && "text-placeholder")} />
                   </Button>
                 </Popconfirm>
               ) : null}

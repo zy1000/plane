@@ -12,7 +12,11 @@ import { useParams } from "next/navigation";
 // icons
 import { Paperclip } from "lucide-react";
 // i18n
-import { PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
+import {
+  PROJECT_ERROR_MESSAGES,
+  PROJECT_SPRINTS_ISSUE_MANAGE_PERMISSION_KEY,
+  isProjectPermissionError,
+} from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { LinkIcon, StartDatePropertyIcon, ViewsIcon, DueDatePropertyIcon } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
@@ -42,6 +46,7 @@ import { useIssues } from "@/hooks/store/use-issues";
 import { useLabel } from "@/hooks/store/use-label";
 import { useProject } from "@/hooks/store/use-project";
 import { useProjectState } from "@/hooks/store/use-project-state";
+import { useUserPermissions } from "@/hooks/store/user";
 import {
   useStateTransitionAssigneeGuard,
   type TStateTransitionUpdatePayload,
@@ -89,6 +94,7 @@ export const IssueProperties = observer(function IssueProperties(props: IIssuePr
   } = useIssues(storeType);
   const { areEstimateEnabledByProjectId } = useProjectEstimates();
   const { getStateById } = useProjectState();
+  const { allowProjectPermissionKeys } = useUserPermissions();
   const { isMobile } = usePlatformOS();
   const storeContext = useContext(StoreContext);
   const projectDetails = getProjectById(issue.project_id);
@@ -101,6 +107,14 @@ export const IssueProperties = observer(function IssueProperties(props: IIssuePr
   // derived values
   const stateDetails = getStateById(issue.state_id);
   const subIssueCount = issue?.sub_issues_count ?? 0;
+  const canManageCycleIssues =
+    !!workspaceSlug &&
+    !!issue.project_id &&
+    allowProjectPermissionKeys(
+      [PROJECT_SPRINTS_ISSUE_MANAGE_PERMISSION_KEY],
+      workspaceSlug.toString(),
+      issue.project_id
+    );
 
   const showIssueUpdateErrorToast = useCallback(
     (error: unknown) => {
@@ -234,11 +248,12 @@ export const IssueProperties = observer(function IssueProperties(props: IIssuePr
 
   const handleCycle = useCallback(
     (cycleId: string | null) => {
+      if (!canManageCycleIssues) return;
       if (!issue || issue.cycle_id === cycleId) return;
       if (cycleId) issueOperations.addIssueToCycle?.(cycleId);
       else issueOperations.removeIssueFromCycle?.();
     },
-    [issue, issueOperations]
+    [canManageCycleIssues, issue, issueOperations]
   );
 
   const handleRelease = useCallback(
@@ -484,7 +499,7 @@ export const IssueProperties = observer(function IssueProperties(props: IIssuePr
                     projectId={issue?.project_id}
                     value={issue?.cycle_id}
                     onChange={handleCycle}
-                    disabled={isReadOnly}
+                    disabled={isReadOnly || !canManageCycleIssues}
                     buttonVariant="border-with-text"
                     renderByDefault={isMobile}
                     showCount

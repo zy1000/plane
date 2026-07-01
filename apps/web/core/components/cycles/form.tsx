@@ -32,6 +32,7 @@ type Props = {
   setActiveProject: (projectId: string) => void;
   data?: ICycle | null;
   isMobile?: boolean;
+  isSubmitDisabled?: boolean;
 };
 
 const defaultValues: Partial<ICycle> = {
@@ -51,7 +52,17 @@ const cycleFormSuggestedTestScopeEditorContainerClassName =
   `min-h-56 rounded-md border-[0.5px] border-subtle-1 bg-layer-2 text-14 ${cycleFormEditorFontSizeOverrideClassName}`;
 
 export function CycleForm(props: Props) {
-  const { handleFormSubmit, handleClose, status, workspaceSlug, projectId, setActiveProject, data, isMobile = false } = props;
+  const {
+    handleFormSubmit,
+    handleClose,
+    status,
+    workspaceSlug,
+    projectId,
+    setActiveProject,
+    data,
+    isMobile = false,
+    isSubmitDisabled = false,
+  } = props;
   // plane hooks
   const { t } = useTranslation();
   // store hooks
@@ -268,7 +279,14 @@ export function CycleForm(props: Props) {
         <Button variant="secondary" size="lg" onClick={handleClose} tabIndex={getIndex("cancel")}>
           {t("common.cancel")}
         </Button>
-        <Button variant="primary" size="lg" type="submit" loading={isSubmitting} tabIndex={getIndex("submit")}>
+        <Button
+          variant="primary"
+          size="lg"
+          type="submit"
+          loading={isSubmitting}
+          disabled={isSubmitting || isSubmitDisabled}
+          tabIndex={getIndex("submit")}
+        >
           {data
             ? isSubmitting
               ? t("common.updating")

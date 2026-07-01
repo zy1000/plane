@@ -3,9 +3,16 @@
 import type { ChangeEvent } from "react";
 import { useRef } from "react";
 import { observer } from "mobx-react";
+import {
+  PROJECT_SPRINTS_FILE_DELETE_PERMISSION_KEY,
+  PROJECT_SPRINTS_FILE_DOWNLOAD_PERMISSION_KEY,
+  PROJECT_SPRINTS_FILE_UPLOAD_PERMISSION_KEY,
+} from "@plane/constants";
 import useCyclesDetails from "@/components/cycles/active-cycle/use-cycles-details";
 import { useCycleFiles } from "@/components/cycles/cycle-overview/use-cycle-files";
 import { ReleaseFilesSection } from "@/components/releases/release-overview/release-scope-tab";
+import { useCycle } from "@/hooks/store/use-cycle";
+import { useUserPermissions } from "@/hooks/store/user";
 
 type Props = {
   workspaceSlug: string;
@@ -16,6 +23,8 @@ type Props = {
 export const CycleAttachmentsContent = observer(function CycleAttachmentsContent(props: Props) {
   const { workspaceSlug, projectId, cycleId } = props;
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const { getCycleById } = useCycle();
+  const { allowProjectPermissionKeys } = useUserPermissions();
 
   const {
     files,
@@ -35,10 +44,23 @@ export const CycleAttachmentsContent = observer(function CycleAttachmentsContent
   });
 
   useCyclesDetails({ workspaceSlug, projectId, cycleId });
+  const cycleDetails = getCycleById(cycleId);
+  const isCycleArchived = Boolean(cycleDetails?.archived_at);
+  const canUploadCycleFile =
+    allowProjectPermissionKeys([PROJECT_SPRINTS_FILE_UPLOAD_PERMISSION_KEY], workspaceSlug, projectId) &&
+    !isCycleArchived;
+  const canDeleteCycleFile =
+    allowProjectPermissionKeys([PROJECT_SPRINTS_FILE_DELETE_PERMISSION_KEY], workspaceSlug, projectId) &&
+    !isCycleArchived;
+  const canDownloadCycleFile = allowProjectPermissionKeys(
+    [PROJECT_SPRINTS_FILE_DOWNLOAD_PERMISSION_KEY],
+    workspaceSlug,
+    projectId
+  );
 
   const handleFileInputChange = (event: ChangeEvent<HTMLInputElement>) => {
     const selectedFile = event.target.files?.[0];
-    if (selectedFile) void uploadFile(selectedFile);
+    if (selectedFile && canUploadCycleFile) void uploadFile(selectedFile);
     event.target.value = "";
   };
 
@@ -54,8 +76,11 @@ export const CycleAttachmentsContent = observer(function CycleAttachmentsContent
           filesDeletingId={filesDeletingId}
           filesDownloadingId={filesDownloadingId}
           uploadStatuses={uploadStatuses}
+          canUploadReleaseFile={canUploadCycleFile}
+          canDeleteReleaseFile={canDeleteCycleFile}
+          canDownloadReleaseFile={canDownloadCycleFile}
           onTriggerUploadFile={() => {
-            if (!filesUploading) fileInputRef.current?.click();
+            if (!filesUploading && canUploadCycleFile) fileInputRef.current?.click();
           }}
           onDeleteFile={(fileId) => void deleteFile(fileId)}
           onDownloadFile={(fileId, _fileName) => void downloadFile(fileId)}

@@ -1459,7 +1459,7 @@ class CycleIssueTypeDistributionEndpoint(BaseAPIView):
 class CyclePlansEndpoint(BaseAPIView):
     """返回当前迭代已关联的测试计划列表。"""
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    @allow_fine_permission(PermissionKey.SPRINTS_VIEW)
     def get(self, request, slug, project_id, cycle_id):
         plans_qs = (
             TestPlan.objects.filter(
@@ -1479,6 +1479,7 @@ class CyclePlansEndpoint(BaseAPIView):
 class CycleSelectablePlansEndpoint(BaseAPIView):
     """返回指定项目下尚未关联到任何迭代的测试计划，用于"迭代 -> 关联测试计划"弹窗选择。"""
 
+    @allow_fine_permission(PermissionKey.SPRINTS_PLAN_MANAGE)
     def get(self, request, slug, project_id, cycle_id):
         if not Cycle.objects.filter(
             workspace__slug=slug, project_id=project_id, id=cycle_id
@@ -1503,7 +1504,7 @@ class CycleSelectablePlansEndpoint(BaseAPIView):
 class CycleAssociatePlansEndpoint(BaseAPIView):
     """将一组测试计划的 cycle 字段批量更新为当前迭代。"""
 
-    @allow_fine_permission(PermissionKey.SPRINTS_EDIT)
+    @allow_fine_permission(PermissionKey.SPRINTS_PLAN_MANAGE)
     def post(self, request, slug, project_id, cycle_id):
         plan_ids = request.data.get("plan_ids") or []
         if not isinstance(plan_ids, list) or len(plan_ids) == 0:
@@ -1532,7 +1533,7 @@ class CycleAssociatePlansEndpoint(BaseAPIView):
 class CycleCancelPlanAssociationEndpoint(BaseAPIView):
     """解除一组测试计划与当前迭代的关联关系（仅当它们当前归属该迭代时）。"""
 
-    @allow_fine_permission(PermissionKey.SPRINTS_EDIT)
+    @allow_fine_permission(PermissionKey.SPRINTS_PLAN_MANAGE)
     def post(self, request, slug, project_id, cycle_id):
         plan_ids = request.data.get("plan_ids") or []
         if not isinstance(plan_ids, list) or len(plan_ids) == 0:

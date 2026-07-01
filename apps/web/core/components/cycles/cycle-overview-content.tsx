@@ -32,7 +32,16 @@ import {
   Pencil,
 } from "lucide-react";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import { CYCLE_STATUS, CYCLE_STATUS_TRANSITIONS, EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import {
+  CYCLE_STATUS,
+  CYCLE_STATUS_TRANSITIONS,
+  PROJECT_SPRINTS_COMMENT_CREATE_PERMISSION_KEY,
+  PROJECT_SPRINTS_EDIT_PERMISSION_KEY,
+  PROJECT_SPRINTS_FILE_DELETE_PERMISSION_KEY,
+  PROJECT_SPRINTS_FILE_DOWNLOAD_PERMISSION_KEY,
+  PROJECT_SPRINTS_FILE_UPLOAD_PERMISSION_KEY,
+  PROJECT_SPRINTS_PLAN_MANAGE_PERMISSION_KEY,
+} from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { CheckIcon, MembersPropertyIcon } from "@plane/propel/icons";
 import type { ICycle, TCyclePlotType, TProgressSnapshot, TCycleDistribution, TCycleEstimateDistribution } from "@plane/types";
@@ -135,7 +144,7 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
     useCycle();
   const { getUserDetails } = useMember();
   const { getFilter, updateFilterValueFromSidebar } = useWorkItemFilters();
-  const { allowPermissions } = useUserPermissions();
+  const { allowProjectPermissionKeys } = useUserPermissions();
   const {
     files,
     filesLoading,
@@ -190,18 +199,43 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
   const backlogIssues = cycleDetails?.backlog_issues ?? 0;
   const cancelledIssues = cycleDetails?.cancelled_issues ?? 0;
   const unstartedIssues = cycleDetails?.unstarted_issues ?? 0;
-  const progress = calculateCycleProgress(cycleDetails);
+  const progress = calculateCycleProgress(cycleDetails ?? undefined);
 
   const cycleStatus = cycleDetails?.status ?? "not_started";
   const statusInfo = CYCLE_STATUS.find((s) => s.value === cycleStatus);
   const statusOptions = CYCLE_STATUS_TRANSITIONS[cycleStatus as NonNullable<ICycle["status"]>] ?? [];
-  const isEditingAllowed = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-    EUserPermissionsLevel.PROJECT,
+  const canEditSprint = allowProjectPermissionKeys([PROJECT_SPRINTS_EDIT_PERMISSION_KEY], workspaceSlug, projectId);
+  const canManageCyclePlans = allowProjectPermissionKeys(
+    [PROJECT_SPRINTS_PLAN_MANAGE_PERMISSION_KEY],
     workspaceSlug,
     projectId
   );
-  const canChangeStatus = isEditingAllowed && !cycleDetails?.archived_at && statusOptions.length > 0;
+  const canUploadCycleFile = allowProjectPermissionKeys(
+    [PROJECT_SPRINTS_FILE_UPLOAD_PERMISSION_KEY],
+    workspaceSlug,
+    projectId
+  );
+  const canDeleteCycleFile = allowProjectPermissionKeys(
+    [PROJECT_SPRINTS_FILE_DELETE_PERMISSION_KEY],
+    workspaceSlug,
+    projectId
+  );
+  const canDownloadCycleFile = allowProjectPermissionKeys(
+    [PROJECT_SPRINTS_FILE_DOWNLOAD_PERMISSION_KEY],
+    workspaceSlug,
+    projectId
+  );
+  const canCreateCycleComment = allowProjectPermissionKeys(
+    [PROJECT_SPRINTS_COMMENT_CREATE_PERMISSION_KEY],
+    workspaceSlug,
+    projectId
+  );
+  const isCycleArchived = Boolean(cycleDetails?.archived_at);
+  const canEditCycleDetails = canEditSprint && !isCycleArchived;
+  const canManageCyclePlansAction = canManageCyclePlans && !isCycleArchived;
+  const canUploadCycleFileAction = canUploadCycleFile && !isCycleArchived;
+  const canDeleteCycleFileAction = canDeleteCycleFile && !isCycleArchived;
+  const canChangeStatus = canEditCycleDetails && statusOptions.length > 0;
   const cycleOwner = cycleDetails ? getUserDetails(cycleDetails.owned_by_id) : undefined;
   const startDate = getDate(cycleDetails?.start_date);
   const endDate = getDate(cycleDetails?.end_date);
@@ -276,7 +310,7 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
   const isEditable = Boolean(!peekCycle) && cycleFilter !== undefined;
   const canEditCycleDescription =
     Boolean(!peekCycle) &&
-    allowPermissions([EUserPermissions.ADMIN, EUserPermissions.MEMBER], EUserPermissionsLevel.PROJECT);
+    canEditCycleDetails;
 
   const formatDate = (d: Date | null | undefined) => {
     if (!d) return "-";
@@ -285,7 +319,7 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
 
   const handleFileInputChange = (event: ChangeEvent<HTMLInputElement>) => {
     const selectedFile = event.target.files?.[0];
-    if (selectedFile) void uploadFile(selectedFile);
+    if (selectedFile && canUploadCycleFileAction) void uploadFile(selectedFile);
     event.target.value = "";
   };
 
@@ -487,19 +521,23 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
                 <span className="text-sm font-medium text-primary">迭代描述</span>
               </div>
               <div className="flex min-w-0 shrink-0 items-center gap-1">
-                {canEditCycleDescription ? (
-                  <button
-                    type="button"
-                    className="cursor-pointer rounded-md p-1 text-placeholder transition-colors hover:bg-surface-2 hover:text-primary"
-                    onClick={() => {
-                      setCycleDescriptionModalInitialEdit(true);
-                      setCycleDescriptionModalOpen(true);
-                    }}
-                    aria-label="编辑迭代描述"
-                  >
-                    <Pencil className="h-3.5 w-3.5" />
-                  </button>
-                ) : null}
+                <button
+                  type="button"
+                  className={cn(
+                    "rounded-md p-1 text-placeholder transition-colors hover:bg-surface-2 hover:text-primary",
+                    canEditCycleDescription ? "cursor-pointer" : "cursor-not-allowed opacity-50"
+                  )}
+                  disabled={!canEditCycleDescription}
+                  aria-disabled={!canEditCycleDescription}
+                  onClick={() => {
+                    if (!canEditCycleDescription) return;
+                    setCycleDescriptionModalInitialEdit(true);
+                    setCycleDescriptionModalOpen(true);
+                  }}
+                  aria-label="编辑迭代描述"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </button>
                 <button
                   type="button"
                   className="grid h-6 w-6 shrink-0 place-items-center rounded transition-colors hover:bg-surface-2"
@@ -590,7 +628,9 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
                         }
                       >
                         <TabIcon className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                        <span className="min-w-0 truncate">{tab.label ?? t(tab.i18n_title)}</span>
+                        <span className="min-w-0 truncate">
+                          {"label" in tab ? tab.label : t(tab.i18n_title)}
+                        </span>
                         <span className="shrink-0 text-placeholder">{overviewTabCounts[tab.key]}</span>
                       </Tab>
                     );
@@ -605,12 +645,16 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
                     )}
                     onClick={() => {
                       if (activeOverviewTabKey === "stat-test-plans") {
+                        if (!canManageCyclePlansAction) return;
                         void openPlanAssociateModal();
                       } else if (activeOverviewTabKey === "stat-files") {
-                        if (!filesUploading) fileInputRef.current?.click();
+                        if (!filesUploading && canUploadCycleFileAction) fileInputRef.current?.click();
                       }
                     }}
-                    disabled={activeOverviewTabKey === "stat-files" && filesUploading}
+                    disabled={
+                      (activeOverviewTabKey === "stat-test-plans" && !canManageCyclePlansAction) ||
+                      (activeOverviewTabKey === "stat-files" && (filesUploading || !canUploadCycleFileAction))
+                    }
                     aria-hidden={activeOverviewTabKey === "stat-assignees"}
                     tabIndex={activeOverviewTabKey === "stat-assignees" ? -1 : 0}
                     aria-label={
@@ -643,7 +687,9 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
                       <div className="min-h-0 max-h-[min(360px,50vh)] flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm">
                         <CycleTestPlansTable
                           cyclePlans={cyclePlans}
+                          projectId={projectId}
                           cancelingPlanId={cancelingPlanId}
+                          canManageCyclePlans={canManageCyclePlansAction}
                           onOpenPlan={(planId) =>
                             router.push(`/${workspaceSlug}/projects/${projectId}/testhub/plan-cases?planId=${planId}`)
                           }
@@ -681,6 +727,8 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
                             files={files}
                             filesDownloadingId={filesDownloadingId}
                             filesDeletingId={filesDeletingId}
+                            canDeleteCycleFile={canDeleteCycleFileAction}
+                            canDownloadCycleFile={canDownloadCycleFile}
                             onDownloadFile={(fileId) => void downloadFile(fileId)}
                             onDeleteFile={(fileId) => void deleteFile(fileId)}
                           />
@@ -694,7 +742,12 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
           </div>
         </div>
 
-        <CycleActivityTab workspaceSlug={workspaceSlug} projectId={projectId} cycleId={cycleId} />
+        <CycleActivityTab
+          workspaceSlug={workspaceSlug}
+          projectId={projectId}
+          cycleId={cycleId}
+          canCreateComment={canCreateCycleComment}
+        />
       </div>
 
       <CycleDescriptionFullscreenModal
@@ -739,7 +792,11 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
                   <Button
                     variant="link-neutral"
                     className="p-0"
-                    onClick={openPlanAssociateModal}
+                    onClick={() => {
+                      if (!canManageCyclePlansAction) return;
+                      void openPlanAssociateModal();
+                    }}
+                    disabled={!canManageCyclePlansAction}
                     aria-label="关联测试计划"
                   >
                     <Plus className="h-3.5 w-3.5" />
@@ -750,7 +807,9 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
                 ) : (
                   <CycleTestPlansTable
                     cyclePlans={cyclePlans}
+                    projectId={projectId}
                     cancelingPlanId={cancelingPlanId}
+                    canManageCyclePlans={canManageCyclePlansAction}
                     onOpenPlan={(planId) =>
                       router.push(`/${workspaceSlug}/projects/${projectId}/testhub/plan-cases?planId=${planId}`)
                     }
@@ -781,9 +840,12 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
                   <Button
                     variant="link-neutral"
                     className="p-0"
-                    onClick={() => fileInputRef.current?.click()}
+                    onClick={() => {
+                      if (!canUploadCycleFileAction) return;
+                      fileInputRef.current?.click();
+                    }}
                     loading={filesUploading}
-                    disabled={filesUploading}
+                    disabled={filesUploading || !canUploadCycleFileAction}
                   >
                     <Plus className="h-3.5 w-3.5" />
                   </Button>
@@ -795,6 +857,8 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
                       files={files}
                       filesDownloadingId={filesDownloadingId}
                       filesDeletingId={filesDeletingId}
+                      canDeleteCycleFile={canDeleteCycleFileAction}
+                      canDownloadCycleFile={canDownloadCycleFile}
                       onDownloadFile={(fileId) => void downloadFile(fileId)}
                       onDeleteFile={(fileId) => void deleteFile(fileId)}
                     />
@@ -810,6 +874,7 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
         open={planAssociateOpen}
         onCancel={closePlanAssociateModal}
         onConfirm={handleConfirmAssociatePlans}
+        canManageCyclePlans={canManageCyclePlansAction}
         selectedPlanIds={selectedPlanIds}
         setSelectedPlanIds={setSelectedPlanIds}
         selectablePlans={selectablePlans}

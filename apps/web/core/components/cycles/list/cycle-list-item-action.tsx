@@ -14,9 +14,8 @@ import { Eye, ArrowRight } from "lucide-react";
 import {
   CYCLE_STATUS,
   CYCLE_STATUS_TRANSITIONS,
-  EUserPermissions,
-  EUserPermissionsLevel,
   IS_FAVORITE_MENU_OPEN,
+  PROJECT_SPRINTS_EDIT_PERMISSION_KEY,
 } from "@plane/constants";
 import { useLocalStorage } from "@plane/hooks";
 import { useTranslation } from "@plane/i18n";
@@ -81,7 +80,7 @@ export const CycleListItemAction = observer(function CycleListItemAction(props: 
   // store hooks
   const { addCycleToFavorites, removeCycleFromFavorites, updateCycleDetails } = useCycle();
   const { data: currentUser } = useUser();
-  const { allowPermissions } = useUserPermissions();
+  const { allowProjectPermissionKeys } = useUserPermissions();
 
   // local storage
   const { setValue: toggleFavoriteMenu, storedValue: isFavoriteMenuOpen } = useLocalStorage<boolean>(
@@ -129,12 +128,7 @@ export const CycleListItemAction = observer(function CycleListItemAction(props: 
 
   const projectUTCOffset = getProjectUTCOffset();
 
-  const isEditingAllowed = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-    EUserPermissionsLevel.PROJECT,
-    workspaceSlug,
-    projectId
-  );
+  const isEditingAllowed = allowProjectPermissionKeys([PROJECT_SPRINTS_EDIT_PERMISSION_KEY], workspaceSlug, projectId);
   const isCompleted = cycleStatus === "completed";
   const isCurrentOwner = Boolean(currentUser?.id) && String(cycleDetails.owned_by_id) === String(currentUser?.id);
   const canChangeStatus = isEditingAllowed && !cycleDetails.archived_at && statusOptions.length > 0;

@@ -7,6 +7,13 @@
 import { useEffect, useState } from "react";
 import { mutate } from "swr";
 // types
+import {
+  PROJECT_ERROR_MESSAGES,
+  PROJECT_SPRINTS_CREATE_PERMISSION_KEY,
+  PROJECT_SPRINTS_EDIT_PERMISSION_KEY,
+  isProjectPermissionError,
+} from "@plane/constants";
+import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { CycleDateCheckData, ICycle, TCycleTabOptions } from "@plane/types";
 // ui
@@ -15,6 +22,7 @@ import { EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
 import { renderFormattedPayloadDate } from "@plane/utils";
 import { useCycle } from "@/hooks/store/use-cycle";
 import { useProject } from "@/hooks/store/use-project";
+import { useUserPermissions } from "@/hooks/store/user";
 import useKeypress from "@/hooks/use-keypress";
 import useLocalStorage from "@/hooks/use-local-storage";
 import { usePlatformOS } from "@/hooks/use-platform-os";
@@ -41,12 +49,20 @@ export function CycleCreateUpdateModal(props: CycleModalProps) {
   // store hooks
   const { workspaceProjectIds } = useProject();
   const { createCycle, updateCycleDetails } = useCycle();
+  const { allowProjectPermissionKeys } = useUserPermissions();
+  const { t } = useTranslation();
   const { isMobile } = usePlatformOS();
+  const canSubmit = allowProjectPermissionKeys(
+    [data ? PROJECT_SPRINTS_EDIT_PERMISSION_KEY : PROJECT_SPRINTS_CREATE_PERMISSION_KEY],
+    workspaceSlug,
+    projectId
+  );
 
   const { setValue: setCycleTab } = useLocalStorage<TCycleTabOptions>("cycle_tab", "active");
 
   const handleCreateCycle = async (payload: Partial<ICycle>) => {
     if (!workspaceSlug || !projectId) return;
+    if (!canSubmit) return;
 
     const selectedProjectId = payload.project_id ?? projectId.toString();
     await createCycle(workspaceSlug, selectedProjectId, payload)
@@ -68,16 +84,27 @@ export function CycleCreateUpdateModal(props: CycleModalProps) {
         });
       })
       .catch((err) => {
-        setToast({
-          type: TOAST_TYPE.ERROR,
-          title: "Error!",
-          message: err?.detail ?? "Error in creating cycle. Please try again.",
-        });
+        if (isProjectPermissionError(err)) {
+          setToast({
+            type: TOAST_TYPE.ERROR,
+            title: t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title),
+            message: PROJECT_ERROR_MESSAGES.permissionError.i18n_message
+              ? t(PROJECT_ERROR_MESSAGES.permissionError.i18n_message)
+              : undefined,
+          });
+        } else {
+          setToast({
+            type: TOAST_TYPE.ERROR,
+            title: "Error!",
+            message: err?.detail ?? "Error in creating cycle. Please try again.",
+          });
+        }
       });
   };
 
   const handleUpdateCycle = async (cycleId: string, payload: Partial<ICycle>) => {
     if (!workspaceSlug || !projectId) return;
+    if (!canSubmit) return;
 
     const selectedProjectId = payload.project_id ?? projectId.toString();
     await updateCycleDetails(workspaceSlug, selectedProjectId, cycleId, payload)
@@ -89,11 +116,21 @@ export function CycleCreateUpdateModal(props: CycleModalProps) {
         });
       })
       .catch((err) => {
-        setToast({
-          type: TOAST_TYPE.ERROR,
-          title: "Error!",
-          message: err?.detail ?? "Error in updating cycle. Please try again.",
-        });
+        if (isProjectPermissionError(err)) {
+          setToast({
+            type: TOAST_TYPE.ERROR,
+            title: t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title),
+            message: PROJECT_ERROR_MESSAGES.permissionError.i18n_message
+              ? t(PROJECT_ERROR_MESSAGES.permissionError.i18n_message)
+              : undefined,
+          });
+        } else {
+          setToast({
+            type: TOAST_TYPE.ERROR,
+            title: "Error!",
+            message: err?.detail ?? "Error in updating cycle. Please try again.",
+          });
+        }
       });
   };
 
@@ -109,6 +146,7 @@ export function CycleCreateUpdateModal(props: CycleModalProps) {
 
   const handleFormSubmit = async (formData: Partial<ICycle>) => {
     if (!workspaceSlug || !projectId) return;
+    if (!canSubmit) return;
 
     const payload: Partial<ICycle> = {
       ...formData,
@@ -199,6 +237,7 @@ export function CycleCreateUpdateModal(props: CycleModalProps) {
         setActiveProject={setActiveProject}
         data={data}
         isMobile={isMobile}
+        isSubmitDisabled={!canSubmit}
       />
     </ModalCore>
   );

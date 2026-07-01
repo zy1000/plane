@@ -14,6 +14,7 @@ type TCyclePlanAssociateModalProps = {
   selectablePlansLoading: boolean;
   selectablePlansError: string | null;
   associatingPlans: boolean;
+  canManageCyclePlans?: boolean;
 };
 
 export const CyclePlanAssociateModal = ({
@@ -26,6 +27,7 @@ export const CyclePlanAssociateModal = ({
   selectablePlansLoading,
   selectablePlansError,
   associatingPlans,
+  canManageCyclePlans = true,
 }: TCyclePlanAssociateModalProps) => (
   <Modal
     title="关联测试计划"
@@ -35,7 +37,7 @@ export const CyclePlanAssociateModal = ({
     okText="确定"
     cancelText="取消"
     okButtonProps={{
-      disabled: selectedPlanIds.length === 0 || selectablePlansLoading,
+      disabled: selectedPlanIds.length === 0 || selectablePlansLoading || !canManageCyclePlans,
       loading: associatingPlans,
     }}
     width={720}
@@ -56,7 +58,9 @@ export const CyclePlanAssociateModal = ({
                     type="checkbox"
                     className="size-4"
                     checked={selectablePlans.length > 0 && selectedPlanIds.length === selectablePlans.length}
+                    disabled={!canManageCyclePlans}
                     onChange={(e) => {
+                      if (!canManageCyclePlans) return;
                       if (e.target.checked) setSelectedPlanIds(selectablePlans.map((p: any) => p.id));
                       else setSelectedPlanIds([]);
                     }}
@@ -85,7 +89,9 @@ export const CyclePlanAssociateModal = ({
                           type="checkbox"
                           className="size-4"
                           checked={checked}
+                          disabled={!canManageCyclePlans}
                           onChange={(e) => {
+                            if (!canManageCyclePlans) return;
                             const v = e.target.checked;
                             setSelectedPlanIds((prev) => {
                               if (v) return Array.from(new Set([...prev, plan.id]));

@@ -80,6 +80,7 @@ export const CycleQuickActions = observer(function CycleQuickActions(props: Prop
 
   const handleUpdateCycleStatus = async (nextStatus: "in_progress" | "testing" | "completed" | "cancelled") => {
     if (!cycleDetails) return;
+    if (!isEditingAllowed || !canEditSprint) return;
     if (cycleDetails.status === nextStatus) return;
 
     await updateCycleDetails(workspaceSlug, projectId, cycleId, { status: nextStatus })
@@ -112,7 +113,8 @@ export const CycleQuickActions = observer(function CycleQuickActions(props: Prop
       });
   };
 
-  const handleRestoreCycle = async () =>
+  const handleRestoreCycle = async () => {
+    if (!isEditingAllowed || !canArchiveSprint) return;
     await restoreCycle(workspaceSlug, projectId, cycleId)
       .then(() => {
         setToast({
@@ -129,6 +131,7 @@ export const CycleQuickActions = observer(function CycleQuickActions(props: Prop
           message: t("project_cycles.action.restore.failed.description"),
         });
       });
+  };
 
   const menuResult = useCycleMenuItems({
     cycleDetails: cycleDetails ?? undefined,
@@ -139,14 +142,23 @@ export const CycleQuickActions = observer(function CycleQuickActions(props: Prop
     canEditSprint,
     canDeleteSprint,
     canArchiveSprint,
-    handleEdit: () => setUpdateModal(true),
+    handleEdit: () => {
+      if (!isEditingAllowed || !canEditSprint) return;
+      setUpdateModal(true);
+    },
     handleMarkAsTesting: () => handleUpdateCycleStatus("testing"),
     handleMarkAsCompleted: () => handleUpdateCycleStatus("completed"),
     handleMarkAsCancelled: () => handleUpdateCycleStatus("cancelled"),
     handleMarkAsInProgress: () => handleUpdateCycleStatus("in_progress"),
-    handleArchive: () => setArchiveCycleModal(true),
+    handleArchive: () => {
+      if (!isEditingAllowed || !canArchiveSprint) return;
+      setArchiveCycleModal(true);
+    },
     handleRestore: handleRestoreCycle,
-    handleDelete: () => setDeleteModal(true),
+    handleDelete: () => {
+      if (!isEditingAllowed || !canDeleteSprint) return;
+      setDeleteModal(true);
+    },
     handleCopyLink: handleCopyText,
     handleOpenInNewTab,
   });

@@ -14,6 +14,7 @@ import { Modal } from "antd";
 import { FileText, Pencil } from "lucide-react";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
+import { cn } from "@plane/utils";
 import { CycleRichTextEditor, isEmptyCycleRichText } from "@/components/cycles/cycle-rich-text-editor";
 import { useCycle } from "@/hooks/store/use-cycle";
 
@@ -42,10 +43,10 @@ export const CycleDescriptionFullscreenModal: FC<Props> = observer(function Cycl
 
   useEffect(() => {
     if (isOpen) {
-      setEditing(initialEditing);
+      setEditing(initialEditing && canEdit);
       setDraft(description ?? "");
     }
-  }, [isOpen, initialEditing, description]);
+  }, [isOpen, initialEditing, description, canEdit]);
 
   const handleClose = useCallback(() => {
     setEditing(false);
@@ -53,6 +54,7 @@ export const CycleDescriptionFullscreenModal: FC<Props> = observer(function Cycl
   }, [onClose]);
 
   const handleSave = useCallback(async () => {
+    if (!canEdit) return;
     setSaving(true);
     try {
       await updateCycleDetails(workspaceSlug, projectId, cycleId, { description: draft });
@@ -64,7 +66,7 @@ export const CycleDescriptionFullscreenModal: FC<Props> = observer(function Cycl
     } finally {
       setSaving(false);
     }
-  }, [workspaceSlug, projectId, cycleId, draft, updateCycleDetails, handleClose]);
+  }, [canEdit, workspaceSlug, projectId, cycleId, draft, updateCycleDetails, handleClose]);
 
   return (
     <Modal
@@ -139,12 +141,20 @@ export const CycleDescriptionFullscreenModal: FC<Props> = observer(function Cycl
       getContainer={() => document.body}
     >
       <div className="flex h-full min-h-0 flex-1 flex-col bg-surface-1">
-        {!editing && canEdit && (
+        {!editing && (
           <div className="flex flex-shrink-0 items-center justify-end px-4 pt-2">
             <button
               type="button"
-              className="flex cursor-pointer items-center gap-1.5 rounded-md px-2.5 py-1 text-xs text-placeholder transition-colors hover:bg-surface-2 hover:text-primary"
-              onClick={() => setEditing(true)}
+              className={cn(
+                "flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs text-placeholder transition-colors hover:bg-surface-2 hover:text-primary",
+                canEdit ? "cursor-pointer" : "cursor-not-allowed opacity-50"
+              )}
+              disabled={!canEdit}
+              aria-disabled={!canEdit}
+              onClick={() => {
+                if (!canEdit) return;
+                setEditing(true);
+              }}
             >
               <Pencil className="h-3 w-3" />
               编辑

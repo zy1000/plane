@@ -8,7 +8,7 @@ import { useState } from "react";
 import { observer } from "mobx-react";
 import { useParams, useSearchParams } from "next/navigation";
 // types
-import { PROJECT_ERROR_MESSAGES } from "@plane/constants";
+import { PROJECT_ERROR_MESSAGES, PROJECT_SPRINTS_DELETE_PERMISSION_KEY, isProjectPermissionError } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { ICycle } from "@plane/types";
@@ -16,6 +16,7 @@ import type { ICycle } from "@plane/types";
 import { AlertModalCore } from "@plane/ui";
 // hooks
 import { useCycle } from "@/hooks/store/use-cycle";
+import { useUserPermissions } from "@/hooks/store/user";
 import { useAppRouter } from "@/hooks/use-app-router";
 
 interface ICycleDelete {
@@ -32,15 +33,17 @@ export const CycleDeleteModal = observer(function CycleDeleteModal(props: ICycle
   const [loader, setLoader] = useState(false);
   // store hooks
   const { deleteCycle } = useCycle();
+  const { allowProjectPermissionKeys } = useUserPermissions();
   const { t } = useTranslation();
   // router
   const router = useAppRouter();
   const { cycleId } = useParams();
   const searchParams = useSearchParams();
   const peekCycle = searchParams.get("peekCycle");
+  const canDeleteCycle = allowProjectPermissionKeys([PROJECT_SPRINTS_DELETE_PERMISSION_KEY], workspaceSlug, projectId);
 
   const formSubmit = async () => {
-    if (!cycle) return;
+    if (!cycle || !canDeleteCycle) return;
 
     setLoader(true);
     try {
@@ -54,7 +57,7 @@ export const CycleDeleteModal = observer(function CycleDeleteModal(props: ICycle
           });
         })
         .catch((errors) => {
-          const isPermissionError = errors?.error === "You don't have the required permissions.";
+          const isPermissionError = isProjectPermissionError(errors);
           const currentError = isPermissionError
             ? PROJECT_ERROR_MESSAGES.permissionError
             : PROJECT_ERROR_MESSAGES.cycleDeleteError;
@@ -80,6 +83,7 @@ export const CycleDeleteModal = observer(function CycleDeleteModal(props: ICycle
     <AlertModalCore
       handleClose={handleClose}
       handleSubmit={formSubmit}
+      isSubmitDisabled={!canDeleteCycle}
       isSubmitting={loader}
       isOpen={isOpen}
       title="Delete cycle"

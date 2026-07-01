@@ -111,7 +111,7 @@ const CycleCommentBlock = observer(function CycleCommentBlock(props: {
                   name={displayName}
                   src={getFileURL(avatarUrl ?? "")}
                   className="shrink-0"
-                  fallbackBackgroundColor={getUserAvatarFallbackBackgroundColor(activity.actor_detail)}
+                  fallbackBackgroundColor={getUserAvatarFallbackBackgroundColor()}
                 />
                 <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1 text-body-sm-regular">
                   <span className="font-medium text-primary">{displayName}</span>

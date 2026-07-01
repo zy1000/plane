@@ -33,6 +33,7 @@ type Props = {
   parentId?: string | null;
   placeholder?: string;
   autoFocus?: boolean;
+  disabled?: boolean;
   onSubmit: (data: SubmitPayload) => Promise<TCycleComment | undefined>;
   onCancel?: () => void;
   showCancel?: boolean;
@@ -49,6 +50,7 @@ export const CycleCommentCreate = observer(function CycleCommentCreate(props: Pr
     parentId = null,
     placeholder,
     autoFocus = false,
+    disabled = false,
     onSubmit,
     onCancel,
     showCancel = false,
@@ -72,9 +74,11 @@ export const CycleCommentCreate = observer(function CycleCommentCreate(props: Pr
 
   const commentHTML = watch("comment_html");
   const isEmpty = isCommentEmpty(commentHTML ?? undefined);
+  const isDisabled = disabled || isSubmitting;
 
   const submitComment = useCallback(
     async (formData: FormValues) => {
+      if (disabled) return;
       try {
         const created = await onSubmit({
           comment_html: formData.comment_html,
@@ -100,7 +104,7 @@ export const CycleCommentCreate = observer(function CycleCommentCreate(props: Pr
         console.error("[cycle-comment] create failed", error);
       }
     },
-    [onSubmit, commentJson, parentId, workspaceSlug, projectId, reset, onCancel]
+    [disabled, onSubmit, commentJson, parentId, workspaceSlug, projectId, reset, onCancel]
   );
 
   return (
@@ -113,7 +117,7 @@ export const CycleCommentCreate = observer(function CycleCommentCreate(props: Pr
           !e.ctrlKey &&
           !e.metaKey &&
           !isEmpty &&
-          !isSubmitting &&
+          !isDisabled &&
           editorRef.current?.isEditorReadyToDiscard()
         ) {
           handleSubmit(submitComment)(e);
@@ -124,56 +128,75 @@ export const CycleCommentCreate = observer(function CycleCommentCreate(props: Pr
         name="comment_html"
         control={control}
         render={({ field: { value, onChange } }) => (
-          <LiteTextEditor
-            editable
-            ref={editorRef}
-            id={`cycle_comment_create_${cycleId}${parentId ? `_${parentId}` : ""}`}
-            workspaceId={workspaceId}
-            workspaceSlug={workspaceSlug}
-            projectId={projectId}
-            value={"<p></p>"}
-            initialValue={value ?? "<p></p>"}
-            placeholder={placeholder}
-            showAccessSpecifier={false}
-            showSubmitButton
-            showToolbarInitially={autoFocus}
-            isSubmitting={isSubmitting}
-            parentClassName="p-2"
-            displayConfig={{ fontSize: "small-font" }}
-            submitButtonText="common.comment"
-            onEnterKeyPress={(e) => {
-              if (!isEmpty && !isSubmitting) handleSubmit(submitComment)(e);
-            }}
-            onChange={(comment_json, comment_html) => {
-              onChange(comment_html);
-              setCommentJson(comment_json);
-            }}
-            uploadFile={async (blockId, file) => {
-              const response = await uploadEditorAsset({
-                blockId,
-                workspaceSlug,
-                projectId,
-                file,
-                data: {
-                  entity_identifier: cycleId,
-                  entity_type: EFileAssetType.CYCLE_COMMENT_DESCRIPTION,
-                },
-              });
-              uploadedAssetIdsRef.current = [...uploadedAssetIdsRef.current, response.asset_id];
-              return response.asset_id;
-            }}
-            duplicateFile={async (assetId) => {
-              const { asset_id } = await duplicateEditorAsset({
-                assetId,
-                entityId: cycleId,
-                entityType: EFileAssetType.CYCLE_COMMENT_DESCRIPTION,
-                projectId,
-                workspaceSlug,
-              });
-              uploadedAssetIdsRef.current = [...uploadedAssetIdsRef.current, asset_id];
-              return asset_id;
-            }}
-          />
+          <div className={cn(isDisabled && "cursor-not-allowed opacity-60")}>
+            {disabled ? (
+              <div className="rounded-sm border border-subtle bg-layer-1 p-2">
+                <div className="min-h-16 px-1 py-1 text-sm text-placeholder">
+                  {placeholder || "你没有发表评论的权限"}
+                </div>
+                <div className="mt-2 flex justify-end">
+                  <button
+                    type="button"
+                    disabled
+                    className="cursor-not-allowed rounded-sm bg-layer-2 px-2.5 py-1.5 text-11 text-placeholder"
+                  >
+                    评论
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <LiteTextEditor
+                editable
+                ref={editorRef}
+                id={`cycle_comment_create_${cycleId}${parentId ? `_${parentId}` : ""}`}
+                workspaceId={workspaceId}
+                workspaceSlug={workspaceSlug}
+                projectId={projectId}
+                value={"<p></p>"}
+                initialValue={value ?? "<p></p>"}
+                placeholder={placeholder}
+                showAccessSpecifier={false}
+                showSubmitButton
+                showToolbarInitially={autoFocus}
+                isSubmitting={isSubmitting}
+                parentClassName="p-2"
+                displayConfig={{ fontSize: "small-font" }}
+                submitButtonText="common.comment"
+                onEnterKeyPress={(e) => {
+                  if (!isEmpty && !isDisabled) handleSubmit(submitComment)(e);
+                }}
+                onChange={(comment_json, comment_html) => {
+                  onChange(comment_html);
+                  setCommentJson(comment_json);
+                }}
+                uploadFile={async (blockId, file) => {
+                  const response = await uploadEditorAsset({
+                    blockId,
+                    workspaceSlug,
+                    projectId,
+                    file,
+                    data: {
+                      entity_identifier: cycleId,
+                      entity_type: EFileAssetType.CYCLE_COMMENT_DESCRIPTION,
+                    },
+                  });
+                  uploadedAssetIdsRef.current = [...uploadedAssetIdsRef.current, response.asset_id];
+                  return response.asset_id;
+                }}
+                duplicateFile={async (assetId) => {
+                  const { asset_id } = await duplicateEditorAsset({
+                    assetId,
+                    entityId: cycleId,
+                    entityType: EFileAssetType.CYCLE_COMMENT_DESCRIPTION,
+                    projectId,
+                    workspaceSlug,
+                  });
+                  uploadedAssetIdsRef.current = [...uploadedAssetIdsRef.current, asset_id];
+                  return asset_id;
+                }}
+              />
+            )}
+          </div>
         )}
       />
       {showCancel && (

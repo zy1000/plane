@@ -16,7 +16,7 @@ import { ActivityOperatorFilterRoot } from "@/components/issues/issue-detail/iss
 import { ActivitySortRoot } from "@/components/issues/issue-detail/issue-activity/sort-root";
 import { ActivityFeedCollapsible } from "@/components/issues/issue-detail/issue-activity/activity-feed-collapsible";
 import { CycleActivityFeed } from "@/components/cycles/cycle-activity";
-import { CycleCommentsSection } from "@/components/cycles/cycle-comments";
+import { CycleCommentComposer, CycleCommentsSection } from "@/components/cycles/cycle-comments";
 import { useCycleActivity } from "@/hooks/store/use-cycle-activity";
 import { useCycleComment } from "@/hooks/store/use-cycle-comment";
 
@@ -26,6 +26,7 @@ type Props = {
   workspaceSlug: string;
   projectId: string;
   cycleId: string;
+  canCreateComment: boolean;
 };
 
 const SECTION_CARD = "rounded-xl border border-subtle bg-surface-1";
@@ -38,7 +39,7 @@ const SUB_TABS: { key: SubTabKey; label: string }[] = [
   { key: "transition", label: "转换" },
 ];
 
-export const CycleActivityTab: React.FC<Props> = observer(({ workspaceSlug, projectId, cycleId }) => {
+export const CycleActivityTab: React.FC<Props> = observer(({ workspaceSlug, projectId, cycleId, canCreateComment }) => {
   const [active, setActive] = useState<SubTabKey>("all");
   const [sortOrder, setSortOrder] = useState<E_SORT_ORDER>(E_SORT_ORDER.ASC);
   const [selectedOperatorIds, setSelectedOperatorIds] = useState<string[]>([]);
@@ -163,26 +164,43 @@ export const CycleActivityTab: React.FC<Props> = observer(({ workspaceSlug, proj
 
       <div className="min-h-0 flex-1 overflow-hidden">
         {active === "comment" ? (
-          <CycleCommentsSection workspaceSlug={workspaceSlug} projectId={projectId} cycleId={cycleId} />
+          <CycleCommentsSection
+            workspaceSlug={workspaceSlug}
+            projectId={projectId}
+            cycleId={cycleId}
+            canCreateComment={canCreateComment}
+          />
         ) : (
-          <div className="px-6 py-5">
-            <ActivityFeedCollapsible
-              resetKey={`${cycleId}:${active}:${sortOrder}`}
-              listLength={feedListLength}
-              maxHeightPx={CYCLE_ACTIVITY_FEED_COLLAPSED_MAX_HEIGHT_PX}
-            >
-              <CycleActivityFeed
-                workspaceSlug={workspaceSlug}
-                projectId={projectId}
-                cycleId={cycleId}
-                activities={active === "all" ? allTabActivities : undefined}
-                filterFn={filterFn}
-                sortOrder={sortOrder}
-                emptyHint={
-                  active === "activity" ? "暂无活动记录" : active === "transition" ? "暂无状态转换记录" : "暂无动态"
-                }
-              />
-            </ActivityFeedCollapsible>
+          <div className="flex h-full min-h-0 flex-col">
+            <div className="min-h-0 flex-1 px-6 py-5">
+              <ActivityFeedCollapsible
+                resetKey={`${cycleId}:${active}:${sortOrder}`}
+                listLength={feedListLength}
+                maxHeightPx={CYCLE_ACTIVITY_FEED_COLLAPSED_MAX_HEIGHT_PX}
+              >
+                <CycleActivityFeed
+                  workspaceSlug={workspaceSlug}
+                  projectId={projectId}
+                  cycleId={cycleId}
+                  activities={active === "all" ? allTabActivities : undefined}
+                  filterFn={filterFn}
+                  sortOrder={sortOrder}
+                  emptyHint={
+                    active === "activity" ? "暂无活动记录" : active === "transition" ? "暂无状态转换记录" : "暂无动态"
+                  }
+                />
+              </ActivityFeedCollapsible>
+            </div>
+            {active === "all" && (
+              <div className="relative z-[2] shrink-0 border-t border-subtle bg-surface-1 px-6 py-3">
+                <CycleCommentComposer
+                  workspaceSlug={workspaceSlug}
+                  projectId={projectId}
+                  cycleId={cycleId}
+                  disabled={!canCreateComment}
+                />
+              </div>
+            )}
           </div>
         )}
       </div>

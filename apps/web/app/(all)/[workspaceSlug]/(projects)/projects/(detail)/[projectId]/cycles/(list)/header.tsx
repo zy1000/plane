@@ -8,7 +8,7 @@ import { observer } from "mobx-react";
 import { useState } from "react";
 import { useParams } from "next/navigation";
 // ui
-import { EUserPermissions, EUserPermissionsLevel, CYCLE_TRACKER_ELEMENTS } from "@plane/constants";
+import { CYCLE_TRACKER_ELEMENTS, PROJECT_SPRINTS_CREATE_PERMISSION_KEY } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { CycleIcon } from "@plane/propel/icons";
@@ -33,16 +33,16 @@ export const CyclesListHeader = observer(function CyclesListHeader() {
 
   // store hooks
   const { toggleCreateCycleModal } = useCommandPalette();
-  const { allowPermissions } = useUserPermissions();
+  const { allowProjectPermissionKeys } = useUserPermissions();
   const { currentProjectDetails, loader } = useProject();
   const { t } = useTranslation();
 
-  const canUserCreateCycle = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-    EUserPermissionsLevel.PROJECT
-  );
-
   const resolvedWorkspaceSlug = workspaceSlug?.toString() ?? "";
+  const resolvedProjectId = projectId?.toString() ?? currentProjectDetails?.id ?? "";
+  const canUserCreateCycle =
+    !!resolvedWorkspaceSlug &&
+    !!resolvedProjectId &&
+    allowProjectPermissionKeys([PROJECT_SPRINTS_CREATE_PERMISSION_KEY], resolvedWorkspaceSlug, resolvedProjectId);
 
   return (
     <>
@@ -65,7 +65,7 @@ export const CyclesListHeader = observer(function CyclesListHeader() {
         </Header.LeftItem>
         {currentProjectDetails ? (
           <Header.RightItem>
-            {canUserCreateCycle ? <CyclesViewHeader projectId={currentProjectDetails.id} /> : <></>}
+            <CyclesViewHeader projectId={currentProjectDetails.id} />
             <Button
               variant="secondary"
               size="lg"
@@ -75,21 +75,19 @@ export const CyclesListHeader = observer(function CyclesListHeader() {
             >
               导出
             </Button>
-            {canUserCreateCycle ? (
-              <Button
-                variant="primary"
-                size="lg"
-                data-ph-element={CYCLE_TRACKER_ELEMENTS.RIGHT_HEADER_ADD_BUTTON}
-                onClick={() => {
-                  toggleCreateCycleModal(true);
-                }}
-              >
-                <div className="block sm:hidden">{t("add")}</div>
-                <div className="hidden sm:block">{t("project_cycles.add_cycle")}</div>
-              </Button>
-            ) : (
-              <></>
-            )}
+            <Button
+              variant="primary"
+              size="lg"
+              data-ph-element={CYCLE_TRACKER_ELEMENTS.RIGHT_HEADER_ADD_BUTTON}
+              disabled={!canUserCreateCycle}
+              onClick={() => {
+                if (!canUserCreateCycle) return;
+                toggleCreateCycleModal(true);
+              }}
+            >
+              <div className="block sm:hidden">{t("add")}</div>
+              <div className="hidden sm:block">{t("project_cycles.add_cycle")}</div>
+            </Button>
           </Header.RightItem>
         ) : (
           <></>

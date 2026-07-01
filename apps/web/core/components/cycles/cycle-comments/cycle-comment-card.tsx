@@ -199,7 +199,7 @@ export const CycleCommentCard = observer(function CycleCommentCard(props: Props)
         <Avatar
           size="sm"
           name={displayName}
-          src={getFileURL(avatarUrl ?? undefined)}
+          src={avatarUrl ? getFileURL(avatarUrl) : undefined}
           className="shrink-0"
           fallbackBackgroundColor={getUserAvatarFallbackBackgroundColor()}
         />

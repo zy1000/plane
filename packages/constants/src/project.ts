@@ -221,9 +221,11 @@ export const PROJECT_SPRINTS_EDIT_PERMISSION_KEY = "sprints.edit" as const;
 export const PROJECT_SPRINTS_DELETE_PERMISSION_KEY = "sprints.delete" as const;
 export const PROJECT_SPRINTS_ARCHIVE_PERMISSION_KEY = "sprints.archive" as const;
 export const PROJECT_SPRINTS_ISSUE_MANAGE_PERMISSION_KEY = "sprints.issue.manage" as const;
+export const PROJECT_SPRINTS_PLAN_MANAGE_PERMISSION_KEY = "sprints.plan.manage" as const;
 export const PROJECT_SPRINTS_FILE_UPLOAD_PERMISSION_KEY = "sprints.file.upload" as const;
 export const PROJECT_SPRINTS_FILE_DELETE_PERMISSION_KEY = "sprints.file.delete" as const;
 export const PROJECT_SPRINTS_FILE_DOWNLOAD_PERMISSION_KEY = "sprints.file.download" as const;
+export const PROJECT_SPRINTS_COMMENT_CREATE_PERMISSION_KEY = "sprints.comment.create" as const;
 
 /** 项目视图列表/详情页权限，与后端 PermissionKey.VIEW_VIEW 一致 */
 export const PROJECT_VIEWS_VIEW_PERMISSION_KEY = "view.view" as const;

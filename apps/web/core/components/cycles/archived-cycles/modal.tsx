@@ -6,11 +6,13 @@
 
 import { useState } from "react";
 // ui
+import { PROJECT_SPRINTS_ARCHIVE_PERMISSION_KEY } from "@plane/constants";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
 // hooks
 import { useCycle } from "@/hooks/store/use-cycle";
+import { useUserPermissions } from "@/hooks/store/user";
 import { useAppRouter } from "@/hooks/use-app-router";
 
 type Props = {
@@ -30,8 +32,14 @@ export function ArchiveCycleModal(props: Props) {
   const [isArchiving, setIsArchiving] = useState(false);
   // store hooks
   const { getCycleNameById, archiveCycle } = useCycle();
+  const { allowProjectPermissionKeys } = useUserPermissions();
 
   const cycleName = getCycleNameById(cycleId);
+  const canArchiveCycle = allowProjectPermissionKeys(
+    [PROJECT_SPRINTS_ARCHIVE_PERMISSION_KEY],
+    workspaceSlug,
+    projectId
+  );
 
   const onClose = () => {
     setIsArchiving(false);
@@ -39,6 +47,7 @@ export function ArchiveCycleModal(props: Props) {
   };
 
   const handleArchiveCycle = async () => {
+    if (!canArchiveCycle) return;
     setIsArchiving(true);
     await archiveCycle(workspaceSlug, projectId, cycleId)
       .then(() => {
@@ -72,7 +81,14 @@ export function ArchiveCycleModal(props: Props) {
           <Button variant="secondary" size="lg" onClick={onClose}>
             Cancel
           </Button>
-          <Button variant="primary" size="lg" tabIndex={1} onClick={handleArchiveCycle} loading={isArchiving}>
+          <Button
+            variant="primary"
+            size="lg"
+            tabIndex={1}
+            onClick={handleArchiveCycle}
+            loading={isArchiving}
+            disabled={isArchiving || !canArchiveCycle}
+          >
             {isArchiving ? "Archiving" : "Archive"}
           </Button>
         </div>

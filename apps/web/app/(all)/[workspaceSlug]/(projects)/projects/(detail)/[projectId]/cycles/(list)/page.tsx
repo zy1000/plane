@@ -57,10 +57,7 @@ function ProjectCyclesPage({ params }: Route.ComponentProps) {
   const project = getProjectById(projectId);
   const pageTitle = project?.name ? `${project?.name} - ${t("common.cycles", { count: 2 })}` : undefined;
   const hasAdminLevelPermission = allowPermissions([EUserProjectRoles.ADMIN], EUserPermissionsLevel.PROJECT);
-  const hasMemberLevelPermission = allowPermissions(
-    [EUserProjectRoles.ADMIN, EUserProjectRoles.MEMBER],
-    EUserPermissionsLevel.PROJECT
-  );
+  const canCreateSprint = allowProjectPermissionKeys([PROJECT_SPRINTS_CREATE_PERMISSION_KEY], workspaceSlug, projectId);
 
   const handleRemoveFilter = (key: keyof TCycleFilters, value: string | null) => {
     let newValues = currentProjectFilters?.[key] ?? [];
@@ -123,7 +120,7 @@ function ProjectCyclesPage({ params }: Route.ComponentProps) {
                   label: t("project_empty_state.cycles.cta_primary"),
                   onClick: () => setCreateModal(true),
                   variant: "primary",
-                  disabled: !hasMemberLevelPermission || !allowProjectPermissionKeys([PROJECT_SPRINTS_CREATE_PERMISSION_KEY], workspaceSlug, projectId),
+                  disabled: !canCreateSprint,
                   "data-ph-element": CYCLE_TRACKER_ELEMENTS.EMPTY_STATE_ADD_BUTTON,
                 },
               ]}
