@@ -5,6 +5,7 @@ import { observer } from "mobx-react";
 import { useParams, useSearchParams } from "next/navigation";
 import {
   PROJECT_ASSET_DELETE_PERMISSION_KEY,
+  PROJECT_ASSET_DOWNLOAD_PERMISSION_KEY,
   PROJECT_ASSET_EDIT_PERMISSION_KEY,
   PROJECT_ASSET_UPLOAD_PERMISSION_KEY,
   PROJECT_ASSET_VIEW_PERMISSION_KEY,
@@ -59,6 +60,7 @@ function FilestorePage() {
   const canUpload = allowProjectPermissionKeys([PROJECT_ASSET_UPLOAD_PERMISSION_KEY], workspaceSlug, projectId);
   const canEdit = allowProjectPermissionKeys([PROJECT_ASSET_EDIT_PERMISSION_KEY], workspaceSlug, projectId);
   const canDelete = allowProjectPermissionKeys([PROJECT_ASSET_DELETE_PERMISSION_KEY], workspaceSlug, projectId);
+  const canDownload = allowProjectPermissionKeys([PROJECT_ASSET_DOWNLOAD_PERMISSION_KEY], workspaceSlug, projectId);
 
   const [editorOpen, setEditorOpen] = useState(false);
   const [editorMode, setEditorMode] = useState<TOnlyOfficeMode>("edit");
@@ -532,10 +534,10 @@ function FilestorePage() {
         <AssetExplorer
           workspaceSlug={String(workspaceSlug ?? "")}
           projectId={String(projectId ?? "")}
-          permissions={{ canUpload, canDelete, canCreateFolder: canUpload }}
+          permissions={{ canUpload, canDelete, canCreateFolder: canUpload, canEdit, canDownload }}
           versionRefreshSignal={assetVersionRefreshSignal}
           onPreview={canView ? handlePreview : undefined}
-          onEdit={canEdit ? handleEdit : undefined}
+          onEdit={handleEdit}
         />
       </ContentWrapper>
 

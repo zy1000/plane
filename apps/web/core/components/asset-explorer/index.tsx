@@ -89,8 +89,9 @@ export const AssetExplorer = (props: TAssetExplorerProps) => {
   );
 
   const triggerUpload = useCallback(() => {
+    if (!props.permissions.canUpload) return;
     fileInputRef.current?.click();
-  }, []);
+  }, [props.permissions.canUpload]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const list = e.target.files;
@@ -166,10 +167,11 @@ export const AssetExplorer = (props: TAssetExplorerProps) => {
 
   const handleRenameFile = useCallback(
     (file: TAssetExplorerFile) => {
+      if (!props.permissions.canEdit) return;
       explorer.setRenamingFile(file);
       explorer.setRenameFileOpen(true);
     },
-    [explorer]
+    [explorer, props.permissions.canEdit]
   );
 
   const handleDeleteFile = useCallback(
@@ -250,7 +252,9 @@ export const AssetExplorer = (props: TAssetExplorerProps) => {
             keyword={explorer.keyword}
             onKeywordChange={explorer.setKeyword}
             onSearch={() => void handleSearch()}
-            onCreateFolder={() => explorer.setCreateFolderOpen(true)}
+            onCreateFolder={() => {
+              if (props.permissions.canCreateFolder) explorer.setCreateFolderOpen(true);
+            }}
           />
         }
       />
@@ -268,7 +272,9 @@ export const AssetExplorer = (props: TAssetExplorerProps) => {
               canUpload={props.permissions.canUpload}
               canCreateFolder={props.permissions.canCreateFolder}
               onUpload={triggerUpload}
-              onCreateFolder={() => explorer.setCreateFolderOpen(true)}
+              onCreateFolder={() => {
+                if (props.permissions.canCreateFolder) explorer.setCreateFolderOpen(true);
+              }}
               onClearSearch={() => {
                 const folderId = explorer.currentFolder?.id ?? explorer.rootFolder?.id;
                 explorer.setKeyword("");
@@ -302,6 +308,8 @@ export const AssetExplorer = (props: TAssetExplorerProps) => {
           <SelectionBar
             open={explorer.selectedCount > 0}
             count={explorer.selectedCount}
+            canUpload={props.permissions.canUpload}
+            canDownload={props.permissions.canDownload}
             canDelete={props.permissions.canDelete}
             onClear={explorer.clearSelection}
             onBatchDownload={explorer.onBatchDownload}

@@ -7,6 +7,8 @@ type TVersionHistoryModalProps = {
   open: boolean;
   file: TAssetExplorerFile | null;
   versions: TAssetFileVersion[];
+  canDownload: boolean;
+  canEdit: boolean;
   onCancel: () => void;
   onDownloadVersion: (file: TAssetExplorerFile, version: TAssetFileVersion) => void | Promise<void>;
   onRenameVersion: (version: TAssetFileVersion) => void;
@@ -19,6 +21,8 @@ export const VersionHistoryModal = ({
   open,
   file,
   versions,
+  canDownload,
+  canEdit,
   onCancel,
   onDownloadVersion,
   onRenameVersion,
@@ -94,18 +98,20 @@ export const VersionHistoryModal = ({
                     <button
                       type="button"
                       title="下载版本"
+                      disabled={!canDownload}
                       onClick={() => {
                         if (file) void onDownloadVersion(file, version);
                       }}
-                      className="flex h-8 w-8 items-center justify-center rounded-md text-tertiary transition hover:bg-layer-1-hover hover:text-primary"
+                      className="flex h-8 w-8 items-center justify-center rounded-md text-tertiary transition hover:bg-layer-1-hover hover:text-primary disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-tertiary"
                     >
                       <Download className="size-3.5" />
                     </button>
                     <button
                       type="button"
                       title="重命名版本"
+                      disabled={!canEdit}
                       onClick={() => onRenameVersion(version)}
-                      className="flex h-8 w-8 items-center justify-center rounded-md text-tertiary transition hover:bg-layer-1-hover hover:text-primary"
+                      className="flex h-8 w-8 items-center justify-center rounded-md text-tertiary transition hover:bg-layer-1-hover hover:text-primary disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-tertiary"
                     >
                       <Pencil className="size-3.5" />
                     </button>
@@ -113,6 +119,7 @@ export const VersionHistoryModal = ({
                       <button
                         type="button"
                         title="回退到此版本"
+                        disabled={!canEdit}
                         onClick={() => {
                           Modal.confirm({
                             title: "确认回退到该版本？",
@@ -125,7 +132,7 @@ export const VersionHistoryModal = ({
                             },
                           });
                         }}
-                        className="flex h-8 w-8 items-center justify-center rounded-md text-tertiary transition hover:bg-layer-1-hover hover:text-primary"
+                        className="flex h-8 w-8 items-center justify-center rounded-md text-tertiary transition hover:bg-layer-1-hover hover:text-primary disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-tertiary"
                       >
                         <RotateCcw className="size-3.5" />
                       </button>

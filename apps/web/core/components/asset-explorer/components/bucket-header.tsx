@@ -124,16 +124,14 @@ export const BucketHeader = ({
           onClick={onRefresh}
           variant="secondary"
         />
-        {canUpload && (
-          <HeaderButton
-            icon={<Upload className="size-4" />}
-            label="上传"
-            onClick={onUpload}
-            disabled={uploading}
-            loading={uploading}
-            variant="primary"
-          />
-        )}
+        <HeaderButton
+          icon={<Upload className="size-4" />}
+          label="上传"
+          onClick={onUpload}
+          disabled={!canUpload || uploading}
+          loading={uploading}
+          variant="primary"
+        />
       </div>
     </div>
   );

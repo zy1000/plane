@@ -3,6 +3,8 @@ import { Copy, Download, FolderInput, Trash2, X } from "lucide-react";
 type TSelectionBarProps = {
   open: boolean;
   count: number;
+  canUpload: boolean;
+  canDownload: boolean;
   canDelete: boolean;
   onClear: () => void;
   onBatchDownload: () => void;
@@ -15,18 +17,21 @@ const Pill = ({
   onClick,
   children,
   danger,
+  disabled,
 }: {
   onClick: () => void;
   children: React.ReactNode;
   danger?: boolean;
+  disabled?: boolean;
 }) => (
   <button
     type="button"
     onClick={onClick}
-    className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] font-medium transition ${
+    disabled={disabled}
+    className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${
       danger
-        ? "text-rose-300 hover:bg-rose-500/15 hover:text-rose-200"
-        : "text-zinc-200 hover:bg-white/[0.08] hover:text-white"
+        ? "text-rose-300 hover:bg-rose-500/15 hover:text-rose-200 disabled:hover:bg-transparent disabled:hover:text-rose-300"
+        : "text-zinc-200 hover:bg-white/[0.08] hover:text-white disabled:hover:bg-transparent disabled:hover:text-zinc-200"
     }`}
   >
     {children}
@@ -36,6 +41,8 @@ const Pill = ({
 export const SelectionBar = ({
   open,
   count,
+  canUpload,
+  canDownload,
   canDelete,
   onClear,
   onBatchDownload,
@@ -62,24 +69,22 @@ export const SelectionBar = ({
           <span className="tracking-tight text-zinc-300">项已选</span>
         </div>
         <div className="mx-1 h-5 w-px bg-white/15" />
-        <Pill onClick={onBatchDownload}>
+        <Pill onClick={onBatchDownload} disabled={!canDownload}>
           <Download className="size-3.5" />
           下载
         </Pill>
-        <Pill onClick={onBatchCopy}>
+        <Pill onClick={onBatchCopy} disabled={!canUpload}>
           <Copy className="size-3.5" />
           复制到
         </Pill>
-        <Pill onClick={onBatchMove}>
+        <Pill onClick={onBatchMove} disabled={!canUpload}>
           <FolderInput className="size-3.5" />
           移动到
         </Pill>
-        {canDelete && (
-          <Pill onClick={onBatchDelete} danger>
-            <Trash2 className="size-3.5" />
-            删除
-          </Pill>
-        )}
+        <Pill onClick={onBatchDelete} danger disabled={!canDelete}>
+          <Trash2 className="size-3.5" />
+          删除
+        </Pill>
         <div className="mx-1 h-5 w-px bg-white/15" />
         <button
           type="button"

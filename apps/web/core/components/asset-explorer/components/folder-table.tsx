@@ -47,47 +47,44 @@ export const FolderTable = ({
 
   const buildFolderMenu = (folder: TAssetFolder): MenuProps["items"] => {
     const items: NonNullable<MenuProps["items"]> = [];
-    if (permissions.canCreateFolder) {
-      items.push({
-        key: "rename",
-        label: "重命名",
-        icon: <Pencil className="size-3.5" />,
-        onClick: ({ domEvent }) => {
-          domEvent.stopPropagation();
-          onRenameFolder(folder);
-        },
-      });
-    }
-    if (permissions.canDelete) {
-      items.push({
-        key: "delete",
-        danger: true,
-        label: "删除",
-        icon: <Trash2 className="size-3.5" />,
-        onClick: ({ domEvent }) => {
-          domEvent.stopPropagation();
-          confirmDeleteFolder(folder.name, () => {
-            void onDeleteFolder(folder.id);
-          });
-        },
-      });
-    }
+    items.push({
+      key: "rename",
+      label: "重命名",
+      icon: <Pencil className="size-3.5" />,
+      disabled: !permissions.canCreateFolder,
+      onClick: ({ domEvent }) => {
+        domEvent.stopPropagation();
+        onRenameFolder(folder);
+      },
+    });
+    items.push({
+      key: "delete",
+      danger: true,
+      label: "删除",
+      icon: <Trash2 className="size-3.5" />,
+      disabled: !permissions.canDelete,
+      onClick: ({ domEvent }) => {
+        domEvent.stopPropagation();
+        confirmDeleteFolder(folder.name, () => {
+          void onDeleteFolder(folder.id);
+        });
+      },
+    });
     return items;
   };
 
   const buildFileMenu = (file: TAssetExplorerFile): MenuProps["items"] => {
     const items: NonNullable<MenuProps["items"]> = [];
-    if (permissions.canUpload) {
-      items.push({
-        key: "rename",
-        label: "重命名",
-        icon: <SquarePen className="size-3.5" />,
-        onClick: ({ domEvent }) => {
-          domEvent.stopPropagation();
-          onRenameFile(file);
-        },
-      });
-    }
+    items.push({
+      key: "rename",
+      label: "重命名",
+      icon: <SquarePen className="size-3.5" />,
+      disabled: !permissions.canEdit,
+      onClick: ({ domEvent }) => {
+        domEvent.stopPropagation();
+        onRenameFile(file);
+      },
+    });
     return items;
   };
 

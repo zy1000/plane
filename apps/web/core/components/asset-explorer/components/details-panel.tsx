@@ -32,21 +32,27 @@ type TActionRowProps = {
   label: string;
   onClick: () => void;
   danger?: boolean;
+  disabled?: boolean;
 };
 
-const ActionRow = ({ icon, label, onClick, danger }: TActionRowProps) => (
+const ActionRow = ({ icon, label, onClick, danger, disabled }: TActionRowProps) => (
   <button
     type="button"
     onClick={onClick}
+    disabled={disabled}
     className={`group flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left text-[13px] font-medium transition ${
       danger
-        ? "text-secondary hover:bg-danger-subtle hover:text-danger-primary"
-        : "text-secondary hover:bg-accent-primary/[0.08] hover:text-accent-primary"
+        ? "text-secondary hover:bg-danger-subtle hover:text-danger-primary disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-secondary"
+        : "text-secondary hover:bg-accent-primary/[0.08] hover:text-accent-primary disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-secondary"
     }`}
   >
     <span
       className={`shrink-0 ${
-        danger ? "text-tertiary group-hover:text-danger-primary" : "text-tertiary group-hover:text-accent-primary"
+        disabled
+          ? "text-tertiary"
+          : danger
+            ? "text-tertiary group-hover:text-danger-primary"
+            : "text-tertiary group-hover:text-accent-primary"
       }`}
     >
       {icon}
@@ -169,40 +175,39 @@ export const DetailsPanel = ({
                   <ActionRow
                     icon={<Pencil className="size-4" strokeWidth={1.75} />}
                     label="编辑"
+                    disabled={!permissions.canEdit}
                     onClick={() => void onEditFile(file)}
                   />
                 )}
-                {permissions.canUpload && (
-                  <ActionRow
-                    icon={<SquarePen className="size-4" strokeWidth={1.75} />}
-                    label="重命名"
-                    onClick={() => void onRenameFile(file)}
-                  />
-                )}
+                <ActionRow
+                  icon={<SquarePen className="size-4" strokeWidth={1.75} />}
+                  label="重命名"
+                  disabled={!permissions.canEdit}
+                  onClick={() => void onRenameFile(file)}
+                />
                 <ActionRow
                   icon={<Download className="size-4" strokeWidth={1.75} />}
                   label="下载"
+                  disabled={!permissions.canDownload}
                   onClick={() => void onDownloadFile(file)}
                 />
-                {permissions.canUpload && (
-                  <ActionRow
-                    icon={<Upload className="size-4" strokeWidth={1.75} />}
-                    label="上传新版本"
-                    onClick={() => versionInputRef.current?.click()}
-                  />
-                )}
-                {permissions.canDelete && (
-                  <ActionRow
-                    icon={<Trash2 className="size-4" strokeWidth={1.75} />}
-                    label="删除"
-                    danger
-                    onClick={() =>
-                      confirmDeleteFiles(1, () => {
-                        void onDeleteFile(file.id);
-                      })
-                    }
-                  />
-                )}
+                <ActionRow
+                  icon={<Upload className="size-4" strokeWidth={1.75} />}
+                  label="上传新版本"
+                  disabled={!permissions.canEdit}
+                  onClick={() => versionInputRef.current?.click()}
+                />
+                <ActionRow
+                  icon={<Trash2 className="size-4" strokeWidth={1.75} />}
+                  label="删除"
+                  danger
+                  disabled={!permissions.canDelete}
+                  onClick={() =>
+                    confirmDeleteFiles(1, () => {
+                      void onDeleteFile(file.id);
+                    })
+                  }
+                />
               </div>
             </section>
 
@@ -282,6 +287,8 @@ export const DetailsPanel = ({
         open={Boolean(file && versionHistoryOpen)}
         file={file}
         versions={versions}
+        canDownload={permissions.canDownload}
+        canEdit={permissions.canEdit}
         onCancel={() => setVersionHistoryOpen(false)}
         onDownloadVersion={onDownloadVersion}
         onRenameVersion={setAliasEditingVersion}

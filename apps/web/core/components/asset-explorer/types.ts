@@ -4,6 +4,8 @@ export type TAssetExplorerPermissions = {
   canUpload: boolean;
   canDelete: boolean;
   canCreateFolder: boolean;
+  canEdit: boolean;
+  canDownload: boolean;
 };
 
 export type TAssetExplorerProps = {

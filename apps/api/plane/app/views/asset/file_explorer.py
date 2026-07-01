@@ -608,7 +608,7 @@ class FilestoreExplorerViewSet(BaseViewSet):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(detail=False, methods=["patch"], url_path="(?P<asset_id>[^/.]+)/rename")
-    @allow_fine_permission(PermissionKey.PROJECT_ASSET_UPLOAD)
+    @allow_fine_permission(PermissionKey.PROJECT_ASSET_EDIT)
     def rename_asset(self, request, slug, project_id, asset_id):
         serializer = AssetRenameSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)

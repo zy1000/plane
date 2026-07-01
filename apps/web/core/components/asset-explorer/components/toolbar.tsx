@@ -81,17 +81,16 @@ export const Toolbar = ({
         </button>
       </div>
 
-      {permissions.canCreateFolder && (
-        <Button
-          type="button"
-          onClick={onCreateFolder}
-          variant="secondary"
-          size="lg"
-          prependIcon={<FolderPlus className="size-3.5" />}
-        >
-          新建文件夹
-        </Button>
-      )}
+      <Button
+        type="button"
+        onClick={onCreateFolder}
+        disabled={!permissions.canCreateFolder}
+        variant="secondary"
+        size="lg"
+        prependIcon={<FolderPlus className="size-3.5" />}
+      >
+        新建文件夹
+      </Button>
     </div>
   );
 };

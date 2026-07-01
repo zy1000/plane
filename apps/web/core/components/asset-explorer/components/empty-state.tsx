@@ -52,26 +52,24 @@ export const EmptyState = ({
         把文件拖进来，或者从下方按钮上传 / 新建子目录开始组织。
       </p>
       <div className="mt-5 flex items-center gap-2">
-        {canUpload && (
-          <button
-            type="button"
-            onClick={onUpload}
-            className="flex h-8 items-center gap-1.5 rounded-md bg-accent-primary px-3 text-[13px] font-medium text-on-color shadow-raised-200 transition hover:bg-accent-primary-hover"
-          >
-            <UploadCloud className="size-3.5" />
-            上传文件
-          </button>
-        )}
-        {canCreateFolder && (
-          <button
-            type="button"
-            onClick={onCreateFolder}
-            className="flex h-8 items-center gap-1.5 rounded-md border border-subtle bg-layer-1 px-3 text-[13px] font-medium text-secondary transition hover:border-strong hover:bg-layer-1-hover hover:text-primary"
-          >
-            <FolderPlus className="size-3.5" />
-            新建文件夹
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={onUpload}
+          disabled={!canUpload}
+          className="flex h-8 items-center gap-1.5 rounded-md bg-accent-primary px-3 text-[13px] font-medium text-on-color shadow-raised-200 transition hover:bg-accent-primary-hover disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-accent-primary"
+        >
+          <UploadCloud className="size-3.5" />
+          上传文件
+        </button>
+        <button
+          type="button"
+          onClick={onCreateFolder}
+          disabled={!canCreateFolder}
+          className="flex h-8 items-center gap-1.5 rounded-md border border-subtle bg-layer-1 px-3 text-[13px] font-medium text-secondary transition hover:border-strong hover:bg-layer-1-hover hover:text-primary disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-subtle disabled:hover:bg-layer-1 disabled:hover:text-secondary"
+        >
+          <FolderPlus className="size-3.5" />
+          新建文件夹
+        </button>
       </div>
     </div>
   );
