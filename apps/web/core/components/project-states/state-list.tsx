@@ -8,6 +8,7 @@ import { observer } from "mobx-react";
 import type { IState, TStateGroups, TStateOperationsCallbacks } from "@plane/types";
 // components
 import { StateItem } from "@/components/project-states";
+import type { TProjectStatePermissions } from "./types";
 
 type TStateList = {
   groupKey: TStateGroups;
@@ -15,7 +16,7 @@ type TStateList = {
   states: IState[];
   stateOperationsCallbacks: TStateOperationsCallbacks;
   shouldTrackEvents: boolean;
-  disabled?: boolean;
+  permissions: TProjectStatePermissions;
   stateItemClassName?: string;
 };
 
@@ -26,7 +27,7 @@ export const StateList = observer(function StateList(props: TStateList) {
     states,
     stateOperationsCallbacks,
     shouldTrackEvents,
-    disabled = false,
+    permissions,
     stateItemClassName,
   } = props;
 
@@ -39,7 +40,7 @@ export const StateList = observer(function StateList(props: TStateList) {
           groupedStates={groupedStates}
           totalStates={states.length || 0}
           state={state}
-          disabled={disabled}
+          permissions={permissions}
           stateOperationsCallbacks={stateOperationsCallbacks}
           shouldTrackEvents={shouldTrackEvents}
           stateItemClassName={stateItemClassName}

@@ -19,6 +19,7 @@ import { DropIndicator } from "@plane/ui";
 import { cn, getCurrentStateSequence } from "@plane/utils";
 // components
 import { StateItemTitle, StateUpdate } from "@/components/project-states";
+import type { TProjectStatePermissions } from "./types";
 // helpers
 type TStateItem = {
   groupKey: TStateGroups;
@@ -27,7 +28,7 @@ type TStateItem = {
   state: IState;
   stateOperationsCallbacks: TStateOperationsCallbacks;
   shouldTrackEvents: boolean;
-  disabled?: boolean;
+  permissions: TProjectStatePermissions;
   stateItemClassName?: string;
 };
 
@@ -39,7 +40,7 @@ export const StateItem = observer(function StateItem(props: TStateItem) {
     state,
     stateOperationsCallbacks,
     shouldTrackEvents,
-    disabled = false,
+    permissions,
     stateItemClassName,
   } = props;
   const { t } = useTranslation();
@@ -60,6 +61,7 @@ export const StateItem = observer(function StateItem(props: TStateItem) {
       markStateAsDefault: stateOperationsCallbacks.markStateAsDefault,
       deleteState: stateOperationsCallbacks.deleteState,
     },
+    permissions,
     shouldTrackEvents,
   };
 
@@ -100,7 +102,7 @@ export const StateItem = observer(function StateItem(props: TStateItem) {
           getInitialData: () => initialData,
           onDragStart: () => setIsDragging(true),
           onDrop: () => setIsDragging(false),
-          canDrag: () => isDraggable && !disabled,
+          canDrag: () => isDraggable && permissions.canEditState,
         }),
         dropTargetForElements({
           element: elementRef,
@@ -138,7 +140,7 @@ export const StateItem = observer(function StateItem(props: TStateItem) {
         })
       );
     }
-  }, [draggableElementRef, state, groupKey, isDraggable, groupedStates, handleStateSequence, disabled]);
+  }, [draggableElementRef, state, groupKey, isDraggable, groupedStates, handleStateSequence, permissions.canEditState]);
   // DND ends
 
   if (updateStateModal)
@@ -160,11 +162,11 @@ export const StateItem = observer(function StateItem(props: TStateItem) {
         className={cn(
           "group relative rounded-sm border border-subtle bg-surface-1 px-3.5 py-3",
           isDragging ? `opacity-50` : `opacity-100`,
-          totalStates === 1 ? `cursor-auto` : `cursor-grab`,
+          totalStates === 1 || !permissions.canEditState ? `cursor-auto` : `cursor-grab`,
           stateItemClassName
         )}
       >
-        <StateItemTitle {...commonStateItemListProps} disabled={disabled} />
+        <StateItemTitle {...commonStateItemListProps} />
       </div>
       {/* draggable drop bottom indicator */}
       <DropIndicator isVisible={isDraggedOver && closestEdge === "bottom"} />

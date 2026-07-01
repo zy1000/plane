@@ -14,6 +14,7 @@ import type { IState, TStateOperationsCallbacks } from "@plane/types";
 // local imports
 import { useProjectState } from "@/hooks/store/use-project-state";
 import { StateDelete, StateMarksAsDefault } from "./options";
+import type { TProjectStatePermissions } from "./types";
 
 type TBaseStateItemTitleProps = {
   stateCount: number;
@@ -21,15 +22,14 @@ type TBaseStateItemTitleProps = {
   shouldShowDescription?: boolean;
   setUpdateStateModal: (value: SetStateAction<boolean>) => void;
   stateOperationsCallbacks: Pick<TStateOperationsCallbacks, "markStateAsDefault" | "deleteState">;
+  permissions: TProjectStatePermissions;
   shouldTrackEvents: boolean;
 };
 
-export type TStateItemTitleProps = TBaseStateItemTitleProps & {
-  disabled: boolean;
-};
+export type TStateItemTitleProps = TBaseStateItemTitleProps;
 
 export const StateItemTitle = observer(function StateItemTitle(props: TStateItemTitleProps) {
-  const { stateCount, setUpdateStateModal, disabled, state, shouldShowDescription = true } = props;
+  const { stateCount, setUpdateStateModal, permissions, state, shouldShowDescription = true } = props;
   // store hooks
   const { getStatePercentageInGroup } = useProjectState();
   // derived values
@@ -40,7 +40,7 @@ export const StateItemTitle = observer(function StateItemTitle(props: TStateItem
     <div className="flex w-full items-center justify-between gap-2">
       <div className="flex items-center gap-1 px-1">
         {/* draggable indicator */}
-        {!disabled && stateCount != 1 && (
+        {permissions.canEditState && stateCount != 1 && (
           <div className="absolute -left-1.5 hidden h-3 w-3 flex-shrink-0 cursor-pointer items-center justify-center rounded-xs bg-surface-2 text-secondary transition-colors group-hover:flex hover:text-primary">
             <GripVertical className="h-3 w-3" />
           </div>
@@ -62,15 +62,17 @@ export const StateItemTitle = observer(function StateItemTitle(props: TStateItem
             stateId={state.id}
             isDefault={state.default ? true : false}
             markStateAsDefaultCallback={props.stateOperationsCallbacks.markStateAsDefault}
-            disabled={disabled}
+            disabled={!permissions.canMarkStateAsDefault}
           />
         </div>
         {/* state edit options */}
         <div className="flex items-center gap-1 transition-all">
           <button
             className="flex h-5 w-5 flex-shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-sm text-secondary transition-colors hover:bg-layer-1 hover:text-primary disabled:cursor-not-allowed disabled:text-placeholder disabled:hover:bg-transparent"
-            onClick={() => setUpdateStateModal(true)}
-            disabled={disabled}
+            onClick={() => {
+              if (permissions.canEditState) setUpdateStateModal(true);
+            }}
+            disabled={!permissions.canEditState}
             data-ph-element={STATE_TRACKER_ELEMENTS.STATE_LIST_EDIT_BUTTON}
           >
             <EditIcon className="h-3 w-3" />
@@ -80,7 +82,7 @@ export const StateItemTitle = observer(function StateItemTitle(props: TStateItem
             state={state}
             deleteStateCallback={props.stateOperationsCallbacks.deleteState}
             shouldTrackEvents={props.shouldTrackEvents}
-            disabled={disabled}
+            disabled={!permissions.canDeleteState}
           />
         </div>
       </div>

@@ -88,6 +88,7 @@ export const StateDelete = observer(function StateDelete(props: TStateDelete) {
       <AlertModalCore
         handleClose={() => setIsDeleteModal(false)}
         handleSubmit={handleDeleteState}
+        isSubmitDisabled={isDeleteDisabled}
         isSubmitting={isDelete}
         isOpen={isDeleteModal}
         title="Delete State"

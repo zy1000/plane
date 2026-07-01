@@ -15,6 +15,7 @@ import type { IState, TStateGroups, TStateOperationsCallbacks } from "@plane/typ
 import { cn } from "@plane/utils";
 // components
 import { StateList, StateCreate } from "@/components/project-states";
+import type { TProjectStatePermissions } from "./types";
 
 type TGroupItem = {
   groupKey: TStateGroups;
@@ -22,7 +23,7 @@ type TGroupItem = {
   groupedStates: Record<string, IState[]>;
   states: IState[];
   stateOperationsCallbacks: TStateOperationsCallbacks;
-  isEditable: boolean;
+  permissions: TProjectStatePermissions;
   shouldTrackEvents: boolean;
   groupItemClassName?: string;
   stateItemClassName?: string;
@@ -36,7 +37,7 @@ export const GroupItem = observer(function GroupItem(props: TGroupItem) {
     groupedStates,
     states,
     groupsExpanded,
-    isEditable,
+    permissions,
     stateOperationsCallbacks,
     shouldTrackEvents,
     groupItemClassName,
@@ -53,6 +54,7 @@ export const GroupItem = observer(function GroupItem(props: TGroupItem) {
   // derived values
   const currentStateExpanded = groupsExpanded.includes(groupKey);
   const shouldShowEmptyState = states.length === 0 && currentStateExpanded && !createState;
+  const isCreateDisabled = !permissions.canCreateState || createState;
 
   return (
     <div
@@ -85,15 +87,15 @@ export const GroupItem = observer(function GroupItem(props: TGroupItem) {
           data-ph-element={STATE_TRACKER_ELEMENTS.STATE_GROUP_ADD_BUTTON}
           className={cn(
             "flex h-6 w-6 flex-shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-sm text-accent-primary/80 transition-colors hover:bg-layer-1 hover:text-accent-primary",
-            (!isEditable || createState) && "cursor-not-allowed text-placeholder hover:text-placeholder"
+            isCreateDisabled && "cursor-not-allowed text-placeholder hover:text-placeholder"
           )}
           onClick={() => {
-            if (!createState) {
+            if (!isCreateDisabled) {
               handleExpand(groupKey);
               setCreateState(true);
             }
           }}
-          disabled={!isEditable || createState}
+          disabled={isCreateDisabled}
         >
           <PlusIcon className="h-4 w-4" />
         </button>
@@ -102,7 +104,7 @@ export const GroupItem = observer(function GroupItem(props: TGroupItem) {
       {shouldShowEmptyState && (
         <div className="flex h-full flex-col items-center justify-center py-4 text-13 text-tertiary">
           <div>{t("project_settings.states.empty_state.title", { groupKey })}</div>
-          {isEditable && <div>{t("project_settings.states.empty_state.description")}</div>}
+          {permissions.canCreateState && <div>{t("project_settings.states.empty_state.description")}</div>}
         </div>
       )}
 
@@ -112,7 +114,7 @@ export const GroupItem = observer(function GroupItem(props: TGroupItem) {
             groupKey={groupKey}
             groupedStates={groupedStates}
             states={states}
-            disabled={!isEditable}
+            permissions={permissions}
             stateOperationsCallbacks={stateOperationsCallbacks}
             shouldTrackEvents={shouldTrackEvents}
             stateItemClassName={stateItemClassName}
@@ -120,7 +122,7 @@ export const GroupItem = observer(function GroupItem(props: TGroupItem) {
         </div>
       )}
 
-      {isEditable && createState && (
+      {permissions.canCreateState && createState && (
         <div className="">
           <StateCreate
             groupKey={groupKey}

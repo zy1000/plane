@@ -11,11 +11,12 @@ import type { IState, TStateGroups, TStateOperationsCallbacks } from "@plane/typ
 import { cn } from "@plane/utils";
 // components
 import { GroupItem } from "@/components/project-states";
+import type { TProjectStatePermissions } from "./types";
 
 type TGroupList = {
   groupedStates: Record<string, IState[]>;
   stateOperationsCallbacks: TStateOperationsCallbacks;
-  isEditable: boolean;
+  permissions: TProjectStatePermissions;
   shouldTrackEvents: boolean;
   groupListClassName?: string;
   groupItemClassName?: string;
@@ -26,7 +27,7 @@ export const GroupList = observer(function GroupList(props: TGroupList) {
   const {
     groupedStates,
     stateOperationsCallbacks,
-    isEditable,
+    permissions,
     shouldTrackEvents,
     groupListClassName,
     groupItemClassName,
@@ -71,7 +72,7 @@ export const GroupList = observer(function GroupList(props: TGroupList) {
             groupedStates={groupedStates}
             groupsExpanded={groupsExpanded}
             stateOperationsCallbacks={stateOperationsCallbacks}
-            isEditable={isEditable}
+            permissions={permissions}
             shouldTrackEvents={shouldTrackEvents}
             handleGroupCollapse={handleGroupCollapse}
             handleExpand={handleExpand}

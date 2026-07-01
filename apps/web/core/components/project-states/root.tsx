@@ -17,10 +17,20 @@ import { useUserPermissions } from "@/hooks/store/user";
 import { useProjectIssueTypes } from "@/hooks/store/use-project-issue-types";
 // types
 import type { TIssueType } from "@/services/project/project-issue-type.service";
+import type { TProjectStatePermissions } from "./types";
 // lucide icons
 import * as LucideIcons from "lucide-react";
 import { LayersIcon } from "@plane/propel/icons";
 import { cn } from "@plane/utils";
+
+const STATE_PERMISSION_KEYS = {
+  create: "state.create",
+  edit: "state.edit",
+  delete: "state.delete",
+  markDefault: "state.mark_default",
+} as const;
+
+const PROJECT_PERMISSION_DENIED_ERROR = { error: "You don't have the required permissions." };
 
 type TProjectState = {
   workspaceSlug: string;
@@ -90,10 +100,14 @@ export const ProjectStateRoot = observer(function ProjectStateRoot(props: TProje
   }, [issueTypes, selectedIssueTypeId]);
 
   // derived values
-  const isEditable = allowProjectPermissionKeys(
-    ["state.create", "state.edit", "state.delete", "state.mark_default"],
-    workspaceSlug,
-    projectId
+  const statePermissions: TProjectStatePermissions = useMemo(
+    () => ({
+      canCreateState: allowProjectPermissionKeys([STATE_PERMISSION_KEYS.create], workspaceSlug, projectId),
+      canEditState: allowProjectPermissionKeys([STATE_PERMISSION_KEYS.edit], workspaceSlug, projectId),
+      canDeleteState: allowProjectPermissionKeys([STATE_PERMISSION_KEYS.delete], workspaceSlug, projectId),
+      canMarkStateAsDefault: allowProjectPermissionKeys([STATE_PERMISSION_KEYS.markDefault], workspaceSlug, projectId),
+    }),
+    [allowProjectPermissionKeys, workspaceSlug, projectId]
   );
 
   const selectedIssueType = issueTypes?.find((t) => t.id === selectedIssueTypeId);
@@ -115,19 +129,51 @@ export const ProjectStateRoot = observer(function ProjectStateRoot(props: TProje
   // State operations callbacks
   const stateOperationsCallbacks: TStateOperationsCallbacks = useMemo(
     () => ({
-      createState: async (data: Partial<IState>) =>
-        createState(workspaceSlug, projectId, {
+      createState: async (data: Partial<IState>) => {
+        if (!statePermissions.canCreateState) {
+          throw PROJECT_PERMISSION_DENIED_ERROR;
+        }
+        return createState(workspaceSlug, projectId, {
           ...data,
           ...(selectedIssueTypeId ? { issue_type_id: selectedIssueTypeId } : {}),
-        }),
-      updateState: async (stateId: string, data: Partial<IState>) =>
-        updateState(workspaceSlug, projectId, stateId, data),
-      deleteState: async (stateId: string) => deleteState(workspaceSlug, projectId, stateId),
-      moveStatePosition: async (stateId: string, data: Partial<IState>) =>
-        moveStatePosition(workspaceSlug, projectId, stateId, data),
-      markStateAsDefault: async (stateId: string) => markStateAsDefault(workspaceSlug, projectId, stateId),
+        });
+      },
+      updateState: async (stateId: string, data: Partial<IState>) => {
+        if (!statePermissions.canEditState) {
+          throw PROJECT_PERMISSION_DENIED_ERROR;
+        }
+        return updateState(workspaceSlug, projectId, stateId, data);
+      },
+      deleteState: async (stateId: string) => {
+        if (!statePermissions.canDeleteState) {
+          throw PROJECT_PERMISSION_DENIED_ERROR;
+        }
+        return deleteState(workspaceSlug, projectId, stateId);
+      },
+      moveStatePosition: async (stateId: string, data: Partial<IState>) => {
+        if (!statePermissions.canEditState) {
+          throw PROJECT_PERMISSION_DENIED_ERROR;
+        }
+        return moveStatePosition(workspaceSlug, projectId, stateId, data);
+      },
+      markStateAsDefault: async (stateId: string) => {
+        if (!statePermissions.canMarkStateAsDefault) {
+          throw PROJECT_PERMISSION_DENIED_ERROR;
+        }
+        return markStateAsDefault(workspaceSlug, projectId, stateId);
+      },
     }),
-    [workspaceSlug, projectId, selectedIssueTypeId, createState, moveStatePosition, updateState, deleteState, markStateAsDefault]
+    [
+      workspaceSlug,
+      projectId,
+      selectedIssueTypeId,
+      createState,
+      moveStatePosition,
+      updateState,
+      deleteState,
+      markStateAsDefault,
+      statePermissions,
+    ]
   );
 
   if (issueTypesLoading) return <ProjectStateLoader />;
@@ -171,7 +217,7 @@ export const ProjectStateRoot = observer(function ProjectStateRoot(props: TProje
           <GroupList
             groupedStates={groupedProjectStates}
             stateOperationsCallbacks={stateOperationsCallbacks}
-            isEditable={isEditable}
+            permissions={statePermissions}
             shouldTrackEvents
           />
         )}
