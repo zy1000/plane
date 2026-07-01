@@ -9,8 +9,6 @@ from rest_framework import status
 from rest_framework.response import Response
 
 from plane.app.permissions import (
-    ROLE,
-    allow_permission,
     allow_fine_permission,
     PermissionKey,
 )
@@ -56,12 +54,12 @@ class ProjectRoleViewSet(BaseViewSet):
     def get_role(self, pk):
         return self.get_queryset().filter(pk=pk).first()
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    @allow_fine_permission(PermissionKey.PROJECT_ROLE_VIEW)
     def list(self, request, slug, project_id):
         serializer = self.get_serializer(self.get_queryset(), many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    @allow_fine_permission(PermissionKey.PROJECT_ROLE_VIEW)
     def retrieve(self, request, slug, project_id, pk):
         role = self.get_role(pk)
         if not role:
@@ -231,7 +229,7 @@ class ProjectRoleImportAPIView(BaseAPIView):
 
         return list(dict.fromkeys(mapped_keys))
 
-    @allow_permission([ROLE.ADMIN])
+    @allow_fine_permission(PermissionKey.PROJECT_ROLE_CREATE)
     def post(self, request, slug, project_id):
         project = self.get_project(slug, project_id)
         if not project:
@@ -399,7 +397,7 @@ class ProjectRolePermissionAPIView(BaseAPIView):
             "permissions": permission_serializer.data,
         }
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    @allow_fine_permission(PermissionKey.PROJECT_ROLE_VIEW)
     def get(self, request, slug, project_id, pk):
         role = self.get_role(slug, project_id, pk)
         if not role:

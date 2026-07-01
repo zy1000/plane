@@ -37,7 +37,7 @@ export const PROJECT_SETTINGS: Record<TProjectSettingsTabs, TProjectSettingsItem
     i18n_label: "common.members",
     href: `/members`,
     access: [EUserProjectRoles.ADMIN, EUserProjectRoles.MEMBER, EUserProjectRoles.GUEST],
-    permissionKeys: ["project.member.view", "project.settings.view"],
+    permissionKeys: ["project.member.view"],
     highlight: (pathname: string, baseUrl: string) => pathname === `${baseUrl}/members/`,
   },
   roles: {
@@ -45,7 +45,7 @@ export const PROJECT_SETTINGS: Record<TProjectSettingsTabs, TProjectSettingsItem
     i18n_label: "project_settings.roles.label",
     href: `/roles`,
     access: [EUserProjectRoles.ADMIN, EUserProjectRoles.MEMBER, EUserProjectRoles.GUEST],
-    permissionKeys: ["project.role.view", "project.settings.view"],
+    permissionKeys: ["project.role.view"],
     highlight: (pathname: string, baseUrl: string) => pathname === `${baseUrl}/roles/`,
   },
   features_cycles: {

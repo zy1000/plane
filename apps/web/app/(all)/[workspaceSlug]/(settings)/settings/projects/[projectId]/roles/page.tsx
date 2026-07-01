@@ -43,11 +43,9 @@ const ProjectRolesPage = observer(function ProjectRolesPage({ params }: Route.Co
   const { workspaceUserInfo, allowProjectPermissionKeys } = useUserPermissions();
   const { currentProjectDetails } = useProject();
 
-  const isAdmin = allowProjectPermissionKeys(
-    ["project.role.create", "project.role.edit", "project.role.delete"],
-    workspaceSlug,
-    projectId
-  );
+  const canCreateRole = allowProjectPermissionKeys(["project.role.create"], workspaceSlug, projectId);
+  const canEditRole = allowProjectPermissionKeys(["project.role.edit"], workspaceSlug, projectId);
+  const canDeleteRole = allowProjectPermissionKeys(["project.role.delete"], workspaceSlug, projectId);
   const canView = allowProjectPermissionKeys(PROJECT_SETTINGS.roles.permissionKeys ?? [], workspaceSlug, projectId);
 
   // 项目角色
@@ -158,7 +156,11 @@ const ProjectRolesPage = observer(function ProjectRolesPage({ params }: Route.Co
           roles={roles as unknown as IWorkspaceRole[]}
           totalRoleCount={roles.length}
           isLoading={isLoading}
-          isAdmin={isAdmin}
+          isAdmin={canCreateRole || canEditRole || canDeleteRole}
+          canCreate={canCreateRole}
+          canEdit={canEditRole}
+          canDelete={canDeleteRole}
+          canImport={canCreateRole}
           selectedRoleId={selectedRoleId}
           onSelectRole={handleSelectRole}
           onCreate={async (data) => {
@@ -233,7 +235,7 @@ const ProjectRolesPage = observer(function ProjectRolesPage({ params }: Route.Co
                 !rolePermissionState?.data &&
                 (rolePermissionState?.isLoading || !rolePermissionState?.loaded)
               )}
-              isAdmin={isAdmin}
+              isAdmin={canEditRole}
               searchQuery={searchQuery}
               onTogglePermission={togglePermission}
               activeScope={activeScope}

@@ -22,6 +22,10 @@ type Props = {
   totalRoleCount: number;
   isLoading: boolean;
   isAdmin: boolean;
+  canCreate?: boolean;
+  canEdit?: boolean;
+  canDelete?: boolean;
+  canImport?: boolean;
   selectedRoleId: string | null;
   onSelectRole: (roleId: string) => void;
   onCreate: (data: { name: string; description: string }) => Promise<IWorkspaceRole>;
@@ -35,6 +39,10 @@ export function RolesSidebar({
   totalRoleCount,
   isLoading,
   isAdmin,
+  canCreate,
+  canEdit,
+  canDelete,
+  canImport,
   selectedRoleId,
   onSelectRole,
   onCreate,
@@ -48,6 +56,10 @@ export function RolesSidebar({
   const [editingRole, setEditingRole] = useState<IWorkspaceRole | null>(null);
   const [pendingDelete, setPendingDelete] = useState<IWorkspaceRole | null>(null);
   const [isDeleteSubmitting, setIsDeleteSubmitting] = useState(false);
+  const canCreateRole = canCreate ?? isAdmin;
+  const canEditRole = canEdit ?? isAdmin;
+  const canDeleteRole = canDelete ?? isAdmin;
+  const canImportRole = canImport ?? canCreateRole;
 
   const filteredRoles = searchQuery.trim()
     ? roles.filter(
@@ -60,13 +72,14 @@ export function RolesSidebar({
   const isSearchNoResults = filteredRoles.length === 0 && totalRoleCount > 0;
 
   const handleCreate = async (data: { name: string; description: string }) => {
+    if (!canCreateRole) return;
     const newRole = await onCreate(data);
     setToast({ type: TOAST_TYPE.SUCCESS, title: "已创建", message: `角色「${newRole.name}」已创建` });
     onSelectRole(newRole.id);
   };
 
   const handleUpdate = async (data: { name: string; description: string }) => {
-    if (!editingRole) return;
+    if (!editingRole || !canEditRole) return;
     await onUpdate(editingRole.id, data);
     setToast({ type: TOAST_TYPE.SUCCESS, title: "已保存", message: "角色信息已更新" });
   };
@@ -77,7 +90,7 @@ export function RolesSidebar({
   };
 
   const handleConfirmDelete = async () => {
-    if (!pendingDelete) return;
+    if (!pendingDelete || !canDeleteRole) return;
     setIsDeleteSubmitting(true);
     try {
       await onDelete(pendingDelete.id);
@@ -135,7 +148,7 @@ export function RolesSidebar({
               <button
                 type="button"
                 onClick={onImport}
-                disabled={!isAdmin}
+                disabled={!canImportRole}
                 className="flex size-6 cursor-pointer items-center justify-center rounded-md text-placeholder transition-colors duration-200 hover:bg-layer-1-hover hover:text-primary disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-placeholder"
                 aria-label="从模板导入"
                 title="从模板导入"
@@ -146,7 +159,7 @@ export function RolesSidebar({
               <button
                 type="button"
                 onClick={() => setShowCreateModal(true)}
-                disabled={!isAdmin}
+                disabled={!canCreateRole}
                 className="flex size-6 cursor-pointer items-center justify-center rounded-md text-placeholder transition-colors duration-200 hover:bg-layer-1-hover hover:text-primary disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-placeholder"
                 aria-label="新建角色"
                 title="新建角色"
@@ -183,7 +196,7 @@ export function RolesSidebar({
                 <button
                   type="button"
                   onClick={() => setShowCreateModal(true)}
-                  disabled={!isAdmin}
+                  disabled={!canCreateRole}
                   className="text-custom-primary-100 mt-2 cursor-pointer text-13 leading-4 font-medium transition-colors hover:underline disabled:cursor-not-allowed disabled:text-placeholder disabled:no-underline"
                 >
                   点击新建
@@ -232,7 +245,7 @@ export function RolesSidebar({
                           e.stopPropagation();
                           setEditingRole(role);
                         }}
-                        disabled={!isAdmin}
+                        disabled={!canEditRole}
                         className="flex size-5 cursor-pointer items-center justify-center rounded text-placeholder transition-colors duration-150 hover:bg-layer-1-hover hover:text-primary disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-placeholder"
                         aria-label="编辑角色"
                         title="编辑"
@@ -245,7 +258,7 @@ export function RolesSidebar({
                           e.stopPropagation();
                           setPendingDelete(role);
                         }}
-                        disabled={!isAdmin}
+                        disabled={!canDeleteRole}
                         className="hover:bg-red-500/10 hover:text-red-600 flex size-5 cursor-pointer items-center justify-center rounded text-placeholder transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-placeholder"
                         aria-label="删除角色"
                         title="删除"
@@ -273,7 +286,7 @@ export function RolesSidebar({
             prependIcon={<PlusIcon />}
             onClick={() => setShowCreateModal(true)}
             className="w-full justify-center"
-            disabled={!isAdmin}
+            disabled={!canCreateRole}
           >
             新建角色
           </Button>
