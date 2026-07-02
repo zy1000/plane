@@ -26,6 +26,15 @@ import type { TIssueType } from "@/services/project/project-issue-type.service";
 import { WorkflowCard } from "./workflow-card";
 import { WorkflowFormModal } from "./workflow-form-modal";
 
+const WORKFLOW_PERMISSION_KEYS = {
+  create: "workflow.create",
+  edit: "workflow.edit",
+  delete: "workflow.delete",
+  config: "workflow.config",
+} as const;
+
+const PROJECT_PERMISSION_DENIED_ERROR = { error: "You don't have the required permissions." };
+
 type TProjectWorkflowRootProps = {
   workspaceSlug: string;
   projectId: string;
@@ -92,11 +101,10 @@ export const ProjectWorkflowRoot: FC<TProjectWorkflowRootProps> = ({ workspaceSl
   const [selectedIssueTypeId, setSelectedIssueTypeId] = useState<string | undefined>(undefined);
   const [modalState, setModalState] = useState<{ isOpen: boolean; workflow?: TWorkflow }>({ isOpen: false });
 
-  const isEditable = allowProjectPermissionKeys(
-    ["workflow.create", "workflow.edit", "workflow.delete"],
-    workspaceSlug,
-    projectId
-  );
+  const canCreateWorkflow = allowProjectPermissionKeys([WORKFLOW_PERMISSION_KEYS.create], workspaceSlug, projectId);
+  const canEditWorkflow = allowProjectPermissionKeys([WORKFLOW_PERMISSION_KEYS.edit], workspaceSlug, projectId);
+  const canDeleteWorkflow = allowProjectPermissionKeys([WORKFLOW_PERMISSION_KEYS.delete], workspaceSlug, projectId);
+  const canConfigWorkflow = allowProjectPermissionKeys([WORKFLOW_PERMISSION_KEYS.config], workspaceSlug, projectId);
 
   const toastWorkflowError = useCallback(
     (error: unknown, fallbackMessage: string) => {
@@ -139,6 +147,10 @@ export const ProjectWorkflowRoot: FC<TProjectWorkflowRootProps> = ({ workspaceSl
 
   const handleToggleActive = async (workflow: TWorkflow, value: boolean) => {
     if (!selectedIssueTypeId) return;
+    if (!canEditWorkflow) {
+      toastWorkflowError(PROJECT_PERMISSION_DENIED_ERROR, "更新工作流状态失败，请重试。");
+      return;
+    }
     try {
       await updateWorkflow(selectedIssueTypeId, { id: workflow.id, is_active: value });
     } catch (error) {
@@ -147,11 +159,19 @@ export const ProjectWorkflowRoot: FC<TProjectWorkflowRootProps> = ({ workspaceSl
   };
 
   const handleEdit = (workflow: TWorkflow) => {
+    if (!canEditWorkflow) {
+      toastWorkflowError(PROJECT_PERMISSION_DENIED_ERROR, "更新工作流失败，请重试。");
+      return;
+    }
     setModalState({ isOpen: true, workflow });
   };
 
   const handleDelete = async (workflowId: string) => {
     if (!selectedIssueTypeId) return;
+    if (!canDeleteWorkflow) {
+      toastWorkflowError(PROJECT_PERMISSION_DENIED_ERROR, "删除工作流失败，请重试。");
+      return;
+    }
     try {
       await deleteWorkflow(selectedIssueTypeId, workflowId);
     } catch (error) {
@@ -161,6 +181,14 @@ export const ProjectWorkflowRoot: FC<TProjectWorkflowRootProps> = ({ workspaceSl
 
   const handleModalSubmit = async (data: { name: string; description: string; issue_type_id: string }) => {
     if (!selectedIssueTypeId) return;
+    const canSubmit = modalState.workflow ? canEditWorkflow : canCreateWorkflow;
+    if (!canSubmit) {
+      toastWorkflowError(
+        PROJECT_PERMISSION_DENIED_ERROR,
+        modalState.workflow ? "更新工作流失败，请重试。" : "创建工作流失败，请重试。"
+      );
+      throw PROJECT_PERMISSION_DENIED_ERROR;
+    }
     try {
       if (modalState.workflow) {
         await updateWorkflow(selectedIssueTypeId, { id: modalState.workflow.id, ...data });
@@ -230,8 +258,10 @@ export const ProjectWorkflowRoot: FC<TProjectWorkflowRootProps> = ({ workspaceSl
                 variant="primary"
                 size="sm"
                 prependIcon={<Plus className="h-3.5 w-3.5" />}
-                onClick={() => setModalState({ isOpen: true, workflow: undefined })}
-                disabled={!isEditable}
+                onClick={() => {
+                  if (canCreateWorkflow) setModalState({ isOpen: true, workflow: undefined });
+                }}
+                disabled={!canCreateWorkflow}
               >
                 新建工作流
               </Button>
@@ -246,7 +276,7 @@ export const ProjectWorkflowRoot: FC<TProjectWorkflowRootProps> = ({ workspaceSl
               <div>
                 <p className="text-sm font-medium text-secondary">暂无工作流</p>
                 <p className="mt-1 text-xs text-tertiary">
-                  {isEditable ? "点击「新建工作流」创建第一条工作流" : "该工作项类型下尚未配置工作流"}
+                  {canCreateWorkflow ? "点击「新建工作流」创建第一条工作流" : "该工作项类型下尚未配置工作流"}
                 </p>
               </div>
             </div>
@@ -260,7 +290,9 @@ export const ProjectWorkflowRoot: FC<TProjectWorkflowRootProps> = ({ workspaceSl
                     workflow={workflow}
                     workspaceSlug={workspaceSlug}
                     projectId={projectId}
-                    isEditable={isEditable}
+                    canEditWorkflow={canEditWorkflow}
+                    canDeleteWorkflow={canDeleteWorkflow}
+                    canConfigWorkflow={canConfigWorkflow}
                     onToggleActive={handleToggleActive}
                     onEdit={handleEdit}
                     onDelete={handleDelete}
@@ -278,6 +310,7 @@ export const ProjectWorkflowRoot: FC<TProjectWorkflowRootProps> = ({ workspaceSl
           issueTypeId={selectedIssueTypeId}
           onClose={() => setModalState({ isOpen: false })}
           onSubmit={handleModalSubmit}
+          isSubmitDisabled={modalState.workflow ? !canEditWorkflow : !canCreateWorkflow}
         />
       )}
     </>

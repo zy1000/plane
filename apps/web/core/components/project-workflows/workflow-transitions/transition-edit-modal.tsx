@@ -27,6 +27,7 @@ type TTransitionEditModalProps = {
   usedToStateIds: string[];
   transition: TWorkflowTransition | null;
   onClose: () => void;
+  isSubmitDisabled?: boolean;
   onSave: (data: {
     id?: string;
     to_state_id: string;
@@ -71,6 +72,7 @@ export const TransitionEditModal: FC<TTransitionEditModalProps> = ({
   usedToStateIds,
   transition,
   onClose,
+  isSubmitDisabled = false,
   onSave,
 }) => {
   const [toStateId, setToStateId] = useState<string | null>(transition?.to_state_id ?? null);
@@ -106,10 +108,10 @@ export const TransitionEditModal: FC<TTransitionEditModalProps> = ({
     requiredCount !== (transition?.required_count ?? 1) ||
     !isSameTokenSet(extraFieldIds, transition?.extra_field_ids ?? []);
 
-  const canSave = transition ? !!toStateId && isDirty : !!toStateId;
+  const canSave = !isSubmitDisabled && (transition ? !!toStateId && isDirty : !!toStateId);
 
   const handleSave = async () => {
-    if (!toStateId || isSaving) return;
+    if (!canSave || !toStateId || isSaving) return;
     setIsSaving(true);
     try {
       const isAll = approverIds.length === 0;
@@ -158,6 +160,7 @@ export const TransitionEditModal: FC<TTransitionEditModalProps> = ({
                 onChange={setToStateId}
                 excludeStateIds={excludeStateIds}
                 placeholder="选择目标状态"
+                disabled={isSubmitDisabled}
               />
             </TimelineItem>
 
@@ -170,6 +173,7 @@ export const TransitionEditModal: FC<TTransitionEditModalProps> = ({
                 onChange={(ids) => {
                   setInitiatorIds(ids);
                 }}
+                disabled={isSubmitDisabled}
               />
             </TimelineItem>
 
@@ -182,6 +186,7 @@ export const TransitionEditModal: FC<TTransitionEditModalProps> = ({
                 onChange={(ids) => {
                   setAssigneeIds(ids);
                 }}
+                disabled={isSubmitDisabled}
               />
             </TimelineItem>
 
@@ -201,6 +206,7 @@ export const TransitionEditModal: FC<TTransitionEditModalProps> = ({
 
                   setRequiredCount((current) => Math.min(Math.max(1, current), ids.length));
                 }}
+                disabled={isSubmitDisabled}
               />
             </TimelineItem>
 
@@ -213,6 +219,7 @@ export const TransitionEditModal: FC<TTransitionEditModalProps> = ({
                   setRequiredCount(count);
                   setIsNofMApproval(useNofM);
                 }}
+                disabled={isSubmitDisabled}
               />
             </TimelineItem>
 
@@ -223,6 +230,7 @@ export const TransitionEditModal: FC<TTransitionEditModalProps> = ({
                 issueTypeId={issueTypeId}
                 value={extraFieldIds}
                 onChange={setExtraFieldIds}
+                disabled={isSubmitDisabled}
               />
             </TimelineItem>
           </div>

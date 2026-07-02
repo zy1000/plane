@@ -16,7 +16,9 @@ type TWorkflowCardProps = {
   workflow: TWorkflow;
   workspaceSlug: string;
   projectId: string;
-  isEditable: boolean;
+  canEditWorkflow: boolean;
+  canDeleteWorkflow: boolean;
+  canConfigWorkflow: boolean;
   onToggleActive: (workflow: TWorkflow, value: boolean) => Promise<void>;
   onEdit: (workflow: TWorkflow) => void;
   onDelete: (workflowId: string) => Promise<void>;
@@ -26,7 +28,9 @@ export const WorkflowCard: FC<TWorkflowCardProps> = ({
   workflow,
   workspaceSlug,
   projectId,
-  isEditable,
+  canEditWorkflow,
+  canDeleteWorkflow,
+  canConfigWorkflow,
   onToggleActive,
   onEdit,
   onDelete,
@@ -36,7 +40,7 @@ export const WorkflowCard: FC<TWorkflowCardProps> = ({
   const [isDeleting, setIsDeleting] = useState(false);
 
   const handleToggleActive = async (value: boolean) => {
-    if (isToggling) return;
+    if (!canEditWorkflow || isToggling) return;
     setIsToggling(true);
     try {
       await onToggleActive(workflow, value);
@@ -46,7 +50,7 @@ export const WorkflowCard: FC<TWorkflowCardProps> = ({
   };
 
   const handleDelete = async () => {
-    if (!isEditable || isDeleting) return;
+    if (!canDeleteWorkflow || isDeleting) return;
     setIsDeleting(true);
     try {
       await onDelete(workflow.id);
@@ -83,29 +87,41 @@ export const WorkflowCard: FC<TWorkflowCardProps> = ({
         <ToggleSwitch
           value={workflow.is_active}
           onChange={handleToggleActive}
-          disabled={!isEditable || isToggling}
+          disabled={!canEditWorkflow || isToggling}
           size="sm"
         />
 
         <CustomMenu ellipsis placement="bottom-end">
           <CustomMenu.MenuItem
-            onClick={() => navigate(`/${workspaceSlug}/settings/projects/${projectId}/workflow/${workflow.id}`)}
-            disabled={!isEditable}
+            onClick={() => {
+              if (canConfigWorkflow) {
+                navigate(`/${workspaceSlug}/settings/projects/${projectId}/workflow/${workflow.id}`);
+              }
+            }}
+            disabled={!canConfigWorkflow}
           >
             <span className="flex items-center gap-2 text-sm">
               <Settings className="h-3.5 w-3.5" />
               配置流转
             </span>
           </CustomMenu.MenuItem>
-          <CustomMenu.MenuItem onClick={() => onEdit(workflow)} disabled={!isEditable}>
+          <CustomMenu.MenuItem
+            onClick={() => {
+              if (canEditWorkflow) onEdit(workflow);
+            }}
+            disabled={!canEditWorkflow}
+          >
             <span className="flex items-center gap-2 text-sm">
               <Pencil className="h-3.5 w-3.5" />
               编辑
             </span>
           </CustomMenu.MenuItem>
-          <CustomMenu.MenuItem onClick={handleDelete} disabled={!isEditable || isDeleting}>
+          <CustomMenu.MenuItem onClick={handleDelete} disabled={!canDeleteWorkflow || isDeleting}>
             <span
-              className={cn("flex items-center gap-2 text-sm", isEditable ? "text-danger-primary" : "text-placeholder")}
+              className={cn(
+                "flex items-center gap-2 text-sm",
+                canDeleteWorkflow ? "text-danger-primary" : "text-placeholder"
+              )}
             >
               <Trash2 className="h-3.5 w-3.5" />
               删除

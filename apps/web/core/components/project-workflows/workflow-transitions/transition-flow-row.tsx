@@ -107,7 +107,9 @@ export const TransitionFlowRow: FC<TTransitionFlowRowProps> = ({
           <div className="absolute top-full right-0 z-20 mt-1 min-w-[100px] overflow-hidden rounded-md border border-subtle bg-surface-1 shadow-lg">
             <button
               type="button"
-              onClick={onEdit}
+              onClick={() => {
+                if (isEditable) onEdit();
+              }}
               disabled={!isEditable}
               className="flex w-full items-center gap-2 px-3 py-2 text-sm text-primary transition-colors hover:bg-layer-1 disabled:cursor-not-allowed disabled:text-placeholder disabled:hover:bg-transparent"
             >

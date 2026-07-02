@@ -19,6 +19,9 @@ import { StateTransitionCard } from "./state-transition-card";
 import { TransitionEditModal } from "./transition-edit-modal";
 import { WorkflowViewPanel, type TViewBox } from "./workflow-view-panel";
 
+const WORKFLOW_CONFIG_PERMISSION_KEY = "workflow.config";
+const PROJECT_PERMISSION_DENIED_ERROR = { error: "You don't have the required permissions." };
+
 type TWorkflowTransitionsRootProps = {
   workspaceSlug: string;
   projectId: string;
@@ -81,7 +84,7 @@ export const WorkflowTransitionsRoot: FC<TWorkflowTransitionsRootProps> = ({
     box: TViewBox;
   } | null>(null);
 
-  const isEditable = allowProjectPermissionKeys(["workflow.config"], workspaceSlug, projectId);
+  const canConfigWorkflow = allowProjectPermissionKeys([WORKFLOW_CONFIG_PERMISSION_KEY], workspaceSlug, projectId);
 
   useEffect(() => {
     fetchTransitions();
@@ -113,6 +116,13 @@ export const WorkflowTransitionsRoot: FC<TWorkflowTransitionsRootProps> = ({
       extra_field_ids: string[];
     }
   ) => {
+    if (!canConfigWorkflow) {
+      toastWorkflowError(
+        PROJECT_PERMISSION_DENIED_ERROR,
+        data.id ? "更新流转配置失败，请重试。" : "创建流转失败，请重试。"
+      );
+      throw PROJECT_PERMISSION_DENIED_ERROR;
+    }
     const requiredCountField = data.required_count !== undefined ? { required_count: data.required_count } : {};
     try {
       if (data.id) {
@@ -146,6 +156,10 @@ export const WorkflowTransitionsRoot: FC<TWorkflowTransitionsRootProps> = ({
   };
 
   const handleDeleteTransition = async (transitionId: string) => {
+    if (!canConfigWorkflow) {
+      toastWorkflowError(PROJECT_PERMISSION_DENIED_ERROR, "删除流转失败，请重试。");
+      return;
+    }
     try {
       await deleteTransitionApi(transitionId);
     } catch (error) {
@@ -154,10 +168,18 @@ export const WorkflowTransitionsRoot: FC<TWorkflowTransitionsRootProps> = ({
   };
 
   const handleOpenCreate = (state: IState) => {
+    if (!canConfigWorkflow) {
+      toastWorkflowError(PROJECT_PERMISSION_DENIED_ERROR, "创建流转失败，请重试。");
+      return;
+    }
     setEditing({ fromState: state, transition: null });
   };
 
   const handleOpenEdit = (state: IState, transition: TWorkflowTransition) => {
+    if (!canConfigWorkflow) {
+      toastWorkflowError(PROJECT_PERMISSION_DENIED_ERROR, "更新流转配置失败，请重试。");
+      return;
+    }
     setActiveView(null);
     setEditing({ fromState: state, transition });
   };
@@ -212,7 +234,7 @@ export const WorkflowTransitionsRoot: FC<TWorkflowTransitionsRootProps> = ({
                     state={state}
                     allStates={allStates}
                     transitions={transitionsByState[state.id] ?? []}
-                    isEditable={isEditable}
+                    isEditable={canConfigWorkflow}
                     activeView={activeView}
                     onCreate={handleOpenCreate}
                     onViewBox={handleViewBox}
@@ -236,7 +258,7 @@ export const WorkflowTransitionsRoot: FC<TWorkflowTransitionsRootProps> = ({
                 workspaceSlug={workspaceSlug}
                 projectId={projectId}
                 issueTypeId={workflow.issue_type_id}
-                isEditable={isEditable}
+                isEditable={canConfigWorkflow}
                 onClose={() => setActiveView(null)}
                 onEdit={() => handleOpenEdit(activeView.fromState, activeView.transition)}
               />
@@ -260,6 +282,7 @@ export const WorkflowTransitionsRoot: FC<TWorkflowTransitionsRootProps> = ({
             await handleSaveTransition(editing.fromState.id, data);
             setEditing(null);
           }}
+          isSubmitDisabled={!canConfigWorkflow}
         />
       )}
     </div>

@@ -15,6 +15,7 @@ type TWorkflowFormModalProps = {
   issueTypeId: string;
   onClose: () => void;
   onSubmit: (data: { name: string; description: string; issue_type_id: string }) => Promise<void>;
+  isSubmitDisabled?: boolean;
 };
 
 export const WorkflowFormModal: FC<TWorkflowFormModalProps> = ({
@@ -23,6 +24,7 @@ export const WorkflowFormModal: FC<TWorkflowFormModalProps> = ({
   issueTypeId,
   onClose,
   onSubmit,
+  isSubmitDisabled = false,
 }) => {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -41,6 +43,7 @@ export const WorkflowFormModal: FC<TWorkflowFormModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitDisabled) return;
     const trimmedName = name.trim();
     if (!trimmedName) {
       setErrors({ name: "工作流名称不能为空" });
@@ -102,7 +105,7 @@ export const WorkflowFormModal: FC<TWorkflowFormModalProps> = ({
             <Button variant="neutral-primary" size="sm" type="button" onClick={onClose} disabled={isSubmitting}>
               取消
             </Button>
-            <Button variant="primary" size="sm" type="submit" loading={isSubmitting}>
+            <Button variant="primary" size="sm" type="submit" loading={isSubmitting} disabled={isSubmitDisabled}>
               {isEditing ? "保存" : "创建"}
             </Button>
           </div>

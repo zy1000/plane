@@ -103,6 +103,7 @@ export const StateTransitionCard: FC<TStateTransitionCardProps> = ({
           <button
             type="button"
             onClick={() => {
+              if (!isEditable) return;
               if (!isExpanded) setIsExpanded(true);
               onCreate(state);
             }}

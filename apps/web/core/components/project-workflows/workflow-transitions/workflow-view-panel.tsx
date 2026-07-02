@@ -254,7 +254,9 @@ export const WorkflowViewPanel: FC<TWorkflowViewPanelProps> = ({
         {onEdit && (
           <button
             type="button"
-            onClick={onEdit}
+            onClick={() => {
+              if (isEditable) onEdit();
+            }}
             disabled={!isEditable}
             className="ml-auto flex h-6 w-6 flex-shrink-0 items-center justify-center rounded text-secondary transition-colors hover:bg-layer-1 hover:text-primary disabled:cursor-not-allowed disabled:text-placeholder disabled:hover:bg-transparent"
             aria-label="编辑流转"
