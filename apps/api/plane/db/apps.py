@@ -11,3 +11,10 @@ class DbConfig(AppConfig):
     def ready(self) -> None:
         # 注册 FilePath 名称同步等 ORM 信号
         from plane.db import signals  # noqa: F401
+        from plane.db.permission_bootstrap import (
+            ensure_static_permissions,
+            register_permission_bootstrap,
+        )
+
+        register_permission_bootstrap(self)
+        ensure_static_permissions()
