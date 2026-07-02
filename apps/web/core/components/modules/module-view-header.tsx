@@ -156,7 +156,8 @@ export const ModuleViewHeader = observer(function ModuleViewHeader() {
       />
       <FiltersDropdown
         icon={<ListFilter className="h-3 w-3" />}
-        title="Filters"
+        miniIcon={<ListFilter className="h-3 w-3" />}
+        title=""
         placement="bottom-end"
         isFiltersApplied={isFiltersApplied}
       >

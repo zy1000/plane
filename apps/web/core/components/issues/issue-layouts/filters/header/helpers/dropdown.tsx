@@ -66,9 +66,11 @@ export function FiltersDropdown(props: Props) {
                     size="lg"
                   >
                     <>
-                      <div className={`${open ? "text-primary" : "text-secondary"}`}>
-                        <span>{title}</span>
-                      </div>
+                      {title ? (
+                        <div className={`${open ? "text-primary" : "text-secondary"}`}>
+                          <span>{title}</span>
+                        </div>
+                      ) : null}
                       {isFiltersApplied && (
                         <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-accent-primary" />
                       )}
