@@ -160,6 +160,9 @@ export interface IUserProfileData {
   completed_today_issues: number;
   created_issues: number;
   high_priority_pending_issues: number;
+  open_assigned_issues: number;
+  open_created_issues: number;
+  open_subscribed_issues: number;
   overdue_issues: number;
   pending_issues: number;
   pending_approval_issues: number;
@@ -187,7 +190,10 @@ export type TProfileMetricKey =
   | "responsible_releases"
   | "assigned_issues"
   | "created_issues"
-  | "subscribed_issues";
+  | "subscribed_issues"
+  | "open_assigned_issues"
+  | "open_created_issues"
+  | "open_subscribed_issues";
 
 export type TProfileMetricTreeNodeType = "project" | "plan" | "review";
 

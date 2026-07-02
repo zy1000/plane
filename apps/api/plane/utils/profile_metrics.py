@@ -16,8 +16,14 @@ from plane.db.models import (
     PlanCase,
     ProjectMember,
     Release,
+    ReleaseStatus,
     TransitionRecordStatus,
 )
+
+
+CLOSED_ISSUE_STATE_GROUPS = ("completed", "cancelled")
+CLOSED_CYCLE_STATUSES = (Cycle.Status.COMPLETED, Cycle.Status.CANCELLED, "completed", "cancelled")
+CLOSED_RELEASE_STATUSES = (ReleaseStatus.COMPLETED, ReleaseStatus.CANCELLED)
 
 
 PROFILE_METRIC_KEYS = frozenset(
@@ -34,6 +40,9 @@ PROFILE_METRIC_KEYS = frozenset(
         "assigned_issues",
         "created_issues",
         "subscribed_issues",
+        "open_assigned_issues",
+        "open_created_issues",
+        "open_subscribed_issues",
     }
 )
 
@@ -47,6 +56,9 @@ ISSUE_PROFILE_METRICS = frozenset(
         "assigned_issues",
         "created_issues",
         "subscribed_issues",
+        "open_assigned_issues",
+        "open_created_issues",
+        "open_subscribed_issues",
     }
 )
 
@@ -69,6 +81,10 @@ def _base_issue_queryset(slug, viewer):
     )
 
 
+def _open_issue_queryset(queryset):
+    return queryset.exclude(state__group__in=CLOSED_ISSUE_STATE_GROUPS)
+
+
 def get_profile_metric_queryset(metric, slug, user_id, viewer):
     if metric not in PROFILE_METRIC_KEYS:
         raise ValueError("Unsupported profile metric")
@@ -80,18 +96,20 @@ def get_profile_metric_queryset(metric, slug, user_id, viewer):
     if metric in ISSUE_PROFILE_METRICS:
         queryset = _base_issue_queryset(slug, viewer)
 
-        if metric == "created_issues":
-            return queryset.filter(created_by_id=user_id).select_related("project", "state")
+        if metric in {"created_issues", "open_created_issues"}:
+            queryset = queryset.filter(created_by_id=user_id)
+            if metric == "open_created_issues":
+                queryset = _open_issue_queryset(queryset)
+            return queryset.select_related("project", "state")
 
-        if metric == "subscribed_issues":
-            return (
-                queryset.filter(
-                    issue_subscribers__subscriber_id=user_id,
-                    issue_subscribers__deleted_at__isnull=True,
-                )
-                .select_related("project", "state")
-                .distinct()
+        if metric in {"subscribed_issues", "open_subscribed_issues"}:
+            queryset = queryset.filter(
+                issue_subscribers__subscriber_id=user_id,
+                issue_subscribers__deleted_at__isnull=True,
             )
+            if metric == "open_subscribed_issues":
+                queryset = _open_issue_queryset(queryset)
+            return queryset.select_related("project", "state").distinct()
 
         if metric == "pending_approval_issues":
             pending_transition = IssueTransitionRecord.objects.filter(
@@ -125,7 +143,10 @@ def get_profile_metric_queryset(metric, slug, user_id, viewer):
         if metric == "assigned_issues":
             return queryset.select_related("project", "state").distinct()
 
-        queryset = queryset.exclude(state__group__in=["completed", "cancelled"])
+        queryset = _open_issue_queryset(queryset)
+        if metric == "open_assigned_issues":
+            return queryset.select_related("project", "state").distinct()
+
         if metric == "today_pending_issues":
             queryset = queryset.filter(target_date__isnull=False, target_date__lte=today)
         elif metric == "week_pending_issues":
@@ -145,6 +166,7 @@ def get_profile_metric_queryset(metric, slug, user_id, viewer):
                 project_id__in=accessible_project_ids,
                 archived_at__isnull=True,
             )
+            .exclude(status__in=CLOSED_CYCLE_STATUSES)
             .select_related("project", "owned_by")
             .distinct()
         )
@@ -157,6 +179,7 @@ def get_profile_metric_queryset(metric, slug, user_id, viewer):
                 project_id__in=accessible_project_ids,
                 archived_at__isnull=True,
             )
+            .exclude(status__in=CLOSED_RELEASE_STATUSES)
             .select_related("project", "lead")
             .distinct()
         )

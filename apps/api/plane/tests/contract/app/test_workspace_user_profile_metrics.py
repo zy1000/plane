@@ -10,8 +10,15 @@ from plane.db.models import (
     CaseReview,
     CaseReviewRecord,
     CaseReviewThrough,
+    Cycle,
+    Issue,
+    IssueAssignee,
+    IssueSubscriber,
     Project,
     ProjectMember,
+    Release,
+    ReleaseStatus,
+    State,
     TestCase as QATestCase,
     TestCaseRepository as QATestCaseRepository,
     User,
@@ -56,6 +63,104 @@ class TestWorkspaceUserProfileMetrics:
         )
         through = CaseReviewThrough.objects.create(case=case, review=self.review)
         return case, through
+
+    def _create_state(self, name, group):
+        return State.objects.create(
+            name=name,
+            color="#60646C",
+            group=group,
+            project=self.project,
+        )
+
+    def _create_issue(self, name, state):
+        issue = Issue.objects.create(
+            name=name,
+            project=self.project,
+            workspace=self.workspace,
+            state=state,
+        )
+        Issue.objects.filter(id=issue.id).update(created_by_id=self.target.id)
+        IssueAssignee.objects.create(issue=issue, assignee=self.target, project=self.project)
+        IssueSubscriber.objects.create(issue=issue, subscriber=self.target, project=self.project)
+        return issue
+
+    def test_scope_and_coverage_metrics_only_include_open_items(self, api_client):
+        open_state = self._create_state("Metric Open", "started")
+        completed_state = self._create_state("Metric Completed", "completed")
+        cancelled_state = self._create_state("Metric Cancelled", "cancelled")
+
+        self._create_issue("Open issue", open_state)
+        self._create_issue("Completed issue", completed_state)
+        self._create_issue("Cancelled issue", cancelled_state)
+
+        Cycle.objects.create(
+            name="Open cycle",
+            project=self.project,
+            workspace=self.workspace,
+            owned_by=self.target,
+            status=Cycle.Status.IN_PROGRESS,
+        )
+        Cycle.objects.create(
+            name="Completed cycle",
+            project=self.project,
+            workspace=self.workspace,
+            owned_by=self.target,
+            status=Cycle.Status.COMPLETED,
+        )
+        Cycle.objects.create(
+            name="Cancelled cycle",
+            project=self.project,
+            workspace=self.workspace,
+            owned_by=self.target,
+            status=Cycle.Status.CANCELLED,
+        )
+        Release.objects.create(
+            name="Open release",
+            project=self.project,
+            workspace=self.workspace,
+            lead=self.target,
+            status=ReleaseStatus.IN_PROGRESS,
+        )
+        Release.objects.create(
+            name="Completed release",
+            project=self.project,
+            workspace=self.workspace,
+            lead=self.target,
+            status=ReleaseStatus.COMPLETED,
+        )
+        Release.objects.create(
+            name="Cancelled release",
+            project=self.project,
+            workspace=self.workspace,
+            lead=self.target,
+            status=ReleaseStatus.CANCELLED,
+        )
+
+        api_client.force_authenticate(user=self.viewer)
+        base_url = f"/api/workspaces/{self.workspace.slug}/user-stats/{self.target.id}"
+        metric_keys = [
+            "responsible_cycles",
+            "responsible_releases",
+            "open_assigned_issues",
+            "open_created_issues",
+            "open_subscribed_issues",
+        ]
+
+        stats_response = api_client.get(f"{base_url}/")
+        assert stats_response.status_code == status.HTTP_200_OK
+        assert stats_response.data["assigned_issues"] == 3
+        assert stats_response.data["created_issues"] == 3
+        assert stats_response.data["subscribed_issues"] == 3
+        for metric in metric_keys:
+            assert stats_response.data[metric] == 1
+
+            tree_response = api_client.get(f"{base_url}/metrics/{metric}/tree/")
+            assert tree_response.status_code == status.HTTP_200_OK
+            assert tree_response.data["count"] == 1
+
+            items_response = api_client.get(f"{base_url}/metrics/{metric}/items/")
+            assert items_response.status_code == status.HTTP_200_OK
+            assert items_response.data["count"] == 1
 
     def test_pending_review_metric_count_tree_pagination_and_soft_delete(self, api_client):
         case_without_record, _ = self._create_review_case("1")

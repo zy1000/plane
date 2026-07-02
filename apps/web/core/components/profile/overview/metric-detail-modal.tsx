@@ -40,6 +40,9 @@ const WORK_ITEM_METRICS = new Set<TProfileMetricKey>([
   "assigned_issues",
   "created_issues",
   "subscribed_issues",
+  "open_assigned_issues",
+  "open_created_issues",
+  "open_subscribed_issues",
 ]);
 
 const DEFAULT_TREE_WIDTH = 256;

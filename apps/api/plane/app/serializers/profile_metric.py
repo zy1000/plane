@@ -59,6 +59,9 @@ class WorkspaceUserMetricItemSerializer(serializers.Serializer):
             "assigned_issues",
             "created_issues",
             "subscribed_issues",
+            "open_assigned_issues",
+            "open_created_issues",
+            "open_subscribed_issues",
         }:
             target_state = None
             if metric == "pending_approval_issues" and getattr(instance, "approval_to_state_id", None):

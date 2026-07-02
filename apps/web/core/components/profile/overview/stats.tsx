@@ -197,24 +197,24 @@ export function ProfileStats({ userProfile }: Props) {
   const coverageMetrics: TOverviewMetric[] = [
     {
       icon: UserCirclePropertyIcon,
-      key: "assigned_issues",
+      key: "open_assigned_issues",
       title: t("profile.stats.assigned"),
       tone: "accent",
-      value: userProfile.assigned_issues,
+      value: userProfile.open_assigned_issues,
     },
     {
       icon: CreateIcon,
-      key: "created_issues",
+      key: "open_created_issues",
       title: t("profile.stats.created"),
       tone: "neutral",
-      value: userProfile.created_issues,
+      value: userProfile.open_created_issues,
     },
     {
       icon: LayerStackIcon,
-      key: "subscribed_issues",
+      key: "open_subscribed_issues",
       title: t("profile.stats.subscribed"),
       tone: "neutral",
-      value: userProfile.subscribed_issues,
+      value: userProfile.open_subscribed_issues,
     },
   ];
 
