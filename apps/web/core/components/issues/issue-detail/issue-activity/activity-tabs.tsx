@@ -40,7 +40,7 @@ export const ActivityTabs = memo(function ActivityTabs(props: TActivityTabsProps
             type="button"
             onClick={() => onChange(tab.key)}
             className={cn(
-              "relative px-3 py-1.5 mb-1 text-body-sm-medium transition-colors outline-none rounded-md",
+              "relative px-3 py-1.5 mb-1 text-body-xs-medium transition-colors outline-none rounded-md",
               "after:absolute after:left-0 after:right-0 after:-bottom-[5px] after:h-0.5 after:rounded-full after:transition-colors",
               isActive
                 ? "bg-layer-1-active text-primary after:bg-[var(--txt-primary)]"
