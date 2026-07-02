@@ -21,14 +21,18 @@ type TTransitionAssigneeRule = {
   fromStateId: string | null;
   toStateId: string | null;
   assigneeTokens: string[];
+  approvalType: TWorkflowTransition["approval_type"];
+  approverTokens: string[];
 };
 
 export type TStateTransitionCheckResult = {
+  shouldPromptApprovalReason: boolean;
   shouldPromptAssigneeSelection: boolean;
   allowedAssigneeIds: string[];
 };
 
 const EMPTY_RESULT: TStateTransitionCheckResult = {
+  shouldPromptApprovalReason: false,
   shouldPromptAssigneeSelection: false,
   allowedAssigneeIds: [],
 };
@@ -44,6 +48,15 @@ const mapFlowchartToTransitionRules = (flowchart?: TWorkflowFlowchart | null): T
   return flowchart.transitions.map((transition) => ({
     fromStateId: transition.from_state_id ? String(transition.from_state_id) : null,
     toStateId: transition.to_state_id ? String(transition.to_state_id) : null,
+    approvalType: transition.approval_type,
+    approverTokens: transition.approvers
+      .map((principal) => {
+        if (principal.kind === "member") return principal.id;
+        if (principal.kind === "role") return `${ROLE_TOKEN_PREFIX}${principal.id}`;
+        if (principal.kind === "dynamic") return `special:${principal.id}`;
+        return null;
+      })
+      .filter((token): token is string => Boolean(token)),
     assigneeTokens: transition.assignees
       .map((principal) => {
         if (principal.kind === "member") return principal.id;
@@ -93,6 +106,8 @@ export const useIssueStateTransition = (
         const rules = transitions.map((transition: TWorkflowTransition) => ({
           fromStateId: transition.from_state_id ? String(transition.from_state_id) : null,
           toStateId: transition.to_state_id ? String(transition.to_state_id) : null,
+          approvalType: transition.approval_type,
+          approverTokens: transition.approver_ids ?? [],
           assigneeTokens: transition.assignee_ids ?? [],
         }));
         transitionRulesByIssueTypeRef.current[issueTypeId] = rules;
@@ -184,7 +199,12 @@ export const useIssueStateTransition = (
         );
 
         if (!transition || transition.assigneeTokens.length === 0) {
-          return EMPTY_RESULT;
+          return {
+            shouldPromptApprovalReason:
+              Boolean(transition?.approverTokens.length) && transition?.approvalType !== "all",
+            shouldPromptAssigneeSelection: false,
+            allowedAssigneeIds: [],
+          };
         }
 
         const allowedAssigneeIds = resolveAllowedAssigneeIds(
@@ -197,6 +217,7 @@ export const useIssueStateTransition = (
         const assigneesAreCompliant = currentAssigneeIds.every((id) => allowedSet.has(id));
 
         return {
+          shouldPromptApprovalReason: transition.approverTokens.length > 0 && transition.approvalType !== "all",
           shouldPromptAssigneeSelection: !assigneesAreCompliant,
           allowedAssigneeIds,
         };

@@ -83,6 +83,7 @@ export type TTransitionRecord = {
   status: "pending" | "approved" | "rejected" | "cancelled";
   required_count: number | null;
   target_assignee_ids: string[] | null;
+  approval_reason: string;
   approval_records: TApprovalRecord[];
   created_at: string;
   completed_at: string | null;

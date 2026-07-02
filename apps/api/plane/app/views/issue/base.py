@@ -41,11 +41,13 @@ from rest_framework.response import Response
 
 # Module imports
 from plane.app.permissions import (
+    PermissionKey,
     ROLE,
     allow_permission,
     has_project_issue_permission,
     resolve_project_issue_type_name,
 )
+from plane.app.permissions.base import _get_user_project_permission_keys
 from plane.app.serializers import (
     IssueCreateSerializer,
     IssueDetailSerializer,
@@ -108,6 +110,48 @@ from plane.utils.workflow import (
 from plane.db.models import State as StateModel
 
 from .. import BaseAPIView, BaseViewSet
+
+
+PROJECT_ISSUE_PAGE_SCOPE_PERMISSION_KEYS = {
+    "issues": PermissionKey.PROJECT_WORK_ITEMS_VIEW,
+    "requirements": PermissionKey.PROJECT_REQUIREMENTS_VIEW,
+    "defects": PermissionKey.PROJECT_DEFECTS_VIEW,
+}
+
+PROJECT_ISSUE_PAGE_SCOPE_CATEGORY_FILTERS = {
+    "requirements": "需求",
+    "defects": "缺陷",
+}
+
+
+def _resolve_project_issue_page_scope(request):
+    scope = request.query_params.get("scope")
+    if scope in PROJECT_ISSUE_PAGE_SCOPE_PERMISSION_KEYS:
+        return scope
+    return None
+
+
+def _check_project_issue_page_scope_permission(request, slug, project_id):
+    scope = _resolve_project_issue_page_scope(request)
+    if scope is None:
+        return None, None
+
+    permission_key = PROJECT_ISSUE_PAGE_SCOPE_PERMISSION_KEYS[scope].value
+    user_keys = _get_user_project_permission_keys(request.user, slug, str(project_id))
+    if permission_key in user_keys:
+        return scope, None
+
+    return scope, Response(
+        {"error": "您没有所需的项目权限。"},
+        status=status.HTTP_403_FORBIDDEN,
+    )
+
+
+def _apply_project_issue_page_scope_filter(queryset, scope):
+    category_name = PROJECT_ISSUE_PAGE_SCOPE_CATEGORY_FILTERS.get(scope)
+    if not category_name:
+        return queryset
+    return queryset.filter(type__category__name=category_name)
 
 
 class IssueListEndpoint(BaseAPIView):
@@ -308,6 +352,12 @@ class IssueViewSet(BaseViewSet):
 
     @method_decorator(gzip_page)
     def list(self, request, slug, project_id):
+        scope, permission_error = _check_project_issue_page_scope_permission(
+            request, slug, project_id
+        )
+        if permission_error:
+            return permission_error
+
         extra_filters = {}
         if request.GET.get("updated_at__gt", None) is not None:
             extra_filters = {"updated_at__gt": request.GET.get("updated_at__gt")}
@@ -319,6 +369,7 @@ class IssueViewSet(BaseViewSet):
         order_by_param = request.GET.get("order_by", "-created_at")
 
         issue_queryset = self.get_queryset()
+        issue_queryset = _apply_project_issue_page_scope_filter(issue_queryset, scope)
 
         # Apply rich filters
         issue_queryset = self.filter_queryset(issue_queryset)
@@ -755,6 +806,7 @@ class IssueViewSet(BaseViewSet):
         queryset = self.apply_annotations(queryset)
 
         skip_activity = request.data.pop("skip_activity", False)
+        approval_reason = request.data.pop("approval_reason", "")
         is_description_update = request.data.get("description_html") is not None
 
         issue = (
@@ -848,6 +900,7 @@ class IssueViewSet(BaseViewSet):
                     user=request.user,
                     project_id=project_id,
                     target_assignee_ids=desired_assignee_ids,
+                    approval_reason=approval_reason,
                 )
                 if not allowed:
                     redis_client.delete(lock_id)
@@ -1537,6 +1590,12 @@ class IssuePaginatedViewSet(BaseViewSet):
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
     def list(self, request, slug, project_id):
+        scope, permission_error = _check_project_issue_page_scope_permission(
+            request, slug, project_id
+        )
+        if permission_error:
+            return permission_error
+
         cursor = request.GET.get("cursor", None)
         is_description_required = request.GET.get("description", "false")
         updated_at = request.GET.get("updated_at__gt", None)
@@ -1579,9 +1638,12 @@ class IssuePaginatedViewSet(BaseViewSet):
         base_queryset = Issue.issue_objects.filter(
             workspace__slug=slug, project_id=project_id
         )
+        base_queryset = _apply_project_issue_page_scope_filter(base_queryset, scope)
 
         base_queryset = base_queryset.order_by("updated_at")
-        queryset = self.get_queryset().order_by("updated_at")
+        queryset = _apply_project_issue_page_scope_filter(
+            self.get_queryset(), scope
+        ).order_by("updated_at")
 
         # validation for guest user
         project = Project.objects.get(pk=project_id, workspace__slug=slug)
@@ -1735,6 +1797,12 @@ class IssueDetailEndpoint(BaseAPIView):
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
     def get(self, request, slug, project_id):
+        scope, permission_error = _check_project_issue_page_scope_permission(
+            request, slug, project_id
+        )
+        if permission_error:
+            return permission_error
+
         filters = issue_filters(request.query_params, "GET")
 
         # check for the project member role, if the role is 5 then check for the guest_view_all_features
@@ -1769,6 +1837,7 @@ class IssueDetailEndpoint(BaseAPIView):
         issue = Issue.issue_objects.filter(
             workspace__slug=slug, project_id=project_id
         ).filter(Exists(permission_subquery))
+        issue = _apply_project_issue_page_scope_filter(issue, scope)
 
         # Add additional prefetch based on expand parameter
         if self.expand:

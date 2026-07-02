@@ -285,7 +285,12 @@ export class IssueService extends APIService {
       });
   }
 
-  async patchIssue(workspaceSlug: string, projectId: string, issueId: string, data: Partial<TIssue>): Promise<any> {
+  async patchIssue(
+    workspaceSlug: string,
+    projectId: string,
+    issueId: string,
+    data: Partial<TIssue> & { approval_reason?: string }
+  ): Promise<any> {
     return this.patch(`/api/workspaces/${workspaceSlug}/projects/${projectId}/${this.serviceType}/${issueId}/`, data)
       .then((response) => response?.data)
       .catch((error) => {
@@ -516,6 +521,7 @@ export class IssueService extends APIService {
         cycle_id?: string | null;
         module_ids?: string[];
         release_ids?: string[];
+        approval_reason?: string;
       };
     }
   ): Promise<{

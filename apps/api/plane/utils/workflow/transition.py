@@ -290,8 +290,12 @@ def check_state_assignee_constraint(issue: Issue, state: State, desired_assignee
     return False, "当前状态负责人不符合工作流规则"
 
 
+def _normalize_approval_reason(approval_reason=None) -> str:
+    return str(approval_reason or "").strip()
+
+
 def check_update_state_permission(
-    issue: Issue, to_state: State, user, target_assignee_ids=None, **kwargs
+    issue: Issue, to_state: State, user, target_assignee_ids=None, approval_reason=None, **kwargs
 ):
     """
     检查是否可以直接变更工作项状态。
@@ -359,6 +363,7 @@ def check_update_state_permission(
             project_id=kwargs["project_id"],
             initiated_by=user,
             target_assignee_ids=desired_assignee_ids,
+            approval_reason=approval_reason,
         )
         if created:
             return False, "已创建审批流程,需要审批人审批通过后更改", record
@@ -375,6 +380,7 @@ def ensure_transition_record(
     project_id,
     initiated_by=None,
     target_assignee_ids=None,
+    approval_reason=None,
 ) -> tuple:
     """
     取消同一流转边中、目标状态不同的 PENDING 申请（已过期的旧申请），
@@ -386,6 +392,7 @@ def ensure_transition_record(
         if target_assignee_ids is not None
         else None
     )
+    normalized_approval_reason = _normalize_approval_reason(approval_reason)
 
     # 取消同一 issue+transition 下目标状态不同的 PENDING 申请
     IssueTransitionRecord.objects.filter(
@@ -403,6 +410,7 @@ def ensure_transition_record(
         project_id=project_id,
         defaults={
             "target_assignee_ids": normalized_target_assignee_ids,
+            "approval_reason": normalized_approval_reason,
         },
     )
 
@@ -438,9 +446,16 @@ def ensure_transition_record(
             epoch=int(timezone.now().timestamp()),
         )
 
-    elif record.target_assignee_ids != normalized_target_assignee_ids:
+    else:
+        target_assignee_changed = record.target_assignee_ids != normalized_target_assignee_ids
+        approval_reason_changed = record.approval_reason != normalized_approval_reason
+
+        if not target_assignee_changed and not approval_reason_changed:
+            return record, created
+
         record.target_assignee_ids = normalized_target_assignee_ids
-        record.save(update_fields=["target_assignee_ids", "updated_at"])
+        record.approval_reason = normalized_approval_reason
+        record.save(update_fields=["target_assignee_ids", "approval_reason", "updated_at"])
 
         reset_count = IssueTransitionApprovalRecord.objects.filter(
             transition_record=record,
@@ -457,6 +472,13 @@ def ensure_transition_record(
             )
             from_name = from_state.name if from_state else "（初始）"
             to_name = to_state.name if to_state else ""
+            reset_reason = "审批申请内容变更"
+            if target_assignee_changed and approval_reason_changed:
+                reset_reason = "目标负责人和变更原因变更"
+            elif target_assignee_changed:
+                reset_reason = "目标负责人变更"
+            elif approval_reason_changed:
+                reset_reason = "变更原因变更"
             IssueActivity.objects.create(
                 issue=issue,
                 actor=initiated_by,
@@ -466,7 +488,7 @@ def ensure_transition_record(
                 new_value="reset",
                 old_identifier=from_state.id if from_state else None,
                 new_identifier=to_state.id if to_state else None,
-                comment=f"目标负责人变更，已重置审批投票（{from_name} → {to_name}）",
+                comment=f"{reset_reason}，已重置审批投票（{from_name} → {to_name}）",
                 project_id=project_id,
                 workspace_id=issue.workspace_id,
                 epoch=int(timezone.now().timestamp()),

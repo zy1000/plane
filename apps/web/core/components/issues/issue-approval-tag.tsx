@@ -164,6 +164,20 @@ function RecordDetail({
               <AssigneeGroup userIds={targetAssigneeIds} getUserDetails={getUserDetails} />
             </div>
           )}
+
+          <div
+            className="rounded-md p-2.5 text-xs"
+            style={{
+              backgroundColor: "rgba(0,0,0,0.04)",
+              border: "1px solid rgba(0,0,0,0.08)",
+              color: "#6b7280",
+            }}
+          >
+            <p className="mb-1 font-medium" style={{ color: "#111827" }}>
+              变更原因
+            </p>
+            <p className="whitespace-pre-wrap break-words">{record.approval_reason?.trim() || "未填写"}</p>
+          </div>
         </div>
       </div>
 

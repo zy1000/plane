@@ -20,7 +20,7 @@ from rest_framework.response import Response
 
 # Module imports
 from ..base import BaseViewSet
-from plane.app.permissions import allow_permission, ROLE
+from plane.app.permissions import PermissionKey, ROLE, allow_fine_permission, allow_permission
 from plane.db.models import (
     Intake,
     IntakeIssue,
@@ -70,8 +70,17 @@ class IntakeViewSet(BaseViewSet):
         )
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
+    @allow_fine_permission(PermissionKey.INTAKE_VIEW)
     def list(self, request, slug, project_id):
         intake = self.get_queryset().first()
+        return Response(IntakeSerializer(intake).data, status=status.HTTP_200_OK)
+
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
+    @allow_fine_permission(PermissionKey.INTAKE_VIEW)
+    def retrieve(self, request, slug, project_id, pk):
+        intake = self.get_queryset().filter(pk=pk).first()
+        if not intake:
+            return Response({"error": "Intake not found"}, status=status.HTTP_404_NOT_FOUND)
         return Response(IntakeSerializer(intake).data, status=status.HTTP_200_OK)
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
@@ -174,6 +183,7 @@ class IntakeIssueViewSet(BaseViewSet):
         ).distinct()
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    @allow_fine_permission(PermissionKey.INTAKE_VIEW)
     def list(self, request, slug, project_id):
         intake = Intake.objects.filter(workspace__slug=slug, project_id=project_id).first()
         if not intake:
@@ -496,6 +506,7 @@ class IntakeIssueViewSet(BaseViewSet):
         return Response(serializer, status=status.HTTP_200_OK)
 
     @allow_permission(allowed_roles=[ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], creator=True, model=Issue)
+    @allow_fine_permission(PermissionKey.INTAKE_VIEW)
     def retrieve(self, request, slug, project_id, pk):
         intake_id = Intake.objects.filter(workspace__slug=slug, project_id=project_id).first()
         project = Project.objects.get(pk=project_id)
@@ -572,6 +583,7 @@ class IntakeWorkItemDescriptionVersionEndpoint(BaseAPIView):
         return paginated_data
 
     @allow_permission(allowed_roles=[ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    @allow_fine_permission(PermissionKey.INTAKE_VIEW)
     def get(self, request, slug, project_id, work_item_id, pk=None):
         project = Project.objects.get(pk=project_id)
         issue = Issue.objects.get(workspace__slug=slug, project_id=project_id, pk=work_item_id)

@@ -203,6 +203,14 @@ export const PROJECT_MEMBER_INVITE_PERMISSION_KEY = "project.member.invite" as c
 /** 项目概览页（/projects/:id/overview），底层 key 兼容旧 PermissionKey.PROJECT_ANALYTICS_VIEW */
 export const PROJECT_OVERVIEW_VIEW_PERMISSION_KEY = "project.analytics.view" as const;
 
+/** 项目工作项 / 需求 / 缺陷页面查看权限常量，与后端 PermissionKey.PROJECT_*_VIEW 一致 */
+export const PROJECT_WORK_ITEMS_VIEW_PERMISSION_KEY = "project.work_items.view" as const;
+export const PROJECT_REQUIREMENTS_VIEW_PERMISSION_KEY = "project.requirements.view" as const;
+export const PROJECT_DEFECTS_VIEW_PERMISSION_KEY = "project.defects.view" as const;
+
+/** 项目收集页权限常量，与后端 PermissionKey.INTAKE_VIEW 一致 */
+export const PROJECT_INTAKE_VIEW_PERMISSION_KEY = "intake.view" as const;
+
 /** 项目公告权限常量，与后端 PermissionKey.PROJECT_ANNOUNCEMENT_* 一致 */
 export const PROJECT_ANNOUNCEMENT_CREATE_PERMISSION_KEY = "project.announcement.create" as const;
 export const PROJECT_ANNOUNCEMENT_DELETE_PERMISSION_KEY = "project.announcement.delete" as const;

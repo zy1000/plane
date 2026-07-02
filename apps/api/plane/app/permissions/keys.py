@@ -57,6 +57,9 @@ class PermissionKey(str, Enum):
     PROJECT_PUBLISH_DELETE = "project.publish.delete"
     PROJECT_ANNOUNCEMENT_CREATE = "project.announcement.create"
     PROJECT_ANNOUNCEMENT_DELETE = "project.announcement.delete"
+    PROJECT_WORK_ITEMS_VIEW = "project.work_items.view"
+    PROJECT_REQUIREMENTS_VIEW = "project.requirements.view"
+    PROJECT_DEFECTS_VIEW = "project.defects.view"
     # 工作项 CRUD/归档权限按 IssueType 动态衍生为 project.issue_type.<id_hex>.<action>，
     # 见 plane.db.models.issue_type.build_issue_type_permission_key。
     ISSUE_COMMENT_CREATE = "issue.comment.create"

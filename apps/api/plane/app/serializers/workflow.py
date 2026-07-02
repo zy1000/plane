@@ -170,6 +170,7 @@ class IssueTransitionRecordListSerializer(BaseSerializer):
             "status",
             "required_count",
             "target_assignee_ids",
+            "approval_reason",
             "approval_records",
             "created_at",
             "completed_at",

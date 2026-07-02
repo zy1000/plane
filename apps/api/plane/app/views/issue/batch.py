@@ -29,7 +29,8 @@ class IssueBatchUpdate(BaseAPIView):
 
     def post(self, request, slug, project_id):
         issue_ids = request.data.get("issue_ids", [])
-        properties = request.data.get("properties", {})
+        properties = dict(request.data.get("properties", {}) or {})
+        approval_reason = properties.pop("approval_reason", "")
 
         state_id = properties.get("state_id")
         has_assignee_update = "assignee_ids" in properties
@@ -57,6 +58,7 @@ class IssueBatchUpdate(BaseAPIView):
                         user=request.user,
                         project_id=project_id,
                         target_assignee_ids=properties.get("assignee_ids"),
+                        approval_reason=approval_reason,
                     )
                     if not allowed:
                         blocked.append({

@@ -21,7 +21,7 @@ import { BaseIssuesStore } from "../helpers/base-issues.store";
 // services
 import type { IIssueRootStore } from "../root.store";
 import type { IProjectIssuesFilter } from "./filter.store";
-import type { TProjectIssueScope } from "./scope";
+import { DEFAULT_PROJECT_ISSUE_SCOPE, type TProjectIssueScope } from "./scope";
 
 export interface IProjectIssues extends IBaseIssuesStore {
   viewFlags: ViewFlags;
@@ -31,7 +31,8 @@ export interface IProjectIssues extends IBaseIssuesStore {
     projectId: string,
     loadType: TLoader,
     option: IssuePaginationOptions,
-    scope?: TProjectIssueScope
+    scope?: TProjectIssueScope,
+    isExistingPaginationOptions?: boolean
   ) => Promise<TIssuesResponse | undefined>;
   fetchIssuesWithExistingPagination: (
     workspaceSlug: string,
@@ -106,8 +107,8 @@ export class ProjectIssues extends BaseIssuesStore implements IProjectIssues {
     projectId: string,
     loadType: TLoader = "init-loader",
     options: IssuePaginationOptions,
-    isExistingPaginationOptions: boolean = false,
-    scope?: TProjectIssueScope
+    scope: TProjectIssueScope = DEFAULT_PROJECT_ISSUE_SCOPE,
+    isExistingPaginationOptions: boolean = false
   ) => {
     try {
       // set loader and clear store
@@ -117,7 +118,15 @@ export class ProjectIssues extends BaseIssuesStore implements IProjectIssues {
       });
 
       // get params from pagination options
-      const params = this.issueFilterStore?.getFilterParams(options, projectId, undefined, undefined, undefined, scope);
+      const filterParams = this.issueFilterStore?.getFilterParams(
+        options,
+        projectId,
+        undefined,
+        undefined,
+        undefined,
+        scope
+      );
+      const params = { ...(filterParams ?? {}), scope };
       // call the fetch issues API with the params
       const response = await this.issueService.getIssues(workspaceSlug, projectId, params, {
         signal: this.controller.signal,
@@ -158,14 +167,16 @@ export class ProjectIssues extends BaseIssuesStore implements IProjectIssues {
       this.setLoader("pagination", groupId, subGroupId);
 
       // get params from stored pagination options
-      const params = this.issueFilterStore?.getFilterParams(
+      const issueScope = scope ?? DEFAULT_PROJECT_ISSUE_SCOPE;
+      const filterParams = this.issueFilterStore?.getFilterParams(
         this.paginationOptions,
         projectId,
         this.getNextCursor(groupId, subGroupId),
         groupId,
         subGroupId,
-        scope
+        issueScope
       );
+      const params = { ...(filterParams ?? {}), scope: issueScope };
       // call the fetch issues API with the params for next page in issues
       const response = await this.issueService.getIssues(workspaceSlug, projectId, params);
 
@@ -194,7 +205,7 @@ export class ProjectIssues extends BaseIssuesStore implements IProjectIssues {
     scope?: TProjectIssueScope
   ) => {
     if (!this.paginationOptions) return;
-    return await this.fetchIssues(workspaceSlug, projectId, loadType, this.paginationOptions, true, scope);
+    return await this.fetchIssues(workspaceSlug, projectId, loadType, this.paginationOptions, scope, true);
   };
 
   /**

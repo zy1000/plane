@@ -400,6 +400,11 @@ class IssueTransitionRecord(ProjectBaseModel):
         blank=True,
         verbose_name="目标负责人ID列表",
     )
+    approval_reason = models.TextField(
+        blank=True,
+        default="",
+        verbose_name="状态变更原因",
+    )
     status = models.CharField(
         max_length=20,
         choices=TransitionRecordStatus.choices,

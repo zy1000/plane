@@ -138,12 +138,15 @@ export const useGroupIssuesDragNDrop = (
         sourceIssue,
         nextStateId,
         async (transitionPayload: TStateTransitionUpdatePayload) => {
-          const nextPayload: Partial<TIssue> = {
+          const nextPayload: Partial<TIssue> & { approval_reason?: string } = {
             ...data,
             state_id: transitionPayload.state_id,
           };
           if ("assignee_ids" in transitionPayload) {
             nextPayload.assignee_ids = transitionPayload.assignee_ids;
+          }
+          if ("approval_reason" in transitionPayload) {
+            nextPayload.approval_reason = transitionPayload.approval_reason;
           }
           await submitIssueUpdate(nextPayload);
         }

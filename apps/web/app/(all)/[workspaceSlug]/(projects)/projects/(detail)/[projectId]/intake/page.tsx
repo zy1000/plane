@@ -8,13 +8,14 @@ import { observer } from "mobx-react";
 import { useSearchParams } from "next/navigation";
 import { useTheme } from "next-themes";
 // plane imports
-import { EUserPermissionsLevel } from "@plane/constants";
+import { EUserPermissionsLevel, PROJECT_INTAKE_VIEW_PERMISSION_KEY } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { EUserProjectRoles, EInboxIssueCurrentTab } from "@plane/types";
 // assets
 import darkIntakeAsset from "@/app/assets/empty-state/disabled-feature/intake-dark.webp?url";
 import lightIntakeAsset from "@/app/assets/empty-state/disabled-feature/intake-light.webp?url";
 // components
+import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
 import { PageHead } from "@/components/core/page-title";
 import { DetailedEmptyState } from "@/components/empty-state/detailed-empty-state-root";
 import { InboxIssueRoot } from "@/components/inbox";
@@ -37,10 +38,15 @@ function ProjectInboxPage({ params }: Route.ComponentProps) {
   const { t } = useTranslation();
   // hooks
   const { currentProjectDetails } = useProject();
-  const { allowPermissions } = useUserPermissions();
+  const { allowPermissions, allowProjectPermissionKeys, workspaceUserInfo } = useUserPermissions();
   // derived values
   const canPerformEmptyStateActions = allowPermissions([EUserProjectRoles.ADMIN], EUserPermissionsLevel.PROJECT);
+  const canViewIntake = allowProjectPermissionKeys([PROJECT_INTAKE_VIEW_PERMISSION_KEY], workspaceSlug, projectId);
   const resolvedPath = resolvedTheme === "light" ? lightIntakeAsset : darkIntakeAsset;
+
+  if (workspaceUserInfo && !canViewIntake) {
+    return <NotAuthorizedView section="general" isProjectView className="h-auto" />;
+  }
 
   // No access to inbox
   if (currentProjectDetails?.inbox_view === false)

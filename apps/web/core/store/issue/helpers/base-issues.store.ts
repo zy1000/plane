@@ -49,6 +49,7 @@ import {
 import type { IBaseIssueFilterStore } from "./issue-filter-helper.store";
 
 export type TIssueDisplayFilterOptions = Exclude<TIssueGroupByOptions, null> | "target_date";
+type TIssueUpdatePayload = Partial<TIssue> & { approval_reason?: string };
 
 export enum EIssueGroupedAction {
   ADD = "ADD",
@@ -561,15 +562,16 @@ export abstract class BaseIssuesStore implements IBaseIssuesStore {
     workspaceSlug: string,
     projectId: string,
     issueId: string,
-    data: Partial<TIssue>,
+    data: TIssueUpdatePayload,
     shouldSync = true
   ) {
     // Store Before state of the issue
     const issueBeforeUpdate = clone(this.rootIssueStore.issues.getIssueById(issueId));
+    const { approval_reason: _approvalReason, ...optimisticData } = data;
     try {
       // Update the Respective Stores
-      this.rootIssueStore.issues.updateIssue(issueId, data);
-      this.updateIssueList({ ...issueBeforeUpdate, ...data } as TIssue, issueBeforeUpdate);
+      this.rootIssueStore.issues.updateIssue(issueId, optimisticData);
+      this.updateIssueList({ ...issueBeforeUpdate, ...optimisticData } as TIssue, issueBeforeUpdate);
 
       // Check if should Sync
       if (!shouldSync) return;
@@ -577,13 +579,13 @@ export abstract class BaseIssuesStore implements IBaseIssuesStore {
       // update parent stats optimistically
       this.updateParentStats(issueBeforeUpdate, {
         ...issueBeforeUpdate,
-        ...data,
+        ...optimisticData,
       } as TIssue);
 
       // call API to update the issue
       await this.issueService.patchIssue(workspaceSlug, projectId, issueId, data);
 
-      if ("state_id" in data && issueBeforeUpdate?.state_id !== data.state_id) {
+      if ("state_id" in optimisticData && issueBeforeUpdate?.state_id !== optimisticData.state_id) {
         invalidateIssueApprovalStatus(projectId, issueId);
       }
 
@@ -592,7 +594,7 @@ export abstract class BaseIssuesStore implements IBaseIssuesStore {
     } catch (error) {
       // If errored out update store again to revert the change
       this.rootIssueStore.issues.updateIssue(issueId, issueBeforeUpdate ?? {});
-      this.updateIssueList(issueBeforeUpdate, { ...issueBeforeUpdate, ...data } as TIssue);
+      this.updateIssueList(issueBeforeUpdate, { ...issueBeforeUpdate, ...optimisticData } as TIssue);
 
       if ((error as { workflow_blocked?: boolean })?.workflow_blocked) {
         invalidateIssueApprovalStatus(projectId, issueId);

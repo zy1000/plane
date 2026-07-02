@@ -9,9 +9,11 @@ type TStateTransitionAssigneeModalProps = {
   projectId: string;
   allowedAssigneeIds: string[];
   initialAssigneeIds: string[];
+  showApprovalReason?: boolean;
+  showAssigneeSelection?: boolean;
   isSubmitting?: boolean;
   onClose: () => void;
-  onConfirm: (assigneeIds: string[]) => Promise<void> | void;
+  onConfirm: (payload: { assigneeIds: string[]; approvalReason: string }) => Promise<void> | void;
 };
 
 export const StateTransitionAssigneeModal = ({
@@ -19,11 +21,14 @@ export const StateTransitionAssigneeModal = ({
   projectId,
   allowedAssigneeIds,
   initialAssigneeIds,
+  showApprovalReason = false,
+  showAssigneeSelection = true,
   isSubmitting = false,
   onClose,
   onConfirm,
 }: TStateTransitionAssigneeModalProps) => {
   const [selectedAssigneeIds, setSelectedAssigneeIds] = useState<string[]>([]);
+  const [approvalReason, setApprovalReason] = useState("");
 
   const normalizedAllowedAssigneeIds = useMemo(
     () => Array.from(new Set(allowedAssigneeIds)),
@@ -34,14 +39,20 @@ export const StateTransitionAssigneeModal = ({
     if (!isOpen) return;
     const allowedSet = new Set(normalizedAllowedAssigneeIds);
     setSelectedAssigneeIds(initialAssigneeIds.filter((id) => allowedSet.has(id)));
+    setApprovalReason("");
   }, [initialAssigneeIds, isOpen, normalizedAllowedAssigneeIds]);
 
-  const noAllowedAssignees = normalizedAllowedAssigneeIds.length === 0;
-  const canConfirm = !isSubmitting && !noAllowedAssignees && selectedAssigneeIds.length > 0;
+  const noAllowedAssignees = showAssigneeSelection && normalizedAllowedAssigneeIds.length === 0;
+  const canConfirm =
+    !isSubmitting &&
+    (!showAssigneeSelection || (!noAllowedAssignees && selectedAssigneeIds.length > 0));
 
   const handleConfirm = async () => {
     if (!canConfirm) return;
-    await onConfirm(selectedAssigneeIds);
+    await onConfirm({
+      assigneeIds: selectedAssigneeIds,
+      approvalReason: approvalReason.trim(),
+    });
   };
 
   return (
@@ -74,7 +85,7 @@ export const StateTransitionAssigneeModal = ({
                 <div className="flex items-center justify-between border-b border-subtle px-5 py-4">
                   <div>
                     <Dialog.Title className="text-base font-semibold text-primary">
-                      选择目标负责人
+                      {showApprovalReason ? "发起状态变更审批" : "选择目标负责人"}
                     </Dialog.Title>
                   </div>
                   <button
@@ -86,13 +97,13 @@ export const StateTransitionAssigneeModal = ({
                   </button>
                 </div>
 
-                <div className="flex-1 space-y-3 px-5 py-4">
-                  {noAllowedAssignees ? (
+                <div className="flex-1 space-y-4 px-5 py-4">
+                  {showAssigneeSelection && noAllowedAssignees ? (
                     <div className="flex items-start gap-2 rounded-md border border-warning/50 bg-warning/10 px-3 py-2 text-sm text-warning">
                       <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" />
                       <span>目标状态未解析到可选负责人，请联系项目管理员调整工作流配置。</span>
                     </div>
-                  ) : (
+                  ) : showAssigneeSelection ? (
                     <div className="space-y-2">
                       <p className="text-xs text-secondary">
                         可选负责人（{normalizedAllowedAssigneeIds.length}）
@@ -111,6 +122,19 @@ export const StateTransitionAssigneeModal = ({
                           buttonContainerClassName="h-full w-full text-left"
                         />
                       </div>
+                    </div>
+                  ) : null}
+
+                  {showApprovalReason && (
+                    <div className="space-y-2">
+                      <p className="text-xs text-secondary">变更原因</p>
+                      <textarea
+                        value={approvalReason}
+                        onChange={(e) => setApprovalReason(e.target.value)}
+                        placeholder="填写变更原因（可选）"
+                        rows={4}
+                        className="w-full resize-none rounded-md border border-subtle bg-surface-2 px-3 py-2 text-sm text-primary placeholder:text-tertiary outline-none transition-colors focus:border-accent-primary/60"
+                      />
                     </div>
                   )}
                 </div>

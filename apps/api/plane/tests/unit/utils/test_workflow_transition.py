@@ -1,5 +1,6 @@
 import pytest
 
+from plane.app.serializers.workflow import IssueTransitionRecordListSerializer
 from plane.db.models import (
     ApprovalType,
     Issue,
@@ -171,6 +172,99 @@ class TestWorkflowTransitionDynamicApprovers:
                 "approver_id", flat=True
             )
         ) == {creator.id, assignee.id}
+
+    @pytest.mark.django_db
+    def test_creates_approval_record_with_reason(self, workflow_context):
+        issue = workflow_context["issue"]
+        project = workflow_context["project"]
+        creator = workflow_context["creator"]
+        initiator = workflow_context["initiator"]
+        to_state = workflow_context["to_state"]
+        workflow = workflow_context["workflow"]
+        from_state = workflow_context["from_state"]
+
+        transition = WorkflowTransition.objects.create(
+            workflow=workflow,
+            project=project,
+            from_state=from_state,
+            to_state=to_state,
+            approval_type=ApprovalType.N_OF_M,
+            required_count=1,
+        )
+        _add_dynamic_approvers(transition, [WorkflowApproverTarget.CREATED_BY])
+
+        allowed, error, record = check_update_state_permission(
+            issue=issue,
+            to_state=to_state,
+            user=initiator,
+            project_id=project.id,
+            approval_reason="  需要进入完成态给验收方确认  ",
+        )
+
+        assert allowed is False
+        assert "已创建审批流程" in error
+        assert record.approval_reason == "需要进入完成态给验收方确认"
+        assert (
+            IssueTransitionRecordListSerializer(record).data["approval_reason"]
+            == "需要进入完成态给验收方确认"
+        )
+        assert IssueTransitionApprovalRecord.objects.filter(
+            transition_record=record,
+            approver=creator,
+        ).exists()
+
+    @pytest.mark.django_db
+    def test_reused_approval_record_updates_reason_and_resets_votes(self, workflow_context):
+        issue = workflow_context["issue"]
+        project = workflow_context["project"]
+        creator = workflow_context["creator"]
+        initiator = workflow_context["initiator"]
+        to_state = workflow_context["to_state"]
+        workflow = workflow_context["workflow"]
+        from_state = workflow_context["from_state"]
+
+        transition = WorkflowTransition.objects.create(
+            workflow=workflow,
+            project=project,
+            from_state=from_state,
+            to_state=to_state,
+            approval_type=ApprovalType.N_OF_M,
+            required_count=1,
+        )
+        _add_dynamic_approvers(transition, [WorkflowApproverTarget.CREATED_BY])
+
+        allowed, _, record = check_update_state_permission(
+            issue=issue,
+            to_state=to_state,
+            user=initiator,
+            project_id=project.id,
+            approval_reason="第一次原因",
+        )
+        assert allowed is False
+
+        approval_record = IssueTransitionApprovalRecord.objects.get(
+            transition_record=record,
+            approver=creator,
+        )
+        approval_record.action = "approved"
+        approval_record.comment = "同意"
+        approval_record.save(update_fields=["action", "comment", "updated_at"])
+
+        allowed, _, reused_record = check_update_state_permission(
+            issue=issue,
+            to_state=to_state,
+            user=initiator,
+            project_id=project.id,
+            approval_reason="第二次原因",
+        )
+
+        assert allowed is False
+        assert reused_record.id == record.id
+        reused_record.refresh_from_db()
+        approval_record.refresh_from_db()
+        assert reused_record.approval_reason == "第二次原因"
+        assert approval_record.action is None
+        assert approval_record.comment == ""
 
     @pytest.mark.django_db
     def test_rejects_when_runtime_approvers_are_less_than_required_count(self, workflow_context):

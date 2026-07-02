@@ -8,7 +8,15 @@ import {
 } from "@/components/issues/workflow-error-utils";
 import { useIssueStateTransition } from "./use-issue-state-transition";
 
-export type TStateTransitionUpdatePayload = Pick<TIssue, "state_id"> & Partial<Pick<TIssue, "assignee_ids">>;
+export type TStateTransitionUpdatePayload = Pick<TIssue, "state_id"> &
+  Partial<Pick<TIssue, "assignee_ids">> & {
+    approval_reason?: string;
+  };
+
+type TStateTransitionConfirmPayload = {
+  assigneeIds: string[];
+  approvalReason: string;
+};
 
 type TSubmitStateTransitionUpdate = (payload: TStateTransitionUpdatePayload) => Promise<void> | void;
 
@@ -16,6 +24,8 @@ type TPendingStateTransitionChange = {
   issue: TIssue;
   nextStateId: string;
   allowedAssigneeIds: string[];
+  shouldPromptApprovalReason: boolean;
+  shouldPromptAssigneeSelection: boolean;
   submit: TSubmitStateTransitionUpdate;
 };
 
@@ -44,7 +54,7 @@ export const useStateTransitionAssigneeGuard = (workspaceSlug: string | undefine
   const requestStateChange = useCallback(
     async (issue: TIssue, nextStateId: string, submit: TSubmitStateTransitionUpdate) => {
       const transitionCheck = await evaluateStateTransition(issue, nextStateId);
-      if (!transitionCheck.shouldPromptAssigneeSelection) {
+      if (!transitionCheck.shouldPromptApprovalReason && !transitionCheck.shouldPromptAssigneeSelection) {
         try {
           await submit({ state_id: nextStateId });
         } catch (error) {
@@ -53,7 +63,7 @@ export const useStateTransitionAssigneeGuard = (workspaceSlug: string | undefine
         return;
       }
 
-      if (transitionCheck.allowedAssigneeIds.length === 0) {
+      if (transitionCheck.shouldPromptAssigneeSelection && transitionCheck.allowedAssigneeIds.length === 0) {
         setToast({
           type: TOAST_TYPE.WARNING,
           title: "无法切换状态",
@@ -66,22 +76,30 @@ export const useStateTransitionAssigneeGuard = (workspaceSlug: string | undefine
         issue,
         nextStateId,
         allowedAssigneeIds: transitionCheck.allowedAssigneeIds,
+        shouldPromptApprovalReason: transitionCheck.shouldPromptApprovalReason,
+        shouldPromptAssigneeSelection: transitionCheck.shouldPromptAssigneeSelection,
         submit,
       });
     },
     [evaluateStateTransition, showTransitionErrorToast]
   );
 
-  const confirmAssigneeSelection = useCallback(
-    async (assigneeIds: string[]) => {
+  const confirmStateTransition = useCallback(
+    async ({ assigneeIds, approvalReason }: TStateTransitionConfirmPayload) => {
       if (!pendingStateChange) return;
 
       setIsSubmitting(true);
       try {
-        await pendingStateChange.submit({
+        const payload: TStateTransitionUpdatePayload = {
           state_id: pendingStateChange.nextStateId,
-          assignee_ids: assigneeIds,
-        });
+        };
+        if (pendingStateChange.shouldPromptAssigneeSelection) {
+          payload.assignee_ids = assigneeIds;
+        }
+        if (pendingStateChange.shouldPromptApprovalReason) {
+          payload.approval_reason = approvalReason;
+        }
+        await pendingStateChange.submit(payload);
         setPendingStateChange(null);
       } catch (error) {
         showTransitionErrorToast(error);
@@ -99,11 +117,13 @@ export const useStateTransitionAssigneeGuard = (workspaceSlug: string | undefine
       projectId: pendingStateChange?.issue.project_id ?? "",
       allowedAssigneeIds: pendingStateChange?.allowedAssigneeIds ?? [],
       initialAssigneeIds: pendingStateChange?.issue.assignee_ids ?? [],
+      showApprovalReason: pendingStateChange?.shouldPromptApprovalReason ?? false,
+      showAssigneeSelection: pendingStateChange?.shouldPromptAssigneeSelection ?? false,
       isSubmitting,
       onClose: closeModal,
-      onConfirm: confirmAssigneeSelection,
+      onConfirm: confirmStateTransition,
     }),
-    [closeModal, confirmAssigneeSelection, isSubmitting, pendingStateChange]
+    [closeModal, confirmStateTransition, isSubmitting, pendingStateChange]
   );
 
   return {
