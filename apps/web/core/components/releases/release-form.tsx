@@ -131,7 +131,7 @@ export function ReleaseForm(props: Props) {
                   value={value}
                   onChange={onChange}
                   placeholder={t("description")}
-                  className="min-h-24 w-full resize-none text-14"
+                  className="min-h-44 w-full resize-none text-14"
                   hasError={Boolean(errors?.description)}
                   tabIndex={getIndex("description")}
                 />

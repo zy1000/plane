@@ -225,8 +225,7 @@ export function CycleCreateUpdateModal(props: CycleModalProps) {
     <ModalCore
       isOpen={isOpen}
       position={EModalPosition.TOP}
-      width={EModalWidth.VIXL}
-      className={data ? "min-h-[36rem]" : "min-h-[30rem]"}
+      width={EModalWidth.XXXXL}
     >
       <CycleForm
         handleFormSubmit={handleFormSubmit}

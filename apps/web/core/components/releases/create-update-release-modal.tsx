@@ -121,7 +121,7 @@ export const CreateUpdateReleaseModal = observer(function CreateUpdateReleaseMod
   });
 
   return (
-    <ModalCore isOpen={isOpen} position={EModalPosition.TOP} width={EModalWidth.XXL}>
+    <ModalCore isOpen={isOpen} position={EModalPosition.TOP} width={EModalWidth.XXXXL}>
       <ReleaseForm
         key={`${isOpen ? "open" : "closed"}-${data?.id ?? "new"}`}
         handleFormSubmit={handleFormSubmit}

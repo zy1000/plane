@@ -157,7 +157,7 @@ export const CreateUpdateModuleModal = observer(function CreateUpdateModuleModal
   });
 
   return (
-    <ModalCore isOpen={isOpen} position={EModalPosition.TOP} width={EModalWidth.XXL}>
+    <ModalCore isOpen={isOpen} position={EModalPosition.TOP} width={EModalWidth.XXXXL}>
       <ModuleForm
         handleFormSubmit={handleFormSubmit}
         handleClose={handleClose}

@@ -227,7 +227,7 @@ export default {
   your_account: "您的账号",
   security: "安全",
   activity: "活动",
-  preferences: "偏好设置",
+  preferences: "偏好",
   language_and_time: "语言与时间",
   "your profile": "个人资料",
   developer: "开发者",
@@ -1609,7 +1609,7 @@ export default {
       },
     },
     preferences: {
-      heading: "偏好设置",
+      heading: "偏好",
       description: "按照您的工作方式自定义应用体验",
     },
     notifications: {
@@ -2031,7 +2031,7 @@ export default {
       profile: "个人资料",
       security: "安全",
       activity: "活动",
-      preferences: "偏好设置",
+      preferences: "偏好",
       appearance: "外观",
       notifications: "通知",
       "api-tokens": "个人访问令牌",

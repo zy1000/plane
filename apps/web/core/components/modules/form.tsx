@@ -82,7 +82,7 @@ export function ModuleForm(props: Props) {
 
   return (
     <form onSubmit={handleSubmit(handleCreateUpdateModule)}>
-      <div className="space-y-5 p-5">
+      <div className="space-y-6 p-6">
         <div className="flex items-center gap-x-3">
           {!status && (
             <Controller
@@ -151,7 +151,7 @@ export function ModuleForm(props: Props) {
                   value={value}
                   onChange={onChange}
                   placeholder={t("description")}
-                  className="min-h-24 w-full resize-none text-14"
+                  className="min-h-52 w-full resize-none text-14"
                   hasError={Boolean(errors?.description)}
                   tabIndex={getIndex("description")}
                 />
