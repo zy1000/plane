@@ -1876,11 +1876,11 @@ export default {
         },
         responsibility: {
           title: "责任范围",
-          description: "由该成员创建或当前负责的迭代与发布。",
+          description: "由该成员创建或当前负责的未完成的迭代与发布。",
         },
         coverage: {
           title: "工作覆盖",
-          description: "查看该成员在分配、创建和订阅工作中的参与范围。",
+          description: "查看该成员在分配、创建和订阅未完成的工作中的参与范围。",
         },
       },
       metric_details: {
