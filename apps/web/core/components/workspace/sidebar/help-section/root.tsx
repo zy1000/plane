@@ -16,6 +16,7 @@ import { DOCS_URL } from "@plane/constants";
 import { CustomMenu } from "@plane/ui";
 // hooks
 import { useChatSupport } from "@/hooks/use-chat-support";
+import { useLatestReleasenoteVersion } from "@/modules/releasenote/hooks/use-latest-releasenote-version";
 import packageJson from "package.json";
 
 type HelpMenuRootProps = {
@@ -29,8 +30,10 @@ export const HelpMenuRoot = observer(function HelpMenuRoot({ showLabel = false }
   // store hooks
   const { t } = useTranslation();
   const { openChatSupport, isEnabled: isChatSupportEnabled } = useChatSupport();
+  const { isLoading: isLatestVersionLoading, latestVersion } = useLatestReleasenoteVersion();
   // states
   const [isNeedHelpOpen, setIsNeedHelpOpen] = useState(false);
+  const displayVersion = latestVersion || (!isLatestVersionLoading ? packageJson.version : null);
 
   return (
     <CustomMenu
@@ -101,7 +104,7 @@ export const HelpMenuRoot = observer(function HelpMenuRoot({ showLabel = false }
           <div className="flex items-center gap-x-2">
             <Sparkles className="h-3.5 w-3.5 shrink-0 text-secondary" />
             <span>
-              最新版本 v{packageJson.version}
+              最新版本{displayVersion ? ` v${displayVersion}` : ""}
             </span>
           </div>
         </div>
