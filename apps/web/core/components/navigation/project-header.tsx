@@ -6,6 +6,7 @@
 
 import { useCallback, useMemo } from "react";
 import { observer } from "mobx-react";
+import { usePathname, useSearchParams } from "next/navigation";
 import { Settings } from "lucide-react";
 // plane imports
 import { ProjectIcon } from "@plane/propel/icons";
@@ -18,6 +19,7 @@ import { useAppRouter } from "@/hooks/use-app-router";
 // plane web imports
 import { useNavigationItems } from "@/plane-web/components/navigations";
 // local imports
+import { buildProjectSettingsPath, getPathWithSearch } from "@/components/settings/project/navigation";
 import { SwitcherLabel } from "../common/switcher-label";
 import { ProjectHeaderButton } from "./project-header-button";
 import { getTabUrl } from "./tab-navigation-utils";
@@ -32,6 +34,8 @@ export const ProjectHeader = observer(function ProjectHeader(props: TProjectHead
   const { workspaceSlug, projectId } = props;
   // router
   const router = useAppRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   // store hooks
   const { joinedProjectIds, getPartialProjectById } = useProject();
   const { allowPermissions, allowProjectPermissionKeys } = useUserPermissions();
@@ -103,9 +107,11 @@ export const ProjectHeader = observer(function ProjectHeader(props: TProjectHead
     router.push(`/${workspaceSlug}/projects/`);
   }, [router, workspaceSlug]);
 
+  const currentPath = getPathWithSearch(pathname, searchParams);
+
   const handleProjectSettingsClick = useCallback(() => {
-    router.push(`/${workspaceSlug}/settings/projects/${projectId}/`);
-  }, [router, workspaceSlug, projectId]);
+    router.push(buildProjectSettingsPath({ workspaceSlug, projectId, currentPath }));
+  }, [router, workspaceSlug, projectId, currentPath]);
 
   // Early return if no project details
   if (!currentProjectDetails) return null;

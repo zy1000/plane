@@ -37,6 +37,8 @@ export const PagesListHeader = observer(function PagesListHeader() {
   const { canCurrentUserCreatePage, createPage } = usePageStore(EPageStoreType.PROJECT);
   // handle page create
   const handleCreatePage = async () => {
+    if (!canCurrentUserCreatePage || isCreatingPage) return;
+
     setIsCreatingPage(true);
 
     const payload: Partial<TPage> = {
@@ -76,19 +78,18 @@ export const PagesListHeader = observer(function PagesListHeader() {
           />
         </Breadcrumbs>
       </Header.LeftItem>
-      {canCurrentUserCreatePage && (
-        <Header.RightItem>
-          <Button
-            variant="primary"
-            size="lg"
-            onClick={handleCreatePage}
-            loading={isCreatingPage}
-            data-ph-element={PROJECT_TRACKER_ELEMENTS.CREATE_HEADER_BUTTON}
-          >
-            {isCreatingPage ? "Adding" : "添加笔记"}
-          </Button>
-        </Header.RightItem>
-      )}
+      <Header.RightItem>
+        <Button
+          variant="primary"
+          size="lg"
+          onClick={handleCreatePage}
+          loading={isCreatingPage}
+          disabled={!canCurrentUserCreatePage || isCreatingPage}
+          data-ph-element={PROJECT_TRACKER_ELEMENTS.CREATE_HEADER_BUTTON}
+        >
+          {isCreatingPage ? "Adding" : "添加笔记"}
+        </Button>
+      </Header.RightItem>
     </Header>
   );
 });

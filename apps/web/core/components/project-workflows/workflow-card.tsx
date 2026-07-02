@@ -7,7 +7,7 @@
 import type { FC } from "react";
 import { useState } from "react";
 import { Pencil, Settings, Trash2 } from "lucide-react";
-import { useNavigate } from "react-router";
+import { useLocation, useNavigate } from "react-router";
 import { CustomMenu, ToggleSwitch } from "@plane/ui";
 import { cn } from "@plane/utils";
 import type { TWorkflow } from "@/services/project/project-workflow.service";
@@ -36,8 +36,10 @@ export const WorkflowCard: FC<TWorkflowCardProps> = ({
   onDelete,
 }) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [isToggling, setIsToggling] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const workflowSettingsPath = `/${workspaceSlug}/settings/projects/${projectId}/workflow/${workflow.id}${location.search}`;
 
   const handleToggleActive = async (value: boolean) => {
     if (!canEditWorkflow || isToggling) return;
@@ -60,7 +62,7 @@ export const WorkflowCard: FC<TWorkflowCardProps> = ({
   };
 
   const handleCardClick = () => {
-    navigate(`/${workspaceSlug}/settings/projects/${projectId}/workflow/${workflow.id}`);
+    navigate(workflowSettingsPath);
   };
 
   return (
@@ -95,7 +97,7 @@ export const WorkflowCard: FC<TWorkflowCardProps> = ({
           <CustomMenu.MenuItem
             onClick={() => {
               if (canConfigWorkflow) {
-                navigate(`/${workspaceSlug}/settings/projects/${projectId}/workflow/${workflow.id}`);
+                navigate(workflowSettingsPath);
               }
             }}
             disabled={!canConfigWorkflow}

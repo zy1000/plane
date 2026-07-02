@@ -89,7 +89,8 @@ export const PageActions = observer(function PageActions(props: Props) {
           },
           title: is_locked ? "Unlock" : "Lock",
           icon: is_locked ? LockKeyholeOpen : LockKeyhole,
-          shouldRender: canCurrentUserLockPage,
+          shouldRender: !archived_at,
+          disabled: !canCurrentUserLockPage,
         },
         {
           key: "toggle-access",
@@ -98,7 +99,8 @@ export const PageActions = observer(function PageActions(props: Props) {
           },
           title: access === EPageAccess.PUBLIC ? "Make private" : "Make public",
           icon: access === EPageAccess.PUBLIC ? LockIcon : GlobeIcon,
-          shouldRender: canCurrentUserChangeAccess && !archived_at,
+          shouldRender: !archived_at,
+          disabled: !canCurrentUserChangeAccess,
         },
         {
           key: "open-in-new-tab",
@@ -121,7 +123,8 @@ export const PageActions = observer(function PageActions(props: Props) {
           },
           title: "Make a copy",
           icon: CopyIcon,
-          shouldRender: canCurrentUserDuplicatePage,
+          shouldRender: true,
+          disabled: !canCurrentUserDuplicatePage,
         },
         {
           key: "archive-restore",
@@ -130,7 +133,8 @@ export const PageActions = observer(function PageActions(props: Props) {
           },
           title: archived_at ? "Restore" : "Archive",
           icon: archived_at ? ArchiveRestoreIcon : ArchiveIcon,
-          shouldRender: canCurrentUserArchivePage,
+          shouldRender: true,
+          disabled: !canCurrentUserArchivePage,
         },
         {
           key: "delete",
@@ -139,14 +143,16 @@ export const PageActions = observer(function PageActions(props: Props) {
           },
           title: "Delete",
           icon: TrashIcon,
-          shouldRender: canCurrentUserDeletePage && !!archived_at,
+          shouldRender: !!archived_at,
+          disabled: !canCurrentUserDeletePage,
         },
         {
           key: "move",
           action: () => setMovePageModal(true),
           title: "Move",
           icon: FileOutput,
-          shouldRender: canCurrentUserMovePage && isMovePageEnabled,
+          shouldRender: isMovePageEnabled,
+          disabled: !canCurrentUserMovePage,
         },
       ];
       if (extraOptions) {

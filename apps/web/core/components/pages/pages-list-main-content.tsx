@@ -8,18 +8,17 @@ import { useState } from "react";
 import { observer } from "mobx-react";
 // plane imports
 import { useParams, useRouter } from "next/navigation";
-import { EUserPermissionsLevel, EPageAccess } from "@plane/constants";
+import { EPageAccess } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { EmptyStateDetailed } from "@plane/propel/empty-state";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TPage, TPageNavigationTabs } from "@plane/types";
-import { EUserProjectRoles } from "@plane/types";
 // components
 import { PageLoader } from "@/components/pages/loaders/page-loader";
 import { useProject } from "@/hooks/store/use-project";
-import { useUserPermissions } from "@/hooks/store/user";
 // plane web hooks
-import { EPageStoreType, usePageStore } from "@/plane-web/hooks/store";
+import type { EPageStoreType } from "@/plane-web/hooks/store";
+import { usePageStore } from "@/plane-web/hooks/store";
 
 type Props = {
   children: React.ReactNode;
@@ -33,10 +32,14 @@ export const PagesListMainContent = observer(function PagesListMainContent(props
   const { t } = useTranslation();
   // store hooks
   const { currentProjectDetails } = useProject();
-  const { isAnyPageAvailable, getCurrentProjectFilteredPageIdsByTab, getCurrentProjectPageIdsByTab, loader } =
-    usePageStore(storeType);
-  const { allowPermissions } = useUserPermissions();
-  const { createPage } = usePageStore(EPageStoreType.PROJECT);
+  const {
+    isAnyPageAvailable,
+    getCurrentProjectFilteredPageIdsByTab,
+    getCurrentProjectPageIdsByTab,
+    loader,
+    canCurrentUserCreatePage,
+    createPage,
+  } = usePageStore(storeType);
   // states
   const [isCreatingPage, setIsCreatingPage] = useState(false);
   // router
@@ -45,13 +48,11 @@ export const PagesListMainContent = observer(function PagesListMainContent(props
   // derived values
   const pageIds = getCurrentProjectPageIdsByTab(pageType);
   const filteredPageIds = getCurrentProjectFilteredPageIdsByTab(pageType);
-  const canPerformEmptyStateActions = allowPermissions(
-    [EUserProjectRoles.ADMIN, EUserProjectRoles.MEMBER],
-    EUserPermissionsLevel.PROJECT
-  );
 
   // handle page create
   const handleCreatePage = async () => {
+    if (!canCurrentUserCreatePage || isCreatingPage) return;
+
     setIsCreatingPage(true);
 
     const payload: Partial<TPage> = {
@@ -89,7 +90,7 @@ export const PagesListMainContent = observer(function PagesListMainContent(props
                 handleCreatePage();
               },
               variant: "primary",
-              disabled: !canPerformEmptyStateActions || isCreatingPage,
+              disabled: !canCurrentUserCreatePage || isCreatingPage,
             },
           ]}
         />
@@ -108,7 +109,7 @@ export const PagesListMainContent = observer(function PagesListMainContent(props
                 handleCreatePage();
               },
               variant: "primary",
-              disabled: !canPerformEmptyStateActions || isCreatingPage,
+              disabled: !canCurrentUserCreatePage || isCreatingPage,
             },
           ]}
         />
@@ -126,7 +127,7 @@ export const PagesListMainContent = observer(function PagesListMainContent(props
                 handleCreatePage();
               },
               variant: "primary",
-              disabled: !canPerformEmptyStateActions || isCreatingPage,
+              disabled: !canCurrentUserCreatePage || isCreatingPage,
             },
           ]}
         />

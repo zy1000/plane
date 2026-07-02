@@ -7,7 +7,18 @@
 import { computed, makeObservable } from "mobx";
 import { computedFn } from "mobx-utils";
 // constants
-import { EPageAccess, EUserPermissions } from "@plane/constants";
+import {
+  EPageAccess,
+  EUserPermissions,
+  PROJECT_NOTES_ACCESS_MANAGE_PERMISSION_KEY,
+  PROJECT_NOTES_ARCHIVE_PERMISSION_KEY,
+  PROJECT_NOTES_CREATE_PERMISSION_KEY,
+  PROJECT_NOTES_DELETE_PERMISSION_KEY,
+  PROJECT_NOTES_EDIT_PERMISSION_KEY,
+  PROJECT_NOTES_LOCK_PERMISSION_KEY,
+  PROJECT_NOTES_VERSION_VIEW_PERMISSION_KEY,
+  PROJECT_NOTES_VIEW_PERMISSION_KEY,
+} from "@plane/constants";
 import type { TPage } from "@plane/types";
 // plane web store
 import type { RootStore } from "@/plane-web/store/root.store";
@@ -71,6 +82,7 @@ export class ProjectPage extends BasePage implements TProjectPage {
       canCurrentUserDeletePage: computed,
       canCurrentUserFavoritePage: computed,
       canCurrentUserMovePage: computed,
+      canCurrentUserViewPageVersions: computed,
       isContentEditable: computed,
     });
   }
@@ -92,12 +104,24 @@ export class ProjectPage extends BasePage implements TProjectPage {
     return highestRole;
   });
 
+  private hasPermissionAcrossProjects = computedFn((permissionKey: string): boolean => {
+    const { workspaceSlug } = this.rootStore.router;
+    if (!workspaceSlug || !this.project_ids?.length) return false;
+    return this.project_ids.some((projectId) =>
+      this.rootStore.user.permission
+        .getProjectPermissionKeysByWorkspaceSlugAndProjectId(workspaceSlug.toString(), projectId.toString())
+        .includes(permissionKey)
+    );
+  });
+
   /**
    * @description returns true if the current logged in user can access the page
    */
   get canCurrentUserAccessPage() {
     const isPagePublic = this.access === EPageAccess.PUBLIC;
-    return isPagePublic || this.isCurrentUserOwner;
+    return (
+      this.hasPermissionAcrossProjects(PROJECT_NOTES_VIEW_PERMISSION_KEY) && (isPagePublic || this.isCurrentUserOwner)
+    );
   }
 
   /**
@@ -107,8 +131,9 @@ export class ProjectPage extends BasePage implements TProjectPage {
     const highestRole = this.getHighestRoleAcrossProjects();
     const isPagePublic = this.access === EPageAccess.PUBLIC;
     return (
-      (isPagePublic && !!highestRole && highestRole >= EUserPermissions.MEMBER) ||
-      (!isPagePublic && this.isCurrentUserOwner)
+      this.hasPermissionAcrossProjects(PROJECT_NOTES_EDIT_PERMISSION_KEY) &&
+      ((isPagePublic && !!highestRole && highestRole >= EUserPermissions.MEMBER) ||
+        (!isPagePublic && this.isCurrentUserOwner))
     );
   }
 
@@ -116,40 +141,37 @@ export class ProjectPage extends BasePage implements TProjectPage {
    * @description returns true if the current logged in user can create a duplicate the page
    */
   get canCurrentUserDuplicatePage() {
-    const highestRole = this.getHighestRoleAcrossProjects();
-    return !!highestRole && highestRole >= EUserPermissions.MEMBER;
+    return this.canCurrentUserAccessPage && this.hasPermissionAcrossProjects(PROJECT_NOTES_CREATE_PERMISSION_KEY);
   }
 
   /**
    * @description returns true if the current logged in user can lock the page
    */
   get canCurrentUserLockPage() {
-    const highestRole = this.getHighestRoleAcrossProjects();
-    return this.isCurrentUserOwner || highestRole === EUserPermissions.ADMIN;
+    return this.canCurrentUserAccessPage && this.hasPermissionAcrossProjects(PROJECT_NOTES_LOCK_PERMISSION_KEY);
   }
 
   /**
    * @description returns true if the current logged in user can change the access of the page
    */
   get canCurrentUserChangeAccess() {
-    const highestRole = this.getHighestRoleAcrossProjects();
-    return this.isCurrentUserOwner || highestRole === EUserPermissions.ADMIN;
+    return (
+      this.canCurrentUserAccessPage && this.hasPermissionAcrossProjects(PROJECT_NOTES_ACCESS_MANAGE_PERMISSION_KEY)
+    );
   }
 
   /**
    * @description returns true if the current logged in user can archive the page
    */
   get canCurrentUserArchivePage() {
-    const highestRole = this.getHighestRoleAcrossProjects();
-    return this.isCurrentUserOwner || highestRole === EUserPermissions.ADMIN;
+    return this.canCurrentUserAccessPage && this.hasPermissionAcrossProjects(PROJECT_NOTES_ARCHIVE_PERMISSION_KEY);
   }
 
   /**
    * @description returns true if the current logged in user can delete the page
    */
   get canCurrentUserDeletePage() {
-    const highestRole = this.getHighestRoleAcrossProjects();
-    return this.isCurrentUserOwner || highestRole === EUserPermissions.ADMIN;
+    return this.canCurrentUserAccessPage && this.hasPermissionAcrossProjects(PROJECT_NOTES_DELETE_PERMISSION_KEY);
   }
 
   /**
@@ -157,15 +179,21 @@ export class ProjectPage extends BasePage implements TProjectPage {
    */
   get canCurrentUserFavoritePage() {
     const highestRole = this.getHighestRoleAcrossProjects();
-    return !!highestRole && highestRole >= EUserPermissions.MEMBER;
+    return this.canCurrentUserAccessPage && !!highestRole && highestRole >= EUserPermissions.MEMBER;
   }
 
   /**
    * @description returns true if the current logged in user can move the page
    */
   get canCurrentUserMovePage() {
-    const highestRole = this.getHighestRoleAcrossProjects();
-    return this.isCurrentUserOwner || highestRole === EUserPermissions.ADMIN;
+    return this.canCurrentUserEditPage;
+  }
+
+  /**
+   * @description returns true if the current logged in user can view page versions
+   */
+  get canCurrentUserViewPageVersions() {
+    return this.canCurrentUserAccessPage && this.hasPermissionAcrossProjects(PROJECT_NOTES_VERSION_VIEW_PERMISSION_KEY);
   }
 
   /**
@@ -179,7 +207,10 @@ export class ProjectPage extends BasePage implements TProjectPage {
     const isLocked = this.is_locked;
 
     return (
-      !isArchived && !isLocked && (isOwner || (isPublic && !!highestRole && highestRole >= EUserPermissions.MEMBER))
+      this.hasPermissionAcrossProjects(PROJECT_NOTES_EDIT_PERMISSION_KEY) &&
+      !isArchived &&
+      !isLocked &&
+      (isOwner || (isPublic && !!highestRole && highestRole >= EUserPermissions.MEMBER))
     );
   }
 

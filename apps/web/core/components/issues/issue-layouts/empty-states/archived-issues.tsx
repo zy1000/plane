@@ -5,7 +5,7 @@
  */
 
 import { observer } from "mobx-react";
-import { useParams } from "next/navigation";
+import { useParams, usePathname, useSearchParams } from "next/navigation";
 // plane imports
 import { EUserPermissionsLevel } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
@@ -15,11 +15,14 @@ import { EIssuesStoreType, EUserProjectRoles } from "@plane/types";
 import { useUserPermissions } from "@/hooks/store/user";
 import { useWorkItemFilterInstance } from "@/hooks/store/work-item-filters/use-work-item-filter-instance";
 import { useAppRouter } from "@/hooks/use-app-router";
+import { buildProjectSettingsPath, getPathWithSearch } from "@/components/settings/project/navigation";
 
 export const ProjectArchivedEmptyState = observer(function ProjectArchivedEmptyState() {
   // router
   const router = useAppRouter();
   const { workspaceSlug: routerWorkspaceSlug, projectId: routerProjectId } = useParams();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const workspaceSlug = routerWorkspaceSlug ? routerWorkspaceSlug.toString() : undefined;
   const projectId = routerProjectId ? routerProjectId.toString() : undefined;
   // plane hooks
@@ -28,6 +31,7 @@ export const ProjectArchivedEmptyState = observer(function ProjectArchivedEmptyS
   const { allowPermissions } = useUserPermissions();
   // derived values
   const archivedWorkItemFilter = useWorkItemFilterInstance(EIssuesStoreType.ARCHIVED, projectId);
+  const currentPath = getPathWithSearch(pathname, searchParams);
   const canPerformEmptyStateActions = allowPermissions(
     [EUserProjectRoles.ADMIN, EUserProjectRoles.MEMBER],
     EUserPermissionsLevel.PROJECT
@@ -57,7 +61,18 @@ export const ProjectArchivedEmptyState = observer(function ProjectArchivedEmptyS
           actions={[
             {
               label: t("workspace_empty_state.archive_work_items.cta_primary"),
-              onClick: () => router.push(`/${workspaceSlug}/settings/projects/${projectId}/automations`),
+              onClick: () => {
+                if (!workspaceSlug || !projectId) return;
+
+                router.push(
+                  buildProjectSettingsPath({
+                    workspaceSlug,
+                    projectId,
+                    settingsPath: "/automations",
+                    currentPath,
+                  })
+                );
+              },
               disabled: !canPerformEmptyStateActions,
               variant: "primary",
             },

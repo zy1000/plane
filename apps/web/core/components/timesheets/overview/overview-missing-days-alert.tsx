@@ -1,5 +1,7 @@
 import { AlertTriangle, ArrowRight } from "lucide-react";
+import { usePathname, useSearchParams } from "next/navigation";
 import { Card } from "@plane/ui";
+import { buildProjectSettingsPath, getPathWithSearch } from "@/components/settings/project/navigation";
 import { useAppRouter } from "@/hooks/use-app-router";
 import type { TAlertDay, TPmsAlert } from "@/hooks/store/use-timesheet-overview";
 
@@ -22,12 +24,15 @@ function getWeekdayLabel(dateStr: string): string {
 
 export function OverviewMissingDaysAlert({ alertDays, pmsAlerts, workspaceSlug }: Props) {
   const router = useAppRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const currentPath = getPathWithSearch(pathname, searchParams);
 
   const handleGoToFill = () => {
     router.push(`/${workspaceSlug}/timesheets`);
   };
   const handleGoToProjectSettings = (projectId: string) => {
-    router.push(`/${workspaceSlug}/settings/projects/${projectId}`);
+    router.push(buildProjectSettingsPath({ workspaceSlug, projectId, currentPath }));
   };
 
   const missingCount = alertDays.filter((d) => d.type === "missing" && !d.isFuture).length;

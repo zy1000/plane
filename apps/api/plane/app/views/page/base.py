@@ -172,13 +172,6 @@ class PageViewSet(BaseViewSet):
                     project_pages__deleted_at__isnull=True,
                 )
 
-            # Only update access if the page owner is the requesting  user
-            if page.access != request.data.get("access", page.access) and page.owned_by_id != request.user.id:
-                return Response(
-                    {"error": "Access cannot be updated since this page is owned by someone else"},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
             serializer = PageDetailSerializer(page, data=request.data, partial=True)
             page_description = page.description_html
             if serializer.is_valid():
@@ -277,13 +270,6 @@ class PageViewSet(BaseViewSet):
             project_pages__deleted_at__isnull=True,
         )
 
-        # Only update access if the page owner is the requesting user
-        if page.access != request.data.get("access", page.access) and page.owned_by_id != request.user.id:
-            return Response(
-                {"error": "Access cannot be updated since this page is owned by someone else"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
         page.access = access
         page.save()
         return Response(status=status.HTTP_204_NO_CONTENT)
@@ -313,18 +299,6 @@ class PageViewSet(BaseViewSet):
             project_pages__deleted_at__isnull=True,
         )
 
-        # only the owner or admin can archive the page
-        if (
-            ProjectMember.objects.filter(
-                project_id=project_id, member=request.user, is_active=True, role__lte=15
-            ).exists()
-            and request.user.id != page.owned_by_id
-        ):
-            return Response(
-                {"error": "Only the owner or admin can archive the page"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
         UserFavorite.objects.filter(
             entity_type="page",
             entity_identifier=page_id,
@@ -343,18 +317,6 @@ class PageViewSet(BaseViewSet):
             projects__id=project_id,
             project_pages__deleted_at__isnull=True,
         )
-
-        # only the owner or admin can un archive the page
-        if (
-            ProjectMember.objects.filter(
-                project_id=project_id, member=request.user, is_active=True, role__lte=15
-            ).exists()
-            and request.user.id != page.owned_by_id
-        ):
-            return Response(
-                {"error": "Only the owner or admin can un archive the page"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
 
         # if parent archived then page will be un archived breaking hierarchy
         if page.parent_id and page.parent.archived_at:
@@ -377,20 +339,6 @@ class PageViewSet(BaseViewSet):
             return Response(
                 {"error": "The page should be archived before deleting"},
                 status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        if page.owned_by_id != request.user.id and (
-            not ProjectMember.objects.filter(
-                workspace__slug=slug,
-                member=request.user,
-                role=20,
-                project_id=project_id,
-                is_active=True,
-            ).exists()
-        ):
-            return Response(
-                {"error": "Only admin or owner can delete the page"},
-                status=status.HTTP_403_FORBIDDEN,
             )
 
         # remove parent from all the children

@@ -4,7 +4,8 @@
 
 from plane.db.models import ProjectMember, Page
 from plane.app.permissions import ROLE
-
+from plane.app.permissions.base import _get_user_project_permission_keys
+from plane.app.permissions.keys import PermissionKey
 
 from rest_framework.permissions import BasePermission, SAFE_METHODS
 
@@ -33,24 +34,74 @@ class ProjectPagePermission(BasePermission):
         page_id = view.kwargs.get("page_id")
         project_id = view.kwargs.get("project_id")
 
-        # Hook for extended validation
-        extended_access, role = self._check_access_and_get_role(request, slug, project_id)
+        extended_access, role = self._check_access_and_get_role(
+            request, slug, project_id
+        )
         if extended_access is False:
             return False
 
-        if page_id:
-            page = Page.objects.get(id=page_id, workspace__slug=slug)
+        user_keys = _get_user_project_permission_keys(
+            request.user, slug, str(project_id)
+        )
+        required_keys = self._get_required_permission_keys(request, view)
+        if not required_keys.issubset(user_keys):
+            return False
 
-            # Allow access if the user is the owner of the page
-            if page.owned_by_id == user_id:
-                return True
+        if page_id:
+            page = (
+                Page.objects.filter(
+                    id=page_id,
+                    workspace__slug=slug,
+                    projects__id=project_id,
+                    project_pages__deleted_at__isnull=True,
+                )
+                .distinct()
+                .first()
+            )
+            if not page:
+                return False
 
             # Handle private page access
-            if page.access == Page.PRIVATE_ACCESS:
-                return self._has_private_page_action_access(request, slug, page, project_id)
+            if page.access == Page.PRIVATE_ACCESS and page.owned_by_id != user_id:
+                return self._has_private_page_action_access(
+                    request, slug, page, project_id
+                )
 
         # Handle public page access
         return self._has_public_page_action_access(request, role)
+
+    def _get_required_permission_keys(self, request, view) -> set:
+        action = getattr(view, "action", None)
+
+        if view.__class__.__name__ == "PageVersionEndpoint":
+            return {PermissionKey.NOTE_VIEW, PermissionKey.NOTE_VERSION_VIEW}
+        if view.__class__.__name__ == "PageDuplicateEndpoint":
+            return {PermissionKey.NOTE_VIEW, PermissionKey.NOTE_CREATE}
+
+        if action == "create":
+            return {PermissionKey.NOTE_CREATE}
+        if action in {"list", "retrieve", "summary"}:
+            return {PermissionKey.NOTE_VIEW}
+        if action == "partial_update":
+            request_keys = set(request.data.keys())
+            required_keys = {PermissionKey.NOTE_VIEW}
+            if not request_keys or request_keys - {"access"}:
+                required_keys.add(PermissionKey.NOTE_EDIT)
+            if "access" in request_keys:
+                required_keys.add(PermissionKey.NOTE_ACCESS_MANAGE)
+            return required_keys
+        if action == "destroy":
+            return {PermissionKey.NOTE_VIEW, PermissionKey.NOTE_DELETE}
+        if action in {"archive", "unarchive"}:
+            return {PermissionKey.NOTE_VIEW, PermissionKey.NOTE_ARCHIVE}
+        if action in {"lock", "unlock"}:
+            return {PermissionKey.NOTE_VIEW, PermissionKey.NOTE_LOCK}
+        if action == "access":
+            return {PermissionKey.NOTE_VIEW, PermissionKey.NOTE_ACCESS_MANAGE}
+
+        if request.method in SAFE_METHODS:
+            return {PermissionKey.NOTE_VIEW}
+        return {PermissionKey.NOTE_VIEW, PermissionKey.NOTE_EDIT}
 
     def _check_project_member_access(self, request, slug, project_id):
         """
@@ -85,34 +136,7 @@ class ProjectPagePermission(BasePermission):
         return False
 
     def _check_project_action_access(self, request, role):
-        method = request.method
-
-        # Only admins can create (POST) pages
-        if method == "POST":
-            if role in [ADMIN, MEMBER]:
-                return True
-            return False
-
-        # Safe methods (GET, HEAD, OPTIONS) allowed for all active roles
-        if method in SAFE_METHODS:
-            if role in [ADMIN, MEMBER, GUEST]:
-                return True
-            return False
-
-        # PUT/PATCH: Admins and members can update
-        if method in ["PUT", "PATCH"]:
-            if role in [ADMIN, MEMBER]:
-                return True
-            return False
-
-        # DELETE: Only admins can delete
-        if method == "DELETE":
-            if role in [ADMIN]:
-                return True
-            return False
-
-        # Deny by default
-        return False
+        return role in [ADMIN, MEMBER, GUEST]
 
     def _has_public_page_action_access(self, request, role):
         """

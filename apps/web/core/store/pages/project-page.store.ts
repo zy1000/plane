@@ -8,9 +8,8 @@ import { unset, set } from "lodash-es";
 import { makeObservable, observable, runInAction, action, reaction, computed } from "mobx";
 import { computedFn } from "mobx-utils";
 // types
-import { EUserPermissions } from "@plane/constants";
+import { PROJECT_NOTES_CREATE_PERMISSION_KEY } from "@plane/constants";
 import type { TPage, TPageFilters, TPageNavigationTabs } from "@plane/types";
-import { EUserProjectRoles } from "@plane/types";
 // helpers
 import { filterPagesByPageType, getPageName, orderPages, shouldFilterPage } from "@plane/utils";
 // plane web constants
@@ -26,13 +25,6 @@ import { ProjectPage } from "./project-page";
 type TLoader = "init-loader" | "mutation-loader" | undefined;
 
 type TError = { title: string; description: string };
-
-export const ROLE_PERMISSIONS_TO_CREATE_PAGE = [
-  EUserPermissions.ADMIN,
-  EUserPermissions.MEMBER,
-  EUserProjectRoles.ADMIN,
-  EUserProjectRoles.MEMBER,
-];
 
 export interface IProjectPageStore {
   // observables
@@ -127,11 +119,13 @@ export class ProjectPageStore implements IProjectPageStore {
    */
   get canCurrentUserCreatePage() {
     const { workspaceSlug, projectId } = this.store.router;
-    const currentUserProjectRole = this.store.user.permission.getProjectRoleByWorkspaceSlugAndProjectId(
-      workspaceSlug?.toString() || "",
-      projectId?.toString() || ""
+    if (!workspaceSlug || !projectId) return false;
+
+    const permissionKeys = this.store.user.permission.getProjectPermissionKeysByWorkspaceSlugAndProjectId(
+      workspaceSlug.toString(),
+      projectId.toString()
     );
-    return !!currentUserProjectRole && ROLE_PERMISSIONS_TO_CREATE_PAGE.includes(currentUserProjectRole);
+    return permissionKeys.includes(PROJECT_NOTES_CREATE_PERMISSION_KEY);
   }
 
   /**

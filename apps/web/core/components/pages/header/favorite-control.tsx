@@ -25,14 +25,14 @@ export const PageFavoriteControl = observer(function PageFavoriteControl({ page 
     page,
   });
 
-  if (!canCurrentUserFavoritePage) return null;
-
   return (
     <IconButton
       variant="ghost"
       size="lg"
       icon={Star}
+      disabled={!canCurrentUserFavoritePage}
       onClick={() => {
+        if (!canCurrentUserFavoritePage) return;
         pageOperations.toggleFavorite();
       }}
       aria-label={is_favorite ? "Remove favorite" : "Add to favorites"}

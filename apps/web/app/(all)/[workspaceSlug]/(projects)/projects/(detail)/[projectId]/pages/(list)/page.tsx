@@ -5,10 +5,10 @@
  */
 
 import { observer } from "mobx-react";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useTheme } from "next-themes";
 // plane imports
-import { EUserPermissionsLevel } from "@plane/constants";
+import { EUserPermissionsLevel, PROJECT_NOTES_VIEW_PERMISSION_KEY } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import type { TPageNavigationTabs } from "@plane/types";
 import { EUserProjectRoles } from "@plane/types";
@@ -16,10 +16,12 @@ import { EUserProjectRoles } from "@plane/types";
 import darkPagesAsset from "@/app/assets/empty-state/disabled-feature/pages-dark.webp?url";
 import lightPagesAsset from "@/app/assets/empty-state/disabled-feature/pages-light.webp?url";
 // components
+import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
 import { PageHead } from "@/components/core/page-title";
 import { DetailedEmptyState } from "@/components/empty-state/detailed-empty-state-root";
 import { PagesListRoot } from "@/components/pages/list/root";
 import { PagesListView } from "@/components/pages/pages-list-view";
+import { buildProjectSettingsPath, getPathWithSearch } from "@/components/settings/project/navigation";
 // hooks
 import { useProject } from "@/hooks/store/use-project";
 import { useUserPermissions } from "@/hooks/store/user";
@@ -37,6 +39,7 @@ const getPageType = (pageType?: string | null): TPageNavigationTabs => {
 function ProjectPagesPage({ params }: Route.ComponentProps) {
   // router
   const router = useAppRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const type = searchParams.get("type");
   const { workspaceSlug, projectId } = params;
@@ -46,13 +49,19 @@ function ProjectPagesPage({ params }: Route.ComponentProps) {
   const { t } = useTranslation();
   // store hooks
   const { getProjectById, currentProjectDetails } = useProject();
-  const { allowPermissions } = useUserPermissions();
+  const { allowPermissions, allowProjectPermissionKeys, workspaceUserInfo } = useUserPermissions();
   // derived values
   const project = getProjectById(projectId);
   const pageTitle = project?.name ? `${project?.name} - Pages` : undefined;
   const canPerformEmptyStateActions = allowPermissions([EUserProjectRoles.ADMIN], EUserPermissionsLevel.PROJECT);
+  const canViewPages = allowProjectPermissionKeys([PROJECT_NOTES_VIEW_PERMISSION_KEY], workspaceSlug, projectId);
   const resolvedPath = resolvedTheme === "light" ? lightPagesAsset : darkPagesAsset;
   const pageType = getPageType(type);
+  const currentPath = getPathWithSearch(pathname, searchParams);
+
+  if (workspaceUserInfo && !canViewPages) {
+    return <NotAuthorizedView section="general" isProjectView className="h-auto" />;
+  }
 
   // No access to cycle
   if (currentProjectDetails?.page_view === false)
@@ -65,7 +74,14 @@ function ProjectPagesPage({ params }: Route.ComponentProps) {
           primaryButton={{
             text: t("disabled_project.empty_state.page.primary_button.text"),
             onClick: () => {
-              router.push(`/${workspaceSlug}/settings/projects/${projectId}/features`);
+              router.push(
+                buildProjectSettingsPath({
+                  workspaceSlug,
+                  projectId,
+                  settingsPath: "/features",
+                  currentPath,
+                })
+              );
             },
             disabled: !canPerformEmptyStateActions,
           }}

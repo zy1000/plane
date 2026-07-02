@@ -5,13 +5,15 @@
  */
 
 import { useState, useRef } from "react";
-import { useNavigate } from "react-router";
+import { useLocation, useNavigate } from "react-router";
 import { LogOut, MoreHorizontal, Settings, Share2, ArchiveIcon } from "lucide-react";
 // plane imports
 import { MEMBER_TRACKER_ELEMENTS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { LinkIcon } from "@plane/propel/icons";
 import { CustomMenu } from "@plane/ui";
+// components
+import { buildProjectSettingsPath } from "@/components/settings/project/navigation";
 
 type Props = {
   workspaceSlug: string;
@@ -41,7 +43,9 @@ export function ProjectActionsMenu({
   // refs
   const actionSectionRef = useRef<HTMLDivElement | null>(null);
   // router
+  const location = useLocation();
   const navigate = useNavigate();
+  const currentPath = `${location.pathname}${location.search}`;
 
   return (
     <CustomMenu
@@ -93,7 +97,7 @@ export function ProjectActionsMenu({
       )}
       <CustomMenu.MenuItem
         onClick={() => {
-          navigate(`/${workspaceSlug}/settings/projects/${project?.id}`);
+          navigate(buildProjectSettingsPath({ workspaceSlug, projectId: project.id, currentPath }));
         }}
       >
         <div className="flex cursor-pointer items-center justify-start gap-2">

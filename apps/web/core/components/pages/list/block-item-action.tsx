@@ -64,16 +64,16 @@ export const BlockItemAction = observer(function BlockItemAction(props: Props) {
       </Tooltip>
 
       {/* favorite/unfavorite */}
-      {canCurrentUserFavoritePage && (
-        <FavoriteStar
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            pageOperations.toggleFavorite();
-          }}
-          selected={is_favorite}
-        />
-      )}
+      <FavoriteStar
+        disabled={!canCurrentUserFavoritePage}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (!canCurrentUserFavoritePage) return;
+          pageOperations.toggleFavorite();
+        }}
+        selected={is_favorite}
+      />
 
       {/* download */}
       <PageListDownloadControl page={page} storeType={storeType} />

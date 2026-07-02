@@ -1,7 +1,7 @@
 "use client";
 
 import { observer } from "mobx-react";
-import { useParams, useSearchParams } from "next/navigation";
+import { useParams, usePathname, useSearchParams } from "next/navigation";
 // plane imports
 import { EUserPermissionsLevel, PROJECT_OVERVIEW_VIEW_PERMISSION_KEY } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
@@ -12,6 +12,7 @@ import { PageHead } from "@/components/core/page-title";
 import { DetailedEmptyState } from "@/components/empty-state/detailed-empty-state-root";
 import { PagesListRoot } from "@/components/pages/list/root";
 import { PagesListView } from "@/components/pages/pages-list-view";
+import { buildProjectSettingsPath, getPathWithSearch } from "@/components/settings/project/navigation";
 // hooks
 import { useProject } from "@/hooks/store/use-project";
 import { useUserPermissions } from "@/hooks/store/user";
@@ -25,6 +26,7 @@ import { OverviewListView } from "./OverviewList";
 const ProjectPagesPage = observer(() => {
   // router
   const router = useAppRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const type = searchParams.get("type");
   const { workspaceSlug, projectId } = useParams();
@@ -39,6 +41,7 @@ const ProjectPagesPage = observer(() => {
   const pageTitle = project?.name ? `${project?.name} - Overview` : undefined;
   const canPerformEmptyStateActions = allowPermissions([EUserProjectRoles.ADMIN], EUserPermissionsLevel.PROJECT);
   const resolvedPath = useResolvedAssetPath({ basePath: "/empty-state/disabled-feature/pages" });
+  const currentPath = getPathWithSearch(pathname, searchParams);
 
 
   if (!workspaceSlug || !projectId) return <></>;
@@ -66,7 +69,14 @@ const ProjectPagesPage = observer(() => {
           primaryButton={{
             text: t("disabled_project.empty_state.page.primary_button.text"),
             onClick: () => {
-              router.push(`/${workspaceSlugString}/settings/projects/${projectIdString}/features`);
+              router.push(
+                buildProjectSettingsPath({
+                  workspaceSlug: workspaceSlugString,
+                  projectId: projectIdString,
+                  settingsPath: "/features",
+                  currentPath,
+                })
+              );
             },
             disabled: !canPerformEmptyStateActions,
           }}

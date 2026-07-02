@@ -47,7 +47,7 @@ export function CreatePageModal(props: Props) {
   // router
   const router = useAppRouter();
   // store hooks
-  const { createPage } = usePageStore(storeType);
+  const { canCurrentUserCreatePage, createPage } = usePageStore(storeType);
   const handlePageFormData = <T extends keyof TPage>(key: T, value: TPage[T]) =>
     setPageFormData((prev) => ({ ...prev, [key]: value }));
 
@@ -62,7 +62,7 @@ export function CreatePageModal(props: Props) {
   };
 
   const handleFormSubmit = async () => {
-    if (!workspaceSlug || !projectId) return;
+    if (!workspaceSlug || !projectId || !canCurrentUserCreatePage) return;
 
     try {
       const pageData = await createPage(pageFormData);
@@ -87,6 +87,7 @@ export function CreatePageModal(props: Props) {
         handleFormData={handlePageFormData}
         handleModalClose={handleStateClear}
         handleFormSubmit={handleFormSubmit}
+        isSubmitDisabled={!canCurrentUserCreatePage}
       />
     </ModalCore>
   );

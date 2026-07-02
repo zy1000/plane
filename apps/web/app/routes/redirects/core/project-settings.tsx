@@ -7,10 +7,11 @@
 import { redirect } from "react-router";
 import type { Route } from "./+types/project-settings";
 
-export const clientLoader = ({ params }: Route.ClientLoaderArgs) => {
+export const clientLoader = ({ params, request }: Route.ClientLoaderArgs) => {
   const { workspaceSlug, projectId } = params;
   const splat = params["*"] || "";
-  const destination = `/${workspaceSlug}/settings/projects/${projectId}${splat ? `/${splat}` : ""}/`;
+  const search = new URL(request.url).search;
+  const destination = `/${workspaceSlug}/settings/projects/${projectId}${splat ? `/${splat}` : ""}/${search}`;
   throw redirect(destination);
 };
 

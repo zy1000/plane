@@ -5,7 +5,7 @@
  */
 
 import { useCallback, useMemo } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { observer } from "mobx-react";
 // plane imports
@@ -23,6 +23,7 @@ import { useAppRouter } from "@/hooks/use-app-router";
 import { useProject } from "@/hooks/store/use-project";
 import { useWorkspace } from "@/hooks/store/use-workspace";
 // local imports
+import { getProjectSettingsReturnPath, PROJECT_SETTINGS_RETURN_TO_PARAM } from "@/components/settings/project/navigation";
 import { ProjectHeaderButton } from "../../../navigation/project-header-button";
 
 type Props = {
@@ -34,12 +35,20 @@ export const ProjectSettingsSidebarHeader = observer(function ProjectSettingsSid
   // router
   const router = useAppRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   // store hooks
   const { getProjectRoleByWorkspaceSlugAndProjectId } = useUserPermissions();
   const { currentWorkspace } = useWorkspace();
   const { joinedProjectIds, getPartialProjectById } = useProject();
   // derived values
   const projectDetails = getPartialProjectById(projectId);
+  const workspaceSlug = currentWorkspace?.slug;
+  const settingsSearch = searchParams.toString();
+  const returnPath = getProjectSettingsReturnPath({
+    projectId,
+    returnTo: searchParams.get(PROJECT_SETTINGS_RETURN_TO_PARAM),
+    workspaceSlug,
+  });
   const currentProjectRole = currentWorkspace?.slug
     ? getProjectRoleByWorkspaceSlugAndProjectId(currentWorkspace.slug, projectId)
     : undefined;
@@ -79,10 +88,11 @@ export const ProjectSettingsSidebarHeader = observer(function ProjectSettingsSid
       const nextPath = pathname.startsWith(currentPathPrefix)
         ? pathname.replace(currentPathPrefix, nextPathPrefix)
         : nextPathPrefix;
+      const nextPathWithTrailingSlash = nextPath.endsWith("/") ? nextPath : `${nextPath}/`;
 
-      router.push(nextPath.endsWith("/") ? nextPath : `${nextPath}/`);
+      router.push(settingsSearch ? `${nextPathWithTrailingSlash}?${settingsSearch}` : nextPathWithTrailingSlash);
     },
-    [currentWorkspace?.slug, pathname, projectId, router]
+    [currentWorkspace?.slug, pathname, projectId, router, settingsSearch]
   );
 
   if (!currentProjectRole || !projectDetails) return null;
@@ -94,7 +104,7 @@ export const ProjectSettingsSidebarHeader = observer(function ProjectSettingsSid
           variant="ghost"
           size="base"
           icon={ArrowLeft}
-          onClick={() => router.push(`/${currentWorkspace?.slug}/projects/${projectId}/issues/`)}
+          onClick={() => router.push(returnPath)}
         />
         <p>Project settings</p>
       </div>

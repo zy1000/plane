@@ -40,6 +40,7 @@ export const PageOptionsDropdown = observer(function PageOptionsDropdown(props: 
   const {
     name,
     isContentEditable,
+    canCurrentUserViewPageVersions,
     editor: { editorRef },
   } = page;
   // page filters
@@ -91,6 +92,8 @@ export const PageOptionsDropdown = observer(function PageOptionsDropdown(props: 
         {
           key: "version-history",
           action: () => {
+            if (!canCurrentUserViewPageVersions) return;
+
             // update query param to show info tab in navigation pane
             const updatedRoute = updateQueryParams({
               paramsToAdd: {
@@ -102,6 +105,7 @@ export const PageOptionsDropdown = observer(function PageOptionsDropdown(props: 
           title: "Version history",
           icon: History,
           shouldRender: true,
+          disabled: !canCurrentUserViewPageVersions,
         },
         {
           key: "export",
@@ -118,6 +122,7 @@ export const PageOptionsDropdown = observer(function PageOptionsDropdown(props: 
       handleStickyToolbar,
       isStickyToolbarEnabled,
       isContentEditable,
+      canCurrentUserViewPageVersions,
       editorRef,
       updateQueryParams,
       router,

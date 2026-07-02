@@ -5,7 +5,7 @@
  */
 
 import { observer } from "mobx-react";
-import { useParams } from "react-router";
+import { useLocation, useParams } from "react-router";
 // plane imports
 import { PROJECT_SETTINGS } from "@plane/constants";
 import { Breadcrumbs } from "@plane/ui";
@@ -22,6 +22,7 @@ export const WorkflowDetailHeader = observer(function WorkflowDetailHeader({
   workflowName,
 }: TWorkflowDetailHeaderProps) {
   const { workspaceSlug, projectId } = useParams<{ workspaceSlug: string; projectId: string }>();
+  const location = useLocation();
   const Icon = PROJECT_SETTINGS_ICONS.workflow;
   const settingsDetails = PROJECT_SETTINGS.workflow;
 
@@ -34,7 +35,7 @@ export const WorkflowDetailHeader = observer(function WorkflowDetailHeader({
               component={
                 <BreadcrumbLink
                   label="工作流"
-                  href={`/${workspaceSlug}/settings/projects/${projectId}/workflow`}
+                  href={`/${workspaceSlug}/settings/projects/${projectId}/workflow${location.search}`}
                   icon={<Icon className="size-4 text-tertiary" />}
                 />
               }

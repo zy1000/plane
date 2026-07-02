@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { observer } from "mobx-react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, usePathname, useSearchParams } from "next/navigation";
 import { Pagination } from "antd";
 import { Archive, ArchiveRestoreIcon, ArrowDown, ArrowUp, ArrowUpDown, Globe2, Link as LinkIcon, Settings, Star } from "lucide-react";
 import {
@@ -30,6 +30,7 @@ import { useUserPermissions } from "@/hooks/store/user";
 import { PublishProjectModal } from "@/components/project/publish-project/modal";
 import { ArchiveRestoreProjectModal } from "@/components/project/archive-restore-modal";
 import { ProjectGradeBadge } from "@/components/project/common/project-grade-badge";
+import { buildProjectSettingsPath, getPathWithSearch } from "@/components/settings/project/navigation";
 import type { TProject } from "@plane/types";
 
 type Props = {
@@ -46,6 +47,8 @@ const isSortKey = (key: string): key is TSortKey =>
 export const ProjectTableList = observer(function ProjectTableList(props: Props) {
   const { totalProjectIds: totalProjectIdsProps, filteredProjectIds: filteredProjectIdsProps } = props;
   const { workspaceSlug } = useParams();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const workspaceSlugString = workspaceSlug?.toString();
   const { t } = useTranslation();
 
@@ -130,6 +133,7 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
   }, [projects, sortDirection, sortKey]);
 
   const total = sortedProjects.length;
+  const currentPath = getPathWithSearch(pathname, searchParams);
   const startIndex = (currentPage - 1) * pageSize;
   const endIndex = Math.min(currentPage * pageSize, total);
   const currentPageProjects = useMemo(
@@ -384,6 +388,9 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
                     typeof project.project_lead === "string"
                       ? getUserDetails(project.project_lead)
                       : project.project_lead ?? undefined;
+                  const projectSettingsPath = workspaceSlugString
+                    ? buildProjectSettingsPath({ workspaceSlug: workspaceSlugString, projectId: project.id, currentPath })
+                    : "#";
 
                   return (
                     <tr
@@ -579,7 +586,7 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
                           onClick={(e) => {
                             e.stopPropagation();
                           }}
-                          href={`/${workspaceSlug}/settings/projects/${project.id}`}
+                          href={projectSettingsPath}
                         >
                           <Settings className="h-3.5 w-3.5" />
                         </Link>

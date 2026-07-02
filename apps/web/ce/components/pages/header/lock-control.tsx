@@ -9,6 +9,7 @@ import { observer } from "mobx-react";
 import { LockKeyhole, LockKeyholeOpen } from "lucide-react";
 // plane imports
 import { Tooltip } from "@plane/propel/tooltip";
+import { cn } from "@plane/utils";
 // hooks
 import { usePageOperations } from "@/hooks/use-page-operations";
 // store
@@ -72,8 +73,6 @@ export const PageLockControl = observer(function PageLockControl({ page }: Props
     prevLockedRef.current = is_locked;
   }, [is_locked]);
 
-  if (!canCurrentUserLockPage) return null;
-
   // Render different UI based on the current display state
   return (
     <>
@@ -82,7 +81,11 @@ export const PageLockControl = observer(function PageLockControl({ page }: Props
           <button
             type="button"
             onClick={toggleLock}
-            className="grid size-6 flex-shrink-0 place-items-center rounded-sm text-secondary transition-colors hover:bg-layer-1 hover:text-primary"
+            disabled={!canCurrentUserLockPage}
+            className={cn(
+              "grid size-6 flex-shrink-0 place-items-center rounded-sm text-secondary transition-colors",
+              canCurrentUserLockPage ? "hover:bg-layer-1 hover:text-primary" : "cursor-not-allowed text-disabled"
+            )}
             aria-label="Lock"
           >
             <LockKeyhole className="size-3.5" />
@@ -94,7 +97,11 @@ export const PageLockControl = observer(function PageLockControl({ page }: Props
         <button
           type="button"
           onClick={toggleLock}
-          className="flex h-6 items-center gap-1 rounded-sm bg-accent-primary/20 px-2 text-accent-primary transition-colors hover:bg-accent-primary/30"
+          disabled={!canCurrentUserLockPage}
+          className={cn(
+            "flex h-6 items-center gap-1 rounded-sm bg-accent-primary/20 px-2 text-accent-primary transition-colors",
+            canCurrentUserLockPage ? "hover:bg-accent-primary/30" : "cursor-not-allowed opacity-60"
+          )}
           aria-label="Locked"
         >
           <LockKeyhole className="animate-lock-icon size-3.5 flex-shrink-0" />

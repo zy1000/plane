@@ -26,10 +26,11 @@ type Props = {
   pageId: string;
   restoreEnabled: boolean;
   storeType: EPageStoreType;
+  viewEnabled: boolean;
 };
 
 export const PageVersionsOverlay = observer(function PageVersionsOverlay(props: Props) {
-  const { editorComponent, fetchVersionDetails, handleRestore, pageId, restoreEnabled, storeType } = props;
+  const { editorComponent, fetchVersionDetails, handleRestore, pageId, restoreEnabled, storeType, viewEnabled } = props;
   // navigation
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -37,7 +38,7 @@ export const PageVersionsOverlay = observer(function PageVersionsOverlay(props: 
   const { updateQueryParams } = useQueryParams();
   // derived values
   const activeVersion = searchParams.get(PAGE_NAVIGATION_PANE_VERSION_QUERY_PARAM);
-  const isOpen = !!activeVersion;
+  const isOpen = !!activeVersion && viewEnabled;
 
   const handleClose = useCallback(() => {
     const updatedRoute = updateQueryParams({
@@ -59,7 +60,7 @@ export const PageVersionsOverlay = observer(function PageVersionsOverlay(props: 
       }}
     >
       <PageVersionsMainContent
-        activeVersion={activeVersion}
+        activeVersion={isOpen ? activeVersion : null}
         editorComponent={editorComponent}
         fetchVersionDetails={fetchVersionDetails}
         handleClose={handleClose}

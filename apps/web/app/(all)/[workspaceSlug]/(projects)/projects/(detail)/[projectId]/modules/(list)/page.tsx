@@ -6,6 +6,7 @@
 
 import { useCallback } from "react";
 import { observer } from "mobx-react";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useTheme } from "next-themes";
 // plane imports
 import { EUserPermissionsLevel } from "@plane/constants";
@@ -20,6 +21,7 @@ import lightModulesAsset from "@/app/assets/empty-state/disabled-feature/modules
 import { PageHead } from "@/components/core/page-title";
 import { DetailedEmptyState } from "@/components/empty-state/detailed-empty-state-root";
 import { ModuleAppliedFiltersList, ModulesListView } from "@/components/modules";
+import { buildProjectSettingsPath, getPathWithSearch } from "@/components/settings/project/navigation";
 // hooks
 import { useModuleFilter } from "@/hooks/store/use-module-filter";
 import { useProject } from "@/hooks/store/use-project";
@@ -30,6 +32,8 @@ import type { Route } from "./+types/page";
 function ProjectModulesPage({ params }: Route.ComponentProps) {
   // router
   const router = useAppRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { workspaceSlug, projectId } = params;
   // theme hook
   const { resolvedTheme } = useTheme();
@@ -50,6 +54,7 @@ function ProjectModulesPage({ params }: Route.ComponentProps) {
   const pageTitle = project?.name ? `${project?.name} - Modules` : undefined;
   const canPerformEmptyStateActions = allowPermissions([EUserProjectRoles.ADMIN], EUserPermissionsLevel.PROJECT);
   const resolvedPath = resolvedTheme === "light" ? lightModulesAsset : darkModulesAsset;
+  const currentPath = getPathWithSearch(pathname, searchParams);
 
   const handleRemoveFilter = useCallback(
     (key: keyof TModuleFilters, value: string | null) => {
@@ -74,7 +79,14 @@ function ProjectModulesPage({ params }: Route.ComponentProps) {
           primaryButton={{
             text: t("disabled_project.empty_state.module.primary_button.text"),
             onClick: () => {
-              router.push(`/${workspaceSlug}/settings/projects/${projectId}/features`);
+              router.push(
+                buildProjectSettingsPath({
+                  workspaceSlug,
+                  projectId,
+                  settingsPath: "/features",
+                  currentPath,
+                })
+              );
             },
             disabled: !canPerformEmptyStateActions,
           }}

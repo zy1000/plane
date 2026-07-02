@@ -6,6 +6,7 @@
 
 import { useCallback } from "react";
 import { observer } from "mobx-react";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useTheme } from "next-themes";
 // plane imports
 import { EUserPermissionsLevel, PROJECT_VIEWS_VIEW_PERMISSION_KEY } from "@plane/constants";
@@ -21,6 +22,7 @@ import lightViewsAsset from "@/app/assets/empty-state/disabled-feature/views-lig
 import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
 import { PageHead } from "@/components/core/page-title";
 import { DetailedEmptyState } from "@/components/empty-state/detailed-empty-state-root";
+import { buildProjectSettingsPath, getPathWithSearch } from "@/components/settings/project/navigation";
 import { ViewAppliedFiltersList } from "@/components/views/applied-filters";
 import { ProjectViewsList } from "@/components/views/views-list";
 // hooks
@@ -33,6 +35,8 @@ import type { Route } from "./+types/page";
 function ProjectViewsPage({ params }: Route.ComponentProps) {
   // router
   const router = useAppRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { workspaceSlug, projectId } = params;
   // theme hook
   const { resolvedTheme } = useTheme();
@@ -50,6 +54,7 @@ function ProjectViewsPage({ params }: Route.ComponentProps) {
   const pageTitle = project?.name ? `${project?.name} - Views` : undefined;
   const canPerformEmptyStateActions = allowPermissions([EUserProjectRoles.ADMIN], EUserPermissionsLevel.PROJECT);
   const resolvedPath = resolvedTheme === "light" ? lightViewsAsset : darkViewsAsset;
+  const currentPath = getPathWithSearch(pathname, searchParams);
 
   const handleRemoveFilter = useCallback(
     (key: keyof TViewFilterProps, value: string | EViewAccess | null) => {
@@ -91,7 +96,14 @@ function ProjectViewsPage({ params }: Route.ComponentProps) {
           primaryButton={{
             text: t("disabled_project.empty_state.view.primary_button.text"),
             onClick: () => {
-              router.push(`/${workspaceSlug}/settings/projects/${projectId}/features/views`);
+              router.push(
+                buildProjectSettingsPath({
+                  workspaceSlug,
+                  projectId,
+                  settingsPath: "/features/views",
+                  currentPath,
+                })
+              );
             },
             disabled: !canPerformEmptyStateActions,
           }}

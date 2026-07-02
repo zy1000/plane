@@ -34,7 +34,7 @@ export const DeletePageModal = observer(function DeletePageModal(props: TConfirm
   const { removePage } = usePageStore(storeType);
 
   // derived values
-  const { id: pageId, name } = page;
+  const { id: pageId, name, canCurrentUserDeletePage } = page;
 
   const handleClose = () => {
     setIsDeleting(false);
@@ -45,7 +45,7 @@ export const DeletePageModal = observer(function DeletePageModal(props: TConfirm
   const { pageId: routePageId } = useParams();
 
   const handleDelete = async () => {
-    if (!pageId) return;
+    if (!pageId || !canCurrentUserDeletePage) return;
     setIsDeleting(true);
     await removePage({ pageId })
       .then(() => {
@@ -78,6 +78,7 @@ export const DeletePageModal = observer(function DeletePageModal(props: TConfirm
       handleClose={handleClose}
       handleSubmit={handleDelete}
       isSubmitting={isDeleting}
+      isSubmitDisabled={!canCurrentUserDeletePage}
       isOpen={isOpen}
       title="Delete page"
       content={

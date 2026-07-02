@@ -82,15 +82,15 @@ export const PageNavigationPaneInfoTabVersionHistory = observer(function PageNav
   const searchParams = useSearchParams();
   const activeVersion = searchParams.get(PAGE_NAVIGATION_PANE_VERSION_QUERY_PARAM);
   // derived values
-  const { id } = page;
+  const { id, canCurrentUserViewPageVersions } = page;
   // translation
   const { t } = useTranslation();
   // query params
   const { updateQueryParams } = useQueryParams();
   // fetch all versions
   const { data: versionsList } = useSWR(
-    id ? `PAGE_VERSIONS_LIST_${id}` : null,
-    id ? () => versionHistory.fetchAllVersions(id) : null
+    id && canCurrentUserViewPageVersions ? `PAGE_VERSIONS_LIST_${id}` : null,
+    id && canCurrentUserViewPageVersions ? () => versionHistory.fetchAllVersions(id) : null
   );
 
   const getVersionLink = useCallback(
@@ -111,8 +111,11 @@ export const PageNavigationPaneInfoTabVersionHistory = observer(function PageNav
   return (
     <div>
       <p className="text-11 font-medium text-secondary">{t("page_navigation_pane.tabs.info.version_history.label")}</p>
+      {!canCurrentUserViewPageVersions ? (
+        <p className="mt-3 text-11 text-tertiary">无权限查看历史版本</p>
+      ) : null}
       <div className="mt-3">
-        <ul className="relative">
+        <ul className={cn("relative", { "pointer-events-none opacity-50": !canCurrentUserViewPageVersions })}>
           {/* timeline line */}
           <div className={cn("absolute top-0 left-0 flex h-full w-6 justify-center")}>
             <div className="w-px bg-layer-3" />

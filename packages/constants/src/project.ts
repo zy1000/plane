@@ -241,8 +241,18 @@ export const PROJECT_VIEWS_CREATE_PERMISSION_KEY = "view.create" as const;
 export const PROJECT_VIEWS_EDIT_PERMISSION_KEY = "view.edit" as const;
 export const PROJECT_VIEWS_DELETE_PERMISSION_KEY = "view.delete" as const;
 
-/** 项目笔记页权限常量，与后端 PermissionKey.PAGE_VIEW 一致 */
-export const PROJECT_PAGES_VIEW_PERMISSION_KEY = "page.view" as const;
+/** 项目笔记权限常量，与后端 PermissionKey.NOTE_* 一致 */
+export const PROJECT_NOTES_VIEW_PERMISSION_KEY = "note.view" as const;
+export const PROJECT_NOTES_CREATE_PERMISSION_KEY = "note.create" as const;
+export const PROJECT_NOTES_EDIT_PERMISSION_KEY = "note.edit" as const;
+export const PROJECT_NOTES_DELETE_PERMISSION_KEY = "note.delete" as const;
+export const PROJECT_NOTES_ARCHIVE_PERMISSION_KEY = "note.archive" as const;
+export const PROJECT_NOTES_LOCK_PERMISSION_KEY = "note.lock" as const;
+export const PROJECT_NOTES_ACCESS_MANAGE_PERMISSION_KEY = "note.access.manage" as const;
+export const PROJECT_NOTES_VERSION_VIEW_PERMISSION_KEY = "note.version.view" as const;
+
+/** @deprecated use PROJECT_NOTES_VIEW_PERMISSION_KEY */
+export const PROJECT_PAGES_VIEW_PERMISSION_KEY = PROJECT_NOTES_VIEW_PERMISSION_KEY;
 
 /** 项目模块页权限常量，与后端 PermissionKey.MODULES_VIEW 一致 */
 export const PROJECT_MODULES_VIEW_PERMISSION_KEY = "modules.view" as const;

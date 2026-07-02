@@ -68,6 +68,7 @@ export const PageRoot = observer(function PageRoot(props: TPageRootProps) {
   const editorRef = useRef<EditorRefApi>(null);
   // derived values
   const {
+    canCurrentUserViewPageVersions,
     isContentEditable,
     editor: { setEditorRef },
   } = page;
@@ -163,6 +164,7 @@ export const PageRoot = observer(function PageRoot(props: TPageRootProps) {
           pageId={page.id ?? ""}
           restoreEnabled={isContentEditable}
           storeType={storeType}
+          viewEnabled={canCurrentUserViewPageVersions}
         />
         <PageEditorToolbarRoot
           handleOpenNavigationPane={handleOpenNavigationPane}

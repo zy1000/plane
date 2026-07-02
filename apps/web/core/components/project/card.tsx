@@ -7,7 +7,7 @@
 import React, { useRef, useState } from "react";
 import { observer } from "mobx-react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, usePathname, useSearchParams } from "next/navigation";
 import { ArchiveRestoreIcon, Settings, UserPlus } from "lucide-react";
 // plane imports
 import { EUserPermissions, EUserPermissionsLevel, IS_FAVORITE_MENU_OPEN } from "@plane/constants";
@@ -30,6 +30,7 @@ import { useAppRouter } from "@/hooks/use-app-router";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 // local imports
 import { CoverImage } from "@/components/common/cover-image";
+import { buildProjectSettingsPath, getPathWithSearch } from "@/components/settings/project/navigation";
 import { DeleteProjectModal } from "./delete-project-modal";
 import { JoinProjectModal } from "./join-project-modal";
 import { ArchiveRestoreProjectModal } from "./archive-restore-modal";
@@ -49,6 +50,8 @@ export const ProjectCard = observer(function ProjectCard(props: Props) {
   // router
   const router = useAppRouter();
   const { workspaceSlug } = useParams();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   // store hooks
   const { getUserDetails } = useMember();
   const { addProjectToFavorites, removeProjectFromFavorites } = useProject();
@@ -67,6 +70,11 @@ export const ProjectCard = observer(function ProjectCard(props: Props) {
   const hasMemberRole = project.member_role === EUserPermissions.MEMBER;
   // archive
   const isArchived = !!project.archived_at;
+  const workspaceSlugString = workspaceSlug?.toString();
+  const currentPath = getPathWithSearch(pathname, searchParams);
+  const projectSettingsPath = workspaceSlugString
+    ? buildProjectSettingsPath({ workspaceSlug: workspaceSlugString, projectId: project.id, currentPath })
+    : "#";
   // local storage
   const { setValue: toggleFavoriteMenu, storedValue: isFavoriteMenuOpen } = useLocalStorage<boolean>(
     IS_FAVORITE_MENU_OPEN,
@@ -125,7 +133,9 @@ export const ProjectCard = observer(function ProjectCard(props: Props) {
   const MENU_ITEMS: TContextMenuItem[] = [
     {
       key: "settings",
-      action: () => router.push(`/${workspaceSlug}/settings/projects/${project.id}`),
+      action: () => {
+        if (workspaceSlugString) router.push(projectSettingsPath);
+      },
       title: "Settings",
       icon: Settings,
       shouldRender: !isArchived && (hasAdminRole || hasMemberRole),
@@ -341,7 +351,7 @@ export const ProjectCard = observer(function ProjectCard(props: Props) {
                       onClick={(e) => {
                         e.stopPropagation();
                       }}
-                      href={`/${workspaceSlug}/settings/projects/${project.id}`}
+                      href={projectSettingsPath}
                     >
                       <Settings className="h-3.5 w-3.5" />
                     </Link>

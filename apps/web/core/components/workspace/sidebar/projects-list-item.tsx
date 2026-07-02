@@ -11,7 +11,7 @@ import { pointerOutsideOfPreview } from "@atlaskit/pragmatic-drag-and-drop/eleme
 import { setCustomNativeDragPreview } from "@atlaskit/pragmatic-drag-and-drop/element/set-custom-native-drag-preview";
 import { attachInstruction, extractInstruction } from "@atlaskit/pragmatic-drag-and-drop-hitbox/tree-item";
 import { observer } from "mobx-react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import { createRoot } from "react-dom/client";
 import scrollIntoView from "smooth-scroll-into-view-if-needed";
 import { Settings, Share2, LogOut, MoreHorizontal } from "lucide-react";
@@ -37,6 +37,7 @@ import { DEFAULT_TAB_KEY, getTabUrl } from "@/components/navigation/tab-navigati
 import { useTabPreferences } from "@/components/navigation/use-tab-preferences";
 import { LeaveProjectModal } from "@/components/project/leave-project-modal";
 import { PublishProjectModal } from "@/components/project/publish-project/modal";
+import { buildProjectSettingsPath, getPathWithSearch } from "@/components/settings/project/navigation";
 // hooks
 import { useAppTheme } from "@/hooks/store/use-app-theme";
 import { useCommandPalette } from "@/hooks/store/use-command-palette";
@@ -99,6 +100,9 @@ export const SidebarProjectsListItem = observer(function SidebarProjectsListItem
   // router
   const { workspaceSlug, projectId: URLProjectId } = useParams();
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const currentPath = getPathWithSearch(pathname, searchParams);
   // derived values
   const project = getPartialProjectById(projectId);
 
@@ -436,7 +440,13 @@ export const SidebarProjectsListItem = observer(function SidebarProjectsListItem
                   )}
                   <CustomMenu.MenuItem
                     onClick={() => {
-                      router.push(`/${workspaceSlug}/settings/projects/${project?.id}`);
+                      router.push(
+                        buildProjectSettingsPath({
+                          workspaceSlug: workspaceSlug.toString(),
+                          projectId: project.id,
+                          currentPath,
+                        })
+                      );
                     }}
                   >
                     <div className="flex cursor-pointer items-center justify-start gap-2">

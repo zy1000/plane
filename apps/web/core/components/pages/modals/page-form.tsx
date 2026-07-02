@@ -28,6 +28,7 @@ type Props = {
   handleFormData: <T extends keyof TPage>(key: T, value: TPage[T]) => void;
   handleModalClose: () => void;
   handleFormSubmit: () => Promise<void>;
+  isSubmitDisabled?: boolean;
 };
 
 const PAGE_ACCESS_SPECIFIERS: {
@@ -40,7 +41,7 @@ const PAGE_ACCESS_SPECIFIERS: {
 ];
 
 export function PageForm(props: Props) {
-  const { formData, handleFormData, handleModalClose, handleFormSubmit } = props;
+  const { formData, handleFormData, handleModalClose, handleFormSubmit, isSubmitDisabled = false } = props;
   // hooks
   const { isMobile } = usePlatformOS();
   const { t } = useTranslation();
@@ -54,6 +55,8 @@ export function PageForm(props: Props) {
 
   const handlePageFormSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (isSubmitDisabled) return;
+
     try {
       setIsSubmitting(true);
       await handleFormSubmit();
@@ -152,7 +155,7 @@ export function PageForm(props: Props) {
             size="lg"
             type="submit"
             loading={isSubmitting}
-            disabled={isTitleLengthMoreThan255Character}
+            disabled={isSubmitDisabled || isTitleLengthMoreThan255Character}
             tabIndex={getIndex("submit")}
           >
             {isSubmitting ? "Creating" : "Create Page"}

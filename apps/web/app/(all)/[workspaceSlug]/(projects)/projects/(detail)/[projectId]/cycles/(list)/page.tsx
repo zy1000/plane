@@ -6,6 +6,7 @@
 
 import { useState } from "react";
 import { observer } from "mobx-react";
+import { usePathname, useSearchParams } from "next/navigation";
 // plane imports
 import { useTheme } from "next-themes";
 import { EUserPermissionsLevel, CYCLE_TRACKER_ELEMENTS, PROJECT_SPRINTS_VIEW_PERMISSION_KEY, PROJECT_SPRINTS_CREATE_PERMISSION_KEY } from "@plane/constants";
@@ -26,6 +27,7 @@ import { CycleAppliedFiltersList } from "@/components/cycles/applied-filters";
 import { CyclesView } from "@/components/cycles/cycles-view";
 import { CycleCreateUpdateModal } from "@/components/cycles/modal";
 import { DetailedEmptyState } from "@/components/empty-state/detailed-empty-state-root";
+import { buildProjectSettingsPath, getPathWithSearch } from "@/components/settings/project/navigation";
 import { CycleModuleListLayoutLoader } from "@/components/ui/loader/cycle-module-list-loader";
 // hooks
 import { useCycle } from "@/hooks/store/use-cycle";
@@ -43,6 +45,8 @@ function ProjectCyclesPage({ params }: Route.ComponentProps) {
   const { getProjectById, currentProjectDetails } = useProject();
   // router
   const router = useAppRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { workspaceSlug, projectId } = params;
   // theme hook
   const { resolvedTheme } = useTheme();
@@ -58,6 +62,7 @@ function ProjectCyclesPage({ params }: Route.ComponentProps) {
   const pageTitle = project?.name ? `${project?.name} - ${t("common.cycles", { count: 2 })}` : undefined;
   const hasAdminLevelPermission = allowPermissions([EUserProjectRoles.ADMIN], EUserPermissionsLevel.PROJECT);
   const canCreateSprint = allowProjectPermissionKeys([PROJECT_SPRINTS_CREATE_PERMISSION_KEY], workspaceSlug, projectId);
+  const currentPath = getPathWithSearch(pathname, searchParams);
 
   const handleRemoveFilter = (key: keyof TCycleFilters, value: string | null) => {
     let newValues = currentProjectFilters?.[key] ?? [];
@@ -89,7 +94,14 @@ function ProjectCyclesPage({ params }: Route.ComponentProps) {
           primaryButton={{
             text: t("disabled_project.empty_state.cycle.primary_button.text"),
             onClick: () => {
-              router.push(`/${workspaceSlug}/settings/projects/${projectId}/features`);
+              router.push(
+                buildProjectSettingsPath({
+                  workspaceSlug,
+                  projectId,
+                  settingsPath: "/features",
+                  currentPath,
+                })
+              );
             },
             disabled: !hasAdminLevelPermission,
           }}

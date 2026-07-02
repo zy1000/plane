@@ -6,7 +6,7 @@
 
 import { FileText, FolderPlus, Layers, SquarePlus } from "lucide-react";
 // plane imports
-import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import { EUserPermissions, EUserPermissionsLevel, PROJECT_NOTES_CREATE_PERMISSION_KEY } from "@plane/constants";
 import { ContrastIcon, DiceIcon, LayersIcon } from "@plane/propel/icons";
 // components
 import { EUserProjectRoles } from "@plane/types";
@@ -34,7 +34,7 @@ export const usePowerKCreationCommandsRecord = (): Record<TPowerKCreationCommand
   const { config } = useInstance();
   const {
     canPerformAnyCreateAction,
-    permission: { allowPermissions },
+    permission: { allowPermissions, allowProjectPermissionKeys },
   } = useUser();
   const { workspaceProjectIds, getPartialProjectById } = useProject();
   const {
@@ -55,6 +55,12 @@ export const usePowerKCreationCommandsRecord = (): Record<TPowerKCreationCommand
     allowPermissions(
       [EUserProjectRoles.ADMIN, EUserProjectRoles.MEMBER],
       EUserPermissionsLevel.PROJECT,
+      ctx.params.workspaceSlug?.toString(),
+      ctx.params.projectId?.toString()
+    );
+  const canCreatePage = (ctx: TPowerKContext) =>
+    allowProjectPermissionKeys(
+      [PROJECT_NOTES_CREATE_PERMISSION_KEY],
       ctx.params.workspaceSlug?.toString(),
       ctx.params.projectId?.toString()
     );
@@ -84,9 +90,9 @@ export const usePowerKCreationCommandsRecord = (): Record<TPowerKCreationCommand
       icon: FileText,
       keySequence: "nd",
       action: () => toggleCreatePageModal({ isOpen: true }),
-      isEnabled: (ctx) => Boolean(getProjectDetails(ctx)?.page_view && hasProjectMemberLevelPermissions(ctx)),
+      isEnabled: (ctx) => Boolean(getProjectDetails(ctx)?.page_view && canCreatePage(ctx)),
       isVisible: (ctx) =>
-        Boolean(ctx.params.projectId && getProjectDetails(ctx)?.page_view && hasProjectMemberLevelPermissions(ctx)),
+        Boolean(ctx.params.projectId && getProjectDetails(ctx)?.page_view && canCreatePage(ctx)),
       closeOnSelect: true,
     },
     create_view: {
