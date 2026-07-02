@@ -117,7 +117,7 @@ export const IssueActivity = observer(function IssueActivity(props: TIssueActivi
   if (!project) return <></>;
 
   return (
-    <div className="px-4 pb-4">
+    <div className="pb-4">
       {/* header：底边横线铺满整行，与右侧排序等按钮右缘对齐 */}
       <div className="border-b border-subtle">
         <div className="flex items-center justify-between gap-2">
