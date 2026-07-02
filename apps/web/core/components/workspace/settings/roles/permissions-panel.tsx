@@ -11,6 +11,7 @@ import type { IPermission, IWorkspaceRole } from "@plane/types";
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { cn } from "@plane/utils";
+import { comparePermissionCategories, comparePermissions } from "./permission-sort";
 
 type Props = {
   role: IWorkspaceRole | null;
@@ -113,11 +114,16 @@ export function PermissionsPanel({
     }
     return (["workspace", "project"] as TScope[]).map((scope) => {
       const catMap = scopeMap.get(scope) ?? new Map<string, IPermission[]>();
-      const categories: TCategoryGroup[] = Array.from(catMap.entries()).map(([category, perms]) => ({
-        category,
-        permissions: perms,
-        boundCount: perms.filter((p) => boundKeySet.has(p.key)).length,
-      }));
+      const categories: TCategoryGroup[] = Array.from(catMap.entries())
+        .map(([category, perms]) => {
+          const sortedPermissions = [...perms].sort(comparePermissions);
+          return {
+            category,
+            permissions: sortedPermissions,
+            boundCount: sortedPermissions.filter((p) => boundKeySet.has(p.key)).length,
+          };
+        })
+        .sort((a, b) => comparePermissionCategories(scope, a.category, b.category));
       return {
         scope,
         ...SCOPE_CONFIG[scope],
@@ -199,7 +205,7 @@ export function PermissionsPanel({
         };
       })
       .filter((g) => g.categories.length > 0);
-  }, [isSearching, scopeGroups, searchQuery]);
+  }, [isSearching, visibleScopeGroups, searchQuery]);
 
   const totalSearchHits = useMemo(() => crossScopeResults.reduce((sum, g) => sum + g.total, 0), [crossScopeResults]);
 
