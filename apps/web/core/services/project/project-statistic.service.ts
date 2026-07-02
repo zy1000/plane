@@ -46,6 +46,30 @@ export type TProjectStatisticCaseReview = {
   owner: TStatisticOwner | null;
 };
 
+export type TProjectOverviewWorkItemMetric = "completed" | "in_progress" | "overdue" | "due_soon";
+
+export type TProjectOverviewWorkItem = {
+  id: string;
+  name: string;
+  sequence_id: number;
+  project_id: string;
+  project_identifier: string;
+  state: {
+    id: string;
+    name: string;
+    group: string;
+    color: string;
+  } | null;
+  priority: string;
+  target_date: string | null;
+  completed_at: string | null;
+  type: {
+    id: string;
+    name: string;
+  } | null;
+  assignees: Array<TStatisticOwner & { avatar_url: string }>;
+};
+
 export type TProjectStatisticResponse = {
   counts: {
     in_progress_requirements: number;
@@ -127,6 +151,17 @@ export type TProjectStatisticParams = {
   include_all_statuses?: boolean;
 };
 
+export type TProjectOverviewWorkItemParams = {
+  metric: TProjectOverviewWorkItemMetric;
+  page?: number;
+  page_size?: number;
+};
+
+export type TProjectOverviewWorkItemResponse = {
+  count: number;
+  data: TProjectOverviewWorkItem[];
+};
+
 export class ProjectStatisticService extends APIService {
   constructor() {
     super(API_BASE_URL);
@@ -152,6 +187,20 @@ export class ProjectStatisticService extends APIService {
     params?: TProjectStatisticParams
   ): Promise<TProjectOverviewStatisticResponse> {
     return this.get(`/api/workspaces/${workspaceSlug}/project/overview-statistic/`, {
+      params: { ...params, project_id: projectId },
+    })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async getOverviewWorkItems(
+    workspaceSlug: string,
+    projectId: string,
+    params: TProjectOverviewWorkItemParams
+  ): Promise<TProjectOverviewWorkItemResponse> {
+    return this.get(`/api/workspaces/${workspaceSlug}/project/overview-work-items/`, {
       params: { ...params, project_id: projectId },
     })
       .then((response) => response?.data)

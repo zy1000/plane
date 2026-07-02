@@ -3,18 +3,7 @@ import { observer } from "mobx-react";
 import { CloseOutlined } from "@ant-design/icons";
 import { Modal, Pagination } from "antd";
 import useSWR from "swr";
-import {
-  AlertTriangle,
-  BookOpen,
-  History,
-  Maximize2,
-  Megaphone,
-  MoreHorizontal,
-  Plus,
-  Timer,
-  Trash2,
-  Users,
-} from "lucide-react";
+import { BookOpen, History, Maximize2, Megaphone, MoreHorizontal, Plus, Timer, Trash2, Users } from "lucide-react";
 import {
   PROJECT_ANNOUNCEMENT_CREATE_PERMISSION_KEY,
   PROJECT_ANNOUNCEMENT_DELETE_PERMISSION_KEY,
@@ -26,23 +15,14 @@ import type { IProject, TNameDescriptionLoader } from "@plane/types";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { CustomMenu } from "@plane/ui";
 import { calculateTimeAgo, getDate, renderFormattedDate } from "@plane/utils";
-import { OverdueByAssigneeCard } from "@/components/common/overdue-by-assignee-card";
 import { DEFECT_PRESET_PARAM } from "@/components/issues/defects/defect-quick-filter-bar";
 import { ProjectDescriptionInput } from "@/components/project/project-description-input";
 import { ProjectActivity } from "@/components/project/project-activity";
 import { useMember } from "@/hooks/store/use-member";
 import { useUserPermissions } from "@/hooks/store/user";
 import { useAppRouter } from "@/hooks/use-app-router";
-import {
-  ProjectAnnouncementService,
-  ProjectStatisticService,
-  type TProjectStatisticResponse,
-} from "@/services/project";
-import {
-  AnnouncementDetailModal,
-  CreateAnnouncementModal,
-  type TProjectAnnouncement,
-} from "./announcement-modals";
+import { ProjectAnnouncementService, ProjectStatisticService } from "@/services/project";
+import { AnnouncementDetailModal, CreateAnnouncementModal, type TProjectAnnouncement } from "./announcement-modals";
 import { OverviewCard } from "./overview-card";
 import { OverviewDescriptionModal } from "./overview-description-modal";
 import { OverviewDistributionCard, type TOverviewDistributionItem } from "./overview-distribution-card";
@@ -50,12 +30,10 @@ import { OverviewFactsRail } from "./overview-facts-rail";
 import { OverviewProjectMeta } from "./overview-project-meta";
 import { Reveal } from "./overview-reveal";
 import { OverviewMemberTimesheet } from "./overview-member-timesheet";
-import {
-  OverviewProgressListModal,
-  type OverviewProgressSection,
-} from "./overview-progress-list-modal";
+import { OverviewProgressListModal, type OverviewProgressSection } from "./overview-progress-list-modal";
 import { OverviewTeamWorkload } from "./overview-team-workload";
 import { OverviewVelocityCard } from "./overview-velocity-card";
+import { OverviewWorkItemListModal, type OverviewWorkItemMetric } from "./overview-work-item-list-modal";
 import { ProjectHealthHero } from "./project-health-hero";
 import { useProjectOverview } from "./use-project-overview";
 
@@ -66,16 +44,7 @@ const iconButtonClass =
   "cursor-pointer rounded-md p-1 text-placeholder transition-colors hover:bg-surface-2 hover:text-primary disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-placeholder";
 
 /** 工作项类型环形图配色（无类型自带颜色时按序兜底） */
-const WORK_ITEM_TYPE_PALETTE = [
-  "#3f76ff",
-  "#16a34a",
-  "#f59e0b",
-  "#8b5cf6",
-  "#ef4444",
-  "#06b6d4",
-  "#ec4899",
-  "#64748b",
-];
+const WORK_ITEM_TYPE_PALETTE = ["#3f76ff", "#16a34a", "#f59e0b", "#8b5cf6", "#ef4444", "#06b6d4", "#ec4899", "#64748b"];
 
 type TPageView = {
   project: IProject;
@@ -101,8 +70,8 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
   const [isMembersModalOpen, setIsMembersModalOpen] = useState(false);
   const [isHoursModalOpen, setIsHoursModalOpen] = useState(false);
   const [isHoursChartReady, setIsHoursChartReady] = useState(false);
-  const [isOverdueModalOpen, setIsOverdueModalOpen] = useState(false);
   const [progressListModalSection, setProgressListModalSection] = useState<OverviewProgressSection | null>(null);
+  const [workItemListModalMetric, setWorkItemListModalMetric] = useState<OverviewWorkItemMetric | null>(null);
   const {
     getUserDetails,
     project: { getProjectMemberIds },
@@ -151,26 +120,6 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
     { keepPreviousData: true }
   );
 
-  const { data: overdueStatisticData, error: overdueStatisticError } = useSWR<TProjectStatisticResponse>(
-    isOverdueModalOpen ? `project-statistic-overdue-${workspaceSlug}-${project.id}` : null,
-    () =>
-      projectStatisticService.getStatistic(workspaceSlug, project.id, {
-        page_size: 20,
-      }),
-    { keepPreviousData: true }
-  );
-
-  const overdueByAssigneeData = useMemo(() => {
-    if (overdueStatisticData?.overdue_by_assignee) return overdueStatisticData.overdue_by_assignee;
-    if (overdueStatisticData || overdueStatisticError) {
-      return {
-        total: 0,
-        data: [],
-      };
-    }
-    return null;
-  }, [overdueStatisticData, overdueStatisticError]);
-
   const fetchAnnouncements = useCallback(async () => {
     if (!workspaceSlug || !project?.id) return;
     setIsLoadingAnnouncements(true);
@@ -197,15 +146,14 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
   }, [fetchAnnouncements]);
 
   const creatorLabel = useMemo(
-    () =>
-      (createdBy: TProjectAnnouncement["created_by"]) => {
-        if (!createdBy) return "-";
-        if (typeof createdBy === "string") {
-          const details = getUserDetails(createdBy);
-          return details?.display_name || details?.email || createdBy;
-        }
-        return createdBy.display_name || createdBy.email || createdBy.id || "-";
-      },
+    () => (createdBy: TProjectAnnouncement["created_by"]) => {
+      if (!createdBy) return "-";
+      if (typeof createdBy === "string") {
+        const details = getUserDetails(createdBy);
+        return details?.display_name || details?.email || createdBy;
+      }
+      return createdBy.display_name || createdBy.email || createdBy.id || "-";
+    },
     [getUserDetails]
   );
 
@@ -286,7 +234,7 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
 
   const announcementsListBody = (
     <>
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-3 vertical-scrollbar scrollbar-sm">
+      <div className="vertical-scrollbar scrollbar-sm min-h-0 flex-1 overflow-y-auto px-4 pb-3">
         {isLoadingAnnouncements ? (
           <div className="grid h-14 place-items-center text-sm text-placeholder">加载中...</div>
         ) : announcements.length === 0 ? (
@@ -399,7 +347,7 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
   };
 
   return (
-    <div className="h-full w-full overflow-y-auto vertical-scrollbar scrollbar-sm">
+    <div className="vertical-scrollbar scrollbar-sm h-full w-full overflow-y-auto">
       <div className="flex flex-col gap-4 px-6 py-5">
         {/* Header */}
         <Reveal className="flex flex-wrap items-center gap-x-4 gap-y-1">
@@ -413,7 +361,10 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
         <Reveal delay={60}>
           <ProjectHealthHero
             overview={overview}
-            onOverdueClick={() => setIsOverdueModalOpen(true)}
+            onCompletedClick={() => setWorkItemListModalMetric("completed")}
+            onInProgressClick={() => setWorkItemListModalMetric("in_progress")}
+            onOverdueClick={() => setWorkItemListModalMetric("overdue")}
+            onDueSoonClick={() => setWorkItemListModalMetric("due_soon")}
             onPendingDefectsClick={handlePendingDefectsClick}
             leftExtra={<OverviewProjectMeta project={project} />}
           >
@@ -502,7 +453,11 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
                   >
                     <Plus className="h-3.5 w-3.5" />
                   </button>
-                  <button type="button" className={iconButtonClass} onClick={() => setIsAnnouncementsFullscreenOpen(true)}>
+                  <button
+                    type="button"
+                    className={iconButtonClass}
+                    onClick={() => setIsAnnouncementsFullscreenOpen(true)}
+                  >
                     <Maximize2 className="h-3.5 w-3.5" />
                   </button>
                 </>
@@ -599,7 +554,7 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
         getContainer={() => document.body}
       >
         <div className="flex h-full min-h-0 flex-1 flex-col bg-surface-1">
-          <div className="min-h-0 flex-1 overflow-y-auto vertical-scrollbar scrollbar-sm px-4 pb-3">
+          <div className="vertical-scrollbar scrollbar-sm min-h-0 flex-1 overflow-y-auto px-4 pb-3">
             <ProjectActivity
               workspaceSlug={workspaceSlug}
               projectId={project.id}
@@ -711,41 +666,20 @@ export const OverviewListView: React.FC<TPageView> = observer((props) => {
         </div>
       </Modal>
 
-      {/* 延期工作项负责人 Modal */}
-      <Modal
-        title={
-          <div className="flex min-h-11 items-center gap-2 pr-2">
-            <AlertTriangle className="h-4 w-4 shrink-0 text-danger-primary" />
-            <span className="text-base font-medium text-primary">延期工作项负责人</span>
-            <span className="text-sm text-placeholder">
-              共 {overdueByAssigneeData?.total ?? overview.overdue} 条
-            </span>
-          </div>
-        }
-        open={isOverdueModalOpen}
-        onCancel={() => setIsOverdueModalOpen(false)}
-        footer={null}
-        centered
-        width={1200}
-        destroyOnClose
-        styles={{ body: { padding: 0, overflow: "hidden" } }}
-      >
-        <div className="flex h-[78vh] max-h-[78vh] flex-col bg-surface-1">
-          <div className="min-h-0 flex-1 overflow-hidden px-4 pb-3">
-            <OverdueByAssigneeCard
-              hideHeader
-              data={overdueByAssigneeData}
-              className="h-full min-h-0 bg-surface-1 p-4"
-            />
-          </div>
-        </div>
-      </Modal>
-
       {progressListModalSection && (
         <OverviewProgressListModal
           open={Boolean(progressListModalSection)}
           onClose={() => setProgressListModalSection(null)}
           section={progressListModalSection}
+          workspaceSlug={workspaceSlug}
+          projectId={project.id}
+        />
+      )}
+      {workItemListModalMetric && (
+        <OverviewWorkItemListModal
+          open={Boolean(workItemListModalMetric)}
+          onClose={() => setWorkItemListModalMetric(null)}
+          metric={workItemListModalMetric}
           workspaceSlug={workspaceSlug}
           projectId={project.id}
         />

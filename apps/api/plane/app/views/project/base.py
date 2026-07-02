@@ -74,7 +74,9 @@ from plane.db.models import (
     TestCaseRepository,
     TestCase,
     TimeSheet,
-    User, IssueSequence,
+    User,
+    IssueSequence,
+    IssueAssignee,
 )
 from plane.db.models.intake import IntakeIssueStatus
 from plane.db.models.issue_type import (
@@ -1070,6 +1072,47 @@ class ProjectAPI(BaseViewSet):
 
         return sorted(work_item_stats_map.values(), key=lambda x: x["total"], reverse=True)
 
+    def _build_overview_work_item_payload(self, issue):
+        return {
+            "id": str(issue.id),
+            "name": issue.name,
+            "sequence_id": issue.sequence_id,
+            "project_id": str(issue.project_id),
+            "project_identifier": issue.project.identifier if issue.project else "",
+            "state": (
+                {
+                    "id": str(issue.state_id),
+                    "name": issue.state.name,
+                    "group": issue.state.group,
+                    "color": issue.state.color,
+                }
+                if issue.state_id and issue.state
+                else None
+            ),
+            "priority": issue.priority,
+            "target_date": issue.target_date.isoformat() if issue.target_date else None,
+            "completed_at": issue.completed_at.isoformat() if issue.completed_at else None,
+            "type": (
+                {
+                    "id": str(issue.type_id),
+                    "name": issue.type.name,
+                }
+                if issue.type_id and issue.type
+                else None
+            ),
+            "assignees": [
+                {
+                    "id": str(assignee.assignee.id),
+                    "display_name": assignee.assignee.display_name
+                    or assignee.assignee.email
+                    or str(assignee.assignee.id),
+                    "avatar_url": assignee.assignee.avatar_url or "",
+                }
+                for assignee in getattr(issue, "active_issue_assignees", [])
+                if assignee.assignee
+            ],
+        }
+
     def _build_overview_statistic_payload(
         self,
         request,
@@ -1648,3 +1691,86 @@ class ProjectAPI(BaseViewSet):
             return error_response
 
         return Response(overview_statistic_payload, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=["get"], url_path="overview-work-items")
+    @allow_fine_permission(PermissionKey.PROJECT_OVERVIEW_VIEW)
+    def get_overview_work_items(self, request, slug):
+        project_id, error_response = self._get_statistic_project_id(request)
+        if error_response:
+            return error_response
+
+        if not self._has_statistic_project_access(slug, project_id, request.user.id):
+            return Response({"error": "forbidden"}, status=status.HTTP_403_FORBIDDEN)
+
+        metric = request.query_params.get("metric")
+        if metric not in {"completed", "in_progress", "overdue", "due_soon"}:
+            return Response(
+                {"error": "invalid metric"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        page, error_response = self._parse_positive_page(request, "page")
+        if error_response:
+            return error_response
+
+        page_size = self._parse_statistic_page_size(request)
+        today = timezone.now().date()
+        open_state_filter = ~Q(state__group__in=["completed", "cancelled"])
+
+        queryset = (
+            Issue.objects.filter(
+                workspace__slug=slug,
+                project_id=project_id,
+                archived_at__isnull=True,
+                deleted_at__isnull=True,
+                is_draft=False,
+            )
+            .select_related("project", "state", "type")
+            .prefetch_related(
+                Prefetch(
+                    "issue_assignee",
+                    queryset=IssueAssignee.objects.filter(
+                        deleted_at__isnull=True
+                    ).select_related("assignee"),
+                    to_attr="active_issue_assignees",
+                )
+            )
+        )
+
+        if metric == "completed":
+            queryset = queryset.filter(state__group="completed").order_by(
+                F("completed_at").desc(nulls_last=True),
+                "-updated_at",
+            )
+        elif metric == "in_progress":
+            queryset = queryset.filter(open_state_filter).order_by(
+                F("target_date").asc(nulls_last=True),
+                "-updated_at",
+            )
+        elif metric == "overdue":
+            queryset = queryset.filter(
+                open_state_filter,
+                target_date__isnull=False,
+                target_date__lt=today,
+            ).order_by("target_date", "-updated_at")
+        else:
+            queryset = queryset.filter(
+                open_state_filter,
+                target_date__isnull=False,
+                target_date__gte=today,
+                target_date__lte=today + timedelta(days=7),
+            ).order_by("target_date", "-updated_at")
+
+        total_count = queryset.count()
+        offset = (page - 1) * page_size
+        items = queryset[offset: offset + page_size]
+
+        return Response(
+            {
+                "count": total_count,
+                "data": [
+                    self._build_overview_work_item_payload(issue) for issue in items
+                ],
+            },
+            status=status.HTTP_200_OK,
+        )

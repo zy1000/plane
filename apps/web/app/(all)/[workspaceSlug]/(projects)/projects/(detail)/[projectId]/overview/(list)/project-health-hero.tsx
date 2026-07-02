@@ -1,5 +1,5 @@
 import { type FC, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
-import { Activity, AlertTriangle, ArrowUpRight, Bug, CircleCheck, Clock, Loader2 } from "lucide-react";
+import { Activity, AlertTriangle, Bug, CircleCheck, Clock, Link, Loader2 } from "lucide-react";
 import { InfoIcon } from "@plane/propel/icons";
 import { Popover } from "@plane/propel/popover";
 import type { TProjectOverviewData } from "./use-project-overview";
@@ -9,7 +9,10 @@ type Props = {
   children?: ReactNode;
   /** 左侧 Hero 区域内的附加内容，如项目静态信息 */
   leftExtra?: ReactNode;
+  onCompletedClick?: () => void;
+  onInProgressClick?: () => void;
   onOverdueClick?: () => void;
+  onDueSoonClick?: () => void;
   onPendingDefectsClick?: () => void;
 };
 
@@ -60,7 +63,7 @@ const RadialGauge: FC<{ value: number; color: string }> = ({ value, color }) => 
         />
       </svg>
       <div className="absolute flex flex-col items-center">
-        <span className="text-[28px] font-semibold leading-none tabular-nums text-primary">{animated}%</span>
+        <span className="text-[28px] leading-none font-semibold text-primary tabular-nums">{animated}%</span>
         <span className="mt-1 text-xs text-placeholder">完成率</span>
       </div>
     </div>
@@ -99,7 +102,11 @@ const ProjectHealthRulesHint: FC = () => (
     >
       <InfoIcon className="h-3.5 w-3.5" />
     </Popover.Button>
-    <Popover.Panel side="bottom" align="start" className="z-50 w-[240px] rounded-lg border border-subtle bg-surface-1 p-3 shadow-raised-200">
+    <Popover.Panel
+      side="bottom"
+      align="start"
+      className="z-50 w-[240px] rounded-lg border border-subtle bg-surface-1 p-3 shadow-raised-200"
+    >
       <p className="text-xs font-medium text-primary">判定规则</p>
       <p className="mt-1.5 text-xs leading-relaxed text-secondary">综合完成率与逾期占比判定，取最严重等级。</p>
       <div className="mt-2 space-y-1 text-xs leading-relaxed text-secondary">
@@ -126,9 +133,27 @@ const StatChip: FC<{ chip: TStatChip }> = ({ chip }) => {
   const Icon = chip.icon;
   const tone = TONE_CLASSES[chip.tone];
   const animated = useCountUp(chip.value);
+  const detailClick = chip.onActionClick && !chip.onValueClick ? chip.onActionClick : undefined;
 
   return (
-    <div className="relative flex h-full items-center gap-3 rounded-lg border border-subtle bg-layer-1 px-3.5 py-4 text-left transition-colors hover:bg-layer-1-hover">
+    <div
+      className={`relative flex h-full items-center gap-3 rounded-lg border border-subtle bg-layer-1 px-3.5 py-4 text-left transition-colors hover:bg-layer-1-hover ${
+        detailClick ? "cursor-pointer" : ""
+      }`}
+      role={detailClick ? "button" : undefined}
+      tabIndex={detailClick ? 0 : undefined}
+      onClick={detailClick}
+      onKeyDown={
+        detailClick
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                detailClick();
+              }
+            }
+          : undefined
+      }
+    >
       {(chip.onActionClick || chip.onValueClick) && (
         <div className="absolute top-1.5 right-1.5 flex items-center gap-0.5">
           {chip.onActionClick && (
@@ -156,7 +181,7 @@ const StatChip: FC<{ chip: TStatChip }> = ({ chip }) => {
                 chip.onValueClick?.();
               }}
             >
-              <ArrowUpRight className="h-3 w-3" />
+              <Link className="h-3 w-3" />
             </button>
           )}
         </div>
@@ -166,7 +191,7 @@ const StatChip: FC<{ chip: TStatChip }> = ({ chip }) => {
         {chip.onValueClick ? (
           <button
             type="button"
-            className={`cursor-pointer rounded text-16 font-semibold leading-tight tabular-nums transition-colors hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-strong ${tone.value}`}
+            className={`cursor-pointer rounded text-16 leading-tight font-semibold tabular-nums transition-colors hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-strong ${tone.value}`}
             aria-label={`查看${chip.label}`}
             onClick={(e) => {
               e.stopPropagation();
@@ -176,7 +201,7 @@ const StatChip: FC<{ chip: TStatChip }> = ({ chip }) => {
             {animated}
           </button>
         ) : (
-          <div className={`text-16 font-semibold leading-tight tabular-nums ${tone.value}`}>{animated}</div>
+          <div className={`text-16 leading-tight font-semibold tabular-nums ${tone.value}`}>{animated}</div>
         )}
         <div className="truncate text-xs text-placeholder">{chip.label}</div>
       </div>
@@ -184,15 +209,36 @@ const StatChip: FC<{ chip: TStatChip }> = ({ chip }) => {
   );
 };
 
-export const ProjectHealthHero: FC<Props> = ({ overview, children, leftExtra, onOverdueClick, onPendingDefectsClick }) => {
+export const ProjectHealthHero: FC<Props> = ({
+  overview,
+  children,
+  leftExtra,
+  onCompletedClick,
+  onInProgressClick,
+  onOverdueClick,
+  onDueSoonClick,
+  onPendingDefectsClick,
+}) => {
   const { isLoading, completionRate, health, counts, openCount, overdue, dueSoon, pendingDefects } = overview;
 
   const chips = useMemo<TStatChip[]>(
     () => [
-      { label: "已完成", value: counts.completed, icon: CircleCheck, tone: "success" },
-      { label: "进行中", value: openCount, icon: Loader2, tone: "accent" },
-      { label: "延期", value: overdue, icon: AlertTriangle, tone: overdue > 0 ? "danger" : "neutral", onActionClick: onOverdueClick },
-      { label: "临期 7 天", value: dueSoon, icon: Clock, tone: dueSoon > 0 ? "warning" : "neutral" },
+      { label: "已完成", value: counts.completed, icon: CircleCheck, tone: "success", onActionClick: onCompletedClick },
+      { label: "进行中", value: openCount, icon: Loader2, tone: "accent", onActionClick: onInProgressClick },
+      {
+        label: "延期",
+        value: overdue,
+        icon: AlertTriangle,
+        tone: overdue > 0 ? "danger" : "neutral",
+        onActionClick: onOverdueClick,
+      },
+      {
+        label: "临期 7 天",
+        value: dueSoon,
+        icon: Clock,
+        tone: dueSoon > 0 ? "warning" : "neutral",
+        onActionClick: onDueSoonClick,
+      },
       {
         label: "待处理缺陷",
         value: pendingDefects,
@@ -201,7 +247,18 @@ export const ProjectHealthHero: FC<Props> = ({ overview, children, leftExtra, on
         onValueClick: onPendingDefectsClick,
       },
     ],
-    [counts.completed, openCount, overdue, onOverdueClick, dueSoon, pendingDefects, onPendingDefectsClick]
+    [
+      counts.completed,
+      openCount,
+      onCompletedClick,
+      onInProgressClick,
+      overdue,
+      onOverdueClick,
+      dueSoon,
+      onDueSoonClick,
+      pendingDefects,
+      onPendingDefectsClick,
+    ]
   );
 
   if (isLoading) {
@@ -212,14 +269,14 @@ export const ProjectHealthHero: FC<Props> = ({ overview, children, leftExtra, on
     <div className="relative overflow-hidden rounded-2xl border border-subtle bg-gradient-to-br from-surface-1 to-layer-1 p-5 shadow-sm">
       {/* 健康色氛围光晕 */}
       <div
-        className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full opacity-[0.14] blur-2xl"
+        className="pointer-events-none absolute -top-16 -right-16 h-48 w-48 rounded-full opacity-[0.14] blur-2xl"
         style={{ backgroundColor: health.color }}
       />
       <div className="relative flex flex-col gap-5 lg:flex-row lg:items-stretch lg:gap-7">
         {/* 项目信息 + 仪表 + 健康判定 */}
         <div className="flex w-full flex-shrink-0 flex-col gap-4 lg:w-[540px] lg:flex-row lg:items-center lg:gap-5">
           {leftExtra && (
-            <div className="flex border-b border-dashed border-subtle pb-3 lg:w-[210px] lg:flex-shrink-0 lg:self-stretch lg:border-r lg:border-b-0 lg:pb-0 lg:pr-4">
+            <div className="flex border-b border-dashed border-subtle pb-3 lg:w-[210px] lg:flex-shrink-0 lg:self-stretch lg:border-r lg:border-b-0 lg:pr-4 lg:pb-0">
               {leftExtra}
             </div>
           )}
@@ -249,7 +306,7 @@ export const ProjectHealthHero: FC<Props> = ({ overview, children, leftExtra, on
               <StatChip key={chip.label} chip={chip} />
             ))}
           </div>
-          {children && <div className="flex w-full min-h-0 flex-1">{children}</div>}
+          {children && <div className="flex min-h-0 w-full flex-1">{children}</div>}
         </div>
       </div>
     </div>
