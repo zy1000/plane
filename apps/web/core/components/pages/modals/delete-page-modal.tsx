@@ -52,8 +52,8 @@ export const DeletePageModal = observer(function DeletePageModal(props: TConfirm
         handleClose();
         setToast({
           type: TOAST_TYPE.SUCCESS,
-          title: "Success!",
-          message: "Page deleted successfully.",
+          title: "成功！",
+          message: "笔记删除成功。",
         });
 
         if (routePageId) {
@@ -63,8 +63,8 @@ export const DeletePageModal = observer(function DeletePageModal(props: TConfirm
       .catch(() => {
         setToast({
           type: TOAST_TYPE.ERROR,
-          title: "Error!",
-          message: "Page could not be deleted. Please try again.",
+          title: "错误！",
+          message: "笔记删除失败，请重试。",
         });
       });
 
@@ -80,12 +80,12 @@ export const DeletePageModal = observer(function DeletePageModal(props: TConfirm
       isSubmitting={isDeleting}
       isSubmitDisabled={!canCurrentUserDeletePage}
       isOpen={isOpen}
-      title="Delete page"
+      title="删除笔记"
       content={
         <>
-          Are you sure you want to delete page-{" "}
-          <span className="font-medium break-words break-all text-primary">{getPageName(name)}</span> ? The Page will be
-          deleted permanently. This action cannot be undone.
+          确定要删除笔记{" "}
+          <span className="font-medium break-words break-all text-primary">{getPageName(name)}</span>{" "}
+          吗？该笔记将被永久删除，此操作无法撤销。
         </>
       }
     />

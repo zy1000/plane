@@ -67,8 +67,8 @@ export const PagesListMainContent = observer(function PagesListMainContent(props
       .catch((err) => {
         setToast({
           type: TOAST_TYPE.ERROR,
-          title: "Error!",
-          message: err?.data?.error || "Page could not be created. Please try again.",
+          title: "错误！",
+          message: err?.data?.error || "笔记创建失败，请重试。",
         });
       })
       .finally(() => setIsCreatingPage(false));

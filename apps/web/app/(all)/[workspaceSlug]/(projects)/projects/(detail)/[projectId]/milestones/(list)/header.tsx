@@ -42,7 +42,7 @@ export const MilestonesListHeader = observer(function MilestonesListHeader() {
           <Breadcrumbs.Item
             component={
               <BreadcrumbLink
-                label="里程碑"
+                label="Milestones"
                 href={`/${workspaceSlug}/projects/${currentProjectDetails?.id}/milestones/`}
                 icon={<Milestone className="h-4 w-4 text-secondary" />}
                 isLast

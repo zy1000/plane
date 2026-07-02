@@ -10,16 +10,17 @@ import { CalendarDays } from "lucide-react";
 import { CalendarAfterIcon, CalendarBeforeIcon } from "@plane/propel/icons";
 import { CustomSelect } from "@plane/ui";
 
+type DueDate = {
+  name: string;
+  value: "before" | "after" | "range";
+  icon: any;
+};
+
 type Props = {
+  labels?: Partial<Record<DueDate["value"], string>>;
   title: string;
   value: string;
   onChange: (value: string) => void;
-};
-
-type DueDate = {
-  name: string;
-  value: string;
-  icon: any;
 };
 
 const dueDateRange: DueDate[] = [
@@ -40,7 +41,12 @@ const dueDateRange: DueDate[] = [
   },
 ];
 
-export function DateFilterSelect({ title, value, onChange }: Props) {
+export function DateFilterSelect({ labels, title, value, onChange }: Props) {
+  const getLabel = (option: DueDate | undefined) => {
+    if (!option) return "";
+    return labels?.[option.value] ?? option.name;
+  };
+
   return (
     <CustomSelect
       value={value}
@@ -48,7 +54,7 @@ export function DateFilterSelect({ title, value, onChange }: Props) {
         <div className="flex items-center gap-2 text-11">
           {dueDateRange.find((item) => item.value === value)?.icon}
           <span>
-            {title} {dueDateRange.find((item) => item.value === value)?.name}
+            {title} {getLabel(dueDateRange.find((item) => item.value === value))}
           </span>
         </div>
       }
@@ -58,7 +64,7 @@ export function DateFilterSelect({ title, value, onChange }: Props) {
         <CustomSelect.Option key={index} value={option.value}>
           <div className="flex items-center gap-2">
             <span>{option.icon}</span>
-            {title} {option.name}
+            {title} {getLabel(option)}
           </div>
         </CustomSelect.Option>
       ))}

@@ -27,6 +27,33 @@ type ToolbarButtonProps = {
   executeCommand: EditorRefApi["executeMenuItemCommand"];
 };
 
+const TOOLBAR_ITEM_LABELS: Record<string, string> = {
+  text: "正文",
+  h1: "标题 1",
+  h2: "标题 2",
+  h3: "标题 3",
+  h4: "标题 4",
+  h5: "标题 5",
+  h6: "标题 6",
+  bold: "加粗",
+  italic: "斜体",
+  underline: "下划线",
+  strikethrough: "删除线",
+  "numbered-list": "有序列表",
+  "bulleted-list": "无序列表",
+  "to-do-list": "待办列表",
+  quote: "引用",
+  code: "代码",
+  table: "表格",
+  image: "图片",
+  "text-align-left": "左对齐",
+  "text-align-center": "居中对齐",
+  "text-align-right": "右对齐",
+};
+
+const getToolbarItemLabel = (item?: ToolbarMenuItem) =>
+  item ? (TOOLBAR_ITEM_LABELS[item.renderKey] ?? item.name) : "正文";
+
 const ToolbarButton = React.memo(function ToolbarButton(props: ToolbarButtonProps) {
   const { item, isActive, executeCommand } = props;
 
@@ -34,7 +61,7 @@ const ToolbarButton = React.memo(function ToolbarButton(props: ToolbarButtonProp
     <Tooltip
       tooltipContent={
         <p className="flex flex-col gap-1 text-center text-11">
-          <span className="font-medium">{item.name}</span>
+          <span className="font-medium">{getToolbarItemLabel(item)}</span>
           {item.shortcut && <kbd className="text-placeholder">{item.shortcut.join(" + ")}</kbd>}
         </p>
       }
@@ -128,7 +155,7 @@ export function PageToolbar(props: Props) {
               }
             )}
           >
-            {activeTypography?.name || "Text"}
+            {getToolbarItemLabel(activeTypography)}
             <ChevronDownIcon className="size-3 shrink-0" />
           </span>
         }
@@ -157,7 +184,7 @@ export function PageToolbar(props: Props) {
           >
             <span className="flex items-center gap-2">
               <item.icon className="size-3" />
-              {item.name}
+              {getToolbarItemLabel(item)}
             </span>
             {activeTypography?.itemKey === item.itemKey && <CheckIcon className="size-3 shrink-0 text-tertiary" />}
           </CustomMenu.MenuItem>

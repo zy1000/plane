@@ -22,9 +22,9 @@ const PAGE_SORTING_KEY_OPTIONS: {
   key: TPageFiltersSortKey;
   label: string;
 }[] = [
-  { key: "name", label: "Name" },
-  { key: "created_at", label: "Date created" },
-  { key: "updated_at", label: "Date modified" },
+  { key: "name", label: "名称" },
+  { key: "created_at", label: "创建时间" },
+  { key: "updated_at", label: "修改时间" },
 ];
 
 export function PageOrderByDropdown(props: Props) {
@@ -69,7 +69,7 @@ export function PageOrderByDropdown(props: Props) {
             });
         }}
       >
-        Ascending
+        升序
         {!isDescending && <CheckIcon className="h-3 w-3" />}
       </CustomMenu.MenuItem>
       <CustomMenu.MenuItem
@@ -81,7 +81,7 @@ export function PageOrderByDropdown(props: Props) {
             });
         }}
       >
-        Descending
+        降序
         {isDescending && <CheckIcon className="h-3 w-3" />}
       </CustomMenu.MenuItem>
     </CustomMenu>

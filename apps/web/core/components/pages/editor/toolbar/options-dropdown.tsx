@@ -56,7 +56,7 @@ export const PageOptionsDropdown = observer(function PageOptionsDropdown(props: 
           action: () => handleFullWidth(!isFullWidth),
           customContent: (
             <>
-              Full width
+              全宽显示
               <ToggleSwitch value={isFullWidth} onChange={() => {}} />
             </>
           ),
@@ -67,7 +67,7 @@ export const PageOptionsDropdown = observer(function PageOptionsDropdown(props: 
           action: () => handleStickyToolbar(!isStickyToolbarEnabled),
           customContent: (
             <>
-              Sticky toolbar
+              固定工具栏
               <ToggleSwitch value={isStickyToolbarEnabled} onChange={() => {}} />
             </>
           ),
@@ -81,11 +81,11 @@ export const PageOptionsDropdown = observer(function PageOptionsDropdown(props: 
             editorRef.copyMarkdownToClipboard();
             setToast({
               type: TOAST_TYPE.SUCCESS,
-              title: "Success!",
-              message: "Markdown copied to clipboard.",
+              title: "成功！",
+              message: "Markdown 已复制到剪贴板。",
             });
           },
-          title: "Copy markdown",
+          title: "复制 Markdown",
           icon: Clipboard,
           shouldRender: true,
         },
@@ -102,7 +102,7 @@ export const PageOptionsDropdown = observer(function PageOptionsDropdown(props: 
             });
             router.push(updatedRoute);
           },
-          title: "Version history",
+          title: "历史版本",
           icon: History,
           shouldRender: true,
           disabled: !canCurrentUserViewPageVersions,
@@ -110,7 +110,7 @@ export const PageOptionsDropdown = observer(function PageOptionsDropdown(props: 
         {
           key: "export",
           action: () => setIsExportModalOpen(true),
-          title: "Export",
+          title: "导出",
           icon: ArrowUpToLine,
           shouldRender: true,
         },

@@ -19,13 +19,28 @@ import { useUser } from "@/hooks/store/user";
 
 type Props = {
   appliedFilters: string[] | null;
+  currentUserLabel?: string;
   handleUpdate: (val: string) => void;
   memberIds: string[] | undefined;
+  noMatchesLabel?: string;
   searchQuery: string;
+  title?: string;
+  viewAllLabel?: string;
+  viewLessLabel?: string;
 };
 
 export const FilterCreatedBy = observer(function FilterCreatedBy(props: Props) {
-  const { appliedFilters, handleUpdate, memberIds, searchQuery } = props;
+  const {
+    appliedFilters,
+    currentUserLabel = "You",
+    handleUpdate,
+    memberIds,
+    noMatchesLabel = "No matches found",
+    searchQuery,
+    title = "Created by",
+    viewAllLabel = "View all",
+    viewLessLabel = "View less",
+  } = props;
   // states
   const [itemsToRender, setItemsToRender] = useState(5);
   const [previewEnabled, setPreviewEnabled] = useState(true);
@@ -58,7 +73,7 @@ export const FilterCreatedBy = observer(function FilterCreatedBy(props: Props) {
   return (
     <>
       <FilterHeader
-        title={`Created by${appliedFiltersCount > 0 ? ` (${appliedFiltersCount})` : ""}`}
+        title={`${title}${appliedFiltersCount > 0 ? ` (${appliedFiltersCount})` : ""}`}
         isPreviewEnabled={previewEnabled}
         handleIsPreviewEnabled={() => setPreviewEnabled(!previewEnabled)}
       />
@@ -84,7 +99,7 @@ export const FilterCreatedBy = observer(function FilterCreatedBy(props: Props) {
                           size="md"
                         />
                       }
-                      title={currentUser?.id === member.id ? "You" : member?.display_name}
+                      title={currentUser?.id === member.id ? currentUserLabel : member?.display_name}
                     />
                   );
                 })}
@@ -94,12 +109,12 @@ export const FilterCreatedBy = observer(function FilterCreatedBy(props: Props) {
                     className="ml-8 text-11 font-medium text-accent-primary"
                     onClick={handleViewToggle}
                   >
-                    {itemsToRender === sortedOptions.length ? "View less" : "View all"}
+                    {itemsToRender === sortedOptions.length ? viewLessLabel : viewAllLabel}
                   </button>
                 )}
               </>
             ) : (
-              <p className="text-11 text-placeholder italic">No matches found</p>
+              <p className="text-11 text-placeholder italic">{noMatchesLabel}</p>
             )
           ) : (
             <Loader className="space-y-2">

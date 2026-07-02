@@ -52,13 +52,13 @@ export const MilestoneIssuesHeader = observer(function MilestoneIssuesHeader() {
           <Breadcrumbs.Item
             component={
               <BreadcrumbLink
-                label="里程碑"
+                label="Milestones"
                 href={`/${workspaceSlug}/projects/${currentProjectDetails?.id}/milestones`}
                 icon={<Milestone className="h-4 w-4 text-secondary" />}
               />
             }
           />
-          <Breadcrumbs.Item component={<BreadcrumbLink label={milestoneName || "关联工作项"} isLast />} isLast />
+          <Breadcrumbs.Item component={<BreadcrumbLink label={milestoneName || "Work Items"} isLast />} isLast />
         </Breadcrumbs>
       </Header.LeftItem>
       <Header.RightItem>

@@ -32,8 +32,8 @@ export const ReportExecutionChart = ({ analysis }: Props) => {
   );
 
   const cells = useMemo(
-    () => STATUS_META.map((m) => ({ key: m.key, fill: m.color })),
-    []
+    () => data.map((item) => ({ key: item.key, fill: item.color })),
+    [data]
   );
 
   return (

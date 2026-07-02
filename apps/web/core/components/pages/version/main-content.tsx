@@ -60,14 +60,14 @@ export const PageVersionsMainContent = observer(function PageVersionsMainContent
       .then(() => {
         setToast({
           type: TOAST_TYPE.SUCCESS,
-          title: "Page version restored.",
+          title: "笔记版本已恢复。",
         });
         handleClose();
       })
       .catch(() =>
         setToast({
           type: TOAST_TYPE.ERROR,
-          title: "Failed to restore page version.",
+          title: "恢复笔记版本失败。",
         })
       )
       .finally(() => setIsRestoring(false));
@@ -90,11 +90,11 @@ export const PageVersionsMainContent = observer(function PageVersionsMainContent
               <TriangleAlert className="size-10" />
             </span>
             <div>
-              <h6 className="text-16 font-semibold">Something went wrong!</h6>
-              <p className="text-13 text-tertiary">The version could not be loaded, please try again.</p>
+              <h6 className="text-16 font-semibold">出错了！</h6>
+              <p className="text-13 text-tertiary">无法加载该版本，请重试。</p>
             </div>
             <Button variant="link" onClick={handleRetry} loading={isRetrying}>
-              Try again
+              重试
             </Button>
           </div>
         </div>
@@ -105,16 +105,16 @@ export const PageVersionsMainContent = observer(function PageVersionsMainContent
               <h6 className="text-14 font-medium">
                 {versionDetails
                   ? `${renderFormattedDate(versionDetails.last_saved_at)} ${renderFormattedTime(versionDetails.last_saved_at)}`
-                  : "Loading version details"}
+                  : "正在加载版本详情"}
               </h6>
               <span className="flex flex-shrink-0 items-center gap-1 rounded-sm bg-accent-primary/20 px-1.5 py-1 text-11 font-medium text-accent-primary">
                 <EyeIcon className="size-3 flex-shrink-0" />
-                View only
+                仅查看
               </span>
             </div>
             {restoreEnabled && (
               <Button variant="primary" className="flex-shrink-0" onClick={handleRestoreVersion} loading={isRestoring}>
-                {isRestoring ? "Restoring" : "Restore"}
+                {isRestoring ? "恢复中" : "恢复"}
               </Button>
             )}
           </div>

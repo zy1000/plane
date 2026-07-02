@@ -35,7 +35,7 @@ export const PageFavoriteControl = observer(function PageFavoriteControl({ page 
         if (!canCurrentUserFavoritePage) return;
         pageOperations.toggleFavorite();
       }}
-      aria-label={is_favorite ? "Remove favorite" : "Add to favorites"}
+      aria-label={is_favorite ? "取消收藏" : "添加到收藏"}
       className={
         is_favorite ? "[&_svg]:fill-(--color-label-yellow-icon) [&_svg]:stroke-(--color-label-yellow-icon)" : ""
       }

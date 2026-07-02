@@ -52,7 +52,7 @@ function ProjectPagesPage({ params }: Route.ComponentProps) {
   const { allowPermissions, allowProjectPermissionKeys, workspaceUserInfo } = useUserPermissions();
   // derived values
   const project = getProjectById(projectId);
-  const pageTitle = project?.name ? `${project?.name} - Pages` : undefined;
+  const pageTitle = project?.name ? `${project?.name} - 笔记` : undefined;
   const canPerformEmptyStateActions = allowPermissions([EUserProjectRoles.ADMIN], EUserPermissionsLevel.PROJECT);
   const canViewPages = allowProjectPermissionKeys([PROJECT_NOTES_VIEW_PERMISSION_KEY], workspaceSlug, projectId);
   const resolvedPath = resolvedTheme === "light" ? lightPagesAsset : darkPagesAsset;

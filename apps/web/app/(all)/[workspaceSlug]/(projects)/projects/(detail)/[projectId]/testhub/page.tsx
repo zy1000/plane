@@ -173,11 +173,17 @@ export default function TestManagementHomePage() {
       title: "描述",
       dataIndex: "description",
       key: "description",
-      render: (description: string) => (
-        <Tooltip title={description || ""} placement="topLeft">
-          <span className="block max-w-[420px] truncate">{description || "-"}</span>
-        </Tooltip>
-      ),
+      render: (description: string) => {
+        const descriptionText = String(description ?? "").trim();
+
+        if (!descriptionText) return null;
+
+        return (
+          <Tooltip title={descriptionText} placement="topLeft">
+            <span className="block max-w-[420px] truncate">{descriptionText}</span>
+          </Tooltip>
+        );
+      },
     },
     {
       title: "项目",

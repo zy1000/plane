@@ -19,16 +19,14 @@ export function ContentLimitBanner({ className, onDismiss }: Props) {
         <span className="text-amber-500">
           <TriangleAlert />
         </span>
-        <span className="font-medium">
-          Content limit reached and live sync is off. Create a new page or use nested pages to continue syncing.
-        </span>
+        <span className="font-medium">内容已达到上限，实时同步已关闭。请新建笔记或使用子笔记继续同步。</span>
       </div>
       {onDismiss && (
         <button
           type="button"
           onClick={onDismiss}
           className="ml-auto text-placeholder hover:text-secondary"
-          aria-label="Dismiss content limit warning"
+          aria-label="关闭内容上限提示"
         >
           ✕
         </button>

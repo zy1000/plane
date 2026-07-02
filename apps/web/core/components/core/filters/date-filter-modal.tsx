@@ -11,7 +11,17 @@ import { CloseIcon } from "@plane/propel/icons";
 import { EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
 import { renderFormattedPayloadDate, renderFormattedDate, getDate } from "@plane/utils";
 import { DateFilterSelect } from "./date-filter-select";
+
+export type TDateFilterModalLabels = {
+  after?: string;
+  apply?: string;
+  before?: string;
+  cancel?: string;
+  range?: string;
+};
+
 type Props = {
+  labels?: TDateFilterModalLabels;
   title: string;
   handleClose: () => void;
   isOpen: boolean;
@@ -30,7 +40,7 @@ const defaultValues: TFormValues = {
   date2: new Date(new Date().getFullYear(), new Date().getMonth() + 1, new Date().getDate()),
 };
 
-export function DateFilterModal({ title, handleClose, isOpen, onSelect }: Props) {
+export function DateFilterModal({ labels, title, handleClose, isOpen, onSelect }: Props) {
   const { handleSubmit, watch, control } = useForm<TFormValues>({
     defaultValues,
   });
@@ -58,7 +68,12 @@ export function DateFilterModal({ title, handleClose, isOpen, onSelect }: Props)
             control={control}
             name="filterType"
             render={({ field: { value, onChange } }) => (
-              <DateFilterSelect title={title} value={value} onChange={onChange} />
+              <DateFilterSelect
+                title={title}
+                value={value}
+                labels={{ before: labels?.before, after: labels?.after, range: labels?.range }}
+                onChange={onChange}
+              />
             )}
           />
           <CloseIcon className="h-4 w-4 cursor-pointer" onClick={handleClose} />
@@ -113,15 +128,15 @@ export function DateFilterModal({ title, handleClose, isOpen, onSelect }: Props)
         </div>
         {watch("filterType") === "range" && (
           <h6 className="flex items-center gap-1 text-11">
-            <span className="text-secondary">After:</span>
+            <span className="text-secondary">{labels?.after ?? "After"}:</span>
             <span>{renderFormattedDate(watch("date1"))}</span>
-            <span className="ml-1 text-secondary">Before:</span>
+            <span className="ml-1 text-secondary">{labels?.before ?? "Before"}:</span>
             {!isInvalid && <span>{renderFormattedDate(watch("date2"))}</span>}
           </h6>
         )}
         <div className="flex justify-end gap-4">
           <Button variant="secondary" size="lg" onClick={handleClose}>
-            Cancel
+            {labels?.cancel ?? "Cancel"}
           </Button>
           <Button
             variant="primary"
@@ -130,7 +145,7 @@ export function DateFilterModal({ title, handleClose, isOpen, onSelect }: Props)
             onClick={handleSubmit(handleFormSubmit)}
             disabled={isInvalid}
           >
-            Apply
+            {labels?.apply ?? "Apply"}
           </Button>
         </div>
       </form>

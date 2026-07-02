@@ -71,7 +71,7 @@ export function PageForm(props: Props) {
   return (
     <form onSubmit={handlePageFormSubmit}>
       <div className="space-y-5 p-5">
-        <h3 className="text-18 font-medium text-secondary">Create page</h3>
+        <h3 className="text-18 font-medium text-secondary">新建笔记</h3>
         <div className="flex h-9 w-full items-start gap-2">
           <EmojiPicker
             isOpen={isOpen}
@@ -122,16 +122,14 @@ export function PageForm(props: Props) {
               type="text"
               value={formData.name}
               onChange={(e) => handleFormData("name", e.target.value)}
-              placeholder="Title"
+              placeholder="标题"
               className="w-full resize-none text-14"
               tabIndex={getIndex("name")}
               required
               autoFocus
             />
             {isTitleLengthMoreThan255Character && (
-              <span className="text-11 text-danger-primary">
-                Max length of the name should be less than 255 characters
-              </span>
+              <span className="text-11 text-danger-primary">名称长度不能超过 255 个字符</span>
             )}
           </div>
         </div>
@@ -148,7 +146,7 @@ export function PageForm(props: Props) {
         </div>
         <div className="flex items-center justify-end gap-2">
           <Button variant="secondary" size="lg" onClick={handleModalClose} tabIndex={getIndex("cancel")}>
-            Cancel
+            取消
           </Button>
           <Button
             variant="primary"
@@ -158,7 +156,7 @@ export function PageForm(props: Props) {
             disabled={isSubmitDisabled || isTitleLengthMoreThan255Character}
             tabIndex={getIndex("submit")}
           >
-            {isSubmitting ? "Creating" : "Create Page"}
+            {isSubmitting ? "创建中" : "创建笔记"}
           </Button>
         </div>
       </div>

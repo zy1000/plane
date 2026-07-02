@@ -88,11 +88,11 @@ const CONTENT_VARIETY: {
 }[] = [
   {
     key: "everything",
-    label: "Everything",
+    label: "全部内容",
   },
   {
     key: "no-assets",
-    label: "No images",
+    label: "不包含图片",
   },
 ];
 
@@ -185,16 +185,16 @@ export function ExportPageModal(props: Props) {
       }
       setToast({
         type: TOAST_TYPE.SUCCESS,
-        title: "Success!",
-        message: "Page exported successfully.",
+        title: "成功！",
+        message: "笔记导出成功。",
       });
       handleClose();
     } catch (error) {
       console.error("Error in exporting page:", error);
       setToast({
         type: TOAST_TYPE.ERROR,
-        title: "Error!",
-        message: "Page could not be exported. Please try again later.",
+        title: "错误！",
+        message: "笔记导出失败，请稍后重试。",
       });
     } finally {
       setIsExporting(false);
@@ -205,10 +205,10 @@ export function ExportPageModal(props: Props) {
     <ModalCore isOpen={isOpen} handleClose={handleClose} position={EModalPosition.CENTER} width={EModalWidth.SM}>
       <div>
         <div className="space-y-5 p-5">
-          <h3 className="text-18 font-medium text-secondary">Export page</h3>
+          <h3 className="text-18 font-medium text-secondary">导出笔记</h3>
           <div className="space-y-3">
             <div className="flex items-center justify-between gap-2">
-              <h6 className="flex-shrink-0 text-13 text-secondary">Export format</h6>
+              <h6 className="flex-shrink-0 text-13 text-secondary">导出格式</h6>
               <Controller
                 control={control}
                 name="export_format"
@@ -231,7 +231,7 @@ export function ExportPageModal(props: Props) {
               />
             </div>
             <div className="flex items-center justify-between gap-2">
-              <h6 className="flex-shrink-0 text-13 text-secondary">Include content</h6>
+              <h6 className="flex-shrink-0 text-13 text-secondary">包含内容</h6>
               <Controller
                 control={control}
                 name="content_variety"
@@ -255,7 +255,7 @@ export function ExportPageModal(props: Props) {
             </div>
             {isPDFSelected && (
               <div className="flex items-center justify-between gap-2">
-                <h6 className="flex-shrink-0 text-13 text-secondary">Page format</h6>
+                <h6 className="flex-shrink-0 text-13 text-secondary">纸张格式</h6>
                 <Controller
                   control={control}
                   name="page_format"
@@ -282,10 +282,10 @@ export function ExportPageModal(props: Props) {
         </div>
         <div className="flex items-center justify-end gap-2 border-t-[0.5px] border-subtle px-5 py-4">
           <Button variant="secondary" size="lg" onClick={handleClose}>
-            Cancel
+            取消
           </Button>
           <Button variant="primary" size="lg" loading={isExporting} onClick={handleExport}>
-            {isExporting ? "Exporting" : "Export"}
+            {isExporting ? "导出中" : "导出"}
           </Button>
         </div>
       </div>

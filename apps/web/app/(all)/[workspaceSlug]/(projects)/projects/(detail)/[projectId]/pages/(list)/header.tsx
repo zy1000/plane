@@ -53,8 +53,8 @@ export const PagesListHeader = observer(function PagesListHeader() {
       .catch((err) => {
         setToast({
           type: TOAST_TYPE.ERROR,
-          title: "Error!",
-          message: err?.data?.error || "Page could not be created. Please try again.",
+          title: "错误！",
+          message: err?.data?.error || "笔记创建失败，请重试。",
         });
       })
       .finally(() => setIsCreatingPage(false));
@@ -68,7 +68,7 @@ export const PagesListHeader = observer(function PagesListHeader() {
           <Breadcrumbs.Item
             component={
               <BreadcrumbLink
-                label="Pages"
+                label="Notes"
                 href={`/${workspaceSlug}/projects/${currentProjectDetails?.id}/pages/`}
                 icon={<PageIcon className="h-4 w-4 text-tertiary" />}
                 isLast
@@ -87,7 +87,7 @@ export const PagesListHeader = observer(function PagesListHeader() {
           disabled={!canCurrentUserCreatePage || isCreatingPage}
           data-ph-element={PROJECT_TRACKER_ELEMENTS.CREATE_HEADER_BUTTON}
         >
-          {isCreatingPage ? "Adding" : "添加笔记"}
+          {isCreatingPage ? "添加中" : "添加笔记"}
         </Button>
       </Header.RightItem>
     </Header>

@@ -11,24 +11,42 @@ import { DATE_BEFORE_FILTER_OPTIONS } from "@plane/constants";
 import { isInDateFormat } from "@plane/utils";
 // components
 import { DateFilterModal } from "@/components/core/filters/date-filter-modal";
+import type { TDateFilterModalLabels } from "@/components/core/filters/date-filter-modal";
 import { FilterHeader, FilterOption } from "@/components/issues/issue-layouts/filters";
 
 type Props = {
   appliedFilters: string[] | null;
+  customLabel?: string;
+  dateModalLabels?: TDateFilterModalLabels;
   handleUpdate: (val: string | string[]) => void;
+  noMatchesLabel?: string;
+  optionLabels?: Record<string, string>;
   searchQuery: string;
+  title?: string;
 };
 
 export const FilterCreatedDate = observer(function FilterCreatedDate(props: Props) {
-  const { appliedFilters, handleUpdate, searchQuery } = props;
+  const {
+    appliedFilters,
+    customLabel = "Custom",
+    dateModalLabels,
+    handleUpdate,
+    noMatchesLabel = "No matches found",
+    optionLabels,
+    searchQuery,
+    title = "Created date",
+  } = props;
 
   const [previewEnabled, setPreviewEnabled] = useState(true);
   const [isDateFilterModalOpen, setIsDateFilterModalOpen] = useState(false);
 
   const appliedFiltersCount = appliedFilters?.length ?? 0;
 
+  const getOptionLabel = (option: (typeof DATE_BEFORE_FILTER_OPTIONS)[number]) =>
+    optionLabels?.[option.value] ?? option.name;
+
   const filteredOptions = DATE_BEFORE_FILTER_OPTIONS.filter((d) =>
-    d.name.toLowerCase().includes(searchQuery.toLowerCase())
+    getOptionLabel(d).toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const isCustomDateSelected = () => {
@@ -48,12 +66,13 @@ export const FilterCreatedDate = observer(function FilterCreatedDate(props: Prop
         <DateFilterModal
           handleClose={() => setIsDateFilterModalOpen(false)}
           isOpen={isDateFilterModalOpen}
+          labels={dateModalLabels}
           onSelect={(val) => handleUpdate(val)}
-          title="Created date"
+          title={title}
         />
       )}
       <FilterHeader
-        title={`Created date${appliedFiltersCount > 0 ? ` (${appliedFiltersCount})` : ""}`}
+        title={`${title}${appliedFiltersCount > 0 ? ` (${appliedFiltersCount})` : ""}`}
         isPreviewEnabled={previewEnabled}
         handleIsPreviewEnabled={() => setPreviewEnabled(!previewEnabled)}
       />
@@ -66,14 +85,19 @@ export const FilterCreatedDate = observer(function FilterCreatedDate(props: Prop
                   key={option.value}
                   isChecked={appliedFilters?.includes(option.value) ? true : false}
                   onClick={() => handleUpdate(option.value)}
-                  title={option.name}
+                  title={getOptionLabel(option)}
                   multiple
                 />
               ))}
-              <FilterOption isChecked={isCustomDateSelected()} onClick={handleCustomDate} title="Custom" multiple />
+              <FilterOption
+                isChecked={isCustomDateSelected()}
+                onClick={handleCustomDate}
+                title={customLabel}
+                multiple
+              />
             </>
           ) : (
-            <p className="text-11 text-placeholder italic">No matches found</p>
+            <p className="text-11 text-placeholder italic">{noMatchesLabel}</p>
           )}
         </div>
       )}

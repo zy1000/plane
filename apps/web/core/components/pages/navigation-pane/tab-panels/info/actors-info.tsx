@@ -47,7 +47,7 @@ export const PageNavigationPaneInfoTabActorsInfo = observer(function PageNavigat
             />
             <span>{editorInformation?.display_name ?? t("common.deactivated_user")}</span>
           </Link>
-          <span className="flex-shrink-0 text-tertiary">{calculateTimeAgoShort(page.updated_at ?? "")} ago</span>
+          <span className="flex-shrink-0 text-tertiary">{calculateTimeAgoShort(page.updated_at ?? "")}前</span>
         </div>
       </div>
       <div>

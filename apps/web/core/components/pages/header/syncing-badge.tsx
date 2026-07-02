@@ -36,15 +36,14 @@ export function PageSyncingBadge({ syncStatus }: Props) {
 
   const badgeContent = {
     syncing: {
-      label: "Syncing...",
-      tooltipHeading: "Syncing...",
-      tooltipContent: "Your changes are being synced with the server. You can continue making changes.",
+      label: "同步中...",
+      tooltipHeading: "同步中...",
+      tooltipContent: "你的更改正在同步到服务器，可以继续编辑。",
     },
     error: {
-      label: "Connection lost",
-      tooltipHeading: "Connection lost",
-      tooltipContent:
-        "We're having trouble connecting to the websocket server. Your changes will be synced and saved every 10 seconds.",
+      label: "连接已断开",
+      tooltipHeading: "连接已断开",
+      tooltipContent: "当前无法连接到 websocket 服务器，你的更改会每 10 秒尝试同步并保存。",
     },
   };
 

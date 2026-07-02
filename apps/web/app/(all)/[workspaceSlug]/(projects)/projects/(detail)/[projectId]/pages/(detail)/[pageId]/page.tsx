@@ -161,15 +161,15 @@ function PageDetailsPage({ params }: Route.ComponentProps) {
   if (pageDetailsError || !canCurrentUserAccessPage)
     return (
       <div className="flex h-full w-full flex-col items-center justify-center">
-        <h3 className="text-center text-16 font-semibold">Page not found</h3>
+        <h3 className="text-center text-16 font-semibold">笔记未找到</h3>
         <p className="mt-3 text-center text-13 text-secondary">
-          The page you are trying to access doesn{"'"}t exist or you don{"'"}t have permission to view it.
+          你要访问的笔记不存在，或你没有权限查看。
         </p>
         <Link
           href={`/${workspaceSlug}/projects/${projectId}/pages`}
           className={cn(getButtonStyling("secondary", "base"), "mt-5")}
         >
-          View other Pages
+          查看其他笔记
         </Link>
       </div>
     );

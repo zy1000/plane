@@ -20,15 +20,15 @@ type TPageTabNavigation = {
 const pageTabs: { key: TPageNavigationTabs; label: string }[] = [
   {
     key: "public",
-    label: "Public",
+    label: "公开",
   },
   {
     key: "private",
-    label: "Private",
+    label: "私有",
   },
   {
     key: "archived",
-    label: "Archived",
+    label: "已归档",
   },
 ];
 

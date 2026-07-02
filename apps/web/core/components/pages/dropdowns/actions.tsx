@@ -87,7 +87,7 @@ export const PageActions = observer(function PageActions(props: Props) {
           action: () => {
             pageOperations.toggleLock();
           },
-          title: is_locked ? "Unlock" : "Lock",
+          title: is_locked ? "解锁" : "锁定",
           icon: is_locked ? LockKeyholeOpen : LockKeyhole,
           shouldRender: !archived_at,
           disabled: !canCurrentUserLockPage,
@@ -97,7 +97,7 @@ export const PageActions = observer(function PageActions(props: Props) {
           action: () => {
             pageOperations.toggleAccess();
           },
-          title: access === EPageAccess.PUBLIC ? "Make private" : "Make public",
+          title: access === EPageAccess.PUBLIC ? "设为私有" : "设为公开",
           icon: access === EPageAccess.PUBLIC ? LockIcon : GlobeIcon,
           shouldRender: !archived_at,
           disabled: !canCurrentUserChangeAccess,
@@ -105,14 +105,14 @@ export const PageActions = observer(function PageActions(props: Props) {
         {
           key: "open-in-new-tab",
           action: pageOperations.openInNewTab,
-          title: "Open in new tab",
+          title: "在新标签页打开",
           icon: NewTabIcon,
           shouldRender: true,
         },
         {
           key: "copy-link",
           action: pageOperations.copyLink,
-          title: "Copy link",
+          title: "复制链接",
           icon: LinkIcon,
           shouldRender: true,
         },
@@ -121,7 +121,7 @@ export const PageActions = observer(function PageActions(props: Props) {
           action: () => {
             pageOperations.duplicate();
           },
-          title: "Make a copy",
+          title: "复制笔记",
           icon: CopyIcon,
           shouldRender: true,
           disabled: !canCurrentUserDuplicatePage,
@@ -131,7 +131,7 @@ export const PageActions = observer(function PageActions(props: Props) {
           action: () => {
             pageOperations.toggleArchive();
           },
-          title: archived_at ? "Restore" : "Archive",
+          title: archived_at ? "恢复" : "归档",
           icon: archived_at ? ArchiveRestoreIcon : ArchiveIcon,
           shouldRender: true,
           disabled: !canCurrentUserArchivePage,
@@ -141,7 +141,7 @@ export const PageActions = observer(function PageActions(props: Props) {
           action: () => {
             setDeletePageModal(true);
           },
-          title: "Delete",
+          title: "删除",
           icon: TrashIcon,
           shouldRender: !!archived_at,
           disabled: !canCurrentUserDeletePage,
@@ -149,7 +149,7 @@ export const PageActions = observer(function PageActions(props: Props) {
         {
           key: "move",
           action: () => setMovePageModal(true),
-          title: "Move",
+          title: "移动",
           icon: FileOutput,
           shouldRender: isMovePageEnabled,
           disabled: !canCurrentUserMovePage,

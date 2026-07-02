@@ -51,15 +51,15 @@ export const PageDownloadControl = observer(function PageDownloadControl({ page 
       );
       setToast({
         type: TOAST_TYPE.SUCCESS,
-        title: "Success!",
-        message: "Page downloaded as Markdown.",
+        title: "成功！",
+        message: "笔记已下载为 Markdown。",
       });
     } catch (error) {
       console.error("Error in downloading page markdown:", error);
       setToast({
         type: TOAST_TYPE.ERROR,
-        title: "Error!",
-        message: "Page could not be downloaded. Please try again later.",
+        title: "错误！",
+        message: "笔记下载失败，请稍后重试。",
       });
     } finally {
       setIsDownloading(false);
@@ -67,7 +67,7 @@ export const PageDownloadControl = observer(function PageDownloadControl({ page 
   }, [editorRef, name, replaceCustomComponentsFromMarkdownContent]);
 
   return (
-    <Tooltip tooltipContent="Download markdown" position="bottom">
+    <Tooltip tooltipContent="下载 Markdown" position="bottom">
       <IconButton
         variant="ghost"
         size="lg"
@@ -75,7 +75,7 @@ export const PageDownloadControl = observer(function PageDownloadControl({ page 
         onClick={handleDownload}
         loading={isDownloading}
         disabled={!editorRef}
-        aria-label="Download markdown"
+        aria-label="下载 Markdown"
       />
     </Tooltip>
   );

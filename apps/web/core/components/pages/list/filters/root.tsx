@@ -65,7 +65,7 @@ export const PageFiltersSelection = observer(function PageFiltersSelection(props
             ref={inputRef}
             type="text"
             className="w-full outline-none placeholder:text-placeholder"
-            placeholder="Search"
+            placeholder="搜索"
             value={filtersSearchQuery}
             onChange={(e) => setFiltersSearchQuery(e.target.value)}
           />
@@ -86,7 +86,7 @@ export const PageFiltersSelection = observer(function PageFiltersSelection(props
                 favorites: !filters.filters?.favorites,
               })
             }
-            title="Favorites"
+            title="收藏"
           />
         </div>
 
@@ -96,6 +96,21 @@ export const PageFiltersSelection = observer(function PageFiltersSelection(props
             appliedFilters={filters.filters?.created_at ?? null}
             handleUpdate={(val) => handleFilters("created_at", val)}
             searchQuery={filtersSearchQuery}
+            title="创建时间"
+            customLabel="自定义"
+            noMatchesLabel="未找到匹配项"
+            optionLabels={{
+              "1_weeks;before;fromnow": "1 周前",
+              "2_weeks;before;fromnow": "2 周前",
+              "1_months;before;fromnow": "1 个月前",
+            }}
+            dateModalLabels={{
+              before: "早于",
+              after: "晚于",
+              range: "范围",
+              cancel: "取消",
+              apply: "应用",
+            }}
           />
         </div>
 
@@ -106,6 +121,11 @@ export const PageFiltersSelection = observer(function PageFiltersSelection(props
             handleUpdate={(val) => handleFilters("created_by", val)}
             searchQuery={filtersSearchQuery}
             memberIds={memberIds}
+            title="创建人"
+            currentUserLabel="你"
+            viewLessLabel="收起"
+            viewAllLabel="查看全部"
+            noMatchesLabel="未找到匹配项"
           />
         </div>
       </div>
