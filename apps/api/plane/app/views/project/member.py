@@ -71,19 +71,68 @@ class ProjectMemberViewSet(BaseViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        member_ids = []
+        member_role_ids = {}
+        requested_role_ids = set()
+        for member in members:
+            member_id = member.get("member_id")
+            if not member_id:
+                return Response(
+                    {"error": "Member is required"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            role_ids = member.get("role_ids", member.get("custom_role_ids", []))
+            if not isinstance(role_ids, list):
+                return Response(
+                    {"error": "role_ids must be a list"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            normalized_role_ids = list(
+                dict.fromkeys(str(role_id) for role_id in role_ids if role_id)
+            )
+            if not normalized_role_ids:
+                return Response(
+                    {"error": "At least one role is required for each member"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            normalized_member_id = str(member_id)
+            member_ids.append(normalized_member_id)
+            member_role_ids[normalized_member_id] = normalized_role_ids
+            requested_role_ids.update(normalized_role_ids)
+
+        valid_roles = list(
+            ProjectRole.objects.filter(
+                pk__in=requested_role_ids,
+                project_id=project_id,
+            )
+        )
+        valid_role_by_id = {str(role.id): role for role in valid_roles}
+        invalid_role_ids = sorted(
+            requested_role_ids.difference(valid_role_by_id.keys())
+        )
+        if invalid_role_ids:
+            return Response(
+                {"error": f"Invalid role IDs: {', '.join(invalid_role_ids)}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         # Initialize the bulk arrays
         bulk_project_members = []
         bulk_issue_props = []
 
         # Create a dictionary of the member_id and their roles
         member_roles = {
-            member.get("member_id"): member.get("role") for member in members
+            str(member.get("member_id")): member.get("role", ROLE.MEMBER.value)
+            for member in members
         }
 
         # Update roles in the members array based on the member_roles dictionary and set is_active to True
         for project_member in ProjectMember.objects.filter(
             project_id=project_id,
-            member_id__in=[member.get("member_id") for member in members],
+            member_id__in=member_ids,
         ):
             project_member.role = member_roles[str(project_member.member_id)]
             project_member.is_active = True
@@ -98,7 +147,7 @@ class ProjectMemberViewSet(BaseViewSet):
         member_sort_orders = (
             ProjectUserProperty.objects.filter(
                 workspace__slug=slug,
-                user_id__in=[member.get("member_id") for member in members],
+                user_id__in=member_ids,
             )
             .values("user_id")
             .annotate(min_sort_order=Min("sort_order"))
@@ -145,8 +194,59 @@ class ProjectMemberViewSet(BaseViewSet):
 
         project_members = ProjectMember.objects.filter(
             project_id=project_id,
-            member_id__in=[member.get("member_id") for member in members],
+            member_id__in=member_ids,
         )
+        project_members_by_member_id = {
+            str(project_member.member_id): project_member for project_member in project_members
+        }
+        project_member_ids = [project_member.id for project_member in project_members]
+
+        for project_member in project_members:
+            role_ids = member_role_ids.get(str(project_member.member_id), [])
+            ProjectMemberRole.objects.filter(
+                member=project_member,
+                deleted_at__isnull=True,
+            ).exclude(role_id__in=role_ids).delete(soft=False)
+
+        existing_role_ids_by_project_member_id = {}
+        existing_role_rows = ProjectMemberRole.objects.filter(
+            member_id__in=project_member_ids,
+            deleted_at__isnull=True,
+            role__deleted_at__isnull=True,
+        ).values_list("member_id", "role_id")
+        for project_member_id, role_id in existing_role_rows:
+            existing_role_ids_by_project_member_id.setdefault(project_member_id, set()).add(str(role_id))
+
+        project_member_roles = []
+        for member_id, role_ids in member_role_ids.items():
+            project_member = project_members_by_member_id.get(member_id)
+            if not project_member:
+                continue
+            existing_role_ids = existing_role_ids_by_project_member_id.get(
+                project_member.id, set()
+            )
+            project_member_roles.extend(
+                ProjectMemberRole(
+                    member=project_member,
+                    role=valid_role_by_id[role_id],
+                    project_id=project_id,
+                    workspace_id=project.workspace_id,
+                    created_by=request.user,
+                    updated_by=request.user,
+                )
+                for role_id in role_ids
+                if role_id not in existing_role_ids
+            )
+
+        if project_member_roles:
+            ProjectMemberRole.objects.bulk_create(
+                project_member_roles, ignore_conflicts=True
+            )
+
+        project_members = ProjectMember.objects.filter(
+            project_id=project_id,
+            member_id__in=member_ids,
+        ).prefetch_related(ACTIVE_MEMBER_ROLES_PREFETCH)
         # Send emails to notify the users
         [
             project_add_user_email.delay(

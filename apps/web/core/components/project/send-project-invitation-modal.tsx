@@ -54,7 +54,7 @@ export const SendProjectInvitationModal = observer(function SendProjectInvitatio
   const { t } = useTranslation();
   // store hooks
   const {
-    project: { getProjectMemberDetails, bulkAddMembersToProject, updateMemberCustomRoles },
+    project: { getProjectMemberDetails, bulkAddMembersToProject },
     workspace: { workspaceMemberIds, getWorkspaceMemberDetails },
   } = useMember();
   const { roles, isLoading: isRolesLoading, fetchRoles } = useProjectRoles(workspaceSlug, projectId);
@@ -83,24 +83,18 @@ export const SendProjectInvitationModal = observer(function SendProjectInvitatio
       members: formData.members.map((m) => ({
         member_id: m.member_id,
         role: EUserProjectRoles.MEMBER,
+        role_ids: m.role_ids,
       })),
     };
 
     await bulkAddMembersToProject(workspaceSlug.toString(), projectId.toString(), payload)
-      .then(async () => {
-        // Assign custom roles for members that have role_ids selected
-        const withRoles = formData.members.filter((m) => m.role_ids.length > 0);
-        await Promise.allSettled(
-          withRoles.map((m) =>
-            updateMemberCustomRoles(workspaceSlug.toString(), projectId.toString(), m.member_id, m.role_ids)
-          )
-        );
+      .then(() => {
         if (onSuccess) onSuccess();
         onClose();
         setToast({
-          title: "Success!",
+          title: "成功",
           type: TOAST_TYPE.SUCCESS,
-          message: "Members added successfully.",
+          message: "成员添加成功。",
         });
       })
       .catch((error) => {
@@ -116,7 +110,7 @@ export const SendProjectInvitationModal = observer(function SendProjectInvitatio
           setToast({
             type: TOAST_TYPE.ERROR,
             title: t("common.error.label"),
-            message: "Something went wrong. Please try again.",
+            message: "出现错误，请重试。",
           });
         }
       })
@@ -212,7 +206,7 @@ export const SendProjectInvitationModal = observer(function SendProjectInvitatio
                   <Controller
                     control={control}
                     name={`members.${index}.member_id`}
-                    rules={{ required: "Please select a member" }}
+                    rules={{ required: "请选择成员" }}
                     render={({ field: { value, onChange } }) => {
                       const selectedMember = getWorkspaceMemberDetails(value);
                       return (
@@ -229,7 +223,7 @@ export const SendProjectInvitationModal = observer(function SendProjectInvitatio
                                   {selectedMember?.member.display_name}
                                 </div>
                               ) : (
-                                <div className="flex items-center gap-2 py-0.5">Select co-worker</div>
+                                <div className="flex items-center gap-2 py-0.5">选择成员</div>
                               )}
                               <ChevronDownIcon className="h-3 w-3" aria-hidden="true" />
                             </button>
@@ -255,7 +249,11 @@ export const SendProjectInvitationModal = observer(function SendProjectInvitatio
                     <Controller
                       name={`members.${index}.role_ids`}
                       control={control}
-                      render={({ field }) => {
+                      rules={{
+                        validate: (value) =>
+                          Array.isArray(value) && value.length > 0 ? true : "请至少选择一个角色",
+                      }}
+                      render={({ field, fieldState: { error } }) => {
                         const selectedIds = field.value ?? [];
                         const selectedNames = roles
                           .filter((r) => selectedIds.includes(r.id))
@@ -286,7 +284,11 @@ export const SendProjectInvitationModal = observer(function SendProjectInvitatio
                             containerClassName="w-36"
                             optionsContainerClassName="w-52"
                             buttonContent={() => (
-                              <div className="shadow-sm flex w-36 items-center justify-between gap-1 rounded-md border border-subtle px-3 py-2.5 text-left text-13 text-secondary duration-300 hover:bg-layer-1 hover:text-primary focus:outline-none">
+                              <div
+                                className={`shadow-sm flex w-36 items-center justify-between gap-1 rounded-md border px-3 py-2.5 text-left text-13 text-secondary duration-300 hover:bg-layer-1 hover:text-primary focus:outline-none ${
+                                  error?.message ? "border-danger-strong" : "border-subtle"
+                                }`}
+                              >
                                 {buttonLabel}
                                 <ChevronDown className="h-3 w-3 flex-shrink-0" aria-hidden="true" />
                               </div>
@@ -305,6 +307,11 @@ export const SendProjectInvitationModal = observer(function SendProjectInvitatio
                         );
                       }}
                     />
+                    {errors.members && errors.members[index]?.role_ids && (
+                      <span className="px-1 text-13 text-danger-primary">
+                        {errors.members[index]?.role_ids?.message}
+                      </span>
+                    )}
                   </div>
 
                   {fields.length > 1 && (

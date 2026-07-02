@@ -157,7 +157,7 @@ export type TProjectMembership = {
 );
 
 export interface IProjectBulkAddFormData {
-  members: { role: TUserPermissions | EUserProjectRoles; member_id: string }[];
+  members: { role: TUserPermissions | EUserProjectRoles; member_id: string; role_ids: string[] }[];
 }
 
 export type IProjectMemberNavigationPreferences = {
