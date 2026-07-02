@@ -4,7 +4,6 @@
  * See the LICENSE file for details.
  */
 
-import { useEffect, useState } from "react";
 import { mutate } from "swr";
 // types
 import {
@@ -21,7 +20,6 @@ import { EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
 // hooks
 import { renderFormattedPayloadDate } from "@plane/utils";
 import { useCycle } from "@/hooks/store/use-cycle";
-import { useProject } from "@/hooks/store/use-project";
 import { useUserPermissions } from "@/hooks/store/user";
 import useKeypress from "@/hooks/use-keypress";
 import useLocalStorage from "@/hooks/use-local-storage";
@@ -44,10 +42,7 @@ const cycleService = new CycleService();
 
 export function CycleCreateUpdateModal(props: CycleModalProps) {
   const { isOpen, handleClose, data, workspaceSlug, projectId } = props;
-  // states
-  const [activeProject, setActiveProject] = useState<string | null>(null);
   // store hooks
-  const { workspaceProjectIds } = useProject();
   const { createCycle, updateCycleDetails } = useCycle();
   const { allowProjectPermissionKeys } = useUserPermissions();
   const { t } = useTranslation();
@@ -196,27 +191,6 @@ export function CycleCreateUpdateModal(props: CycleModalProps) {
       });
   };
 
-  useEffect(() => {
-    // if modal is closed, reset active project to null
-    // and return to avoid activeProject being set to some other project
-    if (!isOpen) {
-      setActiveProject(null);
-      return;
-    }
-
-    // if data is present, set active project to the project of the
-    // issue. This has more priority than the project in the url.
-    if (data && data.project_id) {
-      setActiveProject(data.project_id);
-      return;
-    }
-
-    // if data is not present, set active project to the project
-    // in the url. This has the least priority.
-    if (workspaceProjectIds && workspaceProjectIds.length > 0 && !activeProject)
-      setActiveProject(projectId ?? workspaceProjectIds?.[0] ?? null);
-  }, [activeProject, data, projectId, workspaceProjectIds, isOpen]);
-
   useKeypress("Escape", () => {
     if (isOpen) handleClose();
   });
@@ -232,8 +206,7 @@ export function CycleCreateUpdateModal(props: CycleModalProps) {
         handleClose={handleClose}
         status={!!data}
         workspaceSlug={workspaceSlug}
-        projectId={activeProject ?? ""}
-        setActiveProject={setActiveProject}
+        projectId={projectId}
         data={data}
         isMobile={isMobile}
         isSubmitDisabled={!canSubmit}

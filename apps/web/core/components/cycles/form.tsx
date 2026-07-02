@@ -19,9 +19,6 @@ import { getDate, renderFormattedPayloadDate, getTabIndex } from "@plane/utils";
 import { CycleRichTextEditor } from "@/components/cycles/cycle-rich-text-editor";
 import { DateDropdown } from "@/components/dropdowns/date";
 import { DateRangeDropdown } from "@/components/dropdowns/date-range";
-import { ProjectDropdown } from "@/components/dropdowns/project/dropdown";
-// hooks
-import { useUser } from "@/hooks/store/user/user-user";
 
 type Props = {
   handleFormSubmit: (values: Partial<ICycle>) => Promise<void>;
@@ -29,7 +26,6 @@ type Props = {
   status: boolean;
   workspaceSlug: string;
   projectId: string;
-  setActiveProject: (projectId: string) => void;
   data?: ICycle | null;
   isMobile?: boolean;
   isSubmitDisabled?: boolean;
@@ -58,15 +54,12 @@ export function CycleForm(props: Props) {
     status,
     workspaceSlug,
     projectId,
-    setActiveProject,
     data,
     isMobile = false,
     isSubmitDisabled = false,
   } = props;
   // plane hooks
   const { t } = useTranslation();
-  // store hooks
-  const { projectsWithCreatePermissions } = useUser();
   // form data
   const {
     formState: { errors, isSubmitting },
@@ -102,29 +95,6 @@ export function CycleForm(props: Props) {
     <form onSubmit={handleSubmit((formData) => handleFormSubmit(formData))}>
       <div className="space-y-5 p-5">
         <div className="flex items-center gap-x-3">
-          {!status && (
-            <Controller
-              control={control}
-              name="project_id"
-              render={({ field: { value, onChange } }) => (
-                <div className="h-7">
-                  <ProjectDropdown
-                    value={value}
-                    onChange={(val) => {
-                      if (!Array.isArray(val)) {
-                        onChange(val);
-                        setActiveProject(val);
-                      }
-                    }}
-                    multiple={false}
-                    buttonVariant="border-with-text"
-                    renderCondition={(projectId) => !!projectsWithCreatePermissions?.[projectId]}
-                    tabIndex={getIndex("cover_image")}
-                  />
-                </div>
-              )}
-            />
-          )}
           <h3 className="text-18 font-medium text-secondary">
             {status ? t("project_cycles.update_cycle") : t("project_cycles.create_cycle")}
           </h3>

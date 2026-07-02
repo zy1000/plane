@@ -4,7 +4,6 @@
  * See the LICENSE file for details.
  */
 
-import { useEffect, useState } from "react";
 import { observer } from "mobx-react";
 import { useForm } from "react-hook-form";
 // Plane imports
@@ -17,7 +16,6 @@ import { EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
 import { ModuleForm } from "@/components/modules";
 // hooks
 import { useModule } from "@/hooks/store/use-module";
-import { useProject } from "@/hooks/store/use-project";
 import useKeypress from "@/hooks/use-keypress";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 
@@ -40,10 +38,7 @@ const defaultValues: Partial<IModule> = {
 export const CreateUpdateModuleModal = observer(function CreateUpdateModuleModal(props: Props) {
   const { isOpen, onClose, data, workspaceSlug, projectId } = props;
   const { t } = useTranslation();
-  // states
-  const [activeProject, setActiveProject] = useState<string | null>(null);
   // store hooks
-  const { workspaceProjectIds } = useProject();
   const { createModule, updateModuleDetails } = useModule();
   const { isMobile } = usePlatformOS();
 
@@ -131,27 +126,6 @@ export const CreateUpdateModuleModal = observer(function CreateUpdateModuleModal
     else await handleUpdateModule(payload);
   };
 
-  useEffect(() => {
-    // if modal is closed, reset active project to null
-    // and return to avoid activeProject being set to some other project
-    if (!isOpen) {
-      setActiveProject(null);
-      return;
-    }
-
-    // if data is present, set active project to the project of the
-    // issue. This has more priority than the project in the url.
-    if (data && data.project_id) {
-      setActiveProject(data.project_id);
-      return;
-    }
-
-    // if data is not present, set active project to the project
-    // in the url. This has the least priority.
-    if (workspaceProjectIds && workspaceProjectIds.length > 0 && !activeProject)
-      setActiveProject(projectId ?? workspaceProjectIds?.[0] ?? null);
-  }, [activeProject, data, projectId, workspaceProjectIds, isOpen]);
-
   useKeypress("Escape", () => {
     if (isOpen) handleClose();
   });
@@ -162,8 +136,7 @@ export const CreateUpdateModuleModal = observer(function CreateUpdateModuleModal
         handleFormSubmit={handleFormSubmit}
         handleClose={handleClose}
         status={data ? true : false}
-        projectId={activeProject ?? ""}
-        setActiveProject={setActiveProject}
+        projectId={projectId}
         data={data}
         isMobile={isMobile}
       />

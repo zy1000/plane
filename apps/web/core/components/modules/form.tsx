@@ -17,17 +17,13 @@ import { getDate, renderFormattedPayloadDate, getTabIndex } from "@plane/utils";
 // components
 import { DateRangeDropdown } from "@/components/dropdowns/date-range";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
-import { ProjectDropdown } from "@/components/dropdowns/project/dropdown";
 import { ModuleStatusSelect } from "@/components/modules";
-// hooks
-import { useUser } from "@/hooks/store/user/user-user";
 
 type Props = {
   handleFormSubmit: (values: Partial<IModule>, dirtyFields: any) => Promise<void>;
   handleClose: () => void;
   status: boolean;
   projectId: string;
-  setActiveProject: React.Dispatch<React.SetStateAction<string | null>>;
   data?: IModule;
   isMobile?: boolean;
 };
@@ -41,9 +37,7 @@ const defaultValues: Partial<IModule> = {
 };
 
 export function ModuleForm(props: Props) {
-  const { handleFormSubmit, handleClose, status, projectId, setActiveProject, data, isMobile = false } = props;
-  // store hooks
-  const { projectsWithCreatePermissions } = useUser();
+  const { handleFormSubmit, handleClose, status, projectId, data, isMobile = false } = props;
   // form info
   const {
     formState: { errors, isSubmitting, dirtyFields },
@@ -84,29 +78,6 @@ export function ModuleForm(props: Props) {
     <form onSubmit={handleSubmit(handleCreateUpdateModule)}>
       <div className="space-y-6 p-6">
         <div className="flex items-center gap-x-3">
-          {!status && (
-            <Controller
-              control={control}
-              name="project_id"
-              render={({ field: { value, onChange } }) => (
-                <div className="h-7">
-                  <ProjectDropdown
-                    value={value}
-                    onChange={(val) => {
-                      if (!Array.isArray(val)) {
-                        onChange(val);
-                        setActiveProject(val);
-                      }
-                    }}
-                    multiple={false}
-                    buttonVariant="border-with-text"
-                    renderCondition={(projectId) => !!projectsWithCreatePermissions?.[projectId]}
-                    tabIndex={getIndex("cover_image")}
-                  />
-                </div>
-              )}
-            />
-          )}
           <h3 className="text-18 font-medium text-secondary">
             {status ? t("project_module.update_module") : t("project_module.create_module")}
           </h3>
