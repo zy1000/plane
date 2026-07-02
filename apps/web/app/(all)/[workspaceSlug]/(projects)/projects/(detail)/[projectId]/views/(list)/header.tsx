@@ -8,6 +8,7 @@ import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 // ui
 import { PROJECT_VIEW_TRACKER_ELEMENTS, PROJECT_VIEWS_CREATE_PERMISSION_KEY } from "@plane/constants";
+import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { ViewsIcon } from "@plane/propel/icons";
 import { Breadcrumbs, Header } from "@plane/ui";
@@ -23,6 +24,7 @@ import { CommonProjectBreadcrumbs } from "@/plane-web/components/breadcrumbs/com
 
 export const ProjectViewsHeader = observer(function ProjectViewsHeader() {
   const { workspaceSlug, projectId } = useParams();
+  const { t } = useTranslation();
   // store hooks
   const { toggleCreateViewModal } = useCommandPalette();
   const { loader } = useProject();
@@ -64,7 +66,7 @@ export const ProjectViewsHeader = observer(function ProjectViewsHeader() {
               }}
               disabled={!canCreateView}
             >
-              Add view
+              {t("project_views.add_view")}
             </Button>
           </div>
         </Header.RightItem>

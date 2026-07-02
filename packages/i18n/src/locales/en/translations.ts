@@ -2414,6 +2414,7 @@ export default {
     updated_success: "Release updated successfully.",
   },
   project_views: {
+    add_view: "Add view",
     empty_state: {
       general: {
         title: "Save filtered views for your project. Create as many as you need",

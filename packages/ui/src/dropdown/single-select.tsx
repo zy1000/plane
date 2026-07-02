@@ -150,7 +150,7 @@ export function Dropdown(props: ISingleSelectDropdown) {
 
       {isOpen && (
         <Portal>
-          <Combobox.Options className="z-10" static>
+          <Combobox.Options className="relative z-50" static>
             <div
               data-prevent-outside-click
               className={cn(

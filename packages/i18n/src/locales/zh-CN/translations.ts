@@ -2575,6 +2575,7 @@ export default {
     },
   },
   project_views: {
+    add_view: "添加视图",
     empty_state: {
       general: {
         title: "为您的项目保存筛选视图。根据需要创建任意数量",
