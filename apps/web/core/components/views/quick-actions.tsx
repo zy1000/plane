@@ -8,7 +8,12 @@ import { useState } from "react";
 import { observer } from "mobx-react";
 import { MoreHorizontal } from "lucide-react";
 // types
-import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import {
+  EUserPermissions,
+  EUserPermissionsLevel,
+  PROJECT_VIEWS_DELETE_PERMISSION_KEY,
+  PROJECT_VIEWS_EDIT_PERMISSION_KEY,
+} from "@plane/constants";
 import { IconButton } from "@plane/propel/icon-button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { IProjectView } from "@plane/types";
@@ -40,10 +45,12 @@ export const ViewQuickActions = observer(function ViewQuickActions(props: Props)
   const [deleteViewModal, setDeleteViewModal] = useState(false);
   // store hooks
   const { data } = useUser();
-  const { allowPermissions } = useUserPermissions();
+  const { allowPermissions, allowProjectPermissionKeys } = useUserPermissions();
   // auth
   const isOwner = view?.owned_by === data?.id;
   const isAdmin = allowPermissions([EUserPermissions.ADMIN], EUserPermissionsLevel.PROJECT, workspaceSlug, projectId);
+  const canEditView = allowProjectPermissionKeys([PROJECT_VIEWS_EDIT_PERMISSION_KEY], workspaceSlug, projectId);
+  const canDeleteView = allowProjectPermissionKeys([PROJECT_VIEWS_DELETE_PERMISSION_KEY], workspaceSlug, projectId);
 
   const { isPublishModalOpen, setPublishModalOpen, publishContextMenu } = useViewPublish(
     !!view.anchor,
@@ -64,11 +71,17 @@ export const ViewQuickActions = observer(function ViewQuickActions(props: Props)
   const menuResult = useViewMenuItems({
     isOwner,
     isAdmin,
+    canEditView,
+    canDeleteView,
     workspaceSlug,
     projectId,
     view,
-    handleEdit: () => setCreateUpdateViewModal(true),
-    handleDelete: () => setDeleteViewModal(true),
+    handleEdit: () => {
+      if (canEditView) setCreateUpdateViewModal(true);
+    },
+    handleDelete: () => {
+      if (canDeleteView) setDeleteViewModal(true);
+    },
     handleCopyLink: handleCopyText,
     handleOpenInNewTab,
   });
@@ -83,6 +96,7 @@ export const ViewQuickActions = observer(function ViewQuickActions(props: Props)
     return {
       ...item,
       action: () => {
+        if (item.disabled) return;
         item.action();
       },
     };
@@ -113,6 +127,7 @@ export const ViewQuickActions = observer(function ViewQuickActions(props: Props)
             <CustomMenu.MenuItem
               key={item.key}
               onClick={() => {
+                if (item.disabled) return;
                 item.action();
               }}
               className={cn(

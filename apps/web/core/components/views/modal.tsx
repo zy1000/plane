@@ -5,7 +5,12 @@
  */
 
 import { observer } from "mobx-react";
-import { PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
+import {
+  PROJECT_ERROR_MESSAGES,
+  PROJECT_VIEWS_CREATE_PERMISSION_KEY,
+  PROJECT_VIEWS_EDIT_PERMISSION_KEY,
+  isProjectPermissionError,
+} from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 // types
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
@@ -16,6 +21,7 @@ import { EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
 // hooks
 import { useIssues } from "@/hooks/store/use-issues";
 import { useProjectView } from "@/hooks/store/use-project-view";
+import { useUserPermissions } from "@/hooks/store/user";
 import { useWorkItemFilters } from "@/hooks/store/work-item-filters/use-work-item-filters";
 import { useAppRouter } from "@/hooks/use-app-router";
 import useKeypress from "@/hooks/use-keypress";
@@ -29,15 +35,17 @@ type Props = {
   preLoadedData?: Partial<IProjectView> | null;
   workspaceSlug: string;
   projectId: string;
+  isSubmitDisabled?: boolean;
 };
 
 export const CreateUpdateProjectViewModal = observer(function CreateUpdateProjectViewModal(props: Props) {
-  const { data, isOpen, onClose, preLoadedData, workspaceSlug, projectId } = props;
+  const { data, isOpen, onClose, preLoadedData, workspaceSlug, projectId, isSubmitDisabled = false } = props;
   const { t } = useTranslation();
   // router
   const router = useAppRouter();
   // store hooks
   const { createView, updateView } = useProjectView();
+  const { allowProjectPermissionKeys } = useUserPermissions();
   const {
     issuesFilter: { mutateFilters },
   } = useIssues(EIssuesStoreType.PROJECT_VIEW);
@@ -47,7 +55,26 @@ export const CreateUpdateProjectViewModal = observer(function CreateUpdateProjec
     onClose();
   };
 
+  const canCreateView = allowProjectPermissionKeys([PROJECT_VIEWS_CREATE_PERMISSION_KEY], workspaceSlug, projectId);
+  const canEditView = allowProjectPermissionKeys([PROJECT_VIEWS_EDIT_PERMISSION_KEY], workspaceSlug, projectId);
+  const canSubmit = data ? canEditView : canCreateView;
+  const isSubmitBlocked = isSubmitDisabled || !canSubmit;
+
+  const showPermissionError = () => {
+    setToast({
+      type: TOAST_TYPE.ERROR,
+      title: t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title),
+      message: PROJECT_ERROR_MESSAGES.permissionError.i18n_message
+        ? t(PROJECT_ERROR_MESSAGES.permissionError.i18n_message)
+        : undefined,
+    });
+  };
+
   const handleCreateView = async (payload: IProjectView) => {
+    if (!canCreateView) {
+      showPermissionError();
+      return;
+    }
     try {
       const res = await createView(workspaceSlug, projectId, payload);
       handleClose();
@@ -77,6 +104,10 @@ export const CreateUpdateProjectViewModal = observer(function CreateUpdateProjec
   };
 
   const handleUpdateView = async (payload: IProjectView) => {
+    if (!canEditView) {
+      showPermissionError();
+      return;
+    }
     try {
       const viewDetails = await updateView(workspaceSlug, projectId, data?.id as string, payload);
       mutateFilters(workspaceSlug, viewDetails.id, viewDetails);
@@ -102,6 +133,10 @@ export const CreateUpdateProjectViewModal = observer(function CreateUpdateProjec
   };
 
   const handleFormSubmit = async (formData: IProjectView) => {
+    if (isSubmitBlocked) {
+      showPermissionError();
+      return;
+    }
     if (!data) await handleCreateView(formData);
     else await handleUpdateView(formData);
   };
@@ -118,6 +153,7 @@ export const CreateUpdateProjectViewModal = observer(function CreateUpdateProjec
         handleFormSubmit={handleFormSubmit}
         preLoadedData={preLoadedData}
         projectId={projectId}
+        isSubmitDisabled={isSubmitBlocked}
         workspaceSlug={workspaceSlug}
       />
     </ModalCore>

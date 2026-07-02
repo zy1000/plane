@@ -52,6 +52,8 @@ export const WorkspaceViewQuickActions = observer(function WorkspaceViewQuickAct
   const MENU_ITEMS = useViewMenuItems({
     isOwner,
     isAdmin,
+    canEditView: true,
+    canDeleteView: true,
     handleDelete: () => setDeleteViewModal(true),
     handleEdit: () => setUpdateViewModal(true),
     handleOpenInNewTab,

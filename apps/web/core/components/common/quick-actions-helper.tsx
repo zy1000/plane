@@ -69,6 +69,8 @@ interface UseReleaseMenuItemsProps {
 interface UseViewMenuItemsProps {
   isOwner: boolean;
   isAdmin: boolean;
+  canEditView: boolean;
+  canDeleteView: boolean;
   workspaceSlug: string;
   projectId?: string;
   view: IProjectView | IWorkspaceView;
@@ -250,16 +252,19 @@ export const useReleaseMenuItems = (props: UseReleaseMenuItemsProps): MenuResult
 
 export const useViewMenuItems = (props: UseViewMenuItemsProps): MenuResult => {
   const factory = useQuickActionsFactory();
-  const { workspaceSlug, isOwner, isAdmin, projectId, view, ...handlers } = props;
+  const { workspaceSlug, isOwner, isAdmin, canEditView, canDeleteView, projectId, view, ...handlers } = props;
 
   if (!view) return { items: [], modals: null };
 
+  const editDescription = !canEditView ? "您没有编辑视图的权限" : undefined;
+  const deleteDescription = !canDeleteView ? "您没有删除视图的权限" : undefined;
+
   // Assemble final menu items - order defined here
   const items = [
-    factory.createEditMenuItem(handlers.handleEdit, isOwner),
+    factory.createEditMenuItem(handlers.handleEdit, isOwner, !canEditView, editDescription),
     factory.createOpenInNewTabMenuItem(handlers.handleOpenInNewTab),
     factory.createCopyLinkMenuItem(handlers.handleCopyLink),
-    factory.createDeleteMenuItem(handlers.handleDelete, isOwner || isAdmin),
+    factory.createDeleteMenuItem(handlers.handleDelete, isOwner || isAdmin, !canDeleteView, deleteDescription),
   ].filter((item) => item.shouldRender !== false);
 
   return { items, modals: null };

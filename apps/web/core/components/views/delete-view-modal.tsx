@@ -7,7 +7,11 @@
 import { useState } from "react";
 import { observer } from "mobx-react";
 import { useParams, useRouter } from "next/navigation";
-import { PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
+import {
+  PROJECT_ERROR_MESSAGES,
+  PROJECT_VIEWS_DELETE_PERMISSION_KEY,
+  isProjectPermissionError,
+} from "@plane/constants";
 // types
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
@@ -16,6 +20,7 @@ import type { IProjectView } from "@plane/types";
 import { AlertModalCore } from "@plane/ui";
 // hooks
 import { useProjectView } from "@/hooks/store/use-project-view";
+import { useUserPermissions } from "@/hooks/store/user";
 
 type Props = {
   data: IProjectView;
@@ -32,7 +37,13 @@ export const DeleteProjectViewModal = observer(function DeleteProjectViewModal(p
   const router = useRouter();
   // store hooks
   const { deleteView } = useProjectView();
+  const { allowProjectPermissionKeys } = useUserPermissions();
   const { t } = useTranslation();
+  const canDeleteView = allowProjectPermissionKeys(
+    [PROJECT_VIEWS_DELETE_PERMISSION_KEY],
+    workspaceSlug?.toString(),
+    projectId?.toString()
+  );
   const handleClose = () => {
     onClose();
     setIsDeleteLoading(false);
@@ -40,6 +51,16 @@ export const DeleteProjectViewModal = observer(function DeleteProjectViewModal(p
 
   const handleDeleteView = async () => {
     if (!workspaceSlug || !projectId) return;
+    if (!canDeleteView) {
+      setToast({
+        type: TOAST_TYPE.ERROR,
+        title: t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title),
+        message: PROJECT_ERROR_MESSAGES.permissionError.i18n_message
+          ? t(PROJECT_ERROR_MESSAGES.permissionError.i18n_message)
+          : undefined,
+      });
+      return;
+    }
     try {
       setIsDeleteLoading(true);
       await deleteView(workspaceSlug.toString(), projectId.toString(), data.id);
@@ -74,6 +95,7 @@ export const DeleteProjectViewModal = observer(function DeleteProjectViewModal(p
     <AlertModalCore
       handleClose={handleClose}
       handleSubmit={handleDeleteView}
+      isSubmitDisabled={!canDeleteView}
       isSubmitting={isDeleteLoading}
       isOpen={isOpen}
       title={t("project_views.delete_view.title")}

@@ -8,10 +8,16 @@ import { useCallback, useMemo, useState } from "react";
 import { isEqual, cloneDeep } from "lodash-es";
 import { observer } from "mobx-react";
 // plane imports
-import { EUserPermissionsLevel } from "@plane/constants";
+import {
+  PROJECT_ERROR_MESSAGES,
+  PROJECT_VIEWS_CREATE_PERMISSION_KEY,
+  PROJECT_VIEWS_EDIT_PERMISSION_KEY,
+  isProjectPermissionError,
+} from "@plane/constants";
+import { useTranslation } from "@plane/i18n";
 import { setToast, TOAST_TYPE } from "@plane/propel/toast";
 import type { IProjectView, TWorkItemFilterExpression } from "@plane/types";
-import { EUserProjectRoles, EViewAccess } from "@plane/types";
+import { EViewAccess } from "@plane/types";
 // components
 import { removeNillKeys } from "@/components/issues/issue-layouts/utils";
 import { CreateUpdateProjectViewModal } from "@/components/views/modal";
@@ -40,6 +46,7 @@ export const ProjectLevelWorkItemFiltersHOC = observer(function ProjectLevelWork
 ) {
   const { children, enableSaveView, enableUpdateView, entityId, initialWorkItemFilters, projectId, workspaceSlug } =
     props;
+  const { t } = useTranslation();
   // states
   const [isCreateViewModalOpen, setIsCreateViewModalOpen] = useState(false);
   const [createViewPayload, setCreateViewPayload] = useState<Partial<IProjectView> | null>(null);
@@ -48,7 +55,7 @@ export const ProjectLevelWorkItemFiltersHOC = observer(function ProjectLevelWork
   const { getViewById, updateView } = useProjectView();
   const { getProjectReleaseIds } = useRelease();
   const { data: currentUser } = useUser();
-  const { allowPermissions } = useUserPermissions();
+  const { allowProjectPermissionKeys } = useUserPermissions();
   const { getProjectCycleIds } = useCycle();
   const { getProjectLabelIds } = useLabel();
   const {
@@ -57,12 +64,12 @@ export const ProjectLevelWorkItemFiltersHOC = observer(function ProjectLevelWork
   const { getProjectModuleIds } = useModule();
   const { getProjectStateIds } = useProjectState();
   // derived values
-  const hasProjectMemberLevelPermissions = allowPermissions(
-    [EUserProjectRoles.ADMIN, EUserProjectRoles.MEMBER],
-    EUserPermissionsLevel.PROJECT,
+  const canCreateProjectView = allowProjectPermissionKeys(
+    [PROJECT_VIEWS_CREATE_PERMISSION_KEY],
     workspaceSlug,
     projectId
   );
+  const canEditProjectView = allowProjectPermissionKeys([PROJECT_VIEWS_EDIT_PERMISSION_KEY], workspaceSlug, projectId);
   const projectDetails = getProjectById(projectId);
   const viewDetails = entityId ? getViewById(entityId) : null;
   const isViewLocked = viewDetails ? viewDetails?.is_locked : false;
@@ -72,26 +79,21 @@ export const ProjectLevelWorkItemFiltersHOC = observer(function ProjectLevelWork
       projectDetails?.issue_views_view === true &&
       enableSaveView &&
       !props.saveViewOptions?.isDisabled &&
-      hasProjectMemberLevelPermissions,
-    [
-      projectDetails?.issue_views_view,
-      enableSaveView,
-      props.saveViewOptions?.isDisabled,
-      hasProjectMemberLevelPermissions,
-    ]
+      canCreateProjectView,
+    [projectDetails?.issue_views_view, enableSaveView, props.saveViewOptions?.isDisabled, canCreateProjectView]
   );
   const canUpdateView = useMemo(
     () =>
       enableUpdateView &&
       !props.updateViewOptions?.isDisabled &&
       !isViewLocked &&
-      hasProjectMemberLevelPermissions &&
+      canEditProjectView &&
       isCurrentUserOwner,
     [
       enableUpdateView,
       props.updateViewOptions?.isDisabled,
       isViewLocked,
-      hasProjectMemberLevelPermissions,
+      canEditProjectView,
       isCurrentUserOwner,
     ]
   );
@@ -128,13 +130,14 @@ export const ProjectLevelWorkItemFiltersHOC = observer(function ProjectLevelWork
 
   const handleViewSave = useCallback(
     (expression: TWorkItemFilterExpression) => {
+      if (!canCreateView) return;
       setCreateViewPayload({
         ...getDefaultViewDetailPayload(),
         ...getViewFilterPayload(expression),
       });
       setIsCreateViewModalOpen(true);
     },
-    [getDefaultViewDetailPayload, getViewFilterPayload]
+    [canCreateView, getDefaultViewDetailPayload, getViewFilterPayload]
   );
 
   const handleViewUpdate = useCallback(
@@ -148,6 +151,16 @@ export const ProjectLevelWorkItemFiltersHOC = observer(function ProjectLevelWork
 
         return;
       }
+      if (!canUpdateView) {
+        setToast({
+          type: TOAST_TYPE.ERROR,
+          title: t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title),
+          message: PROJECT_ERROR_MESSAGES.permissionError.i18n_message
+            ? t(PROJECT_ERROR_MESSAGES.permissionError.i18n_message)
+            : undefined,
+        });
+        return;
+      }
 
       updateView(workspaceSlug, projectId, viewDetails.id, {
         ...getViewFilterPayload(filterExpression),
@@ -159,7 +172,17 @@ export const ProjectLevelWorkItemFiltersHOC = observer(function ProjectLevelWork
             message: "Your view has been updated successfully.",
           });
         })
-        .catch(() => {
+        .catch((error: unknown) => {
+          if (isProjectPermissionError(error)) {
+            setToast({
+              type: TOAST_TYPE.ERROR,
+              title: t(PROJECT_ERROR_MESSAGES.permissionError.i18n_title),
+              message: PROJECT_ERROR_MESSAGES.permissionError.i18n_message
+                ? t(PROJECT_ERROR_MESSAGES.permissionError.i18n_message)
+                : undefined,
+            });
+            return;
+          }
           setToast({
             type: TOAST_TYPE.ERROR,
             title: "Error!",
@@ -167,7 +190,7 @@ export const ProjectLevelWorkItemFiltersHOC = observer(function ProjectLevelWork
           });
         });
     },
-    [viewDetails, updateView, workspaceSlug, projectId, getViewFilterPayload]
+    [viewDetails, canUpdateView, updateView, workspaceSlug, projectId, getViewFilterPayload, t]
   );
 
   const saveViewOptions = useMemo(
@@ -200,6 +223,7 @@ export const ProjectLevelWorkItemFiltersHOC = observer(function ProjectLevelWork
           setCreateViewPayload(null);
           setIsCreateViewModalOpen(false);
         }}
+        isSubmitDisabled={!canCreateView}
       />
       <WorkItemFiltersHOC
         {...props}

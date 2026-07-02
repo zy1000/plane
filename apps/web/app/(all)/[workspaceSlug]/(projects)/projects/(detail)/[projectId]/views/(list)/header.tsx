@@ -7,7 +7,7 @@
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 // ui
-import { PROJECT_VIEW_TRACKER_ELEMENTS } from "@plane/constants";
+import { PROJECT_VIEW_TRACKER_ELEMENTS, PROJECT_VIEWS_CREATE_PERMISSION_KEY } from "@plane/constants";
 import { Button } from "@plane/propel/button";
 import { ViewsIcon } from "@plane/propel/icons";
 import { Breadcrumbs, Header } from "@plane/ui";
@@ -17,6 +17,7 @@ import { ViewListHeader } from "@/components/views/view-list-header";
 // hooks
 import { useCommandPalette } from "@/hooks/store/use-command-palette";
 import { useProject } from "@/hooks/store/use-project";
+import { useUserPermissions } from "@/hooks/store/user";
 // plane web imports
 import { CommonProjectBreadcrumbs } from "@/plane-web/components/breadcrumbs/common";
 
@@ -25,6 +26,12 @@ export const ProjectViewsHeader = observer(function ProjectViewsHeader() {
   // store hooks
   const { toggleCreateViewModal } = useCommandPalette();
   const { loader } = useProject();
+  const { allowProjectPermissionKeys } = useUserPermissions();
+  const canCreateView = allowProjectPermissionKeys(
+    [PROJECT_VIEWS_CREATE_PERMISSION_KEY],
+    workspaceSlug?.toString(),
+    projectId?.toString()
+  );
 
   return (
     <>
@@ -52,7 +59,10 @@ export const ProjectViewsHeader = observer(function ProjectViewsHeader() {
               data-ph-element={PROJECT_VIEW_TRACKER_ELEMENTS.RIGHT_HEADER_ADD_BUTTON}
               variant="primary"
               size="lg"
-              onClick={() => toggleCreateViewModal(true)}
+              onClick={() => {
+                if (canCreateView) toggleCreateViewModal(true);
+              }}
+              disabled={!canCreateView}
             >
               Add view
             </Button>

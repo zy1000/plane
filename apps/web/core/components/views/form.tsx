@@ -41,6 +41,7 @@ type Props = {
   handleFormSubmit: (values: IProjectView) => Promise<void>;
   preLoadedData?: Partial<IProjectView> | null;
   projectId: string;
+  isSubmitDisabled?: boolean;
   workspaceSlug: string;
 };
 
@@ -53,7 +54,15 @@ const DEFAULT_VALUES: Partial<IProjectView> = {
 };
 
 export const ProjectViewForm = observer(function ProjectViewForm(props: Props) {
-  const { handleFormSubmit, handleClose, data, preLoadedData, projectId, workspaceSlug } = props;
+  const {
+    handleFormSubmit,
+    handleClose,
+    data,
+    preLoadedData,
+    projectId,
+    isSubmitDisabled = false,
+    workspaceSlug,
+  } = props;
   // i18n
   const { t } = useTranslation();
   // state
@@ -90,6 +99,7 @@ export const ProjectViewForm = observer(function ProjectViewForm(props: Props) {
   const { getIndex } = getTabIndex(ETabIndices.PROJECT_VIEW, isMobile);
 
   const handleCreateUpdateView = async (formData: IProjectView) => {
+    if (isSubmitDisabled) return;
     await handleFormSubmit({
       name: formData.name,
       description: formData.description,
@@ -283,7 +293,14 @@ export const ProjectViewForm = observer(function ProjectViewForm(props: Props) {
         <Button variant="secondary" size="lg" onClick={handleClose} tabIndex={getIndex("cancel")}>
           {t("common.cancel")}
         </Button>
-        <Button variant="primary" size="lg" type="submit" tabIndex={getIndex("submit")} loading={isSubmitting}>
+        <Button
+          variant="primary"
+          size="lg"
+          type="submit"
+          tabIndex={getIndex("submit")}
+          loading={isSubmitting}
+          disabled={isSubmitDisabled}
+        >
           {data
             ? isSubmitting
               ? t("common.updating")

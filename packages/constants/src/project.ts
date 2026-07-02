@@ -229,6 +229,9 @@ export const PROJECT_SPRINTS_COMMENT_CREATE_PERMISSION_KEY = "sprints.comment.cr
 
 /** 项目视图列表/详情页权限，与后端 PermissionKey.VIEW_VIEW 一致 */
 export const PROJECT_VIEWS_VIEW_PERMISSION_KEY = "view.view" as const;
+export const PROJECT_VIEWS_CREATE_PERMISSION_KEY = "view.create" as const;
+export const PROJECT_VIEWS_EDIT_PERMISSION_KEY = "view.edit" as const;
+export const PROJECT_VIEWS_DELETE_PERMISSION_KEY = "view.delete" as const;
 
 /** 项目笔记页权限常量，与后端 PermissionKey.PAGE_VIEW 一致 */
 export const PROJECT_PAGES_VIEW_PERMISSION_KEY = "page.view" as const;
