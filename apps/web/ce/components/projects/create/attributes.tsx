@@ -10,7 +10,7 @@ import { NETWORK_CHOICES, ETabIndices } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import type { IProject } from "@plane/types";
 import { CustomSelect } from "@plane/ui";
-import { getTabIndex } from "@plane/utils";
+import { cn, getTabIndex } from "@plane/utils";
 // components
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { ProjectNetworkIcon } from "@/components/project/project-network-icon";
@@ -24,6 +24,8 @@ function ProjectAttributes(props: Props) {
   const { t } = useTranslation();
   const { control } = useFormContext<IProject>();
   const { getIndex } = getTabIndex(ETabIndices.PROJECT_CREATE, isMobile);
+  const leadRequiredError = t("name_is_required").replace(t("name"), t("lead"));
+
   return (
     <div className="flex flex-wrap items-center gap-2">
       <Controller
@@ -74,18 +76,25 @@ function ProjectAttributes(props: Props) {
       <Controller
         name="project_lead"
         control={control}
-        render={({ field: { value, onChange } }) => {
+        rules={{ required: leadRequiredError }}
+        render={({ field: { value, onChange }, fieldState: { error } }) => {
           if (value === undefined || value === null || typeof value === "string")
             return (
-              <div className="h-7 flex-shrink-0" tabIndex={getIndex("lead")}>
+              <div className="relative h-7 flex-shrink-0" tabIndex={getIndex("lead")}>
                 <MemberDropdown
                   value={value ?? null}
-                  onChange={(lead) => onChange(lead === value ? null : lead)}
+                  onChange={onChange}
                   placeholder={t("lead")}
                   multiple={false}
                   buttonVariant="border-with-text"
+                  buttonClassName={cn("text-11", error?.message && "border-danger-strong")}
                   tabIndex={getIndex("lead")}
                 />
+                {error?.message && (
+                  <span className="absolute left-0 top-full z-10 mt-0.5 whitespace-nowrap text-caption-sm-medium text-danger-primary">
+                    {error.message}
+                  </span>
+                )}
               </div>
             );
           else return <></>;

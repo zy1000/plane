@@ -8,7 +8,7 @@ import { RANDOM_EMOJI_CODES } from "@plane/constants";
 import type { IProject } from "@plane/types";
 import { getRandomCoverImage } from "@/helpers/cover-image.helper";
 
-export const getProjectFormValues = (): Partial<IProject> => ({
+export const getProjectFormValues = (projectLead?: string | null): Partial<IProject> => ({
   cover_image_url: getRandomCoverImage(),
   description: "",
   logo_props: {
@@ -21,8 +21,8 @@ export const getProjectFormValues = (): Partial<IProject> => ({
   name: "",
   grade: null,
   product_type: null,
-  network: 2,
-  project_lead: null,
+  network: 0,
+  project_lead: projectLead ?? null,
   /** 创建时默认开启全部项目特性，跳过创建后选择特性的环节 */
   cycle_view: true,
   module_view: true,

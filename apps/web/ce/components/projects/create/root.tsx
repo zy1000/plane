@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { observer } from "mobx-react";
 import { FormProvider, useForm } from "react-hook-form";
 // plane imports
@@ -18,6 +18,7 @@ import ProjectCreateButtons from "@/components/project/create/project-create-but
 // hooks
 import { getCoverImageType, uploadCoverImage } from "@/helpers/cover-image.helper";
 import { useProject } from "@/hooks/store/use-project";
+import { useUser } from "@/hooks/store/user";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 // plane web types
 import type { TProject } from "@/plane-web/types/projects";
@@ -39,15 +40,30 @@ export const CreateProjectForm = observer(function CreateProjectForm(props: TCre
   // store
   const { t } = useTranslation();
   const { addProjectToFavorites, createProject, updateProject } = useProject();
+  const { data: currentUser } = useUser();
+  const currentUserId = currentUser?.id ?? null;
+  const projectLeadId =
+    typeof data?.project_lead === "string" ? data.project_lead : (data?.project_lead?.id ?? currentUserId);
   // states
   const [shouldAutoSyncIdentifier, setShouldAutoSyncIdentifier] = useState(true);
+  const defaultValues = {
+    ...getProjectFormValues(projectLeadId),
+    ...data,
+    project_lead: projectLeadId,
+  };
   // form info
   const methods = useForm<TProject>({
-    defaultValues: { ...getProjectFormValues(), ...data },
+    defaultValues,
     reValidateMode: "onChange",
   });
-  const { handleSubmit, reset, setValue } = methods;
+  const { getValues, handleSubmit, reset, setValue } = methods;
   const { isMobile } = usePlatformOS();
+
+  useEffect(() => {
+    if (!currentUserId || getValues("project_lead")) return;
+    setValue("project_lead", currentUserId, { shouldValidate: true });
+  }, [currentUserId, getValues, setValue]);
+
   const handleAddToFavorites = (projectId: string) => {
     if (!workspaceSlug) return;
 
@@ -159,7 +175,7 @@ export const CreateProjectForm = observer(function CreateProjectForm(props: TCre
     onClose();
     setShouldAutoSyncIdentifier(true);
     setTimeout(() => {
-      reset();
+      reset(defaultValues);
     }, 300);
   };
 
