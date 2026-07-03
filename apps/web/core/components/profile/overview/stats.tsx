@@ -144,7 +144,6 @@ export function ProfileStats({ userProfile }: Props) {
 
   const queueMetrics: TOverviewMetric[] = [
     {
-      description: t("profile.stats.insights.unscheduled_description"),
       icon: DueDatePropertyIcon,
       key: "unscheduled_pending_issues",
       title: t("profile.stats.insights.unscheduled"),
@@ -152,7 +151,6 @@ export function ProfileStats({ userProfile }: Props) {
       value: userProfile.unscheduled_pending_issues,
     },
     {
-      description: t("profile.stats.pending_approval_description"),
       icon: WorkflowsPropertyIcon,
       key: "pending_approval_issues",
       title: t("profile.stats.pending_approval"),
@@ -160,7 +158,6 @@ export function ProfileStats({ userProfile }: Props) {
       value: userProfile.pending_approval_issues,
     },
     {
-      description: t("profile.stats.pending_execution_cases_description"),
       icon: TestManagementIcon,
       key: "pending_execution_cases",
       title: t("profile.stats.pending_execution_cases"),
@@ -168,7 +165,6 @@ export function ProfileStats({ userProfile }: Props) {
       value: userProfile.pending_execution_cases,
     },
     {
-      description: t("profile.stats.pending_review_cases_description"),
       icon: ClipboardCheck,
       key: "pending_review_cases",
       title: t("profile.stats.pending_review_cases"),
@@ -273,7 +269,6 @@ export function ProfileStats({ userProfile }: Props) {
                   <MetricIcon metric={metric} />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-12 font-medium text-primary">{metric.title}</p>
-                    <p className="mt-0.5 truncate text-11 text-secondary">{metric.description}</p>
                   </div>
                   <span
                     className={cn(
