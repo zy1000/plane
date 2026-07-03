@@ -26,7 +26,7 @@ export const getNameFilterConfig =
   (params: TCreateNameFilterParams) =>
     createFilterConfig<P>({
       id: key,
-      label: "名称",
+      label: "标题",
       ...params,
       icon: params.filterIcon,
       supportedOperatorConfigsMap: new Map([
