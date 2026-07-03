@@ -64,6 +64,7 @@ type Props = {
   handleOpenNavigationPane: () => void;
   handlers: TEditorBodyHandlers;
   isNavigationPaneOpen: boolean;
+  markDirty?: () => void;
   page: TPageInstance;
   webhookConnectionParams: TWebhookConnectionQueryParams;
   projectId?: string;
@@ -83,6 +84,7 @@ export const PageEditorBody = observer(function PageEditorBody(props: Props) {
     handleOpenNavigationPane,
     handlers,
     isNavigationPaneOpen,
+    markDirty,
     page,
     storeType,
     webhookConnectionParams,
@@ -286,6 +288,12 @@ export const PageEditorBody = observer(function PageEditorBody(props: Props) {
               getMentionedEntityDetails: (id: string) => ({ display_name: getUserDetails(id)?.display_name ?? "" }),
             }}
             updatePageProperties={updatePageProperties}
+            onChange={(_json, _html, options) => {
+              // Ignore editor migration artifacts (e.g. UniqueID backfill) so we
+              // only mark the page dirty on real user edits.
+              if (options?.isMigrationUpdate) return;
+              markDirty?.();
+            }}
             realtimeConfig={realtimeConfig}
             serverHandler={serverHandler}
             user={userConfig}

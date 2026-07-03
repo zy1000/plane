@@ -463,8 +463,12 @@ function FilestorePage() {
       try {
         const res = await service.getOnlyOfficeStatus(String(workspaceSlug), String(projectId), String(editorAsset.id));
         const lastCallbackStatus = Number(res?.onlyoffice?.last_callback_status ?? 0);
+        // OnlyOffice 回调状态码：2 = 所有人关闭后的最终保存；6 = 编辑中的强制保存(forcesave)。
+        // 编辑过程中走的是 forcesave(6)，此时内容已落库，需同样视为「已保存」，
+        // 否则文档未关闭前标签会一直卡在「未保存」。
+        const isSavedCallback = lastCallbackStatus === 2 || lastCallbackStatus === 6;
         if (res?.onlyoffice?.last_error) setSaveStatus("保存失败");
-        else if (!latestDirtyRef.current && lastCallbackStatus === 2 && res?.onlyoffice?.last_saved_at) {
+        else if (!latestDirtyRef.current && isSavedCallback && res?.onlyoffice?.last_saved_at) {
           setSaveStatus("已保存");
           const savedVersionId = String(res?.onlyoffice?.last_saved_version_id ?? "");
           if (savedVersionId && savedVersionId !== lastSavedVersionIdRef.current) {

@@ -47,7 +47,7 @@ export class HocusPocusServerManager {
       onAuthenticate,
       onStateless,
       extensions: getExtensions(),
-      debounce: 10000,
+      debounce: 3000,
     });
 
     return this.server;

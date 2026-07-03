@@ -10,6 +10,7 @@ import { observer } from "mobx-react";
 import type { CollaborationState, EditorRefApi } from "@plane/editor";
 import type { TDocumentPayload, TPage, TPageVersion, TWebhookConnectionQueryParams } from "@plane/types";
 // hooks
+import { usePageAutoSave } from "@/hooks/use-page-auto-save";
 import { usePageFallback } from "@/hooks/use-page-fallback";
 // plane web import
 import type { PageUpdateHandler, TCustomEventHandlers } from "@/hooks/use-realtime-page-events";
@@ -78,6 +79,12 @@ export const PageRoot = observer(function PageRoot(props: TPageRootProps) {
     fetchPageDescription: handlers.fetchDescriptionBinary,
     page,
     collaborationState,
+    updatePageDescription: handlers.updateDescription,
+  });
+  // persist content directly to the backend on edit + on close/unmount
+  const { markDirty } = usePageAutoSave({
+    editorRef,
+    page,
     updatePageDescription: handlers.updateDescription,
   });
 
@@ -181,6 +188,7 @@ export const PageRoot = observer(function PageRoot(props: TPageRootProps) {
           handleOpenNavigationPane={handleOpenNavigationPane}
           handlers={handlers}
           isNavigationPaneOpen={isNavigationPaneOpen}
+          markDirty={markDirty}
           page={page}
           projectId={projectId}
           storeType={storeType}
