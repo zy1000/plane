@@ -292,7 +292,7 @@ export const SPREADSHEET_PROPERTY_DETAILS: {
     ascendingOrderTitle: "A",
     descendingOrderKey: "-issue_module__module__name",
     descendingOrderTitle: "Z",
-    icon: "DiceIcon",
+    icon: "ModuleIcon",
   },
   cycle: {
     i18n_title: "common.cycle",

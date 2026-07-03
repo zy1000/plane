@@ -10,6 +10,8 @@ import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 // constants
 import { SPREADSHEET_SELECT_GROUP } from "@plane/constants";
+// icons
+import { EpicIcon, WorkItemsIcon } from "@plane/propel/icons";
 // ui
 import type { IIssueDisplayFilterOptions, IIssueDisplayProperties } from "@plane/types";
 // components
@@ -102,7 +104,12 @@ export const SpreadsheetHeader = observer(function SpreadsheetHeader(props: Prop
                 // 占位：在 flex 流内保留原有的宽度，保证「Work items」文字位置不变
                 <div className="mr-1 flex w-3.5 flex-shrink-0 items-center" aria-hidden />
               )}
-              <span className="text-13 font-medium">{`${isEpic ? "Epics" : "Work items"}`}</span>
+              {isEpic ? (
+                <EpicIcon className="h-3.5 w-3.5 flex-shrink-0 text-placeholder" />
+              ) : (
+                <WorkItemsIcon className="h-3.5 w-3.5 flex-shrink-0 text-placeholder" />
+              )}
+              <span className="text-13 font-medium">{`${isEpic ? "Epics" : "工作项"}`}</span>
             </div>
           </div>
           {canSelectIssues && (
