@@ -9,7 +9,7 @@ from yaml import serialize
 
 from collections import defaultdict
 
-from django.db import connection, transaction
+from django.db import IntegrityError, connection, transaction
 from django.db.models import (
     Case,
     CharField,
@@ -1516,7 +1516,10 @@ class CaseModuleAPIView(BaseAPIView):
     def post(self, request, slug):
         serializer = self.serializer_class(data=request.data)
         serializer.is_valid(raise_exception=True)
-        test_plan = serializer.save()
+        try:
+            test_plan = serializer.save()
+        except IntegrityError:
+            return Response({"error": "同级模块名称已存在"}, status=status.HTTP_400_BAD_REQUEST)
         serializer = CaseModuleListSerializer(instance=test_plan)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 

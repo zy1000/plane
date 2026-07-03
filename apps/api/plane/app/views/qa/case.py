@@ -32,6 +32,20 @@ from plane.utils.paginator import CustomPaginator
 from plane.utils.response import list_response
 
 
+def get_or_create_case_module(repository_id, name, parent):
+    lookup = {
+        "repository_id": repository_id,
+        "name": name,
+        "parent": parent,
+        "deleted_at__isnull": True,
+    }
+    try:
+        module, _ = CaseModule.objects.get_or_create(**lookup)
+        return module
+    except CaseModule.MultipleObjectsReturned:
+        return CaseModule.objects.filter(**lookup).order_by("created_at", "id").first()
+
+
 class CaseAssetAPIView(BaseAPIView):
     model = FileAsset
     queryset = FileAsset.objects.all()
@@ -1329,19 +1343,7 @@ class CaseAPI(BaseViewSet):
 
                         parent = None
                         for name in module_names:
-                            try:
-                                module = CaseModule.objects.get(
-                                    repository_id=repository_id,
-                                    name=name,
-                                    parent=parent,
-                                    deleted_at__isnull=True,
-                                )
-                            except CaseModule.DoesNotExist:
-                                module = CaseModule.objects.create(
-                                    repository_id=repository_id,
-                                    name=name,
-                                    parent=parent,
-                                )
+                            module = get_or_create_case_module(repository_id, name, parent)
                             parent = module
                         instance.module = parent
                 # 创建标签

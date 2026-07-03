@@ -464,6 +464,32 @@ class ProjectCaseListSerializer(serializers.ModelSerializer):
 class CaseModuleCreateUpdateSerializer(ModelSerializer):
     """创建和更新用例"""
 
+    def validate(self, attrs):
+        name = attrs.get("name", getattr(self.instance, "name", None))
+        repository = attrs.get("repository", getattr(self.instance, "repository", None))
+        parent = attrs.get("parent", getattr(self.instance, "parent", None))
+
+        if isinstance(name, str):
+            name = name.strip()
+            attrs["name"] = name
+
+        if parent and repository and parent.repository_id != repository.id:
+            raise serializers.ValidationError({"error": "父模块不属于当前用例库"})
+
+        if name and repository:
+            duplicate_modules = CaseModule.objects.filter(
+                repository=repository,
+                name=name,
+                parent=parent,
+                deleted_at__isnull=True,
+            )
+            if self.instance:
+                duplicate_modules = duplicate_modules.exclude(id=self.instance.id)
+            if duplicate_modules.exists():
+                raise serializers.ValidationError({"error": "同级模块名称已存在"})
+
+        return attrs
+
     class Meta:
         model = CaseModule
         fields = ["name", "sort_order", "parent", "repository"]

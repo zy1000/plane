@@ -69,7 +69,7 @@ class CaseModuleDetailAPIView(BaseAPIView):
         try:
             serializer.save()
         except IntegrityError:
-            return Response({"error": "Module name already exists."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": "同级模块名称已存在"}, status=status.HTTP_400_BAD_REQUEST)
 
         module.refresh_from_db()
         return Response(CaseModuleListSerializer(instance=module).data, status=status.HTTP_200_OK)

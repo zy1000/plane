@@ -92,11 +92,15 @@ class CaseModule(BaseModel):
 
     class Meta:
         constraints = [
-            # Enforce uniqueness of project and name when project is not NULL and deleted_at is NULL
             models.UniqueConstraint(
-                fields=["repository", "name",'parent'],
-                condition=Q(repository__isnull=False, deleted_at__isnull=True),
-                name="unique_case_module_repository_name_when_not_deleted",
+                fields=["repository", "name"],
+                condition=Q(repository__isnull=False, parent__isnull=True, deleted_at__isnull=True),
+                name="unique_case_module_root_repo_name_not_deleted",
+            ),
+            models.UniqueConstraint(
+                fields=["repository", "name", "parent"],
+                condition=Q(repository__isnull=False, parent__isnull=False, deleted_at__isnull=True),
+                name="unique_case_module_child_repo_name_parent_not_deleted",
             ),
         ]
         db_table = "test_modules"

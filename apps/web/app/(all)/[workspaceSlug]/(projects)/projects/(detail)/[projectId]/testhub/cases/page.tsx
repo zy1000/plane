@@ -415,6 +415,7 @@ export default function TestCasesPage() {
       await fetchCases(1, pageSize, filters);
     } catch (e) {
       console.error("创建模块失败:", e);
+      qaCaseSetToastError(e, t, "创建模块失败");
       setCreatingParentId(null);
     }
   };
@@ -472,6 +473,7 @@ export default function TestCasesPage() {
       await fetchModules();
     } catch (e) {
       console.error("重命名失败:", e);
+      qaCaseSetToastError(e, t, "重命名失败");
       setRenamingModuleId(null);
     }
   };
