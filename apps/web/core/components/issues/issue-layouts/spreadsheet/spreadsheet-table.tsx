@@ -18,7 +18,6 @@ import type { TSelectionHelper } from "@/hooks/use-multiple-select";
 import { useTableKeyboardNavigation } from "@/hooks/use-table-keyboard-navigation";
 // local imports
 import type { TRenderQuickActions } from "../list/list-view-types";
-import { getDisplayPropertiesCount } from "../utils";
 import { SpreadsheetIssueRow } from "./issue-row";
 import { SpreadsheetHeader } from "./spreadsheet-header";
 
@@ -43,6 +42,9 @@ type Props = {
 const DEFAULT_WORK_ITEM_COLUMN_WIDTH = 420;
 const MIN_WORK_ITEM_COLUMN_WIDTH = 320;
 const MAX_WORK_ITEM_COLUMN_WIDTH = 900;
+const PROPERTY_COLUMN_WIDTH = 144;
+// border-collapse 下最右侧单元格的外边框会额外多撑出约 1px，自动填充时需预留出来
+const TABLE_COLLAPSED_BORDER_WIDTH = 1;
 
 export const SpreadsheetTable = observer(function SpreadsheetTable(props: Props) {
   const {
@@ -67,6 +69,7 @@ export const SpreadsheetTable = observer(function SpreadsheetTable(props: Props)
   const isScrolled = useRef(false);
   const [intersectionElement, setIntersectionElement] = useState<HTMLTableSectionElement | null>(null);
   const [workItemColumnWidth, setWorkItemColumnWidth] = useState(DEFAULT_WORK_ITEM_COLUMN_WIDTH);
+  const [containerWidth, setContainerWidth] = useState(0);
 
   const {
     issues: { getIssueLoader },
@@ -100,6 +103,19 @@ export const SpreadsheetTable = observer(function SpreadsheetTable(props: Props)
     setWorkItemColumnWidth(clampedWidth);
   }, []);
 
+  const visibleSpreadsheetColumnsList = spreadsheetColumnsList.filter((property) => {
+    if (!displayProperties[property]) return false;
+    if (property === "estimate" && !isEstimateEnabled) return false;
+    return true;
+  });
+
+  const visiblePropertiesWidth = visibleSpreadsheetColumnsList.length * PROPERTY_COLUMN_WIDTH;
+  const resolvedWorkItemColumnWidth = Math.max(
+    workItemColumnWidth,
+    Math.floor(containerWidth - visiblePropertiesWidth - TABLE_COLLAPSED_BORDER_WIDTH)
+  );
+  const tableWidth = resolvedWorkItemColumnWidth + visiblePropertiesWidth;
+
   useEffect(() => {
     const currentContainerRef = containerRef.current;
 
@@ -110,27 +126,51 @@ export const SpreadsheetTable = observer(function SpreadsheetTable(props: Props)
     };
   }, [handleScroll, containerRef]);
 
+  useEffect(() => {
+    const currentContainerRef = containerRef.current;
+    if (!currentContainerRef) return;
+
+    const updateContainerWidth = () => setContainerWidth(currentContainerRef.clientWidth);
+    updateContainerWidth();
+
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", updateContainerWidth);
+      return () => window.removeEventListener("resize", updateContainerWidth);
+    }
+
+    const resizeObserver = new ResizeObserver(updateContainerWidth);
+    resizeObserver.observe(currentContainerRef);
+
+    return () => resizeObserver.disconnect();
+  }, [containerRef]);
+
   const isPaginating = !!getIssueLoader();
 
   useIntersectionObserver(containerRef, isPaginating ? null : intersectionElement, loadMoreIssues, `100% 0% 100% 0%`);
 
   const handleKeyBoardNavigation = useTableKeyboardNavigation();
 
-  const ignoreFieldsForCounting: (keyof IIssueDisplayProperties)[] = ["key"];
-  if (!isEstimateEnabled) ignoreFieldsForCounting.push("estimate");
-  const displayPropertiesCount = getDisplayPropertiesCount(displayProperties, ignoreFieldsForCounting);
-
   return (
-    <table className="min-w-full table-fixed overflow-y-auto bg-surface-1" onKeyDown={handleKeyBoardNavigation}>
+    <table
+      className="min-w-full table-fixed overflow-y-auto bg-surface-1"
+      style={{ width: tableWidth }}
+      onKeyDown={handleKeyBoardNavigation}
+    >
+      <colgroup>
+        <col style={{ width: resolvedWorkItemColumnWidth }} />
+        {visibleSpreadsheetColumnsList.map((property) => (
+          <col key={property} style={{ width: PROPERTY_COLUMN_WIDTH }} />
+        ))}
+      </colgroup>
       <SpreadsheetHeader
         displayProperties={displayProperties}
         displayFilters={displayFilters}
         handleDisplayFilterUpdate={handleDisplayFilterUpdate}
         canEditProperties={canEditProperties}
         isEstimateEnabled={isEstimateEnabled}
-        spreadsheetColumnsList={spreadsheetColumnsList}
+        spreadsheetColumnsList={visibleSpreadsheetColumnsList}
         selectionHelpers={selectionHelpers}
-        workItemColumnWidth={workItemColumnWidth}
+        workItemColumnWidth={resolvedWorkItemColumnWidth}
         onWorkItemColumnResize={handleWorkItemColumnResize}
         isEpic={isEpic}
       />
@@ -148,9 +188,9 @@ export const SpreadsheetTable = observer(function SpreadsheetTable(props: Props)
             portalElement={portalElement}
             containerRef={containerRef}
             isScrolled={isScrolled}
-            spreadsheetColumnsList={spreadsheetColumnsList}
+            spreadsheetColumnsList={visibleSpreadsheetColumnsList}
             selectionHelpers={selectionHelpers}
-            workItemColumnWidth={workItemColumnWidth}
+            workItemColumnWidth={resolvedWorkItemColumnWidth}
             isEpic={isEpic}
           />
         ))}
@@ -158,7 +198,7 @@ export const SpreadsheetTable = observer(function SpreadsheetTable(props: Props)
       {canLoadMoreIssues && (
         <tfoot ref={setIntersectionElement}>
           {Array.from({ length: 3 }).map((_, index) => (
-            <SpreadsheetIssueRowLoader key={index} columnCount={displayPropertiesCount} />
+            <SpreadsheetIssueRowLoader key={index} columnCount={visibleSpreadsheetColumnsList.length} />
           ))}
         </tfoot>
       )}
