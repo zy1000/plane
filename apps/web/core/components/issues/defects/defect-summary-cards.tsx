@@ -1,6 +1,7 @@
 import type { FC, ReactNode } from "react";
 import { AlertTriangle, Bug, CalendarX2, Clock, Hourglass } from "lucide-react";
 import { cn } from "@plane/utils";
+import { useCountUp } from "@/hooks/use-count-up";
 
 type TTone = "neutral" | "danger" | "success" | "warning";
 
@@ -28,6 +29,33 @@ const toneClassNames: Record<TTone, string> = {
   neutral: "text-secondary",
   success: "text-green-600",
   warning: "text-amber-600",
+};
+
+const DefectSummaryCard: FC<{ isLoading: boolean; item: TSummaryItem }> = ({ isLoading, item }) => {
+  const displayValue = useCountUp(item.value, { enabled: !isLoading });
+
+  return (
+    <div className="relative overflow-hidden rounded-xl border border-subtle bg-surface-1 p-4 shadow-sm">
+      <div className="absolute -right-8 -top-10 h-24 w-24 rounded-full bg-red-500/[0.04]" />
+      <div className="relative flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-xs font-medium text-secondary">{item.label}</div>
+          <div className="mt-2 flex items-baseline gap-1 tabular-nums">
+            {isLoading ? (
+              <span className="h-8 w-12 animate-pulse rounded bg-surface-2" />
+            ) : (
+              <>
+                <span className="text-2xl font-semibold tracking-tight text-primary">{displayValue}</span>
+                {item.suffix ? <span className="text-sm text-placeholder">{item.suffix}</span> : null}
+              </>
+            )}
+          </div>
+          <div className="mt-2 line-clamp-1 text-xs text-placeholder">{item.description}</div>
+        </div>
+        <div className={cn("flex-shrink-0", toneClassNames[item.tone])}>{item.icon}</div>
+      </div>
+    </div>
+  );
 };
 
 export const DefectSummaryCards: FC<Props> = ({
@@ -84,29 +112,7 @@ export const DefectSummaryCards: FC<Props> = ({
   return (
     <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
       {items.map((item) => (
-        <div
-          key={item.key}
-          className="relative overflow-hidden rounded-xl border border-subtle bg-surface-1 p-4 shadow-sm"
-        >
-          <div className="absolute -right-8 -top-10 h-24 w-24 rounded-full bg-red-500/[0.04]" />
-          <div className="relative flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <div className="text-xs font-medium text-secondary">{item.label}</div>
-              <div className="mt-2 flex items-baseline gap-1 tabular-nums">
-                {isLoading ? (
-                  <span className="h-8 w-12 animate-pulse rounded bg-surface-2" />
-                ) : (
-                  <>
-                    <span className="text-2xl font-semibold tracking-tight text-primary">{item.value}</span>
-                    {item.suffix ? <span className="text-sm text-placeholder">{item.suffix}</span> : null}
-                  </>
-                )}
-              </div>
-              <div className="mt-2 line-clamp-1 text-xs text-placeholder">{item.description}</div>
-            </div>
-            <div className={cn("flex-shrink-0", toneClassNames[item.tone])}>{item.icon}</div>
-          </div>
-        </div>
+        <DefectSummaryCard key={item.key} isLoading={isLoading} item={item} />
       ))}
     </div>
   );

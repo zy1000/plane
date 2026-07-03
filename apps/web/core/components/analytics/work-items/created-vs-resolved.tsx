@@ -15,6 +15,7 @@ import { EmptyStateCompact } from "@plane/propel/empty-state";
 import type { IChartResponse, TChartData } from "@plane/types";
 import { renderFormattedDate } from "@plane/utils";
 // hooks
+import { useCountUp } from "@/hooks/use-count-up";
 import { useAnalytics } from "@/hooks/store/use-analytics";
 // services
 import { AnalyticsService } from "@/services/analytics.service";
@@ -88,6 +89,36 @@ const CreatedVsResolved = observer(function CreatedVsResolved() {
     ],
     []
   );
+  const chartAnimationKey = useMemo(
+    () => parsedData.map((datum) => JSON.stringify(datum)).join("|"),
+    [parsedData]
+  );
+  const chartProgress = useCountUp(parsedData.length ? 1 : 0, {
+    decimals: 4,
+    duration: 1400,
+    resetKey: chartAnimationKey,
+  });
+  const animatedChartData = useMemo(
+    () =>
+      parsedData.map((datum) => {
+        const nextDatum = { ...datum };
+        Object.entries(nextDatum).forEach(([key, value]) => {
+          if (typeof value === "number") nextDatum[key] = Math.round(value * chartProgress);
+        });
+        return nextDatum;
+      }),
+    [chartProgress, parsedData]
+  );
+  const yAxisMax = useMemo(() => {
+    if (!parsedData.length) return 1;
+
+    return Math.max(
+      ...parsedData.map((datum) =>
+        areas.reduce((sum, area) => sum + (typeof datum[area.key] === "number" ? Number(datum[area.key]) : 0), 0)
+      ),
+      1
+    );
+  }, [areas, parsedData]);
 
   return (
     <AnalyticsSectionWrapper
@@ -100,7 +131,7 @@ const CreatedVsResolved = observer(function CreatedVsResolved() {
       ) : parsedData && parsedData.length > 0 ? (
         <AreaChart
           className="h-[350px] w-full"
-          data={parsedData}
+          data={animatedChartData}
           areas={areas}
           xAxis={{
             key: "name",
@@ -108,6 +139,7 @@ const CreatedVsResolved = observer(function CreatedVsResolved() {
           }}
           yAxis={{
             key: "count",
+            domain: [0, yAxisMax],
             label: t("common.no_of", { entity: isEpic ? t("epics") : t("work_items") }),
             offset: -60,
             dx: -24,

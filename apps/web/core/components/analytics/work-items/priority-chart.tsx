@@ -22,6 +22,7 @@ import type { TBarItem, TChart, TChartDatum, ChartXAxisProperty, ChartYAxisMetri
 // plane web components
 import { generateExtendedColors, parseChartData } from "@/components/chart/utils";
 // hooks
+import { useCountUp } from "@/hooks/use-count-up";
 import { useAnalytics } from "@/hooks/store/use-analytics";
 import { useProjectState } from "@/hooks/store/use-project-state";
 import { AnalyticsService } from "@/services/analytics.service";
@@ -146,6 +147,34 @@ const PriorityChart = observer(function PriorityChart(props: Props) {
     () => ANALYTICS_X_AXIS_VALUES.find((item) => item.value === props.x_axis)?.label ?? props.x_axis,
     [props.x_axis]
   );
+  const chartAnimationKey = useMemo(
+    () => parsedData?.data.map((datum) => JSON.stringify(datum)).join("|") ?? "",
+    [parsedData?.data]
+  );
+  const chartProgress = useCountUp(parsedData?.data?.length ? 1 : 0, {
+    decimals: 4,
+    duration: 1400,
+    resetKey: chartAnimationKey,
+  });
+  const animatedChartData = useMemo(
+    () =>
+      parsedData?.data.map((datum) => {
+        const nextDatum = { ...datum };
+        Object.entries(nextDatum).forEach(([key, value]) => {
+          if (typeof value === "number") nextDatum[key] = Math.round(value * chartProgress);
+        });
+        return nextDatum;
+      }) ?? [],
+    [chartProgress, parsedData?.data]
+  );
+  const yAxisMax = useMemo(() => {
+    if (!parsedData?.data.length || !bars.length) return 1;
+
+    return Math.max(
+      ...parsedData.data.map((datum) => bars.reduce((sum, bar) => sum + Number(datum[bar.key] ?? 0), 0)),
+      1
+    );
+  }, [bars, parsedData?.data]);
 
   const defaultColumns: ColumnDef<TChartDatum>[] = useMemo(
     () => [
@@ -203,7 +232,7 @@ const PriorityChart = observer(function PriorityChart(props: Props) {
         <>
           <BarChart
             className="h-[370px] w-full"
-            data={parsedData.data}
+            data={animatedChartData}
             bars={bars}
             margin={{
               bottom: 30,
@@ -215,6 +244,7 @@ const PriorityChart = observer(function PriorityChart(props: Props) {
             }}
             yAxis={{
               key: "count",
+              domain: [0, yAxisMax],
               label: t("common.no_of", { entity: yAxisLabel.replace("_", " ") }),
               offset: -60,
               dx: -26,

@@ -1,6 +1,7 @@
-import type { FC } from "react";
+import { useMemo, type FC } from "react";
 import { BarChart } from "@plane/propel/charts/bar-chart";
 import type { TBarItem } from "@plane/types";
+import { useCountUp } from "@/hooks/use-count-up";
 import type { TDefectAnalyticsTrendPoint } from "@/services/project/project.service";
 
 type Props = {
@@ -25,6 +26,22 @@ export const DefectTrendChart: FC<Props> = ({ isLoading, trend }) => {
     resolved: point.resolved,
   }));
   const hasData = data.some((point) => point.created > 0 || point.resolved > 0);
+  const chartAnimationKey = data.map((point) => `${point.name}:${point.created}:${point.resolved}`).join("|");
+  const chartProgress = useCountUp(hasData ? 1 : 0, {
+    decimals: 4,
+    duration: 1400,
+    resetKey: chartAnimationKey,
+  });
+  const animatedData = useMemo(
+    () =>
+      data.map((point) => ({
+        ...point,
+        created: Math.round(point.created * chartProgress),
+        resolved: Math.round(point.resolved * chartProgress),
+      })),
+    [chartProgress, data]
+  );
+  const yAxisMax = Math.max(...data.map((point) => Math.max(point.created, point.resolved)), 1);
 
   return (
     <div className="rounded-xl border border-subtle bg-surface-1 p-5 shadow-sm">
@@ -39,10 +56,10 @@ export const DefectTrendChart: FC<Props> = ({ isLoading, trend }) => {
       ) : (
         <BarChart
           className="mt-2 h-[280px] w-full"
-          data={data}
+          data={animatedData}
           bars={bars}
           xAxis={{ key: "name" }}
-          yAxis={{ key: "created", allowDecimals: false }}
+          yAxis={{ key: "created", allowDecimals: false, domain: [0, yAxisMax] }}
           legend={{ align: "center", verticalAlign: "bottom", layout: "horizontal" }}
           barSize={16}
           margin={{ top: 10, right: 16, bottom: 0, left: -12 }}

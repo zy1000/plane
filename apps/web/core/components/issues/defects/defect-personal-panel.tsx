@@ -1,7 +1,8 @@
-import type { FC } from "react";
+import { useEffect, useState, type FC } from "react";
 import { Trophy, UserRound } from "lucide-react";
 import { Avatar } from "@plane/ui";
 import { cn, getFileURL } from "@plane/utils";
+import { useCountUp } from "@/hooks/use-count-up";
 
 type TAssignee = {
   member_id: string;
@@ -19,6 +20,42 @@ type Props = {
   topAssignees: TAssignee[];
 };
 
+const AssigneeDefectRow: FC<{
+  animateBars: boolean;
+  index: number;
+  maxCount: number;
+  member: TAssignee;
+}> = ({ animateBars, index, maxCount, member }) => {
+  const displayCount = useCountUp(member.defect_count);
+  const width = (member.defect_count / maxCount) * 100;
+
+  return (
+    <div className="flex items-center gap-3">
+      <span
+        className={cn(
+          "w-4 shrink-0 text-center text-xs font-semibold tabular-nums",
+          index === 0 ? "text-amber-500" : "text-placeholder"
+        )}
+      >
+        {index + 1}
+      </span>
+      <Avatar name={member.display_name} src={getFileURL(member.avatar_url)} size="md" showTooltip={false} />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center justify-between gap-2">
+          <span className="truncate text-sm text-primary">{member.display_name}</span>
+          <span className="shrink-0 text-xs font-medium tabular-nums text-secondary">{displayCount}</span>
+        </div>
+        <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-surface-2">
+          <div
+            className="h-full rounded-full bg-red-500/60 transition-[width] duration-1000 ease-out"
+            style={{ width: `${animateBars ? width : 0}%` }}
+          />
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export const DefectPersonalPanel: FC<Props> = ({
   isLoading,
   currentUserName,
@@ -29,6 +66,28 @@ export const DefectPersonalPanel: FC<Props> = ({
 }) => {
   const ranked = topAssignees.slice(0, 5);
   const maxCount = ranked.reduce((max, member) => Math.max(max, member.defect_count), 0) || 1;
+  const displayMyDefectCount = useCountUp(myDefectCount, { enabled: !isLoading });
+  const displayMyDefectRatio = useCountUp(myDefectRatio, { enabled: !isLoading });
+  const displayTotalDefects = useCountUp(totalDefects, { enabled: !isLoading });
+  const rankingAnimationKey = ranked.map((member) => `${member.member_id}:${member.defect_count}`).join("|");
+  const [animateBars, setAnimateBars] = useState(false);
+
+  useEffect(() => {
+    if (isLoading) {
+      setAnimateBars(false);
+      return;
+    }
+
+    setAnimateBars(false);
+
+    if (typeof window === "undefined") {
+      setAnimateBars(true);
+      return;
+    }
+
+    const frameId = window.requestAnimationFrame(() => setAnimateBars(true));
+    return () => window.cancelAnimationFrame(frameId);
+  }, [isLoading, myDefectRatio, rankingAnimationKey]);
 
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
@@ -42,22 +101,22 @@ export const DefectPersonalPanel: FC<Props> = ({
           {isLoading ? (
             <span className="h-10 w-16 animate-pulse rounded bg-surface-2" />
           ) : (
-            <span className="text-4xl font-semibold tracking-tight text-primary">{myDefectCount}</span>
+            <span className="text-4xl font-semibold tracking-tight text-primary">{displayMyDefectCount}</span>
           )}
           <span className="pb-1 text-sm text-placeholder">个待你处理的缺陷</span>
         </div>
         <div className="mt-4">
           <div className="flex items-center justify-between text-xs text-secondary">
             <span className="truncate">{currentUserName}</span>
-            <span className="tabular-nums">占全部缺陷 {myDefectRatio}%</span>
+            <span className="tabular-nums">占全部缺陷 {displayMyDefectRatio}%</span>
           </div>
           <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-surface-2">
             <div
-              className="h-full rounded-full bg-red-500/70 transition-all duration-500"
-              style={{ width: `${Math.min(myDefectRatio, 100)}%` }}
+              className="h-full rounded-full bg-red-500/70 transition-[width] duration-1000 ease-out"
+              style={{ width: `${animateBars ? Math.min(myDefectRatio, 100) : 0}%` }}
             />
           </div>
-          <div className="mt-2 text-xs text-placeholder">项目共 {totalDefects} 个缺陷</div>
+          <div className="mt-2 text-xs text-placeholder">项目共 {displayTotalDefects} 个缺陷</div>
         </div>
       </div>
 
@@ -80,31 +139,13 @@ export const DefectPersonalPanel: FC<Props> = ({
         ) : (
           <div className="mt-4 space-y-3">
             {ranked.map((member, index) => (
-              <div key={member.member_id} className="flex items-center gap-3">
-                <span
-                  className={cn(
-                    "w-4 shrink-0 text-center text-xs font-semibold tabular-nums",
-                    index === 0 ? "text-amber-500" : "text-placeholder"
-                  )}
-                >
-                  {index + 1}
-                </span>
-                <Avatar name={member.display_name} src={getFileURL(member.avatar_url)} size="md" showTooltip={false} />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="truncate text-sm text-primary">{member.display_name}</span>
-                    <span className="shrink-0 text-xs font-medium tabular-nums text-secondary">
-                      {member.defect_count}
-                    </span>
-                  </div>
-                  <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-surface-2">
-                    <div
-                      className="h-full rounded-full bg-red-500/60 transition-all duration-500"
-                      style={{ width: `${(member.defect_count / maxCount) * 100}%` }}
-                    />
-                  </div>
-                </div>
-              </div>
+              <AssigneeDefectRow
+                key={member.member_id}
+                animateBars={animateBars}
+                index={index}
+                maxCount={maxCount}
+                member={member}
+              />
             ))}
           </div>
         )}

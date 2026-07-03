@@ -34,7 +34,7 @@ export const DefectAnalysisModal = observer(function DefectAnalysisModal(props: 
       width={fullScreen ? EPortalWidth.FULL : EPortalWidth.THREE_QUARTER}
       position={EPortalPosition.RIGHT}
       fullScreen={fullScreen}
-      contentClassName={fullScreen ? undefined : "w-[90%] max-w-none"}
+      contentClassName={fullScreen ? undefined : "w-[86%] max-w-[1440px]"}
     >
       <div
         className={`flex h-full flex-col overflow-hidden border-subtle bg-surface-1 text-left ${

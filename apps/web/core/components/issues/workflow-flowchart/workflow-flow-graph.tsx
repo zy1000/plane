@@ -275,16 +275,15 @@ export function WorkflowFlowGraph({ flowchart }: { flowchart: TWorkflowFlowchart
             </svg>
 
             {/* 节点层 */}
-            {layout.nodes.map((node, index) => (
+            {layout.nodes.map((node) => (
               <div
                 key={node.id}
-                className="animate-slide-up absolute"
+                className="absolute"
                 style={{
                   left: node.x,
                   top: node.y,
                   width: node.width,
                   height: node.height,
-                  animationDelay: `${Math.min(index * 40, 320)}ms`,
                 }}
                 onMouseEnter={() => setHoveredNodeId(node.id)}
                 onMouseLeave={() => setHoveredNodeId(null)}
