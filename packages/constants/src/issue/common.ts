@@ -158,11 +158,15 @@ export const ISSUE_DISPLAY_PROPERTIES_KEYS: (keyof IIssueDisplayProperties)[] = 
   "attachment_count",
   "estimate",
   "created_on",
-  "updated_on",
   "modules",
   "cycle",
   "release",
   "issue_type",
+];
+
+export const ISSUE_SPREADSHEET_DISPLAY_PROPERTIES_KEYS: (keyof IIssueDisplayProperties)[] = [
+  ...ISSUE_DISPLAY_PROPERTIES_KEYS,
+  "updated_on",
 ];
 
 export const SUB_ISSUES_DISPLAY_PROPERTIES_KEYS: (keyof IIssueDisplayProperties)[] = [
@@ -213,6 +217,10 @@ export const ISSUE_DISPLAY_PROPERTIES: {
     key: "estimate",
     titleTranslationKey: "common.estimate",
   },
+  {
+    key: "updated_on",
+    titleTranslationKey: "common.sort.updated_on",
+  },
   { key: "modules", titleTranslationKey: "common.module" },
   { key: "cycle", titleTranslationKey: "common.cycle" },
   { key: "release", titleTranslationKey: "issue.display.properties.release" },
@@ -229,8 +237,8 @@ export const SPREADSHEET_PROPERTY_LIST: (keyof IIssueDisplayProperties)[] = [
   "start_date",
   "due_date",
   "estimate",
-  "created_on",
   "updated_on",
+  "created_on",
   "link",
   "attachment_count",
   "sub_issue_count",
