@@ -114,7 +114,7 @@ export const ReviewCaseDetailTable = ({
   return (
     <Table
       className="min-w-full table-fixed border-separate border-spacing-0 border-t border-l border-subtle"
-      wrapperClassName="h-full overflow-auto testhub-review-detail-table-scroll scrollbar-always-visible"
+      wrapperClassName="h-full overflow-auto testhub-review-detail-table-scroll hide-vertical-scrollbar"
     >
       <TableHeader className="sticky top-0 z-[2] bg-layer-1">
         <TableRow>
