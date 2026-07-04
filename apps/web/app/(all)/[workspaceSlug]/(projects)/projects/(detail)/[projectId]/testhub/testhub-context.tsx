@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useRef } from "react";
+import React, { createContext, useContext, useRef, useState } from "react";
 
 type TTestHubContext = {
   registerOpenNewModal: (fn: () => void) => void;
@@ -11,6 +11,10 @@ type TTestHubContext = {
   triggerOpenNewReviewModal: () => void;
   registerOpenNewReportModal: (fn: () => void) => void;
   triggerOpenNewReportModal: () => void;
+  registerReviewSearch: (fn: (query: string) => void) => void;
+  triggerReviewSearch: (query: string) => void;
+  reviewSearchValue: string;
+  setReviewSearchValue: (value: string) => void;
 };
 
 const TestHubContext = createContext<TTestHubContext>({
@@ -22,6 +26,10 @@ const TestHubContext = createContext<TTestHubContext>({
   triggerOpenNewReviewModal: () => {},
   registerOpenNewReportModal: () => {},
   triggerOpenNewReportModal: () => {},
+  registerReviewSearch: () => {},
+  triggerReviewSearch: () => {},
+  reviewSearchValue: "",
+  setReviewSearchValue: () => {},
 });
 
 export const TestHubProvider = ({ children }: { children: React.ReactNode }) => {
@@ -29,6 +37,8 @@ export const TestHubProvider = ({ children }: { children: React.ReactNode }) => 
   const openNewPlanModalRef = useRef<(() => void) | null>(null);
   const openNewReviewModalRef = useRef<(() => void) | null>(null);
   const openNewReportModalRef = useRef<(() => void) | null>(null);
+  const reviewSearchRef = useRef<((query: string) => void) | null>(null);
+  const [reviewSearchValue, setReviewSearchValue] = useState<string>("");
 
   const registerOpenNewModal = (fn: () => void) => {
     openNewModalRef.current = fn;
@@ -58,6 +68,13 @@ export const TestHubProvider = ({ children }: { children: React.ReactNode }) => 
     openNewReportModalRef.current?.();
   };
 
+  const registerReviewSearch = (fn: (query: string) => void) => {
+    reviewSearchRef.current = fn;
+  };
+  const triggerReviewSearch = (query: string) => {
+    reviewSearchRef.current?.(query);
+  };
+
   return (
     <TestHubContext.Provider
       value={{
@@ -69,6 +86,10 @@ export const TestHubProvider = ({ children }: { children: React.ReactNode }) => 
         triggerOpenNewReviewModal,
         registerOpenNewReportModal,
         triggerOpenNewReportModal,
+        registerReviewSearch,
+        triggerReviewSearch,
+        reviewSearchValue,
+        setReviewSearchValue,
       }}
     >
       {children}

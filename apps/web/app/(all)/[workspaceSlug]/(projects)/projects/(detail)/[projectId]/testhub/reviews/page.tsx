@@ -11,32 +11,15 @@ import styles from "./reviews.module.css";
 import { CaseService } from "@/services/qa/review.service";
 import { ChevronDownIcon } from "@plane/propel/icons";
 import CreateReviewModal from "@/components/qa/review/CreateReviewModal";
-import { CasesSearchInput } from "@/components/qa/cases/cases-search";
-import {
-  DEFAULT_REVIEW_DISPLAY_PROPERTIES,
-  ReviewsDisplayFilters,
-} from "@/components/qa/review/reviews-display-filters";
-import type { TReviewDisplayProperties, TReviewOrderBy } from "@/components/qa/review/reviews-display-filters";
+import { DEFAULT_REVIEW_DISPLAY_PROPERTIES } from "@/components/qa/review/reviews-display-filters";
 import { ReviewsTable } from "@/components/qa/review/reviews-table";
 import type { TReviewTableRecord } from "@/components/qa/review/reviews-table";
-import { reviewsExpressionToQueryParams } from "@/components/qa/review/filters/expression-to-query";
-import type { TReviewsFilterQueryParams } from "@/components/qa/review/filters/expression-to-query";
-import { useReviewsFilter } from "@/components/qa/review/filters/use-reviews-filter";
-import { useReviewsFiltersConfig } from "@/components/qa/review/filters/use-reviews-filters-config";
-import type { TReviewFilterExpression } from "@/components/qa/review/filters/types";
-import { FiltersRow } from "@/components/rich-filters/filters-row";
-import { FiltersToggle } from "@/components/rich-filters/filters-toggle";
 import { useAppRouter } from "@/hooks/use-app-router";
 import { useTestHub } from "../testhub-context";
 import { useProjectPermissions } from "@/hooks/store/use-project-permissions";
 import UnauthorizedImg from "@/app/assets/auth/unauthorized.svg?url";
 import { useTranslation } from "@plane/i18n";
 import { qaCaseErrorContent, qaCaseSetToastError, qaCaseSetToastSuccess } from "@/utils/qa-case-error";
-
-type ModuleNode = {
-  id: string;
-  name: string;
-};
 
 type ReviewModule = {
   id: string;
@@ -64,17 +47,53 @@ type ReviewItem = {
   module_id?: string | null;
 };
 
-const initialModules: ModuleNode[] = [];
-
 const initialReviews: ReviewItem[] = [];
 const QA_REVIEW_CREATE_PERMISSION_KEY = "qa.review.create" as const;
 const QA_REVIEW_EDIT_PERMISSION_KEY = "qa.review.edit" as const;
 const QA_REVIEW_DELETE_PERMISSION_KEY = "qa.review.delete" as const;
-const EMPTY_REVIEW_FILTER_EXPRESSION: TReviewFilterExpression = {};
-
 type TReviewFilters = {
   search?: string;
-} & TReviewsFilterQueryParams;
+};
+
+const getNodeCount = (module: any) => {
+  const count = module?.review_count ?? module?.count ?? module?.total;
+  return typeof count === "number" ? count : undefined;
+};
+
+const filterModulesByName = (list: any[], queryValue: string): any[] => {
+  if (!queryValue) return list || [];
+  const query = queryValue.trim().toLowerCase();
+  const walk = (nodes: any[]): any[] =>
+    (nodes || [])
+      .map((node) => {
+        const name = String(node?.name || "").toLowerCase();
+        const childMatches = walk(node?.children || []);
+        const selfMatch = name.includes(query);
+        if (selfMatch || childMatches.length) {
+          return Object.assign({}, node, { children: childMatches });
+        }
+        return null;
+      })
+      .filter(Boolean) as any[];
+  return walk(list || []);
+};
+
+const findModuleById = (list: ReviewModule[], id: string): ReviewModule | null => {
+  for (const item of list || []) {
+    if (String(item.id) === id) return item;
+    const child = findModuleById(item.children || [], id);
+    if (child) return child;
+  }
+  return null;
+};
+
+const hasDescendant = (node: ReviewModule, targetId: string): boolean => {
+  for (const child of node.children || []) {
+    if (String(child.id) === targetId) return true;
+    if (hasDescendant(child, targetId)) return true;
+  }
+  return false;
+};
 
 const normalizeReviewsResponse = (response: unknown): { count: number; data: ReviewItem[] } => {
   const responseRecord = response as { count?: unknown; data?: unknown; results?: unknown; total_count?: unknown };
@@ -113,9 +132,15 @@ const ModuleInput = ({
   };
 
   return (
-    <div className="w-full" onClick={(e) => e.stopPropagation()}>
+    <div
+      className="w-full"
+      onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => e.stopPropagation()}
+      role="presentation"
+    >
       <Input
         size="small"
+        // eslint-disable-next-line jsx-a11y/no-autofocus
         autoFocus
         placeholder={placeholder}
         value={value}
@@ -149,7 +174,7 @@ export default function ReviewsPage() {
   const isDraggingRef = useRef<boolean>(false);
   const startXRef = useRef<number>(0);
   const startWidthRef = useRef<number>(0);
-  const [search, setSearch] = useState<string>("");
+  const search = "";
   const [selectedModuleId, setSelectedModuleId] = useState<string | null>(null);
   useEffect(() => {
     selectedModuleIdRef.current = selectedModuleId;
@@ -168,15 +193,11 @@ export default function ReviewsPage() {
   const [error, setError] = useState<string>("");
   const [reviewEnums, setReviewEnums] = useState<Record<string, Record<string, { label: string; color: string }>>>({});
   const [filters, setFilters] = useState<TReviewFilters>({});
-  const [ordering, setOrdering] = useState<TReviewOrderBy | undefined>(undefined);
-  const [reviewDisplayProperties, setReviewDisplayProperties] = useState<TReviewDisplayProperties>(() => ({
-    ...DEFAULT_REVIEW_DISPLAY_PROPERTIES,
-  }));
   const caseService = useMemo(() => new CaseService(), []);
   const [createReviewOpen, setCreateReviewOpen] = useState<boolean>(false);
   const [createReviewInitialValues, setCreateReviewInitialValues] = useState<any | undefined>(undefined);
   const selectedModuleIdRef = useRef<string | null>(null);
-  const { registerOpenNewReviewModal } = useTestHub();
+  const { registerOpenNewReviewModal, registerReviewSearch, setReviewSearchValue } = useTestHub();
   const handleOpenCreateReview = useCallback(() => {
     if (!canCreateReview) return;
     setCreateReviewInitialValues(selectedModuleIdRef.current ? { module_id: selectedModuleIdRef.current } : undefined);
@@ -195,32 +216,6 @@ export default function ReviewsPage() {
     return sum(modules);
   }, [modules]);
   const totalReviews = typeof allTotal === "number" ? allTotal : modulesTotalReviews;
-  const { areAllConfigsInitialized, configs: reviewFilterConfigs } = useReviewsFiltersConfig({
-    workspaceSlug: String(workspaceSlug || ""),
-    projectId: String(projectId || ""),
-    reviewEnums,
-  });
-
-  const handleRichFiltersChange = useCallback(
-    (expression: TReviewFilterExpression) => {
-      const mappedQuery = reviewsExpressionToQueryParams(expression);
-      const nextFilters: TReviewFilters = {
-        ...(filters.search ? { search: filters.search } : {}),
-        ...mappedQuery,
-      };
-      setFilters(nextFilters);
-      setCurrentPage(1);
-    },
-    [filters.search]
-  );
-
-  const reviewsFilter = useReviewsFilter({
-    instanceKey: `${projectId || "all"}-${repositoryKey}`,
-    initialExpression: EMPTY_REVIEW_FILTER_EXPRESSION,
-    areAllConfigsInitialized,
-    configs: reviewFilterConfigs,
-    onExpressionChange: handleRichFiltersChange,
-  });
 
   const onMouseDownResize = (e: React.MouseEvent<HTMLDivElement>) => {
     isDraggingRef.current = true;
@@ -252,6 +247,7 @@ export default function ReviewsPage() {
       window.removeEventListener("mousemove", onMouseMoveResize as any);
       window.removeEventListener("mouseup", onMouseUpResize as any);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -268,7 +264,8 @@ export default function ReviewsPage() {
     const savedName = sessionStorage.getItem(storageKey) || "";
     const initFilters: TReviewFilters = savedName ? { search: savedName } : {};
     setFilters(initFilters);
-    void fetchReviews(1, pageSize, selectedModuleId, initFilters, ordering);
+    setReviewSearchValue(initFilters.search || "");
+    void fetchReviews(1, pageSize, selectedModuleId, initFilters);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceSlug, repositoryKey, permissionsFetched, hasPermission]);
 
@@ -277,7 +274,7 @@ export default function ReviewsPage() {
     try {
       const data: ReviewModule[] = await caseService.getReviewModules(workspaceSlug as string, projectId as string);
       setModules(Array.isArray(data) ? data : []);
-    } catch (e) {
+    } catch {
       // ignore error for placeholder page
     }
   };
@@ -287,7 +284,7 @@ export default function ReviewsPage() {
     try {
       const data = await caseService.getReviewEnums(workspaceSlug as string);
       setReviewEnums(data || {});
-    } catch (e) {}
+    } catch {}
   };
 
   const fetchAllReviewsTotal = async () => {
@@ -296,7 +293,7 @@ export default function ReviewsPage() {
       const params: any = { page: 1, page_size: 1 };
       const res = await caseService.getReviews(workspaceSlug as string, projectId as string, params);
       setAllTotal(Number(res?.count || 0));
-    } catch (e) {
+    } catch {
       setAllTotal(undefined);
     }
   };
@@ -306,8 +303,7 @@ export default function ReviewsPage() {
       page: number,
       size: number,
       moduleId: string | null,
-      extraFilters: TReviewFilters = {},
-      orderBy?: TReviewOrderBy
+      extraFilters: TReviewFilters = {}
     ) => {
       if (!workspaceSlug || !projectId) return;
       setLoading(true);
@@ -315,13 +311,7 @@ export default function ReviewsPage() {
       try {
         const params: any = { page, page_size: size };
         if (moduleId) params.module_id = moduleId;
-        if (orderBy) params.ordering = orderBy;
         if (extraFilters?.search) params.name__icontains = extraFilters.search;
-        if (extraFilters?.state__in) params.state__in = extraFilters.state__in;
-        if (extraFilters?.mode__in) params.mode__in = extraFilters.mode__in;
-        if (extraFilters?.assignee__in) params.assignee__in = extraFilters.assignee__in;
-        if (extraFilters?.started_at__lte) params.started_at__lte = extraFilters.started_at__lte;
-        if (extraFilters?.ended_at__gte) params.ended_at__gte = extraFilters.ended_at__gte;
 
         const res = await caseService.getReviews(workspaceSlug as string, projectId as string, params);
         const normalizedResponse = normalizeReviewsResponse(res);
@@ -377,7 +367,7 @@ export default function ReviewsPage() {
     }
   };
 
-  const startRenameNode = (moduleId: string, currentName: string) => {
+  const startRenameNode = (moduleId: string) => {
     if (!canEditReview) return;
     setCreatingParentId(null);
     setRenamingModuleId(moduleId);
@@ -439,7 +429,7 @@ export default function ReviewsPage() {
         if (!workspaceSlug || !review?.id) return;
         try {
           await caseService.deleteReview(workspaceSlug as string, projectId as string, { ids: [review.id] });
-          await fetchReviews(currentPage, pageSize, selectedModuleId, filters, ordering);
+          await fetchReviews(currentPage, pageSize, selectedModuleId, filters);
           await fetchModules();
           await fetchAllReviewsTotal();
           qaCaseSetToastSuccess("评审已删除");
@@ -453,11 +443,6 @@ export default function ReviewsPage() {
   const renderCreatingInput = (parentId: string | "all") => (
     <ModuleInput placeholder="请输入模块名称" onCommit={(val) => handleCreateBlurOrEnter(parentId, val)} />
   );
-
-  const getNodeCount = (m: any) => {
-    const c = m?.review_count ?? m?.count ?? m?.total;
-    return typeof c === "number" ? c : undefined;
-  };
 
   const renderNodeTitle = (node: any) => {
     const nodeId = String(node?.id);
@@ -493,7 +478,7 @@ export default function ReviewsPage() {
                   type="text"
                   size="small"
                   disabled={!canEditReview}
-                  onClick={() => startRenameNode(nodeId, title)}
+                  onClick={() => startRenameNode(nodeId)}
                 >
                   重命名
                 </Button>
@@ -568,43 +553,7 @@ export default function ReviewsPage() {
     });
   };
 
-  const filterModulesByName = (list: any[], q: string): any[] => {
-    if (!q) return list || [];
-    const query = q.trim().toLowerCase();
-    const walk = (nodes: any[]): any[] => {
-      return (nodes || [])
-        .map((n) => {
-          const name = String(n?.name || "").toLowerCase();
-          const childMatches = walk(n?.children || []);
-          const selfMatch = name.includes(query);
-          if (selfMatch || childMatches.length) {
-            return { ...n, children: childMatches };
-          }
-          return null;
-        })
-        .filter(Boolean) as any[];
-    };
-    return walk(list || []);
-  };
-
   const filteredModules = useMemo(() => filterModulesByName(modules, search), [modules, search]);
-
-  const findModuleById = (list: ReviewModule[], id: string): ReviewModule | null => {
-    for (const item of list || []) {
-      if (String(item.id) === id) return item;
-      const child = findModuleById(item.children || [], id);
-      if (child) return child;
-    }
-    return null;
-  };
-
-  const hasDescendant = (node: ReviewModule, targetId: string): boolean => {
-    for (const child of node.children || []) {
-      if (String(child.id) === targetId) return true;
-      if (hasDescendant(child, targetId)) return true;
-    }
-    return false;
-  };
 
   const treeData = [
     {
@@ -700,15 +649,15 @@ export default function ReviewsPage() {
       });
       await fetchModules();
       await fetchAllReviewsTotal();
-    } catch (e) {}
+    } catch {}
   };
 
   useEffect(() => {
     if (!permissionsFetched) return;
     if (!hasPermission("qa.review.view")) return;
-    void fetchReviews(currentPage, pageSize, selectedModuleId, filters, ordering);
+    void fetchReviews(currentPage, pageSize, selectedModuleId, filters);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedModuleId, currentPage, pageSize, filters, ordering, permissionsFetched, hasPermission]);
+  }, [selectedModuleId, currentPage, pageSize, filters, permissionsFetched, hasPermission]);
 
   const totalForCurrent = useMemo(() => {
     return total;
@@ -755,6 +704,7 @@ export default function ReviewsPage() {
   const handleReviewSearch = (query: string) => {
     const nextFilters: TReviewFilters = { ...filters, search: query.trim() || undefined };
     setFilters(nextFilters);
+    setReviewSearchValue(query.trim() || "");
     const storageKey = `reviews_name_filter_${workspaceSlug}_${repositoryKey}`;
     try {
       sessionStorage.setItem(storageKey, nextFilters.search || "");
@@ -762,14 +712,9 @@ export default function ReviewsPage() {
     setCurrentPage(1);
   };
 
-  const handleSortChange = (nextOrdering: TReviewOrderBy) => {
-    setOrdering(nextOrdering);
-    setCurrentPage(1);
-  };
-
-  const handleDisplayPropertiesUpdate = (updatedDisplayProperties: Partial<TReviewDisplayProperties>) => {
-    setReviewDisplayProperties((prev) => ({ ...prev, ...updatedDisplayProperties }));
-  };
+  useEffect(() => {
+    registerReviewSearch(handleReviewSearch);
+  }, [handleReviewSearch, registerReviewSearch]);
 
   const canViewReviews = permissionsFetched && hasPermission("qa.review.view");
 
@@ -815,7 +760,7 @@ export default function ReviewsPage() {
                 blockNode
                 draggable={canEditReview}
                 showIcon={false}
-                switcherIcon={(nodeProps) => (
+                switcherIcon={() => (
                   <span className="inline-flex h-5 w-5 items-center justify-center text-secondary">
                     <ChevronDownIcon className={`size-4 rotate-0 transition-transform`} strokeWidth={2.5} />
                   </span>
@@ -830,39 +775,10 @@ export default function ReviewsPage() {
                 className="custom-tree-indent testhub-review-module-tree py-2 pl-2"
               />
             </div>
-            <div className={styles.resizer} onMouseDown={onMouseDownResize} />
+            <div className={styles.resizer} onMouseDown={onMouseDownResize} role="presentation" />
           </div>
           <div className={`${styles.right} overflow-hidden !py-0`}>
             <div className="flex h-full flex-col overflow-hidden">
-              <div className="flex flex-shrink-0 items-center justify-end px-3 pt-2 pb-2">
-                <div className="flex items-center gap-2">
-                  <CasesSearchInput
-                    ariaLabel="搜索评审"
-                    clearAriaLabel="清空评审搜索"
-                    placeholder="搜索评审名称"
-                    value={filters.search ?? ""}
-                    onSearch={handleReviewSearch}
-                  />
-                  <FiltersToggle filter={reviewsFilter} triggerClassName="h-8 w-8" iconButtonSize="xl" />
-                  <ReviewsDisplayFilters
-                    displayProperties={reviewDisplayProperties}
-                    ordering={ordering}
-                    onDisplayPropertiesChange={handleDisplayPropertiesUpdate}
-                    onOrderByChange={handleSortChange}
-                  />
-                  <button
-                    type="button"
-                    disabled={!canCreateReview}
-                    onClick={handleOpenCreateReview}
-                    className="flex items-center justify-center gap-1.5 rounded bg-accent-primary px-3 py-1.5 text-xs font-medium whitespace-nowrap text-on-color transition-all hover:bg-accent-primary-hover focus:bg-accent-primary-hover focus:text-on-color disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    新建评审
-                  </button>
-                </div>
-              </div>
-              <div className="flex-shrink-0 px-3 pb-2">
-                <FiltersRow filter={reviewsFilter} />
-              </div>
               <div className="min-h-0 flex-1 overflow-hidden">
                 {error ? (
                   <div className="m-3 rounded-md border border-danger-subtle bg-danger-subtle p-4">
@@ -874,7 +790,7 @@ export default function ReviewsPage() {
                       <ReviewsTable
                         canDelete={canDeleteReview}
                         canEdit={canEditReview}
-                        displayProperties={reviewDisplayProperties}
+                        displayProperties={DEFAULT_REVIEW_DISPLAY_PROPERTIES}
                         loading={loading}
                         onDelete={(record) => confirmDeleteReview(record as ReviewItem)}
                         onEdit={handleEditReview}
@@ -940,7 +856,7 @@ export default function ReviewsPage() {
               open={createReviewOpen}
               initialValues={createReviewInitialValues}
               onClose={() => {
-                fetchReviews(currentPage, pageSize, selectedModuleId, filters, ordering);
+                fetchReviews(currentPage, pageSize, selectedModuleId, filters);
                 fetchModules();
                 fetchAllReviewsTotal();
                 setCreateReviewOpen(false);
@@ -954,7 +870,7 @@ export default function ReviewsPage() {
               mode="edit"
               initialValues={editReview || undefined}
               onClose={() => {
-                fetchReviews(currentPage, pageSize, selectedModuleId, filters, ordering);
+                fetchReviews(currentPage, pageSize, selectedModuleId, filters);
                 fetchModules();
                 fetchAllReviewsTotal();
                 setEditOpen(false);
