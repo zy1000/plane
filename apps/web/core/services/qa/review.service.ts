@@ -13,11 +13,14 @@ export type ReviewCaseReviewerStatus = {
 export type ReviewCaseListItem = {
   id: string;
   case_id: string;
+  code?: string;
   name: string;
   priority: number;
   assignees: string[];
   result: string;
   created_by: string | null;
+  repository?: string | null;
+  module?: string | null;
   suggestion_count: number;
   reviewer_statuses: ReviewCaseReviewerStatus[];
   unreviewed_assignees: string[];
@@ -131,9 +134,14 @@ export class CaseService extends APIService {
       page_size?: number;
       project_id?: string | null;
       repository_id?: string | null;
+      repository_ids?: string | null;
       module_id?: string | null;
+      module_ids?: string | null;
       ordering?: string;
       name__icontains?: string;
+      result__in?: string;
+      priority__in?: string;
+      assignee__in?: string;
     }
   ): Promise<{ data: ReviewCaseListItem[]; count: number }> {
     const params = { review_id, ...(queries || {}) } as any;

@@ -5,16 +5,37 @@ import { useEffect, useRef, useState, useMemo, type ReactNode } from "react";
 import { PageHead } from "@/components/core/page-title";
 import { Breadcrumbs } from "@plane/ui";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
-import { Row, Col, Tree, Table, Button, Tag, Pagination, Popconfirm, Select } from "antd";
-import type { TreeProps, TableProps } from "antd";
-import { AppstoreOutlined, DownOutlined } from "@ant-design/icons";
+import { Tree, Pagination, Popconfirm, Select } from "antd";
+import type { TreeProps } from "antd";
+import { AppstoreOutlined } from "@ant-design/icons";
 import { CaseService as CaseApiService } from "@/services/qa/case.service";
-import { CaseService as ReviewApiService } from "@/services/qa/review.service";
-import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
+import { CaseService as ReviewApiService, type ReviewCaseListItem } from "@/services/qa/review.service";
 import { ChevronDownIcon } from "@plane/propel/icons";
 import { FolderOpenDot, Atom } from "lucide-react";
 import UpdateModal from "@/components/qa/cases/update-modal";
 import TestCaseSelectionModal from "@/components/qa/review/TestCaseSelectionModal";
+import { CasesSearchInput } from "@/components/qa/cases/cases-search";
+import {
+  DEFAULT_REVIEW_CASE_DISPLAY_PROPERTIES,
+  ReviewCaseDisplayFilters,
+} from "@/components/qa/review/review-case-display-filters";
+import type {
+  TReviewCaseDisplayProperties,
+  TReviewCaseOrderBy,
+} from "@/components/qa/review/review-case-display-filters";
+import { ReviewCaseDetailTable } from "@/components/qa/review/review-case-detail-table";
+import { FiltersRow } from "@/components/rich-filters/filters-row";
+import { FiltersToggle } from "@/components/rich-filters/filters-toggle";
+import {
+  reviewCaseExpressionToQueryParams,
+  type TReviewCaseFilterQueryParams,
+} from "@/components/qa/review/review-case-list-filters/expression-to-query";
+import { useReviewCaseFilter } from "@/components/qa/review/review-case-list-filters/use-review-case-filter";
+import { useReviewCaseFiltersConfig } from "@/components/qa/review/review-case-list-filters/use-review-case-filters-config";
+import type {
+  TReviewCaseFilterExpression,
+} from "@/components/qa/review/review-case-list-filters/types";
+import type { TReviewCaseFilterSelectOption } from "@/components/qa/review/review-case-list-filters/use-review-case-filters-config";
 import { useUser } from "@/hooks/store/user";
 import { useTranslation } from "@plane/i18n";
 import {
@@ -24,19 +45,17 @@ import {
   qaCaseSetToastWarning,
 } from "@/utils/qa-case-error";
 import { useProjectPermissions } from "@/hooks/store/use-project-permissions";
+import { globalEnums } from "../util";
 
 const QA_REVIEW_EDIT_PERMISSION_KEY = "qa.review.edit" as const;
 
-type ReviewCaseRow = {
-  id: string;
-  case_id: string;
-  code?: string;
-  name: string;
-  priority: number;
-  assignees: string[];
-  result: string;
-  created_by: string | null;
-};
+type ReviewCaseRow = ReviewCaseListItem;
+type TReviewCaseListFilters = {
+  search?: string;
+} & TReviewCaseFilterQueryParams;
+
+const EMPTY_REVIEW_CASE_FILTER_EXPRESSION: TReviewCaseFilterExpression = {};
+const DEFAULT_REVIEW_CASE_ORDERING: TReviewCaseOrderBy = "-case__updated_at";
 
 export default function CaseManagementReviewDetailPage() {
   const { t } = useTranslation();
@@ -46,11 +65,12 @@ export default function CaseManagementReviewDetailPage() {
   const repositoryIdFromUrl = searchParams.get("repositoryId");
   const repositoryId =
     repositoryIdFromUrl || (typeof window !== "undefined" ? sessionStorage.getItem("selectedRepositoryId") : null);
-  const reviewName = typeof window !== "undefined" ? sessionStorage.getItem("selectedReviewName") : "";
   const router = useRouter();
+  const workspaceSlugString = String(workspaceSlug || "");
+  const projectIdString = String(projectId || "");
   const { fetched: permissionsFetched, hasPermission } = useProjectPermissions(
-    String(workspaceSlug || ""),
-    String(projectId || "")
+    workspaceSlugString,
+    projectIdString
   );
   const canEditReview = permissionsFetched && hasPermission(QA_REVIEW_EDIT_PERMISSION_KEY);
 
@@ -67,7 +87,15 @@ export default function CaseManagementReviewDetailPage() {
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(20);
   const [total, setTotal] = useState<number>(0);
-  const [ordering, setOrdering] = useState<string | undefined>(undefined);
+  const [ordering, setOrdering] = useState<TReviewCaseOrderBy>(DEFAULT_REVIEW_CASE_ORDERING);
+  const [reviewCaseDisplayProperties, setReviewCaseDisplayProperties] = useState<TReviewCaseDisplayProperties>(() => ({
+    ...DEFAULT_REVIEW_CASE_DISPLAY_PROPERTIES,
+  }));
+  const [filters, setFilters] = useState<TReviewCaseListFilters>({});
+  const [filterExpression, setFilterExpression] = useState<TReviewCaseFilterExpression>(
+    EMPTY_REVIEW_CASE_FILTER_EXPRESSION
+  );
+  const [reviewAssigneeIds, setReviewAssigneeIds] = useState<string[]>([]);
   const [reviewEnums, setReviewEnums] = useState<Record<string, Record<string, { label: string; color: string }>>>({});
   const [isCaseModalOpen, setIsCaseModalOpen] = useState(false);
   const [activeCaseId, setActiveCaseId] = useState<string | undefined>(undefined);
@@ -80,13 +108,67 @@ export default function CaseManagementReviewDetailPage() {
   const [reviewList, setReviewList] = useState<Array<{ id: string; name: string }>>([]);
   const [reviewListLoading, setReviewListLoading] = useState<boolean>(false);
 
+  const casePriorityEnums = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries((globalEnums.Enums as any)?.case_priority || {}).map(([value, label]) => [
+          String(value),
+          String(label),
+        ])
+      ) as Record<string, string>,
+    []
+  );
+
+  const { repositoryFilterOptions, moduleFilterOptions } = useMemo(() => {
+    const repositoryMap = new Map<string, TReviewCaseFilterSelectOption>();
+    const moduleMap = new Map<string, TReviewCaseFilterSelectOption>();
+
+    const walk = (node: any, repositoryName = "", modulePath: string[] = []) => {
+      const kind = String(node?.kind || "");
+      const id = node?.id ? String(node.id) : "";
+      const name = String(node?.name || "-");
+
+      if (kind === "repository" && id) {
+        repositoryMap.set(id, { id, value: id, label: name });
+        (node?.children || []).forEach((child: any) => walk(child, name, []));
+        return;
+      }
+
+      if (kind === "repository_modules_all") {
+        (node?.children || []).forEach((child: any) => walk(child, repositoryName, []));
+        return;
+      }
+
+      if (kind === "module" && id) {
+        const nextPath = [...modulePath, name];
+        moduleMap.set(id, {
+          id,
+          value: id,
+          label: [repositoryName, ...nextPath].filter(Boolean).join(" / "),
+        });
+        (node?.children || []).forEach((child: any) => walk(child, repositoryName, nextPath));
+        return;
+      }
+
+      (node?.children || []).forEach((child: any) => walk(child, repositoryName, modulePath));
+    };
+
+    if (reviewTree) walk(reviewTree);
+
+    return {
+      repositoryFilterOptions: Array.from(repositoryMap.values()),
+      moduleFilterOptions: Array.from(moduleMap.values()),
+    };
+  }, [reviewTree]);
+
   const selectionContextKey = useMemo(() => {
     return JSON.stringify({
       reviewId,
       selectedModuleId,
       ordering,
+      filters,
     });
-  }, [reviewId, selectedModuleId, ordering]);
+  }, [filters, reviewId, selectedModuleId, ordering]);
   const lastSelectionContextKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -158,19 +240,29 @@ export default function CaseManagementReviewDetailPage() {
   const fetchReviewCaseList = async (
     page: number = currentPage,
     size: number = pageSize,
-    moduleId?: string | null,
-    orderingParam?: string | null
+    options?: {
+      filtersParam?: TReviewCaseListFilters;
+      moduleId?: string | null;
+      orderingParam?: TReviewCaseOrderBy | null;
+    }
   ) => {
     if (!workspaceSlug || !reviewId) return;
     try {
-      // setLoading(true);
+      setLoading(true);
       setError(null);
-      const effectiveOrdering = orderingParam === undefined ? ordering : (orderingParam ?? undefined);
+      const hasModuleOverride = Object.prototype.hasOwnProperty.call(options || {}, "moduleId");
+      const effectiveModuleId = hasModuleOverride ? options?.moduleId : selectedModuleId;
+      const effectiveOrdering = options?.orderingParam === undefined ? ordering : (options.orderingParam ?? undefined);
+      const effectiveFilters = options?.filtersParam ?? filters;
+      const { search, ...filterParams } = effectiveFilters;
       const listParams = {
         page,
         page_size: size,
-        module_id: typeof moduleId === "undefined" ? selectedModuleId : moduleId,
+        ...(projectId ? { project_id: String(projectId) } : {}),
+        ...(effectiveModuleId ? { module_id: effectiveModuleId } : {}),
         ...(effectiveOrdering ? { ordering: effectiveOrdering } : {}),
+        ...(search ? { name__icontains: search } : {}),
+        ...filterParams,
       };
       let res = await reviewService.getReviewCaseList(workspaceSlug as string, reviewId as string, listParams);
       let data = Array.isArray(res?.data) ? (res.data as ReviewCaseRow[]) : [];
@@ -190,6 +282,10 @@ export default function CaseManagementReviewDetailPage() {
       }
 
       setReviewCases(data);
+      const assigneesFromRows = data.find((row) => Array.isArray(row.assignees) && row.assignees.length > 0)?.assignees;
+      if (assigneesFromRows && assigneesFromRows.length > 0) {
+        setReviewAssigneeIds(Array.from(new Set(assigneesFromRows.map((assigneeId) => String(assigneeId)))));
+      }
       setTotal(count);
       setCurrentPage(pageToUse);
       setPageSize(size);
@@ -208,16 +304,114 @@ export default function CaseManagementReviewDetailPage() {
     fetchReviewCaseList(nextPage, nextSize);
   };
 
+  const handleDisplayPropertiesUpdate = (updatedDisplayProperties: Partial<TReviewCaseDisplayProperties>) => {
+    setReviewCaseDisplayProperties((prev) => ({ ...prev, ...updatedDisplayProperties }));
+  };
+
+  const handleSortChange = (nextOrdering: TReviewCaseOrderBy) => {
+    setOrdering(nextOrdering);
+    fetchReviewCaseList(1, pageSize, { orderingParam: nextOrdering });
+  };
+
+  const handleRichFiltersChange = (expression: TReviewCaseFilterExpression) => {
+    const nextFilters: TReviewCaseListFilters = {
+      ...(filters.search ? { search: filters.search } : {}),
+      ...reviewCaseExpressionToQueryParams(expression),
+    };
+    setFilterExpression(expression);
+    setFilters(nextFilters);
+    fetchReviewCaseList(1, pageSize, { filtersParam: nextFilters });
+  };
+
+  const { areAllConfigsInitialized, configs: reviewCaseFilterConfigs } = useReviewCaseFiltersConfig({
+    assigneeIds: reviewAssigneeIds,
+    casePriorityEnums,
+    moduleOptions: moduleFilterOptions,
+    repositoryOptions: repositoryFilterOptions,
+    reviewEnums,
+    workspaceSlug: workspaceSlugString,
+  });
+
+  const reviewCaseFilter = useReviewCaseFilter({
+    areAllConfigsInitialized,
+    configs: reviewCaseFilterConfigs,
+    initialExpression: filterExpression,
+    instanceKey: `review-case-detail-${workspaceSlugString}-${projectIdString}-${reviewId}`,
+    onExpressionChange: handleRichFiltersChange,
+  });
+
+  const handleRowSelectChange = (selectedKeysOnCurrentPage: string[]) => {
+    const currentPageIds = (reviewCases || []).map((item) => String(item.id));
+    setSelectedCaseIds((prev) => {
+      const next = new Set(prev.map((id) => String(id)));
+      currentPageIds.forEach((id) => next.delete(id));
+      selectedKeysOnCurrentPage.forEach((id) => next.add(id));
+      return Array.from(next);
+    });
+
+    setSelectedCaseMap((prev) => {
+      const next = { ...prev };
+      (reviewCases || []).forEach((row) => {
+        const id = String(row.id);
+        if (selectedKeysOnCurrentPage.includes(id)) {
+          next[id] = String(row.case_id);
+        } else {
+          delete next[id];
+        }
+      });
+      return next;
+    });
+  };
+
+  const handleOpenCase = (record: ReviewCaseRow) => {
+    if (!record?.case_id) {
+      qaCaseSetToastWarning("缺少用例信息，无法打开");
+      return;
+    }
+    setActiveCaseId(String(record.case_id));
+    setIsCaseModalOpen(true);
+  };
+
+  const handleReviewCase = (record: ReviewCaseRow) => {
+    if (!workspaceSlug || !reviewId) return;
+    const href = `/${workspaceSlug}/projects/${projectId}/testhub/case-review?review_id=${encodeURIComponent(
+      reviewId
+    )}&case_id=${encodeURIComponent(record.case_id)}`;
+    router.push(href);
+  };
+
+  const handleCancelCase = async (record: ReviewCaseRow) => {
+    if (!canEditReview) return;
+    if (!workspaceSlug || !reviewId) return;
+    try {
+      await reviewService.CaseCancel(workspaceSlug as string, projectId as string, { ids: [record.id] });
+      qaCaseSetToastSuccess("已取消关联");
+      fetchReviewCaseList(currentPage, pageSize);
+    } catch (e: unknown) {
+      qaCaseSetToastError(e, t, "操作失败");
+    }
+  };
+
   useEffect(() => {
     try {
       if (repositoryIdFromUrl) sessionStorage.setItem("selectedRepositoryId", repositoryIdFromUrl);
     } catch {}
     setReviewTree(null);
+    setFilters({});
+    setFilterExpression(EMPTY_REVIEW_CASE_FILTER_EXPRESSION);
+    setOrdering(DEFAULT_REVIEW_CASE_ORDERING);
+    setReviewAssigneeIds([]);
+    setSelectedCaseIds([]);
+    setSelectedCaseMap({});
     fetchReviewTree();
     fetchReviewEnums();
-    fetchReviewCaseList(1, pageSize);
     setSelectedTreeKey("root");
     setSelectedModuleId(null);
+    fetchReviewCaseList(1, pageSize, {
+      filtersParam: {},
+      moduleId: null,
+      orderingParam: DEFAULT_REVIEW_CASE_ORDERING,
+    });
   }, [repositoryId, reviewId]);
 
   useEffect(() => {
@@ -334,203 +528,20 @@ export default function CaseManagementReviewDetailPage() {
 
     if (!kind || kind === "root" || kind === "repository" || kind === "repository_modules_all") {
       setSelectedModuleId(null);
-      fetchReviewCaseList(1, pageSize, null);
+      fetchReviewCaseList(1, pageSize, { moduleId: null });
       return;
     }
 
     if (kind === "module") {
       const moduleId = node?.moduleId ? String(node.moduleId) : null;
       setSelectedModuleId(moduleId);
-      fetchReviewCaseList(1, pageSize, moduleId);
+      fetchReviewCaseList(1, pageSize, { moduleId });
     }
-  };
-
-  const priorityLabelMap: Record<number, string> = { 0: "低", 1: "中", 2: "高" };
-
-  const columns = [
-    {
-      title: "用例编号",
-      dataIndex: "code",
-      key: "code",
-      sorter: true,
-      sortOrder: ordering === "case__code" ? "ascend" : ordering === "-case__code" ? "descend" : null,
-      render: (code: string | undefined, record: ReviewCaseRow) => (
-        <Button
-          type="link"
-          size="small"
-          className="h-auto p-0 !text-primary hover:!text-primary"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            if (!record?.case_id) {
-              qaCaseSetToastWarning("缺少用例信息，无法打开");
-              return;
-            }
-            setActiveCaseId(String(record.case_id));
-            setIsCaseModalOpen(true);
-          }}
-        >
-          <span className="text-inherit">{code || "-"}</span>
-        </Button>
-      ),
-    },
-    {
-      title: "用例名称",
-      dataIndex: "name",
-      key: "name",
-      width: 220,
-      render: (name: string, record: ReviewCaseRow) => (
-        <Button
-          type="link"
-          size="small"
-          className="h-auto p-0 !text-primary hover:!text-primary"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            if (!record?.case_id) {
-              qaCaseSetToastWarning("缺少用例信息，无法打开");
-              return;
-            }
-            setActiveCaseId(String(record.case_id));
-            setIsCaseModalOpen(true);
-          }}
-        >
-          <span className="block max-w-[200px] truncate text-inherit" title={name || ""}>
-            {name || "-"}
-          </span>
-        </Button>
-      ),
-    },
-    {
-      title: "用例库",
-      dataIndex: "repository",
-      key: "repository",
-      render: (v: string | null) => v ?? "",
-    },
-    {
-      title: "模块",
-      dataIndex: "module",
-      key: "module",
-      render: (v: string | null) => v ?? "",
-    },
-    {
-      title: "用例等级",
-      dataIndex: "priority",
-      key: "priority",
-      render: (v: number) => priorityLabelMap[v] ?? "-",
-    },
-    {
-      title: "评审人",
-      dataIndex: "assignees",
-      key: "assignees",
-      render: (assignees: string[] = []) => (
-        <MemberDropdown
-          multiple={true}
-          value={assignees}
-          onChange={() => {}}
-          disabled={true}
-          placeholder={"未知用户"}
-          className="w-full text-sm"
-          buttonContainerClassName="w-full text-left p-0 cursor-default"
-          buttonVariant="transparent-with-text"
-          buttonClassName="text-sm p-0 hover:bg-transparent hover:bg-inherit"
-          showUserDetails={true}
-          optionsClassName="z-[60]"
-        />
-      ),
-    },
-    {
-      title: "评审结果",
-      dataIndex: "result",
-      key: "result",
-      render: (result: string) => {
-        const color = reviewEnums?.CaseReviewThrough_Result?.[result]?.color || "default";
-        return <Tag color={color}>{result || "-"}</Tag>;
-      },
-    },
-    {
-      title: "创建人",
-      dataIndex: "created_by",
-      key: "created_by",
-      render: (uid: string | null) => (
-        <MemberDropdown
-          multiple={false}
-          value={uid ?? null}
-          onChange={() => {}}
-          disabled={true}
-          placeholder={"未知用户"}
-          className="w-full text-sm"
-          buttonContainerClassName="w-full text-left p-0 cursor-default"
-          buttonVariant="transparent-with-text"
-          buttonClassName="text-sm p-0 hover:bg-transparent hover:bg-inherit"
-          showUserDetails={true}
-          optionsClassName="z-[60]"
-        />
-      ),
-    },
-    {
-      title: "操作",
-      key: "actions",
-      fixed: "right",
-      width: 140,
-      render: (_: any, record: ReviewCaseRow) => (
-        <div className="flex items-center gap-2">
-          <Button
-            type="link"
-            size="small"
-            onClick={() => {
-              if (!workspaceSlug || !reviewId) return;
-              const href = `/${workspaceSlug}/projects/${projectId}/testhub/case-review?review_id=${encodeURIComponent(reviewId)}&case_id=${encodeURIComponent(record.case_id)}`;
-              router.push(href);
-            }}
-          >
-            评审
-          </Button>
-          <Button
-            type="link"
-            size="small"
-            danger
-            disabled={!canEditReview}
-            onClick={async () => {
-              if (!canEditReview) return;
-              if (!workspaceSlug || !reviewId) return;
-              try {
-                await reviewService.CaseCancel(workspaceSlug as string, projectId as string, { ids: [record.id] });
-                qaCaseSetToastSuccess("已取消关联");
-                fetchReviewCaseList(currentPage, pageSize);
-              } catch (e: unknown) {
-                qaCaseSetToastError(e, t, "操作失败");
-              }
-            }}
-          >
-            取关
-          </Button>
-        </div>
-      ),
-    },
-  ];
-
-  const handleTableChange: TableProps<ReviewCaseRow>["onChange"] = (_pagination, _filters, sorter) => {
-    const sorterValue = Array.isArray(sorter) ? sorter[0] : sorter;
-    const sorterField = String((sorterValue as any)?.field ?? "");
-    const sorterOrder = (sorterValue as any)?.order as "ascend" | "descend" | undefined;
-
-    const nextOrdering =
-      sorterField === "code"
-        ? sorterOrder === "ascend"
-          ? "case__code"
-          : sorterOrder === "descend"
-            ? "-case__code"
-            : undefined
-        : undefined;
-
-    setOrdering(nextOrdering);
-    fetchReviewCaseList(1, pageSize, undefined, nextOrdering ?? null);
   };
 
   return (
     <>
-      <div className="flex h-full w-full flex-col overflow-hidden px-4 pt-4 pb-0">
+      <div className="flex h-full w-full flex-col overflow-hidden pr-4 pb-0">
         <PageHead title="评审详情" />
         <div className="flex min-h-0 w-full flex-1 overflow-hidden rounded-md border border-subtle">
           <div
@@ -614,6 +625,24 @@ export default function CaseManagementReviewDetailPage() {
                   </Breadcrumbs>
                 </div>
                 <div className="flex items-center gap-2">
+                  <CasesSearchInput
+                    value={filters.search ?? ""}
+                    onSearch={(query) => {
+                      const trimmedQuery = query.trim();
+                      const nextFilters: TReviewCaseListFilters = { ...filters };
+                      if (trimmedQuery) nextFilters.search = trimmedQuery;
+                      else delete nextFilters.search;
+                      setFilters(nextFilters);
+                      fetchReviewCaseList(1, pageSize, { filtersParam: nextFilters });
+                    }}
+                  />
+                  <FiltersToggle filter={reviewCaseFilter} triggerClassName="h-8 w-8" iconButtonSize="xl" />
+                  <ReviewCaseDisplayFilters
+                    displayProperties={reviewCaseDisplayProperties}
+                    ordering={ordering}
+                    onDisplayPropertiesChange={handleDisplayPropertiesUpdate}
+                    onOrderByChange={handleSortChange}
+                  />
                   <button
                     type="button"
                     disabled={!canEditReview}
@@ -627,7 +656,10 @@ export default function CaseManagementReviewDetailPage() {
                   </button>
                 </div>
               </div>
-              <div className="min-h-0 min-w-0 flex-1 overflow-hidden px-4 pt-0 pb-4">
+              <div className="flex-shrink-0 pr-4 pb-2">
+                <FiltersRow filter={reviewCaseFilter} />
+              </div>
+              <div className="min-h-0 min-w-0 flex-1 overflow-hidden pr-4 pt-0 pb-4">
                 {loading && (
                   <div className="flex items-center justify-center py-12">
                     <div className="text-secondary">加载中...</div>
@@ -640,47 +672,20 @@ export default function CaseManagementReviewDetailPage() {
                 )}
                 {!loading && !error && (
                   <div className="flex h-full min-w-0 flex-col overflow-hidden">
-                    <div className="testhub-review-detail-table-scroll relative flex-1 overflow-y-auto [&::-webkit-scrollbar]:block [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[var(--scrollbar-thumb)] [&::-webkit-scrollbar-track]:bg-transparent">
-                      <Table
-                        dataSource={reviewCases}
-                        columns={columns as any}
-                        rowKey="id"
-                        bordered={true}
-                        pagination={false}
-                        locale={{ emptyText: "暂无数据" }}
-                        scroll={{ x: "max-content" }}
-                        onChange={handleTableChange}
-                        rowSelection={{
-                          selectedRowKeys: selectedCaseIds,
-                          preserveSelectedRowKeys: true,
-                          onChange: (newSelectedRowKeys) => {
-                            const nextSelectedKeys = (newSelectedRowKeys as (string | number)[]).map((k) => String(k));
-                            const currentPageIds = (reviewCases || []).map((c) => String(c.id));
-
-                            setSelectedCaseIds((prev) => {
-                              const next = new Set(prev.map((k) => String(k)));
-                              for (const id of currentPageIds) next.delete(id);
-                              for (const id of nextSelectedKeys) next.add(id);
-                              return Array.from(next);
-                            });
-
-                            setSelectedCaseMap((prev) => {
-                              const next = { ...prev };
-                              (reviewCases || []).forEach((row) => {
-                                const id = String(row.id);
-                                if (nextSelectedKeys.includes(id)) {
-                                  next[id] = String(row.case_id);
-                                } else {
-                                  delete next[id];
-                                }
-                              });
-                              return next;
-                            });
-                          },
-                        }}
+                    <div className="relative min-w-0 flex-1 overflow-hidden">
+                      <ReviewCaseDetailTable
+                        canEditReview={canEditReview}
+                        displayProperties={reviewCaseDisplayProperties}
+                        onCancel={handleCancelCase}
+                        onOpenCase={handleOpenCase}
+                        onReview={handleReviewCase}
+                        onRowSelectChange={handleRowSelectChange}
+                        reviewCases={reviewCases}
+                        reviewEnums={reviewEnums}
+                        selectedCaseIds={selectedCaseIds}
                       />
                     </div>
-                    <div className="flex flex-shrink-0 items-center justify-between border-t border-subtle bg-surface-1 px-4 py-3">
+                    <div className="flex flex-shrink-0 items-center justify-between border-t border-subtle bg-surface-1 pr-4 py-3">
                       <div className="flex items-center gap-4 text-sm">
                         {selectedCaseIds.length > 0 && (
                           <div className="flex items-center gap-2">
@@ -777,37 +782,6 @@ export default function CaseManagementReviewDetailPage() {
                         size="small"
                       />
                     </div>
-                    <style
-                      dangerouslySetInnerHTML={{
-                        __html: `
-                      .testhub-review-detail-table-scroll .ant-table-body {
-                        overflow-y: auto !important;
-                      }
-
-                      .testhub-review-detail-table-scroll .ant-table-thead > tr > th {
-                        font-size: 13px !important;
-                        font-weight: 500 !important;
-                        color: var(--text-color-secondary) !important;
-                      }
-
-                      .testhub-review-detail-table-scroll ::-webkit-scrollbar {
-                        width: 12px;
-                        height: 12px;
-                      }
-
-                      .testhub-review-detail-table-scroll ::-webkit-scrollbar-thumb {
-                        background-color: color-mix(in oklch, var(--scrollbar-thumb) 85%, transparent);
-                        border-radius: 999px;
-                        border: 3px solid transparent;
-                        background-clip: content-box;
-                      }
-
-                      .testhub-review-detail-table-scroll ::-webkit-scrollbar-track {
-                        background: transparent;
-                      }
-                    `,
-                      }}
-                    />
                   </div>
                 )}
               </div>
@@ -842,7 +816,7 @@ export default function CaseManagementReviewDetailPage() {
               qaCaseSetToastSuccess("已关联所选用例");
               setIsCaseSelectionOpen(false);
               fetchReviewTree();
-              fetchReviewCaseList(1, pageSize, selectedModuleId);
+              fetchReviewCaseList(1, pageSize, { moduleId: selectedModuleId });
             } catch (e: unknown) {
               qaCaseSetToastError(e, t, "关联用例失败");
             }

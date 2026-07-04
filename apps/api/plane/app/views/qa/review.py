@@ -214,53 +214,82 @@ class CaseReviewView(BaseViewSet):
 
         return Response(status=status.HTTP_200_OK)
 
-    def _filtered_case_through_qs(self, request):
+    @staticmethod
+    def _query_param_values(request, *keys):
+        values = []
+        for key in keys:
+            for raw in request.query_params.getlist(key):
+                if raw is None:
+                    continue
+                values.extend([part.strip() for part in str(raw).split(',') if part.strip()])
+        return list(dict.fromkeys(values))
+
+    @staticmethod
+    def _expand_case_module_ids(module_ids):
+        expanded = {str(module_id) for module_id in module_ids if module_id}
+        frontier = list(expanded)
+        while frontier:
+            children = list(
+                CaseModule.objects.filter(parent_id__in=frontier, deleted_at__isnull=True).values_list('id', flat=True)
+            )
+            new_children = [str(child) for child in children if str(child) not in expanded]
+            if not new_children:
+                break
+            expanded.update(new_children)
+            frontier = new_children
+        return list(expanded)
+
+    def _filtered_case_through_qs(self, request, slug):
+        review_id = request.query_params.get('review_id')
         query = (
-            CaseReviewThrough.objects.filter(review_id=request.query_params['review_id'])
+            CaseReviewThrough.objects.filter(
+                review_id=review_id,
+                deleted_at__isnull=True,
+                review__deleted_at__isnull=True,
+                review__project__workspace__slug=slug,
+                case__deleted_at__isnull=True,
+            )
             .select_related('case', 'case__repository', 'case__module', 'review')
             .prefetch_related('review__assignees')
         )
         if project_id := request.query_params.get('project_id'):
-            query = query.filter(case__repository__project_id=project_id)
-        if repository_id := request.query_params.get('repository_id'):
-            query = query.filter(case__repository_id=repository_id)
+            query = query.filter(review__project_id=project_id, case__repository__project_id=project_id)
+
+        repository_ids = self._query_param_values(request, 'repository_id', 'repository_ids')
+        if repository_ids:
+            query = query.filter(case__repository_id__in=repository_ids)
+
         if name := request.query_params.get('name__icontains'):
-            query = query.filter(case__name__icontains=name)
-        module_ids = request.query_params.getlist('module_id') or request.query_params.getlist('module_ids')
+            query = query.filter(Q(case__name__icontains=name) | Q(case__code__icontains=name))
+
+        result_values = self._query_param_values(request, 'result__in')
+        if result_values:
+            query = query.filter(result__in=result_values)
+
+        priority_values = self._query_param_values(request, 'priority__in')
+        if priority_values:
+            query = query.filter(case__priority__in=priority_values)
+
+        assignee_values = self._query_param_values(request, 'assignee__in')
+        if assignee_values:
+            query = query.filter(review__assignees__id__in=assignee_values).distinct()
+
+        module_ids = self._query_param_values(request, 'module_id')
         if module_ids:
-            expanded = set(module_ids)
-            frontier = list(module_ids)
-            while frontier:
-                children = list(
-                    CaseModule.objects.filter(parent_id__in=frontier, deleted_at__isnull=True).values_list('id',
-                                                                                                           flat=True))
-                new_children = [c for c in children if c not in expanded]
-                if not new_children:
-                    break
-                expanded.update(new_children)
-                frontier = new_children
-            query = query.filter(case__module_id__in=list(expanded))
-        else:
-            module_id = request.query_params.get('module_id')
-            if module_id:
-                expanded = {module_id}
-                frontier = [module_id]
-                while frontier:
-                    children = list(
-                        CaseModule.objects.filter(parent_id__in=frontier, deleted_at__isnull=True).values_list('id',
-                                                                                                               flat=True))
-                    new_children = [c for c in children if c not in expanded]
-                    if not new_children:
-                        break
-                    expanded.update(new_children)
-                    frontier = new_children
-                query = query.filter(case__module_id__in=list(expanded))
+            query = query.filter(case__module_id__in=self._expand_case_module_ids(module_ids))
+
+        filter_module_ids = self._query_param_values(request, 'module_ids')
+        if filter_module_ids:
+            query = query.filter(case__module_id__in=self._expand_case_module_ids(filter_module_ids))
 
         return NumericSuffixCodeOrderingFilter().filter_queryset(request, query, self)
 
     @action(detail=False, methods=['get'], url_path='case-list')
     def case_list(self, request, slug):
-        query = self._filtered_case_through_qs(request)
+        if not request.query_params.get('review_id'):
+            return Response({"error": "review_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        query = self._filtered_case_through_qs(request, slug)
         query = query.annotate(
             suggestion_count=Count(
                 "review_records",
