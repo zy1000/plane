@@ -592,7 +592,7 @@ export default function CaseManagementReviewDetailPage() {
           </div>
           <div className="min-w-0 flex-1 overflow-hidden">
             <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
-              <div className="flex flex-shrink-0 items-center justify-between py-3 pr-4 pl-7">
+              <div className="flex flex-shrink-0 items-center justify-between pt-2 pr-4 pb-2 pl-7">
                 <div>
                   <Breadcrumbs className="grow-0">
                     <Breadcrumbs.Item
@@ -605,14 +605,14 @@ export default function CaseManagementReviewDetailPage() {
                     />
                     <Breadcrumbs.Item
                       component={
-                        <Breadcrumbs.ItemWrapper className="!cursor-pointer">
+                        <Breadcrumbs.ItemWrapper className="min-w-0 !cursor-pointer !gap-2 !px-1.5 !py-1 !text-sm !font-medium !text-secondary hover:!bg-layer-1 hover:!text-primary">
                           <Select
                             value={reviewId || undefined}
                             placeholder="选择评审"
                             loading={reviewListLoading}
                             showSearch
                             optionFilterProp="label"
-                            className="h-full min-w-[200px] !cursor-pointer [&_.ant-select-selection-item]:!text-sm [&_.ant-select-selection-item]:!leading-4 [&_.ant-select-selection-item]:!text-primary [&_.ant-select-selection-placeholder]:!text-sm [&_.ant-select-selection-placeholder]:!leading-4 [&_.ant-select-selection-placeholder]:!text-secondary [&_.ant-select-selection-search]:!h-full [&_.ant-select-selection-search-input]:!h-full [&_.ant-select-selection-wrap]:!flex [&_.ant-select-selection-wrap]:!h-full [&_.ant-select-selection-wrap]:!items-center [&_.ant-select-selector]:!h-full [&_.ant-select-selector]:!min-h-full [&_.ant-select-selector]:!cursor-pointer [&_.ant-select-selector]:!items-center [&_.ant-select-selector]:!p-0"
+                            className="h-full min-w-[200px] max-w-[240px] !cursor-pointer [&_.ant-select-selection-item]:!max-w-[180px] [&_.ant-select-selection-item]:!truncate [&_.ant-select-selection-item]:!text-inherit [&_.ant-select-selection-item]:!text-sm [&_.ant-select-selection-item]:!font-medium [&_.ant-select-selection-item]:!leading-4 [&_.ant-select-selection-placeholder]:!text-inherit [&_.ant-select-selection-placeholder]:!text-sm [&_.ant-select-selection-placeholder]:!font-medium [&_.ant-select-selection-placeholder]:!leading-4 [&_.ant-select-selection-search]:!h-full [&_.ant-select-selection-search-input]:!h-full [&_.ant-select-selection-search-input]:!text-sm [&_.ant-select-selection-wrap]:!flex [&_.ant-select-selection-wrap]:!h-full [&_.ant-select-selection-wrap]:!items-center [&_.ant-select-selector]:!h-full [&_.ant-select-selector]:!min-h-0 [&_.ant-select-selector]:!cursor-pointer [&_.ant-select-selector]:!items-center [&_.ant-select-selector]:!bg-transparent [&_.ant-select-selector]:!p-0 [&_.ant-select-selector]:!shadow-none"
                             variant="borderless"
                             suffixIcon={null}
                             showArrow={false}
@@ -656,10 +656,10 @@ export default function CaseManagementReviewDetailPage() {
                   </button>
                 </div>
               </div>
-              <div className="flex-shrink-0 pr-4 pb-2">
+              <div className="flex-shrink-0 pr-4 pb-1">
                 <FiltersRow filter={reviewCaseFilter} />
               </div>
-              <div className="min-h-0 min-w-0 flex-1 overflow-hidden pr-4 pt-0 pb-4">
+              <div className="min-h-0 min-w-0 flex-1 overflow-hidden pr-4 pt-0 pb-2">
                 {loading && (
                   <div className="flex items-center justify-center py-12">
                     <div className="text-secondary">加载中...</div>
@@ -685,7 +685,7 @@ export default function CaseManagementReviewDetailPage() {
                         selectedCaseIds={selectedCaseIds}
                       />
                     </div>
-                    <div className="flex flex-shrink-0 items-center justify-between border-t border-subtle bg-surface-1 pr-4 py-3">
+                    <div className="flex flex-shrink-0 items-center justify-between border-t border-subtle bg-surface-1 px-4 py-2">
                       <div className="flex items-center gap-4 text-sm">
                         {selectedCaseIds.length > 0 && (
                           <div className="flex items-center gap-2">
