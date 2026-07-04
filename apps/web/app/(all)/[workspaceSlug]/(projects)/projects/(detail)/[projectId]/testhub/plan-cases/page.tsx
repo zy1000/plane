@@ -6,18 +6,16 @@ import { PageHead } from "@/components/core/page-title";
 import { Breadcrumbs } from "@plane/ui";
 import { Button } from "antd";
 import { Button as PlaneButton } from "@plane/propel/button";
-import { Tooltip } from "@plane/propel/tooltip";
 import PlanCasesModal from "@/components/qa/plans/plan-cases-modal";
 import PlanIterationModal from "@/components/qa/plans/plan-iteration-modal";
 import PlanReleaseModal from "@/components/qa/plans/plan-release-modal";
 import PlanCasesExportModal from "@/components/qa/plans/plan-cases-export-modal";
 import UpdateModal from "@/components/qa/cases/update-modal";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
-import { Tree, Table, Space, Tag, message, Dropdown, Pagination, Popconfirm, Select } from "antd";
-import type { TableProps } from "antd";
+import { Tree, Tag, message, Dropdown, Pagination, Popconfirm, Select } from "antd";
 import type { TreeProps } from "antd";
 import { CaseService } from "@/services/qa/case.service";
-import { PlanService } from "@/services/qa/plan.service";
+import { PlanService, type TPlanCaseItem } from "@/services/qa/plan.service";
 import { AppstoreOutlined } from "@ant-design/icons";
 import { FolderOpenDot, Atom, UserCog, CheckCheck, Unlink, X, Loader2 } from "lucide-react";
 import { formatDateTime, globalEnums } from "../util";
@@ -32,6 +30,24 @@ import {
 } from "@/utils/qa-case-error";
 import { ChevronDownIcon } from "@plane/propel/icons";
 import { useProjectPermissions } from "@/hooks/store/use-project-permissions";
+import { CasesSearchInput } from "@/components/qa/cases/cases-search";
+import { FiltersRow } from "@/components/rich-filters/filters-row";
+import { FiltersToggle } from "@/components/rich-filters/filters-toggle";
+import {
+  DEFAULT_PLAN_CASE_DISPLAY_PROPERTIES,
+  PlanCaseDisplayFilters,
+  type TPlanCaseDisplayProperties,
+  type TPlanCaseOrderBy,
+} from "@/components/qa/plans/plan-case-display-filters";
+import { PlanCasesTable } from "@/components/qa/plans/plan-cases-table";
+import {
+  planCaseExpressionToQueryParams,
+  type TPlanCaseFilterQueryParams,
+} from "@/components/qa/plans/plan-case-list-filters/expression-to-query";
+import { usePlanCaseFilter } from "@/components/qa/plans/plan-case-list-filters/use-plan-case-filter";
+import { usePlanCaseFiltersConfig } from "@/components/qa/plans/plan-case-list-filters/use-plan-case-filters-config";
+import type { TPlanCaseFilterExpression } from "@/components/qa/plans/plan-case-list-filters/types";
+import type { TPlanCaseFilterSelectOption } from "@/components/qa/plans/plan-case-list-filters/use-plan-case-filters-config";
 
 const QA_PLAN_EDIT_PERMISSION_KEY = "qa.plan.edit" as const;
 
@@ -52,13 +68,55 @@ type TestCase = {
   repository_name?: string;
   assignee?: { id?: string } | null;
 };
-type PlanCaseItem = {
-  id: string;
-  assignee?: string | null;
-  result?: string;
-  case?: TestCase;
+type TPlanCaseListFilters = {
+  search?: string;
+} & TPlanCaseFilterQueryParams;
+
+const EMPTY_PLAN_CASE_FILTER_EXPRESSION: TPlanCaseFilterExpression = {};
+const DEFAULT_PLAN_CASE_ORDERING: TPlanCaseOrderBy = "-case__updated_at";
+const PLAN_CASE_RESULT_COLOR_MAP: Record<string, string> = {
+  成功: "green",
+  通过: "green",
+  失败: "red",
+  阻塞: "gold",
+  未执行: "gray",
+  无效: "gray",
 };
-type PlanCaseResponse = { count: number; data: PlanCaseItem[] };
+
+const toStringArray = (value: unknown): string[] => {
+  if (value === null || value === undefined) return [];
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item).trim()).filter(Boolean);
+  }
+  return String(value)
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+};
+
+const renderNodeTitle = (title: string, icon: ReactNode, count?: number, fontMedium?: boolean) => (
+  <div className="group flex w-full items-center justify-between gap-2">
+    <div className="flex items-center gap-2">
+      <span className="inline-flex h-5 w-5 items-center justify-center text-secondary">{icon}</span>
+      <span className={`text-sm text-primary ${fontMedium ? "font-medium" : ""}`}>{title}</span>
+    </div>
+    <div className="flex items-center gap-2">
+      {typeof count === "number" && <span className="text-xs text-secondary">{count}</span>}
+    </div>
+  </div>
+);
+
+function getTreeNodeKey(node: any): string {
+  const kind = String(node?.kind || "");
+  const id = String(node?.id || "");
+  const nodeRepositoryId = node?.repository_id ? String(node.repository_id) : null;
+
+  if (kind === "root") return "root";
+  if (kind === "repository") return `repo:${id}`;
+  if (kind === "repository_modules_all") return `repo:${nodeRepositoryId}:all_modules`;
+  if (kind === "module") return `module:${id}`;
+  return id;
+}
 
 export default function PlanCasesPage() {
   const { t } = useTranslation();
@@ -70,7 +128,6 @@ export default function PlanCasesPage() {
   const repositoryId =
     repositoryIdFromUrl || (typeof window !== "undefined" ? sessionStorage.getItem("selectedRepositoryId") : null);
   const repositoryName = typeof window !== "undefined" ? sessionStorage.getItem("selectedRepositoryName") : "";
-  const planName = typeof window !== "undefined" ? sessionStorage.getItem("selectedPlanName") : "";
   const Enums = globalEnums.Enums;
 
   const planService = useRef(new PlanService()).current;
@@ -89,15 +146,22 @@ export default function PlanCasesPage() {
   const [selectedModuleId, setSelectedModuleId] = useState<string | null>(null);
   const [planTree, setPlanTree] = useState<any | null>(null);
 
-  const [cases, setCases] = useState<PlanCaseItem[]>([]);
+  const [cases, setCases] = useState<TPlanCaseItem[]>([]);
   const [total, setTotal] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(20);
-  const [ordering, setOrdering] = useState<string | undefined>(undefined);
-  const [selectedResults, setSelectedResults] = useState<string[] | undefined>(undefined);
+  const [ordering, setOrdering] = useState<TPlanCaseOrderBy>(DEFAULT_PLAN_CASE_ORDERING);
+  const [filters, setFilters] = useState<TPlanCaseListFilters>({});
+  const [filterExpression, setFilterExpression] = useState<TPlanCaseFilterExpression>(
+    EMPTY_PLAN_CASE_FILTER_EXPRESSION
+  );
+  const [planCaseDisplayProperties, setPlanCaseDisplayProperties] = useState<TPlanCaseDisplayProperties>(() => ({
+    ...DEFAULT_PLAN_CASE_DISPLAY_PROPERTIES,
+  }));
+  const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
 
   const [activeCase, setActiveCase] = useState<TestCase | null>(null);
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
@@ -115,15 +179,102 @@ export default function PlanCasesPage() {
   const [planList, setPlanList] = useState<Array<{ id: string; name: string }>>([]);
   const [planListLoading, setPlanListLoading] = useState<boolean>(false);
 
+  const caseTypeEnums = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries((Enums as any)?.case_type || {}).map(([value, label]) => [String(value), String(label)])
+      ) as Record<string, string>,
+    [Enums]
+  );
+  const casePriorityEnums = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries((Enums as any)?.case_priority || {}).map(([value, label]) => [String(value), String(label)])
+      ) as Record<string, string>,
+    [Enums]
+  );
+  const planCaseResultEnums = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries((Enums as any)?.plan_case_result || {}).map(([value, color]) => [String(value), String(color)])
+      ) as Record<string, string>,
+    [Enums]
+  );
+
+  const { repositoryFilterOptions, moduleFilterOptions, moduleDescendantIdsMap } = useMemo(() => {
+    const repositoryMap = new Map<string, TPlanCaseFilterSelectOption>();
+    const moduleMap = new Map<string, TPlanCaseFilterSelectOption>();
+    const moduleChildrenMap = new Map<string, string[]>();
+
+    const walk = (node: any, repositoryLabel = "", modulePath: string[] = [], parentModuleId?: string) => {
+      const kind = String(node?.kind || "");
+      const id = node?.id ? String(node.id) : "";
+      const name = String(node?.name || "-");
+      const children = Array.isArray(node?.children) ? node.children : [];
+
+      if (kind === "repository" && id) {
+        repositoryMap.set(id, { id, value: id, label: name });
+        children.forEach((child: any) => walk(child, name, []));
+        return;
+      }
+
+      if (kind === "repository_modules_all") {
+        children.forEach((child: any) => walk(child, repositoryLabel, [], parentModuleId));
+        return;
+      }
+
+      if (kind === "module" && id) {
+        if (parentModuleId) {
+          const siblings = moduleChildrenMap.get(parentModuleId) ?? [];
+          moduleChildrenMap.set(parentModuleId, [...siblings, id]);
+        }
+
+        const nextPath = [...modulePath, name];
+        moduleMap.set(id, {
+          id,
+          value: id,
+          label: [repositoryLabel, ...nextPath].filter(Boolean).join(" / "),
+        });
+        children.forEach((child: any) => walk(child, repositoryLabel, nextPath, id));
+        return;
+      }
+
+      children.forEach((child: any) => walk(child, repositoryLabel, modulePath, parentModuleId));
+    };
+
+    if (planTree) walk(planTree);
+
+    const descendantsMap = new Map<string, string[]>();
+    const collectDescendants = (moduleId: string): string[] => {
+      if (descendantsMap.has(moduleId)) return descendantsMap.get(moduleId) ?? [moduleId];
+      const descendants = [moduleId];
+      (moduleChildrenMap.get(moduleId) ?? []).forEach((childId) => {
+        descendants.push(...collectDescendants(childId));
+      });
+      const uniqueDescendants = Array.from(new Set(descendants));
+      descendantsMap.set(moduleId, uniqueDescendants);
+      return uniqueDescendants;
+    };
+
+    moduleMap.forEach((_, moduleId) => collectDescendants(moduleId));
+
+    return {
+      repositoryFilterOptions: Array.from(repositoryMap.values()),
+      moduleFilterOptions: Array.from(moduleMap.values()),
+      moduleDescendantIdsMap: descendantsMap,
+    };
+  }, [planTree]);
+
   const selectionContextKey = useMemo(() => {
     return JSON.stringify({
       planId,
       selectedRepositoryId,
       selectedModuleId,
       ordering,
-      selectedResults,
+      filters,
+      filterExpression,
     });
-  }, [planId, selectedRepositoryId, selectedModuleId, ordering, selectedResults]);
+  }, [planId, selectedRepositoryId, selectedModuleId, ordering, filters, filterExpression]);
   const lastSelectionContextKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -144,10 +295,11 @@ export default function PlanCasesPage() {
     if (!workspaceSlug || !planId) return;
     setLoading(true);
     fetchPlanTree();
-    fetchCases(1, pageSize, undefined, undefined);
+    fetchCases(1, pageSize, { repositoryId: null, moduleId: null });
     setSelectedTreeKey("root");
     setSelectedRepositoryId(null);
     setSelectedModuleId(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceSlug, planId]);
 
   useEffect(() => {
@@ -158,7 +310,7 @@ export default function PlanCasesPage() {
       .then((data) => setPlanList(Array.isArray(data) ? data : []))
       .catch(() => setPlanList([]))
       .finally(() => setPlanListLoading(false));
-  }, [workspaceSlug, projectId]);
+  }, [workspaceSlug, projectId, planService]);
 
   const onChangePlan = (nextPlanId: string) => {
     const found = planList.find((p) => String(p.id) === String(nextPlanId));
@@ -180,30 +332,68 @@ export default function PlanCasesPage() {
     } catch {}
   };
 
+  const expandModuleIds = (moduleIds: string[]): string[] => {
+    const expanded = new Set<string>();
+    moduleIds.forEach((moduleId) => {
+      const descendants = moduleDescendantIdsMap.get(String(moduleId));
+      if (descendants && descendants.length > 0) {
+        descendants.forEach((id) => expanded.add(String(id)));
+      } else if (moduleId) {
+        expanded.add(String(moduleId));
+      }
+    });
+    return Array.from(expanded);
+  };
+
+  const getEffectiveModuleIds = (treeModuleId?: string | null, filterModuleIdsCsv?: string): string[] => {
+    const treeModuleIds = treeModuleId ? expandModuleIds([treeModuleId]) : [];
+    const filterModuleIds = filterModuleIdsCsv ? expandModuleIds(toStringArray(filterModuleIdsCsv)) : [];
+
+    if (treeModuleIds.length > 0 && filterModuleIds.length > 0) {
+      const filterSet = new Set(filterModuleIds);
+      const intersection = treeModuleIds.filter((moduleId) => filterSet.has(moduleId));
+      return intersection.length > 0 ? intersection : ["00000000-0000-0000-0000-000000000000"];
+    }
+
+    return treeModuleIds.length > 0 ? treeModuleIds : filterModuleIds;
+  };
+
   const fetchCases = async (
-    page: number,
-    size: number,
-    repoId?: string,
-    moduleId?: string,
-    orderingParam?: string | null,
-    resultsParam?: string[] | null
+    page: number = currentPage,
+    size: number = pageSize,
+    options?: {
+      filtersParam?: TPlanCaseListFilters;
+      moduleId?: string | null;
+      orderingParam?: TPlanCaseOrderBy | null;
+      repositoryId?: string | null;
+    }
   ) => {
     if (!workspaceSlug || !planId) return;
     try {
+      setLoading(true);
       setError(null);
-      const effectiveOrdering = orderingParam === undefined ? ordering : (orderingParam ?? undefined);
-      const effectiveResults =
-        resultsParam === undefined ? selectedResults : resultsParam === null ? undefined : resultsParam;
+      const hasRepositoryOverride = Object.prototype.hasOwnProperty.call(options || {}, "repositoryId");
+      const hasModuleOverride = Object.prototype.hasOwnProperty.call(options || {}, "moduleId");
+      const effectiveRepositoryId = hasRepositoryOverride ? options?.repositoryId : selectedRepositoryId;
+      const effectiveModuleId = hasModuleOverride ? options?.moduleId : selectedModuleId;
+      const effectiveOrdering = options?.orderingParam === undefined ? ordering : (options.orderingParam ?? undefined);
+      const effectiveFilters = options?.filtersParam ?? filters;
+      const { search, case__module_id__in: moduleFilter, ...filterParams } = effectiveFilters;
+      const effectiveModuleIds = getEffectiveModuleIds(effectiveModuleId, moduleFilter);
+
       const params: any = {
         page,
         page_size: size,
         plan_id: planId,
+        ...filterParams,
       };
-      if (repoId) params["case__repository_id"] = repoId;
-      if (moduleId) params["case__module_id"] = moduleId;
+
+      if (search) params.search = search;
+      if (effectiveRepositoryId) params["case__repository_id"] = effectiveRepositoryId;
+      if (effectiveModuleIds.length > 0) params["case__module_id__in"] = effectiveModuleIds.join(",");
       if (effectiveOrdering) params.ordering = effectiveOrdering;
-      if (effectiveResults && effectiveResults.length > 0) params.result__in = effectiveResults.join(",");
-      const response: PlanCaseResponse = await planService.getPlanCases(workspaceSlug as string, params);
+
+      const response = await planService.getPlanCases(workspaceSlug as string, params);
       setCases(response?.data || []);
       setTotal(response?.count || 0);
       setCurrentPage(page);
@@ -227,7 +417,7 @@ export default function PlanCasesPage() {
     if (!kind || kind === "root") {
       setSelectedRepositoryId(null);
       setSelectedModuleId(null);
-      fetchCases(1, pageSize, undefined, undefined);
+      fetchCases(1, pageSize, { repositoryId: null, moduleId: null });
       return;
     }
 
@@ -235,7 +425,7 @@ export default function PlanCasesPage() {
       const repoId = node?.repositoryId ? String(node.repositoryId) : null;
       setSelectedRepositoryId(repoId);
       setSelectedModuleId(null);
-      fetchCases(1, pageSize, repoId || undefined, undefined);
+      fetchCases(1, pageSize, { repositoryId: repoId, moduleId: null });
       return;
     }
 
@@ -244,51 +434,52 @@ export default function PlanCasesPage() {
       const moduleId = node?.moduleId ? String(node.moduleId) : null;
       setSelectedRepositoryId(repoId);
       setSelectedModuleId(moduleId);
-      fetchCases(1, pageSize, repoId || undefined, moduleId || undefined);
+      fetchCases(1, pageSize, { repositoryId: repoId, moduleId });
     }
   };
 
   const handlePaginationChange = (page: number, size?: number) => {
     const nextSize = size || pageSize;
     const nextPage = nextSize !== pageSize ? 1 : page;
-    fetchCases(nextPage, nextSize, selectedRepositoryId || undefined, selectedModuleId || undefined);
+    fetchCases(nextPage, nextSize);
   };
 
-  const handleTableChange: TableProps<PlanCaseItem>["onChange"] = (_pagination, tableFilters, sorter) => {
-    const sorterValue = Array.isArray(sorter) ? sorter[0] : sorter;
-    const sorterField = String((sorterValue as any)?.field ?? "");
-    const sorterOrder = (sorterValue as any)?.order as "ascend" | "descend" | undefined;
-
-    const nextResultFiltersRaw = (tableFilters?.result as (string | number)[] | undefined) || [];
-    const nextResultFilters = nextResultFiltersRaw.map((v) => String(v)).filter(Boolean);
-    const nextSelectedResults = nextResultFilters.length > 0 ? nextResultFilters : undefined;
-    setSelectedResults(nextSelectedResults);
-
-    const nextOrdering =
-      sorterField === "updated_at"
-        ? sorterOrder === "ascend"
-          ? "case__updated_at"
-          : sorterOrder === "descend"
-            ? "-case__updated_at"
-            : undefined
-        : sorterField === "code"
-          ? sorterOrder === "ascend"
-            ? "case__code"
-            : sorterOrder === "descend"
-              ? "-case__code"
-              : undefined
-          : undefined;
-
+  const handleSortChange = (nextOrdering: TPlanCaseOrderBy) => {
     setOrdering(nextOrdering);
-    fetchCases(
-      1,
-      pageSize,
-      selectedRepositoryId || undefined,
-      selectedModuleId || undefined,
-      nextOrdering ?? null,
-      nextSelectedResults ?? null
-    );
+    fetchCases(1, pageSize, { orderingParam: nextOrdering });
   };
+
+  const handleDisplayPropertiesUpdate = (updatedDisplayProperties: Partial<TPlanCaseDisplayProperties>) => {
+    setPlanCaseDisplayProperties((prev) => ({ ...prev, ...updatedDisplayProperties }));
+  };
+
+  const handleRichFiltersChange = (expression: TPlanCaseFilterExpression) => {
+    const nextFilters: TPlanCaseListFilters = {
+      ...(filters.search ? { search: filters.search } : {}),
+      ...planCaseExpressionToQueryParams(expression),
+    };
+    setFilterExpression(expression);
+    setFilters(nextFilters);
+    fetchCases(1, pageSize, { filtersParam: nextFilters });
+  };
+
+  const { areAllConfigsInitialized, configs: planCaseFilterConfigs } = usePlanCaseFiltersConfig({
+    casePriorityEnums,
+    caseTypeEnums,
+    moduleOptions: moduleFilterOptions,
+    planCaseResultEnums,
+    projectId: String(projectId || ""),
+    repositoryOptions: repositoryFilterOptions,
+    workspaceSlug: String(workspaceSlug || ""),
+  });
+
+  const planCaseFilter = usePlanCaseFilter({
+    areAllConfigsInitialized,
+    configs: planCaseFilterConfigs,
+    initialExpression: filterExpression,
+    instanceKey: `plan-case-list-${workspaceSlug || "workspace"}-${projectId || "project"}-${planId || "plan"}`,
+    onExpressionChange: handleRichFiltersChange,
+  });
 
   const onExpand: TreeProps["onExpand"] = (keys) => {
     setExpandedKeys(keys as string[]);
@@ -327,34 +518,9 @@ export default function PlanCasesPage() {
       window.removeEventListener("mousemove", onMouseMoveResize as any);
       window.removeEventListener("mouseup", onMouseUpResize as any);
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     []
   );
-
-  const renderNodeTitle = (title: string, icon: ReactNode, count?: number, fontMedium?: boolean) => {
-    return (
-      <div className="group flex w-full items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <span className="inline-flex h-5 w-5 items-center justify-center text-secondary">{icon}</span>
-          <span className={`text-sm text-primary ${fontMedium ? "font-medium" : ""}`}>{title}</span>
-        </div>
-        <div className="flex items-center gap-2">
-          {typeof count === "number" && <span className="text-xs text-secondary">{count}</span>}
-        </div>
-      </div>
-    );
-  };
-
-  function getTreeNodeKey(node: any): string {
-    const kind = String(node?.kind || "");
-    const id = String(node?.id || "");
-    const repositoryId = node?.repository_id ? String(node.repository_id) : null;
-
-    if (kind === "root") return "root";
-    if (kind === "repository") return `repo:${id}`;
-    if (kind === "repository_modules_all") return `repo:${repositoryId}:all_modules`;
-    if (kind === "module") return `module:${id}`;
-    return id;
-  }
 
   function collectDefaultExpandedKeys(node: any): string[] {
     const keys = new Set<string>();
@@ -373,7 +539,7 @@ export default function PlanCasesPage() {
   const buildTreeNodes = (node: any): any => {
     const kind = String(node?.kind || "");
     const id = String(node?.id || "");
-    const repositoryId = node?.repository_id ? String(node.repository_id) : null;
+    const nodeRepositoryId = node?.repository_id ? String(node.repository_id) : null;
 
     const key = getTreeNodeKey(node);
 
@@ -394,7 +560,7 @@ export default function PlanCasesPage() {
       title: renderNodeTitle(node?.name ?? "-", icon, undefined, kind === "root" || kind === "repository_modules_all"),
       key,
       kind,
-      repositoryId,
+      repositoryId: nodeRepositoryId,
       moduleId: kind === "module" ? id : null,
       children: children.map((c: any) => buildTreeNodes(c)),
     };
@@ -403,6 +569,7 @@ export default function PlanCasesPage() {
   const treeData = useMemo(() => {
     if (!planTree) return [];
     return [buildTreeNodes(planTree)];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [planTree]);
 
   const onCancelRelation = async (ids: string | string[]) => {
@@ -415,7 +582,7 @@ export default function PlanCasesPage() {
         setSelectedPlanCaseToAssigneeMap({});
       }
       await fetchPlanTree();
-      await fetchCases(1, pageSize, selectedRepositoryId || undefined, selectedModuleId || undefined);
+      await fetchCases(1, pageSize);
       qaCaseSetToastSuccess("取消关联成功");
     } catch (e: unknown) {
       const fallback = "取消关联失败";
@@ -428,8 +595,7 @@ export default function PlanCasesPage() {
     const keys = Object.keys(map);
     if (keys.includes("通过")) return "通过";
     if (keys.includes("成功")) return "成功";
-    const filtered = keys.filter((k) => k !== "未执行");
-    return filtered[0] ?? "通过";
+    return keys.find((key) => key !== "未执行") ?? "通过";
   };
 
   const handleOpenCaseDetail = (caseId?: string) => {
@@ -467,33 +633,6 @@ export default function PlanCasesPage() {
     setBulkExecuteLoading(true);
     const successLabel = getSuccessResultLabel();
     try {
-      const stepGroups = await Promise.all(
-        caseIds.map(async (cid) => {
-          let detail: any = null;
-          try {
-            detail = await planService.getPlanCaseDetail(String(workspaceSlug), {
-              plan_id: String(planId),
-              case_id: String(cid),
-            });
-          } catch {
-            detail = await caseService.getCase(String(workspaceSlug), String(cid));
-          }
-          const chosenSteps =
-            Array.isArray(detail?.execute_steps) && detail.execute_steps.length > 0
-              ? (detail.execute_steps as any[])
-              : Array.isArray(detail?.steps)
-                ? (detail.steps as any[])
-                : [];
-          const stepsPayload = (chosenSteps || []).map((s: any) => ({
-            description: String(s?.description ?? ""),
-            result: String(s?.result ?? ""),
-            actual_result: String(s?.actual_result ?? ""),
-            exec_result: successLabel,
-          }));
-          return { case_id: String(cid) };
-        })
-      );
-
       const payload: any = {
         plan_id: String(planId),
         case_id: caseIds.map(String),
@@ -507,7 +646,7 @@ export default function PlanCasesPage() {
       setSelectedPlanCaseToCaseIdMap({});
       setSelectedPlanCaseToAssigneeMap({});
       await fetchPlanTree();
-      await fetchCases(currentPage, pageSize, selectedRepositoryId || undefined, selectedModuleId || undefined);
+      await fetchCases(currentPage, pageSize);
     } catch (e: any) {
       const msg = e?.message || e?.detail || e?.error || "批量提交结果失败";
       message.error(msg);
@@ -528,12 +667,12 @@ export default function PlanCasesPage() {
       setCases((prev) =>
         (prev || []).map((item) =>
           String(item.id) === String(planCaseId)
-            ? { ...item, assignee: nextAssignee ? String(nextAssignee) : null }
+            ? Object.assign({}, item, { assignee: nextAssignee ? String(nextAssignee) : null })
             : item
         )
       );
       setSelectedPlanCaseToAssigneeMap((prev) => ({
-        ...(prev || {}),
+        ...prev,
         [String(planCaseId)]: nextAssignee ? String(nextAssignee) : null,
       }));
       qaCaseSetToastSuccess("执行人已更新");
@@ -578,10 +717,12 @@ export default function PlanCasesPage() {
         const nextAssignee = assignee ? String(assignee) : null;
 
         setCases((prev) =>
-          (prev || []).map((item) => (successIdSet.has(String(item.id)) ? { ...item, assignee: nextAssignee } : item))
+          (prev || []).map((item) =>
+            successIdSet.has(String(item.id)) ? Object.assign({}, item, { assignee: nextAssignee }) : item
+          )
         );
         setSelectedPlanCaseToAssigneeMap((prev) => {
-          const next = { ...(prev || {}) } as Record<string, string | null>;
+          const next = { ...prev } as Record<string, string | null>;
           successPlanCaseIds.forEach((planCaseId) => {
             next[String(planCaseId)] = nextAssignee;
           });
@@ -603,185 +744,80 @@ export default function PlanCasesPage() {
     }
   };
 
-  const columns: TableProps<PlanCaseItem>["columns"] = [
-    {
-      title: "用例编号",
-      dataIndex: "code",
-      key: "code",
-      width: 120,
-      render: (_: any, record: PlanCaseItem) => {
-        const code = record?.case?.code;
-        const cid = record?.case?.id;
-        return (
-          <span className="block truncate" title={code || ""}>
-            <Button
-              type="text"
-              className="h-auto p-0 text-primary hover:bg-transparent hover:text-primary"
-              onClick={() => handleOpenCaseDetail(cid)}
-            >
-              {code}
-            </Button>
-          </span>
-        );
-      },
-      sorter: true,
-      sortOrder: ordering === "case__code" ? "ascend" : ordering === "-case__code" ? "descend" : null,
-    },
-    {
-      title: "用例名称",
-      dataIndex: "name",
-      width: 240,
-      key: "name",
-      render: (_: any, record: PlanCaseItem) => {
-        const name = record?.case?.name ?? "-";
-        const cid = record?.case?.id;
-        if (!cid) return name;
+  const handleRowSelectChange = (selectedKeysOnCurrentPage: string[]) => {
+    const currentPageIds = (cases || []).map((row) => String(row.id));
 
-        return (
-          <Button
-            type="text"
-            className="h-auto p-0 text-primary hover:bg-transparent hover:text-primary"
-            onClick={() => handleOpenCaseDetail(cid)}
-          >
-            <span className="block max-w-[220px] truncate text-inherit" title={name || ""}>
-              {name || "-"}
-            </span>
-          </Button>
-        );
-      },
-    },
-    {
-      title: "用例库",
-      dataIndex: "repository_name",
-      key: "repository_name",
-      width: 140,
-      render: (_: any, record: PlanCaseItem) =>
-        record?.case?.repository_name ? (
-          <Tooltip tooltipContent={record.case.repository_name}>
-            <span className="block max-w-[140px] truncate text-inherit">{record.case.repository_name}</span>
-          </Tooltip>
-        ) : (
-          "-"
-        ),
-    },
-    {
-      title: "模块",
-      dataIndex: "module",
-      key: "module_name",
-      width: 120,
-      render: (_: any, record: PlanCaseItem) =>
-        record?.case?.module ? (
-          <Tooltip tooltipContent={record.case.module}>
-            <span className="block max-w-[120px] truncate text-inherit">{record.case.module}</span>
-          </Tooltip>
-        ) : (
-          "-"
-        ),
-    },
-    {
-      title: "执行人",
-      dataIndex: "plan_assignee",
-      key: "plan_assignee",
-      width: 160,
-      render: (_: any, record: PlanCaseItem) => (
-        <MemberDropdown
-          multiple={false}
-          value={record?.assignee ?? null}
-          onChange={(value) => handlePlanCaseAssigneeChange(String(record.id), value ? String(value) : null)}
-          disabled={bulkAssigneeUpdating || updatingAssigneePlanCaseId === String(record.id)}
-          projectId={projectId ? String(projectId) : undefined}
-          placeholder="请选择执行人"
-          className="w-full text-sm"
-          buttonContainerClassName="w-full text-left p-0"
-          buttonVariant="transparent-with-text"
-          buttonClassName="text-sm p-0 hover:bg-transparent hover:bg-inherit"
-          showUserDetails={true}
-          optionsClassName="z-[80]"
-        />
-      ),
-    },
-    {
-      title: "类型",
-      dataIndex: "type",
-      key: "type",
-      width: 100,
-      render: (_: any, record: PlanCaseItem) => {
-        const v = record?.case?.type as number;
-        const label = Enums?.case_type?.[v] || "-";
-        return <Tag>{label}</Tag>;
-      },
-    },
-    {
-      title: "优先级",
-      dataIndex: "priority",
-      key: "priority",
-      width: 100,
-      render: (_: any, record: PlanCaseItem) => {
-        const v = record?.case?.priority as number;
-        const label = Enums?.case_priority?.[v] || "-";
-        return <Tag>{label}</Tag>;
-      },
-    },
-    {
-      title: "执行结果",
-      dataIndex: "result",
-      key: "result",
-      width: 120,
-      filters: Object.keys((Enums as any)?.plan_case_result || {}).map((label) => ({ text: label, value: label })),
-      filterMultiple: true,
-      filteredValue: selectedResults ?? null,
-      render: (_: any, record: PlanCaseItem) => {
-        const label = record?.result || "-";
-        const color = (Enums as any)?.plan_case_result?.[label];
-        return <Tag color={color}>{label}</Tag>;
-      },
-    },
-    {
-      title: "更新时间",
-      dataIndex: "updated_at",
-      key: "updated_at",
-      width: 180,
-      render: (_: any, record: PlanCaseItem) =>
-        record?.case?.updated_at ? formatDateTime(record.case.updated_at) : "-",
-      sorter: true,
-      sortOrder: ordering === "case__updated_at" ? "ascend" : ordering === "-case__updated_at" ? "descend" : null,
-    },
-    {
-      title: "操作",
-      key: "actions",
-      width: 140,
-      fixed: "right",
-      render: (_: any, record: PlanCaseItem) => {
-        const isAssignedToCurrentUser =
-          Boolean(record?.assignee) && Boolean(currentUser?.id) && String(record.assignee) === String(currentUser?.id);
-        const actionLabel = isAssignedToCurrentUser ? "执行" : "查看";
-        return (
-          <Space>
-            <Tooltip tooltipContent={actionLabel}>
-              <span>
-                <Button
-                  size="small"
-                  type="link"
-                  onClick={() => {
-                    const cid = record?.case?.id;
-                    if (!cid) return;
-                    router.push(
-                      `/${workspaceSlug}/projects/${projectId}/testhub/test-execution?case_id=${encodeURIComponent(String(cid))}&plan_id=${encodeURIComponent(String(planId || ""))}`
-                    );
-                  }}
-                >
-                  {actionLabel}
-                </Button>
-              </span>
-            </Tooltip>
-            <Button size="small" type="link" danger onClick={() => onCancelRelation([record.id])}>
-              取关
-            </Button>
-          </Space>
-        );
-      },
-    },
-  ];
+    setSelectedCaseIds((prev) => {
+      const next = new Set(prev.map((key) => String(key)));
+      currentPageIds.forEach((id) => next.delete(id));
+      selectedKeysOnCurrentPage.forEach((id) => next.add(String(id)));
+      return Array.from(next);
+    });
+
+    const currentPageSelected = new Set(selectedKeysOnCurrentPage.map((id) => String(id)));
+
+    setSelectedPlanCaseToCaseIdMap((prev) => {
+      const next = { ...prev } as Record<string, string>;
+      currentPageIds.forEach((planCaseId) => {
+        if (!currentPageSelected.has(planCaseId)) delete next[planCaseId];
+      });
+      currentPageSelected.forEach((planCaseId) => {
+        const row = (cases || []).find((item) => String(item.id) === planCaseId);
+        const caseId = row?.case?.id;
+        if (caseId) next[planCaseId] = String(caseId);
+      });
+      return next;
+    });
+
+    setSelectedPlanCaseToAssigneeMap((prev) => {
+      const next = { ...prev } as Record<string, string | null>;
+      currentPageIds.forEach((planCaseId) => {
+        if (!currentPageSelected.has(planCaseId)) delete next[planCaseId];
+      });
+      currentPageSelected.forEach((planCaseId) => {
+        const row = (cases || []).find((item) => String(item.id) === planCaseId);
+        next[planCaseId] = row?.assignee ? String(row.assignee) : null;
+      });
+      return next;
+    });
+  };
+
+  const handleSetColumnWidth = (columnKey: string, width: number) => {
+    setColumnWidths((prev) => ({ ...prev, [columnKey]: width }));
+  };
+
+  const handleViewExecution = (record: TPlanCaseItem) => {
+    const caseId = record?.case?.id;
+    if (!caseId) return;
+    router.push(
+      `/${workspaceSlug}/projects/${projectId}/testhub/test-execution?case_id=${encodeURIComponent(
+        String(caseId)
+      )}&plan_id=${encodeURIComponent(String(planId || ""))}`
+    );
+  };
+
+  const renderEnumTag = (
+    group: "case_type" | "case_priority",
+    value?: number | null,
+    color: "default" | "magenta" | "warning" = "default"
+  ) => {
+    if (value === null || value === undefined) return <span className="text-placeholder">-</span>;
+    const label = (Enums as any)?.[group]?.[value] ?? (Enums as any)?.[group]?.[String(value)] ?? "-";
+    if (label === "-") return <span className="text-placeholder">-</span>;
+    return <Tag color={color}>{label}</Tag>;
+  };
+
+  const renderResultTag = (value?: string) => {
+    const label = value || "-";
+    if (label === "-") return <span className="text-placeholder">-</span>;
+    const rawColor = (Enums as any)?.plan_case_result?.[label] || PLAN_CASE_RESULT_COLOR_MAP[label] || "default";
+    const color = rawColor === "gray" ? "default" : rawColor;
+    return (
+      <Tag color={color} className="!inline-flex w-[55px] justify-center">
+        {label}
+      </Tag>
+    );
+  };
 
   return (
     <div className="h-full w-full">
@@ -796,6 +832,7 @@ export default function PlanCasesPage() {
               onMouseDown={onMouseDownResize}
               className="absolute top-0 right-0 h-full w-2"
               style={{ cursor: "col-resize", zIndex: 10 }}
+              role="presentation"
             />
             <style
               dangerouslySetInnerHTML={{
@@ -820,7 +857,7 @@ export default function PlanCasesPage() {
             <Tree
               showLine={false}
               defaultExpandAll
-              switcherIcon={(nodeProps) => (
+              switcherIcon={() => (
                 <span className="inline-flex h-5 w-5 items-center justify-center text-secondary">
                   <ChevronDownIcon className={`size-4 rotate-0 transition-transform`} strokeWidth={2.5} />
                 </span>
@@ -836,7 +873,7 @@ export default function PlanCasesPage() {
           </div>
           <div className="h-full min-h-0 min-w-0 flex-1 overflow-hidden">
             <div className="flex h-full min-w-0 flex-col">
-              <div className="flex flex-shrink-0 items-center justify-between px-0 py-3">
+              <div className="flex flex-shrink-0 items-center justify-between px-3 pt-2 pb-2">
                 <div>
                   <Breadcrumbs>
                     <Breadcrumbs.Item
@@ -871,6 +908,26 @@ export default function PlanCasesPage() {
                   </Breadcrumbs>
                 </div>
                 <div className="flex items-center gap-2">
+                  <CasesSearchInput
+                    disabled={!planId}
+                    value={filters.search ?? ""}
+                    onSearch={(query) => {
+                      const trimmedQuery = query.trim();
+                      const nextFilters: TPlanCaseListFilters = { ...filters };
+                      if (trimmedQuery) nextFilters.search = trimmedQuery;
+                      else delete nextFilters.search;
+                      setFilters(nextFilters);
+                      fetchCases(1, pageSize, { filtersParam: nextFilters });
+                    }}
+                  />
+                  <FiltersToggle filter={planCaseFilter} triggerClassName="h-8 w-8" iconButtonSize="xl" />
+                  <PlanCaseDisplayFilters
+                    disabled={!planId}
+                    displayProperties={planCaseDisplayProperties}
+                    ordering={ordering}
+                    onDisplayPropertiesChange={handleDisplayPropertiesUpdate}
+                    onOrderByChange={handleSortChange}
+                  />
                   <div className="inline-flex items-center [&>*:first-child]:rounded-r-none [&>*:last-child]:rounded-l-none">
                     <PlaneButton
                       variant="primary"
@@ -885,7 +942,7 @@ export default function PlanCasesPage() {
                     </PlaneButton>
                     <Dropdown
                       menu={{
-                        items: dropdownItems.map((item) => ({ ...item, disabled: !canEditPlan })),
+                        items: dropdownItems.map((item) => Object.assign({}, item, { disabled: !canEditPlan })),
                         onClick: ({ key }) => {
                           if (!canEditPlan) return;
                           if (key === "by_work_item") {
@@ -915,7 +972,10 @@ export default function PlanCasesPage() {
                   </Button>
                 </div>
               </div>
-              <div className="min-h-0 min-w-0 flex-1 overflow-hidden px-0 pb-3">
+              <div className="flex-shrink-0 px-3 pb-2">
+                <FiltersRow filter={planCaseFilter} />
+              </div>
+              <div className="min-h-0 min-w-0 flex-1 overflow-hidden px-3 pb-3">
                 {loading && (
                   <div className="flex items-center justify-center py-12">
                     <div className="text-secondary">加载中...</div>
@@ -928,69 +988,29 @@ export default function PlanCasesPage() {
                 )}
                 {!loading && !error && (
                   <div className="flex h-full min-w-0 flex-col overflow-hidden">
-                    <div
-                      className={`testhub-plan-cases-table-scroll relative flex-1 overflow-y-auto px-0 [&::-webkit-scrollbar]:block [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[var(--scrollbar-thumb)] [&::-webkit-scrollbar-track]:bg-transparent ${
-                        pageSize === 100 ? "testhub-plan-cases-scrollbar-strong" : ""
-                      }`}
-                    >
-                      <Table
-                        dataSource={cases}
-                        columns={columns}
-                        rowKey={(row) => row.id}
-                        bordered={false}
-                        onChange={handleTableChange}
-                        tableLayout="fixed"
-                        pagination={false}
-                        scroll={{ x: "max-content" }}
-                        rowSelection={{
-                          selectedRowKeys: selectedCaseIds,
-                          preserveSelectedRowKeys: true,
-                          onChange: (newSelectedRowKeys) => {
-                            const nextSelectedKeys = (newSelectedRowKeys as (string | number)[]).map((k) => String(k));
-                            const currentPageIds = (cases || []).map((row) => String(row.id));
-
-                            setSelectedCaseIds((prev) => {
-                              const next = new Set(prev.map((k) => String(k)));
-                              for (const id of currentPageIds) next.delete(id);
-                              for (const id of nextSelectedKeys) next.add(id);
-                              return Array.from(next);
-                            });
-
-                            setSelectedPlanCaseToCaseIdMap((prev) => {
-                              const next = { ...(prev || {}) } as Record<string, string>;
-                              const currentPageSelected = new Set(
-                                nextSelectedKeys.filter((k) => currentPageIds.includes(String(k)))
-                              );
-                              for (const pid of currentPageIds) {
-                                if (!currentPageSelected.has(String(pid))) delete next[String(pid)];
-                              }
-                              for (const pid of Array.from(currentPageSelected)) {
-                                const row = (cases || []).find((r) => String(r.id) === String(pid));
-                                const cid = row?.case?.id;
-                                if (cid) next[String(pid)] = String(cid);
-                              }
-                              return next;
-                            });
-
-                            setSelectedPlanCaseToAssigneeMap((prev) => {
-                              const next = { ...(prev || {}) } as Record<string, string | null>;
-                              const currentPageSelected = new Set(
-                                nextSelectedKeys.filter((k) => currentPageIds.includes(String(k)))
-                              );
-                              for (const pid of currentPageIds) {
-                                if (!currentPageSelected.has(String(pid))) delete next[String(pid)];
-                              }
-                              for (const pid of Array.from(currentPageSelected)) {
-                                const row = (cases || []).find((r) => String(r.id) === String(pid));
-                                next[String(pid)] = row?.assignee ? String(row.assignee) : null;
-                              }
-                              return next;
-                            });
-                          },
-                        }}
+                    <div className="relative min-w-0 flex-1 overflow-hidden">
+                      <PlanCasesTable
+                        cases={cases}
+                        columnWidths={columnWidths}
+                        currentUserId={currentUser?.id ? String(currentUser.id) : undefined}
+                        displayProperties={planCaseDisplayProperties}
+                        selectedPlanCaseIds={selectedCaseIds}
+                        setColumnWidth={handleSetColumnWidth}
+                        onAssigneeChange={handlePlanCaseAssigneeChange}
+                        onCancelRelation={(planCaseId) => onCancelRelation([planCaseId])}
+                        onOpenCase={handleOpenCaseDetail}
+                        onRowSelectChange={handleRowSelectChange}
+                        onViewExecution={handleViewExecution}
+                        projectId={projectId ? String(projectId) : undefined}
+                        bulkAssigneeUpdating={bulkAssigneeUpdating}
+                        updatingAssigneePlanCaseId={updatingAssigneePlanCaseId}
+                        renderResultTag={renderResultTag}
+                        renderTypeTag={(value) => renderEnumTag("case_type", value, "magenta")}
+                        renderPriorityTag={(value) => renderEnumTag("case_priority", value, "warning")}
+                        renderUpdatedAt={(value) => (value ? formatDateTime(value) : "-")}
                       />
                     </div>
-                    <div className="flex flex-shrink-0 items-center justify-between border-t border-subtle bg-surface-1 px-0 py-3">
+                    <div className="flex flex-shrink-0 items-center justify-between border-t border-subtle bg-surface-1 px-4 py-3">
                       <div className="flex items-center gap-4 text-sm">
                         {selectedCaseIds.length > 0 && (
                           <div className="flex items-center gap-0.5">
@@ -1093,79 +1113,28 @@ export default function PlanCasesPage() {
                       dangerouslySetInnerHTML={{
                         __html: `
                   .testhub-plan-cases-table-scroll{
-                    scrollbar-gutter: stable both-edges;
-                  }
-
-                  .testhub-plan-cases-table-scroll .ant-table-thead > tr > th{
-                    position: sticky;
-                    top: 0;
-                    z-index: 5;
-                    background: var(--bg-surface-1);
-                    font-size: 13px !important;
-                    font-weight: 500 !important;
-                    color: var(--text-color-secondary) !important;
-                  }
-
-                  .testhub-plan-cases-table-scroll.testhub-plan-cases-scrollbar-strong{
-                    overflow-y: scroll;
-                    scrollbar-width: auto;
-                    scrollbar-color: var(--scrollbar-thumb) transparent;
-                  }
-
-                  .testhub-plan-cases-table-scroll.testhub-plan-cases-scrollbar-strong::-webkit-scrollbar{
-                    width: 12px;
-                    height: 12px;
-                  }
-
-                  .testhub-plan-cases-table-scroll.testhub-plan-cases-scrollbar-strong::-webkit-scrollbar-thumb{
-                    background-color: color-mix(in oklch, var(--scrollbar-thumb) 85%, transparent);
-                    border-radius: 999px;
-                    border: 3px solid var(--bg-surface-1);
-                  }
-
-                  .testhub-plan-cases-table-scroll.testhub-plan-cases-scrollbar-strong::-webkit-scrollbar-track{
-                    background: transparent;
-                  }
-
-                  .testhub-plan-cases-table-scroll .ant-table-content::-webkit-scrollbar,
-                  .testhub-plan-cases-table-scroll .ant-table-body::-webkit-scrollbar {
-                    height: 4px;
-                    background: transparent;
-                  }
-                  .testhub-plan-cases-table-scroll .ant-table-content::-webkit-scrollbar-thumb,
-                  .testhub-plan-cases-table-scroll .ant-table-body::-webkit-scrollbar-thumb {
-                    background-color: transparent;
-                    border-radius: 2px;
-                    transition: background-color 0.3s ease;
-                  }
-                  .testhub-plan-cases-table-scroll .ant-table-content::-webkit-scrollbar-track,
-                  .testhub-plan-cases-table-scroll .ant-table-body::-webkit-scrollbar-track {
-                    background: transparent;
-                  }
-                  .testhub-plan-cases-table-scroll .ant-table-content:hover::-webkit-scrollbar,
-                  .testhub-plan-cases-table-scroll .ant-table-body:hover::-webkit-scrollbar {
-                    height: 4px;
-                  }
-                  .testhub-plan-cases-table-scroll .ant-table-content:hover::-webkit-scrollbar-thumb,
-                  .testhub-plan-cases-table-scroll .ant-table-body:hover::-webkit-scrollbar-thumb {
-                    background-color: #dddde0;
-                  }
-
-                  .testhub-plan-cases-table-scroll .ant-table-content {
-                    scrollbar-width: thin;
-                    scrollbar-color: transparent transparent;
-                  }
-                  .testhub-plan-cases-table-scroll .ant-table-content:hover {
+                    scrollbar-gutter: stable;
                     scrollbar-width: thin;
                     scrollbar-color: #dddde0 transparent;
                   }
-                  .testhub-plan-cases-table-scroll .ant-table-body {
-                    scrollbar-width: thin;
-                    scrollbar-color: transparent transparent;
+
+                  .testhub-plan-cases-table-scroll::-webkit-scrollbar {
+                    width: 8px;
+                    height: 8px;
                   }
-                  .testhub-plan-cases-table-scroll .ant-table-body:hover {
-                    scrollbar-width: thin;
-                    scrollbar-color: #dddde0 transparent;
+
+                  .testhub-plan-cases-table-scroll::-webkit-scrollbar-thumb {
+                    background-color: #d9d9d9;
+                    border-radius: 4px;
+                  }
+
+                  .testhub-plan-cases-table-scroll::-webkit-scrollbar-thumb:hover {
+                    background-color: #bfbfbf;
+                  }
+
+                  .testhub-plan-cases-table-scroll::-webkit-scrollbar-track {
+                    background: color-mix(in oklch, var(--border-subtle) 40%, transparent);
+                    border-radius: 4px;
                   }
                 `,
                       }}
@@ -1191,7 +1160,7 @@ export default function PlanCasesPage() {
             onClosed={() => {
               // 关闭后刷新列表，保留当前查询参数与筛选
               fetchPlanTree();
-              fetchCases(currentPage, pageSize, selectedRepositoryId || undefined, selectedModuleId || undefined);
+              fetchCases(currentPage, pageSize);
             }}
           />
           <PlanIterationModal
@@ -1202,7 +1171,7 @@ export default function PlanCasesPage() {
             planId={String(planId || "")}
             onClosed={() => {
               fetchPlanTree();
-              fetchCases(currentPage, pageSize, selectedRepositoryId || undefined, selectedModuleId || undefined);
+              fetchCases(currentPage, pageSize);
             }}
           />
           <PlanReleaseModal
@@ -1213,7 +1182,7 @@ export default function PlanCasesPage() {
             planId={String(planId || "")}
             onClosed={() => {
               fetchPlanTree();
-              fetchCases(currentPage, pageSize, selectedRepositoryId || undefined, selectedModuleId || undefined);
+              fetchCases(currentPage, pageSize);
             }}
           />
         </>
@@ -1232,7 +1201,7 @@ export default function PlanCasesPage() {
         onClose={() => {
           setIsUpdateModalOpen(false);
           setActiveCase(null);
-          fetchCases(currentPage, pageSize, selectedRepositoryId || undefined, selectedModuleId || undefined);
+          fetchCases(currentPage, pageSize);
         }}
         caseId={activeCase?.id}
         workspaceSlug={String(workspaceSlug)}

@@ -292,6 +292,8 @@ class PlanCaseAPIView(BaseAPIView):
         "plan_id": ["exact", "in"],
         "case__repository_id": ["exact", "in"],
         "case__module_id": ["exact", "in"],
+        "case__type": ["exact", "in"],
+        "case__priority": ["exact", "in"],
         "assignee_id": ["exact", "in"],
         "result": ["exact", "in"],
     }
@@ -301,10 +303,20 @@ class PlanCaseAPIView(BaseAPIView):
         SearchFilter,
         NumericSuffixCodeOrderingFilter,
     )
+    search_fields = ["case__name", "case__code"]
     ordering_fields = ["case__updated_at", "case__code"]
 
-    def get_queryset(self):
-        return PlanCase.objects.select_related("case", "assignee").only(
+    def get_queryset(self, slug=None):
+        queryset = PlanCase.objects.select_related(
+            "case",
+            "case__repository",
+            "case__module",
+            "assignee",
+        )
+        if slug:
+            queryset = queryset.filter(plan__project__workspace__slug=slug)
+
+        return queryset.only(
             "id",
             "plan_id",
             "case_id",
@@ -319,10 +331,17 @@ class PlanCaseAPIView(BaseAPIView):
             "case__priority",
             "case__updated_at",
             "case__repository_id",
+            "case__repository__id",
+            "case__repository__name",
+            "case__module_id",
+            "case__module__id",
+            "case__module__name",
+            "case__assignee_id",
+            "assignee__id",
         )
 
     def get(self, request, slug):
-        plans = self.filter_queryset(self.get_queryset())
+        plans = self.filter_queryset(self.get_queryset(slug=slug))
         paginator = self.pagination_class()
         paginated_queryset = paginator.paginate_queryset(plans, request)
         serializer = self.serializer_class(instance=paginated_queryset, many=True)

@@ -5,6 +5,50 @@ import type { TFileSignedURLResponse } from "@plane/types";
 // services
 import { APIService } from "@/services/api.service";
 
+export type TPlanCaseNestedCase = {
+  id: string;
+  code?: string;
+  name: string;
+  repository?: string | null;
+  repository_name?: string | null;
+  module?: string | null;
+  type?: number | null;
+  priority?: number | null;
+  updated_at?: string | null;
+  assignee?: string | null;
+};
+
+export type TPlanCaseItem = {
+  id: string;
+  plan?: string;
+  case?: TPlanCaseNestedCase | null;
+  assignee?: string | null;
+  result?: string;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type TPlanCaseQueryParams = {
+  page?: number;
+  page_size?: number;
+  plan_id?: string;
+  search?: string;
+  ordering?: "case__code" | "-case__code" | "case__updated_at" | "-case__updated_at" | string;
+  result__in?: string;
+  case__type__in?: string;
+  case__priority__in?: string;
+  assignee_id__in?: string;
+  case__repository_id__in?: string;
+  case__module_id__in?: string;
+  "case__repository_id"?: string;
+  "case__module_id"?: string;
+};
+
+export type TPlanCaseListResponse = {
+  count: number;
+  data: TPlanCaseItem[];
+};
+
 export class PlanService extends APIService {
   constructor() {
     super(API_BASE_URL);
@@ -80,7 +124,7 @@ export class PlanService extends APIService {
   }
 
   async getPlanModules(workspaceSlug: string, projectId: string, queries?: any): Promise<any[]> {
-    const params = { project_id: projectId, ...(queries || {}) };
+    const params = { project_id: projectId, ...queries };
     return this.get(`/api/workspaces/${workspaceSlug}/test/plan/module/`, { params })
       .then((response) => response?.data || [])
       .catch((error) => {
@@ -124,7 +168,7 @@ export class PlanService extends APIService {
       });
   }
 
-  async getPlanCases(workspaceSlug: string, queries?: any): Promise<any> {
+  async getPlanCases(workspaceSlug: string, queries?: TPlanCaseQueryParams): Promise<TPlanCaseListResponse> {
     return this.get(`/api/workspaces/${workspaceSlug}/test/plane/case/`, {
       params: queries,
     })
@@ -166,7 +210,7 @@ export class PlanService extends APIService {
     }>;
     count: number;
   }> {
-    const params = { plan_id, ...(queries || {}) } as any;
+    const params = { plan_id, ...queries } as any;
     return this.get(`/api/workspaces/${workspaceSlug}/test/plan/case-list/`, { params })
       .then((response) => ({ data: response?.data.data ?? [], count: Number(response?.data.count || 0) }))
       .catch((error) => {
