@@ -1,7 +1,9 @@
 from gunicorn.util import close
 import json
 import uuid
+from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.decorators import action
+from rest_framework.filters import SearchFilter
 from rest_framework.response import Response
 from rest_framework import status
 from django.db.models import Count, Q, Prefetch
@@ -73,7 +75,12 @@ class CaseReviewAPIView(BaseAPIView):
     pagination_class = CustomPaginator
     serializer_class = ReviewListSerializer
     filterset_class = CaseReviewFilter
-    ordering_fields = ["case__updated_at", "case__code"]
+    filter_backends = (
+        DjangoFilterBackend,
+        SearchFilter,
+        NumericSuffixCodeOrderingFilter,
+    )
+    ordering_fields = ["name", "created_at", "started_at", "ended_at", "state", "mode"]
 
     @allow_fine_permission(PermissionKey.QA_REVIEW_CREATE)
     def post(self, request, slug, project_id):

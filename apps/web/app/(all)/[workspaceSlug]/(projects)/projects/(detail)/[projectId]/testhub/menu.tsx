@@ -16,7 +16,6 @@ import {
   isTMOverviewMenuActive,
   isTMPlansActive,
   isTMPlansMenuActive,
-  isTMReviewsActive,
   isTMReviewsMenuActive,
   isTMReportsActive,
   isTMReportsMenuActive,
@@ -24,7 +23,6 @@ import {
 import { useTestHub } from "./testhub-context";
 
 const PROJECT_QA_PLAN_CREATE_PERMISSION_KEY = "qa.plan.create" as const;
-const PROJECT_QA_REVIEW_CREATE_PERMISSION_KEY = "qa.review.create" as const;
 const PROJECT_QA_REPORT_CREATE_PERMISSION_KEY = "qa.report.create" as const;
 
 type TMenuItem = {
@@ -70,8 +68,7 @@ export const TestManagementMenuBar = () => {
   const pathname = usePathname();
   const { workspaceSlug, projectId } = useParams();
   const searchParams = useSearchParams();
-  const { triggerOpenNewModal, triggerOpenNewPlanModal, triggerOpenNewReviewModal, triggerOpenNewReportModal } =
-    useTestHub();
+  const { triggerOpenNewModal, triggerOpenNewPlanModal, triggerOpenNewReportModal } = useTestHub();
   const { allowProjectPermissionKeys } = useUserPermissions();
   const [repositoryIdFromStorage, setRepositoryIdFromStorage] = React.useState<string | null>(null);
   const [isClient, setIsClient] = React.useState(false);
@@ -81,11 +78,8 @@ export const TestManagementMenuBar = () => {
 
   const isOverviewActive = !!pathname && !!ws && !!pid && isTMOverviewActive(pathname, ws, pid);
   const isPlansActive = !!pathname && !!ws && !!pid && isTMPlansActive(pathname, ws, pid);
-  const isReviewsActive = !!pathname && !!ws && !!pid && isTMReviewsActive(pathname, ws, pid);
   const isReportsActive = !!pathname && !!ws && !!pid && isTMReportsActive(pathname, ws, pid);
   const canCreatePlan = !!ws && !!pid && allowProjectPermissionKeys([PROJECT_QA_PLAN_CREATE_PERMISSION_KEY], ws, pid);
-  const canCreateReview =
-    !!ws && !!pid && allowProjectPermissionKeys([PROJECT_QA_REVIEW_CREATE_PERMISSION_KEY], ws, pid);
   const canCreateReport =
     !!ws && !!pid && allowProjectPermissionKeys([PROJECT_QA_REPORT_CREATE_PERMISSION_KEY], ws, pid);
   const visibleMenuItems = MENU_ITEMS.filter(
@@ -154,19 +148,6 @@ export const TestManagementMenuBar = () => {
             className="ml-2 flex shrink-0 items-center justify-center gap-1.5 rounded bg-accent-primary px-3 py-1.5 text-xs font-medium whitespace-nowrap text-on-color transition-all hover:bg-accent-primary-hover focus:bg-accent-primary-hover focus:text-on-color disabled:cursor-not-allowed disabled:opacity-50"
           >
             新建计划
-          </button>
-        )}
-        {isReviewsActive && (
-          <button
-            type="button"
-            disabled={!canCreateReview}
-            onClick={() => {
-              if (!canCreateReview) return;
-              triggerOpenNewReviewModal();
-            }}
-            className="ml-2 flex shrink-0 items-center justify-center gap-1.5 rounded bg-accent-primary px-3 py-1.5 text-xs font-medium whitespace-nowrap text-on-color transition-all hover:bg-accent-primary-hover focus:bg-accent-primary-hover focus:text-on-color disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            新建评审
           </button>
         )}
         {isReportsActive && (

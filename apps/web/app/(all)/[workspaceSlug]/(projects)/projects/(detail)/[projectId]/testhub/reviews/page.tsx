@@ -1,28 +1,31 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { PageHead } from "@/components/core/page-title";
-import { Input, Table, Dropdown, Button, Modal, Tag, Tooltip, Space, Pagination, Tree } from "antd";
-import type { TableProps, TableColumnType, InputRef } from "antd";
+import { Input, Dropdown, Button, Modal, Pagination, Tree } from "antd";
 import type { TreeProps } from "antd";
-import {
-  AppstoreOutlined,
-  PlusOutlined,
-  EllipsisOutlined,
-  DeleteOutlined,
-  SearchOutlined,
-  EditOutlined,
-  DownOutlined,
-} from "@ant-design/icons";
+import { AppstoreOutlined, EllipsisOutlined } from "@ant-design/icons";
 import { FolderOpenDot } from "lucide-react";
 import styles from "./reviews.module.css";
 import { CaseService } from "@/services/qa/review.service";
-import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { ChevronDownIcon } from "@plane/propel/icons";
-import { formatCNDateTime } from "@/components/qa/cases/util";
-import { debounce } from "lodash-es";
 import CreateReviewModal from "@/components/qa/review/CreateReviewModal";
+import { CasesSearchInput } from "@/components/qa/cases/cases-search";
+import {
+  DEFAULT_REVIEW_DISPLAY_PROPERTIES,
+  ReviewsDisplayFilters,
+} from "@/components/qa/review/reviews-display-filters";
+import type { TReviewDisplayProperties, TReviewOrderBy } from "@/components/qa/review/reviews-display-filters";
+import { ReviewsTable } from "@/components/qa/review/reviews-table";
+import type { TReviewTableRecord } from "@/components/qa/review/reviews-table";
+import { reviewsExpressionToQueryParams } from "@/components/qa/review/filters/expression-to-query";
+import type { TReviewsFilterQueryParams } from "@/components/qa/review/filters/expression-to-query";
+import { useReviewsFilter } from "@/components/qa/review/filters/use-reviews-filter";
+import { useReviewsFiltersConfig } from "@/components/qa/review/filters/use-reviews-filters-config";
+import type { TReviewFilterExpression } from "@/components/qa/review/filters/types";
+import { FiltersRow } from "@/components/rich-filters/filters-row";
+import { FiltersToggle } from "@/components/rich-filters/filters-toggle";
 import { useAppRouter } from "@/hooks/use-app-router";
 import { useTestHub } from "../testhub-context";
 import { useProjectPermissions } from "@/hooks/store/use-project-permissions";
@@ -67,6 +70,28 @@ const initialReviews: ReviewItem[] = [];
 const QA_REVIEW_CREATE_PERMISSION_KEY = "qa.review.create" as const;
 const QA_REVIEW_EDIT_PERMISSION_KEY = "qa.review.edit" as const;
 const QA_REVIEW_DELETE_PERMISSION_KEY = "qa.review.delete" as const;
+const EMPTY_REVIEW_FILTER_EXPRESSION: TReviewFilterExpression = {};
+
+type TReviewFilters = {
+  search?: string;
+} & TReviewsFilterQueryParams;
+
+const normalizeReviewsResponse = (response: unknown): { count: number; data: ReviewItem[] } => {
+  const responseRecord = response as { count?: unknown; data?: unknown; results?: unknown; total_count?: unknown };
+  const data = Array.isArray(response)
+    ? response
+    : Array.isArray(responseRecord?.data)
+      ? responseRecord.data
+      : Array.isArray(responseRecord?.results)
+        ? responseRecord.results
+        : [];
+  const rawCount = responseRecord?.count ?? responseRecord?.total_count ?? data.length;
+
+  return {
+    count: Number(rawCount || 0),
+    data: data as ReviewItem[],
+  };
+};
 
 // 独立的输入组件，避免 Tree 渲染导致输入法中断
 const ModuleInput = ({
@@ -142,22 +167,25 @@ export default function ReviewsPage() {
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>("");
   const [reviewEnums, setReviewEnums] = useState<Record<string, Record<string, { label: string; color: string }>>>({});
-  const [filters, setFilters] = useState<{ name?: string; state?: string[]; mode?: string[] }>({});
-  const searchInput = useRef<InputRef | null>(null);
+  const [filters, setFilters] = useState<TReviewFilters>({});
+  const [ordering, setOrdering] = useState<TReviewOrderBy | undefined>(undefined);
+  const [reviewDisplayProperties, setReviewDisplayProperties] = useState<TReviewDisplayProperties>(() => ({
+    ...DEFAULT_REVIEW_DISPLAY_PROPERTIES,
+  }));
   const caseService = useMemo(() => new CaseService(), []);
   const [createReviewOpen, setCreateReviewOpen] = useState<boolean>(false);
   const [createReviewInitialValues, setCreateReviewInitialValues] = useState<any | undefined>(undefined);
   const selectedModuleIdRef = useRef<string | null>(null);
   const { registerOpenNewReviewModal } = useTestHub();
+  const handleOpenCreateReview = useCallback(() => {
+    if (!canCreateReview) return;
+    setCreateReviewInitialValues(selectedModuleIdRef.current ? { module_id: selectedModuleIdRef.current } : undefined);
+    setCreateReviewOpen(true);
+  }, [canCreateReview]);
+
   useEffect(() => {
-    registerOpenNewReviewModal(() => {
-      if (!canCreateReview) return;
-      setCreateReviewInitialValues(
-        selectedModuleIdRef.current ? { module_id: selectedModuleIdRef.current } : undefined
-      );
-      setCreateReviewOpen(true);
-    });
-  }, [canCreateReview, registerOpenNewReviewModal]);
+    registerOpenNewReviewModal(handleOpenCreateReview);
+  }, [handleOpenCreateReview, registerOpenNewReviewModal]);
   const [editOpen, setEditOpen] = useState<boolean>(false);
   const [editReview, setEditReview] = useState<any>(null);
 
@@ -167,6 +195,32 @@ export default function ReviewsPage() {
     return sum(modules);
   }, [modules]);
   const totalReviews = typeof allTotal === "number" ? allTotal : modulesTotalReviews;
+  const { areAllConfigsInitialized, configs: reviewFilterConfigs } = useReviewsFiltersConfig({
+    workspaceSlug: String(workspaceSlug || ""),
+    projectId: String(projectId || ""),
+    reviewEnums,
+  });
+
+  const handleRichFiltersChange = useCallback(
+    (expression: TReviewFilterExpression) => {
+      const mappedQuery = reviewsExpressionToQueryParams(expression);
+      const nextFilters: TReviewFilters = {
+        ...(filters.search ? { search: filters.search } : {}),
+        ...mappedQuery,
+      };
+      setFilters(nextFilters);
+      setCurrentPage(1);
+    },
+    [filters.search]
+  );
+
+  const reviewsFilter = useReviewsFilter({
+    instanceKey: `${projectId || "all"}-${repositoryKey}`,
+    initialExpression: EMPTY_REVIEW_FILTER_EXPRESSION,
+    areAllConfigsInitialized,
+    configs: reviewFilterConfigs,
+    onExpressionChange: handleRichFiltersChange,
+  });
 
   const onMouseDownResize = (e: React.MouseEvent<HTMLDivElement>) => {
     isDraggingRef.current = true;
@@ -212,9 +266,9 @@ export default function ReviewsPage() {
     fetchAllReviewsTotal();
     const storageKey = `reviews_name_filter_${workspaceSlug}_${repositoryKey}`;
     const savedName = sessionStorage.getItem(storageKey) || "";
-    const initFilters = savedName ? { ...filters, name: savedName } : { ...filters };
+    const initFilters: TReviewFilters = savedName ? { search: savedName } : {};
     setFilters(initFilters);
-    debouncedFetchReviews(1, pageSize, selectedModuleId, initFilters);
+    void fetchReviews(1, pageSize, selectedModuleId, initFilters, ordering);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceSlug, repositoryKey, permissionsFetched, hasPermission]);
 
@@ -247,128 +301,42 @@ export default function ReviewsPage() {
     }
   };
 
-  const fetchReviews = async (
-    page: number,
-    size: number,
-    moduleId: string | null,
-    extraFilters?: { name?: string; state?: string[]; mode?: string[] }
-  ) => {
-    if (!workspaceSlug || !projectId) return;
-    setLoading(true);
-    setError("");
-    try {
-      const params: any = { page, page_size: size };
-      if (moduleId) params.module_id = moduleId;
-      if (extraFilters?.name) params.name__icontains = extraFilters.name;
-      if (extraFilters?.state && extraFilters.state.length) params.state__in = extraFilters.state.join(",");
-      if (extraFilters?.mode && extraFilters.mode.length) params.mode__in = extraFilters.mode.join(",");
-      const res = await caseService.getReviews(workspaceSlug as string, projectId as string, params);
-      setReviews(Array.isArray(res?.data) ? res.data : []);
-      setTotal(Number(res?.count || 0));
-    } catch (e: unknown) {
-      const fallback = "加载失败";
-      setError(qaCaseErrorContent(e, t, fallback));
-      qaCaseSetToastError(e, t, fallback);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const fetchReviews = useCallback(
+    async (
+      page: number,
+      size: number,
+      moduleId: string | null,
+      extraFilters: TReviewFilters = {},
+      orderBy?: TReviewOrderBy
+    ) => {
+      if (!workspaceSlug || !projectId) return;
+      setLoading(true);
+      setError("");
+      try {
+        const params: any = { page, page_size: size };
+        if (moduleId) params.module_id = moduleId;
+        if (orderBy) params.ordering = orderBy;
+        if (extraFilters?.search) params.name__icontains = extraFilters.search;
+        if (extraFilters?.state__in) params.state__in = extraFilters.state__in;
+        if (extraFilters?.mode__in) params.mode__in = extraFilters.mode__in;
+        if (extraFilters?.assignee__in) params.assignee__in = extraFilters.assignee__in;
+        if (extraFilters?.started_at__lte) params.started_at__lte = extraFilters.started_at__lte;
+        if (extraFilters?.ended_at__gte) params.ended_at__gte = extraFilters.ended_at__gte;
 
-  const debouncedFetchReviews = useMemo(
-    () =>
-      debounce(
-        (
-          page: number,
-          size: number,
-          moduleId: string | null,
-          f?: { name?: string; state?: string[]; mode?: string[] }
-        ) => {
-          fetchReviews(page, size, moduleId, f);
-        },
-        300
-      ),
-    [workspaceSlug]
-  );
-
-  useEffect(() => {
-    return () => {
-      debouncedFetchReviews.cancel();
-    };
-  }, [debouncedFetchReviews]);
-
-  const getColumnSearchProps = (dataIndex: keyof ReviewItem | string): TableColumnType<ReviewItem> => ({
-    filterDropdown: ({ setSelectedKeys, selectedKeys, confirm, clearFilters }) => (
-      <div style={{ padding: 8 }} onKeyDown={(e) => e.stopPropagation()}>
-        <Input
-          ref={searchInput}
-          placeholder={`搜索 ${dataIndex === "name" ? "评审名称" : ""}`}
-          value={selectedKeys[0] as string}
-          onChange={(e) => setSelectedKeys(e.target.value ? [e.target.value] : [])}
-          onPressEnter={() => handleSearch(selectedKeys as string[], dataIndex, confirm)}
-          style={{ marginBottom: 8, display: "block" }}
-        />
-        <Space>
-          <Button
-            type="primary"
-            onClick={() => handleSearch(selectedKeys as string[], dataIndex, confirm)}
-            icon={<SearchOutlined />}
-            size="small"
-            style={{ width: 90 }}
-          >
-            搜索
-          </Button>
-          <Button
-            onClick={() => clearFilters && handleReset(clearFilters, dataIndex, confirm)}
-            size="small"
-            style={{ width: 90 }}
-          >
-            重置
-          </Button>
-        </Space>
-      </div>
-    ),
-    filterIcon: (filtered: boolean) => <SearchOutlined style={{ color: filtered ? "#1677ff" : undefined }} />,
-    onFilterDropdownOpenChange: (visible) => {
-      if (visible) {
-        setTimeout(() => searchInput.current?.select?.(), 100);
+        const res = await caseService.getReviews(workspaceSlug as string, projectId as string, params);
+        const normalizedResponse = normalizeReviewsResponse(res);
+        setReviews(normalizedResponse.data);
+        setTotal(normalizedResponse.count);
+      } catch (e: unknown) {
+        const fallback = "加载失败";
+        setError(qaCaseErrorContent(e, t, fallback));
+        qaCaseSetToastError(e, t, fallback);
+      } finally {
+        setLoading(false);
       }
     },
-    filteredValue: dataIndex === "name" ? (filters.name ? [filters.name] : null) : null,
-  });
-
-  const handleSearch = (selectedKeys: string[], dataIndex: keyof ReviewItem | string, confirm?: () => void) => {
-    const newFilters = { ...filters };
-    if (selectedKeys[0]) {
-      if (dataIndex === "name") newFilters.name = selectedKeys[0];
-    } else {
-      if (dataIndex === "name") delete newFilters.name;
-    }
-    setFilters(newFilters);
-    const storageKey = `reviews_name_filter_${workspaceSlug}_${repositoryKey}`;
-    if (dataIndex === "name") {
-      const v = newFilters.name || "";
-      try {
-        sessionStorage.setItem(storageKey, v);
-      } catch {}
-    }
-    confirm?.();
-    setCurrentPage(1);
-  };
-
-  const handleReset = (clear: () => void, dataIndex: keyof ReviewItem | string, confirm?: () => void) => {
-    clear();
-    const newFilters = { ...filters };
-    if (dataIndex === "name") delete newFilters.name;
-    setFilters(newFilters);
-    const storageKey = `reviews_name_filter_${workspaceSlug}_${repositoryKey}`;
-    if (dataIndex === "name") {
-      try {
-        sessionStorage.setItem(storageKey, "");
-      } catch {}
-    }
-    confirm?.();
-    setCurrentPage(1);
-  };
+    [caseService, projectId, t, workspaceSlug]
+  );
 
   const onExpand: TreeProps["onExpand"] = (keys) => {
     setExpandedKeys(keys as string[]);
@@ -471,7 +439,7 @@ export default function ReviewsPage() {
         if (!workspaceSlug || !review?.id) return;
         try {
           await caseService.deleteReview(workspaceSlug as string, projectId as string, { ids: [review.id] });
-          await fetchReviews(currentPage, pageSize, selectedModuleId, filters);
+          await fetchReviews(currentPage, pageSize, selectedModuleId, filters, ordering);
           await fetchModules();
           await fetchAllReviewsTotal();
           qaCaseSetToastSuccess("评审已删除");
@@ -736,9 +704,11 @@ export default function ReviewsPage() {
   };
 
   useEffect(() => {
-    debouncedFetchReviews(currentPage, pageSize, selectedModuleId, filters);
+    if (!permissionsFetched) return;
+    if (!hasPermission("qa.review.view")) return;
+    void fetchReviews(currentPage, pageSize, selectedModuleId, filters, ordering);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedModuleId, currentPage, pageSize, filters]);
+  }, [selectedModuleId, currentPage, pageSize, filters, ordering, permissionsFetched, hasPermission]);
 
   const totalForCurrent = useMemo(() => {
     return total;
@@ -759,223 +729,47 @@ export default function ReviewsPage() {
     if (currentPage !== 1) setCurrentPage(1);
   };
 
-  const dateOnly = (v?: string | number | Date | null) => {
-    if (!v) return "-";
-    const d = typeof v === "string" || typeof v === "number" ? new Date(v) : v;
-    if (isNaN(d.getTime())) return "-";
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
-    return `${y}-${m}-${day}`;
+  const handleOpenReview = (record: TReviewTableRecord) => {
+    try {
+      sessionStorage.setItem("selectedReviewName", record.name || "");
+    } catch {}
+    router.push(`/${workspaceSlug}/projects/${projectId}/testhub/caseManagementReviewDetail?review_id=${record.id}`);
   };
 
-  const columns: TableProps<ReviewItem>["columns"] = [
-    {
-      title: "评审名称",
-      dataIndex: "name",
-      key: "name",
-      width: 220,
-      align: "left",
-      ...getColumnSearchProps("name"),
-      render: (name: string, record: ReviewItem) => (
-        <Tooltip title={name} placement="topLeft">
-          <Button
-            type="link"
-            className="block !h-auto w-full !justify-start !p-0 !text-left !text-primary hover:!text-primary"
-            onClick={() => {
-              try {
-                sessionStorage.setItem("selectedReviewName", name || "");
-              } catch {}
-              router.push(
-                `/${workspaceSlug}/projects/${projectId}/testhub/caseManagementReviewDetail?review_id=${record.id}`
-              );
-            }}
-          >
-            <div className="truncate">{name}</div>
-          </Button>
-        </Tooltip>
-      ),
-    },
-    { title: "用例数", dataIndex: "case_count", key: "case_count", width: 120 },
-    {
-      title: "状态",
-      dataIndex: "state",
-      key: "state",
-      width: 140,
-      render: (state: string) => {
-        const rawColor = reviewEnums?.CaseReview_State?.[state]?.color || "default";
-        const color = rawColor === "gray" ? "default" : rawColor;
-        return <Tag color={color}>{state || "-"}</Tag>;
-      },
-      filters: Object.entries(reviewEnums?.CaseReview_State || {}).map(([value, meta]) => ({
-        text: (meta as any)?.label || value,
-        value,
-      })),
-      filterMultiple: true,
-      filteredValue: filters.state ?? null,
-    },
-    {
-      title: "通过率",
-      dataIndex: "pass_rate",
-      key: "pass_rate",
-      width: 180,
-      render: (passRate: any, record: ReviewItem) => {
-        const enums = reviewEnums?.CaseReviewThrough_Result || {};
-        const orderKeys = Object.keys(enums);
-        const totalCount =
-          typeof record?.case_count === "number"
-            ? record.case_count || 0
-            : Object.values(passRate || {}).reduce((s: number, v: any) => s + Number(v || 0), 0);
-        const passKey = orderKeys.find((k) => enums[k]?.color === "green") || "通过";
-        const passed = Number(passRate?.[passKey] || 0);
-        const percent = totalCount > 0 ? Math.floor((passed / totalCount) * 100) : 0;
+  const handleEditReview = (record: TReviewTableRecord) => {
+    if (!canEditReview) return;
+    setEditReview({
+      id: record.id,
+      name: record.name,
+      description: (record as any)?.description ?? "",
+      module_id: (record as any)?.module ?? record.module_id ?? null,
+      assignees: Array.isArray(record.assignees) ? record.assignees : [],
+      started_at: record.started_at ?? null,
+      ended_at: record.ended_at ?? null,
+      cases: (record as any)?.cases ?? [],
+      case_count: record.case_count ?? undefined,
+    });
+    setEditOpen(true);
+  };
 
-        const colorHexMap: Record<string, string> = {
-          green: "#52c41a",
-          red: "#ff4d4f",
-          gold: "#faad14",
-          blue: "#1677ff",
-          gray: "#bfbfbf",
-          default: "#d9d9d9",
-        };
+  const handleReviewSearch = (query: string) => {
+    const nextFilters: TReviewFilters = { ...filters, search: query.trim() || undefined };
+    setFilters(nextFilters);
+    const storageKey = `reviews_name_filter_${workspaceSlug}_${repositoryKey}`;
+    try {
+      sessionStorage.setItem(storageKey, nextFilters.search || "");
+    } catch {}
+    setCurrentPage(1);
+  };
 
-        const segments = orderKeys.map((k) => {
-          const count = Number(passRate?.[k] || 0);
-          const c = enums[k]?.color || "default";
-          const color = colorHexMap[c] || c;
-          const widthPct = totalCount > 0 ? (count / totalCount) * 100 : 0;
-          return { key: k, count, color, widthPct };
-        });
+  const handleSortChange = (nextOrdering: TReviewOrderBy) => {
+    setOrdering(nextOrdering);
+    setCurrentPage(1);
+  };
 
-        const tooltipContent = (
-          <div className={styles.legend}>
-            {orderKeys.map((k) => {
-              const c = enums[k]?.color || "default";
-              const color = colorHexMap[c] || c;
-              return (
-                <div key={k} className={styles.legendItem}>
-                  <span className={styles.legendColor} style={{ backgroundColor: color }} />
-                  <span className={styles.legendLabel}>{k}</span>
-                  <span className={styles.legendCount}>{Number(passRate?.[k] || 0)}</span>
-                </div>
-              );
-            })}
-          </div>
-        );
-
-        return (
-          <div className={styles.passRateCell}>
-            <Tooltip mouseEnterDelay={0.25} overlayClassName={styles.lightTooltip} title={tooltipContent}>
-              <div className={styles.progressWrap}>
-                <div className={styles.progressBar}>
-                  {segments.map((seg, idx) => (
-                    <div
-                      key={`${seg.key}-${idx}`}
-                      className={styles.progressSegment}
-                      style={{ width: `${seg.widthPct}%`, backgroundColor: seg.color }}
-                    />
-                  ))}
-                </div>
-              </div>
-            </Tooltip>
-            <span className={styles.progressPercent}>{percent}%</span>
-          </div>
-        );
-      },
-    },
-    {
-      title: "评审模式",
-      dataIndex: "mode",
-      key: "mode",
-      width: 140,
-      render: (mode: string) => {
-        const color = reviewEnums?.CaseReview_ReviewMode?.[mode]?.color || "default";
-        return <Tag color={color}>{mode || "-"}</Tag>;
-      },
-      filters: Object.entries(reviewEnums?.CaseReview_ReviewMode || {}).map(([value, meta]) => ({
-        text: (meta as any)?.label || value,
-        value,
-      })),
-      filterMultiple: true,
-      filteredValue: filters.mode ?? null,
-    },
-    {
-      title: "评审人",
-      dataIndex: "assignees",
-      key: "assignees",
-      width: 220,
-      render: (assignees: string[] = []) => (
-        <MemberDropdown
-          multiple={true}
-          value={assignees}
-          onChange={() => {}}
-          disabled={true}
-          placeholder={assignees?.length ? "" : "未知用户"}
-          className="w-full text-sm"
-          buttonContainerClassName="w-full text-left p-0 cursor-default"
-          buttonVariant="transparent-with-text"
-          buttonClassName="text-sm p-0 hover:bg-transparent hover:bg-inherit"
-          showUserDetails={true}
-          optionsClassName="z-[60]"
-        />
-      ),
-    },
-    { title: "所属模块", dataIndex: "module_name", key: "module_name", width: 200 },
-    {
-      title: "评审周期",
-      key: "period",
-      width: 220,
-      render: (_, r) => <span>{`${dateOnly(r?.started_at)} - ${dateOnly(r?.ended_at)}`}</span>,
-    },
-    {
-      title: "创建时间",
-      dataIndex: "created_at",
-      key: "created_at",
-      width: 200,
-      render: (v: string) => <span>{formatCNDateTime(v)}</span>,
-    },
-    {
-      title: "操作",
-      key: "actions",
-      fixed: "right",
-      width: 120,
-      render: (_, record) => (
-        <Space size="small">
-          <Button
-            type="text"
-            size="small"
-            icon={<EditOutlined />}
-            aria-label="编辑"
-            disabled={!canEditReview}
-            onClick={() => {
-              if (!canEditReview) return;
-              setEditReview({
-                id: record.id,
-                name: record.name,
-                description: (record as any)?.description ?? "",
-                module_id: (record as any)?.module ?? record.module_id ?? null,
-                assignees: Array.isArray(record.assignees) ? record.assignees : [],
-                started_at: record.started_at ?? null,
-                ended_at: record.ended_at ?? null,
-                cases: (record as any)?.cases ?? [],
-                case_count: record.case_count ?? undefined,
-              });
-              setEditOpen(true);
-            }}
-          />
-          <Button
-            type="text"
-            size="small"
-            danger
-            icon={<DeleteOutlined />}
-            aria-label="删除"
-            disabled={!canDeleteReview}
-            onClick={() => confirmDeleteReview(record)}
-          />
-        </Space>
-      ),
-    },
-  ];
+  const handleDisplayPropertiesUpdate = (updatedDisplayProperties: Partial<TReviewDisplayProperties>) => {
+    setReviewDisplayProperties((prev) => ({ ...prev, ...updatedDisplayProperties }));
+  };
 
   const canViewReviews = permissionsFetched && hasPermission("qa.review.view");
 
@@ -1040,94 +834,87 @@ export default function ReviewsPage() {
           </div>
           <div className={`${styles.right} overflow-hidden !py-0`}>
             <div className="flex h-full flex-col overflow-hidden">
-              <div
-                className={`testhub-reviews-table-scroll relative flex-1 overflow-y-auto [&::-webkit-scrollbar]:block [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[var(--scrollbar-thumb)] [&::-webkit-scrollbar-track]:bg-transparent ${
-                  pageSize === 100 ? "testhub-reviews-scrollbar-strong" : ""
-                }`}
-              >
-                <Table
-                  columns={columns}
-                  dataSource={reviews}
-                  loading={loading}
-                  rowKey="id"
-                  scroll={{ x: 1300 }}
-                  onChange={(_, filtersArg) => {
-                    const selectedStates = (filtersArg.state as string[]) || [];
-                    const selectedModes = (filtersArg.mode as string[]) || [];
-                    const newFilters = {
-                      ...filters,
-                      state: selectedStates.length ? selectedStates : undefined,
-                      mode: selectedModes.length ? selectedModes : undefined,
-                    };
-                    const filtersChanged = JSON.stringify(filters) !== JSON.stringify(newFilters);
-                    if (filtersChanged) {
-                      setCurrentPage(1);
-                      setFilters(newFilters);
-                    }
-                  }}
-                  pagination={false}
-                />
-              </div>
-              <div className="flex flex-shrink-0 items-center justify-between border-t border-subtle bg-surface-1 px-4 py-3">
-                <div className="flex items-center gap-4 text-sm">
-                  <span className="text-secondary">
-                    {totalForCurrent > 0
-                      ? `第 ${(currentPage - 1) * pageSize + 1}-${Math.min(
-                          currentPage * pageSize,
-                          totalForCurrent
-                        )} 条，共 ${totalForCurrent} 条`
-                      : ""}
-                  </span>
+              <div className="flex flex-shrink-0 items-center justify-end px-3 pt-2 pb-2">
+                <div className="flex items-center gap-2">
+                  <CasesSearchInput
+                    ariaLabel="搜索评审"
+                    clearAriaLabel="清空评审搜索"
+                    placeholder="搜索评审名称"
+                    value={filters.search ?? ""}
+                    onSearch={handleReviewSearch}
+                  />
+                  <FiltersToggle filter={reviewsFilter} triggerClassName="h-8 w-8" iconButtonSize="xl" />
+                  <ReviewsDisplayFilters
+                    displayProperties={reviewDisplayProperties}
+                    ordering={ordering}
+                    onDisplayPropertiesChange={handleDisplayPropertiesUpdate}
+                    onOrderByChange={handleSortChange}
+                  />
+                  <button
+                    type="button"
+                    disabled={!canCreateReview}
+                    onClick={handleOpenCreateReview}
+                    className="flex items-center justify-center gap-1.5 rounded bg-accent-primary px-3 py-1.5 text-xs font-medium whitespace-nowrap text-on-color transition-all hover:bg-accent-primary-hover focus:bg-accent-primary-hover focus:text-on-color disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    新建评审
+                  </button>
                 </div>
-                <Pagination
-                  simple
-                  current={currentPage}
-                  pageSize={pageSize}
-                  total={totalForCurrent}
-                  showSizeChanger
-                  pageSizeOptions={["10", "20", "50", "100"]}
-                  onChange={handlePaginationChange}
-                  onShowSizeChange={handlePageSizeChange}
-                  size="small"
-                />
+              </div>
+              <div className="flex-shrink-0 px-3 pb-2">
+                <FiltersRow filter={reviewsFilter} />
+              </div>
+              <div className="min-h-0 flex-1 overflow-hidden">
+                {error ? (
+                  <div className="m-3 rounded-md border border-danger-subtle bg-danger-subtle p-4">
+                    <div className="text-sm text-danger-primary">{error}</div>
+                  </div>
+                ) : (
+                  <div className="flex h-full flex-col overflow-hidden">
+                    <div className="relative min-w-0 flex-1 overflow-hidden px-0">
+                      <ReviewsTable
+                        canDelete={canDeleteReview}
+                        canEdit={canEditReview}
+                        displayProperties={reviewDisplayProperties}
+                        loading={loading}
+                        onDelete={(record) => confirmDeleteReview(record as ReviewItem)}
+                        onEdit={handleEditReview}
+                        onOpen={handleOpenReview}
+                        reviewEnums={reviewEnums}
+                        reviews={reviews as TReviewTableRecord[]}
+                      />
+                    </div>
+                    <div className="flex flex-shrink-0 items-center justify-between border-t border-subtle bg-surface-1 px-4 py-3">
+                      <div className="flex items-center gap-4 text-sm">
+                        <span className="text-secondary">
+                          {totalForCurrent > 0
+                            ? `第 ${(currentPage - 1) * pageSize + 1}-${Math.min(
+                                currentPage * pageSize,
+                                totalForCurrent
+                              )} 条，共 ${totalForCurrent} 条`
+                            : ""}
+                        </span>
+                      </div>
+                      <Pagination
+                        simple
+                        current={currentPage}
+                        pageSize={pageSize}
+                        total={totalForCurrent}
+                        showSizeChanger
+                        pageSizeOptions={["10", "20", "50", "100"]}
+                        onChange={handlePaginationChange}
+                        onShowSizeChange={handlePageSizeChange}
+                        size="small"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
             <style
               dangerouslySetInnerHTML={{
                 __html: `
                 .testhub-reviews-table-scroll{
-                  scrollbar-gutter: stable both-edges;
-                }
-
-                .testhub-reviews-table-scroll .ant-table-thead > tr > th{
-                  position: sticky;
-                  top: 0;
-                  z-index: 5;
-                  background: var(--bg-surface-1);
-                  font-size: 13px !important;
-                  font-weight: 500 !important;
-                  color: var(--text-color-secondary) !important;
-                }
-
-                .testhub-reviews-table-scroll.testhub-reviews-scrollbar-strong{
-                  overflow-y: scroll;
-                  scrollbar-width: auto;
-                  scrollbar-color: var(--scrollbar-thumb) transparent;
-                }
-
-                .testhub-reviews-table-scroll.testhub-reviews-scrollbar-strong::-webkit-scrollbar{
-                  width: 12px;
-                  height: 12px;
-                }
-
-                .testhub-reviews-table-scroll.testhub-reviews-scrollbar-strong::-webkit-scrollbar-thumb{
-                  background-color: color-mix(in oklch, var(--scrollbar-thumb) 85%, transparent);
-                  border-radius: 999px;
-                  border: 3px solid var(--bg-surface-1);
-                }
-
-                .testhub-reviews-table-scroll.testhub-reviews-scrollbar-strong::-webkit-scrollbar-track{
-                  background: transparent;
+                  scrollbar-gutter: stable;
                 }
 
                 .testhub-review-module-tree .ant-tree-draggable-icon{
@@ -1153,7 +940,7 @@ export default function ReviewsPage() {
               open={createReviewOpen}
               initialValues={createReviewInitialValues}
               onClose={() => {
-                fetchReviews(currentPage, pageSize, selectedModuleId, filters);
+                fetchReviews(currentPage, pageSize, selectedModuleId, filters, ordering);
                 fetchModules();
                 fetchAllReviewsTotal();
                 setCreateReviewOpen(false);
@@ -1167,7 +954,7 @@ export default function ReviewsPage() {
               mode="edit"
               initialValues={editReview || undefined}
               onClose={() => {
-                fetchReviews(currentPage, pageSize, selectedModuleId, filters);
+                fetchReviews(currentPage, pageSize, selectedModuleId, filters, ordering);
                 fetchModules();
                 fetchAllReviewsTotal();
                 setEditOpen(false);

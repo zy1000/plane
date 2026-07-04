@@ -7,6 +7,8 @@ import { cn } from "@plane/utils";
 type TCasesSearchInputProps = {
   value: string;
   onSearch: (query: string) => void;
+  ariaLabel?: string;
+  clearAriaLabel?: string;
   disabled?: boolean;
   placeholder?: string;
   className?: string;
@@ -15,6 +17,8 @@ type TCasesSearchInputProps = {
 export const CasesSearchInput = ({
   value,
   onSearch,
+  ariaLabel = "搜索用例",
+  clearAriaLabel = "清空搜索",
   disabled = false,
   placeholder = "搜索用例名称 / 编号",
   className,
@@ -77,7 +81,7 @@ export const CasesSearchInput = ({
         <button
           type="button"
           disabled={disabled}
-          aria-label="搜索用例"
+          aria-label={ariaLabel}
           onClick={openSearch}
           className="h-8 w-8 rounded text-secondary hover:text-primary hover:bg-layer-1 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
         >
@@ -108,7 +112,7 @@ export const CasesSearchInput = ({
           <button
             type="button"
             className="grid place-items-center text-secondary hover:text-primary"
-            aria-label="清空搜索"
+            aria-label={clearAriaLabel}
             onClick={clearSearch}
           >
             <CloseOutlined className="text-xs" />

@@ -2,6 +2,7 @@
 from django_filters import rest_framework as filters
 
 from plane.db.models import TestPlan, PlanModule, CaseReview, CaseReviewModule
+from plane.utils.filters.filterset import UUIDInFilter
 
 
 class TestPlanFilter(filters.FilterSet):
@@ -37,7 +38,15 @@ class TestPlanFilter(filters.FilterSet):
 
 
 class CaseReviewFilter(filters.FilterSet):
+    assignee__in = UUIDInFilter(method="filter_assignee")
+    started_at__lte = filters.DateFilter(field_name="started_at", lookup_expr="lte")
+    ended_at__gte = filters.DateFilter(field_name="ended_at", lookup_expr="gte")
     module_id = filters.UUIDFilter(method="filter_module_id")
+
+    def filter_assignee(self, queryset, name, value):
+        if not value:
+            return queryset
+        return queryset.filter(assignees__id__in=value).distinct()
 
     def filter_module_id(self, queryset, name, value):
         if not value:
