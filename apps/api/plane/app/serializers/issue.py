@@ -1247,6 +1247,17 @@ class IssueBatchUpdateSerializer(BaseSerializer):
         ]
 
     def validate(self, attrs):
+        state = attrs.get("state")
+        if state is not None and self.instance is not None:
+            if str(state.project_id) != str(self.instance.project_id):
+                raise serializers.ValidationError(
+                    {"state_id": "目标状态不存在或不属于当前项目"}
+                )
+            if state.issue_type_id and str(state.issue_type_id) != str(self.instance.type_id):
+                raise serializers.ValidationError(
+                    {"state_id": "目标状态不适用于该工作项类型"}
+                )
+
         # 更新场景：若原工作项已存在负责人，不允许将负责人清空
         if (
                 "assignee_ids" in attrs

@@ -1,5 +1,6 @@
 import json
 
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.response import Response
@@ -10,6 +11,7 @@ from plane.app.views import BaseAPIView
 from plane.db.models import (
     Issue,
     IssueTransitionRecord,
+    State,
     TransitionRecordStatus,
     UserRecentVisit,
 )
@@ -21,6 +23,12 @@ from plane.utils.workflow.transition import (
     check_update_state_permission,
     reset_pending_transition_votes_if_content_changed,
 )
+
+
+def _format_serializer_errors(errors):
+    if isinstance(errors, dict):
+        return "; ".join(f"{field}: {detail}" for field, detail in errors.items())
+    return str(errors)
 
 
 class IssueBatchUpdate(BaseAPIView):
@@ -35,38 +43,55 @@ class IssueBatchUpdate(BaseAPIView):
         state_id = properties.get("state_id")
         has_assignee_update = "assignee_ids" in properties
 
-        queryset = self.queryset.filter(project_id=project_id, id__in=issue_ids)
+        queryset = self.queryset.filter(project_id=project_id, id__in=issue_ids).select_related("state", "type")
         blocked = []
         updated_issue_ids = []
         to_state = None
 
         if state_id:
-            from plane.db.models import State as StateModel
-
             try:
-                to_state = StateModel.objects.get(pk=state_id, project_id=project_id)
-            except StateModel.DoesNotExist:
+                to_state = State.objects.get(pk=state_id, project_id=project_id)
+            except (State.DoesNotExist, DjangoValidationError, TypeError, ValueError):
                 to_state = None
 
         for query in queryset:
+            if state_id:
+                if to_state is None:
+                    blocked.append(
+                        {
+                            "issue_id": str(query.id),
+                            "error": "目标状态不存在或不属于当前项目",
+                            "transition_record_id": None,
+                        }
+                    )
+                    continue
+                if to_state.issue_type_id and str(to_state.issue_type_id) != str(query.type_id):
+                    blocked.append(
+                        {
+                            "issue_id": str(query.id),
+                            "error": "目标状态不适用于该工作项类型",
+                            "transition_record_id": None,
+                        }
+                    )
+                    continue
+
             # 工作流审批检查（批量更新中仅对实际变更状态的 issue 生效）
             if state_id and str(state_id) != str(query.state_id):
-                if to_state:
-                    allowed, error_msg, transition_record = check_update_state_permission(
-                        issue=query,
-                        to_state=to_state,
-                        user=request.user,
-                        project_id=project_id,
-                        target_assignee_ids=properties.get("assignee_ids"),
-                        approval_reason=approval_reason,
-                    )
-                    if not allowed:
-                        blocked.append({
-                            "issue_id": str(query.id),
-                            "error": error_msg,
-                            "transition_record_id": str(transition_record.id) if transition_record else None,
-                        })
-                        continue
+                allowed, error_msg, transition_record = check_update_state_permission(
+                    issue=query,
+                    to_state=to_state,
+                    user=request.user,
+                    project_id=project_id,
+                    target_assignee_ids=properties.get("assignee_ids"),
+                    approval_reason=approval_reason,
+                )
+                if not allowed:
+                    blocked.append({
+                        "issue_id": str(query.id),
+                        "error": error_msg,
+                        "transition_record_id": str(transition_record.id) if transition_record else None,
+                    })
+                    continue
             elif has_assignee_update and query.state_id:
                 allowed, error_msg = check_state_assignee_constraint(
                     issue=query,
@@ -84,31 +109,40 @@ class IssueBatchUpdate(BaseAPIView):
                     continue
 
             serializer = IssueBatchUpdateSerializer(instance=query, data=properties, partial=True)
-            if serializer.is_valid():
-                if state_id and str(state_id) != str(query.state_id):
-                    cancel_issue_pending_transitions(
-                        issue=query,
-                        cancelled_by=request.user,
-                        project_id=str(project_id),
-                    )
-                # 评审期间内容变更检测：仅在存在 PENDING 审批时捕获快照
-                approval_before_snapshot = None
-                if IssueTransitionRecord.objects.filter(
-                    issue=query, status=TransitionRecordStatus.PENDING
-                ).exists():
-                    approval_before_snapshot = capture_issue_content_snapshot(issue=query)
+            if not serializer.is_valid():
+                blocked.append(
+                    {
+                        "issue_id": str(query.id),
+                        "error": _format_serializer_errors(serializer.errors),
+                        "transition_record_id": None,
+                    }
+                )
+                continue
 
-                serializer.save()
+            if state_id and str(state_id) != str(query.state_id):
+                cancel_issue_pending_transitions(
+                    issue=query,
+                    cancelled_by=request.user,
+                    project_id=str(project_id),
+                )
+            # 评审期间内容变更检测：仅在存在 PENDING 审批时捕获快照
+            approval_before_snapshot = None
+            if IssueTransitionRecord.objects.filter(
+                issue=query, status=TransitionRecordStatus.PENDING
+            ).exists():
+                approval_before_snapshot = capture_issue_content_snapshot(issue=query)
 
-                if approval_before_snapshot is not None:
-                    query.refresh_from_db()
-                    reset_pending_transition_votes_if_content_changed(
-                        issue=query,
-                        before_snapshot=approval_before_snapshot,
-                        actor=request.user,
-                        project_id=str(project_id),
-                    )
-                updated_issue_ids.append(str(query.id))
+            serializer.save()
+
+            if approval_before_snapshot is not None:
+                query.refresh_from_db()
+                reset_pending_transition_votes_if_content_changed(
+                    issue=query,
+                    before_snapshot=approval_before_snapshot,
+                    actor=request.user,
+                    project_id=str(project_id),
+                )
+            updated_issue_ids.append(str(query.id))
 
         if blocked:
             return Response(

@@ -1,7 +1,8 @@
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Trash2 } from "lucide-react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
+import type { TIssue } from "@plane/types";
 import { cn } from "@plane/utils";
 import { format } from "date-fns";
 // components
@@ -19,10 +20,13 @@ import { IssuePropertyLabels } from "@/components/issues/issue-layouts/propertie
 // hooks
 import { useMultipleSelectStore } from "@/hooks/store/use-multiple-select-store";
 import { useIssues } from "@/hooks/store/use-issues";
+import { useProjectState } from "@/hooks/store/use-project-state";
 import { useIssueStoreType } from "@/hooks/use-issue-layout-store";
 // services
 import { IssueService } from "@/services/issue";
 import { invalidateIssueApprovalStatus } from "@/services/project/issue-approval-status-cache";
+// local imports
+import { getBulkStateCompatibility } from "./state-compatibility";
 
 type Props = {
   className?: string;
@@ -37,6 +41,24 @@ const actionPillContainerClassName = "w-full h-7";
 
 const actionPillLabelClassName = "leading-5";
 
+type TBatchUpdateProperties = {
+  state_id?: string | null;
+  assignee_ids?: string[];
+  start_date?: string | null;
+  target_date?: string | null;
+  label_ids?: string[];
+  cycle_id?: string | null;
+  module_ids?: string[];
+  release_ids?: string[];
+};
+
+type TOptimisticIssuePatchStore = {
+  applyOptimisticIssuePatch: (issueId: string, data: Partial<TIssue>) => void;
+};
+
+const canApplyOptimisticIssuePatch = (store: unknown): store is TOptimisticIssuePatchStore =>
+  typeof (store as TOptimisticIssuePatchStore).applyOptimisticIssuePatch === "function";
+
 export const BulkOperationsActionBar = observer(function BulkOperationsActionBar(props: Props) {
   const { className, isActive = true } = props;
   const { selectedEntityIds, clearSelection } = useMultipleSelectStore();
@@ -46,17 +68,22 @@ export const BulkOperationsActionBar = observer(function BulkOperationsActionBar
   // store hooks
   const storeType = useIssueStoreType();
   const { issueMap, issues } = useIssues(storeType);
-
-  // 计算选中工作项的类型信息
-  const { hasMultipleTypes, singleTypeId } = useMemo(() => {
-    const typeIds = new Set(
-      selectedEntityIds.map((id) => issueMap[id]?.type_id ?? null).filter((typeId) => typeId !== null)
-    );
-    return {
-      hasMultipleTypes: typeIds.size > 1,
-      singleTypeId: typeIds.size === 1 ? [...typeIds][0] : null,
-    };
-  }, [selectedEntityIds, issueMap]);
+  const { getProjectStates, getStateById } = useProjectState();
+  const projectStates = getProjectStates(projectId ? projectId.toString() : undefined);
+  const bulkStateCompatibility = getBulkStateCompatibility({
+    issueIds: selectedEntityIds,
+    issueMap,
+    projectStates,
+  });
+  const {
+    compatibleStateIds,
+    hasMissingIssues,
+    hasMissingTypes,
+    hasMultipleTypes,
+    isReady: areCompatibleStatesReady,
+    singleTypeId,
+    stateIdToTypeStateIdMap,
+  } = bulkStateCompatibility;
 
   const [selectedStateId, setSelectedStateId] = useState<string | null>(null);
   const [selectedAssigneeIds, setSelectedAssigneeIds] = useState<string[]>([]);
@@ -71,6 +98,33 @@ export const BulkOperationsActionBar = observer(function BulkOperationsActionBar
   const [isDeleting, setIsDeleting] = useState(false);
 
   const issueService = new IssueService();
+  const selectedState = selectedStateId ? getStateById(selectedStateId) : undefined;
+  const isSelectedStateInvalid =
+    !!selectedStateId &&
+    (hasMissingIssues ||
+      hasMissingTypes ||
+      (hasMultipleTypes
+        ? compatibleStateIds !== undefined && !compatibleStateIds.includes(selectedStateId)
+        : !!singleTypeId && !!selectedState?.issue_type_id && selectedState.issue_type_id !== singleTypeId));
+
+  const isStateDropdownDisabled =
+    hasMissingIssues ||
+    hasMissingTypes ||
+    (hasMultipleTypes && areCompatibleStatesReady && compatibleStateIds?.length === 0);
+
+  const stateDropdownTooltipContent = hasMissingIssues
+    ? "选中的工作项详情尚未加载，暂不支持修改状态"
+    : hasMissingTypes
+      ? "选中的工作项缺少类型，暂不支持修改状态"
+      : hasMultipleTypes
+        ? areCompatibleStatesReady && compatibleStateIds?.length === 0
+          ? "所选工作项类型没有共同可用状态"
+          : "仅显示所选工作项类型共同支持的状态"
+        : undefined;
+
+  useEffect(() => {
+    if (isSelectedStateInvalid) setSelectedStateId(null);
+  }, [isSelectedStateInvalid]);
 
   const hasChanges =
     !!selectedStateId ||
@@ -82,23 +136,19 @@ export const BulkOperationsActionBar = observer(function BulkOperationsActionBar
     selectedModuleIds.length > 0 ||
     selectedReleaseIds.length > 0;
 
-  const canApplyUpdate = workspaceSlug && projectId && selectedCount > 0 && !isUpdating && hasChanges;
+  const canApplyUpdate =
+    workspaceSlug &&
+    projectId &&
+    selectedCount > 0 &&
+    !isUpdating &&
+    hasChanges &&
+    (!selectedStateId || !isSelectedStateInvalid);
 
   const handleBatchUpdate = async () => {
     if (!workspaceSlug || !projectId || selectedEntityIds.length === 0) return;
     
-    const properties: {
-      state_id?: string | null;
-      assignee_ids?: string[];
-      start_date?: string | null;
-      target_date?: string | null;
-      label_ids?: string[];
-      cycle_id?: string | null;
-      module_ids?: string[];
-      release_ids?: string[];
-    } = {};
+    const properties: TBatchUpdateProperties = {};
 
-    if (selectedStateId) properties.state_id = selectedStateId;
     if (selectedAssigneeIds.length > 0) properties.assignee_ids = selectedAssigneeIds;
     if (selectedStartDate) properties.start_date = format(selectedStartDate, "yyyy-MM-dd");
     if (selectedDueDate) properties.target_date = format(selectedDueDate, "yyyy-MM-dd");
@@ -107,40 +157,123 @@ export const BulkOperationsActionBar = observer(function BulkOperationsActionBar
     if (selectedModuleIds.length > 0) properties.module_ids = selectedModuleIds;
     if (selectedReleaseIds.length > 0) properties.release_ids = selectedReleaseIds;
 
-    setIsUpdating(true);
-    try {
-      const response = await issueService.batchUpdateIssues(workspaceSlug.toString(), projectId.toString(), {
-        issue_ids: selectedEntityIds,
-        properties,
-      });
+    const updatePayloads: { issueIds: string[]; properties: TBatchUpdateProperties }[] = [];
 
-      const blockedIssueIds = new Set(response?.blocked_issues?.map((item) => item.issue_id) ?? []);
-      const updatedIssueIds =
-        response?.updated_issue_ids ?? selectedEntityIds.filter((issueId) => !blockedIssueIds.has(issueId));
+    if (selectedStateId && hasMultipleTypes) {
+      const targetStateIdsByTypeId = stateIdToTypeStateIdMap[selectedStateId];
+      const issueIdsByTargetStateId = new Map<string, string[]>();
 
-      updatedIssueIds.forEach((issueId) => {
-        issues.applyOptimisticIssuePatch(issueId, properties);
-      });
-
-      if (properties.state_id) {
-        (response?.blocked_issues ?? []).forEach((blockedIssue) => {
-          const issue = issueMap[blockedIssue.issue_id];
-          if (issue?.project_id) {
-            invalidateIssueApprovalStatus(issue.project_id, blockedIssue.issue_id);
-          }
+      if (!targetStateIdsByTypeId) {
+        setToast({
+          type: TOAST_TYPE.ERROR,
+          title: "无法批量更新状态",
+          message: "所选状态不适用于当前选中的全部工作项类型。",
         });
+        return;
       }
 
-      if (response?.blocked_issues?.length) {
-        const blockedCount = response.blocked_issues.length;
-        const updatedCount = updatedIssueIds.length;
+      for (const issueId of selectedEntityIds) {
+        const typeId = issueMap[issueId]?.type_id;
+        const targetStateId = typeId ? targetStateIdsByTypeId[typeId] : undefined;
+
+        if (!targetStateId) {
+          setToast({
+            type: TOAST_TYPE.ERROR,
+            title: "无法批量更新状态",
+            message: "部分工作项没有可用的目标状态，请重新选择。",
+          });
+          return;
+        }
+
+        issueIdsByTargetStateId.set(targetStateId, [...(issueIdsByTargetStateId.get(targetStateId) ?? []), issueId]);
+      }
+
+      issueIdsByTargetStateId.forEach((issueIds, targetStateId) => {
+        updatePayloads.push({
+          issueIds,
+          properties: {
+            ...properties,
+            state_id: targetStateId,
+          },
+        });
+      });
+    } else {
+      updatePayloads.push({
+        issueIds: selectedEntityIds,
+        properties: {
+          ...properties,
+          ...(selectedStateId ? { state_id: selectedStateId } : {}),
+        },
+      });
+    }
+
+    setIsUpdating(true);
+    try {
+      const results = await Promise.allSettled(
+        updatePayloads.map(async (payload) => {
+          const response = await issueService.batchUpdateIssues(workspaceSlug.toString(), projectId.toString(), {
+            issue_ids: payload.issueIds,
+            properties: payload.properties,
+          });
+          return { payload, response };
+        })
+      );
+
+      let blockedCount = 0;
+      let updatedCount = 0;
+      let failedCount = 0;
+
+      results.forEach((result) => {
+        if (result.status === "rejected") {
+          failedCount += 1;
+          return;
+        }
+
+        const { payload, response } = result.value;
+        const blockedIssues = response?.blocked_issues ?? [];
+        const blockedIssueIds = new Set(blockedIssues.map((item) => item.issue_id));
+        const updatedIssueIds =
+          response?.updated_issue_ids ?? payload.issueIds.filter((issueId) => !blockedIssueIds.has(issueId));
+
+        updatedCount += updatedIssueIds.length;
+        blockedCount += blockedIssues.length;
+
+        if (canApplyOptimisticIssuePatch(issues)) {
+          updatedIssueIds.forEach((issueId) => {
+            issues.applyOptimisticIssuePatch(issueId, payload.properties);
+          });
+        }
+
+        if (payload.properties.state_id) {
+          blockedIssues.forEach((blockedIssue) => {
+            const issue = issueMap[blockedIssue.issue_id];
+            if (issue?.project_id) {
+              invalidateIssueApprovalStatus(issue.project_id, blockedIssue.issue_id);
+            }
+          });
+        }
+      });
+
+      if (failedCount > 0) {
         setToast({
-          type: TOAST_TYPE.INFO,
-          title: "部分工作项已发起审批流程",
+          type: TOAST_TYPE.ERROR,
+          title: "批量更新失败",
           message:
             updatedCount > 0
-              ? `已更新 ${updatedCount} 个工作项，另有 ${blockedCount} 个工作项需审批通过后才会变更状态。`
-              : `${blockedCount} 个工作项已发起审批流程，需审批通过后状态才会更新。`,
+              ? `已更新 ${updatedCount} 个工作项，另有部分请求失败，请重试。`
+              : "更新时发生错误，请稍后重试。",
+        });
+        return;
+      }
+
+      if (blockedCount > 0) {
+        setToast({
+          type: TOAST_TYPE.INFO,
+          title: "部分工作项未直接更新",
+          message:
+            updatedCount > 0
+              ? `已更新 ${updatedCount} 个工作项，另有 ${blockedCount} 个工作项未直接更新或需审批。`
+              : `${blockedCount} 个工作项未直接更新或需审批。`,
         });
       } else {
         setToast({
@@ -149,10 +282,10 @@ export const BulkOperationsActionBar = observer(function BulkOperationsActionBar
           message: "已更新选中的工作项。",
         });
       }
-      
+
       // 清空选中
       clearSelection();
-      
+
       // 重置选择的状态
       setSelectedStateId(null);
       setSelectedAssigneeIds([]);
@@ -229,20 +362,21 @@ export const BulkOperationsActionBar = observer(function BulkOperationsActionBar
         </div>
         <div className="flex items-center  gap-2 flex-wrap flex-grow">
           <Tooltip
-            tooltipContent={hasMultipleTypes ? "选中的工作项包含多种类型，不支持批量修改状态" : undefined}
-            disabled={!hasMultipleTypes}
+            tooltipContent={stateDropdownTooltipContent}
+            disabled={!stateDropdownTooltipContent}
             position="top"
           >
             <div>
               <StateDropdown
                 projectId={projectId ? projectId.toString() : undefined}
                 issueTypeId={singleTypeId}
+                stateIds={hasMultipleTypes ? (compatibleStateIds ?? []) : undefined}
                 value={selectedStateId}
-                onChange={(stateId) => !hasMultipleTypes && setSelectedStateId(stateId)}
+                onChange={(stateId) => setSelectedStateId(stateId)}
                 buttonVariant="transparent-with-text"
                 buttonContainerClassName={actionPillContainerClassName}
-                buttonClassName={cn(actionPillClassName, hasMultipleTypes && "opacity-50 cursor-not-allowed")}
-                disabled={hasMultipleTypes}
+                buttonClassName={cn(actionPillClassName, isStateDropdownDisabled && "opacity-50 cursor-not-allowed")}
+                disabled={isStateDropdownDisabled}
               />
             </div>
           </Tooltip>
