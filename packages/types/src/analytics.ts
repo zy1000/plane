@@ -49,6 +49,7 @@ export type TAnalyticsFilterParams = {
   project_ids?: string;
   cycle_id?: string;
   module_id?: string;
+  date_filter?: string;
 };
 
 export type TOverdueAnalyticsStatus = "active" | "all" | "resolved";

@@ -100,7 +100,7 @@ function AnalyticsPage({ params }: Route.ComponentProps) {
                     </Tabs.List>
 
                     <div className="flex-shrink-0">
-                      <AnalyticsFilterActions />
+                      <AnalyticsFilterActions activeTab={selectedTab} />
                     </div>
                   </div>
                   {ANALYTICS_TABS.map((tab) => (

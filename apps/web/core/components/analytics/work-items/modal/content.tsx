@@ -14,7 +14,6 @@ import { Spinner } from "@plane/ui";
 import { useAnalytics } from "@/hooks/store/use-analytics";
 // plane web components
 import TotalInsights from "../../total-insights";
-import CreatedVsResolved from "../created-vs-resolved";
 import CustomizedInsights from "../customized-insights";
 import WorkItemsInsightTable from "../workitems-insight-table";
 
@@ -78,7 +77,6 @@ export const WorkItemsModalMainContent = observer(function WorkItemsModalMainCon
     <Tab.Group as={React.Fragment}>
       <div className="flex flex-col gap-14 overflow-y-auto p-6">
         <TotalInsights analyticsType="work-items" peekView={!fullScreen} />
-        <CreatedVsResolved />
         <CustomizedInsights peekView={!fullScreen} isEpic={isEpic} />
         <WorkItemsInsightTable />
       </div>

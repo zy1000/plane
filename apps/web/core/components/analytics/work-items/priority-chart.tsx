@@ -37,6 +37,7 @@ declare module "@tanstack/react-table" {
       key: string;
       value: (row: Row<TData>) => string | number;
       label?: string;
+      _value?: TValue;
     };
   }
 }
@@ -68,7 +69,7 @@ const PriorityChart = observer(function PriorityChart(props: Props) {
         workspaceSlug,
         "custom-work-items",
         {
-          // date_filter: selectedDuration,
+          date_filter: selectedDuration,
           ...(selectedProjects?.length > 0 && { project_ids: selectedProjects?.join(",") }),
           ...(selectedCycle ? { cycle_id: selectedCycle } : {}),
           ...(selectedModule ? { module_id: selectedModule } : {}),
@@ -184,7 +185,7 @@ const PriorityChart = observer(function PriorityChart(props: Props) {
         meta: {
           export: {
             key: xAxisLabel,
-            value: (row) => row.original.name,
+            value: (row: Row<TChartDatum>) => row.original.name,
             label: xAxisLabel,
           },
         },
@@ -196,7 +197,7 @@ const PriorityChart = observer(function PriorityChart(props: Props) {
         meta: {
           export: {
             key: "Count",
-            value: (row) => row.original.count,
+            value: (row: Row<TChartDatum>) => row.original.count,
             label: "Count",
           },
         },
@@ -215,7 +216,7 @@ const PriorityChart = observer(function PriorityChart(props: Props) {
             meta: {
               export: {
                 key,
-                value: (row) => row.original[key],
+                value: (row: Row<TChartDatum>) => row.original[key],
                 label: parsedData.schema[key],
               },
             },

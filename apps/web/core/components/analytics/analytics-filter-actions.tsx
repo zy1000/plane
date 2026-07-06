@@ -6,14 +6,20 @@
 
 // plane web components
 import { observer } from "mobx-react";
+import type { TAnalyticsTabsBase } from "@plane/types";
 // hooks
 import { useAnalytics } from "@/hooks/store/use-analytics";
 import { useProject } from "@/hooks/store/use-project";
 // components
+import DurationDropdown from "./select/duration";
 import { ProjectSelect } from "./select/project";
 
-const AnalyticsFilterActions = observer(function AnalyticsFilterActions() {
-  const { selectedProjects, updateSelectedProjects } = useAnalytics();
+type Props = {
+  activeTab: TAnalyticsTabsBase | string;
+};
+
+const AnalyticsFilterActions = observer(function AnalyticsFilterActions({ activeTab }: Props) {
+  const { selectedDuration, selectedProjects, updateSelectedDuration, updateSelectedProjects } = useAnalytics();
   const { joinedProjectIds } = useProject();
   return (
     <div className="flex items-center justify-end gap-2">
@@ -24,14 +30,16 @@ const AnalyticsFilterActions = observer(function AnalyticsFilterActions() {
         }}
         projectIds={joinedProjectIds}
       />
-      {/* <DurationDropdown
-        buttonVariant="border-with-text"
-        value={selectedDuration}
-        onChange={(val) => {
-          updateSelectedDuration(val);
-        }}
-        dropdownArrow
-      /> */}
+      {activeTab === "work-items" && (
+        <DurationDropdown
+          buttonVariant="border-with-text"
+          value={selectedDuration}
+          onChange={(val) => {
+            updateSelectedDuration(val);
+          }}
+          dropdownArrow
+        />
+      )}
     </div>
   );
 });

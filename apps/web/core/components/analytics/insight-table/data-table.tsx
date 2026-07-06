@@ -5,6 +5,7 @@
  */
 
 import * as React from "react";
+import { createPortal } from "react-dom";
 import type {
   ColumnDef,
   ColumnFiltersState,
@@ -40,6 +41,7 @@ interface DataTableProps<TData, TValue> {
   actions?: (table: TanstackTable<TData>) => React.ReactNode;
   filtersRow?: React.ReactNode;
   searchTriggerPosition?: "left" | "actions-left";
+  searchToolbarMount?: HTMLElement | null;
   enablePagination?: boolean;
   pageSize?: number;
 }
@@ -51,10 +53,11 @@ export function DataTable<TData, TValue>({
   actions,
   filtersRow,
   searchTriggerPosition = "left",
+  searchToolbarMount,
   enablePagination = false,
   pageSize = 20,
 }: DataTableProps<TData, TValue>) {
-  const [rowSelection, setRowSelection] = React.useState({});
+  const [rowSelection] = React.useState({});
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
   const [sorting, setSorting] = React.useState<SortingState>([]);
@@ -79,6 +82,7 @@ export function DataTable<TData, TValue>({
       rowSelection,
       columnFilters,
     },
+    onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
     onColumnVisibilityChange: setColumnVisibility,
     getCoreRowModel: getCoreRowModel(),
@@ -183,27 +187,34 @@ export function DataTable<TData, TValue>({
     [firstColumnId, handleSearchClose, handleSearchOpen, isSearchOpen, table]
   );
 
+  const useExternalSearchToolbar = searchToolbarMount !== undefined;
+  const searchToolbar = (
+    <div className="relative flex max-w-[300px] items-center gap-4">
+      {firstColumnId && (
+        <div className="flex items-center gap-2 text-13 whitespace-nowrap text-placeholder">{searchPlaceholder}</div>
+      )}
+      {searchTriggerPosition === "left" && searchControl("left")}
+    </div>
+  );
+
   return (
     <div className="space-y-4">
-      <div className="flex w-full items-center justify-between">
-        <div className="relative flex max-w-[300px] items-center gap-4">
-          {firstColumnId && (
-            <div className="flex items-center gap-2 text-13 whitespace-nowrap text-placeholder">
-              {searchPlaceholder}
-            </div>
-          )}
-          {searchTriggerPosition === "left" && searchControl("left")}
+      {(useExternalSearchToolbar ? Boolean(actions) : true) && (
+        <div className="flex w-full items-center justify-between">
+          {!useExternalSearchToolbar && searchToolbar}
+          <div
+            className={cn("flex items-center", {
+              "ml-auto": useExternalSearchToolbar,
+              "gap-1": searchTriggerPosition === "actions-left",
+              "gap-2": searchTriggerPosition !== "actions-left",
+            })}
+          >
+            {searchTriggerPosition === "actions-left" && searchControl("actions-left")}
+            {actions && <div>{actions(table)}</div>}
+          </div>
         </div>
-        <div
-          className={cn("flex items-center", {
-            "gap-1": searchTriggerPosition === "actions-left",
-            "gap-2": searchTriggerPosition !== "actions-left",
-          })}
-        >
-          {searchTriggerPosition === "actions-left" && searchControl("actions-left")}
-          {actions && <div>{actions(table)}</div>}
-        </div>
-      </div>
+      )}
+      {useExternalSearchToolbar && searchToolbarMount && createPortal(searchToolbar, searchToolbarMount)}
       {filtersRow}
 
       <div className="rounded-md">
@@ -247,7 +258,7 @@ export function DataTable<TData, TValue>({
           </TableBody>
         </Table>
         {enablePagination && table.getPageCount() > 0 && (
-          <div className="flex-shrink-0 border-t border-subtle px-4 py-3 bg-surface-1 flex items-center justify-between">
+          <div className="flex flex-shrink-0 items-center justify-between border-t border-subtle bg-surface-1 px-4 py-3">
             <div className="flex items-center gap-4 text-sm">
               <span className="text-secondary">
                 {filteredRowsCount > 0 ? `第 ${startIndex + 1}-${endIndex} 条，共 ${filteredRowsCount} 条` : ""}
