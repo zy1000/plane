@@ -40,6 +40,7 @@ from plane.utils.asset_versions import (
     mark_asset_physically_deleted,
     NULL_VERSION_ID,
     object_name_for_version,
+    record_latest_object_checkpoint,
     record_latest_object_version,
     restore_asset_to_version,
 )
@@ -174,9 +175,11 @@ def _compute_doc_key(
                 "version",
                 str(source_version.version_id or ""),
                 str(source_version.etag or ""),
-                source_version.updated_at.isoformat()
-                if source_version.updated_at
-                else "",
+                (
+                    source_version.updated_at.isoformat()
+                    if source_version.updated_at
+                    else ""
+                ),
             ]
         )
         return hashlib.sha256(raw.encode("utf-8")).hexdigest()
@@ -282,7 +285,9 @@ def _set_onlyoffice_doc_session(
     }
     ordered_sessions = sorted(
         sessions.items(),
-        key=lambda item: str(item[1].get("opened_at") if isinstance(item[1], dict) else ""),
+        key=lambda item: str(
+            item[1].get("opened_at") if isinstance(item[1], dict) else ""
+        ),
     )
     onlyoffice_state["doc_sessions"] = dict(
         ordered_sessions[-ONLYOFFICE_DOC_SESSION_LIMIT:]
@@ -322,6 +327,20 @@ def _set_asset_content_sha256(asset: FileAsset, digest: str) -> None:
     attributes = asset.attributes if isinstance(asset.attributes, dict) else {}
     attributes["content_sha256"] = str(digest or "").strip().lower()
     asset.attributes = attributes
+
+
+def _delete_untracked_storage_version(
+    storage, asset: FileAsset, version_id: str | None
+) -> None:
+    storage_version = _storage_version_id(version_id)
+    if not storage_version or not asset.storage_key:
+        return
+    if asset.versions.filter(version_id=version_id).exists():
+        return
+    try:
+        storage.delete_object_version(asset.storage_key, storage_version)
+    except Exception:
+        pass
 
 
 def _onlyoffice_created_by_id(
@@ -631,8 +650,15 @@ class FilestoreAssetVersionListAPIView(BaseAPIView):
         asset = _get_filestore_asset(pk, slug, project_id)
         storage = S3Storage(request=request)
         ensure_current_asset_version(asset, storage=storage)
-        versions = asset.versions.filter(deleted_at__isnull=True).select_related("created_by").order_by("-created_at")
-        return Response({"versions": [_serialize_file_version(item) for item in versions]}, status=status.HTTP_200_OK)
+        versions = (
+            asset.versions.filter(deleted_at__isnull=True)
+            .select_related("created_by")
+            .order_by("-created_at")
+        )
+        return Response(
+            {"versions": [_serialize_file_version(item) for item in versions]},
+            status=status.HTTP_200_OK,
+        )
 
 
 class FilestoreAssetVersionDetailAPIView(BaseAPIView):
@@ -641,14 +667,22 @@ class FilestoreAssetVersionDetailAPIView(BaseAPIView):
         asset = _get_filestore_asset(pk, slug, project_id)
         alias = str(request.data.get("alias") or "").strip()
         if len(alias) > 255:
-            return Response({"error": "alias is too long"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "alias is too long"}, status=status.HTTP_400_BAD_REQUEST
+            )
 
-        version = asset.versions.filter(version_id=version_id, deleted_at__isnull=True).first()
+        version = asset.versions.filter(
+            version_id=version_id, deleted_at__isnull=True
+        ).first()
         if version is None:
-            return Response({"error": "Version not found"}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"error": "Version not found"}, status=status.HTTP_404_NOT_FOUND
+            )
         version.alias = alias
         version.save(update_fields=["alias"])
-        return Response({"version": _serialize_file_version(version)}, status=status.HTTP_200_OK)
+        return Response(
+            {"version": _serialize_file_version(version)}, status=status.HTTP_200_OK
+        )
 
 
 class FilestoreAssetVersionDownloadAPIView(BaseAPIView):
@@ -659,15 +693,21 @@ class FilestoreAssetVersionDownloadAPIView(BaseAPIView):
             disposition = "attachment"
 
         asset = _get_filestore_asset(pk, slug, project_id)
-        version = asset.versions.filter(version_id=version_id, deleted_at__isnull=True).first()
+        version = asset.versions.filter(
+            version_id=version_id, deleted_at__isnull=True
+        ).first()
         if version is None:
-            return Response({"error": "Version not found"}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"error": "Version not found"}, status=status.HTTP_404_NOT_FOUND
+            )
 
         storage = S3Storage(request=request)
         signed_url = storage.generate_presigned_url(
             object_name=object_name_for_version(version) or asset.storage_key,
             disposition=disposition,
-            filename=version.alias or version.filename or (asset.attributes or {}).get("name"),
+            filename=version.alias
+            or version.filename
+            or (asset.attributes or {}).get("name"),
             version_id=_storage_version_id(version.version_id),
         )
         redirect = request.query_params.get("redirect", "1")
@@ -680,7 +720,11 @@ class FilestoreAssetVersionUploadAPIView(BaseAPIView):
     @allow_fine_permission(PermissionKey.PROJECT_ASSET_EDIT)
     def post(self, request, slug, project_id, pk):
         asset = _get_filestore_asset(pk, slug, project_id)
-        file_type = request.data.get("type") or (asset.attributes or {}).get("type") or "application/octet-stream"
+        file_type = (
+            request.data.get("type")
+            or (asset.attributes or {}).get("type")
+            or "application/octet-stream"
+        )
         file_size = int(request.data.get("size") or settings.FILE_SIZE_LIMIT)
         size_limit = min(file_size, settings.FILE_SIZE_LIMIT)
         storage = S3Storage(request=request)
@@ -695,7 +739,10 @@ class FilestoreAssetVersionUploadAPIView(BaseAPIView):
             file_type=file_type,
             file_size=size_limit,
         )
-        return Response({"upload_data": presigned_url, "asset_id": str(asset.id)}, status=status.HTTP_200_OK)
+        return Response(
+            {"upload_data": presigned_url, "asset_id": str(asset.id)},
+            status=status.HTTP_200_OK,
+        )
 
     @allow_fine_permission(PermissionKey.PROJECT_ASSET_EDIT)
     def patch(self, request, slug, project_id, pk):
@@ -720,16 +767,22 @@ class FilestoreAssetVersionUploadAPIView(BaseAPIView):
             created_by_id=request.user.id,
             alias=request.data.get("alias") or None,
         )
-        return Response({"version": _serialize_file_version(version)}, status=status.HTTP_200_OK)
+        return Response(
+            {"version": _serialize_file_version(version)}, status=status.HTTP_200_OK
+        )
 
 
 class FilestoreAssetVersionRestoreAPIView(BaseAPIView):
     @allow_fine_permission(PermissionKey.PROJECT_ASSET_EDIT)
     def post(self, request, slug, project_id, pk, version_id):
         asset = _get_filestore_asset(pk, slug, project_id)
-        target_version = asset.versions.filter(version_id=version_id, deleted_at__isnull=True).first()
+        target_version = asset.versions.filter(
+            version_id=version_id, deleted_at__isnull=True
+        ).first()
         if target_version is None:
-            return Response({"error": "Version not found"}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"error": "Version not found"}, status=status.HTTP_404_NOT_FOUND
+            )
 
         storage = S3Storage(request=request)
         deleted_version_ids = restore_asset_to_version(
@@ -837,9 +890,7 @@ class FilestoreAssetOnlyOfficeConfigAPIView(BaseAPIView):
         )
         # 工作项附件、PDF、或显式请求预览：本质只读，与编辑权限无关。
         view_only = (
-            requested_mode == "view"
-            or is_issue_attachment
-            or document_type == "pdf"
+            requested_mode == "view" or is_issue_attachment or document_type == "pdf"
         )
         # 其余均为编辑请求：必须具备「编辑项目资产」权限，否则直接拒绝并提示，
         # 不再降级为只读，确保无权限用户无法打开在线编辑器。
@@ -922,8 +973,8 @@ class FilestoreAssetOnlyOfficeDownloadProxyAPIView(BaseAPIView):
         doc_key = (request.query_params.get("key") or "").split(";", 1)[0]
         sig = (request.query_params.get("sig") or "").split(";", 1)[0]
         source_version_id = (
-            request.query_params.get("version_id") or ""
-        ).split(";", 1)[0].strip()
+            (request.query_params.get("version_id") or "").split(";", 1)[0].strip()
+        )
         if not doc_key or not sig:
             return Response(
                 {"error": "missing key/sig"}, status=status.HTTP_400_BAD_REQUEST
@@ -957,7 +1008,11 @@ class FilestoreAssetOnlyOfficeDownloadProxyAPIView(BaseAPIView):
 
         storage = S3Storage()
         obj = storage.get_object(
-            object_name=(object_name_for_version(source_version) if source_version else asset.storage_key),
+            object_name=(
+                object_name_for_version(source_version)
+                if source_version
+                else asset.storage_key
+            ),
             version_id=_storage_version_id(source_version_id),
         )
         if not obj or "Body" not in obj:
@@ -992,11 +1047,11 @@ class FilestoreAssetOnlyOfficeCallbackAPIView(BaseAPIView):
         doc_key = (request.query_params.get("key") or "").split(";", 1)[0]
         sig = (request.query_params.get("sig") or "").split(";", 1)[0]
         source_version_id = (
-            request.query_params.get("version_id") or ""
-        ).split(";", 1)[0].strip()
+            (request.query_params.get("version_id") or "").split(";", 1)[0].strip()
+        )
         editor_user_id = (
-            request.query_params.get("editor_id") or ""
-        ).split(";", 1)[0].strip()
+            (request.query_params.get("editor_id") or "").split(";", 1)[0].strip()
+        )
         if not doc_key or not sig:
             return Response(
                 {"error": 1, "message": "missing key/sig"},
@@ -1020,11 +1075,11 @@ class FilestoreAssetOnlyOfficeCallbackAPIView(BaseAPIView):
         doc_key = (request.query_params.get("key") or "").split(";", 1)[0]
         sig = (request.query_params.get("sig") or "").split(";", 1)[0]
         source_version_id = (
-            request.query_params.get("version_id") or ""
-        ).split(";", 1)[0].strip()
+            (request.query_params.get("version_id") or "").split(";", 1)[0].strip()
+        )
         editor_user_id = (
-            request.query_params.get("editor_id") or ""
-        ).split(";", 1)[0].strip()
+            (request.query_params.get("editor_id") or "").split(";", 1)[0].strip()
+        )
         if not doc_key or not sig:
             return Response(
                 {"error": 1, "message": "missing key/sig"},
@@ -1108,6 +1163,11 @@ class FilestoreAssetOnlyOfficeCallbackAPIView(BaseAPIView):
                 if isinstance(onlyoffice_state, dict)
                 else ""
             )
+            checkpoint_version_id = (
+                str(onlyoffice_state.get("last_checkpoint_version_id") or "").strip()
+                if isinstance(onlyoffice_state, dict)
+                else ""
+            )
             if active_doc_key and active_doc_key != doc_key:
                 asset.attributes = _set_onlyoffice_state(
                     asset.attributes,
@@ -1145,14 +1205,55 @@ class FilestoreAssetOnlyOfficeCallbackAPIView(BaseAPIView):
                     current_sha256 = _asset_content_sha256(asset)
                     next_sha256 = downloaded["sha256"]
                     if current_sha256 and current_sha256 == next_sha256:
+                        created_by_id = None
+                        version = None
+                        if (
+                            status_code == 2
+                            and checkpoint_version_id
+                            and checkpoint_version_id == str(asset.version_id or "")
+                            and not asset.versions.filter(
+                                version_id=checkpoint_version_id,
+                                deleted_at__isnull=True,
+                            ).exists()
+                        ):
+                            created_by_id = _onlyoffice_created_by_id(
+                                payload,
+                                asset=asset,
+                                doc_key=doc_key,
+                                trusted_editor_user_id=trusted_editor_user_id,
+                            )
+                            version = record_latest_object_version(
+                                asset=asset,
+                                storage=storage,
+                                created_by_id=created_by_id,
+                            )
+
+                        saved_at = timezone.now().isoformat()
                         patch = {
-                            "last_saved_at": timezone.now().isoformat(),
+                            "last_saved_at": saved_at,
                             "last_error": None,
                             "last_save_skipped": "unchanged",
                         }
                         if status_code == 6:
-                            patch["last_force_saved_at"] = timezone.now().isoformat()
-                        asset.attributes = _set_onlyoffice_state(asset.attributes, patch)
+                            patch["last_force_saved_at"] = saved_at
+                        else:
+                            patch.update(
+                                {
+                                    "last_checkpoint_version_id": None,
+                                    "last_checkpoint_saved_at": None,
+                                }
+                            )
+                            if version is not None:
+                                patch.update(
+                                    {
+                                        "last_save_skipped": None,
+                                        "last_saved_version_id": version.version_id,
+                                        "last_saved_by_id": str(created_by_id or ""),
+                                    }
+                                )
+                        asset.attributes = _set_onlyoffice_state(
+                            asset.attributes, patch
+                        )
                         asset.save(update_fields=["attributes"])
                         return Response({"error": 0}, status=status.HTTP_200_OK)
 
@@ -1175,32 +1276,74 @@ class FilestoreAssetOnlyOfficeCallbackAPIView(BaseAPIView):
                     if not storage_metadata:
                         raise RuntimeError("missing storage metadata after upload")
 
-                    created_by_id = _onlyoffice_created_by_id(
-                        payload,
-                        asset=asset,
-                        doc_key=doc_key,
-                        trusted_editor_user_id=trusted_editor_user_id,
-                    )
-                    version = record_latest_object_version(
-                        asset=asset,
-                        storage=storage,
-                        created_by_id=created_by_id,
-                    )
+                    if status_code == 6:
+                        checkpoint = record_latest_object_checkpoint(
+                            asset=asset,
+                            storage=storage,
+                        )
+                        checkpoint_version_id_next = str(
+                            checkpoint.get("version_id") or ""
+                        )
+                        if (
+                            checkpoint_version_id
+                            and checkpoint_version_id != checkpoint_version_id_next
+                        ):
+                            _delete_untracked_storage_version(
+                                storage,
+                                asset,
+                                checkpoint_version_id,
+                            )
+                    else:
+                        created_by_id = _onlyoffice_created_by_id(
+                            payload,
+                            asset=asset,
+                            doc_key=doc_key,
+                            trusted_editor_user_id=trusted_editor_user_id,
+                        )
+                        version = record_latest_object_version(
+                            asset=asset,
+                            storage=storage,
+                            created_by_id=created_by_id,
+                        )
+                        if (
+                            checkpoint_version_id
+                            and checkpoint_version_id != version.version_id
+                        ):
+                            _delete_untracked_storage_version(
+                                storage,
+                                asset,
+                                checkpoint_version_id,
+                            )
+
                     _set_asset_content_sha256(asset, next_sha256)
                     if isinstance(asset.attributes, dict):
                         asset.attributes["size"] = int(
                             asset.size or downloaded.get("size") or 0
                         )
 
+                    saved_at = timezone.now().isoformat()
                     patch = {
-                        "last_saved_at": timezone.now().isoformat(),
+                        "last_saved_at": saved_at,
                         "last_error": None,
-                        "last_save_skipped": None,
-                        "last_saved_version_id": version.version_id,
-                        "last_saved_by_id": str(created_by_id or ""),
+                        "last_save_skipped": "checkpoint" if status_code == 6 else None,
                     }
                     if status_code == 6:
-                        patch["last_force_saved_at"] = timezone.now().isoformat()
+                        patch.update(
+                            {
+                                "last_force_saved_at": saved_at,
+                                "last_checkpoint_saved_at": saved_at,
+                                "last_checkpoint_version_id": checkpoint_version_id_next,
+                            }
+                        )
+                    else:
+                        patch.update(
+                            {
+                                "last_saved_version_id": version.version_id,
+                                "last_saved_by_id": str(created_by_id or ""),
+                                "last_checkpoint_version_id": None,
+                                "last_checkpoint_saved_at": None,
+                            }
+                        )
                     asset.attributes = _set_onlyoffice_state(asset.attributes, patch)
                     asset.save(update_fields=["attributes"])
                     return Response({"error": 0}, status=status.HTTP_200_OK)
@@ -1243,7 +1386,9 @@ class FilestoreAssetOnlyOfficeStatusAPIView(BaseAPIView):
         return Response(
             {
                 "onlyoffice": onlyoffice if isinstance(onlyoffice, dict) else {},
-                "versions_count": asset.versions.filter(deleted_at__isnull=True).count(),
+                "versions_count": asset.versions.filter(
+                    deleted_at__isnull=True
+                ).count(),
                 "updated_at": asset.updated_at,
             },
             status=status.HTTP_200_OK,

@@ -154,8 +154,8 @@ export const OverdueRecordsTable = observer(({ records, isLoading = false }: Pro
       },
       {
         accessorKey: "overdue_days",
-        header: () => <div className="text-right">延期天数</div>,
-        cell: ({ row }) => <div className="text-right">{row.original.overdue_days}</div>,
+        header: () => <div className="text-center">延期天数</div>,
+        cell: ({ row }) => <div className="text-center">{row.original.overdue_days}</div>,
       },
       {
         accessorKey: "assignees",
@@ -169,61 +169,64 @@ export const OverdueRecordsTable = observer(({ records, isLoading = false }: Pro
     [router, workspaceSlugValue]
   );
 
-  if (isLoading) {
-    return (
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {Array.from({ length: 4 }).map((_, index) => (
-          <div key={index} className="h-24 animate-pulse rounded-md border border-subtle bg-layer-1" />
-        ))}
-      </div>
-    );
-  }
-
   return (
-    <DataTable
-      data={quickFilteredRecords}
-      columns={columns}
-      searchPlaceholder={`${quickFilteredRecords.length} 条延期记录`}
-      searchTriggerPosition="actions-left"
-      enablePagination
-      pageSize={20}
-      filtersRow={<FiltersRow filter={filter} />}
-      actions={() => (
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-0.5 rounded-md border border-subtle bg-surface-1 p-0.5">
-            {QUICK_STATUS_FILTERS.map((item) => {
-              const isActive = quickStatusFilter === item.key;
-
-              return (
-                <button
-                  key={item.key}
-                  type="button"
-                  aria-pressed={isActive}
-                  className={cn(
-                    "h-6 rounded-sm px-2 text-11 transition-colors",
-                    isActive ? "bg-accent-subtle font-medium text-accent-primary" : "text-secondary hover:bg-layer-2-hover"
-                  )}
-                  onClick={() =>
-                    setQuickStatusFilter((current) => (current === item.key ? "all" : item.key))
-                  }
-                >
-                  {item.label}
-                </button>
-              );
-            })}
-          </div>
-          <FiltersToggle filter={filter} triggerClassName="h-8 w-8" iconButtonSize="xl" />
-          <Button
-            variant="secondary"
-            className="h-8 px-3 text-12"
-            loading={isExporting}
-            disabled={isExporting || quickFilteredRecords.length === 0}
-            onClick={() => void exportXlsx(quickFilteredRecords)}
-          >
-            导出
-          </Button>
+    <section className="rounded-md border border-subtle bg-surface-1 p-4">
+      <div className="mb-4 flex items-center gap-3">
+        <h2 className="text-15 font-semibold text-primary">全部延期记录</h2>
+      </div>
+      {isLoading ? (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <div key={index} className="h-24 animate-pulse rounded-md border border-subtle bg-layer-1" />
+          ))}
         </div>
+      ) : (
+        <DataTable
+          data={quickFilteredRecords}
+          columns={columns}
+          searchPlaceholder={`${quickFilteredRecords.length} 条延期记录`}
+          searchTriggerPosition="actions-left"
+          enablePagination
+          pageSize={20}
+          filtersRow={<FiltersRow filter={filter} />}
+          actions={() => (
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-0.5 rounded-md border border-subtle bg-surface-1 p-0.5">
+                {QUICK_STATUS_FILTERS.map((item) => {
+                  const isActive = quickStatusFilter === item.key;
+
+                  return (
+                    <button
+                      key={item.key}
+                      type="button"
+                      aria-pressed={isActive}
+                      className={cn(
+                        "h-6 rounded-sm px-2 text-11 transition-colors",
+                        isActive ? "bg-accent-subtle font-medium text-accent-primary" : "text-secondary hover:bg-layer-2-hover"
+                      )}
+                      onClick={() =>
+                        setQuickStatusFilter((current) => (current === item.key ? "all" : item.key))
+                      }
+                    >
+                      {item.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <FiltersToggle filter={filter} triggerClassName="h-8 w-8" iconButtonSize="xl" />
+              <Button
+                variant="secondary"
+                className="h-8 px-3 text-12"
+                loading={isExporting}
+                disabled={isExporting || quickFilteredRecords.length === 0}
+                onClick={() => void exportXlsx(quickFilteredRecords)}
+              >
+                导出
+              </Button>
+            </div>
+          )}
+        />
       )}
-    />
+    </section>
   );
 });

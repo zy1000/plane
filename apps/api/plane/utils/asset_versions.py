@@ -155,6 +155,14 @@ def ensure_current_asset_version(asset: FileAsset, storage=None) -> Optional[Fil
         return current
 
     attrs = asset.attributes if isinstance(asset.attributes, dict) else {}
+    onlyoffice_state = attrs.get("onlyoffice") if isinstance(attrs.get("onlyoffice"), dict) else {}
+    checkpoint_raw = onlyoffice_state.get("last_checkpoint_version_id")
+    checkpoint_version_id = normalize_version_id(checkpoint_raw) if checkpoint_raw else ""
+    if checkpoint_version_id and checkpoint_version_id == version_id:
+        current = asset.versions.filter(is_current=True, deleted_at__isnull=True).first()
+        if current:
+            return current
+
     version_meta = {}
     if storage and asset.storage_key:
         version_meta = metadata_for_version(storage, asset.storage_key, version_id if version_id != NULL_VERSION_ID else None)
@@ -189,6 +197,18 @@ def record_latest_object_version(*, asset: FileAsset, storage, created_by_id=Non
         storage_metadata=meta.get("storage_metadata") or {},
         created_by_id=created_by_id,
     )
+
+
+def record_latest_object_checkpoint(*, asset: FileAsset, storage) -> dict:
+    """Point the asset at the newest object version without adding history."""
+    meta = metadata_for_version(storage, asset.storage_key)
+    asset.version_id = meta["version_id"]
+    asset.size = float(meta.get("size") or asset.size or 0)
+    if isinstance(asset.attributes, dict):
+        asset.attributes["size"] = int(asset.size)
+    asset.storage_metadata = meta.get("storage_metadata") or asset.storage_metadata or {}
+    asset.save(update_fields=["version_id", "size", "storage_metadata", "attributes", "updated_at"])
+    return meta
 
 
 def physical_delete_asset_versions(asset: FileAsset, storage) -> bool:

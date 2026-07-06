@@ -22,12 +22,6 @@ const HEALTH_BADGE_CLASSES: Record<TWorkspaceOverviewHealthLevel, string> = {
   risk: "bg-danger-subtle text-danger-primary",
 };
 
-const HEALTH_PROGRESS_CLASSES: Record<TWorkspaceOverviewHealthLevel, string> = {
-  healthy: "bg-success-primary",
-  watch: "bg-warning-primary",
-  risk: "bg-danger-primary",
-};
-
 const ATTENTION_LOADER_KEYS = ["attention-loader-1", "attention-loader-2", "attention-loader-3", "attention-loader-4"];
 
 const SortIcon = ({ state }: { state: false | "asc" | "desc" }) => {
@@ -69,22 +63,6 @@ const HealthBadge = ({ row }: { row: TWorkspaceOverviewRow }) => (
     {row.health.label}
   </span>
 );
-
-const CompletionBar = ({ row }: { row: TWorkspaceOverviewRow }) => {
-  const percentage = Math.min(Math.max(row.completionRate, 0), 100);
-
-  return (
-    <div className="flex min-w-[120px] items-center justify-end gap-2">
-      <div className="h-1.5 w-20 overflow-hidden rounded-full bg-layer-2">
-        <div
-          className={cn("h-full rounded-full", HEALTH_PROGRESS_CLASSES[row.health.level])}
-          style={{ width: `${percentage}%` }}
-        />
-      </div>
-      <span className="w-10 text-right text-13 text-primary tabular-nums">{percentage}%</span>
-    </div>
-  );
-};
 
 const ProjectCell = ({
   row,
@@ -229,42 +207,27 @@ export const WorkspaceOverviewProjectsTable = ({
       },
       {
         accessorKey: "completionRate",
-        header: ({ column }) => <SortHeader column={column} label="完成率" align="right" />,
-        cell: ({ row }) => <CompletionBar row={row.original} />,
+        header: ({ column }) => <SortHeader column={column} label="完成率" />,
+        cell: ({ row }) => <div className="text-13 tabular-nums">{row.original.completionRate}%</div>,
       },
       {
         accessorKey: "openWorkItems",
-        header: ({ column }) => <SortHeader column={column} label="未完成" align="right" />,
-        cell: ({ row }) => <div className="text-right text-13 tabular-nums">{row.original.openWorkItems}</div>,
+        header: ({ column }) => <SortHeader column={column} label="未完成" />,
+        cell: ({ row }) => <div className="text-13 tabular-nums">{row.original.openWorkItems}</div>,
       },
       {
         accessorKey: "totalOverdue",
-        header: ({ column }) => <SortHeader column={column} label="延期" align="right" />,
+        header: ({ column }) => <SortHeader column={column} label="延期" />,
         cell: ({ row }) => (
           <div
             className={cn(
-              "text-right text-13 tabular-nums",
+              "text-13 tabular-nums",
               row.original.totalOverdue > 0 ? "font-medium text-danger-primary" : "text-secondary"
             )}
           >
             {row.original.totalOverdue}
           </div>
         ),
-      },
-      {
-        accessorKey: "memberCount",
-        header: ({ column }) => <SortHeader column={column} label="成员" align="right" />,
-        cell: ({ row }) => <div className="text-right text-13 tabular-nums">{row.original.memberCount}</div>,
-      },
-      {
-        accessorKey: "cycleCount",
-        header: ({ column }) => <SortHeader column={column} label="迭代" align="right" />,
-        cell: ({ row }) => <div className="text-right text-13 tabular-nums">{row.original.cycleCount}</div>,
-      },
-      {
-        accessorKey: "moduleCount",
-        header: ({ column }) => <SortHeader column={column} label="模块" align="right" />,
-        cell: ({ row }) => <div className="text-right text-13 tabular-nums">{row.original.moduleCount}</div>,
       },
     ],
     [openProject]

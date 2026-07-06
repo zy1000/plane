@@ -12,7 +12,6 @@ import {
   LayersIcon,
   MembersPropertyIcon,
   StartDatePropertyIcon,
-  StatePropertyIcon,
 } from "@plane/propel/icons";
 import type { TFilterConfig, TOverdueRecord, TSupportedOperators } from "@plane/types";
 import { COLLECTION_OPERATOR, COMPARISON_OPERATOR, EQUALITY_OPERATOR } from "@plane/types";
@@ -38,11 +37,6 @@ const ENTITY_TYPE_OPTIONS: TSelectOption[] = [
   { id: "cycle", label: "迭代", value: "cycle" },
   { id: "release", label: "发布", value: "release" },
   { id: "test_plan", label: "测试计划", value: "test_plan" },
-];
-
-const STATUS_OPTIONS: TSelectOption[] = [
-  { id: "active", label: "仍在延期", value: "active" },
-  { id: "resolved", label: "历史已结束", value: "resolved" },
 ];
 
 type TUseOverdueFiltersConfigProps = {
@@ -120,22 +114,6 @@ export const useOverdueFiltersConfig = ({ records, workspaceSlug }: TUseOverdueF
         icon: LayersIcon,
         isEnabled: true,
         supportedOperatorConfigsMap: getMultiSelectOperatorConfigs(ENTITY_TYPE_OPTIONS, {
-          isEnabled: true,
-          allowedOperators: operatorConfigs.allowedOperators,
-          allowNegative: operatorConfigs.allowNegative,
-        }),
-      }),
-    [operatorConfigs.allowNegative, operatorConfigs.allowedOperators]
-  );
-
-  const statusFilterConfig = useMemo<TFilterConfig<TOverdueFilterProperty>>(
-    () =>
-      createFilterConfig<TOverdueFilterProperty>({
-        id: "status",
-        label: "状态",
-        icon: StatePropertyIcon,
-        isEnabled: true,
-        supportedOperatorConfigsMap: getMultiSelectOperatorConfigs(STATUS_OPTIONS, {
           isEnabled: true,
           allowedOperators: operatorConfigs.allowedOperators,
           allowNegative: operatorConfigs.allowNegative,
@@ -280,7 +258,6 @@ export const useOverdueFiltersConfig = ({ records, workspaceSlug }: TUseOverdueF
   return {
     areAllConfigsInitialized: true,
     configs: [
-      statusFilterConfig,
       entityTypeFilterConfig,
       assigneeFilterConfig,
       projectFilterConfig,
