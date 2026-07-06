@@ -14,6 +14,7 @@ import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import RepositoryModal from "./repository-modal";
 import { Logo } from "@plane/propel/emoji-icon-picker";
 import { useTestHub } from "./testhub-context";
+import styles from "./reviews/reviews.module.css";
 
 const repositoryService = new RepositoryService();
 
@@ -64,13 +65,34 @@ export default function TestManagementHomePage() {
   const [editing, setEditing] = useState<any | null>(null);
   const [apiLoading, setApiLoading] = useState(false);
 
-  const { registerOpenNewModal } = useTestHub();
+  const { registerOpenNewModal, registerOverviewSearch, setOverviewSearchValue } = useTestHub();
   useEffect(() => {
     registerOpenNewModal(() => {
       setEditing(null);
       setModalOpen(true);
     });
   }, [registerOpenNewModal]);
+
+  const handleOverviewSearch = (query: string) => {
+    const trimmedQuery = query.trim();
+    const newFilters = { ...filters };
+    if (trimmedQuery) newFilters.name = trimmedQuery;
+    else delete newFilters.name;
+    setSearchText(trimmedQuery);
+    setSearchedColumn("name");
+    setFilters(newFilters);
+    setOverviewSearchValue(trimmedQuery);
+    fetchRepositories(1, pageSize, newFilters);
+  };
+
+  useEffect(() => {
+    registerOverviewSearch(handleOverviewSearch);
+  }, [handleOverviewSearch, registerOverviewSearch]);
+
+  useEffect(() => {
+    setOverviewSearchValue("");
+    return () => setOverviewSearchValue("");
+  }, [setOverviewSearchValue]);
 
   const getColumnSearchProps = (dataIndex: keyof any | string): TableColumnType<any> => ({
     filterDropdown: ({ setSelectedKeys, selectedKeys, confirm, clearFilters, close }: FilterDropdownProps) => (
@@ -131,6 +153,7 @@ export default function TestManagementHomePage() {
       else if (dataIndex === "project") delete newFilters.project;
     }
     setFilters(newFilters);
+    if (dataIndex === "name") setOverviewSearchValue(selectedKeys[0] || "");
     fetchRepositories(1, pageSize, newFilters);
     close?.();
   };
@@ -142,6 +165,7 @@ export default function TestManagementHomePage() {
     if (dataIndex === "name") delete newFilters.name;
     else if (dataIndex === "project") delete newFilters.project;
     setFilters(newFilters);
+    if (dataIndex === "name") setOverviewSearchValue("");
     fetchRepositories(1, pageSize, newFilters);
   };
 
@@ -314,6 +338,7 @@ export default function TestManagementHomePage() {
     setSearchText("");
     setSearchedColumn("");
     setFilters({});
+    setOverviewSearchValue("");
     fetchRepositories(1, 20, {});
   }, [workspaceSlug, projectId]);
 
@@ -328,7 +353,7 @@ export default function TestManagementHomePage() {
             </div>
           )}
           {error && (
-            <div className="bg-red-50 border border-red-200 rounded-md p-4 mb-4">
+            <div className="bg-red-50 border-red-200 mb-4 rounded-md border p-4">
               <div className="text-red-800 text-sm">{error}</div>
             </div>
           )}
@@ -336,6 +361,8 @@ export default function TestManagementHomePage() {
             dangerouslySetInnerHTML={{
               __html: `
                 .testhub-overview-table-scroll .ant-table-thead > tr > th {
+                  background: var(--bg-layer-1) !important;
+                  border-color: var(--border-subtle) !important;
                   font-size: 13px !important;
                   font-weight: 500 !important;
                   color: var(--text-color-secondary) !important;
@@ -345,7 +372,7 @@ export default function TestManagementHomePage() {
           />
           {!loading && !error && (
             <>
-              <div className="testhub-overview-table-scroll">
+              <div className={`${styles.reviewLikeAntTable} testhub-overview-table-scroll`}>
                 <Table
                   dataSource={repositories}
                   columns={columns}

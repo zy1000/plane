@@ -71,7 +71,20 @@ export const TestManagementMenuBar = () => {
   const pathname = usePathname();
   const { workspaceSlug, projectId } = useParams();
   const searchParams = useSearchParams();
-  const { triggerOpenNewModal, triggerOpenNewPlanModal, triggerOpenNewReportModal, triggerOpenNewReviewModal, triggerReviewSearch, reviewSearchValue } = useTestHub();
+  const {
+    overviewSearchValue,
+    planSearchValue,
+    reportSearchValue,
+    reviewSearchValue,
+    triggerOpenNewModal,
+    triggerOpenNewPlanModal,
+    triggerOpenNewReportModal,
+    triggerOpenNewReviewModal,
+    triggerOverviewSearch,
+    triggerPlanSearch,
+    triggerReportSearch,
+    triggerReviewSearch,
+  } = useTestHub();
   const { allowProjectPermissionKeys } = useUserPermissions();
   const [repositoryIdFromStorage, setRepositoryIdFromStorage] = React.useState<string | null>(null);
   const [isClient, setIsClient] = React.useState(false);
@@ -135,39 +148,66 @@ export const TestManagementMenuBar = () => {
           })}
         </div>
         {isOverviewActive && (
-          <button
-            type="button"
-            onClick={triggerOpenNewModal}
-            className="ml-2 flex shrink-0 items-center justify-center gap-1.5 rounded bg-accent-primary px-3 py-1.5 text-xs font-medium whitespace-nowrap text-on-color transition-all hover:bg-accent-primary-hover focus:bg-accent-primary-hover focus:text-on-color disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            新建用例库
-          </button>
+          <div className="ml-2 flex shrink-0 items-center gap-2">
+            <CasesSearchInput
+              ariaLabel="搜索用例库"
+              clearAriaLabel="清空用例库搜索"
+              placeholder="搜索用例库名称"
+              value={overviewSearchValue}
+              onSearch={triggerOverviewSearch}
+            />
+            <button
+              type="button"
+              onClick={triggerOpenNewModal}
+              className="flex shrink-0 items-center justify-center gap-1.5 rounded bg-accent-primary px-3 py-1.5 text-xs font-medium whitespace-nowrap text-on-color transition-all hover:bg-accent-primary-hover focus:bg-accent-primary-hover focus:text-on-color disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              新建用例库
+            </button>
+          </div>
         )}
         {isPlansActive && (
-          <button
-            type="button"
-            disabled={!canCreatePlan}
-            onClick={() => {
-              if (!canCreatePlan) return;
-              triggerOpenNewPlanModal();
-            }}
-            className="ml-2 flex shrink-0 items-center justify-center gap-1.5 rounded bg-accent-primary px-3 py-1.5 text-xs font-medium whitespace-nowrap text-on-color transition-all hover:bg-accent-primary-hover focus:bg-accent-primary-hover focus:text-on-color disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            新建计划
-          </button>
+          <div className="ml-2 flex shrink-0 items-center gap-2">
+            <CasesSearchInput
+              ariaLabel="搜索计划"
+              clearAriaLabel="清空计划搜索"
+              placeholder="搜索计划名称"
+              value={planSearchValue}
+              onSearch={triggerPlanSearch}
+            />
+            <button
+              type="button"
+              disabled={!canCreatePlan}
+              onClick={() => {
+                if (!canCreatePlan) return;
+                triggerOpenNewPlanModal();
+              }}
+              className="flex shrink-0 items-center justify-center gap-1.5 rounded bg-accent-primary px-3 py-1.5 text-xs font-medium whitespace-nowrap text-on-color transition-all hover:bg-accent-primary-hover focus:bg-accent-primary-hover focus:text-on-color disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              新建计划
+            </button>
+          </div>
         )}
         {isReportsActive && (
-          <button
-            type="button"
-            disabled={!canCreateReport}
-            onClick={() => {
-              if (!canCreateReport) return;
-              triggerOpenNewReportModal();
-            }}
-            className="ml-2 flex shrink-0 items-center justify-center gap-1.5 rounded bg-accent-primary px-3 py-1.5 text-xs font-medium whitespace-nowrap text-on-color transition-all hover:bg-accent-primary-hover focus:bg-accent-primary-hover focus:text-on-color disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            新建报告
-          </button>
+          <div className="ml-2 flex shrink-0 items-center gap-2">
+            <CasesSearchInput
+              ariaLabel="搜索报告"
+              clearAriaLabel="清空报告搜索"
+              placeholder="搜索报告名称"
+              value={reportSearchValue}
+              onSearch={triggerReportSearch}
+            />
+            <button
+              type="button"
+              disabled={!canCreateReport}
+              onClick={() => {
+                if (!canCreateReport) return;
+                triggerOpenNewReportModal();
+              }}
+              className="flex shrink-0 items-center justify-center gap-1.5 rounded bg-accent-primary px-3 py-1.5 text-xs font-medium whitespace-nowrap text-on-color transition-all hover:bg-accent-primary-hover focus:bg-accent-primary-hover focus:text-on-color disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              新建报告
+            </button>
+          </div>
         )}
         {isReviewsActive && (
           <div className="ml-2 flex shrink-0 items-center gap-2">

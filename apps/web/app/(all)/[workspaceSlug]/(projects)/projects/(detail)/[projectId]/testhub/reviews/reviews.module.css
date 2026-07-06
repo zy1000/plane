@@ -35,6 +35,44 @@
 .legendCount { margin-left: auto; font-size: 12px; color: #8c8c8c; }
 .lightTooltip :global(.ant-tooltip-inner) { background-color: #ffffff; color: #333; }
 .lightTooltip :global(.ant-tooltip-arrow) { border-color: #ffffff; }
+.reviewLikeAntTable :global(.ant-table) { background: var(--bg-surface-1); color: var(--text-color-primary); }
+.reviewLikeAntTable :global(.ant-table-container) { border-color: var(--border-subtle) !important; }
+.reviewLikeAntTable :global(.ant-table-thead > tr > th) {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  height: 48px;
+  border-color: var(--border-subtle) !important;
+  background: var(--bg-layer-1) !important;
+  padding: 0 var(--padding-page-x) !important;
+  color: var(--text-color-secondary) !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  vertical-align: middle;
+}
+.reviewLikeAntTable :global(.ant-table-thead > tr > th::before) { display: none !important; }
+.reviewLikeAntTable :global(.ant-table-tbody > tr > td) {
+  height: 48px;
+  border-color: var(--border-subtle) !important;
+  padding: 0 var(--padding-page-x) !important;
+  color: var(--text-color-primary);
+  vertical-align: middle;
+}
+.reviewLikeAntTable :global(.ant-table-tbody > tr.ant-table-row:hover > td) {
+  background: var(--bg-surface-2) !important;
+}
+.reviewLikeAntTable :global(.ant-table-cell-fix-right),
+.reviewLikeAntTable :global(.ant-table-cell-fix-left) {
+  background: var(--bg-surface-1) !important;
+}
+.reviewLikeAntTable :global(.ant-table-thead .ant-table-cell-fix-right),
+.reviewLikeAntTable :global(.ant-table-thead .ant-table-cell-fix-left) {
+  background: var(--bg-layer-1) !important;
+}
+.reviewLikeAntTable :global(.ant-table-tbody > tr.ant-table-row:hover > td.ant-table-cell-fix-right),
+.reviewLikeAntTable :global(.ant-table-tbody > tr.ant-table-row:hover > td.ant-table-cell-fix-left) {
+  background: var(--bg-surface-2) !important;
+}
 .right :global(.ant-table-content::-webkit-scrollbar), .right :global(.ant-table-body::-webkit-scrollbar) { height: 4px; background: transparent; }
 .right :global(.ant-table-content::-webkit-scrollbar-thumb), .right :global(.ant-table-body::-webkit-scrollbar-thumb) { background-color: transparent; border-radius: 2px; transition: background-color 0.3s ease; }
 .right :global(.ant-table-content::-webkit-scrollbar-track), .right :global(.ant-table-body::-webkit-scrollbar-track) { background: transparent; }

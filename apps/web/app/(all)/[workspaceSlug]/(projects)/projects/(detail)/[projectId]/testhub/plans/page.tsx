@@ -80,7 +80,7 @@ export default function TestPlanDetailPage() {
   const [searchedColumn, setSearchedColumn] = useState("");
   const searchInput = useRef<InputRef>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const { registerOpenNewPlanModal } = useTestHub();
+  const { registerOpenNewPlanModal, registerPlanSearch, setPlanSearchValue } = useTestHub();
   useEffect(() => {
     registerOpenNewPlanModal(() => {
       if (!canCreatePlan) return;
@@ -225,6 +225,27 @@ export default function TestPlanDetailPage() {
     } catch {}
   };
 
+  const handlePlanSearch = (query: string) => {
+    const trimmedQuery = query.trim();
+    const newFilters = { ...filters };
+    if (trimmedQuery) newFilters.name = trimmedQuery;
+    else delete newFilters.name;
+    setSearchText(trimmedQuery);
+    setSearchedColumn("name");
+    setFilters(newFilters);
+    setPlanSearchValue(trimmedQuery);
+    fetchTestPlans(1, pageSize, newFilters, selectedModuleId ?? undefined);
+  };
+
+  useEffect(() => {
+    registerPlanSearch(handlePlanSearch);
+  }, [handlePlanSearch, registerPlanSearch]);
+
+  useEffect(() => {
+    setPlanSearchValue("");
+    return () => setPlanSearchValue("");
+  }, [setPlanSearchValue]);
+
   const getColumnSearchProps = (dataIndex: keyof TestPlan | string): TableColumnType<TestPlan> => ({
     filterDropdown: ({ setSelectedKeys, selectedKeys, confirm, clearFilters, close }: FilterDropdownProps) => (
       <div style={{ padding: 8 }} onKeyDown={(e) => e.stopPropagation()}>
@@ -273,6 +294,7 @@ export default function TestPlanDetailPage() {
       if (dataIndex === "name") delete newFilters.name;
     }
     setFilters(newFilters);
+    if (dataIndex === "name") setPlanSearchValue(selectedKeys[0] || "");
     fetchTestPlans(1, pageSize, newFilters);
     close?.();
   };
@@ -283,6 +305,7 @@ export default function TestPlanDetailPage() {
     const newFilters = { ...filters };
     if (dataIndex === "name") delete newFilters.name;
     setFilters(newFilters);
+    if (dataIndex === "name") setPlanSearchValue("");
     fetchTestPlans(1, pageSize, newFilters);
   };
 
@@ -974,7 +997,7 @@ export default function TestPlanDetailPage() {
                   {!loading && !error && (
                     <div className="flex h-full flex-col overflow-hidden">
                       <div
-                        className={`testhub-plans-table-scroll relative flex-1 overflow-y-auto [&::-webkit-scrollbar]:block [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[var(--scrollbar-thumb)] [&::-webkit-scrollbar-track]:bg-transparent ${
+                        className={`${styles.reviewLikeAntTable} testhub-plans-table-scroll relative flex-1 overflow-y-auto [&::-webkit-scrollbar]:block [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[var(--scrollbar-thumb)] [&::-webkit-scrollbar-track]:bg-transparent ${
                           pageSize === 100 ? "testhub-plans-scrollbar-strong" : ""
                         }`}
                       >
@@ -1025,7 +1048,7 @@ export default function TestPlanDetailPage() {
                         position: sticky;
                         top: 0;
                         z-index: 5;
-                        background: var(--bg-surface-1);
+                        background: var(--bg-layer-1);
                         font-size: 13px !important;
                         font-weight: 500 !important;
                         color: var(--text-color-secondary) !important;

@@ -51,7 +51,7 @@ export default function TestReportsPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingReport, setEditingReport] = useState<TReportListItem | null>(null);
-  const { registerOpenNewReportModal } = useTestHub();
+  const { registerOpenNewReportModal, registerReportSearch, setReportSearchValue } = useTestHub();
   useEffect(() => {
     registerOpenNewReportModal(() => {
       if (!canCreateReport) return;
@@ -105,6 +105,25 @@ export default function TestReportsPage() {
     }
   };
 
+  const handleReportSearch = (query: string) => {
+    const trimmedQuery = query.trim();
+    const newFilters = { ...filters };
+    if (trimmedQuery) newFilters.name = trimmedQuery;
+    else delete newFilters.name;
+    setFilters(newFilters);
+    setReportSearchValue(trimmedQuery);
+    fetchReports(1, pageSize, newFilters);
+  };
+
+  useEffect(() => {
+    registerReportSearch(handleReportSearch);
+  }, [handleReportSearch, registerReportSearch]);
+
+  useEffect(() => {
+    setReportSearchValue("");
+    return () => setReportSearchValue("");
+  }, [setReportSearchValue]);
+
   useEffect(() => {
     if (!workspaceSlug || !projectId) return;
     if (!permissionsFetched) return;
@@ -148,6 +167,7 @@ export default function TestReportsPage() {
     onFilterDropdownOpenChange: (visible) => {
       if (visible) setTimeout(() => searchInput.current?.select(), 100);
     },
+    filteredValue: dataIndex === "name" ? (filters.name ? [filters.name] : null) : null,
   });
 
   const handleSearch = (selectedKeys: string[], dataIndex: string, close?: () => void) => {
@@ -155,6 +175,7 @@ export default function TestReportsPage() {
     if (selectedKeys[0]) newFilters.name = selectedKeys[0];
     else delete newFilters.name;
     setFilters(newFilters);
+    if (dataIndex === "name") setReportSearchValue(selectedKeys[0] || "");
     fetchReports(1, pageSize, newFilters);
     close?.();
   };
@@ -164,6 +185,7 @@ export default function TestReportsPage() {
     const newFilters = { ...filters };
     delete newFilters.name;
     setFilters(newFilters);
+    if (dataIndex === "name") setReportSearchValue("");
     fetchReports(1, pageSize, newFilters);
   };
 
@@ -395,7 +417,9 @@ export default function TestReportsPage() {
                 </div>
               )}
               <div className="flex h-full flex-col overflow-hidden">
-                <div className="testhub-reports-table-scroll relative flex-1 overflow-y-auto [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[var(--scrollbar-thumb)] [&::-webkit-scrollbar-track]:bg-transparent">
+                <div
+                  className={`${styles.reviewLikeAntTable} testhub-reports-table-scroll relative flex-1 overflow-y-auto [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[var(--scrollbar-thumb)] [&::-webkit-scrollbar-track]:bg-transparent`}
+                >
                   <Table
                     dataSource={reports}
                     columns={columns}
@@ -434,7 +458,7 @@ export default function TestReportsPage() {
                       position: sticky;
                       top: 0;
                       z-index: 5;
-                      background: var(--bg-surface-1);
+                      background: var(--bg-layer-1);
                       font-size: 13px !important;
                       font-weight: 500 !important;
                       color: var(--text-color-secondary) !important;
