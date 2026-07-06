@@ -31,7 +31,6 @@ import {
   LineChart,
   Pencil,
 } from "lucide-react";
-import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import {
   CYCLE_STATUS,
   CYCLE_STATUS_TRANSITIONS,
@@ -58,8 +57,9 @@ import { CyclePlanAssociateModal } from "@/components/cycles/cycle-overview/cycl
 import { CycleTestPlansTable } from "@/components/cycles/cycle-overview/cycle-test-plans-table";
 import { useCycleFiles } from "@/components/cycles/cycle-overview/use-cycle-files";
 import { useCyclePlans } from "@/components/cycles/cycle-overview/use-cycle-plans";
-import { formatCycleUpdateError } from "@/components/cycles/use-cycle-error-message";
+import { useCycleStatusChange } from "@/components/cycles/use-cycle-status-change";
 import useCyclesDetails from "@/components/cycles/active-cycle/use-cycles-details";
+import { TestingDatesConfirmModal } from "@/components/common/testing-dates-confirm-modal";
 import type { TAssigneeData } from "@/components/core/sidebar/progress-stats/assignee";
 import { AssigneeStatComponent } from "@/components/core/sidebar/progress-stats/assignee";
 import { createFilterUpdateHandler } from "@/components/core/sidebar/progress-stats/shared";
@@ -140,8 +140,7 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
   const searchParams = useSearchParams();
   const peekCycle = searchParams.get("peekCycle") || undefined;
   const cycleService = useMemo(() => new CycleService(), []);
-  const { getPlotTypeByCycleId, getEstimateTypeByCycleId, getCycleById, fetchCycleDetails, updateCycleDetails } =
-    useCycle();
+  const { getPlotTypeByCycleId, getEstimateTypeByCycleId, getCycleById, fetchCycleDetails } = useCycle();
   const { getUserDetails } = useMember();
   const { getFilter, updateFilterValueFromSidebar } = useWorkItemFilters();
   const { allowProjectPermissionKeys } = useUserPermissions();
@@ -166,7 +165,6 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
   const [expandPanel, setExpandPanel] = useState<TOverviewExpandPanel>(null);
   const [cycleDescriptionModalOpen, setCycleDescriptionModalOpen] = useState(false);
   const [cycleDescriptionModalInitialEdit, setCycleDescriptionModalInitialEdit] = useState(false);
-  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const { storedValue: currentTab, setValue: setCurrentTab } = useLocalStorage(
     `cycle-overview-tab-${cycleId}`,
     "stat-test-plans"
@@ -236,6 +234,13 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
   const canUploadCycleFileAction = canUploadCycleFile && !isCycleArchived;
   const canDeleteCycleFileAction = canDeleteCycleFile && !isCycleArchived;
   const canChangeStatus = canEditCycleDetails && statusOptions.length > 0;
+  const { isUpdatingStatus, handleStatusChange, testingDatesModalProps } = useCycleStatusChange({
+    workspaceSlug,
+    projectId,
+    cycleId,
+    cycleDetails,
+    canChangeStatus,
+  });
   const cycleOwner = cycleDetails ? getUserDetails(cycleDetails.owned_by_id) : undefined;
   const startDate = getDate(cycleDetails?.start_date);
   const endDate = getDate(cycleDetails?.end_date);
@@ -396,29 +401,7 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
                   }
                   value={cycleStatus}
                   onChange={(nextStatus: string) => {
-                    void (async () => {
-                      if (!nextStatus || nextStatus === cycleStatus || isUpdatingStatus) return;
-                      setIsUpdatingStatus(true);
-                      try {
-                        await updateCycleDetails(workspaceSlug, projectId, cycleId, {
-                          status: nextStatus as ICycle["status"],
-                        });
-                        setToast({
-                          type: TOAST_TYPE.SUCCESS,
-                          title: t("project_cycles.action.update.success.title"),
-                          message: t("project_cycles.action.update.success.description"),
-                        });
-                      } catch (err) {
-                        const { title, message } = formatCycleUpdateError(err);
-                        setToast({
-                          type: TOAST_TYPE.ERROR,
-                          title,
-                          message,
-                        });
-                      } finally {
-                        setIsUpdatingStatus(false);
-                      }
-                    })();
+                    handleStatusChange(nextStatus);
                   }}
                   disabled={isUpdatingStatus}
                 >
@@ -763,6 +746,8 @@ export const CycleOverviewContent = observer(function CycleOverviewContent(props
         canEdit={canEditCycleDescription}
         initialEditing={cycleDescriptionModalInitialEdit}
       />
+
+      <TestingDatesConfirmModal {...testingDatesModalProps} />
 
       <CycleOverviewFullscreenModal
         isOpen={expandPanel === "overdue"}

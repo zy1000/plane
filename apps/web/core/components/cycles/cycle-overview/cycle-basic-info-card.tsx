@@ -10,7 +10,9 @@ import { Avatar, CircularProgressIndicator, CustomSelect } from "@plane/ui";
 import { getDate, getFileURL, renderFormattedDate, renderFormattedPayloadDate } from "@plane/utils";
 import { DateRangeDropdown } from "@/components/dropdowns/date-range";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
+import { TestingDatesConfirmModal } from "@/components/common/testing-dates-confirm-modal";
 import { formatCycleUpdateError } from "@/components/cycles/use-cycle-error-message";
+import { useCycleStatusChange } from "@/components/cycles/use-cycle-status-change";
 import { useCycle } from "@/hooks/store/use-cycle";
 import { useMember } from "@/hooks/store/use-member";
 import { useUser } from "@/hooks/store/user";
@@ -38,7 +40,6 @@ export const CycleBasicInfoCard = ({ workspaceSlug, projectId, cycleId, cycleDet
   const { updateCycleDetails } = useCycle();
   const { getUserDetails } = useMember();
   const { data: currentUser } = useUser();
-  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const [isUpdatingDateRange, setIsUpdatingDateRange] = useState(false);
   const [isUpdatingOwner, setIsUpdatingOwner] = useState(false);
   const { completionRate, delayRate, typeDistribution, isTypeLoading } = useCycleBasicInfo({
@@ -62,6 +63,13 @@ export const CycleBasicInfoCard = ({ workspaceSlug, projectId, cycleId, cycleDet
   const canChangeStatus = canEdit && !cycleDetails?.archived_at && statusOptions.length > 0;
   const canUpdateDateRange = canEdit && !cycleDetails?.archived_at && !isCompleted;
   const canUpdateOwner = canEdit && !cycleDetails?.archived_at && isCurrentOwner;
+  const { isUpdatingStatus, handleStatusChange, testingDatesModalProps } = useCycleStatusChange({
+    workspaceSlug,
+    projectId,
+    cycleId,
+    cycleDetails,
+    canChangeStatus,
+  });
 
   const issueTypePieData = useMemo(
     () =>
@@ -83,6 +91,7 @@ export const CycleBasicInfoCard = ({ workspaceSlug, projectId, cycleId, cycleDet
 
   return (
     <div className="flex min-h-0 flex-1 flex-col justify-between">
+      <TestingDatesConfirmModal {...testingDatesModalProps} />
       <div className="grid grid-cols-3 gap-3 pt-2 pb-5">
         <div className="flex min-w-0 flex-col items-center gap-2">
           <span className="text-center text-sm font-medium leading-5 text-primary">工作项完成率</span>
@@ -205,27 +214,7 @@ export const CycleBasicInfoCard = ({ workspaceSlug, projectId, cycleId, cycleDet
               }
               value={cycleStatus}
               onChange={(nextStatus: string) => {
-                if (!nextStatus || nextStatus === cycleStatus || isUpdatingStatus || !canChangeStatus) return;
-                void (async () => {
-                  setIsUpdatingStatus(true);
-                  try {
-                    await updateCycleDetails(workspaceSlug, projectId, cycleId, { status: nextStatus as ICycle["status"] });
-                    setToast({
-                      type: TOAST_TYPE.SUCCESS,
-                      title: t("project_cycles.action.update.success.title"),
-                      message: t("project_cycles.action.update.success.description"),
-                    });
-                  } catch (err) {
-                    const { title, message } = formatCycleUpdateError(err);
-                    setToast({
-                      type: TOAST_TYPE.ERROR,
-                      title,
-                      message,
-                    });
-                  } finally {
-                    setIsUpdatingStatus(false);
-                  }
-                })();
+                handleStatusChange(nextStatus);
               }}
               disabled={!canChangeStatus || isUpdatingStatus}
             >

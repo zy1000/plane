@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { observer } from "mobx-react";
 import { Controller, useForm } from "react-hook-form";
 import { ArrowRight } from "lucide-react";
@@ -19,6 +19,7 @@ import { getDate, renderFormattedPayloadDate } from "@plane/utils";
 // components
 import { DateDropdown } from "@/components/dropdowns/date";
 import { DateRangeDropdown } from "@/components/dropdowns/date-range";
+import { TestingDatesConfirmModal } from "@/components/common/testing-dates-confirm-modal";
 // hooks
 import { useCycle } from "@/hooks/store/use-cycle";
 import { useUserPermissions } from "@/hooks/store/user";
@@ -26,6 +27,7 @@ import { useTimeZoneConverter } from "@/hooks/use-timezone-converter";
 // services
 import { CycleService } from "@/services/cycle.service";
 import { formatCycleUpdateError } from "../use-cycle-error-message";
+import { useCycleStatusChange } from "../use-cycle-status-change";
 
 type Props = {
   workspaceSlug: string;
@@ -52,7 +54,6 @@ export const CycleSidebarHeader = observer(function CycleSidebarHeader(props: Pr
   const { updateCycleDetails } = useCycle();
   const { t } = useTranslation();
   const { renderFormattedDateInUserTimezone, getProjectUTCOffset } = useTimeZoneConverter(projectId);
-  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
 
   // derived values
   const projectUTCOffset = getProjectUTCOffset();
@@ -171,9 +172,17 @@ export const CycleSidebarHeader = observer(function CycleSidebarHeader(props: Pr
   const statusOptions = cycleStatus ? CYCLE_STATUS_TRANSITIONS[cycleStatus] ?? [] : [];
 
   const canChangeStatus = isEditingAllowed && !isArchived && statusOptions.length > 0;
+  const { isUpdatingStatus, handleStatusChange, testingDatesModalProps } = useCycleStatusChange({
+    workspaceSlug,
+    projectId,
+    cycleId: cycleDetails.id,
+    cycleDetails,
+    canChangeStatus,
+  });
 
   return (
     <>
+      <TestingDatesConfirmModal {...testingDatesModalProps} />
       <div className="sticky top-0 z-10 flex items-center justify-between bg-surface-1 pt-2">
         <div className="flex size-5 items-center justify-center">
           <button
@@ -209,29 +218,7 @@ export const CycleSidebarHeader = observer(function CycleSidebarHeader(props: Pr
                     }
                     value={value}
                     onChange={(nextStatus: any) => {
-                      void (async () => {
-                        if (!nextStatus || nextStatus === cycleStatus || isUpdatingStatus) return;
-                        setIsUpdatingStatus(true);
-                        try {
-                          const result = await submitChanges({ status: nextStatus });
-                          if (result.success) {
-                            setToast({
-                              type: TOAST_TYPE.SUCCESS,
-                              title: t("project_cycles.action.update.success.title"),
-                              message: t("project_cycles.action.update.success.description"),
-                            });
-                          } else {
-                            const { title, message } = formatCycleUpdateError(result.error);
-                            setToast({
-                              type: TOAST_TYPE.ERROR,
-                              title,
-                              message,
-                            });
-                          }
-                        } finally {
-                          setIsUpdatingStatus(false);
-                        }
-                      })();
+                      handleStatusChange(nextStatus);
                     }}
                     disabled={!canChangeStatus || isUpdatingStatus}
                   >

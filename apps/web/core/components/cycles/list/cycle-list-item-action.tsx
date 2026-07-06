@@ -29,6 +29,7 @@ import { getDate, getFileURL, generateQueryParams, renderFormattedPayloadDate } 
 import { DateDropdown } from "@/components/dropdowns/date";
 import { DateRangeDropdown } from "@/components/dropdowns/date-range";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
+import { TestingDatesConfirmModal } from "@/components/common/testing-dates-confirm-modal";
 // hooks
 import { useCycle } from "@/hooks/store/use-cycle";
 import { useCycleFilter } from "@/hooks/store/use-cycle-filter";
@@ -43,6 +44,7 @@ import { CycleAdditionalActions } from "@/plane-web/components/cycles";
 import { CycleQuickActions } from "../quick-actions";
 import { TransferIssuesModal } from "../transfer-issues-modal";
 import { formatCycleUpdateError } from "../use-cycle-error-message";
+import { useCycleStatusChange } from "../use-cycle-status-change";
 
 type Props = {
   workspaceSlug: string;
@@ -64,7 +66,6 @@ export const CycleListItemAction = observer(function CycleListItemAction(props: 
   const { projectId: routerProjectId } = useParams();
   //states
   const [transferIssuesModal, setTransferIssuesModal] = useState(false);
-  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const [isUpdatingDateRange, setIsUpdatingDateRange] = useState(false);
   const [isUpdatingOwner, setIsUpdatingOwner] = useState(false);
   // hooks
@@ -134,6 +135,13 @@ export const CycleListItemAction = observer(function CycleListItemAction(props: 
   const canChangeStatus = isEditingAllowed && !cycleDetails.archived_at && statusOptions.length > 0;
   const canUpdateDateRange = isEditingAllowed && !cycleDetails.archived_at && !isCompleted;
   const canUpdateOwner = isEditingAllowed && !cycleDetails.archived_at && isCurrentOwner;
+  const { isUpdatingStatus, handleStatusChange, testingDatesModalProps } = useCycleStatusChange({
+    workspaceSlug,
+    projectId,
+    cycleId,
+    cycleDetails,
+    canChangeStatus,
+  });
 
   const handleDateRangeSelect = (startDate?: Date, endDate?: Date) => {
     void (async () => {
@@ -304,6 +312,7 @@ export const CycleListItemAction = observer(function CycleListItemAction(props: 
         isOpen={transferIssuesModal}
         cycleId={cycleId.toString()}
       />
+      <TestingDatesConfirmModal {...testingDatesModalProps} />
       <button
         onClick={openCycleOverview}
         className={`z-[1] flex flex-shrink-0 gap-1 text-11 text-accent-secondary ${
@@ -331,29 +340,7 @@ export const CycleListItemAction = observer(function CycleListItemAction(props: 
             }
             value={cycleStatus}
             onChange={(nextStatus: string) => {
-              void (async () => {
-                if (!nextStatus || nextStatus === cycleStatus || isUpdatingStatus) return;
-                setIsUpdatingStatus(true);
-                try {
-                  await updateCycleDetails(workspaceSlug, projectId, cycleId, {
-                    status: nextStatus as ICycle["status"],
-                  });
-                  setToast({
-                    type: TOAST_TYPE.SUCCESS,
-                    title: t("project_cycles.action.update.success.title"),
-                    message: t("project_cycles.action.update.success.description"),
-                  });
-                } catch (err) {
-                  const { title, message } = formatCycleUpdateError(err);
-                  setToast({
-                    type: TOAST_TYPE.ERROR,
-                    title,
-                    message,
-                  });
-                } finally {
-                  setIsUpdatingStatus(false);
-                }
-              })();
+              handleStatusChange(nextStatus);
             }}
             disabled={isUpdatingStatus}
           >

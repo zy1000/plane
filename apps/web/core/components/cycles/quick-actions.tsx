@@ -25,6 +25,7 @@ import { copyUrlToClipboard, cn } from "@plane/utils";
 import { captureError, captureSuccess } from "@/helpers/event-tracker.helper";
 // hooks
 import { useCycleMenuItems } from "@/components/common/quick-actions-helper";
+import { TestingDatesConfirmModal } from "@/components/common/testing-dates-confirm-modal";
 import { useCycle } from "@/hooks/store/use-cycle";
 import { useUserPermissions } from "@/hooks/store/user";
 import { useAppRouter } from "@/hooks/use-app-router";
@@ -32,7 +33,7 @@ import { useAppRouter } from "@/hooks/use-app-router";
 import { ArchiveCycleModal } from "./archived-cycles/modal";
 import { CycleDeleteModal } from "./delete-modal";
 import { CycleCreateUpdateModal } from "./modal";
-import { formatCycleUpdateError } from "./use-cycle-error-message";
+import { useCycleStatusChange } from "./use-cycle-status-change";
 
 type Props = {
   parentRef: React.RefObject<HTMLElement>;
@@ -52,7 +53,7 @@ export const CycleQuickActions = observer(function CycleQuickActions(props: Prop
   const [deleteModal, setDeleteModal] = useState(false);
   // store hooks
   const { allowPermissions, allowProjectPermissionKeys } = useUserPermissions();
-  const { getCycleById, restoreCycle, updateCycleDetails } = useCycle();
+  const { getCycleById, restoreCycle } = useCycle();
   const { t } = useTranslation();
   // derived values
   const cycleDetails = getCycleById(cycleId);
@@ -66,6 +67,30 @@ export const CycleQuickActions = observer(function CycleQuickActions(props: Prop
   const canEditSprint = allowProjectPermissionKeys([PROJECT_SPRINTS_EDIT_PERMISSION_KEY], workspaceSlug, projectId);
   const canDeleteSprint = allowProjectPermissionKeys([PROJECT_SPRINTS_DELETE_PERMISSION_KEY], workspaceSlug, projectId);
   const canArchiveSprint = allowProjectPermissionKeys([PROJECT_SPRINTS_ARCHIVE_PERMISSION_KEY], workspaceSlug, projectId);
+  const canChangeStatus = Boolean(cycleDetails && isEditingAllowed && canEditSprint && !cycleDetails.archived_at);
+  const { handleStatusChange, testingDatesModalProps } = useCycleStatusChange({
+    workspaceSlug,
+    projectId,
+    cycleId,
+    cycleDetails,
+    canChangeStatus,
+    onSuccess: () => {
+      captureSuccess({
+        eventName: CYCLE_TRACKER_EVENTS.update,
+        payload: {
+          id: cycleId,
+        },
+      });
+    },
+    onError: () => {
+      captureError({
+        eventName: CYCLE_TRACKER_EVENTS.update,
+        payload: {
+          id: cycleId,
+        },
+      });
+    },
+  });
 
   const cycleLink = `${workspaceSlug}/projects/${projectId}/cycles/${cycleId}`;
   const handleCopyText = () =>
@@ -77,41 +102,6 @@ export const CycleQuickActions = observer(function CycleQuickActions(props: Prop
       });
     });
   const handleOpenInNewTab = () => window.open(`/${cycleLink}`, "_blank");
-
-  const handleUpdateCycleStatus = async (nextStatus: "in_progress" | "testing" | "completed" | "cancelled") => {
-    if (!cycleDetails) return;
-    if (!isEditingAllowed || !canEditSprint) return;
-    if (cycleDetails.status === nextStatus) return;
-
-    await updateCycleDetails(workspaceSlug, projectId, cycleId, { status: nextStatus })
-      .then(() => {
-        setToast({
-          type: TOAST_TYPE.SUCCESS,
-          title: t("project_cycles.action.update.success.title"),
-          message: t("project_cycles.action.update.success.description"),
-        });
-        captureSuccess({
-          eventName: CYCLE_TRACKER_EVENTS.update,
-          payload: {
-            id: cycleId,
-          },
-        });
-      })
-      .catch((err) => {
-        const { title, message } = formatCycleUpdateError(err);
-        setToast({
-          type: TOAST_TYPE.ERROR,
-          title,
-          message,
-        });
-        captureError({
-          eventName: CYCLE_TRACKER_EVENTS.update,
-          payload: {
-            id: cycleId,
-          },
-        });
-      });
-  };
 
   const handleRestoreCycle = async () => {
     if (!isEditingAllowed || !canArchiveSprint) return;
@@ -146,10 +136,10 @@ export const CycleQuickActions = observer(function CycleQuickActions(props: Prop
       if (!isEditingAllowed || !canEditSprint) return;
       setUpdateModal(true);
     },
-    handleMarkAsTesting: () => handleUpdateCycleStatus("testing"),
-    handleMarkAsCompleted: () => handleUpdateCycleStatus("completed"),
-    handleMarkAsCancelled: () => handleUpdateCycleStatus("cancelled"),
-    handleMarkAsInProgress: () => handleUpdateCycleStatus("in_progress"),
+    handleMarkAsTesting: () => handleStatusChange("testing"),
+    handleMarkAsCompleted: () => handleStatusChange("completed"),
+    handleMarkAsCancelled: () => handleStatusChange("cancelled"),
+    handleMarkAsInProgress: () => handleStatusChange("in_progress"),
     handleArchive: () => {
       if (!isEditingAllowed || !canArchiveSprint) return;
       setArchiveCycleModal(true);
@@ -200,6 +190,7 @@ export const CycleQuickActions = observer(function CycleQuickActions(props: Prop
             workspaceSlug={workspaceSlug}
             projectId={projectId}
           />
+          <TestingDatesConfirmModal {...testingDatesModalProps} />
           {additionalModals}
         </div>
       )}

@@ -24,7 +24,7 @@ import {
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { ILinkDetails, IRelease, ModuleLink } from "@plane/types";
 // plane ui
-import { Loader, CustomSelect, TextArea } from "@plane/ui";
+import { Loader, TextArea } from "@plane/ui";
 // components
 // helpers
 import { getDate, renderFormattedPayloadDate } from "@plane/utils";
@@ -33,7 +33,7 @@ import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { CreateUpdateReleaseLinkModal, ReleaseLinksList } from "@/components/releases/links";
 import { ReleaseAnalyticsProgress } from "@/components/releases/analytics-sidebar/issue-progress";
 import { ReleaseOverdueRecordsSection } from "@/components/releases/release-overdue-records-section";
-import { getAllowedReleaseStatusOptions, getReleaseStatusDetails } from "@/components/releases/release-status-config";
+import { ReleaseStatusDropdown, type TReleaseUpdatePayload } from "@/components/releases/release-status-dropdown";
 import { formatReleaseUpdateError } from "@/components/releases/use-release-error-message";
 // hooks
 import { useProjectEstimates } from "@/hooks/store/estimates";
@@ -89,7 +89,7 @@ export const ReleaseAnalyticsSidebar = observer(function ReleaseAnalyticsSidebar
     defaultValues,
   });
 
-  const submitChanges = async (data: Partial<IRelease>) => {
+  const submitChanges = async (data: TReleaseUpdatePayload) => {
     if (!workspaceSlug || !projectId || !releaseId || !canEditReleaseDetails) return;
     try {
       await updateReleaseDetails(workspaceSlug.toString(), projectId.toString(), releaseId.toString(), data);
@@ -174,9 +174,6 @@ export const ReleaseAnalyticsSidebar = observer(function ReleaseAnalyticsSidebar
       </Loader>
     );
 
-  const releaseStatusMeta = getReleaseStatusDetails(releaseDetails.status);
-  const allowedStatusOptions = getAllowedReleaseStatusOptions(releaseDetails.status);
-
   const issueCount =
     releaseDetails.total_issues === 0
       ? "0 work items"
@@ -215,43 +212,10 @@ export const ReleaseAnalyticsSidebar = observer(function ReleaseAnalyticsSidebar
 
         <div className="flex flex-col gap-3">
           <div className="flex items-center gap-5 pt-2">
-            <Controller
-              control={control}
-              name="status"
-              render={({ field: { value } }) => (
-                <CustomSelect
-                  customButton={
-                    <span
-                      className={`flex h-6 w-20 items-center justify-center rounded-xs text-center text-11 ${
-                        canEditReleaseDetails ? "cursor-pointer" : "cursor-not-allowed"
-                      }`}
-                      style={{
-                        color: releaseStatusMeta.color,
-                        backgroundColor: `${releaseStatusMeta.color}20`,
-                      }}
-                    >
-                      {releaseStatusMeta.label}
-                    </span>
-                  }
-                  value={value}
-                  onChange={(value: any) => {
-                    submitChanges({ status: value });
-                  }}
-                  disabled={!canEditReleaseDetails}
-                >
-                  {allowedStatusOptions.map((status) => {
-                    const StatusIcon = status.icon;
-                    return (
-                      <CustomSelect.Option key={status.value} value={status.value}>
-                        <div className="flex items-center gap-2">
-                          <StatusIcon className="h-4 w-4" style={{ color: status.color }} />
-                          {status.label}
-                        </div>
-                      </CustomSelect.Option>
-                    );
-                  })}
-                </CustomSelect>
-              )}
+            <ReleaseStatusDropdown
+              isDisabled={!canEditReleaseDetails}
+              releaseDetails={releaseDetails}
+              handleReleaseDetailsChange={submitChanges}
             />
           </div>
           <h4 className="w-full text-18 font-semibold break-words text-primary">{releaseDetails.name}</h4>

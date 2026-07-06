@@ -101,7 +101,8 @@ export const useCycleMenuItems = (props: UseCycleMenuItemsProps): MenuResult => 
   const isCompleted = cycleDetails?.status === "completed";
   const cycleStatus = cycleDetails?.status;
 
-  const canMarkTesting = !isArchived && isEditingAllowed && canEditSprint && cycleStatus === "in_progress";
+  const canMarkTesting =
+    !isArchived && isEditingAllowed && canEditSprint && (cycleStatus === "in_progress" || cycleStatus === "returned");
   const canMarkCompleted = !isArchived && isEditingAllowed && canEditSprint && cycleStatus === "testing";
   const canMarkCancelled =
     !isArchived &&
