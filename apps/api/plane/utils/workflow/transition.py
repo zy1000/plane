@@ -23,6 +23,10 @@ from plane.db.models import (
     TypeExtraFieldValue,
 )
 from plane.db.models.workflow import WorkflowTransitionRequiredField
+from plane.utils.extra_field_value import (
+    get_missing_required_extra_fields,
+    is_extra_field_value_empty,
+)
 
 
 def get_active_workflow(issue: Issue):
@@ -162,22 +166,40 @@ def resolve_transition_approver_ids(issue: Issue, transition: WorkflowTransition
 CONTENT_RESET_CORE_FIELDS = frozenset({"name", "description_html", "priority", "assignee_ids"})
 
 
+def _evaluate_issue_type_required_fields(issue: Issue):
+    missing_type_fields = get_missing_required_extra_fields(issue)
+    if missing_type_fields:
+        names = "、".join(field.name for field in missing_type_fields)
+        return False, f"工作项类型必填字段缺失：{names}"
+    return True, None
+
+
 def _evaluate_required_fields(transition, issue: Issue):
     """
-    校验该 transition 配置的必填字段在 issue 上是否都已有值。
-    返回: (ok: bool, error_message: str | None)。transition 为 None 时直接通过。
+    校验 issue 类型必填字段和该 transition 配置的必填字段是否都已有值。
+    返回: (ok: bool, error_message: str | None)。transition 为 None 时仅检查类型级必填字段。
     """
+    ok, error = _evaluate_issue_type_required_fields(issue)
+    if not ok:
+        return ok, error
+
     if transition is None:
         return True, None
 
-    queryset = WorkflowTransitionRequiredField.objects.filter(workflow=transition).select_related("extra_field")
+    queryset = WorkflowTransitionRequiredField.objects.filter(
+        workflow=transition, deleted_at__isnull=True
+    ).select_related("extra_field")
     for obj in queryset:
         value = (
-            TypeExtraFieldValue.objects.filter(issue=issue, extra_field=obj.extra_field)
+            TypeExtraFieldValue.objects.filter(
+                issue=issue,
+                extra_field=obj.extra_field,
+                deleted_at__isnull=True,
+            )
             .values_list("value", flat=True)
             .first()
         )
-        if value is None:
+        if is_extra_field_value_empty(value):
             return False, f"按照工作流规则[{obj.extra_field.name}]是必填项"
     return True, None
 
@@ -308,6 +330,9 @@ def check_update_state_permission(
     workflow, wft, exist_wft = get_active_transition(issue, to_state)
 
     if not workflow:
+        ok, error = _evaluate_issue_type_required_fields(issue)
+        if not ok:
+            return False, error, None
         return True, None, None
 
     # 有工作流但当前状态没有指定可流转方向
@@ -316,6 +341,9 @@ def check_update_state_permission(
 
     # 没有配置流转规则则放行
     if not wft:
+        ok, error = _evaluate_issue_type_required_fields(issue)
+        if not ok:
+            return False, error, None
         return True, None, None
 
     desired_assignee_ids = _normalize_user_ids(

@@ -286,6 +286,7 @@ class IssueCreateSerializer(BaseSerializer):
                 raw_values=raw_values,
                 project_id=str(project_id) if project_id else None,
                 issue_type_id=issue_type_id,
+                require_all=self.instance is None or not getattr(self, "partial", False),
             )
             if errors:
                 raise serializers.ValidationError({"extra_field_values": errors})

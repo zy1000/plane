@@ -43,6 +43,10 @@ def _is_value_empty(value: Any) -> bool:
     return False
 
 
+def is_extra_field_value_empty(value: Any) -> bool:
+    return _is_value_empty(value)
+
+
 def _coerce_value_for_field(
     field: TypeExtraField, value: Any
 ) -> Tuple[Any, Optional[str]]:
@@ -220,12 +224,14 @@ def validate_extra_field_values(
     raw_values: List[Dict[str, Any]],
     project_id: str,
     issue_type_id: Optional[str],
+    require_all: bool = True,
 ) -> Tuple[List[Tuple[TypeExtraField, Any]], Dict[str, List[str]]]:
     """对一组 `extra_field_values` 做项目/类型/必填/类型校验。
 
     返回 `(items, errors)`：
     - `items` 是 `(field, normalized_value)` 列表，可直接喂给 `save_extra_field_values`
     - `errors` 当非空时，调用方应抛 `ValidationError({"extra_field_values": errors})`
+    - `require_all=False` 表示 PATCH 部分更新，仅校验本次提交的字段
     """
 
     if not issue_type_id:
@@ -261,15 +267,49 @@ def validate_extra_field_values(
             continue
         items.append((field, normalized))
 
+    normalized_by_field_id = {str(field.id): value for field, value in items}
     for field_id, field in field_map.items():
-        if field.is_required and field_id not in seen_ids:
+        if require_all and field.is_required and field_id not in seen_ids:
             errors.setdefault(field_id, []).append(f"{field.name} 为必填字段")
         if field.is_required and field_id in seen_ids:
-            normalized = next((v for f, v in items if str(f.id) == field_id), None)
+            normalized = normalized_by_field_id.get(field_id)
             if normalized is None:
                 errors.setdefault(field_id, []).append(f"{field.name} 为必填字段")
 
     return items, errors
+
+
+def get_missing_required_extra_fields(issue) -> List[TypeExtraField]:
+    """返回 issue 当前类型下未填写的 active required 自定义字段。"""
+
+    if not getattr(issue, "type_id", None):
+        return []
+
+    required_fields = list(
+        TypeExtraField.objects.filter(
+            project_id=issue.project_id,
+            issue_type_id=issue.type_id,
+            is_active=True,
+            is_required=True,
+            deleted_at__isnull=True,
+        ).order_by("sort_order", "created_at")
+    )
+    if not required_fields:
+        return []
+
+    value_map = {
+        str(value.extra_field_id): value.value
+        for value in TypeExtraFieldValue.objects.filter(
+            issue=issue,
+            extra_field_id__in=[field.id for field in required_fields],
+            deleted_at__isnull=True,
+        )
+    }
+    return [
+        field
+        for field in required_fields
+        if _is_value_empty(value_map.get(str(field.id)))
+    ]
 
 
 def save_extra_field_values(

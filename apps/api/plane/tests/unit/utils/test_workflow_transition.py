@@ -14,12 +14,15 @@ from plane.db.models import (
     ProjectRole,
     State,
     TransitionRecordStatus,
+    TypeExtraField,
+    TypeExtraFieldValue,
     Workflow,
     WorkflowApproverTarget,
     WorkflowPrincipalDimension,
     WorkflowPrincipalKind,
     WorkflowTransition,
     WorkflowTransitionPrincipal,
+    WorkflowTransitionRequiredField,
     Workspace,
     WorkspaceMember,
 )
@@ -409,6 +412,177 @@ class TestWorkflowTransitionDynamicApprovers:
         ).latest("created_at")
 
         assert state_activity.actor_id == assignee.id
+
+    @pytest.mark.django_db
+    def test_type_required_field_blocks_state_change_until_filled(self, workflow_context):
+        issue = workflow_context["issue"]
+        project = workflow_context["project"]
+        initiator = workflow_context["initiator"]
+        issue_type = workflow_context["issue_type"]
+        to_state = workflow_context["to_state"]
+        workflow = workflow_context["workflow"]
+        from_state = workflow_context["from_state"]
+
+        WorkflowTransition.objects.create(
+            workflow=workflow,
+            project=project,
+            from_state=from_state,
+            to_state=to_state,
+            approval_type=ApprovalType.ALL,
+        )
+        field = TypeExtraField.objects.create(
+            project=project,
+            issue_type=issue_type,
+            name="验收说明",
+            is_required=True,
+        )
+
+        allowed, error, record = check_update_state_permission(
+            issue=issue,
+            to_state=to_state,
+            user=initiator,
+            project_id=project.id,
+        )
+
+        assert allowed is False
+        assert "工作项类型必填字段缺失" in error
+        assert "验收说明" in error
+        assert record is None
+
+        TypeExtraFieldValue.objects.create(
+            issue=issue,
+            extra_field=field,
+            project=project,
+            value="已填写",
+        )
+        allowed, error, record = check_update_state_permission(
+            issue=issue,
+            to_state=to_state,
+            user=initiator,
+            project_id=project.id,
+        )
+
+        assert allowed is True
+        assert error is None
+        assert record is None
+
+    @pytest.mark.django_db
+    def test_transition_required_field_still_blocks_state_change(self, workflow_context):
+        issue = workflow_context["issue"]
+        project = workflow_context["project"]
+        initiator = workflow_context["initiator"]
+        issue_type = workflow_context["issue_type"]
+        to_state = workflow_context["to_state"]
+        workflow = workflow_context["workflow"]
+        from_state = workflow_context["from_state"]
+
+        transition = WorkflowTransition.objects.create(
+            workflow=workflow,
+            project=project,
+            from_state=from_state,
+            to_state=to_state,
+            approval_type=ApprovalType.ALL,
+        )
+        field = TypeExtraField.objects.create(
+            project=project,
+            issue_type=issue_type,
+            name="发布备注",
+            is_required=False,
+        )
+        WorkflowTransitionRequiredField.objects.create(
+            workflow=transition,
+            extra_field=field,
+        )
+
+        allowed, error, record = check_update_state_permission(
+            issue=issue,
+            to_state=to_state,
+            user=initiator,
+            project_id=project.id,
+        )
+
+        assert allowed is False
+        assert error == "按照工作流规则[发布备注]是必填项"
+        assert record is None
+
+        TypeExtraFieldValue.objects.create(
+            issue=issue,
+            extra_field=field,
+            project=project,
+            value="已填写",
+        )
+        allowed, error, record = check_update_state_permission(
+            issue=issue,
+            to_state=to_state,
+            user=initiator,
+            project_id=project.id,
+        )
+
+        assert allowed is True
+        assert error is None
+        assert record is None
+
+    @pytest.mark.django_db
+    def test_approval_cancels_when_type_required_field_is_cleared_before_final_apply(
+        self, workflow_context
+    ):
+        issue = workflow_context["issue"]
+        project = workflow_context["project"]
+        creator = workflow_context["creator"]
+        initiator = workflow_context["initiator"]
+        issue_type = workflow_context["issue_type"]
+        to_state = workflow_context["to_state"]
+        workflow = workflow_context["workflow"]
+        from_state = workflow_context["from_state"]
+
+        transition = WorkflowTransition.objects.create(
+            workflow=workflow,
+            project=project,
+            from_state=from_state,
+            to_state=to_state,
+            approval_type=ApprovalType.N_OF_M,
+            required_count=1,
+        )
+        _add_dynamic_approvers(transition, [WorkflowApproverTarget.CREATED_BY])
+        field = TypeExtraField.objects.create(
+            project=project,
+            issue_type=issue_type,
+            name="验收说明",
+            is_required=True,
+        )
+        value = TypeExtraFieldValue.objects.create(
+            issue=issue,
+            extra_field=field,
+            project=project,
+            value="已填写",
+        )
+
+        allowed, error, record = check_update_state_permission(
+            issue=issue,
+            to_state=to_state,
+            user=initiator,
+            project_id=project.id,
+        )
+
+        assert allowed is False
+        assert "已创建审批流程" in error
+        assert record is not None
+
+        value.value = None
+        value.save(update_fields=["value", "updated_at"])
+
+        success, action_error, record = approve_transition_record(
+            record_id=record.id,
+            approver=creator,
+            action="approved",
+        )
+
+        assert success is True
+        assert action_error is None
+        issue.refresh_from_db()
+        record.refresh_from_db()
+        assert record.status == TransitionRecordStatus.CANCELLED
+        assert issue.state_id == from_state.id
 
     @pytest.mark.django_db
     def test_role_principal_creates_any_approval_record(self, workflow_context):
