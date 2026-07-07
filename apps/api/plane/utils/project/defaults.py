@@ -357,7 +357,7 @@ def create_default_bug_workflow(issue_types: list[IssueType], **kwargs):
     project = kwargs["project"]
 
     # 将三人添加进项目里面
-    approver_users = User.objects.filter(display_name__in=['欧秋洁', '何洽', '钟长会'])
+    approver_users = User.objects.filter(display_name__in=['欧秋洁', '何洽', '钟长会','杨玉柱'])
     add_user_to_project(approver_users, project)
 
     # 创建默认缺陷工作流
