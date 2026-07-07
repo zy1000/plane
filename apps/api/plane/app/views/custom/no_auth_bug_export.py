@@ -49,7 +49,7 @@ class PublicBugReportExportAPIView(BaseAPIView):
     permission_classes = [AllowAny]
 
     bug_type_names = ("缺陷", "缺陷(软件)")
-    STATE_TRACE_FROM_ASSIGNEE = ("Closed", "Pending-Reject")
+    OPEN_STATE_NAME = "Open"
     TRACE_ACTIVITY_FIELDS = ("state", "assignees")
     TECH_REASON_FIELD_NAME = "技术原因及解决方案"
     export_columns = [
@@ -168,113 +168,81 @@ class PublicBugReportExportAPIView(BaseAPIView):
 
         return assignee_ids
 
-    def _reconstruct_assignee_before_time(self, issue_activities, cutoff_time):
-        if cutoff_time is None:
-            return None
+    def _apply_assignee_activity(self, assignee_ids, activity):
+        old_identifier = self._normalize_identifier(activity.get("old_identifier"))
+        new_identifier = self._normalize_identifier(activity.get("new_identifier"))
 
+        # 工作流审批通过后的负责人活动是“整体快照替换”，仅在 new_value 里存 id 串
+        if not old_identifier and not new_identifier:
+            return self._parse_assignee_snapshot_ids(activity.get("new_value"))
+
+        next_assignee_ids = list(assignee_ids)
+        if new_identifier and new_identifier not in next_assignee_ids:
+            next_assignee_ids.append(new_identifier)
+
+        if old_identifier and old_identifier in next_assignee_ids:
+            next_assignee_ids.remove(old_identifier)
+
+        return next_assignee_ids
+
+    def _get_current_assignee_ids(self, issue):
         assignee_ids = []
-        for activity in issue_activities:
-            if activity.get("field") != "assignees":
+        seen = set()
+        for link in getattr(issue, "active_issue_assignees", []):
+            assignee_id = self._normalize_identifier(getattr(link, "assignee_id", None))
+            if not assignee_id or assignee_id in seen:
                 continue
 
-            activity_time = activity.get("created_at")
-            if activity_time is None or activity_time >= cutoff_time:
-                continue
-
-            old_identifier = self._normalize_identifier(activity.get("old_identifier"))
-            new_identifier = self._normalize_identifier(activity.get("new_identifier"))
-
-            # 工作流审批通过后的负责人活动是“整体快照替换”，仅在 new_value 里存 id 串
-            if not old_identifier and not new_identifier:
-                assignee_ids = self._parse_assignee_snapshot_ids(activity.get("new_value"))
-                continue
-
-            if new_identifier and new_identifier not in assignee_ids:
-                assignee_ids.append(new_identifier)
-
-            if old_identifier and old_identifier in assignee_ids:
-                assignee_ids.remove(old_identifier)
+            assignee_ids.append(assignee_id)
+            seen.add(assignee_id)
 
         return assignee_ids
 
-    def _reconstruct_assignee_before_state(self, issue_activities, target_state_name):
-        transition_at = None
-        for activity in reversed(issue_activities):
-            if activity.get("field") != "state":
-                continue
-
-            state_name = (activity.get("new_value") or "").strip()
-            if state_name == target_state_name:
-                transition_at = activity.get("created_at")
-                break
-
-        if transition_at is None:
-            return None
-
-        return self._reconstruct_assignee_before_time(issue_activities, transition_at)
-
-    def _reconstruct_assignee_two_steps_before_closed(self, issue_activities):
-        state_activities = [
-            activity for activity in issue_activities if activity.get("field") == "state"
-        ]
-        closed_index = None
-        for idx in range(len(state_activities) - 1, -1, -1):
-            state_name = (state_activities[idx].get("new_value") or "").strip()
-            if state_name == "Closed":
-                closed_index = idx
-                break
-
-        if closed_index is None:
-            return None
-
-        # Closed 之前没有足够两段状态记录时，回退到“进入 Closed 前一刻负责人”
-        if closed_index == 0:
-            return self._reconstruct_assignee_before_state(issue_activities, "Closed")
-
-        previous_state_entered_at = state_activities[closed_index - 1].get("created_at")
-        if previous_state_entered_at is None:
-            return self._reconstruct_assignee_before_state(issue_activities, "Closed")
-
-        return self._reconstruct_assignee_before_time(
-            issue_activities=issue_activities,
-            cutoff_time=previous_state_entered_at,
-        )
-
     @staticmethod
-    def _get_current_assignee_names(issue):
-        assignee_names = []
-        for link in getattr(issue, "active_issue_assignees", []):
-            assignee = getattr(link, "assignee", None)
-            if not assignee:
+    def _activity_state_name(activity, key):
+        return (activity.get(key) or "").strip()
+
+    def _resolve_open_assignee_ids(self, issue, issue_activities):
+        assignee_ids = []
+        current_state_name = None
+        last_open_assignee_ids = None
+
+        for activity in issue_activities:
+            field = activity.get("field")
+
+            if field == "assignees":
+                assignee_ids = self._apply_assignee_activity(assignee_ids, activity)
+                if current_state_name == self.OPEN_STATE_NAME:
+                    last_open_assignee_ids = list(assignee_ids)
                 continue
 
-            display_name = (getattr(assignee, "display_name", "") or "").strip()
-            if display_name:
-                assignee_names.append(display_name)
+            if field != "state":
                 continue
 
-            email = (getattr(assignee, "email", "") or "").strip()
-            if "@" in email:
-                assignee_names.append(email.split("@")[0])
-            elif email:
-                assignee_names.append(email)
+            old_state_name = self._activity_state_name(activity, "old_value")
+            new_state_name = self._activity_state_name(activity, "new_value")
+            state_before_transition = current_state_name or old_state_name
 
-        return [name for name in assignee_names if name]
+            if state_before_transition == self.OPEN_STATE_NAME:
+                last_open_assignee_ids = list(assignee_ids)
 
-    def _prepare_state_assignee_context(self, issues):
-        trace_issues = [
-            issue
-            for issue in issues
-            if issue.state_id
-            and issue.state
-            and issue.state.name in self.STATE_TRACE_FROM_ASSIGNEE
-        ]
-        if not trace_issues:
+            current_state_name = new_state_name or None
+            if current_state_name == self.OPEN_STATE_NAME:
+                last_open_assignee_ids = list(assignee_ids)
+
+        issue_state_name = issue.state.name if issue.state_id and issue.state else ""
+        if issue_state_name == self.OPEN_STATE_NAME:
+            return self._get_current_assignee_ids(issue)
+
+        return last_open_assignee_ids
+
+    def _prepare_open_assignee_context(self, issues):
+        if not issues:
             return {}, {}
 
         activities = (
             IssueActivity.objects.filter(
-                issue_id__in=[issue.id for issue in trace_issues],
+                issue_id__in=[issue.id for issue in issues],
                 field__in=self.TRACE_ACTIVITY_FIELDS,
                 deleted_at__isnull=True,
             )
@@ -294,36 +262,28 @@ class PublicBugReportExportAPIView(BaseAPIView):
         for activity in activities:
             activity_map[str(activity["issue_id"])].append(activity)
 
-        history_assignee_ids_map = {}
-        all_history_assignee_ids = set()
-        for issue in trace_issues:
+        open_assignee_ids_map = {}
+        all_open_assignee_ids = set()
+        for issue in issues:
             issue_id = str(issue.id)
-            state_name = issue.state.name
             issue_activities = activity_map.get(issue_id, [])
-
-            if state_name == "Closed":
-                assignee_ids = self._reconstruct_assignee_two_steps_before_closed(
-                    issue_activities=issue_activities
-                )
-            else:
-                assignee_ids = self._reconstruct_assignee_before_state(
-                    issue_activities=issue_activities,
-                    target_state_name=state_name,
-                )
-            history_assignee_ids_map[issue_id] = assignee_ids
+            assignee_ids = self._resolve_open_assignee_ids(
+                issue=issue, issue_activities=issue_activities
+            )
+            open_assignee_ids_map[issue_id] = assignee_ids
             if assignee_ids:
-                all_history_assignee_ids.update(assignee_ids)
+                all_open_assignee_ids.update(assignee_ids)
 
-        history_assignee_name_map = {}
-        if all_history_assignee_ids:
-            users = User.objects.filter(id__in=all_history_assignee_ids).only(
+        open_assignee_name_map = {}
+        if all_open_assignee_ids:
+            users = User.objects.filter(id__in=all_open_assignee_ids).only(
                 "id", "display_name", "email"
             )
-            history_assignee_name_map = {
+            open_assignee_name_map = {
                 str(user.id): self._resolve_user_name(user) for user in users
             }
 
-        return history_assignee_ids_map, history_assignee_name_map
+        return open_assignee_ids_map, open_assignee_name_map
 
     def _get_queryset(self, workspace_slug, start_date, end_date):
         queryset = (
@@ -365,26 +325,21 @@ class PublicBugReportExportAPIView(BaseAPIView):
         self,
         request,
         issues,
-        history_assignee_ids_map=None,
-        history_assignee_name_map=None,
+        open_assignee_ids_map=None,
+        open_assignee_name_map=None,
     ):
-        history_assignee_ids_map = history_assignee_ids_map or {}
-        history_assignee_name_map = history_assignee_name_map or {}
+        open_assignee_ids_map = open_assignee_ids_map or {}
+        open_assignee_name_map = open_assignee_name_map or {}
         rows = []
         for index, issue in enumerate(issues, start=1):
-            assignees = self._get_current_assignee_names(issue)
+            issue_id = str(issue.id)
+            open_assignee_ids = open_assignee_ids_map.get(issue_id)
+            assignees = [
+                open_assignee_name_map.get(assignee_id, "")
+                for assignee_id in open_assignee_ids or []
+            ]
+            assignees = [name for name in assignees if name]
             issue_url = self._build_issue_url(request, issue)
-
-            issue_state_name = issue.state.name if issue.state_id and issue.state else ""
-            if issue_state_name in self.STATE_TRACE_FROM_ASSIGNEE:
-                issue_id = str(issue.id)
-                history_assignee_ids = history_assignee_ids_map.get(issue_id)
-                if history_assignee_ids is not None:
-                    assignees = [
-                        history_assignee_name_map.get(assignee_id, "")
-                        for assignee_id in history_assignee_ids
-                    ]
-                    assignees = [name for name in assignees if name]
 
             rows.append(
                 {
@@ -456,14 +411,14 @@ class PublicBugReportExportAPIView(BaseAPIView):
                 end_date=query_params.get("end_date"),
             )
         )
-        history_assignee_ids_map, history_assignee_name_map = (
-            self._prepare_state_assignee_context(issues)
+        open_assignee_ids_map, open_assignee_name_map = (
+            self._prepare_open_assignee_context(issues)
         )
         rows = self._serialize_issue_rows(
             request,
             issues,
-            history_assignee_ids_map=history_assignee_ids_map,
-            history_assignee_name_map=history_assignee_name_map,
+            open_assignee_ids_map=open_assignee_ids_map,
+            open_assignee_name_map=open_assignee_name_map,
         )
         workbook = self._build_workbook(rows)
 
