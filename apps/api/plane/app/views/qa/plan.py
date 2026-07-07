@@ -172,6 +172,7 @@ class RepositoryAPIView(BaseAPIView):
     model = TestCaseRepository
     queryset = TestCaseRepository.objects.all()
     serializer_class = TestCaseRepositorySerializer
+    filter_backends = (DjangoFilterBackend, SearchFilter)
     filterset_fields = {
         "project_id": ["exact", "in"],
         "project__name": ["exact", "icontains", "in"],
@@ -179,6 +180,8 @@ class RepositoryAPIView(BaseAPIView):
         "workspace__slug": ["exact", "icontains", "in"],
         "name": ["exact", "icontains", "in"],
     }
+    # search 参数在用例库名称与所属项目名称间做 OR 匹配
+    search_fields = ["name", "project__name"]
     pagination_class = CustomPaginator
 
     def post(self, request, slug):

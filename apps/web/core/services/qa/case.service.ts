@@ -343,6 +343,19 @@ export class CaseService extends APIService {
       });
   }
 
+  // 新增：一次性批量获取多个用例库的模块树，避免逐个 repository 发请求（N+1）
+  async getModulesByRepositoryIds(workspaceSlug: string, repositoryIds: string[]): Promise<any[]> {
+    const ids = (repositoryIds || []).filter(Boolean).join(",");
+    if (!ids) return [];
+    return this.get(`/api/workspaces/${workspaceSlug}/test/module/`, {
+      params: { repository_id__in: ids },
+    })
+      .then((response) => response?.data || [])
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
   async createModules(workspaceSlug: string, data: any): Promise<any[]> {
     return this.post(`/api/workspaces/${workspaceSlug}/test/module/`, data)
       .then((response) => response?.data || [])
