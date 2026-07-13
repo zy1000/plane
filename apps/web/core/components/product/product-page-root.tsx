@@ -189,7 +189,7 @@ export const ProductPageRoot = observer(function ProductPageRoot() {
                     <tr key={product.id} className="hover:bg-layer-1-hover">
                       <td className="px-4 py-3">
                         <Link
-                          href={slug ? `/${slug}/products/${product.id}/settings` : "#"}
+                          href={slug ? `/${slug}/products/${product.id}/dashboard` : "#"}
                           className="flex min-w-0 items-center gap-1.5 text-primary"
                         >
                           <span className="grid size-4 flex-shrink-0 place-items-center">

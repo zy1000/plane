@@ -126,10 +126,16 @@ export const coreRoutes: RouteConfigEntry[] = [
 
         // Workspace Products
         route(":workspaceSlug/products", "./(all)/[workspaceSlug]/(projects)/products/(list)/page.tsx"),
-        route(
-          ":workspaceSlug/products/:productId/settings",
-          "./(all)/[workspaceSlug]/(projects)/products/[productId]/settings/page.tsx"
-        ),
+        layout("./(all)/[workspaceSlug]/(projects)/products/[productId]/layout.tsx", [
+          route(
+            ":workspaceSlug/products/:productId/settings",
+            "./(all)/[workspaceSlug]/(projects)/products/[productId]/settings/page.tsx"
+          ),
+          route(
+            ":workspaceSlug/products/:productId/:productView",
+            "./(all)/[workspaceSlug]/(projects)/products/[productId]/[productView]/page.tsx"
+          ),
+        ]),
 
         // Archived Projects
         layout("./(all)/[workspaceSlug]/(projects)/projects/(detail)/archives/layout.tsx", [
