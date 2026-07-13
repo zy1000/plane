@@ -26,6 +26,7 @@ type RichTextEditorWrapperProps = MakeOptional<
   workspaceSlug: string;
   workspaceId: string;
   projectId?: string;
+  productId?: string;
   issueSequenceId?: number;
 } & (
     | {
@@ -48,6 +49,7 @@ export const RichTextEditor = forwardRef(function RichTextEditor(
     editable,
     workspaceSlug,
     workspaceId,
+    productId,
     projectId,
     disabledExtensions: additionalDisabledExtensions = [],
     ...rest
@@ -78,6 +80,7 @@ export const RichTextEditor = forwardRef(function RichTextEditor(
       editable={editable}
       flaggedExtensions={richTextEditorExtensions.flagged}
       fileHandler={getEditorFileHandlers({
+        productId,
         projectId,
         uploadFile: editable ? props.uploadFile : async () => "",
         duplicateFile: editable ? props.duplicateFile : async () => "",

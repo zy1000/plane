@@ -18,9 +18,15 @@ from rest_framework.permissions import AllowAny
 
 # Module imports
 from ..base import BaseAPIView
-from plane.db.models import FileAsset, Workspace, Project, User, Cycle, Release, TestCase
+from plane.db.models import FileAsset, Workspace, Project, Product, User, Cycle, Release, TestCase
 from plane.settings.storage import S3Storage
-from plane.app.permissions import allow_permission, ROLE
+from plane.app.permissions import (
+    allow_permission,
+    can_create_product,
+    can_manage_product,
+    can_view_product,
+    ROLE,
+)
 from plane.utils.cache import invalidate_cache_directly
 from plane.bgtasks.storage_metadata_task import get_asset_object_metadata
 from plane.throttles.asset import AssetRateThrottle
@@ -261,7 +267,30 @@ class WorkspaceFileAssetEndpoint(BaseAPIView):
         # Comment Description
         if entity_type == FileAsset.EntityTypeContext.COMMENT_DESCRIPTION:
             return {"comment_id": entity_id}
+        if entity_type == FileAsset.EntityTypeContext.PRODUCT_DESCRIPTION and entity_id:
+            return {"product_id": entity_id}
         return {}
+
+    def _authorize_product_asset(self, request, slug, asset=None, product_id=None, write=False):
+        if asset is not None:
+            if asset.product_id:
+                product_id = asset.product_id
+            elif asset.created_by_id == request.user.id:
+                return True
+            else:
+                return False
+
+        if not product_id:
+            return can_create_product(request.user, slug)
+
+        product = (
+            Product.objects.filter(id=product_id, workspace__slug=slug)
+            .select_related("workspace")
+            .first()
+        )
+        if product is None:
+            return False
+        return can_manage_product(request.user, product) if write else can_view_product(request.user, product)
 
     def asset_delete(self, asset_id):
         asset = FileAsset.objects.filter(id=asset_id).first()
@@ -364,6 +393,14 @@ class WorkspaceFileAssetEndpoint(BaseAPIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        if entity_type == FileAsset.EntityTypeContext.PRODUCT_DESCRIPTION and not self._authorize_product_asset(
+            request,
+            slug,
+            product_id=entity_identifier or None,
+            write=True,
+        ):
+            return Response({"error": "You do not have permission."}, status=status.HTTP_403_FORBIDDEN)
+
         # # Check if the file type is allowed
         # allowed_types = [
         #     "image/jpeg",
@@ -427,6 +464,10 @@ class WorkspaceFileAssetEndpoint(BaseAPIView):
     def patch(self, request, slug, asset_id):
         # get the asset id
         asset = FileAsset.objects.get(id=asset_id, workspace__slug=slug)
+        if asset.entity_type == FileAsset.EntityTypeContext.PRODUCT_DESCRIPTION and not self._authorize_product_asset(
+            request, slug, asset=asset, write=True
+        ):
+            return Response({"error": "You do not have permission."}, status=status.HTTP_403_FORBIDDEN)
         # get the storage metadata
         asset.is_uploaded = True
         # get the storage metadata
@@ -461,6 +502,10 @@ class WorkspaceFileAssetEndpoint(BaseAPIView):
 
     def delete(self, request, slug, asset_id):
         asset = FileAsset.objects.get(id=asset_id, workspace__slug=slug)
+        if asset.entity_type == FileAsset.EntityTypeContext.PRODUCT_DESCRIPTION and not self._authorize_product_asset(
+            request, slug, asset=asset, write=True
+        ):
+            return Response({"error": "You do not have permission."}, status=status.HTTP_403_FORBIDDEN)
         asset.is_deleted = True
         asset.deleted_at = timezone.now()
         # get the entity and save the asset id for the request field
@@ -473,6 +518,13 @@ class WorkspaceFileAssetEndpoint(BaseAPIView):
     def get(self, request, slug, asset_id):
         # get the asset id
         asset = FileAsset.objects.get(id=asset_id, workspace__slug=slug)
+        if asset.entity_type == FileAsset.EntityTypeContext.PRODUCT_DESCRIPTION and not self._authorize_product_asset(
+            request, slug, asset=asset, write=False
+        ):
+            return Response(
+                {"error": "The requested asset could not be found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
 
         # Check if the asset is uploaded
         if not asset.is_uploaded:
@@ -490,6 +542,126 @@ class WorkspaceFileAssetEndpoint(BaseAPIView):
             filename=asset.attributes.get("name"),
         )
         # Redirect to the signed URL
+        return HttpResponseRedirect(signed_url)
+
+
+class ProductAssetEndpoint(BaseAPIView):
+    def get_product(self, slug, product_id):
+        return (
+            Product.objects.filter(id=product_id, workspace__slug=slug)
+            .select_related("workspace")
+            .first()
+        )
+
+    def get_asset(self, slug, product_id, asset_id):
+        return FileAsset.objects.filter(
+            id=asset_id,
+            workspace__slug=slug,
+            product_id=product_id,
+            entity_type=FileAsset.EntityTypeContext.PRODUCT_DESCRIPTION,
+        ).first()
+
+    def post(self, request, slug, product_id):
+        product = self.get_product(slug, product_id)
+        if product is None:
+            return Response({"error": "Product not found."}, status=status.HTTP_404_NOT_FOUND)
+        if not can_manage_product(request.user, product):
+            return Response({"error": "You do not have permission."}, status=status.HTTP_403_FORBIDDEN)
+
+        name = request.data.get("name")
+        file_type = request.data.get("type", "image/jpeg")
+        size = int(request.data.get("size", settings.FILE_SIZE_LIMIT))
+        size_limit = min(settings.FILE_SIZE_LIMIT, size)
+        asset = FileAsset.objects.create(
+            attributes={"name": name, "type": file_type, "size": size_limit},
+            size=size_limit,
+            workspace=product.workspace,
+            product=product,
+            created_by=request.user,
+            entity_type=FileAsset.EntityTypeContext.PRODUCT_DESCRIPTION,
+            entity_identifier=str(product.id),
+        )
+        presigned_url = presigned_post_for_asset(
+            request=request,
+            asset=asset,
+            file_type=file_type,
+            file_size=size_limit,
+        )
+        return Response(
+            {
+                "upload_data": presigned_url,
+                "asset_id": str(asset.id),
+                "asset_url": asset.asset_url,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    def patch(self, request, slug, product_id, asset_id):
+        product = self.get_product(slug, product_id)
+        asset = self.get_asset(slug, product_id, asset_id)
+        if product is None or asset is None:
+            return Response({"error": "Asset not found."}, status=status.HTTP_404_NOT_FOUND)
+        if not can_manage_product(request.user, product):
+            return Response({"error": "You do not have permission."}, status=status.HTTP_403_FORBIDDEN)
+
+        asset.is_uploaded = True
+        if not asset.storage_metadata:
+            get_asset_object_metadata.delay(asset_id=str(asset.id))
+        asset.attributes = request.data.get("attributes", asset.attributes)
+        asset.save(update_fields=["is_uploaded", "attributes"])
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    def get(self, request, slug, product_id, asset_id):
+        product = self.get_product(slug, product_id)
+        asset = self.get_asset(slug, product_id, asset_id)
+        if product is None or asset is None or not asset.is_uploaded or not can_view_product(request.user, product):
+            return Response({"error": "Asset not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        storage = S3Storage(request=request)
+        signed_url = storage.generate_presigned_url(
+            object_name=asset.storage_key,
+            disposition="inline",
+            filename=asset.attributes.get("name"),
+        )
+        return HttpResponseRedirect(signed_url)
+
+    def delete(self, request, slug, product_id, asset_id):
+        product = self.get_product(slug, product_id)
+        asset = self.get_asset(slug, product_id, asset_id)
+        if product is None or asset is None:
+            return Response({"error": "Asset not found."}, status=status.HTTP_404_NOT_FOUND)
+        if not can_manage_product(request.user, product):
+            return Response({"error": "You do not have permission."}, status=status.HTTP_403_FORBIDDEN)
+
+        asset.is_deleted = True
+        asset.deleted_at = timezone.now()
+        asset.save(update_fields=["is_deleted", "deleted_at"])
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class ProductAssetDownloadEndpoint(BaseAPIView):
+    def get(self, request, slug, product_id, asset_id):
+        product = (
+            Product.objects.filter(id=product_id, workspace__slug=slug)
+            .select_related("workspace")
+            .first()
+        )
+        asset = FileAsset.objects.filter(
+            id=asset_id,
+            product_id=product_id,
+            workspace__slug=slug,
+            entity_type=FileAsset.EntityTypeContext.PRODUCT_DESCRIPTION,
+            is_uploaded=True,
+        ).first()
+        if product is None or asset is None or not can_view_product(request.user, product):
+            return Response({"error": "Asset not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        storage = S3Storage(request=request)
+        signed_url = storage.generate_presigned_url(
+            object_name=asset.storage_key,
+            disposition="attachment",
+            filename=asset.attributes.get("name", uuid.uuid4().hex),
+        )
         return HttpResponseRedirect(signed_url)
 
 
@@ -576,6 +748,30 @@ class AssetRestoreEndpoint(BaseAPIView):
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
     def post(self, request, slug, asset_id):
         asset = FileAsset.all_objects.get(id=asset_id, workspace__slug=slug)
+        if asset.entity_type == FileAsset.EntityTypeContext.PRODUCT_DESCRIPTION:
+            if asset.product_id:
+                product = (
+                    Product.objects.filter(id=asset.product_id, workspace__slug=slug)
+                    .select_related("workspace")
+                    .first()
+                )
+                if product is None:
+                    return Response(
+                        {"error": "Asset not found."},
+                        status=status.HTTP_404_NOT_FOUND,
+                    )
+                if not can_manage_product(request.user, product):
+                    return Response(
+                        {"error": "You do not have permission."},
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+            elif asset.created_by_id != request.user.id or not can_create_product(
+                request.user, slug
+            ):
+                return Response(
+                    {"error": "You do not have permission."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
         asset.is_deleted = False
         asset.deleted_at = None
         asset.save(update_fields=["is_deleted", "deleted_at"])
@@ -655,6 +851,9 @@ class ProjectAssetEndpoint(BaseAPIView):
         # 作为 path 父级；bulk 阶段再回填 test_case_comment_id。
         if entity_type == FileAsset.EntityTypeContext.TEST_CASE_COMMENT_DESCRIPTION:
             return {"case_id": entity_id}
+
+        if entity_type == FileAsset.EntityTypeContext.PRODUCT_DESCRIPTION and entity_id:
+            return {"product_id": entity_id}
 
         return {}
 
@@ -921,11 +1120,15 @@ class DuplicateAssetEndpoint(BaseAPIView):
         if entity_type == FileAsset.EntityTypeContext.TEST_CASE_COMMENT_DESCRIPTION:
             return {"case_id": entity_id}
 
+        if entity_type == FileAsset.EntityTypeContext.PRODUCT_DESCRIPTION and entity_id:
+            return {"product_id": entity_id}
+
         return {}
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
     def post(self, request, slug, asset_id):
         project_id = request.data.get("project_id", None)
+        product_id = request.data.get("product_id", None)
         entity_id = request.data.get("entity_id", None)
         entity_type = request.data.get("entity_type", None)
 
@@ -936,6 +1139,38 @@ class DuplicateAssetEndpoint(BaseAPIView):
             )
 
         workspace = Workspace.objects.get(slug=slug)
+        if product_id and entity_type != FileAsset.EntityTypeContext.PRODUCT_DESCRIPTION:
+            return Response(
+                {"error": "Product can only be used with product description assets."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if entity_type == FileAsset.EntityTypeContext.PRODUCT_DESCRIPTION:
+            target_product_id = product_id or entity_id
+            if target_product_id:
+                product = (
+                    Product.objects.filter(id=target_product_id, workspace=workspace)
+                    .select_related("workspace")
+                    .first()
+                )
+                if product is None:
+                    return Response(
+                        {"error": "Product not found"},
+                        status=status.HTTP_404_NOT_FOUND,
+                    )
+                if not can_manage_product(request.user, product):
+                    return Response(
+                        {"error": "You do not have permission."},
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+                product_id = str(product.id)
+                entity_id = str(product.id)
+            elif not can_create_product(request.user, slug):
+                return Response(
+                    {"error": "You do not have permission."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
         if project_id:
             # check if project exists in the workspace
             if not Project.objects.filter(id=project_id, workspace=workspace).exists():
@@ -944,18 +1179,36 @@ class DuplicateAssetEndpoint(BaseAPIView):
                 )
 
         storage = S3Storage(request=request)
-        original_asset = FileAsset.objects.filter(id=asset_id, is_uploaded=True).first()
+        original_asset = FileAsset.objects.filter(
+            id=asset_id,
+            workspace=workspace,
+            is_uploaded=True,
+        ).first()
 
         if not original_asset:
             return Response(
                 {"error": "Asset not found"}, status=status.HTTP_404_NOT_FOUND
             )
+        if original_asset.entity_type == FileAsset.EntityTypeContext.PRODUCT_DESCRIPTION:
+            if original_asset.product_id:
+                if not can_view_product(request.user, original_asset.product):
+                    return Response(
+                        {"error": "Asset not found"},
+                        status=status.HTTP_404_NOT_FOUND,
+                    )
+            elif original_asset.created_by_id != request.user.id:
+                return Response(
+                    {"error": "Asset not found"},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
 
         entity_id_fields = self.get_entity_id_field(
             entity_type=entity_type, entity_id=entity_id
         )
         if project_id:
             entity_id_fields["project_id"] = project_id
+        if product_id:
+            entity_id_fields["product_id"] = product_id
 
         duplicated_asset = FileAsset.objects.create(
             attributes={
@@ -1002,6 +1255,19 @@ class WorkspaceAssetDownloadEndpoint(BaseAPIView):
                 {"error": "The requested asset could not be found."},
                 status=status.HTTP_404_NOT_FOUND,
             )
+
+        if asset.entity_type == FileAsset.EntityTypeContext.PRODUCT_DESCRIPTION:
+            if asset.product_id:
+                if not can_view_product(request.user, asset.product):
+                    return Response(
+                        {"error": "The requested asset could not be found."},
+                        status=status.HTTP_404_NOT_FOUND,
+                    )
+            elif asset.created_by_id != request.user.id:
+                return Response(
+                    {"error": "The requested asset could not be found."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
 
         storage = S3Storage(request=request)
         signed_url = storage.generate_presigned_url(

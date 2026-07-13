@@ -112,7 +112,7 @@ from .workspace import (
 
 from .favorite import UserFavorite
 
-from .issue_type import IssueType,IssueTypeCategory
+from .issue_type import IssueType, IssueTypeCategory
 
 from .recent_visit import UserRecentVisit
 
@@ -143,3 +143,5 @@ from .workflow import (
     IssueTransitionApprovalRecord,
 )
 from .timesheet import TimeSheet, TimesheetCategory
+from .product import Product, ProductMember
+from .requirement import Requirement, RequirementAttachment, RequirementModule

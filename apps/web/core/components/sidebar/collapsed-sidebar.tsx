@@ -8,7 +8,7 @@ import React, { useMemo } from "react";
 import { observer } from "mobx-react";
 import Link from "next/link";
 import { useParams, usePathname } from "next/navigation";
-import { Clock, LayoutDashboard, PanelLeft } from "lucide-react";
+import { Clock, LayoutDashboard, Package, PanelLeft } from "lucide-react";
 import {
   WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS,
   WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS_LINKS,
@@ -188,9 +188,15 @@ export const CollapsedSidebar = observer(function CollapsedSidebar() {
           </Tooltip>
         )}
 
-        {projectsSidebarItem && (
-          <NavIconItem slug={slug} pathname={pathname} item={projectsSidebarItem} t={t} />
-        )}
+        {projectsSidebarItem && <NavIconItem slug={slug} pathname={pathname} item={projectsSidebarItem} t={t} />}
+
+        <Tooltip tooltipContent={t("products")} position="right">
+          <Link href={`/${slug}/products`} className="flex w-full justify-center">
+            <div className={collapsedNavIconClass(!!pathname?.includes(`/${slug}/products`))}>
+              <Package className="size-4 flex-shrink-0" />
+            </div>
+          </Link>
+        </Tooltip>
 
         {canPerformWorkspaceMemberActions && (
           <Tooltip tooltipContent={t("timesheets")} position="right">

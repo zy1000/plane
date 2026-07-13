@@ -21,7 +21,11 @@ from plane.app.views import (
     ProjectAssetDownloadEndpoint,
 )
 from plane.app.views.asset.base import FileAPIView
-from plane.app.views.asset.v2 import WorkspaceBulkAssetEndpoint
+from plane.app.views.asset.v2 import (
+    ProductAssetDownloadEndpoint,
+    ProductAssetEndpoint,
+    WorkspaceBulkAssetEndpoint,
+)
 
 urlpatterns = [
     path(
@@ -120,5 +124,20 @@ urlpatterns = [
         "assets/v2/workspaces/<str:slug>/projects/<uuid:project_id>/download/<uuid:asset_id>/",
         ProjectAssetDownloadEndpoint.as_view(),
         name="project-asset-download",
+    ),
+    path(
+        "assets/v2/workspaces/<str:slug>/products/<uuid:product_id>/download/<uuid:asset_id>/",
+        ProductAssetDownloadEndpoint.as_view(),
+        name="product-asset-download",
+    ),
+    path(
+        "assets/v2/workspaces/<str:slug>/products/<uuid:product_id>/",
+        ProductAssetEndpoint.as_view(),
+        name="product-assets",
+    ),
+    path(
+        "assets/v2/workspaces/<str:slug>/products/<uuid:product_id>/<uuid:asset_id>/",
+        ProductAssetEndpoint.as_view(),
+        name="product-assets",
     ),
 ]

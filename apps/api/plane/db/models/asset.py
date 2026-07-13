@@ -33,12 +33,15 @@ def get_upload_path(instance, filename):
     safe_name = _sanitize_filename(filename)
     workspace_id = getattr(instance, "workspace_id", None)
     project_id = getattr(instance, "project_id", None)
+    product_id = getattr(instance, "product_id", None)
 
     parts = []
     if workspace_id:
         parts.append(str(workspace_id))
     if project_id:
         parts.append(str(project_id))
+    elif product_id:
+        parts.append(str(product_id))
 
     issue_id = getattr(instance, "issue_id", None)
     page_id = getattr(instance, "page_id", None)
@@ -76,6 +79,7 @@ class FilePath(MPTTModel):
         # 业务实体节点：name 取业务对象的可读名（workspace.name、project.name、issue.name 等）
         WORKSPACE = "WORKSPACE"
         PROJECT = "PROJECT"
+        PRODUCT = "PRODUCT"
         FILESTORE_ROOT = "FILESTORE_ROOT"
         USER_FOLDER = "USER_FOLDER"
         ISSUE = "ISSUE"
@@ -142,6 +146,7 @@ class FileAsset(BaseModel):
         COMMENT_DESCRIPTION = "COMMENT_DESCRIPTION"
         PAGE_DESCRIPTION = "PAGE_DESCRIPTION"
         PROJECT_DESCRIPTION = "PROJECT_DESCRIPTION"
+        PRODUCT_DESCRIPTION = "PRODUCT_DESCRIPTION"
         USER_COVER = "USER_COVER"
         USER_AVATAR = "USER_AVATAR"
         WORKSPACE_LOGO = "WORKSPACE_LOGO"
@@ -173,6 +178,9 @@ class FileAsset(BaseModel):
     )
     project = models.ForeignKey(
         "db.Project", on_delete=models.CASCADE, null=True, related_name="assets"
+    )
+    product = models.ForeignKey(
+        "db.Product", on_delete=models.CASCADE, null=True, related_name="assets"
     )
     issue = models.ForeignKey(
         "db.Issue", on_delete=models.CASCADE, null=True, related_name="assets"
@@ -339,6 +347,11 @@ class FileAsset(BaseModel):
         # 新增：测试用例附件的下载 URL
         if self.entity_type == self.EntityTypeContext.CASE_ATTACHMENT:
             return f"/api/assets/v2/workspaces/{self.workspace.slug}/{self.case_id}/attachments/{self.id}/"
+
+        if self.entity_type == self.EntityTypeContext.PRODUCT_DESCRIPTION:
+            if self.product_id:
+                return f"/api/assets/v2/workspaces/{self.workspace.slug}/products/{self.product_id}/{self.id}/"
+            return f"/api/assets/v2/workspaces/{self.workspace.slug}/{self.id}/"
 
         if self.entity_type in [
             self.EntityTypeContext.ISSUE_DESCRIPTION,

@@ -152,6 +152,7 @@ from .exporter import ExporterHistorySerializer
 from .webhook import WebhookSerializer, WebhookLogSerializer
 
 from .favorite import UserFavoriteSerializer
+from .product import ProductSerializer
 
 from .draft import (
     DraftIssueCreateSerializer,

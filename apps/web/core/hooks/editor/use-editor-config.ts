@@ -19,6 +19,7 @@ const fileService = new FileService();
 
 type TArgs = {
   projectId?: string;
+  productId?: string;
   uploadFile: TFileHandler["upload"];
   duplicateFile: TFileHandler["duplicate"];
   workspaceId: string;
@@ -34,7 +35,7 @@ export const useEditorConfig = () => {
 
   const getEditorFileHandlers = useCallback(
     (args: TArgs): TFileHandler => {
-      const { projectId, uploadFile, duplicateFile, workspaceId, workspaceSlug } = args;
+      const { productId, projectId, uploadFile, duplicateFile, workspaceId, workspaceSlug } = args;
 
       return {
         assetsUploadStatus: assetsUploadPercentage,
@@ -50,6 +51,7 @@ export const useEditorConfig = () => {
             await fileService.deleteNewAsset(
               getEditorAssetSrc({
                 assetId: src,
+                productId,
                 projectId,
                 workspaceSlug,
               }) ?? ""
@@ -64,6 +66,7 @@ export const useEditorConfig = () => {
             return (
               getEditorAssetDownloadSrc({
                 assetId: path,
+                productId,
                 projectId,
                 workspaceSlug,
               }) ?? ""
@@ -78,6 +81,7 @@ export const useEditorConfig = () => {
             return (
               getEditorAssetSrc({
                 assetId: path,
+                productId,
                 projectId,
                 workspaceSlug,
               }) ?? ""

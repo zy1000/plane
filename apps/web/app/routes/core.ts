@@ -124,6 +124,13 @@ export const coreRoutes: RouteConfigEntry[] = [
           route(":workspaceSlug/timesheets/report", "./(all)/[workspaceSlug]/(projects)/timesheets/report/page.tsx"),
         ]),
 
+        // Workspace Products
+        route(":workspaceSlug/products", "./(all)/[workspaceSlug]/(projects)/products/(list)/page.tsx"),
+        route(
+          ":workspaceSlug/products/:productId/settings",
+          "./(all)/[workspaceSlug]/(projects)/products/[productId]/settings/page.tsx"
+        ),
+
         // Archived Projects
         layout("./(all)/[workspaceSlug]/(projects)/projects/(detail)/archives/layout.tsx", [
           route(

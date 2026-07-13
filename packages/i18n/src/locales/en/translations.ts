@@ -158,6 +158,7 @@ export default {
   your_work: "Your work",
   drafts: "Drafts",
   projects: "Projects",
+  products: "Products",
   timesheets: "Timesheets",
   views: "Views",
   workspace: "Workspace",

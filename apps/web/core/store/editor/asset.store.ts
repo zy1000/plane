@@ -25,12 +25,14 @@ export interface IEditorAssetStore {
     data,
     file,
     projectId,
+    productId,
     workspaceSlug,
   }: {
     blockId: string;
     data: TFileEntityInfo;
     file: File;
     projectId?: string;
+    productId?: string;
     workspaceSlug: string;
   }) => Promise<TFileSignedURLResponse>;
   duplicateEditorAsset: ({
@@ -38,12 +40,14 @@ export interface IEditorAssetStore {
     entityId,
     entityType,
     projectId,
+    productId,
     workspaceSlug,
   }: {
     assetId: string;
     entityId?: string;
     entityType: EFileAssetType;
     projectId?: string;
+    productId?: string;
     workspaceSlug: string;
   }) => Promise<{ asset_id: string }>;
 }
@@ -94,7 +98,7 @@ export class EditorAssetStore implements IEditorAssetStore {
   }, 16);
 
   uploadEditorAsset: IEditorAssetStore["uploadEditorAsset"] = async (args) => {
-    const { blockId, data, file, projectId, workspaceSlug } = args;
+    const { blockId, data, file, productId, projectId, workspaceSlug } = args;
     const tempId = uuidv4();
 
     try {
@@ -108,7 +112,19 @@ export class EditorAssetStore implements IEditorAssetStore {
           type: file.type,
         });
       });
-      if (projectId) {
+      if (productId) {
+        const response = await this.fileService.uploadProductAsset(
+          workspaceSlug,
+          productId,
+          data,
+          file,
+          (progressEvent) => {
+            const progressPercentage = Math.round((progressEvent.progress ?? 0) * 100);
+            this.debouncedUpdateProgress(blockId, progressPercentage);
+          }
+        );
+        return response;
+      } else if (projectId) {
         const response = await this.fileService.uploadProjectAsset(
           workspaceSlug,
           projectId,
@@ -137,10 +153,11 @@ export class EditorAssetStore implements IEditorAssetStore {
     }
   };
   duplicateEditorAsset: IEditorAssetStore["duplicateEditorAsset"] = async (args) => {
-    const { assetId, entityId, entityType, projectId, workspaceSlug } = args;
+    const { assetId, entityId, entityType, productId, projectId, workspaceSlug } = args;
     const { asset_id } = await this.fileService.duplicateAsset(workspaceSlug, assetId, {
       entity_id: entityId,
       entity_type: entityType,
+      product_id: productId,
       project_id: projectId,
     });
     return { asset_id };

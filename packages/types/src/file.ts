@@ -41,6 +41,7 @@ export type TDuplicateAssetData = {
   entity_id: string;
   entity_type: EFileAssetType;
   project_id?: string;
+  product_id?: string;
   asset_ids: string[];
 };
 

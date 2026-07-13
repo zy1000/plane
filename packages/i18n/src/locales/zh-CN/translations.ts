@@ -327,6 +327,7 @@ export default {
   your_work: "我的工作",
   drafts: "草稿",
   projects: "项目管理",
+  products: "产品管理",
   timesheets: "工时管理",
   views: "视图",
   workspace: "工作区",

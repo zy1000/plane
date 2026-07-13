@@ -27,3 +27,10 @@ from .base import (
     ROLE,
 )
 from .page import ProjectPagePermission
+from .product import (
+    can_create_product,
+    can_manage_product,
+    can_view_product,
+    filter_products_for_user,
+    get_product_workspace_member,
+)

@@ -173,6 +173,46 @@ export class FileService extends APIService {
       });
   }
 
+  private async updateProductAssetUploadStatus(
+    workspaceSlug: string,
+    productId: string,
+    assetId: string
+  ): Promise<void> {
+    return this.patch(`/api/assets/v2/workspaces/${workspaceSlug}/products/${productId}/${assetId}/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async uploadProductAsset(
+    workspaceSlug: string,
+    productId: string,
+    data: TFileEntityInfo,
+    file: File,
+    uploadProgressHandler?: AxiosRequestConfig["onUploadProgress"]
+  ): Promise<TFileSignedURLResponse> {
+    const fileMetaData = await getFileMetaDataForUpload(file);
+    return this.post(`/api/assets/v2/workspaces/${workspaceSlug}/products/${productId}/`, {
+      ...data,
+      ...fileMetaData,
+    })
+      .then(async (response) => {
+        const signedURLResponse: TFileSignedURLResponse = response?.data;
+        const fileUploadPayload = generateFileUploadPayload(signedURLResponse, file);
+        await this.fileUploadService.uploadFile(
+          signedURLResponse.upload_data.url,
+          fileUploadPayload,
+          uploadProgressHandler
+        );
+        await this.updateProductAssetUploadStatus(workspaceSlug, productId, signedURLResponse.asset_id);
+        return signedURLResponse;
+      })
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
   private async updateUserAssetUploadStatus(assetId: string): Promise<void> {
     return this.patch(`/api/assets/v2/user-assets/${assetId}/`)
       .then((response) => response?.data)
@@ -287,6 +327,7 @@ export class FileService extends APIService {
     data: {
       entity_id?: string;
       entity_type: EFileAssetType;
+      product_id?: string;
       project_id?: string;
     }
   ): Promise<{ asset_id: string }> {

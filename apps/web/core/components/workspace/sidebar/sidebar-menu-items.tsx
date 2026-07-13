@@ -9,7 +9,7 @@ import { isEmpty } from "lodash-es";
 import { observer } from "mobx-react";
 import Link from "next/link";
 import { useParams, usePathname } from "next/navigation";
-import { Clock, LayoutDashboard } from "lucide-react";
+import { Clock, LayoutDashboard, Package } from "lucide-react";
 // plane imports
 import {
   WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS,
@@ -123,6 +123,16 @@ export const SidebarMenuItems = observer(function SidebarMenuItems() {
             <SidebarItem key="pinned_projects" item={projectsSidebarItem} />
           </div>
         )}
+        <div className="flex flex-col gap-0.5">
+          <Link href={`/${workspaceSlug}/products`}>
+            <SidebarNavItem isActive={!!pathname?.includes(`/${workspaceSlug}/products`)}>
+              <div className="flex items-center gap-1.5 py-[1px]">
+                <Package className="size-4 flex-shrink-0" />
+                <p className="text-13 leading-5 font-medium">{t("products")}</p>
+              </div>
+            </SidebarNavItem>
+          </Link>
+        </div>
         {canPerformWorkspaceMemberActions && (
           <div className="flex flex-col gap-0.5">
             <Link href={`/${workspaceSlug}/timesheets/overview/`}>
