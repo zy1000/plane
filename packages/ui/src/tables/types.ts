@@ -9,6 +9,8 @@ export type TTableColumn<T> = {
   content: string;
   thRender?: () => React.ReactNode;
   tdRender: (rowData: T) => React.ReactNode;
+  thClassName?: string;
+  tdClassName?: string;
 };
 
 export type TTableData<T> = {

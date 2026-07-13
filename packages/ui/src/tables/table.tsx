@@ -29,7 +29,7 @@ export function Table<T>(props: TTableData<T>) {
       <thead className={cn("divide-y divide-subtle", tHeadClassName)}>
         <tr className={cn("divide-x divide-subtle text-13 text-primary", tHeadTrClassName)}>
           {columns.map((column) => (
-            <th key={column.key} className={cn("px-2.5 py-2", thClassName)}>
+            <th key={column.key} className={cn("px-2.5 py-2", thClassName, column.thClassName)}>
               {(column?.thRender && column?.thRender()) || column.content}
             </th>
           ))}
@@ -42,7 +42,10 @@ export function Table<T>(props: TTableData<T>) {
             className={cn("divide-x divide-subtle text-13 text-secondary", tBodyTrClassName)}
           >
             {columns.map((column) => (
-              <td key={`${column.key}-${keyExtractor(item)}`} className={cn("px-2.5 py-2", tdClassName)}>
+              <td
+                key={`${column.key}-${keyExtractor(item)}`}
+                className={cn("px-2.5 py-2", tdClassName, column.tdClassName)}
+              >
                 {column.tdRender(item)}
               </td>
             ))}

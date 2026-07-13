@@ -34,6 +34,18 @@ from plane.utils.file_path import build_resolver, rebind_asset_to_path
 from plane.utils.asset_upload import presigned_post_for_asset
 
 
+PRODUCT_ASSET_TYPES = {
+    FileAsset.EntityTypeContext.PRODUCT_DESCRIPTION,
+    FileAsset.EntityTypeContext.REQUIREMENT_ATTACHMENT,
+}
+
+
+def _can_write_product_asset(user, product, entity_type):
+    if entity_type == FileAsset.EntityTypeContext.REQUIREMENT_ATTACHMENT:
+        return can_view_product(user, product)
+    return can_manage_product(user, product)
+
+
 def _rebind_assets_to_final_path(assets, request):
     """把仍处于 _temp 节点下的 asset 物理迁移到正式路径，并同步刷新 path/filename。
 
@@ -267,12 +279,21 @@ class WorkspaceFileAssetEndpoint(BaseAPIView):
         # Comment Description
         if entity_type == FileAsset.EntityTypeContext.COMMENT_DESCRIPTION:
             return {"comment_id": entity_id}
-        if entity_type == FileAsset.EntityTypeContext.PRODUCT_DESCRIPTION and entity_id:
+        if entity_type in PRODUCT_ASSET_TYPES and entity_id:
             return {"product_id": entity_id}
         return {}
 
-    def _authorize_product_asset(self, request, slug, asset=None, product_id=None, write=False):
+    def _authorize_product_asset(
+        self,
+        request,
+        slug,
+        asset=None,
+        product_id=None,
+        entity_type=None,
+        write=False,
+    ):
         if asset is not None:
+            entity_type = asset.entity_type
             if asset.product_id:
                 product_id = asset.product_id
             elif asset.created_by_id == request.user.id:
@@ -290,7 +311,11 @@ class WorkspaceFileAssetEndpoint(BaseAPIView):
         )
         if product is None:
             return False
-        return can_manage_product(request.user, product) if write else can_view_product(request.user, product)
+        return (
+            _can_write_product_asset(request.user, product, entity_type)
+            if write
+            else can_view_product(request.user, product)
+        )
 
     def asset_delete(self, asset_id):
         asset = FileAsset.objects.filter(id=asset_id).first()
@@ -393,10 +418,11 @@ class WorkspaceFileAssetEndpoint(BaseAPIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        if entity_type == FileAsset.EntityTypeContext.PRODUCT_DESCRIPTION and not self._authorize_product_asset(
+        if entity_type in PRODUCT_ASSET_TYPES and not self._authorize_product_asset(
             request,
             slug,
             product_id=entity_identifier or None,
+            entity_type=entity_type,
             write=True,
         ):
             return Response({"error": "You do not have permission."}, status=status.HTTP_403_FORBIDDEN)
@@ -464,7 +490,7 @@ class WorkspaceFileAssetEndpoint(BaseAPIView):
     def patch(self, request, slug, asset_id):
         # get the asset id
         asset = FileAsset.objects.get(id=asset_id, workspace__slug=slug)
-        if asset.entity_type == FileAsset.EntityTypeContext.PRODUCT_DESCRIPTION and not self._authorize_product_asset(
+        if asset.entity_type in PRODUCT_ASSET_TYPES and not self._authorize_product_asset(
             request, slug, asset=asset, write=True
         ):
             return Response({"error": "You do not have permission."}, status=status.HTTP_403_FORBIDDEN)
@@ -502,7 +528,7 @@ class WorkspaceFileAssetEndpoint(BaseAPIView):
 
     def delete(self, request, slug, asset_id):
         asset = FileAsset.objects.get(id=asset_id, workspace__slug=slug)
-        if asset.entity_type == FileAsset.EntityTypeContext.PRODUCT_DESCRIPTION and not self._authorize_product_asset(
+        if asset.entity_type in PRODUCT_ASSET_TYPES and not self._authorize_product_asset(
             request, slug, asset=asset, write=True
         ):
             return Response({"error": "You do not have permission."}, status=status.HTTP_403_FORBIDDEN)
@@ -518,7 +544,7 @@ class WorkspaceFileAssetEndpoint(BaseAPIView):
     def get(self, request, slug, asset_id):
         # get the asset id
         asset = FileAsset.objects.get(id=asset_id, workspace__slug=slug)
-        if asset.entity_type == FileAsset.EntityTypeContext.PRODUCT_DESCRIPTION and not self._authorize_product_asset(
+        if asset.entity_type in PRODUCT_ASSET_TYPES and not self._authorize_product_asset(
             request, slug, asset=asset, write=False
         ):
             return Response(
@@ -558,14 +584,22 @@ class ProductAssetEndpoint(BaseAPIView):
             id=asset_id,
             workspace__slug=slug,
             product_id=product_id,
-            entity_type=FileAsset.EntityTypeContext.PRODUCT_DESCRIPTION,
+            entity_type__in=PRODUCT_ASSET_TYPES,
         ).first()
 
     def post(self, request, slug, product_id):
         product = self.get_product(slug, product_id)
         if product is None:
             return Response({"error": "Product not found."}, status=status.HTTP_404_NOT_FOUND)
-        if not can_manage_product(request.user, product):
+        entity_type = request.data.get(
+            "entity_type", FileAsset.EntityTypeContext.PRODUCT_DESCRIPTION
+        )
+        if entity_type not in PRODUCT_ASSET_TYPES:
+            return Response(
+                {"error": "Invalid product asset type."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not _can_write_product_asset(request.user, product, entity_type):
             return Response({"error": "You do not have permission."}, status=status.HTTP_403_FORBIDDEN)
 
         name = request.data.get("name")
@@ -578,8 +612,8 @@ class ProductAssetEndpoint(BaseAPIView):
             workspace=product.workspace,
             product=product,
             created_by=request.user,
-            entity_type=FileAsset.EntityTypeContext.PRODUCT_DESCRIPTION,
-            entity_identifier=str(product.id),
+            entity_type=entity_type,
+            entity_identifier=request.data.get("entity_identifier") or str(product.id),
         )
         presigned_url = presigned_post_for_asset(
             request=request,
@@ -601,7 +635,7 @@ class ProductAssetEndpoint(BaseAPIView):
         asset = self.get_asset(slug, product_id, asset_id)
         if product is None or asset is None:
             return Response({"error": "Asset not found."}, status=status.HTTP_404_NOT_FOUND)
-        if not can_manage_product(request.user, product):
+        if not _can_write_product_asset(request.user, product, asset.entity_type):
             return Response({"error": "You do not have permission."}, status=status.HTTP_403_FORBIDDEN)
 
         asset.is_uploaded = True
@@ -630,7 +664,7 @@ class ProductAssetEndpoint(BaseAPIView):
         asset = self.get_asset(slug, product_id, asset_id)
         if product is None or asset is None:
             return Response({"error": "Asset not found."}, status=status.HTTP_404_NOT_FOUND)
-        if not can_manage_product(request.user, product):
+        if not _can_write_product_asset(request.user, product, asset.entity_type):
             return Response({"error": "You do not have permission."}, status=status.HTTP_403_FORBIDDEN)
 
         asset.is_deleted = True
@@ -650,7 +684,7 @@ class ProductAssetDownloadEndpoint(BaseAPIView):
             id=asset_id,
             product_id=product_id,
             workspace__slug=slug,
-            entity_type=FileAsset.EntityTypeContext.PRODUCT_DESCRIPTION,
+            entity_type__in=PRODUCT_ASSET_TYPES,
             is_uploaded=True,
         ).first()
         if product is None or asset is None or not can_view_product(request.user, product):
@@ -748,7 +782,7 @@ class AssetRestoreEndpoint(BaseAPIView):
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
     def post(self, request, slug, asset_id):
         asset = FileAsset.all_objects.get(id=asset_id, workspace__slug=slug)
-        if asset.entity_type == FileAsset.EntityTypeContext.PRODUCT_DESCRIPTION:
+        if asset.entity_type in PRODUCT_ASSET_TYPES:
             if asset.product_id:
                 product = (
                     Product.objects.filter(id=asset.product_id, workspace__slug=slug)
@@ -760,7 +794,9 @@ class AssetRestoreEndpoint(BaseAPIView):
                         {"error": "Asset not found."},
                         status=status.HTTP_404_NOT_FOUND,
                     )
-                if not can_manage_product(request.user, product):
+                if not _can_write_product_asset(
+                    request.user, product, asset.entity_type
+                ):
                     return Response(
                         {"error": "You do not have permission."},
                         status=status.HTTP_403_FORBIDDEN,
@@ -852,7 +888,7 @@ class ProjectAssetEndpoint(BaseAPIView):
         if entity_type == FileAsset.EntityTypeContext.TEST_CASE_COMMENT_DESCRIPTION:
             return {"case_id": entity_id}
 
-        if entity_type == FileAsset.EntityTypeContext.PRODUCT_DESCRIPTION and entity_id:
+        if entity_type in PRODUCT_ASSET_TYPES and entity_id:
             return {"product_id": entity_id}
 
         return {}
@@ -1120,7 +1156,7 @@ class DuplicateAssetEndpoint(BaseAPIView):
         if entity_type == FileAsset.EntityTypeContext.TEST_CASE_COMMENT_DESCRIPTION:
             return {"case_id": entity_id}
 
-        if entity_type == FileAsset.EntityTypeContext.PRODUCT_DESCRIPTION and entity_id:
+        if entity_type in PRODUCT_ASSET_TYPES and entity_id:
             return {"product_id": entity_id}
 
         return {}
@@ -1139,13 +1175,13 @@ class DuplicateAssetEndpoint(BaseAPIView):
             )
 
         workspace = Workspace.objects.get(slug=slug)
-        if product_id and entity_type != FileAsset.EntityTypeContext.PRODUCT_DESCRIPTION:
+        if product_id and entity_type not in PRODUCT_ASSET_TYPES:
             return Response(
-                {"error": "Product can only be used with product description assets."},
+                {"error": "Product can only be used with product assets."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        if entity_type == FileAsset.EntityTypeContext.PRODUCT_DESCRIPTION:
+        if entity_type in PRODUCT_ASSET_TYPES:
             target_product_id = product_id or entity_id
             if target_product_id:
                 product = (
@@ -1158,7 +1194,7 @@ class DuplicateAssetEndpoint(BaseAPIView):
                         {"error": "Product not found"},
                         status=status.HTTP_404_NOT_FOUND,
                     )
-                if not can_manage_product(request.user, product):
+                if not _can_write_product_asset(request.user, product, entity_type):
                     return Response(
                         {"error": "You do not have permission."},
                         status=status.HTTP_403_FORBIDDEN,
@@ -1189,7 +1225,7 @@ class DuplicateAssetEndpoint(BaseAPIView):
             return Response(
                 {"error": "Asset not found"}, status=status.HTTP_404_NOT_FOUND
             )
-        if original_asset.entity_type == FileAsset.EntityTypeContext.PRODUCT_DESCRIPTION:
+        if original_asset.entity_type in PRODUCT_ASSET_TYPES:
             if original_asset.product_id:
                 if not can_view_product(request.user, original_asset.product):
                     return Response(
@@ -1256,7 +1292,7 @@ class WorkspaceAssetDownloadEndpoint(BaseAPIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        if asset.entity_type == FileAsset.EntityTypeContext.PRODUCT_DESCRIPTION:
+        if asset.entity_type in PRODUCT_ASSET_TYPES:
             if asset.product_id:
                 if not can_view_product(request.user, asset.product):
                     return Response(

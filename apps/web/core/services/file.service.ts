@@ -213,6 +213,18 @@ export class FileService extends APIService {
       });
   }
 
+  async deleteProductAsset(workspaceSlug: string, productId: string, assetId: string): Promise<void> {
+    return this.delete(`/api/assets/v2/workspaces/${workspaceSlug}/products/${productId}/${assetId}/`)
+      .then(() => undefined)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  getProductAssetDownloadUrl(workspaceSlug: string, productId: string, assetId: string): string {
+    return `${API_BASE_URL}/api/assets/v2/workspaces/${workspaceSlug}/products/${productId}/download/${assetId}/`;
+  }
+
   private async updateUserAssetUploadStatus(assetId: string): Promise<void> {
     return this.patch(`/api/assets/v2/user-assets/${assetId}/`)
       .then((response) => response?.data)

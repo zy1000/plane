@@ -13,16 +13,26 @@ const EMPTY_DESCRIPTION = "<p></p>";
 type Props = {
   workspaceSlug: string;
   productId?: string;
+  entityIdentifier?: string;
+  assetEntityType?: EFileAssetType;
+  editorId?: string;
   value?: string | null;
   editable: boolean;
   placeholder?: string;
   onChange?: (value: string) => void;
   onAssetUpload?: (assetId: string) => void;
+  heightClassName?: string;
+  minHeightClassName?: string;
 };
 
 export const ProductDescriptionEditor = observer(function ProductDescriptionEditor(props: Props) {
   const {
     editable,
+    assetEntityType = EFileAssetType.PRODUCT_DESCRIPTION,
+    editorId = "product-description",
+    entityIdentifier,
+    heightClassName = "max-h-80",
+    minHeightClassName = "min-h-36",
     onAssetUpload,
     onChange,
     placeholder = "输入产品描述，可插入图片或附件",
@@ -40,8 +50,8 @@ export const ProductDescriptionEditor = observer(function ProductDescriptionEdit
       const { asset_id } = await uploadEditorAsset({
         blockId,
         data: {
-          entity_identifier: productId ?? "",
-          entity_type: EFileAssetType.PRODUCT_DESCRIPTION,
+          entity_identifier: entityIdentifier ?? productId ?? "",
+          entity_type: assetEntityType,
         },
         file,
         productId,
@@ -50,22 +60,22 @@ export const ProductDescriptionEditor = observer(function ProductDescriptionEdit
       onAssetUpload?.(asset_id);
       return asset_id;
     },
-    [onAssetUpload, productId, uploadEditorAsset, workspaceSlug]
+    [assetEntityType, entityIdentifier, onAssetUpload, productId, uploadEditorAsset, workspaceSlug]
   );
 
   const duplicateFile = useCallback(
     async (assetId: string) => {
       const { asset_id } = await duplicateEditorAsset({
         assetId,
-        entityId: productId,
-        entityType: EFileAssetType.PRODUCT_DESCRIPTION,
+        entityId: entityIdentifier ?? productId,
+        entityType: assetEntityType,
         productId,
         workspaceSlug,
       });
       onAssetUpload?.(asset_id);
       return asset_id;
     },
-    [duplicateEditorAsset, onAssetUpload, productId, workspaceSlug]
+    [assetEntityType, duplicateEditorAsset, entityIdentifier, onAssetUpload, productId, workspaceSlug]
   );
 
   if (!workspaceId)
@@ -78,7 +88,7 @@ export const ProductDescriptionEditor = observer(function ProductDescriptionEdit
   if (!editable)
     return (
       <RichTextEditor
-        id={`product-description-${productId ?? "draft"}`}
+        id={`${editorId}-${entityIdentifier ?? productId ?? "draft"}`}
         editable={false}
         initialValue={initialValue}
         value={initialValue}
@@ -91,10 +101,12 @@ export const ProductDescriptionEditor = observer(function ProductDescriptionEdit
     );
 
   return (
-    <div className="vertical-scrollbar scrollbar-sm max-h-80 min-h-36 overflow-y-auto rounded-md border border-subtle bg-layer-2">
+    <div
+      className={`vertical-scrollbar scrollbar-sm ${minHeightClassName} ${heightClassName} overflow-y-auto rounded-md border border-subtle bg-layer-2`}
+    >
       <RichTextEditor
-        key={productId ?? "draft"}
-        id={`product-description-${productId ?? "draft"}`}
+        key={`${editorId}-${entityIdentifier ?? productId ?? "draft"}`}
+        id={`${editorId}-${entityIdentifier ?? productId ?? "draft"}`}
         editable
         initialValue={initialValue}
         value={null}
@@ -107,7 +119,7 @@ export const ProductDescriptionEditor = observer(function ProductDescriptionEdit
         searchMentionCallback={(payload) => workspaceService.searchEntity(workspaceSlug, payload)}
         uploadFile={uploadFile}
         duplicateFile={duplicateFile}
-        containerClassName="min-h-36 pr-3 pt-2 text-13"
+        containerClassName={`${minHeightClassName} pr-3 pt-2 text-13`}
       />
     </div>
   );

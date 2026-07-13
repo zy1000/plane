@@ -139,6 +139,14 @@ class Requirement(BaseModel):
                     {"parent": "父需求必须属于当前需求的产品。"}
                 )
 
+            visited = {self.pk} if self.pk else set()
+            ancestor = self.parent
+            while ancestor is not None:
+                if ancestor.pk in visited:
+                    raise ValidationError({"parent": "父需求关系不能形成循环。"})
+                visited.add(ancestor.pk)
+                ancestor = ancestor.parent
+
     def save(self, *args, **kwargs):
         self.full_clean(exclude=["created_by", "updated_by"])
         return super().save(*args, **kwargs)
@@ -186,6 +194,19 @@ class RequirementAttachment(BaseModel):
             raise ValidationError(
                 {"asset": "附件必须属于需求产品所在的工作空间。"}
             )
+
+        if self.asset_id and self.asset.product_id != self.requirement.product_id:
+            raise ValidationError({"asset": "附件必须属于当前需求的产品。"})
+
+        if (
+            self.asset_id
+            and self.asset.entity_type
+            != self.asset.EntityTypeContext.REQUIREMENT_ATTACHMENT
+        ):
+            raise ValidationError({"asset": "附件类型不是需求附件。"})
+
+        if self.asset_id and not self.asset.is_uploaded:
+            raise ValidationError({"asset": "附件尚未上传完成。"})
 
     def save(self, *args, **kwargs):
         self.full_clean(exclude=["created_by", "updated_by"])

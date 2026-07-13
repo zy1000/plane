@@ -145,6 +145,10 @@ export const SlashCommandsMenu = forwardRef(function SlashCommandsMenu(props: Sl
           e.stopPropagation();
         }}
         onMouseDown={(e) => {
+          // Keep the editor focused until the click handler executes the selected command.
+          // Otherwise TipTap closes and destroys the suggestion menu on mousedown,
+          // so the following click never reaches the command item.
+          e.preventDefault();
           e.stopPropagation();
         }}
       >

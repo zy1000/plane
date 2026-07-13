@@ -147,6 +147,7 @@ class FileAsset(BaseModel):
         PAGE_DESCRIPTION = "PAGE_DESCRIPTION"
         PROJECT_DESCRIPTION = "PROJECT_DESCRIPTION"
         PRODUCT_DESCRIPTION = "PRODUCT_DESCRIPTION"
+        REQUIREMENT_ATTACHMENT = "REQUIREMENT_ATTACHMENT"
         USER_COVER = "USER_COVER"
         USER_AVATAR = "USER_AVATAR"
         WORKSPACE_LOGO = "WORKSPACE_LOGO"
@@ -348,7 +349,10 @@ class FileAsset(BaseModel):
         if self.entity_type == self.EntityTypeContext.CASE_ATTACHMENT:
             return f"/api/assets/v2/workspaces/{self.workspace.slug}/{self.case_id}/attachments/{self.id}/"
 
-        if self.entity_type == self.EntityTypeContext.PRODUCT_DESCRIPTION:
+        if self.entity_type in [
+            self.EntityTypeContext.PRODUCT_DESCRIPTION,
+            self.EntityTypeContext.REQUIREMENT_ATTACHMENT,
+        ]:
             if self.product_id:
                 return f"/api/assets/v2/workspaces/{self.workspace.slug}/products/{self.product_id}/{self.id}/"
             return f"/api/assets/v2/workspaces/{self.workspace.slug}/{self.id}/"

@@ -7,10 +7,11 @@ import { cn } from "@plane/utils";
 type Props = {
   searchQuery: string;
   onSearchQueryChange: (value: string) => void;
+  placeholder?: string;
 };
 
 export function ProductSearch(props: Props) {
-  const { searchQuery, onSearchQueryChange } = props;
+  const { searchQuery, onSearchQueryChange, placeholder = "搜索产品" } = props;
   const inputRef = useRef<HTMLInputElement>(null);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
 
@@ -51,7 +52,7 @@ export function ProductSearch(props: Props) {
         <input
           ref={inputRef}
           className="w-full max-w-[234px] border-none bg-transparent text-13 text-primary placeholder:text-placeholder focus:outline-none"
-          placeholder="搜索产品"
+          placeholder={placeholder}
           value={searchQuery}
           onChange={(e) => onSearchQueryChange(e.target.value)}
           onKeyDown={handleInputKeyDown}
