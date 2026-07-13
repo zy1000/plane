@@ -19,13 +19,17 @@ const opinionMeta: Record<TRequirementReviewOpinion, { label: string; icon: type
   },
 };
 
-export function RequirementStatusBadge(props: { status: TRequirementStatus }) {
+export function RequirementStatusBadge(props: { status: TRequirementStatus; className?: string }) {
   const meta = {
     in_review: { label: "评审中", className: "bg-yellow-500/10 text-yellow-700 dark:text-yellow-300" },
     active: { label: "激活", className: "bg-green-500/10 text-green-700 dark:text-green-300" },
     rejected: { label: "拒绝", className: "bg-red-500/10 text-red-700 dark:text-red-300" },
   }[props.status];
-  return <span className={`rounded-full px-2.5 py-1 text-11 font-medium ${meta.className}`}>{meta.label}</span>;
+  return (
+    <span className={`rounded-full px-2.5 py-1 text-11 font-medium ${meta.className} ${props.className ?? ""}`}>
+      {meta.label}
+    </span>
+  );
 }
 
 function displayValue(field: string, value: unknown) {

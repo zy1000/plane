@@ -49,11 +49,15 @@ from plane.utils.asset_upload import presigned_post_for_asset
 PRODUCT_ASSET_TYPES = {
     FileAsset.EntityTypeContext.PRODUCT_DESCRIPTION,
     FileAsset.EntityTypeContext.REQUIREMENT_ATTACHMENT,
+    FileAsset.EntityTypeContext.REQUIREMENT_COMMENT_DESCRIPTION,
 }
 
 
 def _can_write_product_asset(user, product, entity_type):
-    if entity_type == FileAsset.EntityTypeContext.REQUIREMENT_ATTACHMENT:
+    if entity_type in {
+        FileAsset.EntityTypeContext.REQUIREMENT_ATTACHMENT,
+        FileAsset.EntityTypeContext.REQUIREMENT_COMMENT_DESCRIPTION,
+    }:
         return can_view_product(user, product)
     return can_manage_product(user, product)
 
@@ -648,6 +652,18 @@ class ProductAssetEndpoint(BaseAPIView):
                 {
                     "error": "该附件已被需求、待评审变更或历史版本引用，不能直接删除。",
                     "code": "REQUIREMENT_ASSET_IN_USE",
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        if (
+            asset.entity_type == FileAsset.EntityTypeContext.REQUIREMENT_COMMENT_DESCRIPTION
+            and asset.requirement_comment_id
+        ):
+            return Response(
+                {
+                    "error": "该文件已被需求评论引用，不能直接删除。",
+                    "code": "REQUIREMENT_COMMENT_ASSET_IN_USE",
                 },
                 status=status.HTTP_409_CONFLICT,
             )

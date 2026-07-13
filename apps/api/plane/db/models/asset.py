@@ -148,6 +148,7 @@ class FileAsset(BaseModel):
         PROJECT_DESCRIPTION = "PROJECT_DESCRIPTION"
         PRODUCT_DESCRIPTION = "PRODUCT_DESCRIPTION"
         REQUIREMENT_ATTACHMENT = "REQUIREMENT_ATTACHMENT"
+        REQUIREMENT_COMMENT_DESCRIPTION = "REQUIREMENT_COMMENT_DESCRIPTION"
         USER_COVER = "USER_COVER"
         USER_AVATAR = "USER_AVATAR"
         WORKSPACE_LOGO = "WORKSPACE_LOGO"
@@ -203,6 +204,9 @@ class FileAsset(BaseModel):
     )
     release_comment = models.ForeignKey(
         "db.ReleaseComment", on_delete=models.CASCADE, null=True, related_name="assets"
+    )
+    requirement_comment = models.ForeignKey(
+        "db.RequirementComment", on_delete=models.CASCADE, null=True, related_name="assets"
     )
     cycle_comment = models.ForeignKey(
         "db.CycleComment", on_delete=models.CASCADE, null=True, related_name="assets"
@@ -352,6 +356,7 @@ class FileAsset(BaseModel):
         if self.entity_type in [
             self.EntityTypeContext.PRODUCT_DESCRIPTION,
             self.EntityTypeContext.REQUIREMENT_ATTACHMENT,
+            self.EntityTypeContext.REQUIREMENT_COMMENT_DESCRIPTION,
         ]:
             if self.product_id:
                 return f"/api/assets/v2/workspaces/{self.workspace.slug}/products/{self.product_id}/{self.id}/"

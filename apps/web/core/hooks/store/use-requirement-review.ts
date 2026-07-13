@@ -33,7 +33,7 @@ export const useRequirementReview = (
       try {
         const [requirementResponse, changesResponse, versionsResponse] = await Promise.all([
           requirementService.getUserRequirement(workspaceSlug, productId, requirementId, requirementType),
-          requirementService.getChanges(workspaceSlug, productId, requirementId, requirementType),
+          requirementService.getAllChanges(workspaceSlug, productId, requirementId, requirementType),
           requirementService.getVersions(workspaceSlug, productId, requirementId, requirementType),
         ]);
         setRequirement(requirementResponse);

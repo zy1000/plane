@@ -9,6 +9,7 @@ from rest_framework.response import Response
 from plane.app.permissions import ROLE, allow_permission, can_view_product
 from plane.app.serializers.requirement import (
     RequirementChangeSerializer,
+    RequirementCommentSerializer,
     RequirementDetailSerializer,
     RequirementListSerializer,
     RequirementModuleSerializer,
@@ -28,6 +29,7 @@ from plane.db.models import (
     RequirementChangeKind,
     RequirementChangeReviewer,
     RequirementChangeStatus,
+    RequirementComment,
     RequirementModule,
     RequirementReviewOpinion,
     RequirementReviewRecord,
@@ -523,6 +525,97 @@ class RequirementViewSet(ProductRequirementMixin, BaseViewSet):
                 frontier = child_ids
             queryset = queryset.exclude(id__in=excluded_ids)
         return Response(list(queryset.values("id", "name", "type")[:50]))
+
+
+class RequirementCommentViewSet(ProductRequirementMixin, BaseViewSet):
+    serializer_class = RequirementCommentSerializer
+    model = RequirementComment
+    requirement_type = Requirement.RequirementType.USER
+
+    def get_requirement(self):
+        product = self.get_product()
+        if product is None:
+            return None
+        return (
+            Requirement.objects.filter(
+                id=self.kwargs.get("pk"),
+                product=product,
+                type=self.requirement_type,
+            )
+            .select_related("product", "product__workspace")
+            .first()
+        )
+
+    def get_queryset(self):
+        return (
+            RequirementComment.objects.filter(
+                requirement_id=self.kwargs.get("pk"),
+                requirement__product_id=self.kwargs.get("product_id"),
+                requirement__product__workspace__slug=self.kwargs.get("slug"),
+                requirement__type=self.requirement_type,
+            )
+            .select_related("actor", "requirement", "requirement__product", "parent")
+            .order_by("created_at")
+        )
+
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
+    def list(self, request, slug, product_id, pk):
+        if self.get_requirement() is None:
+            return Response({"error": "Requirement not found."}, status=status.HTTP_404_NOT_FOUND)
+        return Response(self.get_serializer(self.get_queryset(), many=True).data)
+
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
+    def create(self, request, slug, product_id, pk):
+        requirement = self.get_requirement()
+        if requirement is None:
+            return Response({"error": "Requirement not found."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = self.get_serializer(
+            data=request.data,
+            context={"request": request, "requirement": requirement},
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
+    def destroy(self, request, slug, product_id, pk, comment_id):
+        if self.get_requirement() is None:
+            return Response({"error": "Requirement not found."}, status=status.HTTP_404_NOT_FOUND)
+        comment = self.get_queryset().filter(id=comment_id).first()
+        if comment is None:
+            return Response({"error": "Comment not found."}, status=status.HTTP_404_NOT_FOUND)
+        if comment.actor_id != request.user.id:
+            return Response(
+                {"error": "Only the comment author can delete this comment."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        comment_ids = {comment.id}
+        frontier = {comment.id}
+        while frontier:
+            child_ids = set(
+                RequirementComment.objects.filter(
+                    requirement_id=pk,
+                    parent_id__in=frontier,
+                ).values_list("id", flat=True)
+            ) - comment_ids
+            if not child_ids:
+                break
+            comment_ids.update(child_ids)
+            frontier = child_ids
+
+        now = timezone.now()
+        with transaction.atomic():
+            FileAsset.objects.filter(requirement_comment_id__in=comment_ids).update(
+                is_deleted=True,
+                deleted_at=now,
+                updated_by=request.user,
+            )
+            RequirementComment.objects.filter(id__in=comment_ids).update(
+                deleted_at=now,
+                updated_at=now,
+                updated_by=request.user,
+            )
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 # Backward-compatible class name used by existing imports.

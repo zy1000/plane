@@ -147,6 +147,7 @@ from .product import Product, ProductMember
 from .requirement import (
     Requirement,
     RequirementAttachment,
+    RequirementComment,
     RequirementChange,
     RequirementChangeAttachment,
     RequirementChangeKind,

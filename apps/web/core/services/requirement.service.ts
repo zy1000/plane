@@ -314,13 +314,42 @@ export class RequirementService extends APIService {
     workspaceSlug: string,
     productId: string,
     requirementId: string,
-    type: TRequirementType
+    type: TRequirementType,
+    params?: { page?: number; page_size?: number }
   ): Promise<{ count: number; data: TRequirementChange[] }> {
-    return this.get(`${this.requirementUrl(workspaceSlug, productId, type)}${requirementId}/changes/`)
+    return this.get(`${this.requirementUrl(workspaceSlug, productId, type)}${requirementId}/changes/`, { params })
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
       });
+  }
+
+  async getAllChanges(
+    workspaceSlug: string,
+    productId: string,
+    requirementId: string,
+    type: TRequirementType
+  ): Promise<{ count: number; data: TRequirementChange[] }> {
+    const pageSize = 100;
+    const firstPage = await this.getChanges(workspaceSlug, productId, requirementId, type, {
+      page: 1,
+      page_size: pageSize,
+    });
+    const totalPages = Math.ceil(firstPage.count / pageSize);
+    if (totalPages <= 1) return firstPage;
+
+    const remainingPages = await Promise.all(
+      Array.from({ length: totalPages - 1 }, (_, index) =>
+        this.getChanges(workspaceSlug, productId, requirementId, type, {
+          page: index + 2,
+          page_size: pageSize,
+        })
+      )
+    );
+    return {
+      count: firstPage.count,
+      data: [firstPage, ...remainingPages].flatMap((page) => page.data),
+    };
   }
 
   async reviewChange(

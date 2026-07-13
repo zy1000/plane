@@ -11,6 +11,7 @@ from plane.db.models import (
     RequirementAttachment,
     RequirementChange,
     RequirementChangeStatus,
+    RequirementComment,
     RequirementModule,
     RequirementVersion,
     User,
@@ -39,6 +40,12 @@ def review_url(workspace_slug, product_id, requirement_id, change_id):
     return f"{change_url(workspace_slug, product_id, requirement_id, change_id)}reviews/"
 
 
+def comment_url(workspace_slug, product_id, requirement_id, comment_id=None, requirement_type="user"):
+    prefix = "user-requirements" if requirement_type == "user" else "development-requirements"
+    base = f"/api/workspaces/{workspace_slug}/products/{product_id}/{prefix}/{requirement_id}/comments/"
+    return f"{base}{comment_id}/" if comment_id else base
+
+
 def create_workspace_user(workspace, email, role=15):
     user = User.objects.create_user(email=email, username=email.split("@")[0])
     WorkspaceMember.objects.create(workspace=workspace, member=user, role=role)
@@ -48,6 +55,118 @@ def create_workspace_user(workspace, email, role=15):
 @pytest.mark.contract
 @pytest.mark.django_db
 class TestUserRequirementApp:
+    def test_requirement_comments_support_assets_replies_scope_and_author_delete(
+        self, session_client, workspace, create_user
+    ):
+        product = Product.objects.create(
+            name="Comment Product",
+            workspace=workspace,
+            owner=create_user,
+            created_by=create_user,
+        )
+        requirement = Requirement.objects.create(
+            product=product,
+            name="Commented requirement",
+            type=Requirement.RequirementType.USER,
+        )
+        other_requirement = Requirement.objects.create(
+            product=product,
+            name="Other requirement",
+            type=Requirement.RequirementType.USER,
+        )
+        asset = FileAsset.objects.create(
+            workspace=workspace,
+            product=product,
+            created_by=create_user,
+            entity_type=FileAsset.EntityTypeContext.REQUIREMENT_COMMENT_DESCRIPTION,
+            entity_identifier=str(requirement.id),
+            attributes={"name": "comment.png", "type": "image/png", "size": 10},
+            size=10,
+            is_uploaded=True,
+        )
+        FileAsset.objects.filter(id=asset.id).update(created_by=create_user)
+
+        root = session_client.post(
+            comment_url(workspace.slug, product.id, requirement.id),
+            {
+                "comment_html": "<p>根评论 <strong>内容</strong></p>",
+                "comment_json": {"type": "doc"},
+                "asset_ids": [str(asset.id)],
+            },
+            format="json",
+        )
+        assert root.status_code == status.HTTP_201_CREATED, root.data
+        assert root.data["comment_stripped"] == "根评论 内容"
+        assert root.data["actor"] == create_user.id
+        asset.refresh_from_db()
+        assert asset.requirement_comment_id == root.data["id"]
+
+        member = create_workspace_user(workspace, "requirement-commenter@example.com")
+        session_client.force_authenticate(user=member)
+        reply = session_client.post(
+            comment_url(workspace.slug, product.id, requirement.id),
+            {
+                "comment_html": "<p>回复内容</p>",
+                "parent": root.data["id"],
+            },
+            format="json",
+        )
+        assert reply.status_code == status.HTTP_201_CREATED, reply.data
+        assert reply.data["parent"] == root.data["id"]
+
+        foreign_parent = RequirementComment.objects.create(
+            requirement=other_requirement,
+            actor=member,
+            comment_html="<p>另一个需求</p>",
+        )
+        invalid_parent = session_client.post(
+            comment_url(workspace.slug, product.id, requirement.id),
+            {"comment_html": "<p>错误回复</p>", "parent": str(foreign_parent.id)},
+            format="json",
+        )
+        assert invalid_parent.status_code == status.HTTP_400_BAD_REQUEST
+
+        forbidden_delete = session_client.delete(
+            comment_url(workspace.slug, product.id, requirement.id, root.data["id"])
+        )
+        assert forbidden_delete.status_code == status.HTTP_403_FORBIDDEN
+
+        listing = session_client.get(comment_url(workspace.slug, product.id, requirement.id))
+        assert listing.status_code == status.HTTP_200_OK
+        assert [item["id"] for item in listing.data] == [root.data["id"], reply.data["id"]]
+
+        session_client.force_authenticate(user=create_user)
+        immutable = session_client.patch(
+            comment_url(workspace.slug, product.id, requirement.id, root.data["id"]),
+            {"comment_html": "<p>不可编辑</p>"},
+            format="json",
+        )
+        assert immutable.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
+
+        deleted = session_client.delete(
+            comment_url(workspace.slug, product.id, requirement.id, root.data["id"])
+        )
+        assert deleted.status_code == status.HTTP_204_NO_CONTENT
+        assert not RequirementComment.objects.filter(id__in=[root.data["id"], reply.data["id"]]).exists()
+        assert not FileAsset.objects.filter(id=asset.id).exists()
+
+        development_requirement = Requirement.objects.create(
+            product=product,
+            name="Development comment",
+            type=Requirement.RequirementType.DEVELOPMENT,
+        )
+        development_comment = session_client.post(
+            comment_url(
+                workspace.slug,
+                product.id,
+                development_requirement.id,
+                requirement_type="development",
+            ),
+            {"comment_html": "<p>研发需求评论</p>"},
+            format="json",
+        )
+        assert development_comment.status_code == status.HTTP_201_CREATED, development_comment.data
+
     def test_visible_member_can_create_and_type_is_forced_to_user(self, session_client, workspace, create_user):
         product = Product.objects.create(
             name="Public Product",
@@ -308,6 +427,16 @@ class TestUserRequirementApp:
                 },
                 format="json",
             )
+            comment_asset = session_client.post(
+                asset_url,
+                {
+                    "name": "comment.png",
+                    "type": "image/png",
+                    "size": 12,
+                    "entity_type": FileAsset.EntityTypeContext.REQUIREMENT_COMMENT_DESCRIPTION,
+                },
+                format="json",
+            )
             product_description = session_client.post(
                 asset_url,
                 {
@@ -321,6 +450,11 @@ class TestUserRequirementApp:
 
         assert requirement_asset.status_code == status.HTTP_200_OK
         assert FileAsset.objects.get(id=requirement_asset.data["asset_id"]).entity_type == "REQUIREMENT_ATTACHMENT"
+        assert comment_asset.status_code == status.HTTP_200_OK
+        assert (
+            FileAsset.objects.get(id=comment_asset.data["asset_id"]).entity_type
+            == "REQUIREMENT_COMMENT_DESCRIPTION"
+        )
         assert product_description.status_code == status.HTTP_403_FORBIDDEN
 
     def test_review_state_machine_clarification_approval_rejection_and_versions(

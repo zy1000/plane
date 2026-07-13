@@ -1,6 +1,6 @@
 from django.urls import path
 
-from plane.app.views.requirement import RequirementModuleViewSet, RequirementViewSet
+from plane.app.views.requirement import RequirementCommentViewSet, RequirementModuleViewSet, RequirementViewSet
 from plane.db.models import Requirement
 
 
@@ -66,6 +66,19 @@ def requirement_urls(prefix, requirement_type, name_prefix):
             f"{base}/<uuid:pk>/compare/",
             RequirementViewSet.as_view({"get": "compare"}, **view_kwargs),
             name=f"product-{name_prefix}-compare",
+        ),
+        path(
+            f"{base}/<uuid:pk>/comments/",
+            RequirementCommentViewSet.as_view(
+                {"get": "list", "post": "create"},
+                **view_kwargs,
+            ),
+            name=f"product-{name_prefix}-comments",
+        ),
+        path(
+            f"{base}/<uuid:pk>/comments/<uuid:comment_id>/",
+            RequirementCommentViewSet.as_view({"delete": "destroy"}, **view_kwargs),
+            name=f"product-{name_prefix}-comment-detail",
         ),
     ]
 

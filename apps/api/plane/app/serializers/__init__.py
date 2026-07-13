@@ -154,6 +154,7 @@ from .webhook import WebhookSerializer, WebhookLogSerializer
 from .favorite import UserFavoriteSerializer
 from .product import ProductSerializer
 from .requirement import (
+    RequirementCommentSerializer,
     RequirementModuleSerializer,
     UserRequirementDetailSerializer,
     UserRequirementListSerializer,

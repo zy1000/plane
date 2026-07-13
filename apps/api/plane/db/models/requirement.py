@@ -2,6 +2,7 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Q
+from django.utils.html import strip_tags
 
 from .base import BaseModel
 
@@ -217,6 +218,57 @@ class RequirementAttachment(BaseModel):
             raise ValidationError({"asset": "附件尚未上传完成。"})
 
     def save(self, *args, **kwargs):
+        self.full_clean(exclude=["created_by", "updated_by"])
+        return super().save(*args, **kwargs)
+
+
+class RequirementComment(BaseModel):
+    requirement = models.ForeignKey(
+        Requirement,
+        on_delete=models.CASCADE,
+        related_name="requirement_comments",
+        verbose_name="Requirement",
+    )
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="requirement_comments",
+        verbose_name="Comment Actor",
+    )
+    comment_stripped = models.TextField(verbose_name="Comment", blank=True)
+    comment_json = models.JSONField(blank=True, default=dict)
+    comment_html = models.TextField(blank=True, default="<p></p>")
+    parent = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="child_requirement_comments",
+    )
+    edited_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Requirement Comment"
+        verbose_name_plural = "Requirement Comments"
+        db_table = "requirement_comments"
+        ordering = ("created_at",)
+        indexes = [
+            models.Index(
+                fields=["requirement", "created_at"],
+                name="requirement_comment_req_ts",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.requirement_id} {self.actor_id}"
+
+    def clean(self):
+        super().clean()
+        if self.parent_id and self.parent.requirement_id != self.requirement_id:
+            raise ValidationError({"parent": "回复的评论必须属于当前需求。"})
+
+    def save(self, *args, **kwargs):
+        self.comment_stripped = strip_tags(self.comment_html) if self.comment_html else ""
         self.full_clean(exclude=["created_by", "updated_by"])
         return super().save(*args, **kwargs)
 

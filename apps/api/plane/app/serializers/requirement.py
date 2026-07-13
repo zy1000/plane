@@ -6,6 +6,7 @@ from plane.db.models import (
     FileAsset,
     Requirement,
     RequirementAttachment,
+    RequirementComment,
     RequirementChange,
     RequirementChangeAttachment,
     RequirementChangeKind,
@@ -107,6 +108,110 @@ class RequirementAttachmentDetailSerializer(serializers.ModelSerializer):
             "updated_at",
             "created_by",
         ]
+
+
+class RequirementCommentSerializer(BaseSerializer):
+    actor_detail = UserLiteSerializer(source="actor", read_only=True)
+    asset_ids = serializers.ListField(
+        child=serializers.UUIDField(),
+        required=False,
+        write_only=True,
+        default=list,
+    )
+
+    class Meta:
+        model = RequirementComment
+        fields = [
+            "id",
+            "requirement",
+            "actor",
+            "actor_detail",
+            "comment_stripped",
+            "comment_json",
+            "comment_html",
+            "parent",
+            "asset_ids",
+            "edited_at",
+            "created_at",
+            "updated_at",
+            "created_by",
+            "updated_by",
+        ]
+        read_only_fields = [
+            "id",
+            "requirement",
+            "actor",
+            "comment_stripped",
+            "edited_at",
+            "created_at",
+            "updated_at",
+            "created_by",
+            "updated_by",
+        ]
+
+    def validate_parent(self, value):
+        if value and value.requirement_id != self.context["requirement"].id:
+            raise serializers.ValidationError("REQUIREMENT_COMMENT_PARENT_INVALID")
+        return value
+
+    def validate_asset_ids(self, value):
+        asset_ids = list(dict.fromkeys(value))
+        if not asset_ids:
+            return []
+
+        requirement = self.context["requirement"]
+        request = self.context["request"]
+        matched_ids = set(
+            FileAsset.objects.filter(
+                id__in=asset_ids,
+                workspace=requirement.product.workspace,
+                product=requirement.product,
+                entity_type=FileAsset.EntityTypeContext.REQUIREMENT_COMMENT_DESCRIPTION,
+                entity_identifier=str(requirement.id),
+                requirement_comment__isnull=True,
+                created_by=request.user,
+                is_uploaded=True,
+                is_deleted=False,
+            ).values_list("id", flat=True)
+        )
+        if matched_ids != set(asset_ids):
+            raise serializers.ValidationError("REQUIREMENT_COMMENT_ASSETS_INVALID")
+        return asset_ids
+
+    @transaction.atomic
+    def create(self, validated_data):
+        asset_ids = validated_data.pop("asset_ids", [])
+        requirement = self.context["requirement"]
+        request = self.context["request"]
+
+        assets = FileAsset.objects.none()
+        if asset_ids:
+            assets = FileAsset.objects.select_for_update().filter(
+                id__in=asset_ids,
+                workspace=requirement.product.workspace,
+                product=requirement.product,
+                entity_type=FileAsset.EntityTypeContext.REQUIREMENT_COMMENT_DESCRIPTION,
+                entity_identifier=str(requirement.id),
+                requirement_comment__isnull=True,
+                created_by=request.user,
+                is_uploaded=True,
+                is_deleted=False,
+            )
+            if set(assets.values_list("id", flat=True)) != set(asset_ids):
+                raise serializers.ValidationError({"asset_ids": "REQUIREMENT_COMMENT_ASSETS_INVALID"})
+
+        comment = RequirementComment(
+            requirement=requirement,
+            actor=request.user,
+            **validated_data,
+        )
+        comment.save(created_by_id=request.user.id)
+        if asset_ids:
+            assets.update(
+                requirement_comment=comment,
+                entity_identifier=str(comment.id),
+            )
+        return comment
 
 
 class RequirementReviewRecordSerializer(BaseSerializer):
