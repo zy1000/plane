@@ -124,7 +124,11 @@ export function RequirementActivity(props: Props) {
         </div>
       </div>
 
-      <div id={`requirement-activity-panel-${activeTab}`} role="tabpanel" className="min-h-52">
+      <div
+        id={`requirement-activity-panel-${activeTab}`}
+        role="tabpanel"
+        className="vertical-scrollbar scrollbar-sm max-h-[min(560px,60vh)] min-h-52 overflow-y-auto pr-2"
+      >
         {activeTab === "comment" ? (
           <RequirementCommentsSection
             comments={comments}
