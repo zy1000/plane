@@ -131,9 +131,7 @@ class ProductSerializer(BaseSerializer):
             )
             product.save(created_by_id=request.user.id)
         except IntegrityError as exc:
-            raise serializers.ValidationError(
-                {"name": "PRODUCT_NAME_ALREADY_EXIST"}
-            ) from exc
+            raise serializers.ValidationError({"name": "PRODUCT_NAME_ALREADY_EXIST"}) from exc
         for member_id in {request.user.id, product.owner_id} - {None}:
             ProductMember.objects.get_or_create(product=product, member_id=member_id)
 
@@ -148,9 +146,7 @@ class ProductSerializer(BaseSerializer):
             )
             locked_asset_ids = set(assets.values_list("id", flat=True))
             if locked_asset_ids != set(asset_ids):
-                raise serializers.ValidationError(
-                    {"description_asset_ids": "PRODUCT_DESCRIPTION_ASSETS_INVALID"}
-                )
+                raise serializers.ValidationError({"description_asset_ids": "PRODUCT_DESCRIPTION_ASSETS_INVALID"})
             FileAsset.objects.filter(id__in=locked_asset_ids).update(product=product)
         self.bound_description_asset_ids = asset_ids
         return product
@@ -162,3 +158,45 @@ class ProductSerializer(BaseSerializer):
         if "owner" in validated_data and product.owner_id:
             ProductMember.objects.get_or_create(product=product, member_id=product.owner_id)
         return product
+
+
+class ProductMemberSerializer(BaseSerializer):
+    member = serializers.PrimaryKeyRelatedField(queryset=User.objects.all())
+    member_detail = UserLiteSerializer(source="member", read_only=True)
+
+    class Meta:
+        model = ProductMember
+        fields = [
+            "id",
+            "product",
+            "member",
+            "member_detail",
+            "created_at",
+            "created_by",
+        ]
+        read_only_fields = [
+            "id",
+            "product",
+            "member_detail",
+            "created_at",
+            "created_by",
+        ]
+
+    def validate_member(self, value):
+        product = self.context["product"]
+        if not WorkspaceMember.objects.filter(
+            workspace=product.workspace,
+            member=value,
+            is_active=True,
+        ).exists():
+            raise serializers.ValidationError("PRODUCT_MEMBER_MUST_BE_WORKSPACE_MEMBER")
+        if ProductMember.objects.filter(product=product, member=value).exists():
+            raise serializers.ValidationError("PRODUCT_MEMBER_ALREADY_EXISTS")
+        return value
+
+    def create(self, validated_data):
+        return ProductMember.objects.create(
+            product=self.context["product"],
+            created_by=self.context["request"].user,
+            **validated_data,
+        )

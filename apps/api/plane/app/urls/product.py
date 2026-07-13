@@ -20,4 +20,19 @@ urlpatterns = [
         ),
         name="product-detail",
     ),
+    path(
+        "workspaces/<str:slug>/products/<uuid:pk>/members/",
+        ProductViewSet.as_view({"get": "members", "post": "members"}),
+        name="product-members",
+    ),
+    path(
+        "workspaces/<str:slug>/products/<uuid:pk>/eligible-members/",
+        ProductViewSet.as_view({"get": "eligible_members"}),
+        name="product-eligible-members",
+    ),
+    path(
+        "workspaces/<str:slug>/products/<uuid:pk>/members/<uuid:member_id>/",
+        ProductViewSet.as_view({"delete": "remove_member"}),
+        name="product-member-detail",
+    ),
 ]

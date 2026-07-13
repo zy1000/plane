@@ -17,6 +17,7 @@ import { useWorkspaceNotifications } from "@/hooks/store/notifications";
 import { useNotification } from "@/hooks/store/notifications/use-notification";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useWorkspace } from "@/hooks/store/use-workspace";
+import { useAppRouter } from "@/hooks/use-app-router";
 // local imports
 import { NotificationContent } from "./content";
 import { NotificationOption } from "./options";
@@ -33,6 +34,7 @@ export const NotificationItem = observer(function NotificationItem(props: TNotif
   const { asJson: notification, markNotificationAsRead } = useNotification(notificationId);
   const { getIsIssuePeeked, setPeekIssue } = useIssueDetail();
   const { getWorkspaceBySlug } = useWorkspace();
+  const router = useAppRouter();
   // states
   const [isSnoozeStateModalOpen, setIsSnoozeStateModalOpen] = useState(false);
   const [customSnoozeModal, setCustomSnoozeModal] = useState(false);
@@ -42,13 +44,17 @@ export const NotificationItem = observer(function NotificationItem(props: TNotif
   const issueId = notification?.data?.issue?.id || undefined;
   const workspace = getWorkspaceBySlug(workspaceSlug);
 
-  const notificationField = notification?.data?.issue_activity.field || undefined;
+  const notificationField = notification?.data?.issue_activity?.field || undefined;
   const notificationTriggeredBy = notification.triggered_by_details || undefined;
   const isApprovalNotification = notification?.sender === "in_app:workflow_approval:requested";
+  const isRequirementNotification = notification?.entity_name === "requirement";
+  const requirementData = notification?.data as
+    | ({ target_url?: string; requirement?: { name?: string } } & typeof notification.data)
+    | undefined;
 
   const handleNotificationIssuePeekOverview = async () => {
-    if (workspaceSlug && projectId && issueId && !isSnoozeStateModalOpen && !customSnoozeModal) {
-      setCurrentSelectedNotificationId(notificationId);
+    if (workspaceSlug && !isSnoozeStateModalOpen && !customSnoozeModal) {
+      if (!isRequirementNotification && (!projectId || !issueId)) return;
 
       // make the notification as read
       if (notification.read_at === null) {
@@ -59,19 +65,32 @@ export const NotificationItem = observer(function NotificationItem(props: TNotif
         }
       }
 
+      if (isRequirementNotification && requirementData?.target_url) {
+        router.push(requirementData.target_url);
+        return;
+      }
+
+      setCurrentSelectedNotificationId(notificationId);
+
       // 审批通知：右侧面板展示审批详情，无需 peek issue
       if (isApprovalNotification) return;
 
       setPeekIssue(undefined);
       if (notification?.is_inbox_issue === false) {
-        if (!getIsIssuePeeked(issueId)) {
-          setPeekIssue({ workspaceSlug, projectId, issueId });
+        if (!getIsIssuePeeked(issueId as string)) {
+          setPeekIssue({ workspaceSlug, projectId: projectId as string, issueId: issueId as string });
         }
       }
     }
   };
 
-  if (!workspaceSlug || !notificationId || !notification?.id || !notificationField || !workspace?.id || !projectId)
+  if (
+    !workspaceSlug ||
+    !notificationId ||
+    !notification?.id ||
+    !workspace?.id ||
+    (!isRequirementNotification && (!notificationField || !projectId))
+  )
     return <></>;
 
   return (
@@ -106,12 +125,16 @@ export const NotificationItem = observer(function NotificationItem(props: TNotif
         <div className="-mt-2 w-full space-y-1">
           <div className="relative flex h-8 items-center gap-3">
             <div className="line-clamp-1 w-full truncate overflow-hidden text-body-xs-medium break-all whitespace-normal text-primary">
-              <NotificationContent
-                notification={notification}
-                workspaceId={workspace.id}
-                workspaceSlug={workspaceSlug}
-                projectId={projectId}
-              />
+              {isRequirementNotification ? (
+                <span className="font-medium text-primary">{notification.title}</span>
+              ) : (
+                <NotificationContent
+                  notification={notification}
+                  workspaceId={workspace.id}
+                  workspaceSlug={workspaceSlug}
+                  projectId={projectId as string}
+                />
+              )}
             </div>
             <NotificationOption
               workspaceSlug={workspaceSlug}
@@ -125,8 +148,14 @@ export const NotificationItem = observer(function NotificationItem(props: TNotif
 
           <div className="relative flex items-center gap-3 text-caption-sm-regular text-secondary">
             <div className="line-clamp-1 w-full truncate overflow-hidden break-words whitespace-normal">
-              {notification?.data?.issue?.identifier}-{notification?.data?.issue?.sequence_id}&nbsp;
-              {notification?.data?.issue?.name}
+              {isRequirementNotification ? (
+                requirementData?.requirement?.name
+              ) : (
+                <>
+                  {notification?.data?.issue?.identifier}-{notification?.data?.issue?.sequence_id}&nbsp;
+                  {notification?.data?.issue?.name}
+                </>
+              )}
             </div>
             <div className="flex-shrink-0">
               {notification?.snoozed_till ? (

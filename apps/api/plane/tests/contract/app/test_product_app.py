@@ -3,12 +3,24 @@ from unittest.mock import patch
 import pytest
 from rest_framework import status
 
-from plane.db.models import FileAsset, Product, ProductMember, User, WorkspaceMember
+from plane.db.models import (
+    FileAsset,
+    Product,
+    ProductMember,
+    Requirement,
+    User,
+    WorkspaceMember,
+)
 
 
 def product_url(workspace_slug, product_id=None):
     base = f"/api/workspaces/{workspace_slug}/products/"
     return f"{base}{product_id}/" if product_id else base
+
+
+def product_member_url(workspace_slug, product_id, member_id=None):
+    base = f"{product_url(workspace_slug, product_id)}members/"
+    return f"{base}{member_id}/" if member_id else base
 
 
 def create_workspace_user(workspace, email, role):
@@ -72,7 +84,7 @@ class TestProductApp:
     def test_visibility_matches_product_network_and_membership(self, session_client, workspace, create_user):
         member = create_workspace_user(workspace, "product-member@example.com", 15)
         guest = create_workspace_user(workspace, "product-reader@example.com", 5)
-        public = Product.objects.create(name="Public Product", workspace=workspace, owner=create_user)
+        Product.objects.create(name="Public Product", workspace=workspace, owner=create_user)
         secret = Product.objects.create(name="Secret Product", workspace=workspace, owner=create_user, network=0)
         ProductMember.objects.create(product=secret, member=guest)
 
@@ -138,3 +150,54 @@ class TestProductApp:
         assert not Product.objects.filter(id=product.id).exists()
         assert FileAsset.all_objects.get(id=asset.id).is_deleted is True
         assert FileAsset.all_objects.get(id=asset.id).deleted_at is not None
+
+    def test_product_members_protect_requirement_participants_and_private_transition(
+        self, session_client, workspace, create_user
+    ):
+        product = Product.objects.create(
+            name="Member Product",
+            workspace=workspace,
+            owner=create_user,
+            created_by=create_user,
+        )
+        reviewer = create_workspace_user(workspace, "product-reviewer@example.com", 15)
+        assignee = create_workspace_user(workspace, "product-assignee@example.com", 15)
+
+        added = session_client.post(
+            product_member_url(workspace.slug, product.id),
+            {"member": str(reviewer.id)},
+            format="json",
+        )
+        assert added.status_code == status.HTTP_201_CREATED, added.data
+
+        requirement = Requirement.objects.create(
+            product=product,
+            name="Protected requirement",
+            type=Requirement.RequirementType.USER,
+            assignee=assignee,
+        )
+        requirement.reviewers.add(reviewer)
+
+        protected = session_client.delete(product_member_url(workspace.slug, product.id, reviewer.id))
+        assert protected.status_code == status.HTTP_409_CONFLICT
+
+        blocked_private = session_client.patch(
+            product_url(workspace.slug, product.id),
+            {"network": 0},
+            format="json",
+        )
+        assert blocked_private.status_code == status.HTTP_409_CONFLICT
+        assert str(assignee.id) in blocked_private.data["member_ids"]
+
+        add_assignee = session_client.post(
+            product_member_url(workspace.slug, product.id),
+            {"member": str(assignee.id)},
+            format="json",
+        )
+        assert add_assignee.status_code == status.HTTP_201_CREATED, add_assignee.data
+        made_private = session_client.patch(
+            product_url(workspace.slug, product.id),
+            {"network": 0},
+            format="json",
+        )
+        assert made_private.status_code == status.HTTP_200_OK, made_private.data

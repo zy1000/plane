@@ -8,6 +8,7 @@ import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { CustomSelect, EModalPosition, EModalWidth, Input, ModalCore } from "@plane/ui";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { ProductDescriptionEditor } from "@/components/product/product-description-editor";
+import { useProductMembers } from "@/hooks/store/use-product-members";
 import { FileService } from "@/services/file.service";
 import type {
   TRequirementAttachment,
@@ -71,6 +72,7 @@ type Props = {
   isOpen: boolean;
   workspaceSlug: string;
   productId: string;
+  requirementLabel?: string;
   requirementId?: string;
   modules: TRequirementModule[];
   fetchRequirement: (id: string) => Promise<TUserRequirementDetail | undefined>;
@@ -99,6 +101,7 @@ export function RequirementFormModal(props: Props) {
     onClose,
     onSubmit,
     productId,
+    requirementLabel = "用户需求",
     requirementId,
     workspaceSlug,
   } = props;
@@ -115,6 +118,12 @@ export function RequirementFormModal(props: Props) {
     reset,
     setError,
   } = useForm<TFormValues>({ defaultValues });
+  const { eligibleMembers, fetchMembers } = useProductMembers(workspaceSlug, productId);
+  const eligibleMemberIds = useMemo(() => eligibleMembers.map((member) => member.id), [eligibleMembers]);
+
+  useEffect(() => {
+    if (isOpen) void fetchMembers().catch(() => undefined);
+  }, [fetchMembers, isOpen]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -130,19 +139,21 @@ export function RequirementFormModal(props: Props) {
     ])
       .then(([detail, options]) => {
         if (!active) return undefined;
+        const pendingProposal = detail?.latest_change?.status === "pending" ? detail.latest_change : undefined;
         setParentOptions(options);
-        setAttachments(detail?.attachments ?? []);
+        setAttachments(pendingProposal?.attachments ?? detail?.attachments ?? []);
         reset(
           detail
             ? {
-                name: detail.name,
-                priority: detail.priority,
-                module: detail.module,
-                parent: detail.parent,
-                assignee: detail.assignee,
-                reviewers: detail.reviewers,
-                description_html: detail.description_html ?? "<p></p>",
-                acceptance_criteria_html: detail.acceptance_criteria_html ?? "<p></p>",
+                name: pendingProposal?.name ?? detail.name,
+                priority: pendingProposal?.priority ?? detail.priority,
+                module: pendingProposal ? pendingProposal.module : detail.module,
+                parent: pendingProposal ? pendingProposal.parent : detail.parent,
+                assignee: pendingProposal ? pendingProposal.assignee : detail.assignee,
+                reviewers: pendingProposal?.proposed_reviewers ?? detail.reviewers,
+                description_html: pendingProposal?.description_html ?? detail.description_html ?? "<p></p>",
+                acceptance_criteria_html:
+                  pendingProposal?.acceptance_criteria_html ?? detail.acceptance_criteria_html ?? "<p></p>",
               }
             : defaultValues
         );
@@ -160,7 +171,7 @@ export function RequirementFormModal(props: Props) {
     };
   }, [fetchParentOptions, fetchRequirement, isOpen, requirementId, reset]);
 
-  const title = requirementId ? "编辑用户需求" : "创建用户需求";
+  const title = requirementId ? `发起${requirementLabel}变更` : `创建${requirementLabel}`;
   const attachmentIds = useMemo(
     () => [...new Set([...attachments.map((attachment) => attachment.id), ...uploadedAssetIds])],
     [attachments, uploadedAssetIds]
@@ -192,8 +203,8 @@ export function RequirementFormModal(props: Props) {
       onClose();
       setToast({
         type: TOAST_TYPE.SUCCESS,
-        title: requirementId ? "保存成功" : "创建成功",
-        message: requirementId ? "用户需求已更新。" : "用户需求已加入列表。",
+        title: requirementId ? "已发起变更" : "创建成功",
+        message: requirementId ? `${requirementLabel}已重新进入评审。` : `${requirementLabel}已创建并进入评审。`,
       });
     } catch (error: any) {
       if (error?.name) {
@@ -264,7 +275,7 @@ export function RequirementFormModal(props: Props) {
                           {...field}
                           id="requirement-name"
                           hasError={!!errors.name}
-                          placeholder="用一句话概括这个用户需求"
+                          placeholder={`用一句话概括这个${requirementLabel}`}
                           className="h-10 w-full text-14"
                         />
                       )}
@@ -420,6 +431,7 @@ export function RequirementFormModal(props: Props) {
                           control={control}
                           render={({ field }) => (
                             <MemberDropdown
+                              memberIds={eligibleMemberIds}
                               value={field.value ?? null}
                               onChange={field.onChange}
                               multiple={false}
@@ -436,8 +448,12 @@ export function RequirementFormModal(props: Props) {
                         <Controller
                           name="reviewers"
                           control={control}
+                          rules={{
+                            validate: (value) => value.length > 0 || "至少选择一名评审人",
+                          }}
                           render={({ field }) => (
                             <MemberDropdown
+                              memberIds={eligibleMemberIds}
                               value={field.value ?? []}
                               onChange={field.onChange}
                               multiple
@@ -448,6 +464,9 @@ export function RequirementFormModal(props: Props) {
                             />
                           )}
                         />
+                        {errors.reviewers?.message && (
+                          <p className="mt-1 text-11 text-danger-primary">{errors.reviewers.message}</p>
+                        )}
                       </PropertyRow>
                     </div>
                   </div>
@@ -486,7 +505,7 @@ export function RequirementFormModal(props: Props) {
                   取消
                 </Button>
                 <Button type="submit" variant="primary" size="lg" loading={isSubmitting}>
-                  {requirementId ? "保存需求" : "创建需求"}
+                  {requirementId ? "提交变更并重新评审" : "创建并发起评审"}
                 </Button>
               </div>
             </form>

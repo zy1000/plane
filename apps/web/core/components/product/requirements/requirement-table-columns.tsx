@@ -2,6 +2,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   CalendarClock,
   ClipboardList,
+  CircleDot,
   GitBranch,
   LayoutGrid,
   Pencil,
@@ -24,6 +25,7 @@ const priorityLabels: Record<string, string> = {
 };
 
 type TRequirementTableColumnsParams = {
+  onOpen: (requirement: TUserRequirementListItem) => void;
   onEdit: (requirement: TUserRequirementListItem) => void;
   onDelete: (requirement: TUserRequirementListItem) => void;
 };
@@ -39,7 +41,7 @@ function HeaderLabel(props: { icon: LucideIcon; label: string }) {
 }
 
 export function getRequirementTableColumns(params: TRequirementTableColumnsParams) {
-  const { onEdit, onDelete } = params;
+  const { onDelete, onEdit, onOpen } = params;
 
   return [
     {
@@ -52,7 +54,7 @@ export function getRequirementTableColumns(params: TRequirementTableColumnsParam
         <button
           type="button"
           className="flex h-11 w-full min-w-0 items-center gap-2 px-3 text-left hover:text-primary"
-          onClick={() => onEdit(requirement)}
+          onClick={() => onOpen(requirement)}
         >
           <ClipboardList className="size-3.5 shrink-0 text-accent-primary" />
           <span className="min-w-0 truncate text-13 text-primary">{requirement.name}</span>
@@ -61,6 +63,25 @@ export function getRequirementTableColumns(params: TRequirementTableColumnsParam
           </span>
         </button>
       ),
+    },
+    {
+      key: "status",
+      content: "状态",
+      thClassName: "w-28 min-w-28 max-w-28",
+      tdClassName: "w-28 min-w-28 max-w-28",
+      thRender: () => <HeaderLabel icon={CircleDot} label="状态" />,
+      tdRender: (requirement: TUserRequirementListItem) => {
+        const meta = {
+          in_review: { label: "评审中", className: "bg-yellow-500/10 text-yellow-700 dark:text-yellow-300" },
+          active: { label: "激活", className: "bg-green-500/10 text-green-700 dark:text-green-300" },
+          rejected: { label: "拒绝", className: "bg-red-500/10 text-red-700 dark:text-red-300" },
+        }[requirement.status];
+        return (
+          <div className="flex h-11 items-center px-3">
+            <span className={`rounded-full px-2 py-0.5 text-11 font-medium ${meta.className}`}>{meta.label}</span>
+          </div>
+        );
+      },
     },
     {
       key: "module",
@@ -159,7 +180,7 @@ export function getRequirementTableColumns(params: TRequirementTableColumnsParam
             <CustomMenu.MenuItem onClick={() => onEdit(requirement)}>
               <span className="flex items-center gap-2">
                 <Pencil className="size-3.5" />
-                编辑
+                发起变更
               </span>
             </CustomMenu.MenuItem>
             <CustomMenu.MenuItem onClick={() => onDelete(requirement)}>

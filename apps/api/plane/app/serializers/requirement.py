@@ -1,17 +1,29 @@
 from django.db import transaction
-from django.utils import timezone
+from django.db.models import Q
 from rest_framework import serializers
-from rest_framework.fields import empty
 
 from plane.db.models import (
     FileAsset,
     Requirement,
     RequirementAttachment,
+    RequirementChange,
+    RequirementChangeAttachment,
+    RequirementChangeKind,
+    RequirementChangeReviewer,
+    RequirementChangeStatus,
     RequirementModule,
+    RequirementReviewOpinion,
+    RequirementReviewRecord,
+    RequirementVersion,
     User,
-    WorkspaceMember,
 )
 from plane.utils.content_validator import validate_html_content
+from plane.utils.requirement import (
+    build_requirement_diff,
+    create_requirement_change,
+    is_eligible_requirement_member,
+    proposal_data_from_change,
+)
 
 from .base import BaseSerializer
 from .user import UserLiteSerializer
@@ -73,7 +85,7 @@ class RequirementModuleSerializer(BaseSerializer):
 class RequirementParentLiteSerializer(BaseSerializer):
     class Meta:
         model = Requirement
-        fields = ["id", "name"]
+        fields = ["id", "name", "type", "status", "current_version"]
         read_only_fields = fields
 
 
@@ -83,9 +95,7 @@ class RequirementAttachmentDetailSerializer(serializers.ModelSerializer):
     asset_url = serializers.CharField(source="asset.asset_url", read_only=True)
     created_at = serializers.DateTimeField(source="asset.created_at", read_only=True)
     updated_at = serializers.DateTimeField(source="asset.updated_at", read_only=True)
-    created_by = serializers.UUIDField(
-        source="asset.created_by_id", read_only=True, allow_null=True
-    )
+    created_by = serializers.UUIDField(source="asset.created_by_id", read_only=True, allow_null=True)
 
     class Meta:
         model = RequirementAttachment
@@ -99,13 +109,152 @@ class RequirementAttachmentDetailSerializer(serializers.ModelSerializer):
         ]
 
 
-class UserRequirementListSerializer(BaseSerializer):
+class RequirementReviewRecordSerializer(BaseSerializer):
+    reviewer_detail = serializers.SerializerMethodField()
+
+    class Meta:
+        model = RequirementReviewRecord
+        fields = [
+            "id",
+            "opinion",
+            "reason",
+            "reviewer_detail",
+            "created_at",
+        ]
+        read_only_fields = fields
+
+    def get_reviewer_detail(self, obj):
+        return UserLiteSerializer(obj.assignment.reviewer).data
+
+
+class RequirementChangeReviewerSerializer(BaseSerializer):
+    reviewer_detail = UserLiteSerializer(source="reviewer", read_only=True)
+    records = RequirementReviewRecordSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = RequirementChangeReviewer
+        fields = [
+            "id",
+            "reviewer",
+            "reviewer_detail",
+            "latest_opinion",
+            "latest_reason",
+            "reviewed_at",
+            "records",
+        ]
+        read_only_fields = fields
+
+
+class RequirementChangeSerializer(BaseSerializer):
+    module_detail = RequirementModuleLiteSerializer(source="module", read_only=True)
+    parent_detail = RequirementParentLiteSerializer(source="parent", read_only=True)
+    assignee_detail = UserLiteSerializer(source="assignee", read_only=True)
+    proposed_reviewer_details = UserLiteSerializer(source="proposed_reviewers", many=True, read_only=True)
+    attachments = RequirementAttachmentDetailSerializer(source="change_attachments", many=True, read_only=True)
+    reviewer_assignments = RequirementChangeReviewerSerializer(many=True, read_only=True)
+    base_version_number = serializers.IntegerField(source="base_version.version", read_only=True, allow_null=True)
+    diff = serializers.SerializerMethodField()
+    review_progress = serializers.SerializerMethodField()
+    can_review = serializers.SerializerMethodField()
+    requirement_type = serializers.CharField(source="requirement.type", read_only=True)
+    requirement_status = serializers.CharField(source="requirement.status", read_only=True)
+    requirement_current_version = serializers.IntegerField(source="requirement.current_version", read_only=True)
+
+    class Meta:
+        model = RequirementChange
+        fields = [
+            "id",
+            "requirement",
+            "requirement_type",
+            "requirement_status",
+            "requirement_current_version",
+            "sequence",
+            "kind",
+            "status",
+            "base_version",
+            "base_version_number",
+            "base_snapshot",
+            "proposal_snapshot",
+            "name",
+            "priority",
+            "module",
+            "module_detail",
+            "parent",
+            "parent_detail",
+            "assignee",
+            "assignee_detail",
+            "proposed_reviewers",
+            "proposed_reviewer_details",
+            "description_html",
+            "acceptance_criteria_html",
+            "attachments",
+            "reviewer_assignments",
+            "diff",
+            "review_progress",
+            "can_review",
+            "created_at",
+            "created_by",
+            "completed_at",
+        ]
+        read_only_fields = fields
+
+    def get_diff(self, obj):
+        return build_requirement_diff(obj.base_snapshot, obj.proposal_snapshot)
+
+    def get_review_progress(self, obj):
+        assignments = list(obj.reviewer_assignments.all())
+        approved = len([item for item in assignments if item.latest_opinion == RequirementReviewOpinion.APPROVED])
+        rejected = len([item for item in assignments if item.latest_opinion == RequirementReviewOpinion.REJECTED])
+        clarification = len(
+            [item for item in assignments if item.latest_opinion == RequirementReviewOpinion.NEEDS_CLARIFICATION]
+        )
+        return {
+            "total": len(assignments),
+            "approved": approved,
+            "rejected": rejected,
+            "needs_clarification": clarification,
+            "pending": len(assignments) - approved - rejected,
+        }
+
+    def get_can_review(self, obj):
+        request = self.context.get("request")
+        if not request or obj.status != RequirementChangeStatus.PENDING:
+            return False
+        assignment = next(
+            (item for item in obj.reviewer_assignments.all() if str(item.reviewer_id) == str(request.user.id)),
+            None,
+        )
+        return bool(
+            assignment
+            and assignment.latest_opinion not in {RequirementReviewOpinion.APPROVED, RequirementReviewOpinion.REJECTED}
+        )
+
+
+class RequirementChangeSummarySerializer(RequirementChangeSerializer):
+    class Meta(RequirementChangeSerializer.Meta):
+        fields = [
+            "id",
+            "sequence",
+            "kind",
+            "status",
+            "name",
+            "review_progress",
+            "can_review",
+            "created_at",
+            "created_by",
+            "completed_at",
+        ]
+        read_only_fields = fields
+
+
+class RequirementListSerializer(BaseSerializer):
     module_detail = RequirementModuleLiteSerializer(source="module", read_only=True)
     parent_detail = RequirementParentLiteSerializer(source="parent", read_only=True)
     assignee_detail = UserLiteSerializer(source="assignee", read_only=True)
     reviewer_details = UserLiteSerializer(source="reviewers", many=True, read_only=True)
     attachment_count = serializers.IntegerField(read_only=True, default=0)
     sub_requirements_count = serializers.IntegerField(read_only=True, default=0)
+    active_change = serializers.SerializerMethodField()
 
     class Meta:
         model = Requirement
@@ -115,6 +264,8 @@ class UserRequirementListSerializer(BaseSerializer):
             "name",
             "type",
             "priority",
+            "status",
+            "current_version",
             "module",
             "module_detail",
             "parent",
@@ -125,6 +276,7 @@ class UserRequirementListSerializer(BaseSerializer):
             "reviewer_details",
             "attachment_count",
             "sub_requirements_count",
+            "active_change",
             "created_at",
             "updated_at",
             "created_by",
@@ -132,41 +284,47 @@ class UserRequirementListSerializer(BaseSerializer):
         ]
         read_only_fields = fields
 
+    def get_active_change(self, obj):
+        changes = getattr(obj, "prefetched_pending_changes", None)
+        change = changes[0] if changes else None
+        if change is None:
+            return None
+        return RequirementChangeSummarySerializer(change, context=self.context).data
 
-class UserRequirementDetailSerializer(UserRequirementListSerializer):
-    attachments = RequirementAttachmentDetailSerializer(
-        source="requirement_attachments", many=True, read_only=True
-    )
 
-    class Meta(UserRequirementListSerializer.Meta):
-        fields = UserRequirementListSerializer.Meta.fields + [
+class RequirementDetailSerializer(RequirementListSerializer):
+    attachments = RequirementAttachmentDetailSerializer(source="requirement_attachments", many=True, read_only=True)
+    latest_change = serializers.SerializerMethodField()
+
+    class Meta(RequirementListSerializer.Meta):
+        fields = RequirementListSerializer.Meta.fields + [
             "description_html",
             "acceptance_criteria_html",
             "attachments",
+            "latest_change",
         ]
         read_only_fields = fields
 
+    def get_latest_change(self, obj):
+        changes = getattr(obj, "prefetched_changes", None)
+        change = changes[0] if changes else obj.changes.first()
+        if change is None:
+            return None
+        return RequirementChangeSerializer(change, context=self.context).data
 
-class UserRequirementWriteSerializer(BaseSerializer):
+
+class RequirementWriteSerializer(BaseSerializer):
     module = serializers.PrimaryKeyRelatedField(
         queryset=RequirementModule.objects.all(), required=False, allow_null=True
     )
-    parent = serializers.PrimaryKeyRelatedField(
-        queryset=Requirement.objects.all(), required=False, allow_null=True
-    )
-    assignee = serializers.PrimaryKeyRelatedField(
-        queryset=User.objects.all(), required=False, allow_null=True
-    )
+    parent = serializers.PrimaryKeyRelatedField(queryset=Requirement.objects.all(), required=False, allow_null=True)
+    assignee = serializers.PrimaryKeyRelatedField(queryset=User.objects.all(), required=False, allow_null=True)
     reviewers = serializers.PrimaryKeyRelatedField(
-        queryset=User.objects.all(), many=True, required=False
+        queryset=User.objects.all(), many=True, required=True, allow_empty=False
     )
     description_html = serializers.CharField(required=False, allow_blank=True, allow_null=True)
-    acceptance_criteria_html = serializers.CharField(
-        required=False, allow_blank=True, allow_null=True
-    )
-    attachment_ids = serializers.ListField(
-        child=serializers.UUIDField(), required=False, write_only=True
-    )
+    acceptance_criteria_html = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    attachment_ids = serializers.ListField(child=serializers.UUIDField(), required=False, write_only=True)
 
     class Meta:
         model = Requirement
@@ -211,8 +369,11 @@ class UserRequirementWriteSerializer(BaseSerializer):
         if value is None:
             return None
         product = self.context["product"]
-        if value.product_id != product.id or value.type != Requirement.RequirementType.USER:
+        requirement_type = self.instance.type if self.instance else self.context["requirement_type"]
+        if value.product_id != product.id:
             raise serializers.ValidationError("REQUIREMENT_PARENT_PRODUCT_MISMATCH")
+        if requirement_type == Requirement.RequirementType.USER and value.type != Requirement.RequirementType.USER:
+            raise serializers.ValidationError("REQUIREMENT_PARENT_TYPE_MISMATCH")
         if self.instance and value.id == self.instance.id:
             raise serializers.ValidationError("REQUIREMENT_PARENT_SELF_REFERENCE")
 
@@ -225,23 +386,21 @@ class UserRequirementWriteSerializer(BaseSerializer):
             ancestor = ancestor.parent
         return value
 
-    def _is_active_workspace_member(self, user):
-        return WorkspaceMember.objects.filter(
-            workspace=self.context["product"].workspace,
-            member=user,
-            is_active=True,
-        ).exists()
+    def _is_eligible_member(self, user):
+        return is_eligible_requirement_member(self.context["product"], user)
 
     def validate_assignee(self, value):
-        if value and not self._is_active_workspace_member(value):
+        if value and not self._is_eligible_member(value):
             raise serializers.ValidationError("REQUIREMENT_ASSIGNEE_INVALID")
         return value
 
     def validate_reviewers(self, value):
-        invalid = [user for user in value if not self._is_active_workspace_member(user)]
+        if not value:
+            raise serializers.ValidationError("REQUIREMENT_REVIEWERS_REQUIRED")
+        invalid = [user for user in value if not self._is_eligible_member(user)]
         if invalid:
             raise serializers.ValidationError("REQUIREMENT_REVIEWERS_INVALID")
-        return value
+        return list(dict.fromkeys(value))
 
     def validate_attachment_ids(self, value):
         asset_ids = list(dict.fromkeys(value))
@@ -252,9 +411,7 @@ class UserRequirementWriteSerializer(BaseSerializer):
         request = self.context["request"]
         current_ids = set()
         if self.instance:
-            current_ids = set(
-                self.instance.requirement_attachments.values_list("asset_id", flat=True)
-            )
+            current_ids = set(self.instance.requirement_attachments.values_list("asset_id", flat=True))
 
         assets = FileAsset.objects.filter(
             id__in=asset_ids,
@@ -269,67 +426,121 @@ class UserRequirementWriteSerializer(BaseSerializer):
             raise serializers.ValidationError("REQUIREMENT_ATTACHMENTS_INVALID")
 
         new_assets = assets.exclude(id__in=current_ids)
-        if new_assets.exclude(created_by=request.user).exists():
+        reusable_asset_ids = set()
+        if self.instance:
+            reusable_asset_ids.update(
+                FileAsset.objects.filter(
+                    Q(requirement_change_attachments__change__requirement=self.instance)
+                    | Q(requirement_version_attachments__version__requirement=self.instance),
+                    id__in=new_assets.values("id"),
+                ).values_list("id", flat=True)
+            )
+        if new_assets.exclude(created_by=request.user).exclude(id__in=reusable_asset_ids).exists():
             raise serializers.ValidationError("REQUIREMENT_ATTACHMENTS_NOT_OWNED")
-        if RequirementAttachment.objects.filter(asset_id__in=new_assets.values("id")).exists():
+        bound_requirements = RequirementAttachment.objects.filter(asset_id__in=new_assets.values("id"))
+        if self.instance:
+            bound_requirements = bound_requirements.exclude(requirement=self.instance)
+        if bound_requirements.exists():
+            raise serializers.ValidationError("REQUIREMENT_ATTACHMENTS_ALREADY_BOUND")
+        foreign_changes = RequirementChangeAttachment.objects.filter(asset_id__in=new_assets.values("id"))
+        if self.instance:
+            foreign_changes = foreign_changes.exclude(change__requirement=self.instance)
+        if foreign_changes.exists():
             raise serializers.ValidationError("REQUIREMENT_ATTACHMENTS_ALREADY_BOUND")
         return asset_ids
 
-    def _sync_attachments(self, requirement, attachment_ids):
-        if attachment_ids is empty:
-            return
-
-        requested_ids = set(attachment_ids)
-        current_relations = requirement.requirement_attachments.all()
-        removed_relations = current_relations.exclude(asset_id__in=requested_ids)
-        removed_ids = list(removed_relations.values_list("asset_id", flat=True))
-        if removed_ids:
-            now = timezone.now()
-            removed_relations.update(deleted_at=now, updated_by=self.context["request"].user)
-            FileAsset.objects.filter(id__in=removed_ids).update(
-                is_deleted=True, deleted_at=now, updated_by=self.context["request"].user
-            )
-
-        existing_ids = set(
-            requirement.requirement_attachments.filter(asset_id__in=requested_ids).values_list(
-                "asset_id", flat=True
-            )
-        )
-        request = self.context["request"]
-        for asset_id in requested_ids - existing_ids:
-            RequirementAttachment.objects.create(
-                requirement=requirement,
-                asset_id=asset_id,
-                created_by=request.user,
-            )
-        FileAsset.objects.filter(id__in=requested_ids).update(
-            entity_identifier=str(requirement.id)
-        )
-
     @transaction.atomic
     def create(self, validated_data):
-        reviewers = validated_data.pop("reviewers", [])
-        attachment_ids = validated_data.pop("attachment_ids", [])
         request = self.context["request"]
+        reviewers = validated_data["reviewers"]
+        attachment_ids = validated_data.get("attachment_ids", [])
         requirement = Requirement(
             product=self.context["product"],
-            type=Requirement.RequirementType.USER,
-            **validated_data,
+            type=self.context["requirement_type"],
+            name=validated_data["name"],
+            priority=validated_data.get("priority", "none"),
+            module=validated_data.get("module"),
+            parent=validated_data.get("parent"),
+            assignee=validated_data.get("assignee"),
+            description_html=validated_data.get("description_html"),
+            acceptance_criteria_html=validated_data.get("acceptance_criteria_html"),
+            status=Requirement.Status.IN_REVIEW,
+            current_version=0,
         )
         requirement.save(created_by_id=request.user.id)
-        requirement.reviewers.set(reviewers)
-        self._sync_attachments(requirement, attachment_ids)
+        create_requirement_change(
+            requirement,
+            {**validated_data, "reviewers": reviewers, "attachment_ids": attachment_ids},
+            request.user,
+            kind=RequirementChangeKind.INITIAL,
+        )
         return requirement
 
     @transaction.atomic
     def update(self, instance, validated_data):
-        reviewers = validated_data.pop("reviewers", empty)
-        attachment_ids = validated_data.pop("attachment_ids", empty)
-        for field, value in validated_data.items():
-            setattr(instance, field, value)
-        instance.type = Requirement.RequirementType.USER
-        instance.save()
-        if reviewers is not empty:
-            instance.reviewers.set(reviewers)
-        self._sync_attachments(instance, attachment_ids)
+        pending_change = (
+            instance.changes.filter(status=RequirementChangeStatus.PENDING)
+            .prefetch_related("proposed_reviewers", "change_attachments")
+            .first()
+        )
+        if pending_change:
+            proposed_data = proposal_data_from_change(pending_change)
+        else:
+            proposed_data = {
+                "name": instance.name,
+                "priority": instance.priority,
+                "module": instance.module,
+                "parent": instance.parent,
+                "assignee": instance.assignee,
+                "reviewers": list(instance.reviewers.all()),
+                "description_html": instance.description_html,
+                "acceptance_criteria_html": instance.acceptance_criteria_html,
+                "attachment_ids": list(instance.requirement_attachments.values_list("asset_id", flat=True)),
+            }
+        proposed_data.update(validated_data)
+        self.change = create_requirement_change(
+            instance,
+            proposed_data,
+            self.context["request"].user,
+            kind=self.context.get("change_kind", RequirementChangeKind.CHANGE),
+        )
         return instance
+
+
+class RequirementReviewActionSerializer(serializers.Serializer):
+    opinion = serializers.ChoiceField(choices=RequirementReviewOpinion.choices)
+    reason = serializers.CharField(required=False, allow_blank=True, default="")
+
+    def validate(self, attrs):
+        attrs["reason"] = str(attrs.get("reason") or "").strip()
+        if attrs["opinion"] == RequirementReviewOpinion.REJECTED and not attrs["reason"]:
+            raise serializers.ValidationError({"reason": "REQUIREMENT_REJECT_REASON_REQUIRED"})
+        return attrs
+
+
+class RequirementVersionListSerializer(BaseSerializer):
+    change_id = serializers.UUIDField(source="source_change_id", read_only=True, allow_null=True)
+
+    class Meta:
+        model = RequirementVersion
+        fields = ["id", "version", "source", "change_id", "created_at", "created_by"]
+        read_only_fields = fields
+
+
+class RequirementVersionDetailSerializer(RequirementVersionListSerializer):
+    review = serializers.SerializerMethodField()
+
+    class Meta(RequirementVersionListSerializer.Meta):
+        fields = RequirementVersionListSerializer.Meta.fields + ["snapshot", "review"]
+        read_only_fields = fields
+
+    def get_review(self, obj):
+        if obj.source_change is None:
+            return None
+        return RequirementChangeSerializer(obj.source_change, context=self.context).data
+
+
+# Backward-compatible imports for code that still uses the previous user-only names.
+UserRequirementListSerializer = RequirementListSerializer
+UserRequirementDetailSerializer = RequirementDetailSerializer
+UserRequirementWriteSerializer = RequirementWriteSerializer

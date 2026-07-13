@@ -36,6 +36,17 @@ export type TProductUpdatePayload = Partial<Omit<TProductCreatePayload, "descrip
   owner?: string | null;
 };
 
+export type TProductMember = {
+  id: string;
+  product: string;
+  member: string;
+  member_detail: IUserLite;
+  created_at: string;
+  created_by: string | null;
+};
+
+export type TProductEligibleMember = IUserLite & { is_product_member: boolean };
+
 export class ProductService extends APIService {
   constructor() {
     super(API_BASE_URL);
@@ -79,6 +90,38 @@ export class ProductService extends APIService {
 
   async deleteProduct(workspaceSlug: string, productId: string): Promise<void> {
     return this.delete(`/api/workspaces/${workspaceSlug}/products/${productId}/`)
+      .then(() => undefined)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async getProductMembers(workspaceSlug: string, productId: string): Promise<TProductMember[]> {
+    return this.get(`/api/workspaces/${workspaceSlug}/products/${productId}/members/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async getEligibleProductMembers(workspaceSlug: string, productId: string): Promise<TProductEligibleMember[]> {
+    return this.get(`/api/workspaces/${workspaceSlug}/products/${productId}/eligible-members/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async addProductMember(workspaceSlug: string, productId: string, member: string): Promise<TProductMember> {
+    return this.post(`/api/workspaces/${workspaceSlug}/products/${productId}/members/`, { member })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async removeProductMember(workspaceSlug: string, productId: string, memberId: string): Promise<void> {
+    return this.delete(`/api/workspaces/${workspaceSlug}/products/${productId}/members/${memberId}/`)
       .then(() => undefined)
       .catch((error) => {
         throw error?.response?.data;

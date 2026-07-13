@@ -166,7 +166,7 @@ export const ProductNavigation = observer(function ProductNavigation(props: TPro
                     <TabNavigationList className="h-full">
                       {PRODUCT_TAB_ITEMS.map((item) => {
                         const href = `/${workspaceSlug}/products/${productId}/${item.key}`;
-                        const isActive = pathname === href || pathname === `${href}/`;
+                        const isActive = pathname === href || pathname?.startsWith(`${href}/`);
 
                         return (
                           <div key={item.key} className="relative flex h-full items-center">

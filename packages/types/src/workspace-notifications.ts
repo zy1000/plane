@@ -28,8 +28,8 @@ export type TNotificationIssueLite = {
 };
 
 export type TNotificationData = {
-  issue: TNotificationIssueLite | undefined;
-  issue_activity: {
+  issue?: TNotificationIssueLite;
+  issue_activity?: {
     id: string | undefined;
     actor: string | undefined;
     field: string | undefined;
@@ -40,6 +40,15 @@ export type TNotificationData = {
   };
   /** 工作流审批申请通知专用，指向 IssueTransitionRecord 的 ID */
   transition_record_id?: string;
+  requirement?: {
+    id: string;
+    name: string;
+    type: "user" | "development";
+    product_id: string;
+  };
+  requirement_change_id?: string;
+  event?: "requested" | "reset" | "clarification" | "approved" | "rejected";
+  target_url?: string;
 };
 
 export type TNotification = {

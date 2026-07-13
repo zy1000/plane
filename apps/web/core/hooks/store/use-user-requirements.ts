@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import {
   RequirementService,
+  type TRequirementType,
   type TUserRequirementDetail,
   type TUserRequirementListParams,
   type TUserRequirementPayload,
@@ -8,7 +9,11 @@ import {
 
 const requirementService = new RequirementService();
 
-export const useUserRequirements = (workspaceSlug?: string, productId?: string) => {
+export const useUserRequirements = (
+  workspaceSlug?: string,
+  productId?: string,
+  requirementType: TRequirementType = "user"
+) => {
   const [requirements, setRequirements] = useState<
     Awaited<ReturnType<typeof requirementService.getUserRequirements>>["data"]
   >([]);
@@ -24,7 +29,12 @@ export const useUserRequirements = (workspaceSlug?: string, productId?: string) 
       setIsLoading(true);
       setError(null);
       try {
-        const response = await requirementService.getUserRequirements(workspaceSlug, productId, params);
+        const response = await requirementService.getUserRequirements(
+          workspaceSlug,
+          productId,
+          params,
+          requirementType
+        );
         setRequirements(response.data);
         setTotalCount(response.count);
         return response;
@@ -35,7 +45,7 @@ export const useUserRequirements = (workspaceSlug?: string, productId?: string) 
         setIsLoading(false);
       }
     },
-    [productId, workspaceSlug]
+    [productId, requirementType, workspaceSlug]
   );
 
   const fetchRequirement = useCallback(
@@ -43,20 +53,20 @@ export const useUserRequirements = (workspaceSlug?: string, productId?: string) 
       if (!workspaceSlug || !productId) return undefined;
       setIsDetailLoading(true);
       try {
-        return await requirementService.getUserRequirement(workspaceSlug, productId, requirementId);
+        return await requirementService.getUserRequirement(workspaceSlug, productId, requirementId, requirementType);
       } finally {
         setIsDetailLoading(false);
       }
     },
-    [productId, workspaceSlug]
+    [productId, requirementType, workspaceSlug]
   );
 
   const fetchParentOptions = useCallback(
     async (search?: string, exclude?: string) => {
       if (!workspaceSlug || !productId) return [];
-      return requirementService.getParentOptions(workspaceSlug, productId, search, exclude);
+      return requirementService.getParentOptions(workspaceSlug, productId, search, exclude, requirementType);
     },
-    [productId, workspaceSlug]
+    [productId, requirementType, workspaceSlug]
   );
 
   const createRequirement = useCallback(
@@ -64,7 +74,12 @@ export const useUserRequirements = (workspaceSlug?: string, productId?: string) 
       if (!workspaceSlug || !productId) throw new Error("缺少产品参数");
       setIsMutating(true);
       try {
-        const response = await requirementService.createUserRequirement(workspaceSlug, productId, data);
+        const response = await requirementService.createUserRequirement(
+          workspaceSlug,
+          productId,
+          data,
+          requirementType
+        );
         setRequirements((current) => [response, ...current.filter((item) => item.id !== response.id)]);
         setTotalCount((count) => count + 1);
         return response;
@@ -72,7 +87,7 @@ export const useUserRequirements = (workspaceSlug?: string, productId?: string) 
         setIsMutating(false);
       }
     },
-    [productId, workspaceSlug]
+    [productId, requirementType, workspaceSlug]
   );
 
   const updateRequirement = useCallback(
@@ -80,14 +95,20 @@ export const useUserRequirements = (workspaceSlug?: string, productId?: string) 
       if (!workspaceSlug || !productId) throw new Error("缺少产品参数");
       setIsMutating(true);
       try {
-        const response = await requirementService.updateUserRequirement(workspaceSlug, productId, requirementId, data);
+        await requirementService.updateUserRequirement(workspaceSlug, productId, requirementId, data, requirementType);
+        const response = await requirementService.getUserRequirement(
+          workspaceSlug,
+          productId,
+          requirementId,
+          requirementType
+        );
         setRequirements((current) => current.map((item) => (item.id === response.id ? response : item)));
         return response;
       } finally {
         setIsMutating(false);
       }
     },
-    [productId, workspaceSlug]
+    [productId, requirementType, workspaceSlug]
   );
 
   const deleteRequirement = useCallback(
@@ -95,13 +116,13 @@ export const useUserRequirements = (workspaceSlug?: string, productId?: string) 
       if (!workspaceSlug || !productId) throw new Error("缺少产品参数");
       setIsMutating(true);
       try {
-        await requirementService.deleteUserRequirement(workspaceSlug, productId, requirementId);
+        await requirementService.deleteUserRequirement(workspaceSlug, productId, requirementId, requirementType);
         setRequirements((current) => current.filter((item) => item.id !== requirementId));
       } finally {
         setIsMutating(false);
       }
     },
-    [productId, workspaceSlug]
+    [productId, requirementType, workspaceSlug]
   );
 
   return useMemo(

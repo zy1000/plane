@@ -1,9 +1,13 @@
 import { useCallback, useMemo, useState } from "react";
-import { RequirementService, type TRequirementModule } from "@/services/requirement.service";
+import { RequirementService, type TRequirementModule, type TRequirementType } from "@/services/requirement.service";
 
 const requirementService = new RequirementService();
 
-export const useRequirementModules = (workspaceSlug?: string, productId?: string) => {
+export const useRequirementModules = (
+  workspaceSlug?: string,
+  productId?: string,
+  requirementType: TRequirementType = "user"
+) => {
   const [modules, setModules] = useState<TRequirementModule[]>([]);
   const [total, setTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
@@ -13,14 +17,14 @@ export const useRequirementModules = (workspaceSlug?: string, productId?: string
     if (!workspaceSlug || !productId) return undefined;
     setIsLoading(true);
     try {
-      const response = await requirementService.getModules(workspaceSlug, productId);
+      const response = await requirementService.getModules(workspaceSlug, productId, requirementType);
       setModules(response.modules);
       setTotal(response.total);
       return response;
     } finally {
       setIsLoading(false);
     }
-  }, [productId, workspaceSlug]);
+  }, [productId, requirementType, workspaceSlug]);
 
   const createModule = useCallback(
     async (name: string) => {

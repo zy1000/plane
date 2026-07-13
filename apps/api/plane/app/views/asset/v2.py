@@ -18,7 +18,19 @@ from rest_framework.permissions import AllowAny
 
 # Module imports
 from ..base import BaseAPIView
-from plane.db.models import FileAsset, Workspace, Project, Product, User, Cycle, Release, TestCase
+from plane.db.models import (
+    Cycle,
+    FileAsset,
+    Product,
+    Project,
+    Release,
+    RequirementAttachment,
+    RequirementChangeAttachment,
+    RequirementVersionAttachment,
+    TestCase,
+    User,
+    Workspace,
+)
 from plane.settings.storage import S3Storage
 from plane.app.permissions import (
     allow_permission,
@@ -90,9 +102,7 @@ class UserAssetsV2Endpoint(BaseAPIView):
             # Save the new avatar
             user.avatar_asset_id = asset_id
             user.save()
-            invalidate_cache_directly(
-                path="/api/users/me/", url_params=False, user=True, request=request
-            )
+            invalidate_cache_directly(path="/api/users/me/", url_params=False, user=True, request=request)
             invalidate_cache_directly(
                 path="/api/users/me/settings/",
                 url_params=False,
@@ -110,9 +120,7 @@ class UserAssetsV2Endpoint(BaseAPIView):
             # Save the new cover image
             user.cover_image_asset_id = asset_id
             user.save()
-            invalidate_cache_directly(
-                path="/api/users/me/", url_params=False, user=True, request=request
-            )
+            invalidate_cache_directly(path="/api/users/me/", url_params=False, user=True, request=request)
             invalidate_cache_directly(
                 path="/api/users/me/settings/",
                 url_params=False,
@@ -128,9 +136,7 @@ class UserAssetsV2Endpoint(BaseAPIView):
             user = User.objects.get(id=asset.user_id)
             user.avatar_asset_id = None
             user.save()
-            invalidate_cache_directly(
-                path="/api/users/me/", url_params=False, user=True, request=request
-            )
+            invalidate_cache_directly(path="/api/users/me/", url_params=False, user=True, request=request)
             invalidate_cache_directly(
                 path="/api/users/me/settings/",
                 url_params=False,
@@ -143,9 +149,7 @@ class UserAssetsV2Endpoint(BaseAPIView):
             user = User.objects.get(id=asset.user_id)
             user.cover_image_asset_id = None
             user.save()
-            invalidate_cache_directly(
-                path="/api/users/me/", url_params=False, user=True, request=request
-            )
+            invalidate_cache_directly(path="/api/users/me/", url_params=False, user=True, request=request)
             invalidate_cache_directly(
                 path="/api/users/me/settings/",
                 url_params=False,
@@ -198,9 +202,7 @@ class UserAssetsV2Endpoint(BaseAPIView):
             entity_type=entity_type,
         )
 
-        presigned_url = presigned_post_for_asset(
-            request=request, asset=asset, file_type=type, file_size=size_limit
-        )
+        presigned_url = presigned_post_for_asset(request=request, asset=asset, file_type=type, file_size=size_limit)
         # Return the presigned URL
         return Response(
             {
@@ -237,9 +239,7 @@ class UserAssetsV2Endpoint(BaseAPIView):
         asset.is_deleted = True
         asset.deleted_at = timezone.now()
         # get the entity and save the asset id for the request field
-        self.entity_asset_delete(
-            entity_type=asset.entity_type, asset=asset, request=request
-        )
+        self.entity_asset_delete(entity_type=asset.entity_type, asset=asset, request=request)
         asset.save(update_fields=["is_deleted", "deleted_at"])
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -304,11 +304,7 @@ class WorkspaceFileAssetEndpoint(BaseAPIView):
         if not product_id:
             return can_create_product(request.user, slug)
 
-        product = (
-            Product.objects.filter(id=product_id, workspace__slug=slug)
-            .select_related("workspace")
-            .first()
-        )
+        product = Product.objects.filter(id=product_id, workspace__slug=slug).select_related("workspace").first()
         if product is None:
             return False
         return (
@@ -341,18 +337,14 @@ class WorkspaceFileAssetEndpoint(BaseAPIView):
             workspace.logo = ""
             workspace.logo_asset_id = asset_id
             workspace.save()
-            invalidate_cache_directly(
-                path="/api/workspaces/", url_params=False, user=False, request=request
-            )
+            invalidate_cache_directly(path="/api/workspaces/", url_params=False, user=False, request=request)
             invalidate_cache_directly(
                 path="/api/users/me/workspaces/",
                 url_params=False,
                 user=True,
                 request=request,
             )
-            invalidate_cache_directly(
-                path="/api/instances/", url_params=False, user=False, request=request
-            )
+            invalidate_cache_directly(path="/api/instances/", url_params=False, user=False, request=request)
             return
 
         # Project Cover
@@ -379,18 +371,14 @@ class WorkspaceFileAssetEndpoint(BaseAPIView):
                 return
             workspace.logo_asset_id = None
             workspace.save()
-            invalidate_cache_directly(
-                path="/api/workspaces/", url_params=False, user=False, request=request
-            )
+            invalidate_cache_directly(path="/api/workspaces/", url_params=False, user=False, request=request)
             invalidate_cache_directly(
                 path="/api/users/me/workspaces/",
                 url_params=False,
                 user=True,
                 request=request,
             )
-            invalidate_cache_directly(
-                path="/api/instances/", url_params=False, user=False, request=request
-            )
+            invalidate_cache_directly(path="/api/instances/", url_params=False, user=False, request=request)
             return
         # Project Cover
         elif entity_type == FileAsset.EntityTypeContext.PROJECT_COVER:
@@ -451,16 +439,10 @@ class WorkspaceFileAssetEndpoint(BaseAPIView):
         workspace = Workspace.objects.get(slug=slug)
 
         # PROJECT_COVER 兼容旧请求：前端通常把 project_id 放在 entity_identifier。
-        if (
-            entity_type == FileAsset.EntityTypeContext.PROJECT_COVER
-            and not project_scope_id
-            and entity_identifier
-        ):
+        if entity_type == FileAsset.EntityTypeContext.PROJECT_COVER and not project_scope_id and entity_identifier:
             project_scope_id = str(entity_identifier)
 
-        entity_id_fields = self.get_entity_id_field(
-            entity_type=entity_type, entity_id=entity_identifier
-        )
+        entity_id_fields = self.get_entity_id_field(entity_type=entity_type, entity_id=entity_identifier)
         if project_scope_id:
             entity_id_fields["project_id"] = project_scope_id
 
@@ -474,9 +456,7 @@ class WorkspaceFileAssetEndpoint(BaseAPIView):
             **entity_id_fields,
         )
 
-        presigned_url = presigned_post_for_asset(
-            request=request, asset=asset, file_type=type, file_size=size_limit
-        )
+        presigned_url = presigned_post_for_asset(request=request, asset=asset, file_type=type, file_size=size_limit)
         # Return the presigned URL
         return Response(
             {
@@ -535,9 +515,7 @@ class WorkspaceFileAssetEndpoint(BaseAPIView):
         asset.is_deleted = True
         asset.deleted_at = timezone.now()
         # get the entity and save the asset id for the request field
-        self.entity_asset_delete(
-            entity_type=asset.entity_type, asset=asset, request=request
-        )
+        self.entity_asset_delete(entity_type=asset.entity_type, asset=asset, request=request)
         asset.save(update_fields=["is_deleted", "deleted_at"])
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -573,11 +551,7 @@ class WorkspaceFileAssetEndpoint(BaseAPIView):
 
 class ProductAssetEndpoint(BaseAPIView):
     def get_product(self, slug, product_id):
-        return (
-            Product.objects.filter(id=product_id, workspace__slug=slug)
-            .select_related("workspace")
-            .first()
-        )
+        return Product.objects.filter(id=product_id, workspace__slug=slug).select_related("workspace").first()
 
     def get_asset(self, slug, product_id, asset_id):
         return FileAsset.objects.filter(
@@ -591,9 +565,7 @@ class ProductAssetEndpoint(BaseAPIView):
         product = self.get_product(slug, product_id)
         if product is None:
             return Response({"error": "Product not found."}, status=status.HTTP_404_NOT_FOUND)
-        entity_type = request.data.get(
-            "entity_type", FileAsset.EntityTypeContext.PRODUCT_DESCRIPTION
-        )
+        entity_type = request.data.get("entity_type", FileAsset.EntityTypeContext.PRODUCT_DESCRIPTION)
         if entity_type not in PRODUCT_ASSET_TYPES:
             return Response(
                 {"error": "Invalid product asset type."},
@@ -667,6 +639,19 @@ class ProductAssetEndpoint(BaseAPIView):
         if not _can_write_product_asset(request.user, product, asset.entity_type):
             return Response({"error": "You do not have permission."}, status=status.HTTP_403_FORBIDDEN)
 
+        if asset.entity_type == FileAsset.EntityTypeContext.REQUIREMENT_ATTACHMENT and (
+            RequirementAttachment.objects.filter(asset=asset).exists()
+            or RequirementChangeAttachment.objects.filter(asset=asset).exists()
+            or RequirementVersionAttachment.objects.filter(asset=asset).exists()
+        ):
+            return Response(
+                {
+                    "error": "该附件已被需求、待评审变更或历史版本引用，不能直接删除。",
+                    "code": "REQUIREMENT_ASSET_IN_USE",
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
         asset.is_deleted = True
         asset.deleted_at = timezone.now()
         asset.save(update_fields=["is_deleted", "deleted_at"])
@@ -675,11 +660,7 @@ class ProductAssetEndpoint(BaseAPIView):
 
 class ProductAssetDownloadEndpoint(BaseAPIView):
     def get(self, request, slug, product_id, asset_id):
-        product = (
-            Product.objects.filter(id=product_id, workspace__slug=slug)
-            .select_related("workspace")
-            .first()
-        )
+        product = Product.objects.filter(id=product_id, workspace__slug=slug).select_related("workspace").first()
         asset = FileAsset.objects.filter(
             id=asset_id,
             product_id=product_id,
@@ -700,16 +681,13 @@ class ProductAssetDownloadEndpoint(BaseAPIView):
 
 
 class WorkspaceBulkAssetEndpoint(BaseAPIView):
-
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
     def post(self, request, slug, entity_id):
         asset_ids = request.data.get("asset_ids", [])
 
         # Check if the asset ids are provided
         if not asset_ids:
-            return Response(
-                {"error": "No asset ids provided."}, status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({"error": "No asset ids provided."}, status=status.HTTP_400_BAD_REQUEST)
 
         # get the asset id
         assets = FileAsset.objects.filter(id__in=asset_ids, workspace__slug=slug)
@@ -732,9 +710,7 @@ class WorkspaceBulkAssetEndpoint(BaseAPIView):
                 pass
 
             # case 绑定后把 _temp 节点下的对象迁移到正式路径（resolver 会重新算 path）
-            refreshed_assets = list(
-                FileAsset.objects.filter(id__in=asset_ids, workspace__slug=slug)
-            )
+            refreshed_assets = list(FileAsset.objects.filter(id__in=asset_ids, workspace__slug=slug))
             _rebind_assets_to_final_path(refreshed_assets, request=request)
 
         return Response(status=status.HTTP_204_NO_CONTENT)
@@ -794,16 +770,12 @@ class AssetRestoreEndpoint(BaseAPIView):
                         {"error": "Asset not found."},
                         status=status.HTTP_404_NOT_FOUND,
                     )
-                if not _can_write_product_asset(
-                    request.user, product, asset.entity_type
-                ):
+                if not _can_write_product_asset(request.user, product, asset.entity_type):
                     return Response(
                         {"error": "You do not have permission."},
                         status=status.HTTP_403_FORBIDDEN,
                     )
-            elif asset.created_by_id != request.user.id or not can_create_product(
-                request.user, slug
-            ):
+            elif asset.created_by_id != request.user.id or not can_create_product(request.user, slug):
                 return Response(
                     {"error": "You do not have permission."},
                     status=status.HTTP_403_FORBIDDEN,
@@ -826,14 +798,10 @@ class ProjectAssetEndpoint(BaseAPIView):
         except (TypeError, ValueError, AttributeError):
             return entity_type
 
-        if Cycle.objects.filter(
-            id=related_entity_id, workspace__slug=slug, project_id=project_id
-        ).exists():
+        if Cycle.objects.filter(id=related_entity_id, workspace__slug=slug, project_id=project_id).exists():
             return FileAsset.EntityTypeContext.CYCLE_COMMENT_DESCRIPTION
 
-        if Release.objects.filter(
-            id=related_entity_id, workspace__slug=slug, project_id=project_id
-        ).exists():
+        if Release.objects.filter(id=related_entity_id, workspace__slug=slug, project_id=project_id).exists():
             return FileAsset.EntityTypeContext.RELEASE_COMMENT_DESCRIPTION
 
         if TestCase.objects.filter(
@@ -935,9 +903,7 @@ class ProjectAssetEndpoint(BaseAPIView):
             **entity_id_fields,
         )
 
-        presigned_url = presigned_post_for_asset(
-            request=request, asset=asset, file_type=type, file_size=size_limit
-        )
+        presigned_url = presigned_post_for_asset(request=request, asset=asset, file_type=type, file_size=size_limit)
         # Return the presigned URL
         return Response(
             {
@@ -951,9 +917,7 @@ class ProjectAssetEndpoint(BaseAPIView):
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
     def patch(self, request, slug, project_id, pk):
         # get the asset id
-        asset = FileAsset.objects.get(
-            id=pk, workspace__slug=slug, project_id=project_id
-        )
+        asset = FileAsset.objects.get(id=pk, workspace__slug=slug, project_id=project_id)
         # get the storage metadata
         asset.is_uploaded = True
         # get the storage metadata
@@ -969,9 +933,7 @@ class ProjectAssetEndpoint(BaseAPIView):
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
     def delete(self, request, slug, project_id, pk):
         # Get the asset
-        asset = FileAsset.objects.get(
-            id=pk, workspace__slug=slug, project_id=project_id
-        )
+        asset = FileAsset.objects.get(id=pk, workspace__slug=slug, project_id=project_id)
         # Check deleted assets
         asset.is_deleted = True
         asset.deleted_at = timezone.now()
@@ -982,9 +944,7 @@ class ProjectAssetEndpoint(BaseAPIView):
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
     def get(self, request, slug, project_id, pk):
         # get the asset id
-        asset = FileAsset.objects.get(
-            workspace__slug=slug, project_id=project_id, pk=pk
-        )
+        asset = FileAsset.objects.get(workspace__slug=slug, project_id=project_id, pk=pk)
 
         # Check if the asset is uploaded
         if not asset.is_uploaded:
@@ -1017,9 +977,7 @@ class ProjectBulkAssetEndpoint(BaseAPIView):
 
         # Check if the asset ids are provided
         if not asset_ids:
-            return Response(
-                {"error": "No asset ids provided."}, status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({"error": "No asset ids provided."}, status=status.HTTP_400_BAD_REQUEST)
 
         # get the asset id
         assets = FileAsset.objects.filter(id__in=asset_ids, workspace__slug=slug)
@@ -1094,9 +1052,7 @@ class ProjectBulkAssetEndpoint(BaseAPIView):
                 pass
 
         if needs_rebind:
-            refreshed_assets = list(
-                FileAsset.objects.filter(id__in=asset_ids, workspace__slug=slug)
-            )
+            refreshed_assets = list(FileAsset.objects.filter(id__in=asset_ids, workspace__slug=slug))
             _rebind_assets_to_final_path(refreshed_assets, request=request)
 
         return Response(status=status.HTTP_204_NO_CONTENT)
@@ -1107,9 +1063,7 @@ class AssetCheckEndpoint(BaseAPIView):
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
     def get(self, request, slug, asset_id):
-        asset = FileAsset.all_objects.filter(
-            id=asset_id, workspace__slug=slug, deleted_at__isnull=True
-        ).exists()
+        asset = FileAsset.all_objects.filter(id=asset_id, workspace__slug=slug, deleted_at__isnull=True).exists()
         return Response({"exists": asset}, status=status.HTTP_200_OK)
 
 
@@ -1210,9 +1164,7 @@ class DuplicateAssetEndpoint(BaseAPIView):
         if project_id:
             # check if project exists in the workspace
             if not Project.objects.filter(id=project_id, workspace=workspace).exists():
-                return Response(
-                    {"error": "Project not found"}, status=status.HTTP_404_NOT_FOUND
-                )
+                return Response({"error": "Project not found"}, status=status.HTTP_404_NOT_FOUND)
 
         storage = S3Storage(request=request)
         original_asset = FileAsset.objects.filter(
@@ -1222,9 +1174,7 @@ class DuplicateAssetEndpoint(BaseAPIView):
         ).first()
 
         if not original_asset:
-            return Response(
-                {"error": "Asset not found"}, status=status.HTTP_404_NOT_FOUND
-            )
+            return Response({"error": "Asset not found"}, status=status.HTTP_404_NOT_FOUND)
         if original_asset.entity_type in PRODUCT_ASSET_TYPES:
             if original_asset.product_id:
                 if not can_view_product(request.user, original_asset.product):
@@ -1238,9 +1188,7 @@ class DuplicateAssetEndpoint(BaseAPIView):
                     status=status.HTTP_404_NOT_FOUND,
                 )
 
-        entity_id_fields = self.get_entity_id_field(
-            entity_type=entity_type, entity_id=entity_id
-        )
+        entity_id_fields = self.get_entity_id_field(entity_type=entity_type, entity_id=entity_id)
         if project_id:
             entity_id_fields["project_id"] = project_id
         if product_id:
@@ -1270,9 +1218,7 @@ class DuplicateAssetEndpoint(BaseAPIView):
         # Update the is_uploaded field for all newly created assets
         FileAsset.objects.filter(id=duplicated_asset.id).update(is_uploaded=True)
 
-        return Response(
-            {"asset_id": str(duplicated_asset.id)}, status=status.HTTP_200_OK
-        )
+        return Response({"asset_id": str(duplicated_asset.id)}, status=status.HTTP_200_OK)
 
 
 class WorkspaceAssetDownloadEndpoint(BaseAPIView):

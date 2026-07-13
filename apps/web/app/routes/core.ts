@@ -120,7 +120,10 @@ export const coreRoutes: RouteConfigEntry[] = [
         // Workspace Timesheets
         layout("./(all)/[workspaceSlug]/(projects)/timesheets/layout.tsx", [
           route(":workspaceSlug/timesheets", "./(all)/[workspaceSlug]/(projects)/timesheets/page.tsx"),
-          route(":workspaceSlug/timesheets/overview", "./(all)/[workspaceSlug]/(projects)/timesheets/overview/page.tsx"),
+          route(
+            ":workspaceSlug/timesheets/overview",
+            "./(all)/[workspaceSlug]/(projects)/timesheets/overview/page.tsx"
+          ),
           route(":workspaceSlug/timesheets/report", "./(all)/[workspaceSlug]/(projects)/timesheets/report/page.tsx"),
         ]),
 
@@ -130,6 +133,42 @@ export const coreRoutes: RouteConfigEntry[] = [
           route(
             ":workspaceSlug/products/:productId/user-requirements",
             "./(all)/[workspaceSlug]/(projects)/products/[productId]/user-requirements/page.tsx"
+          ),
+          route(
+            ":workspaceSlug/products/:productId/user-requirements/reviews",
+            "./(all)/[workspaceSlug]/(projects)/products/[productId]/user-requirements/reviews/page.tsx"
+          ),
+          route(
+            ":workspaceSlug/products/:productId/user-requirements/:requirementId/review/:changeId",
+            "./(all)/[workspaceSlug]/(projects)/products/[productId]/user-requirements/[requirementId]/review/[changeId]/page.tsx"
+          ),
+          route(
+            ":workspaceSlug/products/:productId/user-requirements/:requirementId/review",
+            "./(all)/[workspaceSlug]/(projects)/products/[productId]/user-requirements/[requirementId]/review/page.tsx"
+          ),
+          route(
+            ":workspaceSlug/products/:productId/user-requirements/:requirementId",
+            "./(all)/[workspaceSlug]/(projects)/products/[productId]/user-requirements/[requirementId]/page.tsx"
+          ),
+          route(
+            ":workspaceSlug/products/:productId/development-requirements",
+            "./(all)/[workspaceSlug]/(projects)/products/[productId]/development-requirements/page.tsx"
+          ),
+          route(
+            ":workspaceSlug/products/:productId/development-requirements/reviews",
+            "./(all)/[workspaceSlug]/(projects)/products/[productId]/development-requirements/reviews/page.tsx"
+          ),
+          route(
+            ":workspaceSlug/products/:productId/development-requirements/:requirementId/review/:changeId",
+            "./(all)/[workspaceSlug]/(projects)/products/[productId]/development-requirements/[requirementId]/review/[changeId]/page.tsx"
+          ),
+          route(
+            ":workspaceSlug/products/:productId/development-requirements/:requirementId/review",
+            "./(all)/[workspaceSlug]/(projects)/products/[productId]/development-requirements/[requirementId]/review/page.tsx"
+          ),
+          route(
+            ":workspaceSlug/products/:productId/development-requirements/:requirementId",
+            "./(all)/[workspaceSlug]/(projects)/products/[productId]/development-requirements/[requirementId]/page.tsx"
           ),
           route(
             ":workspaceSlug/products/:productId/settings",
@@ -379,12 +418,15 @@ export const coreRoutes: RouteConfigEntry[] = [
           ]),
 
           // Project Archives - Issues - Detail
-          layout("./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/archives/issues/(detail)/layout.tsx", [
-            route(
-              ":workspaceSlug/projects/:projectId/archives/issues/:archivedIssueId",
-              "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/archives/issues/(detail)/[archivedIssueId]/page.tsx"
-            ),
-          ]),
+          layout(
+            "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/archives/issues/(detail)/layout.tsx",
+            [
+              route(
+                ":workspaceSlug/projects/:projectId/archives/issues/:archivedIssueId",
+                "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/archives/issues/(detail)/[archivedIssueId]/page.tsx"
+              ),
+            ]
+          ),
 
           // Project Archives - Cycles
           layout("./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/archives/cycles/layout.tsx", [

@@ -144,4 +144,17 @@ from .workflow import (
 )
 from .timesheet import TimeSheet, TimesheetCategory
 from .product import Product, ProductMember
-from .requirement import Requirement, RequirementAttachment, RequirementModule
+from .requirement import (
+    Requirement,
+    RequirementAttachment,
+    RequirementChange,
+    RequirementChangeAttachment,
+    RequirementChangeKind,
+    RequirementChangeReviewer,
+    RequirementChangeStatus,
+    RequirementModule,
+    RequirementReviewOpinion,
+    RequirementReviewRecord,
+    RequirementVersion,
+    RequirementVersionAttachment,
+)
