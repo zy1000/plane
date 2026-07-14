@@ -1,8 +1,11 @@
 import { useState } from "react";
-import { ArrowRight, Check, ChevronDown, CircleHelp, Clock3, FileText, GitCompareArrows, X } from "lucide-react";
+import { ArrowRight, Check, ChevronDown, CircleHelp, Clock3, GitCompareArrows, X } from "lucide-react";
+import { useParams } from "next/navigation";
 import { Avatar } from "@plane/ui";
 import { calculateTimeAgo, cn, getFileURL } from "@plane/utils";
+import { useRequirementAttachmentDownload } from "@/hooks/use-requirement-attachment-download";
 import type {
+  TRequirementAttachment,
   TRequirementChange,
   TRequirementChangeReviewer,
   TRequirementFieldDiff,
@@ -151,7 +154,33 @@ export function RequirementReviewProgress(props: { change: TRequirementChange; v
   );
 }
 
+function RequirementAttachmentList(props: { attachments: TRequirementAttachment[] }) {
+  const { productId, workspaceSlug } = useParams();
+  const { download } = useRequirementAttachmentDownload(workspaceSlug?.toString(), productId?.toString());
+  if (props.attachments.length === 0) return <span className="text-tertiary italic">无</span>;
+  return (
+    <div className="divide-y divide-subtle overflow-hidden rounded-lg border border-subtle">
+      {props.attachments.map((attachment) => {
+        return (
+          <button
+            key={attachment.id}
+            type="button"
+            onClick={() => download(attachment)}
+            className="group focus-visible:ring-accent-primary/40 flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left text-12 text-secondary transition-colors duration-150 hover:bg-layer-1 hover:text-primary focus-visible:ring-2 focus-visible:outline-none focus-visible:ring-inset motion-reduce:transition-none"
+          >
+            <span className="min-w-0 truncate">{attachment.attributes?.name ?? "附件"}</span>
+            <span className="shrink-0 text-10 text-tertiary group-hover:text-accent-primary">下载</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function displayValue(field: string, value: unknown) {
+  if (field === "attachments") {
+    return <RequirementAttachmentList attachments={(value as TRequirementAttachment[] | null | undefined) ?? []} />;
+  }
   if (value === null || value === undefined || value === "") {
     return <span className="text-tertiary italic">未设置</span>;
   }
@@ -370,35 +399,6 @@ export function RequirementReviewHistory(props: { change: TRequirementChange }) 
       <div className="divide-y divide-subtle">
         {change.reviewer_assignments.map((assignment) => (
           <RequirementReviewerAssignmentItem key={assignment.id} assignment={assignment} />
-        ))}
-      </div>
-    </section>
-  );
-}
-
-export function RequirementAttachments(props: { change: TRequirementChange }) {
-  if (props.change.attachments.length === 0) return null;
-  return (
-    <section className="overflow-hidden rounded-xl border border-subtle bg-surface-1 shadow-raised-100">
-      <div className="flex items-center justify-between border-b border-subtle bg-layer-1 px-4 py-3.5">
-        <h2 className="flex items-center gap-2 text-13 font-semibold text-primary">
-          <FileText className="size-4 text-tertiary" />
-          评审附件
-        </h2>
-        <span className="text-10 text-tertiary tabular-nums">{props.change.attachments.length} 个</span>
-      </div>
-      <div className="divide-y divide-subtle">
-        {props.change.attachments.map((attachment) => (
-          <a
-            key={attachment.id}
-            href={attachment.asset_url}
-            target="_blank"
-            rel="noreferrer"
-            className="group focus-visible:ring-accent-primary/40 flex items-center justify-between gap-3 px-4 py-3 text-12 text-secondary transition-colors duration-150 hover:bg-layer-1 hover:text-primary focus-visible:ring-2 focus-visible:outline-none focus-visible:ring-inset motion-reduce:transition-none"
-          >
-            <span className="min-w-0 truncate">{attachment.attributes.name ?? "附件"}</span>
-            <span className="shrink-0 text-10 text-tertiary group-hover:text-accent-primary">打开</span>
-          </a>
         ))}
       </div>
     </section>

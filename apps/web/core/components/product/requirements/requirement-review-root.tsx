@@ -21,7 +21,6 @@ import type {
 } from "@/services/requirement.service";
 import type { TProductDetailOutletContext } from "../product-detail-layout";
 import {
-  RequirementAttachments,
   RequirementDiffPanel,
   RequirementReviewHistory,
   RequirementReviewProgress,
@@ -437,7 +436,6 @@ export const RequirementReviewRoot = observer(function RequirementReviewRoot(pro
                   </div>
                 )}
                 {!change.can_review && change.status === "pending" && <RequirementReviewUnavailableNotice />}
-                <RequirementAttachments change={change} />
                 <RequirementReviewHistory change={change} />
               </aside>
             </div>

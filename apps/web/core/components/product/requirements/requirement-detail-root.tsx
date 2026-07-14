@@ -9,6 +9,7 @@ import {
   ChevronRight,
   CircleDot,
   ClipboardCheck,
+  Download,
   GitCompareArrows,
   GitFork,
   Layers3,
@@ -29,6 +30,7 @@ import { useRequirementModules } from "@/hooks/store/use-requirement-modules";
 import { useRequirementReview } from "@/hooks/store/use-requirement-review";
 import { useUserRequirements } from "@/hooks/store/use-user-requirements";
 import { useAppRouter } from "@/hooks/use-app-router";
+import { useRequirementAttachmentDownload } from "@/hooks/use-requirement-attachment-download";
 import type { TRequirementType } from "@/services/requirement.service";
 import type { TProductDetailOutletContext } from "../product-detail-layout";
 import { RequirementActivity } from "./requirement-activity";
@@ -107,6 +109,7 @@ export const RequirementDetailRoot = observer(function RequirementDetailRoot(pro
   const id = productId?.toString();
   const reqId = requirementId?.toString();
   const router = useAppRouter();
+  const { download: downloadAttachment } = useRequirementAttachmentDownload(slug, id);
   const { product } = useOutletContext<TProductDetailOutletContext>();
   const { changes, compare, fetchDetail, isLoading, requirement, versions } = useRequirementReview(
     slug,
@@ -281,41 +284,6 @@ export const RequirementDetailRoot = observer(function RequirementDetailRoot(pro
                 )}
               </section>
 
-              <section>
-                <div className="flex items-center justify-between gap-3">
-                  <h2 className="text-body-sm-semibold text-primary">附件</h2>
-                  <span className="text-caption-sm-regular text-tertiary">{requirement.attachments.length} 个</span>
-                </div>
-                {requirement.attachments.length > 0 ? (
-                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                    {requirement.attachments.map((attachment) => (
-                      <a
-                        key={attachment.id}
-                        href={attachment.asset_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="group focus-visible:ring-accent-primary/30 flex min-w-0 items-center gap-3 rounded-md border border-subtle px-3 py-2.5 transition-colors hover:bg-layer-1 focus-visible:ring-2 focus-visible:outline-none"
-                      >
-                        <span className="grid size-8 shrink-0 place-items-center rounded-md bg-layer-1 text-tertiary">
-                          <Paperclip className="size-3.5" />
-                        </span>
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-body-xs-medium text-primary">
-                            {attachment.attributes.name ?? "附件"}
-                          </span>
-                          <span className="mt-0.5 block text-caption-sm-regular text-tertiary">
-                            上传于 {calculateTimeAgo(attachment.created_at)}
-                          </span>
-                        </span>
-                        <ChevronRight className="size-3.5 shrink-0 text-tertiary transition-transform group-hover:translate-x-0.5" />
-                      </a>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="mt-2 text-body-xs-regular text-placeholder">暂无附件</p>
-                )}
-              </section>
-
               <RequirementActivity
                 workspaceSlug={slug}
                 productId={id}
@@ -390,6 +358,42 @@ export const RequirementDetailRoot = observer(function RequirementDetailRoot(pro
                     </div>
                   ) : (
                     <p className="text-body-xs-regular text-tertiary">未设置</p>
+                  )}
+                </SectionGroup>
+
+                <SectionGroup
+                  title="附件"
+                  action={
+                    <span className="text-caption-sm-regular text-tertiary">{requirement.attachments.length} 个</span>
+                  }
+                >
+                  {requirement.attachments.length > 0 ? (
+                    <div className="flex w-full flex-col gap-2">
+                      {requirement.attachments.map((attachment) => (
+                        <button
+                          key={attachment.id}
+                          type="button"
+                          aria-label={`下载附件 ${attachment.attributes.name ?? "附件"}`}
+                          onClick={() => downloadAttachment(attachment)}
+                          className="group focus-visible:ring-accent-primary/30 flex w-full min-w-0 items-center gap-3 rounded-md border border-subtle px-3 py-2.5 text-left transition-colors hover:bg-layer-1 focus-visible:ring-2 focus-visible:outline-none"
+                        >
+                          <span className="grid size-8 shrink-0 place-items-center rounded-md bg-layer-1 text-tertiary">
+                            <Paperclip className="size-3.5" />
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-body-xs-medium text-primary">
+                              {attachment.attributes.name ?? "附件"}
+                            </span>
+                            <span className="mt-0.5 block text-caption-sm-regular text-tertiary">
+                              上传于 {calculateTimeAgo(attachment.created_at)}
+                            </span>
+                          </span>
+                          <Download className="size-3.5 shrink-0 text-tertiary transition-colors group-hover:text-accent-primary" />
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-body-xs-regular text-placeholder">暂无附件</p>
                   )}
                 </SectionGroup>
 
