@@ -3,9 +3,32 @@ import type { IUserLite, TIssuePriorities } from "@plane/types";
 import { APIService } from "@/services/api.service";
 
 export type TRequirementType = "user" | "development";
-export type TRequirementStatus = "in_review" | "active" | "rejected";
-export type TRequirementChangeStatus = "pending" | "approved" | "rejected" | "superseded";
+export type TRequirementStatus = "draft" | "in_review" | "published" | "rejected" | "closed";
+export type TRequirementChangeStatus = "draft" | "pending" | "approved" | "rejected" | "cancelled" | "superseded";
 export type TRequirementReviewOpinion = "approved" | "rejected" | "needs_clarification";
+export type TRequirementLifecycleAction =
+  | "draft_created"
+  | "submitted"
+  | "withdrawn"
+  | "draft_discarded"
+  | "closed"
+  | "reopened"
+  | "archived"
+  | "restored";
+export type TRequirementCloseReason = "cancelled" | "duplicate" | "postponed" | "replaced" | "other";
+
+export type TRequirementPermissions = {
+  can_create_revision: boolean;
+  can_edit_draft: boolean;
+  can_submit: boolean;
+  can_withdraw: boolean;
+  can_discard_draft: boolean;
+  can_close: boolean;
+  can_reopen: boolean;
+  can_archive: boolean;
+  can_restore: boolean;
+  can_delete: boolean;
+};
 
 export type TRequirementModule = {
   id: string;
@@ -129,6 +152,14 @@ export type TUserRequirementListItem = {
   priority: TIssuePriorities;
   status: TRequirementStatus;
   current_version: number;
+  closed_at: string | null;
+  closed_by: string | null;
+  closed_by_detail: IUserLite | null;
+  closed_reason_code: TRequirementCloseReason | "";
+  closed_note: string;
+  archived_at: string | null;
+  archived_by: string | null;
+  archived_by_detail: IUserLite | null;
   module: string | null;
   module_detail: Pick<TRequirementModule, "id" | "name"> | null;
   parent: string | null;
@@ -143,6 +174,7 @@ export type TUserRequirementListItem = {
     TRequirementChange,
     "id" | "sequence" | "kind" | "status" | "name" | "review_progress" | "can_review" | "created_at"
   > | null;
+  permissions: TRequirementPermissions;
   created_at: string;
   updated_at: string;
   created_by: string | null;
@@ -154,6 +186,7 @@ export type TUserRequirementDetail = TUserRequirementListItem & {
   acceptance_criteria_html: string | null;
   attachments: TRequirementAttachment[];
   latest_change: TRequirementChange | null;
+  open_change: TRequirementChange | null;
 };
 
 export type TUserRequirementPayload = {
@@ -176,11 +209,29 @@ export type TUserRequirementListParams = {
   status?: string;
   module?: string;
   assignee?: string;
+  archived?: boolean;
+  change_status?: "draft" | "pending" | "none";
 };
 
 export type TUserRequirementListResponse = {
   count: number;
+  status_counts: Record<TRequirementStatus, number>;
+  archived_count: number;
   data: TUserRequirementListItem[];
+};
+
+export type TRequirementLifecycleEvent = {
+  id: string;
+  action: TRequirementLifecycleAction;
+  from_status: TRequirementStatus | "";
+  to_status: TRequirementStatus | "";
+  reason_code: string;
+  note: string;
+  metadata: Record<string, unknown>;
+  change: string | null;
+  created_at: string;
+  created_by: string | null;
+  actor_detail: IUserLite | null;
 };
 
 export type TRequirementReviewListResponse = {
@@ -260,9 +311,13 @@ export class RequirementService extends APIService {
     workspaceSlug: string,
     productId: string,
     data: TUserRequirementPayload,
-    type: TRequirementType = "user"
+    type: TRequirementType = "user",
+    submitForReview = true
   ) {
-    return this.post(this.requirementUrl(workspaceSlug, productId, type), data)
+    return this.post(this.requirementUrl(workspaceSlug, productId, type), {
+      ...data,
+      submit_for_review: submitForReview,
+    })
       .then((response) => response?.data as TUserRequirementDetail)
       .catch((error) => {
         throw error?.response?.data;
@@ -274,10 +329,135 @@ export class RequirementService extends APIService {
     productId: string,
     requirementId: string,
     data: Partial<TUserRequirementPayload>,
-    type: TRequirementType = "user"
+    type: TRequirementType = "user",
+    submitForReview = true
   ) {
-    return this.post(`${this.requirementUrl(workspaceSlug, productId, type)}${requirementId}/changes/`, data)
+    return this.post(`${this.requirementUrl(workspaceSlug, productId, type)}${requirementId}/changes/`, {
+      ...data,
+      submit_for_review: submitForReview,
+    })
       .then((response) => response?.data as TRequirementChange)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async saveChangeDraft(
+    workspaceSlug: string,
+    productId: string,
+    requirementId: string,
+    changeId: string,
+    data: Partial<TUserRequirementPayload>,
+    type: TRequirementType
+  ): Promise<TRequirementChange> {
+    return this.patch(`${this.requirementUrl(workspaceSlug, productId, type)}${requirementId}/changes/${changeId}/`, {
+      ...data,
+      submit_for_review: false,
+    })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async submitChange(
+    workspaceSlug: string,
+    productId: string,
+    requirementId: string,
+    changeId: string,
+    type: TRequirementType,
+    data?: Partial<TUserRequirementPayload>
+  ): Promise<TRequirementChange> {
+    return this.post(
+      `${this.requirementUrl(workspaceSlug, productId, type)}${requirementId}/changes/${changeId}/submit/`,
+      data
+    )
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async withdrawChange(
+    workspaceSlug: string,
+    productId: string,
+    requirementId: string,
+    changeId: string,
+    type: TRequirementType
+  ): Promise<TRequirementChange> {
+    return this.post(
+      `${this.requirementUrl(workspaceSlug, productId, type)}${requirementId}/changes/${changeId}/withdraw/`
+    )
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async discardChangeDraft(
+    workspaceSlug: string,
+    productId: string,
+    requirementId: string,
+    changeId: string,
+    type: TRequirementType
+  ): Promise<TUserRequirementDetail> {
+    return this.delete(`${this.requirementUrl(workspaceSlug, productId, type)}${requirementId}/changes/${changeId}/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async transitionLifecycle(
+    workspaceSlug: string,
+    productId: string,
+    requirementId: string,
+    type: TRequirementType,
+    data:
+      | { action: "closed"; reason_code: TRequirementCloseReason; note?: string }
+      | { action: "reopened"; note: string }
+  ): Promise<TUserRequirementDetail> {
+    return this.post(`${this.requirementUrl(workspaceSlug, productId, type)}${requirementId}/lifecycle/`, data)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async archiveRequirement(
+    workspaceSlug: string,
+    productId: string,
+    requirementId: string,
+    type: TRequirementType
+  ): Promise<TUserRequirementDetail> {
+    return this.post(`${this.requirementUrl(workspaceSlug, productId, type)}${requirementId}/archive/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async restoreRequirement(
+    workspaceSlug: string,
+    productId: string,
+    requirementId: string,
+    type: TRequirementType
+  ): Promise<TUserRequirementDetail> {
+    return this.delete(`${this.requirementUrl(workspaceSlug, productId, type)}${requirementId}/archive/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async getLifecycleEvents(
+    workspaceSlug: string,
+    productId: string,
+    requirementId: string,
+    type: TRequirementType
+  ): Promise<TRequirementLifecycleEvent[]> {
+    return this.get(`${this.requirementUrl(workspaceSlug, productId, type)}${requirementId}/lifecycle-events/`)
+      .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
       });

@@ -11,6 +11,8 @@ from plane.app.serializers.requirement import (
     RequirementChangeSerializer,
     RequirementCommentSerializer,
     RequirementDetailSerializer,
+    RequirementLifecycleActionSerializer,
+    RequirementLifecycleEventSerializer,
     RequirementListSerializer,
     RequirementModuleSerializer,
     RequirementReviewActionSerializer,
@@ -31,6 +33,7 @@ from plane.db.models import (
     RequirementChangeStatus,
     RequirementComment,
     RequirementModule,
+    RequirementLifecycleEvent,
     RequirementReviewOpinion,
     RequirementReviewRecord,
     RequirementVersion,
@@ -41,8 +44,14 @@ from plane.utils.requirement import (
     RequirementReviewError,
     build_requirement_diff,
     create_requirement_change,
+    discard_requirement_draft,
+    notify_requirement_deleted,
     proposal_data_from_change,
+    set_requirement_archived,
+    submit_requirement_change,
     submit_requirement_review,
+    transition_requirement_lifecycle,
+    withdraw_requirement_change,
 )
 
 
@@ -110,7 +119,9 @@ class RequirementViewSet(ProductRequirementMixin, BaseViewSet):
 
     def get_queryset(self):
         changes = self.get_change_queryset().order_by("-sequence")
-        pending_changes = self.get_change_queryset().filter(status=RequirementChangeStatus.PENDING)
+        open_changes = self.get_change_queryset().filter(
+            status__in=[RequirementChangeStatus.DRAFT, RequirementChangeStatus.PENDING]
+        )
         return (
             Requirement.objects.filter(
                 product_id=self.kwargs.get("product_id"),
@@ -125,6 +136,8 @@ class RequirementViewSet(ProductRequirementMixin, BaseViewSet):
                 "assignee",
                 "created_by",
                 "updated_by",
+                "closed_by",
+                "archived_by",
             )
             .prefetch_related(
                 "reviewers",
@@ -132,8 +145,8 @@ class RequirementViewSet(ProductRequirementMixin, BaseViewSet):
                 Prefetch("changes", queryset=changes, to_attr="prefetched_changes"),
                 Prefetch(
                     "changes",
-                    queryset=pending_changes,
-                    to_attr="prefetched_pending_changes",
+                    queryset=open_changes,
+                    to_attr="prefetched_open_changes",
                 ),
             )
             .annotate(
@@ -172,16 +185,64 @@ class RequirementViewSet(ProductRequirementMixin, BaseViewSet):
             **extra,
         }
 
+    def error_response(self, exc):
+        response_status = (
+            status.HTTP_403_FORBIDDEN
+            if exc.code in {
+                "REQUIREMENT_REVIEW_FORBIDDEN",
+                "REQUIREMENT_DRAFT_EDIT_FORBIDDEN",
+                "REQUIREMENT_LIFECYCLE_FORBIDDEN",
+            }
+            else status.HTTP_409_CONFLICT
+        )
+        return Response({"error": exc.message, "code": exc.code}, status=response_status)
+
+    def parse_write_payload(self, request, default_submit=True):
+        payload = request.data.copy()
+        submit_for_review = payload.pop("submit_for_review", default_submit)
+        if isinstance(submit_for_review, list):
+            submit_for_review = submit_for_review[0] if submit_for_review else default_submit
+        if isinstance(submit_for_review, str):
+            submit_for_review = submit_for_review.lower() not in {"false", "0", "no"}
+        return payload, bool(submit_for_review)
+
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
     def list(self, request, slug, product_id):
         if self.get_product() is None:
             return Response({"error": "Product not found."}, status=status.HTTP_404_NOT_FOUND)
-        queryset = self.filter_queryset(self.get_queryset())
+        archived = request.query_params.get("archived", "false").lower() == "true"
+        base_queryset = self.get_queryset().filter(archived_at__isnull=not archived)
+        change_status = request.query_params.get("change_status")
+        if change_status in {RequirementChangeStatus.DRAFT, RequirementChangeStatus.PENDING}:
+            base_queryset = base_queryset.filter(changes__status=change_status).distinct()
+        elif change_status == "none":
+            base_queryset = base_queryset.exclude(
+                changes__status__in=[RequirementChangeStatus.DRAFT, RequirementChangeStatus.PENDING]
+            )
+        queryset = self.filter_queryset(base_queryset)
+        facet_queryset = self.get_queryset().filter(archived_at__isnull=not archived)
+        search = request.query_params.get("search", "").strip()
+        if search:
+            facet_queryset = facet_queryset.filter(name__icontains=search)
+        for field in ["priority", "module", "assignee", "parent"]:
+            value = request.query_params.get(field)
+            if value:
+                facet_queryset = facet_queryset.filter(**{field: value})
+        if change_status in {RequirementChangeStatus.DRAFT, RequirementChangeStatus.PENDING}:
+            facet_queryset = facet_queryset.filter(changes__status=change_status).distinct()
+        elif change_status == "none":
+            facet_queryset = facet_queryset.exclude(
+                changes__status__in=[RequirementChangeStatus.DRAFT, RequirementChangeStatus.PENDING]
+            )
         paginator = self.pagination_class()
         page = paginator.paginate_queryset(queryset, request)
         return Response(
             {
                 "count": queryset.count(),
+                "status_counts": {
+                    choice: facet_queryset.filter(status=choice).count() for choice, _label in Requirement.Status.choices
+                },
+                "archived_count": self.get_queryset().filter(archived_at__isnull=False).count(),
                 "data": RequirementListSerializer(
                     page,
                     many=True,
@@ -208,12 +269,16 @@ class RequirementViewSet(ProductRequirementMixin, BaseViewSet):
         product = self.get_product()
         if product is None:
             return Response({"error": "Product not found."}, status=status.HTTP_404_NOT_FOUND)
+        payload, submit_for_review = self.parse_write_payload(request)
         serializer = RequirementWriteSerializer(
-            data=request.data,
-            context=self.write_context(product),
+            data=payload,
+            context=self.write_context(product, submit_for_review=submit_for_review),
         )
         serializer.is_valid(raise_exception=True)
-        requirement = serializer.save()
+        try:
+            requirement = serializer.save()
+        except RequirementReviewError as exc:
+            return self.error_response(exc)
         return Response(
             RequirementDetailSerializer(
                 self.get_requirement(requirement.id),
@@ -242,13 +307,18 @@ class RequirementViewSet(ProductRequirementMixin, BaseViewSet):
         requirement = self.get_requirement(pk)
         if product is None or requirement is None:
             return Response({"error": "Requirement not found."}, status=status.HTTP_404_NOT_FOUND)
+        payload, submit_for_review = self.parse_write_payload(request)
         serializer = RequirementWriteSerializer(
             requirement,
-            data=request.data,
-            context=self.write_context(product),
+            data=payload,
+            partial=True,
+            context=self.write_context(product, submit_for_review=submit_for_review),
         )
         serializer.is_valid(raise_exception=True)
-        serializer.save()
+        try:
+            serializer.save()
+        except RequirementReviewError as exc:
+            return self.error_response(exc)
         change = self.get_change(pk, serializer.change.id)
         return Response(
             RequirementChangeSerializer(change, context={"request": request}).data,
@@ -283,6 +353,82 @@ class RequirementViewSet(ProductRequirementMixin, BaseViewSet):
         return Response(RequirementChangeSerializer(change, context={"request": request}).data)
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
+    def update_change(self, request, slug, product_id, pk, change_id):
+        product = self.get_product()
+        requirement = self.get_requirement(pk)
+        change = self.get_change(pk, change_id)
+        if product is None or requirement is None or change is None:
+            return Response({"error": "Requirement change not found."}, status=status.HTTP_404_NOT_FOUND)
+        payload, submit_for_review = self.parse_write_payload(request, default_submit=False)
+        serializer = RequirementWriteSerializer(
+            requirement,
+            data=payload,
+            partial=True,
+            context=self.write_context(
+                product,
+                draft_change=change,
+                submit_for_review=submit_for_review,
+            ),
+        )
+        serializer.is_valid(raise_exception=True)
+        try:
+            serializer.save()
+        except RequirementReviewError as exc:
+            return self.error_response(exc)
+        updated = self.get_change(pk, serializer.change.id)
+        return Response(RequirementChangeSerializer(updated, context={"request": request}).data)
+
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
+    def submit_change(self, request, slug, product_id, pk, change_id):
+        product = self.get_product()
+        requirement = self.get_requirement(pk)
+        change = self.get_change(pk, change_id)
+        if product is None or requirement is None or change is None:
+            return Response({"error": "Requirement change not found."}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            if request.data:
+                serializer = RequirementWriteSerializer(
+                    requirement,
+                    data=request.data,
+                    partial=True,
+                    context=self.write_context(product, draft_change=change, submit_for_review=True),
+                )
+                serializer.is_valid(raise_exception=True)
+                serializer.save()
+                submitted_change_id = serializer.change.id
+            else:
+                submit_requirement_change(change.id, request.user)
+                submitted_change_id = change.id
+        except RequirementReviewError as exc:
+            return self.error_response(exc)
+        submitted = self.get_change(pk, submitted_change_id)
+        return Response(RequirementChangeSerializer(submitted, context={"request": request}).data)
+
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
+    def withdraw_change(self, request, slug, product_id, pk, change_id):
+        if self.get_product() is None or self.get_change(pk, change_id) is None:
+            return Response({"error": "Requirement change not found."}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            draft = withdraw_requirement_change(change_id, request.user)
+        except RequirementReviewError as exc:
+            return self.error_response(exc)
+        refreshed = self.get_change(pk, draft.id)
+        return Response(RequirementChangeSerializer(refreshed, context={"request": request}).data)
+
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
+    def destroy_change(self, request, slug, product_id, pk, change_id):
+        if self.get_product() is None or self.get_change(pk, change_id) is None:
+            return Response({"error": "Requirement change not found."}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            discard_requirement_draft(change_id, request.user)
+        except RequirementReviewError as exc:
+            return self.error_response(exc)
+        return Response(
+            RequirementDetailSerializer(self.get_requirement(pk), context={"request": request}).data,
+            status=status.HTTP_200_OK,
+        )
+
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
     def review_change(self, request, slug, product_id, pk, change_id):
         if self.get_product() is None or self.get_change(pk, change_id) is None:
             return Response({"error": "Requirement change not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -296,13 +442,7 @@ class RequirementViewSet(ProductRequirementMixin, BaseViewSet):
                 serializer.validated_data.get("reason", ""),
             )
         except RequirementReviewError as exc:
-            response_status = (
-                status.HTTP_403_FORBIDDEN if exc.code == "REQUIREMENT_REVIEW_FORBIDDEN" else status.HTTP_409_CONFLICT
-            )
-            return Response(
-                {"error": exc.message, "code": exc.code},
-                status=response_status,
-            )
+            return self.error_response(exc)
         return Response(
             RequirementChangeSerializer(
                 self.get_change(pk, change_id),
@@ -413,6 +553,51 @@ class RequirementViewSet(ProductRequirementMixin, BaseViewSet):
         return Response(build_requirement_diff(from_snapshot, to_snapshot))
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
+    def lifecycle(self, request, slug, product_id, pk):
+        if self.get_product() is None or self.get_requirement(pk) is None:
+            return Response({"error": "Requirement not found."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = RequirementLifecycleActionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            transition_requirement_lifecycle(
+                pk,
+                request.user,
+                serializer.validated_data["action"],
+                serializer.validated_data.get("reason_code", ""),
+                serializer.validated_data.get("note", ""),
+            )
+        except RequirementReviewError as exc:
+            return self.error_response(exc)
+        return Response(RequirementDetailSerializer(self.get_requirement(pk), context={"request": request}).data)
+
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
+    def archive(self, request, slug, product_id, pk):
+        if self.get_product() is None or self.get_requirement(pk) is None:
+            return Response({"error": "Requirement not found."}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            set_requirement_archived(pk, request.user, True)
+        except RequirementReviewError as exc:
+            return self.error_response(exc)
+        return Response(RequirementDetailSerializer(self.get_requirement(pk), context={"request": request}).data)
+
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
+    def unarchive(self, request, slug, product_id, pk):
+        if self.get_product() is None or self.get_requirement(pk) is None:
+            return Response({"error": "Requirement not found."}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            set_requirement_archived(pk, request.user, False)
+        except RequirementReviewError as exc:
+            return self.error_response(exc)
+        return Response(RequirementDetailSerializer(self.get_requirement(pk), context={"request": request}).data)
+
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
+    def lifecycle_events(self, request, slug, product_id, pk):
+        if self.get_product() is None or self.get_requirement(pk) is None:
+            return Response({"error": "Requirement not found."}, status=status.HTTP_404_NOT_FOUND)
+        events = RequirementLifecycleEvent.objects.filter(requirement_id=pk).select_related("created_by", "change")
+        return Response(RequirementLifecycleEventSerializer(events, many=True).data)
+
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
     def destroy(self, request, slug, product_id, pk):
         product = self.get_product()
         requirement = self.get_requirement(pk)
@@ -432,6 +617,7 @@ class RequirementViewSet(ProductRequirementMixin, BaseViewSet):
 
         now = timezone.now()
         with transaction.atomic():
+            notify_requirement_deleted(requirement, request.user)
             pending_parent_changes = list(
                 RequirementChange.objects.filter(
                     requirement__product=product,
@@ -485,6 +671,8 @@ class RequirementViewSet(ProductRequirementMixin, BaseViewSet):
         queryset = Requirement.objects.filter(
             product_id=product_id,
             product__workspace__slug=slug,
+            archived_at__isnull=True,
+            status__in=[Requirement.Status.DRAFT, Requirement.Status.IN_REVIEW, Requirement.Status.PUBLISHED],
         )
         if self.requirement_type == Requirement.RequirementType.USER:
             queryset = queryset.filter(type=Requirement.RequirementType.USER)
@@ -569,6 +757,11 @@ class RequirementCommentViewSet(ProductRequirementMixin, BaseViewSet):
         requirement = self.get_requirement()
         if requirement is None:
             return Response({"error": "Requirement not found."}, status=status.HTTP_404_NOT_FOUND)
+        if requirement.archived_at is not None or requirement.status == Requirement.Status.CLOSED:
+            return Response(
+                {"error": "当前需求为只读状态。", "code": "REQUIREMENT_TERMINAL_READ_ONLY"},
+                status=status.HTTP_409_CONFLICT,
+            )
         serializer = self.get_serializer(
             data=request.data,
             context={"request": request, "requirement": requirement},
@@ -579,8 +772,14 @@ class RequirementCommentViewSet(ProductRequirementMixin, BaseViewSet):
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
     def destroy(self, request, slug, product_id, pk, comment_id):
-        if self.get_requirement() is None:
+        requirement = self.get_requirement()
+        if requirement is None:
             return Response({"error": "Requirement not found."}, status=status.HTTP_404_NOT_FOUND)
+        if requirement.archived_at is not None or requirement.status == Requirement.Status.CLOSED:
+            return Response(
+                {"error": "当前需求为只读状态。", "code": "REQUIREMENT_TERMINAL_READ_ONLY"},
+                status=status.HTTP_409_CONFLICT,
+            )
         comment = self.get_queryset().filter(id=comment_id).first()
         if comment is None:
             return Response({"error": "Comment not found."}, status=status.HTTP_404_NOT_FOUND)

@@ -1,5 +1,5 @@
 import { observer } from "mobx-react";
-import { ListFilterPlus, SignalHigh, Users, X } from "lucide-react";
+import { CircleDot, FilePenLine, ListFilterPlus, SignalHigh, Users, X } from "lucide-react";
 import { Button, getButtonStyling } from "@plane/propel/button";
 import { IconButton } from "@plane/propel/icon-button";
 import { FilterAppliedIcon, FilterIcon, PriorityIcon } from "@plane/propel/icons";
@@ -8,9 +8,23 @@ import { CustomSearchSelect } from "@plane/ui";
 import { cn } from "@plane/utils";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 
-export type TRequirementFilterKey = "priority" | "assignee";
+export type TRequirementFilterKey = "status" | "change_status" | "priority" | "assignee";
 
-export const REQUIREMENT_FILTER_KEYS: TRequirementFilterKey[] = ["priority", "assignee"];
+export const REQUIREMENT_FILTER_KEYS: TRequirementFilterKey[] = ["status", "change_status", "priority", "assignee"];
+
+const STATUS_FILTER_OPTIONS = [
+  { value: "draft", label: "草稿" },
+  { value: "in_review", label: "评审中" },
+  { value: "published", label: "已发布" },
+  { value: "rejected", label: "拒绝" },
+  { value: "closed", label: "已关闭" },
+];
+
+const CHANGE_STATUS_FILTER_OPTIONS = [
+  { value: "draft", label: "修订草稿" },
+  { value: "pending", label: "修订评审中" },
+  { value: "none", label: "无开放修订" },
+];
 
 const PRIORITY_FILTER_OPTIONS: { value: TIssuePriorities; label: string }[] = [
   { value: "urgent", label: "紧急" },
@@ -21,6 +35,8 @@ const PRIORITY_FILTER_OPTIONS: { value: TIssuePriorities; label: string }[] = [
 ];
 
 const FILTER_META: Record<TRequirementFilterKey, { label: string; icon: typeof SignalHigh }> = {
+  status: { label: "状态", icon: CircleDot },
+  change_status: { label: "修订状态", icon: FilePenLine },
   priority: { label: "优先级", icon: SignalHigh },
   assignee: { label: "负责人", icon: Users },
 };
@@ -82,12 +98,16 @@ function FilterChip(props: TFilterChipProps) {
 type TRequirementFiltersRowProps = {
   isVisible: boolean;
   activeKeys: TRequirementFilterKey[];
+  status: string;
+  changeStatus: string;
   priority: string;
   assigneeId: string | null;
   totalCount: number;
   onAddFilter: (key: TRequirementFilterKey) => void;
   onRemoveFilter: (key: TRequirementFilterKey) => void;
   onPriorityChange: (value: string) => void;
+  onStatusChange: (value: string) => void;
+  onChangeStatusChange: (value: string) => void;
   onAssigneeChange: (value: string | null) => void;
   onClearAll: () => void;
 };
@@ -96,12 +116,16 @@ export const RequirementFiltersRow = observer(function RequirementFiltersRow(pro
   const {
     isVisible,
     activeKeys,
+    status,
+    changeStatus,
     priority,
     assigneeId,
     totalCount,
     onAddFilter,
     onRemoveFilter,
     onPriorityChange,
+    onStatusChange,
+    onChangeStatusChange,
     onAssigneeChange,
     onClearAll,
   } = props;
@@ -109,7 +133,7 @@ export const RequirementFiltersRow = observer(function RequirementFiltersRow(pro
   if (!isVisible) return null;
 
   const availableKeys = REQUIREMENT_FILTER_KEYS.filter((key) => !activeKeys.includes(key));
-  const hasAppliedFilters = !!(priority || assigneeId);
+  const hasAppliedFilters = !!(status || changeStatus || priority || assigneeId);
   const selectedPriorityLabel = PRIORITY_FILTER_OPTIONS.find((item) => item.value === priority)?.label;
 
   const addFilterOptions = availableKeys.map((key) => {
@@ -128,8 +152,64 @@ export const RequirementFiltersRow = observer(function RequirementFiltersRow(pro
 
   return (
     <div className="flex flex-wrap items-center gap-2 border-b border-subtle bg-layer-1/50 px-3 py-2">
+      {activeKeys.includes("status") && (
+        <FilterChip
+          icon={FILTER_META.status.icon}
+          label={FILTER_META.status.label}
+          onRemove={() => onRemoveFilter("status")}
+        >
+          <CustomSearchSelect
+            value={status}
+            onChange={onStatusChange}
+            options={STATUS_FILTER_OPTIONS.map((item) => ({
+              value: item.value,
+              content: item.label,
+              query: item.label,
+            }))}
+            optionsClassName="w-40"
+            maxHeight="rg"
+            placement="bottom-start"
+            customButton={
+              <span className="flex h-7 items-center px-2 text-11 text-secondary">
+                {STATUS_FILTER_OPTIONS.find((item) => item.value === status)?.label ?? "选择状态"}
+              </span>
+            }
+          />
+        </FilterChip>
+      )}
+
+      {activeKeys.includes("change_status") && (
+        <FilterChip
+          icon={FILTER_META.change_status.icon}
+          label={FILTER_META.change_status.label}
+          onRemove={() => onRemoveFilter("change_status")}
+        >
+          <CustomSearchSelect
+            value={changeStatus}
+            onChange={onChangeStatusChange}
+            options={CHANGE_STATUS_FILTER_OPTIONS.map((item) => ({
+              value: item.value,
+              content: item.label,
+              query: item.label,
+            }))}
+            optionsClassName="w-40"
+            maxHeight="rg"
+            placement="bottom-start"
+            customButton={
+              <span className="flex h-7 items-center px-2 text-11 text-secondary">
+                {CHANGE_STATUS_FILTER_OPTIONS.find((item) => item.value === changeStatus)?.label ?? "选择修订状态"}
+              </span>
+            }
+          />
+        </FilterChip>
+      )}
+
       {activeKeys.includes("priority") && (
-        <FilterChip icon={FILTER_META.priority.icon} label={FILTER_META.priority.label} onRemove={() => onRemoveFilter("priority")}>
+        <FilterChip
+          icon={FILTER_META.priority.icon}
+          label={FILTER_META.priority.label}
+          onRemove={() => onRemoveFilter("priority")}
+        >
           <CustomSearchSelect
             value={priority}
             onChange={onPriorityChange}
@@ -163,7 +243,11 @@ export const RequirementFiltersRow = observer(function RequirementFiltersRow(pro
       )}
 
       {activeKeys.includes("assignee") && (
-        <FilterChip icon={FILTER_META.assignee.icon} label={FILTER_META.assignee.label} onRemove={() => onRemoveFilter("assignee")}>
+        <FilterChip
+          icon={FILTER_META.assignee.icon}
+          label={FILTER_META.assignee.label}
+          onRemove={() => onRemoveFilter("assignee")}
+        >
           <MemberDropdown
             value={assigneeId}
             onChange={onAssigneeChange}
@@ -198,7 +282,7 @@ export const RequirementFiltersRow = observer(function RequirementFiltersRow(pro
         </Button>
       )}
 
-      <span className="ml-auto text-11 text-tertiary">共 {totalCount} 条用户需求</span>
+      <span className="ml-auto text-11 text-tertiary">共 {totalCount} 条需求</span>
     </div>
   );
 });

@@ -13,6 +13,7 @@ from plane.db.models import (
     RequirementChangeStatus,
     RequirementComment,
     RequirementModule,
+    RequirementReviewOpinion,
     RequirementVersion,
     User,
     WorkspaceMember,
@@ -38,6 +39,22 @@ def change_url(workspace_slug, product_id, requirement_id, change_id=None):
 
 def review_url(workspace_slug, product_id, requirement_id, change_id):
     return f"{change_url(workspace_slug, product_id, requirement_id, change_id)}reviews/"
+
+
+def change_action_url(workspace_slug, product_id, requirement_id, change_id, action):
+    return f"{change_url(workspace_slug, product_id, requirement_id, change_id)}{action}/"
+
+
+def lifecycle_url(workspace_slug, product_id, requirement_id):
+    return f"{requirement_url(workspace_slug, product_id, requirement_id)}lifecycle/"
+
+
+def archive_url(workspace_slug, product_id, requirement_id):
+    return f"{requirement_url(workspace_slug, product_id, requirement_id)}archive/"
+
+
+def lifecycle_events_url(workspace_slug, product_id, requirement_id):
+    return f"{requirement_url(workspace_slug, product_id, requirement_id)}lifecycle-events/"
 
 
 def comment_url(workspace_slug, product_id, requirement_id, comment_id=None, requirement_type="user"):
@@ -233,7 +250,28 @@ class TestUserRequirementApp:
             },
             format="json",
         )
-        assert changed.status_code == status.HTTP_201_CREATED, changed.data
+        assert changed.status_code == status.HTTP_409_CONFLICT, changed.data
+        assert changed.data["code"] == "REQUIREMENT_OPEN_CHANGE_EXISTS"
+
+        initial_change = RequirementChange.objects.get(requirement=requirement)
+        withdrawn = session_client.post(
+            change_action_url(workspace.slug, product.id, requirement.id, initial_change.id, "withdraw"),
+            format="json",
+        )
+        assert withdrawn.status_code == status.HTTP_200_OK, withdrawn.data
+        assert withdrawn.data["status"] == RequirementChangeStatus.DRAFT
+
+        changed = session_client.patch(
+            change_url(workspace.slug, product.id, requirement.id, withdrawn.data["id"]),
+            {"attachment_ids": []},
+            format="json",
+        )
+        assert changed.status_code == status.HTTP_200_OK, changed.data
+        submitted = session_client.post(
+            change_action_url(workspace.slug, product.id, requirement.id, changed.data["id"], "submit"),
+            format="json",
+        )
+        assert submitted.status_code == status.HTTP_200_OK, submitted.data
         approved = session_client.post(
             review_url(workspace.slug, product.id, requirement.id, changed.data["id"]),
             {"opinion": "approved"},
@@ -241,7 +279,7 @@ class TestUserRequirementApp:
         )
         assert approved.status_code == status.HTTP_200_OK, approved.data
         requirement.refresh_from_db()
-        assert requirement.status == Requirement.Status.ACTIVE
+        assert requirement.status == Requirement.Status.PUBLISHED
         assert requirement.current_version == 1
         assert not requirement.requirement_attachments.filter(asset_id=asset.id).exists()
         assert FileAsset.all_objects.get(id=asset.id).is_deleted is False
@@ -511,7 +549,7 @@ class TestUserRequirementApp:
         )
         assert final_approval.status_code == status.HTTP_200_OK, final_approval.data
         requirement = Requirement.objects.get(id=requirement_id)
-        assert requirement.status == Requirement.Status.ACTIVE
+        assert requirement.status == Requirement.Status.PUBLISHED
         assert requirement.current_version == 1
         assert RequirementVersion.objects.filter(requirement=requirement).count() == 1
 
@@ -527,7 +565,7 @@ class TestUserRequirementApp:
         assert proposed.status_code == status.HTTP_201_CREATED, proposed.data
         requirement.refresh_from_db()
         assert requirement.name == "Review lifecycle"
-        assert requirement.status == Requirement.Status.IN_REVIEW
+        assert requirement.status == Requirement.Status.PUBLISHED
 
         session_client.force_authenticate(user=reviewer)
         missing_reason = session_client.post(
@@ -543,9 +581,191 @@ class TestUserRequirementApp:
         )
         assert rejected.status_code == status.HTTP_200_OK, rejected.data
         requirement.refresh_from_db()
-        assert requirement.status == Requirement.Status.REJECTED
+        assert requirement.status == Requirement.Status.PUBLISHED
         assert requirement.current_version == 1
         assert RequirementVersion.objects.filter(requirement=requirement).count() == 1
+
+    def test_draft_revision_terminal_archive_and_reopen_lifecycle(
+        self, session_client, workspace, create_user
+    ):
+        product = Product.objects.create(
+            name="Lifecycle Product",
+            workspace=workspace,
+            owner=create_user,
+            created_by=create_user,
+        )
+        created = session_client.post(
+            requirement_url(workspace.slug, product.id),
+            {
+                "name": "Lifecycle requirement",
+                "priority": "medium",
+                "reviewers": [],
+                "submit_for_review": False,
+            },
+            format="json",
+        )
+        assert created.status_code == status.HTTP_201_CREATED, created.data
+        requirement_id = created.data["id"]
+        draft_id = created.data["open_change"]["id"]
+        assert created.data["status"] == Requirement.Status.DRAFT
+        assert created.data["open_change"]["status"] == RequirementChangeStatus.DRAFT
+
+        draft_listing = session_client.get(
+            requirement_url(workspace.slug, product.id),
+            {"change_status": RequirementChangeStatus.DRAFT},
+        )
+        assert draft_listing.status_code == status.HTTP_200_OK
+        assert [item["id"] for item in draft_listing.data["data"]] == [requirement_id]
+
+        updated = session_client.patch(
+            change_url(workspace.slug, product.id, requirement_id, draft_id),
+            {
+                "name": "Lifecycle requirement ready",
+                "reviewers": [str(create_user.id)],
+            },
+            format="json",
+        )
+        assert updated.status_code == status.HTTP_200_OK, updated.data
+        submitted = session_client.post(
+            change_action_url(workspace.slug, product.id, requirement_id, draft_id, "submit"),
+            format="json",
+        )
+        assert submitted.status_code == status.HTTP_200_OK, submitted.data
+        assert submitted.data["status"] == RequirementChangeStatus.PENDING
+        approved = session_client.post(
+            review_url(workspace.slug, product.id, requirement_id, draft_id),
+            {"opinion": RequirementReviewOpinion.APPROVED},
+            format="json",
+        )
+        assert approved.status_code == status.HTTP_200_OK, approved.data
+
+        revision = session_client.post(
+            change_url(workspace.slug, product.id, requirement_id),
+            {
+                "name": "Lifecycle requirement V2",
+                "reviewers": [str(create_user.id)],
+                "submit_for_review": False,
+            },
+            format="json",
+        )
+        assert revision.status_code == status.HTTP_201_CREATED, revision.data
+        requirement = Requirement.objects.get(id=requirement_id)
+        assert requirement.status == Requirement.Status.PUBLISHED
+        assert requirement.name == "Lifecycle requirement ready"
+        assert requirement.current_version == 1
+
+        revision_submitted = session_client.post(
+            change_action_url(
+                workspace.slug,
+                product.id,
+                requirement_id,
+                revision.data["id"],
+                "submit",
+            ),
+            format="json",
+        )
+        assert revision_submitted.status_code == status.HTTP_200_OK, revision_submitted.data
+        withdrawn = session_client.post(
+            change_action_url(
+                workspace.slug,
+                product.id,
+                requirement_id,
+                revision.data["id"],
+                "withdraw",
+            ),
+            format="json",
+        )
+        assert withdrawn.status_code == status.HTTP_200_OK, withdrawn.data
+        assert withdrawn.data["status"] == RequirementChangeStatus.DRAFT
+        assert RequirementChange.objects.get(id=revision.data["id"]).status == RequirementChangeStatus.CANCELLED
+
+        discarded = session_client.delete(
+            change_url(workspace.slug, product.id, requirement_id, withdrawn.data["id"])
+        )
+        assert discarded.status_code == status.HTTP_200_OK, discarded.data
+        assert discarded.data["open_change"] is None
+
+        removed_completed_action = session_client.post(
+            lifecycle_url(workspace.slug, product.id, requirement_id),
+            {"action": "completed", "note": "不再支持"},
+            format="json",
+        )
+        assert removed_completed_action.status_code == status.HTTP_400_BAD_REQUEST
+        invalid_close = session_client.post(
+            lifecycle_url(workspace.slug, product.id, requirement_id),
+            {"action": "closed", "reason_code": "other"},
+            format="json",
+        )
+        assert invalid_close.status_code == status.HTTP_409_CONFLICT
+        closed = session_client.post(
+            lifecycle_url(workspace.slug, product.id, requirement_id),
+            {"action": "closed", "reason_code": "duplicate", "note": "合并到主需求"},
+            format="json",
+        )
+        assert closed.status_code == status.HTTP_200_OK, closed.data
+        assert closed.data["status"] == Requirement.Status.CLOSED
+        assert closed.data["closed_reason_code"] == Requirement.CloseReason.DUPLICATE
+        terminal_comment = session_client.post(
+            comment_url(workspace.slug, product.id, requirement_id),
+            {"comment_html": "<p>终态不可评论</p>"},
+            format="json",
+        )
+        assert terminal_comment.status_code == status.HTTP_409_CONFLICT
+        terminal_revision = session_client.post(
+            change_url(workspace.slug, product.id, requirement_id),
+            {
+                "name": "Terminal revision",
+                "reviewers": [str(create_user.id)],
+                "submit_for_review": False,
+            },
+            format="json",
+        )
+        assert terminal_revision.status_code == status.HTTP_409_CONFLICT
+
+        archived = session_client.post(archive_url(workspace.slug, product.id, requirement_id), format="json")
+        assert archived.status_code == status.HTTP_200_OK, archived.data
+        assert archived.data["archived_at"] is not None
+        active_listing = session_client.get(requirement_url(workspace.slug, product.id))
+        assert active_listing.data["count"] == 0
+        assert active_listing.data["archived_count"] == 1
+        archived_listing = session_client.get(
+            requirement_url(workspace.slug, product.id),
+            {"archived": "true"},
+        )
+        assert [item["id"] for item in archived_listing.data["data"]] == [requirement_id]
+
+        reopen_while_archived = session_client.post(
+            lifecycle_url(workspace.slug, product.id, requirement_id),
+            {"action": "reopened", "note": "补充范围"},
+            format="json",
+        )
+        assert reopen_while_archived.status_code == status.HTTP_409_CONFLICT
+        restored = session_client.delete(archive_url(workspace.slug, product.id, requirement_id))
+        assert restored.status_code == status.HTTP_200_OK, restored.data
+        reopened = session_client.post(
+            lifecycle_url(workspace.slug, product.id, requirement_id),
+            {"action": "reopened", "note": "补充范围"},
+            format="json",
+        )
+        assert reopened.status_code == status.HTTP_200_OK, reopened.data
+        assert reopened.data["status"] == Requirement.Status.PUBLISHED
+        assert reopened.data["closed_at"] is None
+
+        closed_again = session_client.post(
+            lifecycle_url(workspace.slug, product.id, requirement_id),
+            {"action": "closed", "reason_code": "postponed", "note": "等待后续规划"},
+            format="json",
+        )
+        assert closed_again.status_code == status.HTTP_200_OK, closed_again.data
+        assert closed_again.data["status"] == Requirement.Status.CLOSED
+        assert closed_again.data["closed_reason_code"] == Requirement.CloseReason.POSTPONED
+
+        events = session_client.get(lifecycle_events_url(workspace.slug, product.id, requirement_id))
+        assert events.status_code == status.HTTP_200_OK
+        actions = [event["action"] for event in events.data]
+        assert "withdrawn" in actions
+        assert "draft_discarded" in actions
+        assert actions[-5:] == ["closed", "archived", "restored", "reopened", "closed"]
 
     def test_development_requirements_support_full_api_and_type_aware_parents(
         self, session_client, workspace, create_user

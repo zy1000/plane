@@ -77,9 +77,11 @@ const opinions: {
 ];
 
 const reviewStatusDescription: Record<TRequirementChangeStatus, string> = {
+  draft: "该修订仍是草稿，提交评审后评审人才能处理。",
   pending: "请对照基线核对本轮提案；所有评审人通过后，变更才会写入需求。",
   approved: "本轮评审已经通过，以下内容作为完整的评审记录保留。",
   rejected: "本轮评审已被拒绝，以下内容作为完整的评审记录保留。",
+  cancelled: "本轮评审或草稿已被取消，以下内容仅供回溯。",
   superseded: "本轮提案已被后续变更取代，以下内容仅供回溯。",
 };
 

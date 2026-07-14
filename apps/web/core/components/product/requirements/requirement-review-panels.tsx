@@ -40,13 +40,18 @@ const opinionMeta: Record<
 
 export function RequirementStatusBadge(props: { status: TRequirementStatus; className?: string }) {
   const meta = {
+    draft: {
+      label: "草稿",
+      className: "bg-gray-500/10 text-gray-700 dark:text-gray-300",
+      dotClassName: "bg-gray-500",
+    },
     in_review: {
       label: "评审中",
       className: "bg-yellow-500/10 text-yellow-700 dark:text-yellow-300",
       dotClassName: "bg-yellow-500",
     },
-    active: {
-      label: "已激活",
+    published: {
+      label: "已发布",
       className: "bg-green-500/10 text-green-700 dark:text-green-300",
       dotClassName: "bg-green-500",
     },
@@ -54,6 +59,11 @@ export function RequirementStatusBadge(props: { status: TRequirementStatus; clas
       label: "已拒绝",
       className: "bg-red-500/10 text-red-700 dark:text-red-300",
       dotClassName: "bg-red-500",
+    },
+    closed: {
+      label: "已关闭",
+      className: "bg-slate-500/10 text-slate-700 dark:text-slate-300",
+      dotClassName: "bg-slate-500",
     },
   }[props.status];
 

@@ -77,7 +77,7 @@ type Props = {
   modules: TRequirementModule[];
   fetchRequirement: (id: string) => Promise<TUserRequirementDetail | undefined>;
   fetchParentOptions: (search?: string, exclude?: string) => Promise<{ id: string; name: string }[]>;
-  onSubmit: (data: TUserRequirementPayload) => Promise<unknown>;
+  onSubmit: (data: TUserRequirementPayload, submitForReview: boolean) => Promise<unknown>;
   onClose: () => void;
 };
 
@@ -113,6 +113,7 @@ export function RequirementFormModal(props: Props) {
   const [expandedEditor, setExpandedEditor] = useState<"description" | "acceptance-criteria" | null>(null);
   const {
     control,
+    clearErrors,
     formState: { errors, isSubmitting },
     handleSubmit,
     reset,
@@ -139,7 +140,7 @@ export function RequirementFormModal(props: Props) {
     ])
       .then(([detail, options]) => {
         if (!active) return undefined;
-        const pendingProposal = detail?.latest_change?.status === "pending" ? detail.latest_change : undefined;
+        const pendingProposal = detail?.open_change ?? undefined;
         setParentOptions(options);
         setAttachments(pendingProposal?.attachments ?? detail?.attachments ?? []);
         reset(
@@ -193,9 +194,14 @@ export function RequirementFormModal(props: Props) {
     onClose();
   };
 
-  const submitForm = async (data: TFormValues) => {
+  const submitForm = async (data: TFormValues, submitForReview: boolean) => {
+    if (submitForReview && data.reviewers.length === 0) {
+      setError("reviewers", { message: "至少选择一名评审人" });
+      return;
+    }
+    clearErrors("reviewers");
     try {
-      await onSubmit({ ...data, attachment_ids: attachmentIds });
+      await onSubmit({ ...data, attachment_ids: attachmentIds }, submitForReview);
       setUploadedAssetIds([]);
       setAttachments([]);
       setExpandedEditor(null);
@@ -203,8 +209,12 @@ export function RequirementFormModal(props: Props) {
       onClose();
       setToast({
         type: TOAST_TYPE.SUCCESS,
-        title: requirementId ? "已发起变更" : "创建成功",
-        message: requirementId ? `${requirementLabel}已重新进入评审。` : `${requirementLabel}已创建并进入评审。`,
+        title: submitForReview ? (requirementId ? "已提交修订" : "创建成功") : "草稿已保存",
+        message: submitForReview
+          ? requirementId
+            ? `${requirementLabel}修订已进入评审。`
+            : `${requirementLabel}已创建并进入评审。`
+          : `${requirementLabel}草稿已保存，可稍后继续编辑。`,
       });
     } catch (error: any) {
       if (error?.name) {
@@ -252,7 +262,10 @@ export function RequirementFormModal(props: Props) {
               </div>
             </div>
           ) : (
-            <form onSubmit={handleSubmit(submitForm)} className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <form
+              onSubmit={handleSubmit((data) => submitForm(data, true))}
+              className="flex min-h-0 flex-1 flex-col overflow-hidden"
+            >
               <div
                 data-modal-wheel-scroll
                 className="vertical-scrollbar grid scrollbar-sm min-h-0 flex-1 grid-cols-1 overflow-y-auto lg:grid-cols-[minmax(0,1fr)_400px] lg:grid-rows-[minmax(0,1fr)] lg:overflow-hidden"
@@ -448,9 +461,6 @@ export function RequirementFormModal(props: Props) {
                         <Controller
                           name="reviewers"
                           control={control}
-                          rules={{
-                            validate: (value) => value.length > 0 || "至少选择一名评审人",
-                          }}
                           render={({ field }) => (
                             <MemberDropdown
                               memberIds={eligibleMemberIds}
@@ -504,8 +514,17 @@ export function RequirementFormModal(props: Props) {
                 <Button type="button" variant="secondary" size="lg" onClick={() => void handleClose()}>
                   取消
                 </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="lg"
+                  loading={isSubmitting}
+                  onClick={() => void handleSubmit((data) => submitForm(data, false))()}
+                >
+                  保存草稿
+                </Button>
                 <Button type="submit" variant="primary" size="lg" loading={isSubmitting}>
-                  {requirementId ? "提交变更并重新评审" : "创建并发起评审"}
+                  {requirementId ? "提交修订评审" : "创建并发起评审"}
                 </Button>
               </div>
             </form>

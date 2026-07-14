@@ -153,6 +153,8 @@ from .requirement import (
     RequirementChangeKind,
     RequirementChangeReviewer,
     RequirementChangeStatus,
+    RequirementLifecycleAction,
+    RequirementLifecycleEvent,
     RequirementModule,
     RequirementReviewOpinion,
     RequirementReviewRecord,

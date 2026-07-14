@@ -1,13 +1,17 @@
 import type { LucideIcon } from "lucide-react";
 import {
+  Archive,
+  ArchiveRestore,
   CalendarClock,
   ClipboardList,
   CircleDot,
   GitBranch,
   LayoutGrid,
   Pencil,
+  RotateCcw,
   SignalHigh,
   Trash2,
+  Undo2,
   UserRound,
   Users,
 } from "lucide-react";
@@ -27,7 +31,12 @@ const priorityLabels: Record<string, string> = {
 type TRequirementTableColumnsParams = {
   onOpen: (requirement: TUserRequirementListItem) => void;
   onEdit: (requirement: TUserRequirementListItem) => void;
+  onReview: (requirement: TUserRequirementListItem) => void;
   onDelete: (requirement: TUserRequirementListItem) => void;
+  onAction: (
+    action: "close" | "reopen" | "archive" | "restore" | "withdraw" | "discard",
+    requirement: TUserRequirementListItem
+  ) => void;
 };
 
 function HeaderLabel(props: { icon: LucideIcon; label: string }) {
@@ -41,7 +50,7 @@ function HeaderLabel(props: { icon: LucideIcon; label: string }) {
 }
 
 export function getRequirementTableColumns(params: TRequirementTableColumnsParams) {
-  const { onDelete, onEdit, onOpen } = params;
+  const { onAction, onDelete, onEdit, onOpen, onReview } = params;
 
   return [
     {
@@ -72,13 +81,20 @@ export function getRequirementTableColumns(params: TRequirementTableColumnsParam
       thRender: () => <HeaderLabel icon={CircleDot} label="状态" />,
       tdRender: (requirement: TUserRequirementListItem) => {
         const meta = {
+          draft: { label: "草稿", className: "bg-gray-500/10 text-gray-700 dark:text-gray-300" },
           in_review: { label: "评审中", className: "bg-yellow-500/10 text-yellow-700 dark:text-yellow-300" },
-          active: { label: "激活", className: "bg-green-500/10 text-green-700 dark:text-green-300" },
+          published: { label: "已发布", className: "bg-green-500/10 text-green-700 dark:text-green-300" },
           rejected: { label: "拒绝", className: "bg-red-500/10 text-red-700 dark:text-red-300" },
+          closed: { label: "已关闭", className: "bg-slate-500/10 text-slate-700 dark:text-slate-300" },
         }[requirement.status];
         return (
-          <div className="flex h-11 items-center px-3">
+          <div className="flex h-11 items-center gap-1 px-3">
             <span className={`rounded-full px-2 py-0.5 text-11 font-medium ${meta.className}`}>{meta.label}</span>
+            {requirement.active_change && (
+              <span className="rounded-full bg-accent-primary/10 px-1.5 py-0.5 text-10 text-accent-primary">
+                {requirement.active_change.status === "draft" ? "修订草稿" : "修订评审中"}
+              </span>
+            )}
           </div>
         );
       },
@@ -177,12 +193,73 @@ export function getRequirementTableColumns(params: TRequirementTableColumnsParam
       tdRender: (requirement: TUserRequirementListItem) => (
         <div className="flex h-11 items-center justify-center">
           <CustomMenu ellipsis placement="bottom-end" closeOnSelect>
-            <CustomMenu.MenuItem onClick={() => onEdit(requirement)}>
-              <span className="flex items-center gap-2">
-                <Pencil className="size-3.5" />
-                发起变更
-              </span>
-            </CustomMenu.MenuItem>
+            {requirement.permissions.can_edit_draft && (
+              <CustomMenu.MenuItem onClick={() => onEdit(requirement)}>
+                <span className="flex items-center gap-2">
+                  <Pencil className="size-3.5" />
+                  继续编辑草稿
+                </span>
+              </CustomMenu.MenuItem>
+            )}
+            {requirement.permissions.can_create_revision && (
+              <CustomMenu.MenuItem onClick={() => onEdit(requirement)}>
+                <span className="flex items-center gap-2">
+                  <Pencil className="size-3.5" />
+                  {requirement.status === "rejected" ? "重新修改" : "创建修订"}
+                </span>
+              </CustomMenu.MenuItem>
+            )}
+            {requirement.active_change?.status === "pending" && (
+              <CustomMenu.MenuItem onClick={() => onReview(requirement)}>
+                <span className="flex items-center gap-2">
+                  <ClipboardList className="size-3.5" />
+                  查看评审
+                </span>
+              </CustomMenu.MenuItem>
+            )}
+            {requirement.permissions.can_withdraw && (
+              <CustomMenu.MenuItem onClick={() => onAction("withdraw", requirement)}>
+                <span className="flex items-center gap-2">
+                  <Undo2 className="size-3.5" />
+                  撤回修改
+                </span>
+              </CustomMenu.MenuItem>
+            )}
+            {requirement.permissions.can_discard_draft && (
+              <CustomMenu.MenuItem onClick={() => onAction("discard", requirement)}>
+                <span className="flex items-center gap-2">
+                  <Trash2 className="size-3.5" />
+                  放弃修订草稿
+                </span>
+              </CustomMenu.MenuItem>
+            )}
+            {requirement.permissions.can_close && (
+              <CustomMenu.MenuItem onClick={() => onAction("close", requirement)}>关闭需求</CustomMenu.MenuItem>
+            )}
+            {requirement.permissions.can_reopen && (
+              <CustomMenu.MenuItem onClick={() => onAction("reopen", requirement)}>
+                <span className="flex items-center gap-2">
+                  <RotateCcw className="size-3.5" />
+                  重新打开
+                </span>
+              </CustomMenu.MenuItem>
+            )}
+            {requirement.permissions.can_archive && (
+              <CustomMenu.MenuItem onClick={() => onAction("archive", requirement)}>
+                <span className="flex items-center gap-2">
+                  <Archive className="size-3.5" />
+                  归档
+                </span>
+              </CustomMenu.MenuItem>
+            )}
+            {requirement.permissions.can_restore && (
+              <CustomMenu.MenuItem onClick={() => onAction("restore", requirement)}>
+                <span className="flex items-center gap-2">
+                  <ArchiveRestore className="size-3.5" />
+                  恢复归档
+                </span>
+              </CustomMenu.MenuItem>
+            )}
             <CustomMenu.MenuItem onClick={() => onDelete(requirement)}>
               <span className="flex items-center gap-2 text-danger-primary">
                 <Trash2 className="size-3.5" />

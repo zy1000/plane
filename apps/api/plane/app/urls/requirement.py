@@ -44,8 +44,21 @@ def requirement_urls(prefix, requirement_type, name_prefix):
         ),
         path(
             f"{base}/<uuid:pk>/changes/<uuid:change_id>/",
-            RequirementViewSet.as_view({"get": "change_detail"}, **view_kwargs),
+            RequirementViewSet.as_view(
+                {"get": "change_detail", "patch": "update_change", "delete": "destroy_change"},
+                **view_kwargs,
+            ),
             name=f"product-{name_prefix}-change-detail",
+        ),
+        path(
+            f"{base}/<uuid:pk>/changes/<uuid:change_id>/submit/",
+            RequirementViewSet.as_view({"post": "submit_change"}, **view_kwargs),
+            name=f"product-{name_prefix}-change-submit",
+        ),
+        path(
+            f"{base}/<uuid:pk>/changes/<uuid:change_id>/withdraw/",
+            RequirementViewSet.as_view({"post": "withdraw_change"}, **view_kwargs),
+            name=f"product-{name_prefix}-change-withdraw",
         ),
         path(
             f"{base}/<uuid:pk>/changes/<uuid:change_id>/reviews/",
@@ -66,6 +79,21 @@ def requirement_urls(prefix, requirement_type, name_prefix):
             f"{base}/<uuid:pk>/compare/",
             RequirementViewSet.as_view({"get": "compare"}, **view_kwargs),
             name=f"product-{name_prefix}-compare",
+        ),
+        path(
+            f"{base}/<uuid:pk>/lifecycle/",
+            RequirementViewSet.as_view({"post": "lifecycle"}, **view_kwargs),
+            name=f"product-{name_prefix}-lifecycle",
+        ),
+        path(
+            f"{base}/<uuid:pk>/archive/",
+            RequirementViewSet.as_view({"post": "archive", "delete": "unarchive"}, **view_kwargs),
+            name=f"product-{name_prefix}-archive",
+        ),
+        path(
+            f"{base}/<uuid:pk>/lifecycle-events/",
+            RequirementViewSet.as_view({"get": "lifecycle_events"}, **view_kwargs),
+            name=f"product-{name_prefix}-lifecycle-events",
         ),
         path(
             f"{base}/<uuid:pk>/comments/",

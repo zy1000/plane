@@ -6,7 +6,12 @@ import { ActivityOperatorFilterRoot } from "@/components/issues/issue-detail/iss
 import { ActivitySortRoot } from "@/components/issues/issue-detail/issue-activity/sort-root";
 import { useRequirementComments } from "@/hooks/store/use-requirement-comments";
 import { useWorkspace } from "@/hooks/store/use-workspace";
-import type { TRequirementChange, TRequirementType, TRequirementVersion } from "@/services/requirement.service";
+import type {
+  TRequirementChange,
+  TRequirementLifecycleEvent,
+  TRequirementType,
+  TRequirementVersion,
+} from "@/services/requirement.service";
 import { RequirementActivityFeed } from "./requirement-activity-feed";
 import {
   buildRequirementActivityItems,
@@ -15,10 +20,11 @@ import {
 } from "./requirement-activity-utils";
 import { RequirementCommentComposer, RequirementCommentsSection } from "./requirement-comments-section";
 
-type TActivityTab = "all" | "version" | "review" | "comment";
+type TActivityTab = "all" | "lifecycle" | "version" | "review" | "comment";
 
 const TABS: { key: TActivityTab; label: string }[] = [
   { key: "all", label: "全部" },
+  { key: "lifecycle", label: "状态记录" },
   { key: "version", label: "版本记录" },
   { key: "review", label: "评审记录" },
   { key: "comment", label: "评论" },
@@ -31,11 +37,23 @@ type Props = {
   requirementType: TRequirementType;
   changes: TRequirementChange[];
   versions: TRequirementVersion[];
+  lifecycleEvents: TRequirementLifecycleEvent[];
+  readOnly?: boolean;
   onOpenReview: (changeId: string) => void;
 };
 
 export function RequirementActivity(props: Props) {
-  const { workspaceSlug, productId, requirementId, requirementType, changes, versions, onOpenReview } = props;
+  const {
+    workspaceSlug,
+    productId,
+    requirementId,
+    requirementType,
+    changes,
+    versions,
+    lifecycleEvents,
+    readOnly = false,
+    onOpenReview,
+  } = props;
   const [activeTab, setActiveTab] = useState<TActivityTab>("all");
   const [sortOrder, setSortOrder] = useState<E_SORT_ORDER>(E_SORT_ORDER.ASC);
   const [selectedOperatorIds, setSelectedOperatorIds] = useState<string[]>([]);
@@ -58,8 +76,8 @@ export function RequirementActivity(props: Props) {
   }, [requirementId]);
 
   const allItems = useMemo(
-    () => buildRequirementActivityItems(changes, versions, comments),
-    [changes, comments, versions]
+    () => buildRequirementActivityItems(changes, versions, comments, lifecycleEvents),
+    [changes, comments, lifecycleEvents, versions]
   );
   const operatorIds = useMemo(
     () => Array.from(new Set(allItems.map((item) => item.actor).filter((actor): actor is string => Boolean(actor)))),
@@ -76,7 +94,13 @@ export function RequirementActivity(props: Props) {
   }, [activeTab, allItems, selectedOperatorIds, sortOrder]);
 
   const emptyLabel =
-    activeTab === "version" ? "暂无版本记录" : activeTab === "review" ? "暂无评审记录" : "暂无活动记录";
+    activeTab === "version"
+      ? "暂无版本记录"
+      : activeTab === "review"
+        ? "暂无评审记录"
+        : activeTab === "lifecycle"
+          ? "暂无状态记录"
+          : "暂无活动记录";
 
   return (
     <section className="pt-2 pb-4" aria-label="需求活动">
@@ -137,6 +161,7 @@ export function RequirementActivity(props: Props) {
             workspaceId={workspaceId}
             productId={productId}
             requirementId={requirementId}
+            disabled={readOnly}
             onCreate={createComment}
             onRemove={removeComment}
           />
@@ -160,7 +185,7 @@ export function RequirementActivity(props: Props) {
                 onOpenReview={onOpenReview}
               />
             )}
-            {activeTab === "all" && (
+            {activeTab === "all" && !readOnly && (
               <div className="border-t border-subtle pt-3">
                 <RequirementCommentComposer
                   workspaceSlug={workspaceSlug}

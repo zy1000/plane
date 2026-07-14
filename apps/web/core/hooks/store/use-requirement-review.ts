@@ -3,6 +3,7 @@ import {
   RequirementService,
   type TRequirementChange,
   type TRequirementDiff,
+  type TRequirementLifecycleEvent,
   type TRequirementReviewOpinion,
   type TRequirementType,
   type TRequirementVersion,
@@ -20,6 +21,7 @@ export const useRequirementReview = (
   const [changes, setChanges] = useState<TRequirementChange[]>([]);
   const [change, setChange] = useState<TRequirementChange>();
   const [versions, setVersions] = useState<TRequirementVersion[]>([]);
+  const [lifecycleEvents, setLifecycleEvents] = useState<TRequirementLifecycleEvent[]>([]);
   const [versionDetail, setVersionDetail] = useState<TRequirementVersion>();
   const [reviewItems, setReviewItems] = useState<TRequirementChange[]>([]);
   const [pendingCount, setPendingCount] = useState(0);
@@ -31,14 +33,16 @@ export const useRequirementReview = (
       if (!workspaceSlug || !productId) return;
       setIsLoading(true);
       try {
-        const [requirementResponse, changesResponse, versionsResponse] = await Promise.all([
+        const [requirementResponse, changesResponse, versionsResponse, lifecycleResponse] = await Promise.all([
           requirementService.getUserRequirement(workspaceSlug, productId, requirementId, requirementType),
           requirementService.getAllChanges(workspaceSlug, productId, requirementId, requirementType),
           requirementService.getVersions(workspaceSlug, productId, requirementId, requirementType),
+          requirementService.getLifecycleEvents(workspaceSlug, productId, requirementId, requirementType),
         ]);
         setRequirement(requirementResponse);
         setChanges(changesResponse.data);
         setVersions(versionsResponse);
+        setLifecycleEvents(lifecycleResponse);
         return requirementResponse;
       } finally {
         setIsLoading(false);
@@ -139,6 +143,7 @@ export const useRequirementReview = (
       changes,
       change,
       versions,
+      lifecycleEvents,
       versionDetail,
       reviewItems,
       pendingCount,
@@ -161,6 +166,7 @@ export const useRequirementReview = (
       fetchVersion,
       isLoading,
       isMutating,
+      lifecycleEvents,
       pendingCount,
       requirement,
       reviewItems,

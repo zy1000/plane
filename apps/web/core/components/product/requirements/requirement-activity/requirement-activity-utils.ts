@@ -2,6 +2,8 @@ import type { IUserLite } from "@plane/types";
 import type { TRequirementComment } from "@/services/requirement-comment.service";
 import type {
   TRequirementChange,
+  TRequirementLifecycleAction,
+  TRequirementLifecycleEvent,
   TRequirementReviewOpinion,
   TRequirementVersion,
 } from "@/services/requirement.service";
@@ -39,9 +41,24 @@ type TRequirementCommentActivity = {
   replyTarget?: TRequirementComment;
 };
 
+type TRequirementLifecycleActivity = {
+  id: string;
+  activityType: "lifecycle";
+  actor: string | null;
+  actorDetail: IUserLite | null;
+  createdAt: string;
+  action: TRequirementLifecycleAction;
+  fromStatus: string;
+  toStatus: string;
+  reasonCode: string;
+  note: string;
+  changeId: string | null;
+};
+
 export type TRequirementActivityItem =
   | TRequirementVersionActivity
   | TRequirementReviewActivity
+  | TRequirementLifecycleActivity
   | TRequirementCommentActivity;
 
 const activityTimestamp = (item: TRequirementActivityItem) => new Date(item.createdAt).getTime();
@@ -59,7 +76,8 @@ export const sortRequirementActivityItems = (items: TRequirementActivityItem[], 
 export const buildRequirementActivityItems = (
   changes: TRequirementChange[],
   versions: TRequirementVersion[],
-  comments: TRequirementComment[]
+  comments: TRequirementComment[],
+  lifecycleEvents: TRequirementLifecycleEvent[] = []
 ): TRequirementActivityItem[] => {
   const commentsById = new Map(comments.map((comment) => [comment.id, comment]));
   const versionItems: TRequirementVersionActivity[] = versions.map((version) => ({
@@ -95,8 +113,21 @@ export const buildRequirementActivityItems = (
     comment,
     replyTarget: comment.parent ? commentsById.get(comment.parent) : undefined,
   }));
+  const lifecycleItems: TRequirementLifecycleActivity[] = lifecycleEvents.map((event) => ({
+    id: `lifecycle-${event.id}`,
+    activityType: "lifecycle",
+    actor: event.created_by,
+    actorDetail: event.actor_detail,
+    createdAt: event.created_at,
+    action: event.action,
+    fromStatus: event.from_status,
+    toStatus: event.to_status,
+    reasonCode: event.reason_code,
+    note: event.note,
+    changeId: event.change,
+  }));
 
-  return sortRequirementActivityItems([...versionItems, ...reviewItems, ...commentItems], "asc");
+  return sortRequirementActivityItems([...versionItems, ...reviewItems, ...lifecycleItems, ...commentItems], "asc");
 };
 
 export type TRequirementCommentTree = {

@@ -12,6 +12,8 @@ from plane.db.models import (
     RequirementChangeKind,
     RequirementChangeReviewer,
     RequirementChangeStatus,
+    RequirementLifecycleAction,
+    RequirementLifecycleEvent,
     RequirementModule,
     RequirementReviewOpinion,
     RequirementReviewRecord,
@@ -21,9 +23,13 @@ from plane.db.models import (
 from plane.utils.content_validator import validate_html_content
 from plane.utils.requirement import (
     build_requirement_diff,
+    can_edit_requirement_draft,
+    can_manage_requirement_lifecycle,
     create_requirement_change,
     is_eligible_requirement_member,
     proposal_data_from_change,
+    submit_requirement_change,
+    update_requirement_draft,
 )
 
 from .base import BaseSerializer
@@ -360,6 +366,9 @@ class RequirementListSerializer(BaseSerializer):
     attachment_count = serializers.IntegerField(read_only=True, default=0)
     sub_requirements_count = serializers.IntegerField(read_only=True, default=0)
     active_change = serializers.SerializerMethodField()
+    closed_by_detail = UserLiteSerializer(source="closed_by", read_only=True)
+    archived_by_detail = UserLiteSerializer(source="archived_by", read_only=True)
+    permissions = serializers.SerializerMethodField()
 
     class Meta:
         model = Requirement
@@ -371,6 +380,14 @@ class RequirementListSerializer(BaseSerializer):
             "priority",
             "status",
             "current_version",
+            "closed_at",
+            "closed_by",
+            "closed_by_detail",
+            "closed_reason_code",
+            "closed_note",
+            "archived_at",
+            "archived_by",
+            "archived_by_detail",
             "module",
             "module_detail",
             "parent",
@@ -382,6 +399,7 @@ class RequirementListSerializer(BaseSerializer):
             "attachment_count",
             "sub_requirements_count",
             "active_change",
+            "permissions",
             "created_at",
             "updated_at",
             "created_by",
@@ -390,16 +408,52 @@ class RequirementListSerializer(BaseSerializer):
         read_only_fields = fields
 
     def get_active_change(self, obj):
-        changes = getattr(obj, "prefetched_pending_changes", None)
+        changes = getattr(obj, "prefetched_open_changes", None)
         change = changes[0] if changes else None
         if change is None:
             return None
         return RequirementChangeSummarySerializer(change, context=self.context).data
 
+    def get_permissions(self, obj):
+        request = self.context.get("request")
+        user = request.user if request else None
+        changes = getattr(obj, "prefetched_open_changes", None)
+        open_change = changes[0] if changes else None
+        can_manage = can_manage_requirement_lifecycle(obj, user)
+        can_edit_draft = bool(
+            open_change
+            and open_change.status == RequirementChangeStatus.DRAFT
+            and can_edit_requirement_draft(open_change, user)
+        )
+        can_withdraw = bool(
+            open_change
+            and open_change.status == RequirementChangeStatus.PENDING
+            and can_edit_requirement_draft(open_change, user)
+        )
+        is_published = obj.status == Requirement.Status.PUBLISHED and obj.archived_at is None
+        is_terminal = obj.status == Requirement.Status.CLOSED
+        return {
+            "can_create_revision": bool(
+                obj.archived_at is None
+                and obj.status in {Requirement.Status.PUBLISHED, Requirement.Status.REJECTED}
+                and open_change is None
+            ),
+            "can_edit_draft": can_edit_draft,
+            "can_submit": can_edit_draft,
+            "can_withdraw": can_withdraw,
+            "can_discard_draft": bool(can_edit_draft and obj.current_version > 0),
+            "can_close": bool(can_manage and is_published and open_change is None),
+            "can_reopen": bool(can_manage and is_terminal and obj.archived_at is None),
+            "can_archive": bool(can_manage and is_terminal and obj.archived_at is None),
+            "can_restore": bool(can_manage and obj.archived_at is not None),
+            "can_delete": bool(user and not user.is_anonymous),
+        }
+
 
 class RequirementDetailSerializer(RequirementListSerializer):
     attachments = RequirementAttachmentDetailSerializer(source="requirement_attachments", many=True, read_only=True)
     latest_change = serializers.SerializerMethodField()
+    open_change = serializers.SerializerMethodField()
 
     class Meta(RequirementListSerializer.Meta):
         fields = RequirementListSerializer.Meta.fields + [
@@ -407,12 +461,20 @@ class RequirementDetailSerializer(RequirementListSerializer):
             "acceptance_criteria_html",
             "attachments",
             "latest_change",
+            "open_change",
         ]
         read_only_fields = fields
 
     def get_latest_change(self, obj):
         changes = getattr(obj, "prefetched_changes", None)
         change = changes[0] if changes else obj.changes.first()
+        if change is None:
+            return None
+        return RequirementChangeSerializer(change, context=self.context).data
+
+    def get_open_change(self, obj):
+        changes = getattr(obj, "prefetched_open_changes", None)
+        change = changes[0] if changes else None
         if change is None:
             return None
         return RequirementChangeSerializer(change, context=self.context).data
@@ -425,7 +487,7 @@ class RequirementWriteSerializer(BaseSerializer):
     parent = serializers.PrimaryKeyRelatedField(queryset=Requirement.objects.all(), required=False, allow_null=True)
     assignee = serializers.PrimaryKeyRelatedField(queryset=User.objects.all(), required=False, allow_null=True)
     reviewers = serializers.PrimaryKeyRelatedField(
-        queryset=User.objects.all(), many=True, required=True, allow_empty=False
+        queryset=User.objects.all(), many=True, required=False, allow_empty=True
     )
     description_html = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     acceptance_criteria_html = serializers.CharField(required=False, allow_blank=True, allow_null=True)
@@ -500,8 +562,6 @@ class RequirementWriteSerializer(BaseSerializer):
         return value
 
     def validate_reviewers(self, value):
-        if not value:
-            raise serializers.ValidationError("REQUIREMENT_REVIEWERS_REQUIRED")
         invalid = [user for user in value if not self._is_eligible_member(user)]
         if invalid:
             raise serializers.ValidationError("REQUIREMENT_REVIEWERS_INVALID")
@@ -557,7 +617,7 @@ class RequirementWriteSerializer(BaseSerializer):
     @transaction.atomic
     def create(self, validated_data):
         request = self.context["request"]
-        reviewers = validated_data["reviewers"]
+        reviewers = validated_data.get("reviewers", [])
         attachment_ids = validated_data.get("attachment_ids", [])
         requirement = Requirement(
             product=self.context["product"],
@@ -569,7 +629,7 @@ class RequirementWriteSerializer(BaseSerializer):
             assignee=validated_data.get("assignee"),
             description_html=validated_data.get("description_html"),
             acceptance_criteria_html=validated_data.get("acceptance_criteria_html"),
-            status=Requirement.Status.IN_REVIEW,
+            status=Requirement.Status.DRAFT,
             current_version=0,
         )
         requirement.save(created_by_id=request.user.id)
@@ -578,18 +638,20 @@ class RequirementWriteSerializer(BaseSerializer):
             {**validated_data, "reviewers": reviewers, "attachment_ids": attachment_ids},
             request.user,
             kind=RequirementChangeKind.INITIAL,
+            submit_for_review=self.context.get("submit_for_review", True),
         )
         return requirement
 
     @transaction.atomic
     def update(self, instance, validated_data):
-        pending_change = (
-            instance.changes.filter(status=RequirementChangeStatus.PENDING)
+        draft_change = self.context.get("draft_change")
+        open_change = draft_change or (
+            instance.changes.filter(status__in=[RequirementChangeStatus.DRAFT, RequirementChangeStatus.PENDING])
             .prefetch_related("proposed_reviewers", "change_attachments")
             .first()
         )
-        if pending_change:
-            proposed_data = proposal_data_from_change(pending_change)
+        if open_change:
+            proposed_data = proposal_data_from_change(open_change)
         else:
             proposed_data = {
                 "name": instance.name,
@@ -603,13 +665,55 @@ class RequirementWriteSerializer(BaseSerializer):
                 "attachment_ids": list(instance.requirement_attachments.values_list("asset_id", flat=True)),
             }
         proposed_data.update(validated_data)
-        self.change = create_requirement_change(
-            instance,
-            proposed_data,
-            self.context["request"].user,
-            kind=self.context.get("change_kind", RequirementChangeKind.CHANGE),
-        )
+        if draft_change:
+            self.change = update_requirement_draft(
+                draft_change.id,
+                proposed_data,
+                self.context["request"].user,
+            )
+            if self.context.get("submit_for_review", False):
+                self.change = submit_requirement_change(self.change.id, self.context["request"].user)
+        else:
+            self.change = create_requirement_change(
+                instance,
+                proposed_data,
+                self.context["request"].user,
+                kind=self.context.get("change_kind", RequirementChangeKind.CHANGE),
+                submit_for_review=self.context.get("submit_for_review", True),
+            )
         return instance
+
+
+class RequirementLifecycleActionSerializer(serializers.Serializer):
+    action = serializers.ChoiceField(
+        choices=[
+            RequirementLifecycleAction.CLOSED,
+            RequirementLifecycleAction.REOPENED,
+        ]
+    )
+    reason_code = serializers.CharField(required=False, allow_blank=True, default="")
+    note = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+class RequirementLifecycleEventSerializer(BaseSerializer):
+    actor_detail = UserLiteSerializer(source="created_by", read_only=True)
+
+    class Meta:
+        model = RequirementLifecycleEvent
+        fields = [
+            "id",
+            "action",
+            "from_status",
+            "to_status",
+            "reason_code",
+            "note",
+            "metadata",
+            "change",
+            "created_at",
+            "created_by",
+            "actor_detail",
+        ]
+        read_only_fields = fields
 
 
 class RequirementReviewActionSerializer(serializers.Serializer):

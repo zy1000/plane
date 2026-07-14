@@ -3,6 +3,8 @@ import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 import { useOutletContext } from "react-router";
 import {
+  Archive,
+  ArchiveRestore,
   Boxes,
   CalendarClock,
   CalendarPlus,
@@ -16,12 +18,14 @@ import {
   Package,
   Paperclip,
   Pencil,
+  RotateCcw,
   SignalHigh,
   UserRound,
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "@plane/propel/button";
-import { Avatar, Breadcrumbs, Header } from "@plane/ui";
+import { TOAST_TYPE, setToast } from "@plane/propel/toast";
+import { AlertModalCore, Avatar, Breadcrumbs, Header } from "@plane/ui";
 import { calculateTimeAgo, cn, getFileURL } from "@plane/utils";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { AppHeader } from "@/components/core/app-header";
@@ -31,10 +35,11 @@ import { useRequirementReview } from "@/hooks/store/use-requirement-review";
 import { useUserRequirements } from "@/hooks/store/use-user-requirements";
 import { useAppRouter } from "@/hooks/use-app-router";
 import { useRequirementAttachmentDownload } from "@/hooks/use-requirement-attachment-download";
-import type { TRequirementType } from "@/services/requirement.service";
+import type { TRequirementType, TUserRequirementListItem } from "@/services/requirement.service";
 import type { TProductDetailOutletContext } from "../product-detail-layout";
 import { RequirementActivity } from "./requirement-activity";
 import { RequirementFormModal } from "./requirement-form-modal";
+import { RequirementLifecycleModal } from "./requirement-lifecycle-modal";
 import { RequirementStatusBadge } from "./requirement-review-panels";
 import { RequirementVersionCompareModal } from "./requirement-version-compare-modal";
 
@@ -111,15 +116,28 @@ export const RequirementDetailRoot = observer(function RequirementDetailRoot(pro
   const router = useAppRouter();
   const { download: downloadAttachment } = useRequirementAttachmentDownload(slug, id);
   const { product } = useOutletContext<TProductDetailOutletContext>();
-  const { changes, compare, fetchDetail, isLoading, requirement, versions } = useRequirementReview(
+  const { changes, compare, fetchDetail, isLoading, lifecycleEvents, requirement, versions } = useRequirementReview(
     slug,
     id,
     requirementType
   );
   const { fetchModules, modules } = useRequirementModules(slug, id, requirementType);
-  const { fetchParentOptions, fetchRequirement, updateRequirement } = useUserRequirements(slug, id, requirementType);
+  const {
+    discardChangeDraft,
+    fetchParentOptions,
+    fetchRequirement,
+    saveChangeDraft,
+    setArchived,
+    submitChange,
+    transitionLifecycle,
+    updateRequirement,
+    withdrawChange,
+  } = useUserRequirements(slug, id, requirementType);
   const [isChangeOpen, setIsChangeOpen] = useState(false);
   const [isCompareOpen, setIsCompareOpen] = useState(false);
+  const [lifecycleAction, setLifecycleAction] = useState<"closed" | "reopened" | null>(null);
+  const [isActionSubmitting, setIsActionSubmitting] = useState(false);
+  const [simpleAction, setSimpleAction] = useState<"archive" | "restore" | "withdraw" | "discard" | null>(null);
   const label = requirementType === "user" ? "用户需求" : "研发需求";
   const path = requirementType === "user" ? "user-requirements" : "development-requirements";
 
@@ -143,10 +161,78 @@ export const RequirementDetailRoot = observer(function RequirementDetailRoot(pro
         fetchRequirement={fetchRequirement}
         fetchParentOptions={fetchParentOptions}
         onClose={() => setIsChangeOpen(false)}
-        onSubmit={async (data) => {
-          const response = await updateRequirement(reqId, data);
+        onSubmit={async (data, submitForReview) => {
+          const openChange = requirement?.open_change;
+          const response =
+            openChange?.status === "draft"
+              ? submitForReview
+                ? await submitChange(reqId, openChange.id, data)
+                : await saveChangeDraft(reqId, openChange.id, data)
+              : await updateRequirement(reqId, data, submitForReview);
           await fetchDetail(reqId);
           return response;
+        }}
+      />
+      <RequirementLifecycleModal
+        requirement={(requirement as TUserRequirementListItem | undefined) ?? null}
+        action={lifecycleAction}
+        isSubmitting={isActionSubmitting}
+        onClose={() => setLifecycleAction(null)}
+        onSubmit={async (data) => {
+          setIsActionSubmitting(true);
+          try {
+            await transitionLifecycle(reqId, data);
+            await fetchDetail(reqId);
+            setLifecycleAction(null);
+            setToast({ type: TOAST_TYPE.SUCCESS, title: "状态已更新", message: "需求生命周期状态已更新。" });
+          } catch (error: any) {
+            setToast({ type: TOAST_TYPE.ERROR, title: "操作失败", message: error?.error ?? "请稍后重试。" });
+          } finally {
+            setIsActionSubmitting(false);
+          }
+        }}
+      />
+      <AlertModalCore
+        isOpen={!!simpleAction}
+        title={
+          simpleAction === "archive"
+            ? "归档需求"
+            : simpleAction === "restore"
+              ? "恢复归档"
+              : simpleAction === "withdraw"
+                ? "撤回评审"
+                : "放弃修订草稿"
+        }
+        content={
+          simpleAction === "archive"
+            ? "归档后需求将从默认列表隐藏。"
+            : simpleAction === "restore"
+              ? "恢复后需求仍保持当前终态。"
+              : simpleAction === "withdraw"
+                ? "当前评审会结束，并生成新的修订草稿。"
+                : "修订草稿会被取消，当前正式版本不受影响。"
+        }
+        isSubmitting={isActionSubmitting}
+        handleClose={() => setSimpleAction(null)}
+        handleSubmit={async () => {
+          if (!requirement || !simpleAction) return;
+          setIsActionSubmitting(true);
+          try {
+            if (simpleAction === "archive" || simpleAction === "restore") {
+              await setArchived(reqId, simpleAction === "archive");
+            } else if (simpleAction === "withdraw" && requirement.open_change) {
+              await withdrawChange(reqId, requirement.open_change.id);
+            } else if (simpleAction === "discard" && requirement.open_change) {
+              await discardChangeDraft(reqId, requirement.open_change.id);
+            }
+            await fetchDetail(reqId);
+            setSimpleAction(null);
+            setToast({ type: TOAST_TYPE.SUCCESS, title: "操作成功", message: "需求已更新。" });
+          } catch (error: any) {
+            setToast({ type: TOAST_TYPE.ERROR, title: "操作失败", message: error?.error ?? "请稍后重试。" });
+          } finally {
+            setIsActionSubmitting(false);
+          }
         }}
       />
       {requirement && (
@@ -180,22 +266,73 @@ export const RequirementDetailRoot = observer(function RequirementDetailRoot(pro
               </Breadcrumbs>
             </Header.LeftItem>
             <Header.RightItem>
-              <Button
-                variant="secondary"
-                size="lg"
-                prependIcon={<ClipboardCheck className="size-4" />}
-                onClick={() => router.push(`/${slug}/products/${id}/${path}/${reqId}/review`)}
-              >
-                查看评审
-              </Button>
-              <Button
-                variant="primary"
-                size="lg"
-                prependIcon={<Pencil className="size-4" />}
-                onClick={() => setIsChangeOpen(true)}
-              >
-                发起变更
-              </Button>
+              {requirement && (
+                <>
+                  <Button
+                    variant="secondary"
+                    size="lg"
+                    prependIcon={<ClipboardCheck className="size-4" />}
+                    onClick={() => router.push(`/${slug}/products/${id}/${path}/${reqId}/review`)}
+                  >
+                    查看评审
+                  </Button>
+                  {(requirement.permissions.can_edit_draft || requirement.permissions.can_create_revision) && (
+                    <Button
+                      variant="primary"
+                      size="lg"
+                      prependIcon={<Pencil className="size-4" />}
+                      onClick={() => setIsChangeOpen(true)}
+                    >
+                      {requirement.permissions.can_edit_draft ? "继续编辑草稿" : "创建修订"}
+                    </Button>
+                  )}
+                  {requirement.permissions.can_withdraw && (
+                    <Button variant="secondary" size="lg" onClick={() => setSimpleAction("withdraw")}>
+                      撤回修改
+                    </Button>
+                  )}
+                  {requirement.permissions.can_discard_draft && (
+                    <Button variant="secondary" size="lg" onClick={() => setSimpleAction("discard")}>
+                      放弃草稿
+                    </Button>
+                  )}
+                  {requirement.permissions.can_close && (
+                    <Button variant="secondary" size="lg" onClick={() => setLifecycleAction("closed")}>
+                      关闭需求
+                    </Button>
+                  )}
+                  {requirement.permissions.can_reopen && (
+                    <Button
+                      variant="primary"
+                      size="lg"
+                      prependIcon={<RotateCcw className="size-4" />}
+                      onClick={() => setLifecycleAction("reopened")}
+                    >
+                      重新打开
+                    </Button>
+                  )}
+                  {requirement.permissions.can_archive && (
+                    <Button
+                      variant="secondary"
+                      size="lg"
+                      prependIcon={<Archive className="size-4" />}
+                      onClick={() => setSimpleAction("archive")}
+                    >
+                      归档
+                    </Button>
+                  )}
+                  {requirement.permissions.can_restore && (
+                    <Button
+                      variant="primary"
+                      size="lg"
+                      prependIcon={<ArchiveRestore className="size-4" />}
+                      onClick={() => setSimpleAction("restore")}
+                    >
+                      恢复归档
+                    </Button>
+                  )}
+                </>
+              )}
             </Header.RightItem>
           </Header>
         }
@@ -291,6 +428,8 @@ export const RequirementDetailRoot = observer(function RequirementDetailRoot(pro
                 requirementType={requirementType}
                 changes={changes}
                 versions={versions}
+                lifecycleEvents={lifecycleEvents}
+                readOnly={requirement.archived_at !== null || requirement.status === "closed"}
                 onOpenReview={(changeId) => router.push(`/${slug}/products/${id}/${path}/${reqId}/review/${changeId}`)}
               />
             </div>
@@ -335,6 +474,16 @@ export const RequirementDetailRoot = observer(function RequirementDetailRoot(pro
                   <SidebarRow icon={Layers3} label="当前版本">
                     {requirement.current_version > 0 ? `V${requirement.current_version}` : "尚未生效"}
                   </SidebarRow>
+                  {requirement.closed_at && (
+                    <SidebarRow icon={CalendarClock} label="关闭时间">
+                      {calculateTimeAgo(requirement.closed_at)}
+                    </SidebarRow>
+                  )}
+                  {requirement.archived_at && (
+                    <SidebarRow icon={Archive} label="归档时间">
+                      {calculateTimeAgo(requirement.archived_at)}
+                    </SidebarRow>
+                  )}
                   <SidebarRow icon={Boxes} label="所属模块">
                     <span className="truncate">{requirement.module_detail?.name ?? "未分配"}</span>
                   </SidebarRow>

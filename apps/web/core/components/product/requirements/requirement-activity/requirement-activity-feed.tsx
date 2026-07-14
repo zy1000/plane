@@ -22,6 +22,17 @@ const opinionMeta: Record<TRequirementReviewOpinion, { label: string; icon: type
   },
 };
 
+const lifecycleLabels = {
+  draft_created: "创建了需求草稿",
+  submitted: "提交了需求评审",
+  withdrawn: "撤回了需求评审",
+  draft_discarded: "放弃了修订草稿",
+  closed: "关闭了需求",
+  reopened: "重新打开了需求",
+  archived: "归档了需求",
+  restored: "恢复了归档需求",
+};
+
 type Props = {
   items: TRequirementActivityItem[];
   workspaceSlug: string;
@@ -55,6 +66,33 @@ export const RequirementActivityFeed = observer(function RequirementActivityFeed
                 item.replyTarget ? actorName(item.replyTarget.actor, item.replyTarget.actor_detail) : null
               }
             />
+          );
+        }
+
+        if (item.activityType === "lifecycle") {
+          const displayName = actorName(item.actor, item.actorDetail);
+          return (
+            <li key={item.id} className="relative flex gap-3 py-2.5">
+              <div className="absolute top-0 bottom-0 left-[13px] w-px bg-layer-3" aria-hidden />
+              <div className="relative z-[2] grid size-7 shrink-0 place-items-center rounded-lg border border-subtle bg-layer-2 text-secondary shadow-raised-100">
+                <Layers3 className="size-3.5" aria-hidden />
+              </div>
+              <div className="min-w-0 flex-1 pt-0.5">
+                <div className="flex flex-wrap items-baseline gap-x-1.5 text-body-xs-regular text-secondary">
+                  <span className="font-medium text-primary">{displayName}</span>
+                  <span>{lifecycleLabels[item.action]}</span>
+                  <Tooltip
+                    tooltipContent={`${renderFormattedDate(item.createdAt)} ${renderFormattedTime(item.createdAt)}`}
+                    position="bottom"
+                  >
+                    <span className="whitespace-nowrap text-tertiary">{calculateTimeAgo(item.createdAt)}</span>
+                  </Tooltip>
+                </div>
+                {item.note && (
+                  <p className="mt-1 text-body-xs-regular whitespace-pre-wrap text-secondary">{item.note}</p>
+                )}
+              </div>
+            </li>
           );
         }
 

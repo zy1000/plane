@@ -2,7 +2,7 @@ from django.db import transaction
 from django.db.models import Max
 from django.utils import timezone
 
-from plane.app.permissions import can_view_product
+from plane.app.permissions import can_manage_product, can_view_product
 from plane.db.models import (
     FileAsset,
     Notification,
@@ -13,6 +13,8 @@ from plane.db.models import (
     RequirementChangeKind,
     RequirementChangeReviewer,
     RequirementChangeStatus,
+    RequirementLifecycleAction,
+    RequirementLifecycleEvent,
     RequirementReviewOpinion,
     RequirementReviewRecord,
     RequirementVersion,
@@ -185,6 +187,27 @@ def is_eligible_requirement_member(product, user):
     return can_view_product(user, product)
 
 
+def can_edit_requirement_draft(change, user):
+    requirement = change.requirement
+    return bool(
+        user
+        and not user.is_anonymous
+        and (
+            change.created_by_id == user.id
+            or requirement.assignee_id == user.id
+            or can_manage_product(user, requirement.product)
+        )
+    )
+
+
+def can_manage_requirement_lifecycle(requirement, user):
+    return bool(
+        user
+        and not user.is_anonymous
+        and (requirement.assignee_id == user.id or can_manage_product(user, requirement.product))
+    )
+
+
 def _eligible_user_ids(product, user_ids):
     members = WorkspaceMember.objects.filter(
         workspace=product.workspace,
@@ -220,6 +243,47 @@ def _bind_change_attachments(change, asset_ids, actor):
         ],
         batch_size=100,
         ignore_conflicts=True,
+    )
+
+
+def _sync_change_attachments(change, asset_ids, actor):
+    asset_ids = set(asset_ids)
+    current_relations = RequirementChangeAttachment.objects.filter(change=change)
+    current_ids = set(current_relations.values_list("asset_id", flat=True))
+    current_relations.exclude(asset_id__in=asset_ids).update(
+        deleted_at=timezone.now(),
+        updated_by=actor,
+    )
+    for asset_id in asset_ids - current_ids:
+        RequirementChangeAttachment.objects.create(
+            change=change,
+            asset_id=asset_id,
+            created_by=actor,
+        )
+
+
+def _record_lifecycle_event(
+    requirement,
+    action,
+    actor,
+    *,
+    change=None,
+    from_status="",
+    to_status="",
+    reason_code="",
+    note="",
+    metadata=None,
+):
+    return RequirementLifecycleEvent.objects.create(
+        requirement=requirement,
+        change=change,
+        action=action,
+        from_status=from_status or "",
+        to_status=to_status or "",
+        reason_code=reason_code or "",
+        note=str(note or "").strip(),
+        metadata=metadata or {},
+        created_by=actor,
     )
 
 
@@ -269,6 +333,61 @@ def _send_notifications(change, event, receivers, triggered_by):
     Notification.objects.bulk_create(notifications, batch_size=100)
 
 
+def _send_requirement_lifecycle_notifications(requirement, event, triggered_by, change=None):
+    receiver_ids = [
+        requirement.created_by_id,
+        requirement.assignee_id,
+        *requirement.reviewers.values_list("id", flat=True),
+    ]
+    receiver_ids = list(
+        dict.fromkeys(
+            str(receiver_id)
+            for receiver_id in receiver_ids
+            if receiver_id and str(receiver_id) != str(triggered_by.id)
+        )
+    )
+    if not receiver_ids:
+        return
+    event_titles = {
+        "withdrawn": f"需求「{requirement.name}」的评审已撤回",
+        "discarded": f"需求「{requirement.name}」的修订草稿已放弃",
+        "closed": f"需求「{requirement.name}」已关闭",
+        "reopened": f"需求「{requirement.name}」已重新打开",
+        "archived": f"需求「{requirement.name}」已归档",
+        "restored": f"需求「{requirement.name}」已恢复归档",
+        "deleted": f"需求「{requirement.name}」已删除",
+    }
+    notifications = [
+        Notification(
+            workspace=requirement.product.workspace,
+            project=None,
+            sender=f"in_app:requirement_lifecycle:{event}",
+            triggered_by=triggered_by,
+            receiver_id=receiver_id,
+            entity_identifier=requirement.id,
+            entity_name="requirement",
+            title=event_titles[event],
+            data={
+                "requirement": {
+                    "id": str(requirement.id),
+                    "name": requirement.name,
+                    "type": requirement.type,
+                    "product_id": str(requirement.product_id),
+                },
+                "requirement_change_id": str(change.id) if change else None,
+                "event": event,
+                "target_url": _requirement_url(requirement),
+            },
+        )
+        for receiver_id in receiver_ids
+    ]
+    Notification.objects.bulk_create(notifications, batch_size=100)
+
+
+def notify_requirement_deleted(requirement, actor):
+    _send_requirement_lifecycle_notifications(requirement, "deleted", actor)
+
+
 def _apply_proposal_to_requirement(requirement, change, actor):
     requirement.name = change.name
     requirement.priority = change.priority
@@ -307,33 +426,46 @@ def _create_version(requirement, change, actor):
         ignore_conflicts=True,
     )
     requirement.current_version = next_version
-    requirement.status = Requirement.Status.ACTIVE
+    requirement.status = Requirement.Status.PUBLISHED
     requirement.save(update_fields=["current_version", "status", "updated_at"])
     return version
 
 
 @transaction.atomic
-def create_requirement_change(requirement, proposed_data, actor, kind=RequirementChangeKind.CHANGE):
+def create_requirement_change(
+    requirement,
+    proposed_data,
+    actor,
+    kind=RequirementChangeKind.CHANGE,
+    submit_for_review=True,
+):
     requirement = (
         Requirement.objects.select_for_update(of=("self",))
         .select_related("product", "product__workspace", "module", "parent", "assignee")
         .prefetch_related("reviewers", "requirement_attachments__asset")
         .get(pk=requirement.pk)
     )
+    if requirement.archived_at is not None:
+        raise RequirementReviewError("REQUIREMENT_ARCHIVED_READ_ONLY", "已归档需求不可发起修订。")
+    if requirement.status == Requirement.Status.CLOSED:
+        raise RequirementReviewError("REQUIREMENT_TERMINAL_READ_ONLY", "已关闭的需求不可发起修订。")
+    from_status = requirement.status
     now = timezone.now()
-    pending = (
+    open_change = (
         RequirementChange.objects.select_for_update()
         .filter(
             requirement=requirement,
-            status=RequirementChangeStatus.PENDING,
+            status__in=[RequirementChangeStatus.DRAFT, RequirementChangeStatus.PENDING],
         )
         .first()
     )
-    if pending:
-        pending.status = RequirementChangeStatus.SUPERSEDED
-        pending.completed_at = now
-        pending.updated_by = actor
-        pending.save(update_fields=["status", "completed_at", "updated_by", "updated_at"])
+    if open_change and kind != RequirementChangeKind.SYSTEM_RESET:
+        raise RequirementReviewError("REQUIREMENT_OPEN_CHANGE_EXISTS", "该需求已有草稿或评审中的修订。")
+    if open_change:
+        open_change.status = RequirementChangeStatus.SUPERSEDED
+        open_change.completed_at = now
+        open_change.updated_by = actor
+        open_change.save(update_fields=["status", "completed_at", "updated_by", "updated_at"])
 
     max_sequence = (
         RequirementChange.all_objects.filter(requirement=requirement).aggregate(value=Max("sequence")).get("value") or 0
@@ -341,16 +473,11 @@ def create_requirement_change(requirement, proposed_data, actor, kind=Requiremen
     base_version = requirement.versions.filter(version=requirement.current_version).first()
     base_snapshot = capture_requirement_snapshot(requirement) if requirement.current_version else {}
     proposed_reviewers = list(proposed_data["reviewers"])
-    proposed_reviewer_ids = [user.id for user in proposed_reviewers]
-    current_reviewer_ids = list(requirement.reviewers.values_list("id", flat=True))
-    approver_ids = _eligible_user_ids(requirement.product, current_reviewer_ids)
-    if kind == RequirementChangeKind.INITIAL or not approver_ids:
-        approver_ids = proposed_reviewer_ids
-
     change = RequirementChange.objects.create(
         requirement=requirement,
         sequence=max_sequence + 1,
         kind=kind,
+        status=RequirementChangeStatus.DRAFT,
         base_version=base_version,
         base_snapshot=base_snapshot,
         proposal_snapshot={},
@@ -365,14 +492,6 @@ def create_requirement_change(requirement, proposed_data, actor, kind=Requiremen
     )
     change.proposed_reviewers.set(proposed_reviewers)
     _bind_change_attachments(change, proposed_data.get("attachment_ids", []), actor)
-    RequirementChangeReviewer.objects.bulk_create(
-        [
-            RequirementChangeReviewer(change=change, reviewer_id=reviewer_id, created_by=actor)
-            for reviewer_id in approver_ids
-        ],
-        batch_size=100,
-        ignore_conflicts=True,
-    )
     change = (
         RequirementChange.objects.select_related("requirement", "module", "parent", "assignee")
         .prefetch_related("proposed_reviewers", "change_attachments__asset")
@@ -381,9 +500,9 @@ def create_requirement_change(requirement, proposed_data, actor, kind=Requiremen
     change.proposal_snapshot = capture_change_snapshot(change)
     change.save(update_fields=["proposal_snapshot", "updated_at"])
 
-    requirement.status = Requirement.Status.IN_REVIEW
     requirement.updated_by = actor
     if requirement.current_version == 0:
+        requirement.status = Requirement.Status.DRAFT
         requirement.name = change.name
         requirement.priority = change.priority
         requirement.module = change.module
@@ -396,13 +515,372 @@ def create_requirement_change(requirement, proposed_data, actor, kind=Requiremen
         requirement.reviewers.set(proposed_reviewers)
         _sync_current_attachments(requirement, proposed_data.get("attachment_ids", []), actor)
 
+    _record_lifecycle_event(
+        requirement,
+        RequirementLifecycleAction.DRAFT_CREATED,
+        actor,
+        change=change,
+        from_status=from_status,
+        to_status=requirement.status,
+    )
+    if submit_for_review:
+        return submit_requirement_change(change.id, actor)
+    return change
+
+
+@transaction.atomic
+def update_requirement_draft(change_id, proposed_data, actor):
+    change = (
+        RequirementChange.objects.select_for_update(of=("self",))
+        .select_related(
+            "requirement",
+            "requirement__product",
+            "requirement__product__workspace",
+            "module",
+            "parent",
+            "assignee",
+        )
+        .prefetch_related("proposed_reviewers", "change_attachments__asset")
+        .get(pk=change_id)
+    )
+    requirement = change.requirement
+    if change.status != RequirementChangeStatus.DRAFT:
+        raise RequirementReviewError("REQUIREMENT_DRAFT_EDIT_CLOSED", "只有草稿修订可以编辑。")
+    if not can_edit_requirement_draft(change, actor):
+        raise RequirementReviewError("REQUIREMENT_DRAFT_EDIT_FORBIDDEN", "你没有编辑该草稿的权限。")
+    if requirement.archived_at is not None or requirement.status == Requirement.Status.CLOSED:
+        raise RequirementReviewError("REQUIREMENT_TERMINAL_READ_ONLY", "当前需求不可编辑。")
+
+    change.name = proposed_data["name"]
+    change.priority = proposed_data.get("priority", "none")
+    change.module = proposed_data.get("module")
+    change.parent = proposed_data.get("parent")
+    change.assignee = proposed_data.get("assignee")
+    change.description_html = proposed_data.get("description_html")
+    change.acceptance_criteria_html = proposed_data.get("acceptance_criteria_html")
+    change.updated_by = actor
+    change.save()
+    change.proposed_reviewers.set(proposed_data.get("reviewers", []))
+    _sync_change_attachments(change, proposed_data.get("attachment_ids", []), actor)
+    change = (
+        RequirementChange.objects.select_related("requirement", "module", "parent", "assignee")
+        .prefetch_related("proposed_reviewers", "change_attachments__asset")
+        .get(pk=change.pk)
+    )
+    change.proposal_snapshot = capture_change_snapshot(change)
+    change.updated_by = actor
+    change.save(update_fields=["proposal_snapshot", "updated_by", "updated_at"])
+
+    if requirement.current_version == 0:
+        requirement.name = change.name
+        requirement.priority = change.priority
+        requirement.module = change.module
+        requirement.parent = change.parent
+        requirement.assignee = change.assignee
+        requirement.description_html = change.description_html
+        requirement.acceptance_criteria_html = change.acceptance_criteria_html
+        requirement.status = Requirement.Status.DRAFT
+        requirement.updated_by = actor
+        requirement.save()
+        requirement.reviewers.set(change.proposed_reviewers.all())
+        _sync_current_attachments(
+            requirement,
+            change.change_attachments.values_list("asset_id", flat=True),
+            actor,
+        )
+    return change
+
+
+@transaction.atomic
+def submit_requirement_change(change_id, actor):
+    change = (
+        RequirementChange.objects.select_for_update(of=("self",))
+        .select_related("requirement", "requirement__product", "requirement__product__workspace", "assignee")
+        .prefetch_related("proposed_reviewers")
+        .get(pk=change_id)
+    )
+    requirement = Requirement.objects.select_for_update().select_related("product", "product__workspace").get(
+        pk=change.requirement_id
+    )
+    if change.status != RequirementChangeStatus.DRAFT:
+        raise RequirementReviewError("REQUIREMENT_SUBMIT_CLOSED", "只有草稿修订可以提交评审。")
+    if not can_edit_requirement_draft(change, actor):
+        raise RequirementReviewError("REQUIREMENT_DRAFT_EDIT_FORBIDDEN", "你没有提交该草稿的权限。")
+    if requirement.archived_at is not None or requirement.status == Requirement.Status.CLOSED:
+        raise RequirementReviewError("REQUIREMENT_TERMINAL_READ_ONLY", "当前需求不可提交评审。")
+    proposed_reviewer_ids = list(change.proposed_reviewers.values_list("id", flat=True))
+    if not proposed_reviewer_ids:
+        raise RequirementReviewError("REQUIREMENT_REVIEWERS_REQUIRED", "需求至少需要一名评审人。")
+    participant_ids = set(proposed_reviewer_ids)
+    if change.assignee_id:
+        participant_ids.add(change.assignee_id)
+    if set(_eligible_user_ids(requirement.product, participant_ids)) != participant_ids:
+        raise RequirementReviewError(
+            "REQUIREMENT_PARTICIPANTS_INVALID",
+            "需求负责人或评审人已失去产品访问权限。",
+        )
+
+    current_reviewer_ids = list(requirement.reviewers.values_list("id", flat=True))
+    approver_ids = _eligible_user_ids(requirement.product, current_reviewer_ids)
+    if change.kind == RequirementChangeKind.INITIAL or not approver_ids:
+        approver_ids = proposed_reviewer_ids
+    RequirementChangeReviewer.objects.filter(change=change).delete()
+    RequirementChangeReviewer.objects.bulk_create(
+        [
+            RequirementChangeReviewer(change=change, reviewer_id=reviewer_id, created_by=actor)
+            for reviewer_id in approver_ids
+        ],
+        batch_size=100,
+        ignore_conflicts=True,
+    )
+    from_status = requirement.status
+    change.status = RequirementChangeStatus.PENDING
+    change.updated_by = actor
+    change.save(update_fields=["status", "updated_by", "updated_at"])
+    if requirement.current_version == 0:
+        requirement.status = Requirement.Status.IN_REVIEW
+        requirement.updated_by = actor
+        requirement.save(update_fields=["status", "updated_by", "updated_at"])
+    _record_lifecycle_event(
+        requirement,
+        RequirementLifecycleAction.SUBMITTED,
+        actor,
+        change=change,
+        from_status=from_status,
+        to_status=requirement.status,
+    )
     _send_notifications(
         change,
-        "reset" if kind == RequirementChangeKind.SYSTEM_RESET else "requested",
+        "reset" if change.kind == RequirementChangeKind.SYSTEM_RESET else "requested",
         approver_ids,
         actor,
     )
     return change
+
+
+@transaction.atomic
+def withdraw_requirement_change(change_id, actor):
+    change = (
+        RequirementChange.objects.select_for_update(of=("self",))
+        .select_related("requirement", "requirement__product", "requirement__product__workspace", "module", "parent", "assignee")
+        .prefetch_related("proposed_reviewers", "change_attachments")
+        .get(pk=change_id)
+    )
+    if change.status != RequirementChangeStatus.PENDING:
+        raise RequirementReviewError("REQUIREMENT_WITHDRAW_CLOSED", "只有评审中的修订可以撤回。")
+    if not can_edit_requirement_draft(change, actor):
+        raise RequirementReviewError("REQUIREMENT_DRAFT_EDIT_FORBIDDEN", "你没有撤回该评审的权限。")
+    requirement = change.requirement
+    proposed_data = proposal_data_from_change(change)
+    from_status = requirement.status
+    change.status = RequirementChangeStatus.CANCELLED
+    change.completed_at = timezone.now()
+    change.updated_by = actor
+    change.save(update_fields=["status", "completed_at", "updated_by", "updated_at"])
+    if requirement.current_version == 0:
+        requirement.status = Requirement.Status.DRAFT
+        requirement.updated_by = actor
+        requirement.save(update_fields=["status", "updated_by", "updated_at"])
+    _record_lifecycle_event(
+        requirement,
+        RequirementLifecycleAction.WITHDRAWN,
+        actor,
+        change=change,
+        from_status=from_status,
+        to_status=requirement.status,
+    )
+    _send_requirement_lifecycle_notifications(requirement, "withdrawn", actor, change)
+    return create_requirement_change(
+        requirement,
+        proposed_data,
+        actor,
+        kind=change.kind,
+        submit_for_review=False,
+    )
+
+
+@transaction.atomic
+def discard_requirement_draft(change_id, actor):
+    change = (
+        RequirementChange.objects.select_for_update(of=("self",))
+        .select_related("requirement", "requirement__product", "requirement__product__workspace")
+        .get(pk=change_id)
+    )
+    if change.status != RequirementChangeStatus.DRAFT:
+        raise RequirementReviewError("REQUIREMENT_DRAFT_DISCARD_CLOSED", "只有草稿修订可以放弃。")
+    if not can_edit_requirement_draft(change, actor):
+        raise RequirementReviewError("REQUIREMENT_DRAFT_EDIT_FORBIDDEN", "你没有放弃该草稿的权限。")
+    requirement = change.requirement
+    if requirement.current_version == 0:
+        raise RequirementReviewError("REQUIREMENT_INITIAL_DRAFT_DELETE_REQUIRED", "初始草稿请直接删除需求。")
+    change.status = RequirementChangeStatus.CANCELLED
+    change.completed_at = timezone.now()
+    change.updated_by = actor
+    change.save(update_fields=["status", "completed_at", "updated_by", "updated_at"])
+    _record_lifecycle_event(
+        requirement,
+        RequirementLifecycleAction.DRAFT_DISCARDED,
+        actor,
+        change=change,
+        from_status=requirement.status,
+        to_status=requirement.status,
+    )
+    _send_requirement_lifecycle_notifications(requirement, "discarded", actor, change)
+    return requirement
+
+
+@transaction.atomic
+def transition_requirement_lifecycle(requirement_id, actor, action, reason_code="", note=""):
+    requirement = (
+        Requirement.objects.select_for_update(of=("self",))
+        .select_related("product", "product__workspace", "assignee")
+        .prefetch_related("reviewers")
+        .get(pk=requirement_id)
+    )
+    if not can_manage_requirement_lifecycle(requirement, actor):
+        raise RequirementReviewError("REQUIREMENT_LIFECYCLE_FORBIDDEN", "你没有执行该状态操作的权限。")
+    if requirement.archived_at is not None:
+        raise RequirementReviewError("REQUIREMENT_ARCHIVED_READ_ONLY", "请先恢复归档需求。")
+    note = str(note or "").strip()
+    reason_code = str(reason_code or "").strip()
+    from_status = requirement.status
+    if action == RequirementLifecycleAction.CLOSED:
+        if requirement.status != Requirement.Status.PUBLISHED or requirement.current_version == 0:
+            raise RequirementReviewError("REQUIREMENT_CLOSE_REQUIRES_PUBLISHED", "只有已发布需求可以关闭。")
+        if requirement.changes.filter(
+            status__in=[RequirementChangeStatus.DRAFT, RequirementChangeStatus.PENDING]
+        ).exists():
+            raise RequirementReviewError(
+                "REQUIREMENT_OPEN_CHANGE_BLOCKS_TRANSITION",
+                "请先处理草稿或评审中的修订。",
+            )
+        valid_reasons = {choice for choice, _label in Requirement.CloseReason.choices}
+        if reason_code not in valid_reasons:
+            raise RequirementReviewError("REQUIREMENT_CLOSE_REASON_REQUIRED", "请选择有效的关闭原因。")
+        if reason_code == Requirement.CloseReason.OTHER and not note:
+            raise RequirementReviewError("REQUIREMENT_CLOSE_NOTE_REQUIRED", "选择其他原因时必须填写说明。")
+        requirement.status = Requirement.Status.CLOSED
+        requirement.closed_at = timezone.now()
+        requirement.closed_by = actor
+        requirement.closed_reason_code = reason_code
+        requirement.closed_note = note
+        event_name = "closed"
+    elif action == RequirementLifecycleAction.REOPENED:
+        if requirement.status != Requirement.Status.CLOSED:
+            raise RequirementReviewError("REQUIREMENT_REOPEN_INVALID_STATUS", "只有已关闭的需求可以重新打开。")
+        if not note:
+            raise RequirementReviewError("REQUIREMENT_REOPEN_REASON_REQUIRED", "重新打开时必须填写原因。")
+        requirement.status = Requirement.Status.PUBLISHED
+        requirement.closed_at = None
+        requirement.closed_by = None
+        requirement.closed_reason_code = ""
+        requirement.closed_note = ""
+        event_name = "reopened"
+    else:
+        raise RequirementReviewError("REQUIREMENT_LIFECYCLE_ACTION_INVALID", "不支持的需求状态操作。")
+
+    requirement.updated_by = actor
+    requirement.save()
+    _record_lifecycle_event(
+        requirement,
+        action,
+        actor,
+        from_status=from_status,
+        to_status=requirement.status,
+        reason_code=reason_code,
+        note=note,
+    )
+    _send_requirement_lifecycle_notifications(requirement, event_name, actor)
+    return requirement
+
+
+def _unarchived_descendant_ids(requirement):
+    visited_ids = {requirement.id}
+    unarchived_ids = set()
+    frontier = {requirement.id}
+    while frontier:
+        children = list(
+            Requirement.objects.filter(
+                product_id=requirement.product_id,
+                parent_id__in=frontier,
+            ).values_list("id", "archived_at")
+        )
+        child_ids = {child_id for child_id, _archived_at in children} - visited_ids
+        if not child_ids:
+            break
+        visited_ids.update(child_ids)
+        unarchived_ids.update(
+            child_id for child_id, archived_at in children if child_id in child_ids and archived_at is None
+        )
+        frontier = child_ids
+    return unarchived_ids
+
+
+def _has_archived_ancestor(requirement):
+    parent_id = requirement.parent_id
+    visited_ids = {requirement.id}
+    while parent_id and parent_id not in visited_ids:
+        visited_ids.add(parent_id)
+        ancestor = Requirement.objects.filter(
+            id=parent_id,
+            product_id=requirement.product_id,
+        ).values("parent_id", "archived_at").first()
+        if ancestor is None:
+            return False
+        if ancestor["archived_at"] is not None:
+            return True
+        parent_id = ancestor["parent_id"]
+    return False
+
+
+@transaction.atomic
+def set_requirement_archived(requirement_id, actor, archived):
+    requirement = (
+        Requirement.objects.select_for_update(of=("self",))
+        .select_related("product", "product__workspace", "assignee")
+        .prefetch_related("reviewers")
+        .get(pk=requirement_id)
+    )
+    if not can_manage_requirement_lifecycle(requirement, actor):
+        raise RequirementReviewError("REQUIREMENT_LIFECYCLE_FORBIDDEN", "你没有执行归档操作的权限。")
+    if archived:
+        if requirement.archived_at is not None:
+            return requirement
+        if requirement.status != Requirement.Status.CLOSED:
+            raise RequirementReviewError("REQUIREMENT_ARCHIVE_STATUS_INVALID", "只有已关闭的需求可以归档。")
+        descendant_ids = _unarchived_descendant_ids(requirement)
+        if descendant_ids:
+            raise RequirementReviewError(
+                "REQUIREMENT_ARCHIVE_DESCENDANTS_EXIST",
+                f"仍有 {len(descendant_ids)} 个未归档后代需求，请先处理后再归档。",
+            )
+        requirement.archived_at = timezone.now()
+        requirement.archived_by = actor
+        action = RequirementLifecycleAction.ARCHIVED
+        event_name = "archived"
+    else:
+        if requirement.archived_at is None:
+            return requirement
+        if _has_archived_ancestor(requirement):
+            raise RequirementReviewError(
+                "REQUIREMENT_RESTORE_ANCESTOR_ARCHIVED",
+                "请先恢复该需求的已归档上级需求。",
+            )
+        requirement.archived_at = None
+        requirement.archived_by = None
+        action = RequirementLifecycleAction.RESTORED
+        event_name = "restored"
+    requirement.updated_by = actor
+    requirement.save(update_fields=["archived_at", "archived_by", "updated_by", "updated_at"])
+    _record_lifecycle_event(
+        requirement,
+        action,
+        actor,
+        from_status=requirement.status,
+        to_status=requirement.status,
+    )
+    _send_requirement_lifecycle_notifications(requirement, event_name, actor)
+    return requirement
 
 
 @transaction.atomic
@@ -462,12 +940,16 @@ def submit_requirement_review(change_id, reviewer, opinion, reason=""):
     assignment.save(update_fields=["latest_opinion", "latest_reason", "reviewed_at", "updated_by", "updated_at"])
 
     requirement = Requirement.objects.select_for_update().get(pk=change.requirement_id)
+    if requirement.archived_at is not None or requirement.status == Requirement.Status.CLOSED:
+        raise RequirementReviewError("REQUIREMENT_TERMINAL_READ_ONLY", "当前需求不可继续评审。")
     if opinion == RequirementReviewOpinion.REJECTED:
         change.status = RequirementChangeStatus.REJECTED
         change.completed_at = timezone.now()
         change.updated_by = reviewer
         change.save(update_fields=["status", "completed_at", "updated_by", "updated_at"])
-        requirement.status = Requirement.Status.REJECTED
+        requirement.status = (
+            Requirement.Status.REJECTED if requirement.current_version == 0 else Requirement.Status.PUBLISHED
+        )
         requirement.updated_by = reviewer
         requirement.save(update_fields=["status", "updated_by", "updated_at"])
         _send_notifications(change, "rejected", [change.created_by_id], reviewer)
@@ -519,7 +1001,7 @@ def create_legacy_version(requirement, actor=None):
         batch_size=100,
         ignore_conflicts=True,
     )
-    requirement.status = Requirement.Status.ACTIVE
+    requirement.status = Requirement.Status.PUBLISHED
     requirement.current_version = 1
     requirement.save(update_fields=["status", "current_version", "updated_at"])
     return version

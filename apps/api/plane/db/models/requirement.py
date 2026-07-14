@@ -40,9 +40,18 @@ class Requirement(BaseModel):
         USER = "user", "用户需求"
 
     class Status(models.TextChoices):
+        DRAFT = "draft", "草稿"
         IN_REVIEW = "in_review", "评审中"
-        ACTIVE = "active", "激活"
+        PUBLISHED = "published", "已发布"
         REJECTED = "rejected", "拒绝"
+        CLOSED = "closed", "已关闭"
+
+    class CloseReason(models.TextChoices):
+        CANCELLED = "cancelled", "需求取消"
+        DUPLICATE = "duplicate", "重复需求"
+        POSTPONED = "postponed", "暂不实施"
+        REPLACED = "replaced", "已被替代"
+        OTHER = "other", "其他"
 
     PRIORITY_CHOICES = (
         ("urgent", "Urgent"),
@@ -104,13 +113,39 @@ class Requirement(BaseModel):
     status = models.CharField(
         max_length=20,
         choices=Status.choices,
-        default=Status.IN_REVIEW,
+        default=Status.DRAFT,
         db_index=True,
         verbose_name="Requirement Status",
     )
     current_version = models.PositiveIntegerField(
         default=0,
         verbose_name="Current Requirement Version",
+    )
+    closed_at = models.DateTimeField(null=True, blank=True, verbose_name="Closed At")
+    closed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="closed_requirements",
+        verbose_name="Closed By",
+    )
+    closed_reason_code = models.CharField(
+        max_length=20,
+        choices=CloseReason.choices,
+        blank=True,
+        default="",
+        verbose_name="Close Reason",
+    )
+    closed_note = models.TextField(blank=True, default="", verbose_name="Close Note")
+    archived_at = models.DateTimeField(null=True, blank=True, db_index=True, verbose_name="Archived At")
+    archived_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="archived_requirements",
+        verbose_name="Archived By",
     )
     description_html = models.JSONField(
         blank=True,
@@ -142,6 +177,16 @@ class Requirement(BaseModel):
 
     def clean(self):
         super().clean()
+
+        if self.status == self.Status.CLOSED:
+            if self.closed_at is None:
+                raise ValidationError({"closed_at": "关闭需求时必须记录关闭时间。"})
+            if not self.closed_reason_code:
+                raise ValidationError({"closed_reason_code": "关闭需求时必须选择关闭原因。"})
+            if self.closed_reason_code == self.CloseReason.OTHER and not self.closed_note.strip():
+                raise ValidationError({"closed_note": "选择其他原因时必须填写说明。"})
+        if self.archived_at is not None and self.status != self.Status.CLOSED:
+            raise ValidationError({"archived_at": "只有已关闭的需求可以归档。"})
 
         if self.module_id and self.module.product_id != self.product_id:
             raise ValidationError({"module": "需求模块必须属于当前需求的产品。"})
@@ -274,9 +319,11 @@ class RequirementComment(BaseModel):
 
 
 class RequirementChangeStatus(models.TextChoices):
+    DRAFT = "draft", "草稿"
     PENDING = "pending", "待评审"
     APPROVED = "approved", "已通过"
     REJECTED = "rejected", "已拒绝"
+    CANCELLED = "cancelled", "已取消"
     SUPERSEDED = "superseded", "已替代"
 
 
@@ -361,7 +408,7 @@ class RequirementChange(BaseModel):
     status = models.CharField(
         max_length=20,
         choices=RequirementChangeStatus.choices,
-        default=RequirementChangeStatus.PENDING,
+        default=RequirementChangeStatus.DRAFT,
         db_index=True,
         verbose_name="Change Status",
     )
@@ -464,10 +511,10 @@ class RequirementChange(BaseModel):
             models.UniqueConstraint(
                 fields=["requirement"],
                 condition=Q(
-                    status=RequirementChangeStatus.PENDING,
+                    status__in=[RequirementChangeStatus.DRAFT, RequirementChangeStatus.PENDING],
                     deleted_at__isnull=True,
                 ),
-                name="requirement_change_unique_pending_when_not_deleted",
+                name="requirement_change_unique_open_when_not_deleted",
             ),
         ]
 
@@ -574,6 +621,60 @@ class RequirementReviewRecord(BaseModel):
     def save(self, *args, **kwargs):
         self.full_clean(exclude=["created_by", "updated_by"])
         return super().save(*args, **kwargs)
+
+
+class RequirementLifecycleAction(models.TextChoices):
+    DRAFT_CREATED = "draft_created", "创建草稿"
+    SUBMITTED = "submitted", "提交评审"
+    WITHDRAWN = "withdrawn", "撤回评审"
+    DRAFT_DISCARDED = "draft_discarded", "放弃草稿"
+    CLOSED = "closed", "关闭"
+    REOPENED = "reopened", "重新打开"
+    ARCHIVED = "archived", "归档"
+    RESTORED = "restored", "恢复归档"
+
+
+class RequirementLifecycleEvent(BaseModel):
+    requirement = models.ForeignKey(
+        Requirement,
+        on_delete=models.CASCADE,
+        related_name="lifecycle_events",
+        verbose_name="Requirement",
+    )
+    change = models.ForeignKey(
+        RequirementChange,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="lifecycle_events",
+        verbose_name="Requirement Change",
+    )
+    action = models.CharField(
+        max_length=30,
+        choices=RequirementLifecycleAction.choices,
+        db_index=True,
+        verbose_name="Lifecycle Action",
+    )
+    from_status = models.CharField(max_length=20, blank=True, default="", verbose_name="From Status")
+    to_status = models.CharField(max_length=20, blank=True, default="", verbose_name="To Status")
+    reason_code = models.CharField(max_length=30, blank=True, default="", verbose_name="Reason Code")
+    note = models.TextField(blank=True, default="", verbose_name="Note")
+    metadata = models.JSONField(default=dict, blank=True, verbose_name="Metadata")
+
+    class Meta:
+        verbose_name = "Requirement Lifecycle Event"
+        verbose_name_plural = "Requirement Lifecycle Events"
+        db_table = "requirement_lifecycle_events"
+        ordering = ("created_at",)
+        indexes = [
+            models.Index(
+                fields=["requirement", "created_at"],
+                name="idx_req_lifecycle_history",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.requirement_id} - {self.action}"
 
 
 class RequirementChangeAttachment(BaseModel):

@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { observer } from "mobx-react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { useOutletContext } from "react-router";
 import { Pagination } from "antd";
-import { ClipboardCheck, ClipboardList, Package, Settings2 } from "lucide-react";
+import { Archive, ClipboardCheck, ClipboardList, Package, Settings2 } from "lucide-react";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { AlertModalCore, Breadcrumbs, Header, Table } from "@plane/ui";
@@ -26,6 +26,7 @@ import { DeleteRequirementModal } from "./delete-requirement-modal";
 import type { TRequirementFilterKey } from "./requirement-filters";
 import { RequirementFiltersRow, RequirementFiltersToggle } from "./requirement-filters";
 import { RequirementFormModal } from "./requirement-form-modal";
+import { RequirementLifecycleModal } from "./requirement-lifecycle-modal";
 import { RequirementModuleManagerModal } from "./requirement-module-manager-modal";
 import { RequirementModuleSidebar } from "./requirement-module-sidebar";
 import { getRequirementTableColumns } from "./requirement-table-columns";
@@ -37,20 +38,29 @@ type TRequirementsRootProps = {
 export const UserRequirementsRoot = observer(function UserRequirementsRoot(props: TRequirementsRootProps) {
   const { requirementType = "user" } = props;
   const { productId, workspaceSlug } = useParams();
+  const searchParams = useSearchParams();
   const slug = workspaceSlug?.toString();
   const id = productId?.toString();
   const { error: productError, isLoading: isProductLoading, product } = useOutletContext<TProductDetailOutletContext>();
   const {
     createRequirement,
+    archivedCount,
     deleteRequirement,
+    discardChangeDraft,
     error,
     fetchParentOptions,
     fetchRequirement,
     fetchRequirements,
     isLoading,
+    isMutating,
     requirements,
     totalCount,
+    saveChangeDraft,
+    setArchived,
+    submitChange,
+    transitionLifecycle,
     updateRequirement,
+    withdrawChange,
   } = useUserRequirements(slug, id, requirementType);
   const {
     createModule,
@@ -66,9 +76,12 @@ export const UserRequirementsRoot = observer(function UserRequirementsRoot(props
   const isUserRequirement = requirementType === "user";
   const requirementLabel = isUserRequirement ? "用户需求" : "研发需求";
   const requirementPath = isUserRequirement ? "user-requirements" : "development-requirements";
+  const isArchivedView = searchParams.get("archived") === "true";
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [priority, setPriority] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [changeStatus, setChangeStatus] = useState("");
   const [moduleId, setModuleId] = useState("");
   const [assigneeId, setAssigneeId] = useState<string | null>(null);
   const [isFiltersVisible, setIsFiltersVisible] = useState(false);
@@ -80,13 +93,22 @@ export const UserRequirementsRoot = observer(function UserRequirementsRoot(props
   const [deletingRequirement, setDeletingRequirement] = useState<TUserRequirementListItem | null>(null);
   const [deletingModule, setDeletingModule] = useState<TRequirementModule | null>(null);
   const [isModuleManagerOpen, setIsModuleManagerOpen] = useState(false);
+  const [lifecycleTarget, setLifecycleTarget] = useState<TUserRequirementListItem | null>(null);
+  const [lifecycleAction, setLifecycleAction] = useState<"closed" | "reopened" | null>(null);
+  const [pendingAction, setPendingAction] = useState<{
+    action: "archive" | "restore" | "withdraw" | "discard";
+    requirement: TUserRequirementListItem;
+  } | null>(null);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedSearch(searchQuery.trim()), 300);
     return () => window.clearTimeout(timer);
   }, [searchQuery]);
 
-  useEffect(() => setPage(1), [assigneeId, debouncedSearch, moduleId, priority]);
+  useEffect(
+    () => setPage(1),
+    [assigneeId, changeStatus, debouncedSearch, isArchivedView, moduleId, priority, statusFilter]
+  );
 
   const listParams = useMemo<TUserRequirementListParams>(
     () => ({
@@ -94,10 +116,13 @@ export const UserRequirementsRoot = observer(function UserRequirementsRoot(props
       page_size: pageSize,
       search: debouncedSearch || undefined,
       priority: priority || undefined,
+      status: statusFilter || undefined,
+      change_status: (changeStatus || undefined) as TUserRequirementListParams["change_status"],
+      archived: isArchivedView,
       module: moduleId || undefined,
       assignee: assigneeId || undefined,
     }),
-    [assigneeId, debouncedSearch, moduleId, page, pageSize, priority]
+    [assigneeId, changeStatus, debouncedSearch, isArchivedView, moduleId, page, pageSize, priority, statusFilter]
   );
 
   useEffect(() => {
@@ -118,6 +143,18 @@ export const UserRequirementsRoot = observer(function UserRequirementsRoot(props
           setEditingRequirement(requirement);
           setIsFormOpen(true);
         },
+        onReview: (requirement) =>
+          router.push(
+            `/${slug}/products/${id}/${requirementPath}/${requirement.id}/review/${requirement.active_change?.id ?? ""}`
+          ),
+        onAction: (action, requirement) => {
+          if (action === "close" || action === "reopen") {
+            setLifecycleTarget(requirement);
+            setLifecycleAction(action === "close" ? "closed" : "reopened");
+            return;
+          }
+          setPendingAction({ action, requirement });
+        },
         onDelete: setDeletingRequirement,
       }),
     [id, requirementPath, router, slug]
@@ -137,8 +174,8 @@ export const UserRequirementsRoot = observer(function UserRequirementsRoot(props
 
   const refresh = () => fetchRequirements(listParams);
   const isBusy = isLoading;
-  const hasFilters = !!(debouncedSearch || priority || moduleId || assigneeId);
-  const hasAppliedFilters = !!(priority || moduleId || assigneeId);
+  const hasFilters = !!(debouncedSearch || priority || statusFilter || changeStatus || moduleId || assigneeId);
+  const hasAppliedFilters = !!(priority || statusFilter || changeStatus || moduleId || assigneeId);
 
   const addFilterKey = (key: TRequirementFilterKey) => {
     setActiveFilterKeys((keys) => (keys.includes(key) ? keys : [...keys, key]));
@@ -149,10 +186,14 @@ export const UserRequirementsRoot = observer(function UserRequirementsRoot(props
     setActiveFilterKeys((keys) => keys.filter((item) => item !== key));
     if (key === "priority") setPriority("");
     if (key === "assignee") setAssigneeId(null);
+    if (key === "status") setStatusFilter("");
+    if (key === "change_status") setChangeStatus("");
   };
 
   const clearAllFilters = () => {
     setPriority("");
+    setStatusFilter("");
+    setChangeStatus("");
     setModuleId("");
     setAssigneeId(null);
   };
@@ -190,17 +231,86 @@ export const UserRequirementsRoot = observer(function UserRequirementsRoot(props
           setIsFormOpen(false);
           setEditingRequirement(null);
         }}
-        onSubmit={async (data) => {
+        onSubmit={async (data, submitForReview) => {
           if (editingRequirement) {
-            const updated = await updateRequirement(editingRequirement.id, data);
+            const openChange = editingRequirement.active_change;
+            const updated =
+              openChange?.status === "draft"
+                ? submitForReview
+                  ? await submitChange(editingRequirement.id, openChange.id, data)
+                  : await saveChangeDraft(editingRequirement.id, openChange.id, data)
+                : await updateRequirement(editingRequirement.id, data, submitForReview);
             void fetchModules();
+            await refresh();
             return updated;
           }
-          const response = await createRequirement(data);
+          const response = await createRequirement(data, submitForReview);
           void fetchModules();
           if (page !== 1) setPage(1);
           else await refresh();
           return response;
+        }}
+      />
+      <RequirementLifecycleModal
+        requirement={lifecycleTarget}
+        action={lifecycleAction}
+        isSubmitting={isMutating}
+        onClose={() => {
+          setLifecycleTarget(null);
+          setLifecycleAction(null);
+        }}
+        onSubmit={async (data) => {
+          if (!lifecycleTarget) return;
+          try {
+            await transitionLifecycle(lifecycleTarget.id, data);
+            setToast({ type: TOAST_TYPE.SUCCESS, title: "状态已更新", message: "需求生命周期状态已更新。" });
+            setLifecycleTarget(null);
+            setLifecycleAction(null);
+            await refresh();
+          } catch (error: any) {
+            setToast({ type: TOAST_TYPE.ERROR, title: "操作失败", message: error?.error ?? "请稍后重试。" });
+          }
+        }}
+      />
+      <AlertModalCore
+        isOpen={!!pendingAction}
+        title={
+          pendingAction?.action === "archive"
+            ? "归档需求"
+            : pendingAction?.action === "restore"
+              ? "恢复归档"
+              : pendingAction?.action === "withdraw"
+                ? "撤回评审"
+                : "放弃修订草稿"
+        }
+        content={
+          pendingAction?.action === "archive"
+            ? "归档后需求将从默认列表隐藏。存在未归档后代需求时无法归档。"
+            : pendingAction?.action === "restore"
+              ? "恢复后需求仍保持已关闭状态。"
+              : pendingAction?.action === "withdraw"
+                ? "当前评审会结束，并基于提案创建一个新的修订草稿。"
+                : "该修订草稿将被取消，当前正式版本不受影响。"
+        }
+        isSubmitting={isMutating}
+        handleClose={() => setPendingAction(null)}
+        handleSubmit={async () => {
+          if (!pendingAction) return;
+          const { action, requirement } = pendingAction;
+          try {
+            if (action === "archive" || action === "restore") {
+              await setArchived(requirement.id, action === "archive");
+            } else if (action === "withdraw" && requirement.active_change) {
+              await withdrawChange(requirement.id, requirement.active_change.id);
+            } else if (action === "discard" && requirement.active_change) {
+              await discardChangeDraft(requirement.id, requirement.active_change.id);
+            }
+            setToast({ type: TOAST_TYPE.SUCCESS, title: "操作成功", message: "需求已更新。" });
+            setPendingAction(null);
+            await refresh();
+          } catch (error: any) {
+            setToast({ type: TOAST_TYPE.ERROR, title: "操作失败", message: error?.error ?? "请稍后重试。" });
+          }
         }}
       />
       <DeleteRequirementModal
@@ -278,6 +388,16 @@ export const UserRequirementsRoot = observer(function UserRequirementsRoot(props
                 onToggle={() => setIsFiltersVisible((visible) => !visible)}
               />
               <Button
+                variant={isArchivedView ? "primary" : "secondary"}
+                size="lg"
+                prependIcon={<Archive className="size-4" />}
+                onClick={() =>
+                  router.push(`/${slug}/products/${id}/${requirementPath}${isArchivedView ? "" : "?archived=true"}`)
+                }
+              >
+                {isArchivedView ? "返回需求" : `已归档 ${archivedCount}`}
+              </Button>
+              <Button
                 variant="secondary"
                 size="lg"
                 prependIcon={<ClipboardCheck className="size-4" />}
@@ -293,9 +413,11 @@ export const UserRequirementsRoot = observer(function UserRequirementsRoot(props
               >
                 管理模块
               </Button>
-              <Button variant="primary" size="lg" onClick={openCreate}>
-                创建{requirementLabel}
-              </Button>
+              {!isArchivedView && (
+                <Button variant="primary" size="lg" onClick={openCreate}>
+                  创建{requirementLabel}
+                </Button>
+              )}
             </Header.RightItem>
           </Header>
         }
@@ -332,12 +454,16 @@ export const UserRequirementsRoot = observer(function UserRequirementsRoot(props
               <RequirementFiltersRow
                 isVisible={isFiltersVisible}
                 activeKeys={activeFilterKeys}
+                status={statusFilter}
+                changeStatus={changeStatus}
                 priority={priority}
                 assigneeId={assigneeId}
                 totalCount={totalCount}
                 onAddFilter={addFilterKey}
                 onRemoveFilter={removeFilterKey}
                 onPriorityChange={setPriority}
+                onStatusChange={setStatusFilter}
+                onChangeStatusChange={setChangeStatus}
                 onAssigneeChange={setAssigneeId}
                 onClearAll={clearAllFilters}
               />
@@ -372,7 +498,7 @@ export const UserRequirementsRoot = observer(function UserRequirementsRoot(props
                         ? "调整筛选条件或搜索关键词后重试。"
                         : "记录真实用户场景，让产品决策和研发交付有清晰依据。"}
                     </p>
-                    {!hasFilters && (
+                    {!hasFilters && !isArchivedView && (
                       <Button variant="primary" size="lg" className="mt-4" onClick={openCreate}>
                         创建第一个{requirementLabel}
                       </Button>
