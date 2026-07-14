@@ -16,7 +16,7 @@ import {
   Users,
 } from "lucide-react";
 import { PriorityIcon } from "@plane/propel/icons";
-import { Avatar, CustomMenu } from "@plane/ui";
+import { Avatar, CustomMenu, Tooltip } from "@plane/ui";
 import { getFileURL, renderFormattedDate } from "@plane/utils";
 import type { TUserRequirementListItem } from "@/services/requirement.service";
 
@@ -65,11 +65,7 @@ export function getRequirementTableColumns(params: TRequirementTableColumnsParam
           className="flex h-11 w-full min-w-0 items-center gap-2 px-3 text-left hover:text-primary"
           onClick={() => onOpen(requirement)}
         >
-          <ClipboardList className="size-3.5 shrink-0 text-accent-primary" />
           <span className="min-w-0 truncate text-13 text-primary">{requirement.name}</span>
-          <span className="ml-auto shrink-0 text-11 text-tertiary">
-            {requirement.attachment_count} 附件 · {requirement.sub_requirements_count} 子需求
-          </span>
         </button>
       ),
     },
@@ -88,12 +84,17 @@ export function getRequirementTableColumns(params: TRequirementTableColumnsParam
           closed: { label: "已关闭", className: "bg-slate-500/10 text-slate-700 dark:text-slate-300" },
         }[requirement.status];
         return (
-          <div className="flex h-11 items-center gap-1 px-3">
+          <div className="flex h-11 items-center gap-1.5 px-3">
             <span className={`rounded-full px-2 py-0.5 text-11 font-medium ${meta.className}`}>{meta.label}</span>
             {requirement.active_change && (
-              <span className="rounded-full bg-accent-primary/10 px-1.5 py-0.5 text-10 text-accent-primary">
-                {requirement.active_change.status === "draft" ? "修订草稿" : "修订评审中"}
-              </span>
+              <Tooltip tooltipContent={requirement.active_change.status === "draft" ? "修订草稿" : "修订评审中"}>
+                <span
+                  className="inline-block size-2 shrink-0 rounded-full"
+                  style={{
+                    backgroundColor: requirement.active_change.status === "draft" ? "#9ca3af" : "#eab308",
+                  }}
+                />
+              </Tooltip>
             )}
           </div>
         );
