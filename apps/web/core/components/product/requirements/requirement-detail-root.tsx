@@ -452,7 +452,7 @@ export const RequirementDetailRoot = observer(function RequirementDetailRoot(pro
                   }
                 >
                   <SidebarRow icon={CircleDot} label="状态">
-                    <RequirementStatusBadge status={requirement.status} />
+                    <RequirementStatusBadge status={requirement.status} plain />
                   </SidebarRow>
                   <SidebarRow icon={SignalHigh} label="优先级">
                     {priorityLabels[requirement.priority] ?? "无"}

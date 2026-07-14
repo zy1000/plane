@@ -38,34 +38,52 @@ const opinionMeta: Record<
   },
 };
 
-export function RequirementStatusBadge(props: { status: TRequirementStatus; className?: string }) {
+export function RequirementStatusBadge(props: {
+  status: TRequirementStatus;
+  className?: string;
+  /** 属性栏等需与纯文本左对齐时，去掉 pill 内边距与前置圆点 */
+  plain?: boolean;
+}) {
   const meta = {
     draft: {
       label: "草稿",
       className: "bg-gray-500/10 text-gray-700 dark:text-gray-300",
+      textClassName: "text-gray-700 dark:text-gray-300",
       dotClassName: "bg-gray-500",
     },
     in_review: {
       label: "评审中",
       className: "bg-yellow-500/10 text-yellow-700 dark:text-yellow-300",
+      textClassName: "text-yellow-700 dark:text-yellow-300",
       dotClassName: "bg-yellow-500",
     },
     published: {
       label: "已发布",
       className: "bg-green-500/10 text-green-700 dark:text-green-300",
+      textClassName: "text-green-700 dark:text-green-300",
       dotClassName: "bg-green-500",
     },
     rejected: {
       label: "已拒绝",
       className: "bg-red-500/10 text-red-700 dark:text-red-300",
+      textClassName: "text-red-700 dark:text-red-300",
       dotClassName: "bg-red-500",
     },
     closed: {
       label: "已关闭",
       className: "bg-slate-500/10 text-slate-700 dark:text-slate-300",
+      textClassName: "text-slate-700 dark:text-slate-300",
       dotClassName: "bg-slate-500",
     },
   }[props.status];
+
+  if (props.plain) {
+    return (
+      <span className={cn("text-body-xs-medium font-medium", meta.textClassName, props.className)}>
+        {meta.label}
+      </span>
+    );
+  }
 
   return (
     <span
