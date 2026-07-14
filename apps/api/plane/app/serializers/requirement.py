@@ -452,6 +452,11 @@ class RequirementListSerializer(BaseSerializer):
 
 class RequirementDetailSerializer(RequirementListSerializer):
     attachments = RequirementAttachmentDetailSerializer(source="requirement_attachments", many=True, read_only=True)
+    sub_requirements = RequirementParentLiteSerializer(
+        source="prefetched_sub_requirements",
+        many=True,
+        read_only=True,
+    )
     latest_change = serializers.SerializerMethodField()
     open_change = serializers.SerializerMethodField()
 
@@ -460,6 +465,7 @@ class RequirementDetailSerializer(RequirementListSerializer):
             "description_html",
             "acceptance_criteria_html",
             "attachments",
+            "sub_requirements",
             "latest_change",
             "open_change",
         ]

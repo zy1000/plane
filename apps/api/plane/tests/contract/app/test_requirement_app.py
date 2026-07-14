@@ -292,8 +292,9 @@ class TestUserRequirementApp:
             name="User requirement",
             type=Requirement.RequirementType.USER,
         )
-        Requirement.objects.create(
+        development_requirement = Requirement.objects.create(
             product=product,
+            parent=user_requirement,
             name="Development requirement",
             type=Requirement.RequirementType.DEVELOPMENT,
         )
@@ -306,6 +307,18 @@ class TestUserRequirementApp:
         listing = session_client.get(requirement_url(workspace.slug, product.id))
         assert listing.status_code == status.HTTP_200_OK
         assert [row["id"] for row in listing.data["data"]] == [user_requirement.id]
+
+        detail = session_client.get(requirement_url(workspace.slug, product.id, user_requirement.id))
+        assert detail.status_code == status.HTTP_200_OK
+        assert detail.data["sub_requirements"] == [
+            {
+                "id": development_requirement.id,
+                "name": development_requirement.name,
+                "type": Requirement.RequirementType.DEVELOPMENT,
+                "status": development_requirement.status,
+                "current_version": development_requirement.current_version,
+            }
+        ]
 
         foreign_detail = session_client.get(requirement_url(workspace.slug, product.id, foreign_requirement.id))
         assert foreign_detail.status_code == status.HTTP_404_NOT_FOUND

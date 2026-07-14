@@ -51,6 +51,9 @@ const priorityLabels: Record<string, string> = {
   none: "无",
 };
 
+const getRequirementPath = (requirementType: TRequirementType) =>
+  requirementType === "user" ? "user-requirements" : "development-requirements";
+
 /** 右侧属性栏分组：加粗标题 + 可折叠箭头，风格对齐工作项详情页的「属性」侧边栏 */
 function SectionGroup(props: { title: string; action?: ReactNode; defaultOpen?: boolean; children: ReactNode }) {
   const { title, action, defaultOpen = true, children } = props;
@@ -139,7 +142,7 @@ export const RequirementDetailRoot = observer(function RequirementDetailRoot(pro
   const [isActionSubmitting, setIsActionSubmitting] = useState(false);
   const [simpleAction, setSimpleAction] = useState<"archive" | "restore" | "withdraw" | "discard" | null>(null);
   const label = requirementType === "user" ? "用户需求" : "研发需求";
-  const path = requirementType === "user" ? "user-requirements" : "development-requirements";
+  const path = getRequirementPath(requirementType);
 
   useEffect(() => {
     if (!reqId) return;
@@ -488,7 +491,23 @@ export const RequirementDetailRoot = observer(function RequirementDetailRoot(pro
                     <span className="truncate">{requirement.module_detail?.name ?? "未分配"}</span>
                   </SidebarRow>
                   <SidebarRow icon={GitFork} label="父需求">
-                    <span className="truncate">{requirement.parent_detail?.name ?? "无"}</span>
+                    {requirement.parent_detail ? (
+                      <button
+                        type="button"
+                        title={requirement.parent_detail.name}
+                        aria-label={`打开父需求 ${requirement.parent_detail.name}`}
+                        onClick={() =>
+                          router.push(
+                            `/${slug}/products/${id}/${getRequirementPath(requirement.parent_detail.type)}/${requirement.parent_detail.id}`
+                          )
+                        }
+                        className="focus-visible:ring-accent-primary/30 -ml-1.5 min-w-0 max-w-full truncate rounded-sm px-1.5 py-1 text-left transition-colors hover:bg-layer-1 hover:text-primary focus-visible:ring-2 focus-visible:outline-none"
+                      >
+                        {requirement.parent_detail.name}
+                      </button>
+                    ) : (
+                      "无"
+                    )}
                   </SidebarRow>
                 </SectionGroup>
 
@@ -543,6 +562,39 @@ export const RequirementDetailRoot = observer(function RequirementDetailRoot(pro
                     </div>
                   ) : (
                     <p className="text-body-xs-regular text-placeholder">暂无附件</p>
+                  )}
+                </SectionGroup>
+
+                <SectionGroup
+                  title="子需求"
+                  action={
+                    <span className="text-caption-sm-regular text-tertiary">
+                      {requirement.sub_requirements.length} 个
+                    </span>
+                  }
+                >
+                  {requirement.sub_requirements.length > 0 ? (
+                    <ul className="w-full divide-y divide-subtle">
+                      {requirement.sub_requirements.map((subRequirement) => (
+                        <li key={subRequirement.id} className="min-w-0">
+                          <button
+                            type="button"
+                            title={subRequirement.name}
+                            aria-label={`打开子需求 ${subRequirement.name}`}
+                            onClick={() =>
+                              router.push(
+                                `/${slug}/products/${id}/${getRequirementPath(subRequirement.type)}/${subRequirement.id}`
+                              )
+                            }
+                            className="focus-visible:ring-accent-primary/30 block w-full truncate rounded-sm px-2 py-2 text-left text-body-xs-medium text-secondary transition-colors hover:bg-layer-1 hover:text-primary focus-visible:ring-2 focus-visible:outline-none"
+                          >
+                            {subRequirement.name}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-body-xs-regular text-placeholder">暂无子需求</p>
                   )}
                 </SectionGroup>
 

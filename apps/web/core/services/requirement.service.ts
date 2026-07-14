@@ -55,6 +55,14 @@ export type TRequirementAttachment = {
   created_by: string | null;
 };
 
+export type TRequirementReference = {
+  id: string;
+  name: string;
+  type: TRequirementType;
+  status: TRequirementStatus;
+  current_version: number;
+};
+
 export type TRequirementSnapshot = {
   name?: string;
   type?: TRequirementType;
@@ -185,6 +193,7 @@ export type TUserRequirementDetail = TUserRequirementListItem & {
   description_html: string | null;
   acceptance_criteria_html: string | null;
   attachments: TRequirementAttachment[];
+  sub_requirements: TRequirementReference[];
   latest_change: TRequirementChange | null;
   open_change: TRequirementChange | null;
 };

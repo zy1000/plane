@@ -142,6 +142,15 @@ class RequirementViewSet(ProductRequirementMixin, BaseViewSet):
             .prefetch_related(
                 "reviewers",
                 "requirement_attachments__asset",
+                Prefetch(
+                    "sub_requirements",
+                    queryset=Requirement.objects.filter(
+                        product_id=self.kwargs.get("product_id"),
+                        product__workspace__slug=self.kwargs.get("slug"),
+                        deleted_at__isnull=True,
+                    ).order_by("-created_at"),
+                    to_attr="prefetched_sub_requirements",
+                ),
                 Prefetch("changes", queryset=changes, to_attr="prefetched_changes"),
                 Prefetch(
                     "changes",
