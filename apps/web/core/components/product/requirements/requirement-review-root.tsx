@@ -251,6 +251,13 @@ export const RequirementReviewRoot = observer(function RequirementReviewRoot(pro
   const [opinion, setOpinion] = useState<TRequirementReviewOpinion>("approved");
   const [reason, setReason] = useState("");
   const change = refreshedChange ?? requirement?.latest_change;
+  const isStructuredChange = change?.requirement_content_mode === "structured";
+  const metaChangedCount = change
+    ? change.diff.changed_fields.filter((field) => field.field !== "structured").length
+    : 0;
+  const structuredChangedCount = change
+    ? Object.values(change.structured_diff_summary ?? {}).reduce((sum, value) => sum + value, 0)
+    : 0;
   const initiator = change?.created_by ? getUserDetails(change.created_by) : undefined;
   const initiatorName = change?.created_by ? (initiator?.display_name ?? "未知用户") : "系统";
   const label = requirementType === "user" ? "用户需求" : "研发需求";
@@ -401,7 +408,9 @@ export const RequirementReviewRoot = observer(function RequirementReviewRoot(pro
                 <span className="mx-1 hidden h-4 w-px bg-white/25 sm:block dark:bg-black/25" aria-hidden="true" />
                 <span className="inline-flex items-center gap-1.5 text-on-color/80 tabular-nums">
                   <GitCompareArrows className="size-3.5" aria-hidden="true" />
-                  {change.diff.changed_count} 个字段变更
+                  {isStructuredChange
+                    ? `${metaChangedCount} 项属性变更 · ${structuredChangedCount} 处数据变更`
+                    : `${metaChangedCount} 处变更`}
                 </span>
               </div>
             </section>
@@ -423,7 +432,8 @@ export const RequirementReviewRoot = observer(function RequirementReviewRoot(pro
             <div className="mt-8 grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
               <main className="min-w-0">
                 <div className="space-y-5">
-                  {change.requirement_content_mode === "structured" && (
+                  {(!isStructuredChange || metaChangedCount > 0) && <RequirementDiffPanel change={change} />}
+                  {isStructuredChange && (
                     <StructuredRequirementReviewPanel
                       workspaceSlug={slug}
                       productId={id}
@@ -431,7 +441,6 @@ export const RequirementReviewRoot = observer(function RequirementReviewRoot(pro
                       change={change}
                     />
                   )}
-                  <RequirementDiffPanel change={change} />
                 </div>
               </main>
               <aside className="space-y-4 xl:sticky xl:top-4">

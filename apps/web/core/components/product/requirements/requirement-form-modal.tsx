@@ -44,16 +44,18 @@ const priorities: { value: TIssuePriorities; label: string }[] = [
 type TPropertyRowProps = {
   icon: typeof SignalHigh;
   label: string;
+  required?: boolean;
   children: React.ReactNode;
 };
 
 function PropertyRow(props: TPropertyRowProps) {
-  const { icon: Icon, label, children } = props;
+  const { icon: Icon, label, required, children } = props;
   return (
     <div className="flex items-center gap-3 py-2">
-      <div className="flex w-[72px] shrink-0 items-center gap-1.5 text-12 text-tertiary">
+      <div className="flex w-[80px] shrink-0 items-center gap-1.5 text-12 text-tertiary">
         <Icon className="size-3.5 shrink-0" />
         <span className="truncate">{label}</span>
+        {required && <span className="shrink-0 text-danger-primary">*</span>}
       </div>
       <div className="min-w-0 flex-1">{children}</div>
     </div>
@@ -124,6 +126,7 @@ export function RequirementFormModal(props: Props) {
   } = props;
   const [isInitializing, setIsInitializing] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
+  const [isEditingDraft, setIsEditingDraft] = useState(false);
   const [parentOptions, setParentOptions] = useState<{ id: string; name: string }[]>([]);
   const [attachments, setAttachments] = useState<TRequirementAttachment[]>([]);
   const [uploadedAssetIds, setUploadedAssetIds] = useState<string[]>([]);
@@ -160,6 +163,7 @@ export function RequirementFormModal(props: Props) {
     let active = true;
     setIsInitializing(true);
     setLoadFailed(false);
+    setIsEditingDraft(false);
     Promise.all([
       requirementId ? fetchRequirement(requirementId) : Promise.resolve(undefined),
       fetchParentOptions(undefined, requirementId),
@@ -167,6 +171,7 @@ export function RequirementFormModal(props: Props) {
       .then(([detail, options]) => {
         if (!active) return undefined;
         const pendingProposal = detail?.open_change ?? undefined;
+        setIsEditingDraft(pendingProposal?.status === "draft");
         setParentOptions(options);
         setAttachments(pendingProposal?.attachments ?? detail?.attachments ?? []);
         reset(
@@ -205,7 +210,11 @@ export function RequirementFormModal(props: Props) {
     };
   }, [fetchParentOptions, fetchRequirement, isOpen, requirementId, reset]);
 
-  const title = requirementId ? `发起${requirementLabel}变更` : `创建${requirementLabel}`;
+  const title = !requirementId
+    ? `创建${requirementLabel}`
+    : isEditingDraft
+      ? `编辑${requirementLabel}属性`
+      : `发起${requirementLabel}变更`;
   const attachmentIds = useMemo(
     () => [...new Set([...attachments.map((attachment) => attachment.id), ...uploadedAssetIds])],
     [attachments, uploadedAssetIds]
@@ -221,6 +230,7 @@ export function RequirementFormModal(props: Props) {
 
   const handleClose = async () => {
     setExpandedEditor(null);
+    setIsEditingDraft(false);
     await cleanupNewAssets();
     setAttachments([]);
     reset(defaultValues);
@@ -242,6 +252,7 @@ export function RequirementFormModal(props: Props) {
       setUploadedAssetIds([]);
       setAttachments([]);
       setExpandedEditor(null);
+      setIsEditingDraft(false);
       reset(defaultValues);
       onClose();
       setToast({
@@ -596,7 +607,7 @@ export function RequirementFormModal(props: Props) {
                         />
                       </PropertyRow>
 
-                      <PropertyRow icon={Users} label="评审人">
+                      <PropertyRow icon={Users} label="评审人" required>
                         <Controller
                           name="reviewers"
                           control={control}

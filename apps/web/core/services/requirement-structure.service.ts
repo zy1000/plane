@@ -93,7 +93,6 @@ export type TStructuredRowsResponse = {
 };
 
 export type TStructuredDiffEntry = {
-  id: string;
   scope: "schema" | "root_row" | "child_row";
   change_type: "added" | "removed" | "modified" | "moved";
   field_key: string | null;

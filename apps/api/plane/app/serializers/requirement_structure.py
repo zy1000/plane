@@ -2,20 +2,15 @@ from rest_framework import serializers
 
 from plane.db.models import (
     RequirementFieldTemplate,
-    RequirementStructuredDiffEntry,
     RequirementStructuredRevision,
 )
-from plane.utils.requirement_structure import (
-    serialize_structured_field,
-    serialize_structured_row,
-    serialize_template_field,
-)
+from plane.utils.requirement_structure import serialize_structured_row
 
 from .base import BaseSerializer
 
 
 class RequirementFieldTemplateSerializer(BaseSerializer):
-    field_count = serializers.IntegerField(read_only=True, default=0)
+    field_count = serializers.SerializerMethodField()
 
     class Meta:
         model = RequirementFieldTemplate
@@ -43,6 +38,9 @@ class RequirementFieldTemplateSerializer(BaseSerializer):
             "created_by",
             "updated_by",
         ]
+
+    def get_field_count(self, obj):
+        return len(obj.schema or [])
 
     def validate_name(self, value):
         value = str(value or "").strip()
@@ -141,10 +139,7 @@ class RequirementStructuredRevisionSerializer(BaseSerializer):
         read_only_fields = fields
 
     def get_serialized_fields(self, obj):
-        fields = getattr(obj, "prefetched_fields", None)
-        if fields is None:
-            fields = obj.fields.select_related("parent_field").order_by("sort_key", "created_at")
-        return [serialize_structured_field(field) for field in fields]
+        return list(obj.schema or [])
 
 
 class RequirementStructuredRowSerializer(serializers.Serializer):
@@ -152,28 +147,9 @@ class RequirementStructuredRowSerializer(serializers.Serializer):
         return serialize_structured_row(instance)
 
 
-class RequirementStructuredDiffEntrySerializer(BaseSerializer):
-    class Meta:
-        model = RequirementStructuredDiffEntry
-        fields = [
-            "id",
-            "scope",
-            "change_type",
-            "field_key",
-            "row_key",
-            "parent_row_key",
-            "label",
-            "before_value",
-            "after_value",
-            "sort_key",
-        ]
-        read_only_fields = fields
-
-
 def serialize_template_schema(template):
-    fields = template.fields.select_related("parent_field").order_by("sort_key", "created_at")
     return {
         "template_id": str(template.id),
         "revision": template.revision,
-        "fields": [serialize_template_field(field) for field in fields],
+        "fields": list(template.schema or []),
     }

@@ -372,6 +372,21 @@ export class RequirementService extends APIService {
       });
   }
 
+  async startChangeDraft(
+    workspaceSlug: string,
+    productId: string,
+    requirementId: string,
+    type: TRequirementType
+  ): Promise<TRequirementChange> {
+    return this.post(`${this.requirementUrl(workspaceSlug, productId, type)}${requirementId}/changes/`, {
+      submit_for_review: false,
+    })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
   async saveChangeDraft(
     workspaceSlug: string,
     productId: string,

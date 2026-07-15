@@ -131,6 +131,34 @@ export const useUserRequirements = (
     [productId, requirementType, workspaceSlug]
   );
 
+  const startChangeDraft = useCallback(
+    async (requirementId: string) => {
+      if (!workspaceSlug || !productId) throw new Error("缺少产品参数");
+      setIsMutating(true);
+      try {
+        return await requirementService.startChangeDraft(workspaceSlug, productId, requirementId, requirementType);
+      } finally {
+        setIsMutating(false);
+      }
+    },
+    [productId, requirementType, workspaceSlug]
+  );
+
+  const patchChangeDraft = useCallback(
+    async (requirementId: string, changeId: string, data: Partial<TUserRequirementPayload>) => {
+      if (!workspaceSlug || !productId) throw new Error("缺少产品参数");
+      return requirementService.saveChangeDraft(
+        workspaceSlug,
+        productId,
+        requirementId,
+        changeId,
+        data,
+        requirementType
+      );
+    },
+    [productId, requirementType, workspaceSlug]
+  );
+
   const saveChangeDraft = useCallback(
     async (requirementId: string, changeId: string, data: Partial<TUserRequirementPayload>) => {
       if (!workspaceSlug || !productId) throw new Error("缺少产品参数");
@@ -271,6 +299,8 @@ export const useUserRequirements = (
       fetchParentOptions,
       createRequirement,
       updateRequirement,
+      startChangeDraft,
+      patchChangeDraft,
       saveChangeDraft,
       submitChange,
       withdrawChange,
@@ -292,8 +322,10 @@ export const useUserRequirements = (
       isLoading,
       isMutating,
       requirements,
+      patchChangeDraft,
       saveChangeDraft,
       setArchived,
+      startChangeDraft,
       statusCounts,
       submitChange,
       totalCount,

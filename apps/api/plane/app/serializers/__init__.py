@@ -162,7 +162,6 @@ from .requirement import (
 )
 from .requirement_structure import (
     RequirementFieldTemplateSerializer,
-    RequirementStructuredDiffEntrySerializer,
     RequirementStructuredRevisionSerializer,
     RequirementStructuredRowCreateSerializer,
     RequirementStructuredRowReorderSerializer,

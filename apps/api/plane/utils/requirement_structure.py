@@ -16,13 +16,9 @@ from django.utils import timezone
 from plane.db.models import (
     RequirementFieldTemplate,
     RequirementSequenceCounter,
-    RequirementStructuredDiffEntry,
-    RequirementStructuredField,
     RequirementStructuredFieldType,
     RequirementStructuredRevision,
     RequirementStructuredRow,
-    RequirementStructuredValue,
-    RequirementTemplateField,
 )
 
 
@@ -53,17 +49,14 @@ def _is_empty(value: Any) -> bool:
     return False
 
 
-def _json_value(value: Any) -> Any:
-    if isinstance(value, Decimal):
-        return str(value)
-    if isinstance(value, (date, datetime)):
-        return value.isoformat()
-    return value
-
-
 def _hash_payload(payload: Any) -> str:
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str)
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+# ---------------------------------------------------------------------------
+# Schema (field definitions) - stored as JSON list of API-shaped dicts
+# ---------------------------------------------------------------------------
 
 
 def validate_schema_payload(fields: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -214,62 +207,35 @@ def _validate_field_rules(field: dict[str, Any]) -> None:
             raise RequirementStructureError("STRUCTURED_FIELD_VALIDATION_INVALID", "子表最少行数不能大于最多行数")
 
 
-def serialize_template_field(field: RequirementTemplateField) -> dict[str, Any]:
+def _stored_field(item: dict[str, Any]) -> dict[str, Any]:
+    """Convert a validated schema item into the persisted (API-shaped) dict."""
     return {
-        "key": str(field.field_key),
-        "parent_key": str(field.parent_field.field_key) if field.parent_field_id else None,
-        "name": field.name,
-        "description": field.description,
-        "field_type": field.field_type,
-        "sort_key": str(field.sort_key),
-        "is_required": field.is_required,
-        "is_active": field.is_active,
-        "config": field.config or {},
-        "validation": field.validation or {},
-        "options": field.options or {},
-        "default_value": field.default_value,
+        "key": str(item["field_key"]),
+        "parent_key": str(item["parent_key"]) if item["parent_key"] else None,
+        "name": item["name"],
+        "description": item["description"],
+        "field_type": item["field_type"],
+        "sort_key": str(item["sort_key"]),
+        "is_required": item["is_required"],
+        "is_active": item["is_active"],
+        "config": item["config"],
+        "validation": item["validation"],
+        "options": item["options"],
+        "default_value": item["default_value"],
     }
 
 
-def serialize_structured_field(field: RequirementStructuredField) -> dict[str, Any]:
-    return {
-        "key": str(field.field_key),
-        "parent_key": str(field.parent_field.field_key) if field.parent_field_id else None,
-        "name": field.name,
-        "description": field.description,
-        "field_type": field.field_type,
-        "sort_key": str(field.sort_key),
-        "is_required": field.is_required,
-        "is_active": field.is_active,
-        "config": field.config or {},
-        "validation": field.validation or {},
-        "options": field.options or {},
-        "default_value": field.default_value,
-    }
+def _schema_of(revision_or_template) -> list[dict[str, Any]]:
+    return list(revision_or_template.schema or [])
 
 
-def _write_template_fields(template, normalized, actor):
-    existing = {item.field_key: item for item in template.fields.select_for_update().all()}
-    parent_map: dict[uuid.UUID, RequirementTemplateField] = {}
-    touched: set[uuid.UUID] = set()
-    for parent_key in (None,):
-        for item in [field for field in normalized if field["parent_key"] == parent_key]:
-            model = _upsert_template_field(template, existing.get(item["field_key"]), item, None, actor)
-            parent_map[item["field_key"]] = model
-            touched.add(item["field_key"])
-    for item in [field for field in normalized if field["parent_key"] is not None]:
-        model = _upsert_template_field(
-            template,
-            existing.get(item["field_key"]),
-            item,
-            parent_map[item["parent_key"]],
-            actor,
-        )
-        parent_map[item["field_key"]] = model
-        touched.add(item["field_key"])
-    for field_key, model in existing.items():
-        if field_key not in touched:
-            model.delete()
+def _active_fields(schema: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [field for field in schema if field.get("is_active", True)]
+
+
+# ---------------------------------------------------------------------------
+# Templates
+# ---------------------------------------------------------------------------
 
 
 @transaction.atomic
@@ -281,9 +247,9 @@ def create_requirement_template(product, data: dict[str, Any], actor):
         description=data.get("description", ""),
         template_type=data.get("template_type", RequirementFieldTemplate.TemplateType.STRUCTURED),
         is_active=data.get("is_active", True),
+        schema=[_stored_field(item) for item in normalized],
         created_by=actor,
     )
-    _write_template_fields(template, normalized, actor)
     return template
 
 
@@ -301,15 +267,17 @@ def update_requirement_template(
         raise RequirementStructureError("REQUIREMENT_TEMPLATE_STALE", "模板已被其他用户修改，请刷新后重试")
     if "template_type" in data and data["template_type"] != template.template_type:
         raise RequirementStructureError("REQUIREMENT_TEMPLATE_TYPE_IMMUTABLE", "模板类型创建后不能修改")
+    update_fields = ["name", "description", "is_active", "revision", "updated_by", "updated_at"]
     if replace_fields:
         normalized = validate_schema_payload(data.get("fields", []))
-        _write_template_fields(template, normalized, actor)
+        template.schema = [_stored_field(item) for item in normalized]
+        update_fields.append("schema")
     for attribute in ("name", "description", "is_active"):
         if attribute in data:
             setattr(template, attribute, data[attribute])
     template.revision += 1
     template.updated_by = actor
-    template.save(update_fields=["name", "description", "is_active", "revision", "updated_by", "updated_at"])
+    template.save(update_fields=update_fields)
     return template
 
 
@@ -323,42 +291,9 @@ def replace_template_schema(template: RequirementFieldTemplate, fields: list[dic
     )
 
 
-def _upsert_template_field(template, model, item, parent, actor):
-    if model is None:
-        return RequirementTemplateField.objects.create(
-            template=template,
-            field_key=item["field_key"],
-            parent_field=parent,
-            name=item["name"],
-            description=item["description"],
-            field_type=item["field_type"],
-            sort_key=item["sort_key"],
-            is_required=item["is_required"],
-            is_active=item["is_active"],
-            config=item["config"],
-            validation=item["validation"],
-            options=item["options"],
-            default_value=item["default_value"],
-            created_by=actor,
-        )
-    for key in [
-        "name",
-        "description",
-        "field_type",
-        "sort_key",
-        "is_required",
-        "is_active",
-        "config",
-        "validation",
-        "options",
-        "default_value",
-    ]:
-        setattr(model, key, item[key])
-    model.parent_field = parent
-    model.deleted_at = None
-    model.updated_by = actor
-    model.save()
-    return model
+# ---------------------------------------------------------------------------
+# Revisions - schema + row cloning
+# ---------------------------------------------------------------------------
 
 
 @transaction.atomic
@@ -369,92 +304,24 @@ def create_structured_revision(change, actor, template: RequirementFieldTemplate
         source_revision=source_revision,
         source_template=template,
         source_template_revision=template.revision if template else None,
+        schema=[],
         created_by=actor,
     )
     if source_revision:
         _clone_revision_content(source_revision, revision, actor)
     elif template:
-        _copy_template_schema(template, revision, actor)
+        revision.schema = list(template.schema or [])
+        revision.save(update_fields=["schema", "updated_at"])
     refresh_revision_metadata(revision)
     return revision
 
 
-def _copy_template_schema(template, revision, actor):
-    fields = list(template.fields.select_related("parent_field").order_by("sort_key", "created_at"))
-    model_map = {}
-    for field in [item for item in fields if item.parent_field_id is None]:
-        model_map[field.id] = RequirementStructuredField.objects.create(
-            revision=revision,
-            field_key=field.field_key,
-            name=field.name,
-            description=field.description,
-            field_type=field.field_type,
-            sort_key=field.sort_key,
-            is_required=field.is_required,
-            is_active=field.is_active,
-            config=field.config,
-            validation=field.validation,
-            options=field.options,
-            default_value=field.default_value,
-            created_by=actor,
-        )
-    for field in [item for item in fields if item.parent_field_id is not None]:
-        model_map[field.id] = RequirementStructuredField.objects.create(
-            revision=revision,
-            field_key=field.field_key,
-            parent_field=model_map[field.parent_field_id],
-            name=field.name,
-            description=field.description,
-            field_type=field.field_type,
-            sort_key=field.sort_key,
-            is_required=field.is_required,
-            is_active=field.is_active,
-            config=field.config,
-            validation=field.validation,
-            options=field.options,
-            default_value=field.default_value,
-            created_by=actor,
-        )
-
-
 def _clone_revision_content(source, target, actor):
-    source_fields = list(source.fields.select_related("parent_field").order_by("sort_key", "created_at"))
-    field_map = {}
-    for field in [item for item in source_fields if item.parent_field_id is None]:
-        field_map[field.id] = RequirementStructuredField.objects.create(
-            revision=target,
-            field_key=field.field_key,
-            name=field.name,
-            description=field.description,
-            field_type=field.field_type,
-            sort_key=field.sort_key,
-            is_required=field.is_required,
-            is_active=field.is_active,
-            config=field.config,
-            validation=field.validation,
-            options=field.options,
-            default_value=field.default_value,
-            created_by=actor,
-        )
-    for field in [item for item in source_fields if item.parent_field_id is not None]:
-        field_map[field.id] = RequirementStructuredField.objects.create(
-            revision=target,
-            field_key=field.field_key,
-            parent_field=field_map[field.parent_field_id],
-            name=field.name,
-            description=field.description,
-            field_type=field.field_type,
-            sort_key=field.sort_key,
-            is_required=field.is_required,
-            is_active=field.is_active,
-            config=field.config,
-            validation=field.validation,
-            options=field.options,
-            default_value=field.default_value,
-            created_by=actor,
-        )
-    source_rows = list(source.rows.select_related("parent_row", "table_field").order_by("sort_key", "created_at"))
-    row_map = {}
+    target.schema = list(source.schema or [])
+    target.save(update_fields=["schema", "updated_at"])
+
+    source_rows = list(source.rows.select_related("parent_row").order_by("sort_key", "created_at"))
+    row_map: dict[Any, RequirementStructuredRow] = {}
     for row in [item for item in source_rows if item.parent_row_id is None]:
         row_map[row.id] = RequirementStructuredRow.objects.create(
             revision=target,
@@ -462,6 +329,7 @@ def _clone_revision_content(source, target, actor):
             sequence_number=row.sequence_number,
             display_id=row.display_id,
             sort_key=row.sort_key,
+            values=row.values or {},
             created_by=actor,
         )
     for row in [item for item in source_rows if item.parent_row_id is not None]:
@@ -469,133 +337,100 @@ def _clone_revision_content(source, target, actor):
             revision=target,
             row_key=row.row_key,
             parent_row=row_map[row.parent_row_id],
-            table_field=field_map[row.table_field_id],
+            table_field_key=row.table_field_key,
             sequence_number=row.sequence_number,
             display_id=row.display_id,
             sort_key=row.sort_key,
+            values=row.values or {},
             created_by=actor,
         )
-    values = [
-        RequirementStructuredValue(
-            revision=target,
-            row=row_map[value.row_id],
-            field=field_map[value.field_id],
-            value_text=value.value_text,
-            value_number=value.value_number,
-            value_boolean=value.value_boolean,
-            value_date=value.value_date,
-            value_min=value.value_min,
-            value_max=value.value_max,
-            value_json=value.value_json,
-            created_by=actor,
-        )
-        for value in source.values.all()
-    ]
-    RequirementStructuredValue.objects.bulk_create(values, batch_size=500)
 
 
 @transaction.atomic
 def replace_revision_schema(revision, fields, actor, expected_lock_version):
     revision = _lock_editable_revision(revision.id, actor, expected_lock_version)
     normalized = validate_schema_payload(fields)
-    existing = {item.field_key: item for item in revision.fields.select_for_update().all()}
-    values_by_field = set(revision.values.values_list("field_id", flat=True))
-    counters = set(
-        RequirementSequenceCounter.objects.filter(requirement=revision.requirement).values_list("field_key", flat=True)
-    )
-    parent_map = {}
-    touched = set()
-    for item in [field for field in normalized if field["parent_key"] is None]:
-        model = _upsert_revision_field(revision, existing.get(item["field_key"]), item, None, actor, values_by_field, counters)
-        parent_map[item["field_key"]] = model
-        touched.add(item["field_key"])
-    for item in [field for field in normalized if field["parent_key"] is not None]:
-        model = _upsert_revision_field(
-            revision,
-            existing.get(item["field_key"]),
-            item,
-            parent_map[item["parent_key"]],
-            actor,
-            values_by_field,
-            counters,
+    existing_by_key = {field["key"]: field for field in _schema_of(revision)}
+    counters = {
+        str(field_key)
+        for field_key in RequirementSequenceCounter.objects.filter(requirement=revision.requirement).values_list(
+            "field_key", flat=True
         )
-        parent_map[item["field_key"]] = model
-        touched.add(item["field_key"])
-    for field_key, model in existing.items():
-        if field_key not in touched:
-            if model.field_type == RequirementStructuredFieldType.AUTO_ID and field_key in counters:
-                raise RequirementStructureError("STRUCTURED_AUTO_ID_IMMUTABLE", "已经产生编号的自动编号字段不能移除")
-            model.is_active = False
-            model.updated_by = actor
-            model.save(update_fields=["is_active", "updated_by", "updated_at"])
+    }
+    new_schema: list[dict[str, Any]] = []
+    touched: set[str] = set()
+    for item in normalized:
+        key = str(item["field_key"])
+        old = existing_by_key.get(key)
+        if old is not None:
+            _guard_field_mutation(revision, old, item, counters)
+        new_schema.append(_stored_field(item))
+        touched.add(key)
+    for key, old in existing_by_key.items():
+        if key in touched:
+            continue
+        if old["field_type"] == RequirementStructuredFieldType.AUTO_ID and key in counters:
+            raise RequirementStructureError("STRUCTURED_AUTO_ID_IMMUTABLE", "已经产生编号的自动编号字段不能移除")
+        new_schema.append({**old, "is_active": False})
 
-    _backfill_new_auto_ids(revision, existing, parent_map, actor)
+    old_keys = set(existing_by_key)
+    revision.schema = new_schema
+    revision.updated_by = actor
+    revision.save(update_fields=["schema", "updated_by", "updated_at"])
+    _backfill_new_auto_ids(revision, old_keys, new_schema, actor)
     _bump_revision(revision, actor)
     refresh_revision_metadata(revision)
     return revision
 
 
-def _upsert_revision_field(revision, model, item, parent, actor, values_by_field, counters):
-    if model is None:
-        return RequirementStructuredField.objects.create(
-            revision=revision,
-            field_key=item["field_key"],
-            parent_field=parent,
-            name=item["name"],
-            description=item["description"],
-            field_type=item["field_type"],
-            sort_key=item["sort_key"],
-            is_required=item["is_required"],
-            is_active=item["is_active"],
-            config=item["config"],
-            validation=item["validation"],
-            options=item["options"],
-            default_value=item["default_value"],
-            created_by=actor,
-        )
-    if model.id in values_by_field and (model.field_type != item["field_type"] or model.parent_field_id != getattr(parent, "id", None)):
-        raise RequirementStructureError("STRUCTURED_FIELD_TYPE_IMMUTABLE", "已有数据的字段不能修改类型或层级")
-    if model.field_type == RequirementStructuredFieldType.AUTO_ID and model.field_key in counters:
-        if model.config != item["config"] or not item["is_active"]:
+def _guard_field_mutation(revision, old, item, counters):
+    key = old["key"]
+    new_parent = str(item["parent_key"]) if item["parent_key"] else None
+    old_parent = old.get("parent_key")
+    if old["field_type"] != item["field_type"] or old_parent != new_parent:
+        if revision.rows.filter(values__has_key=key).exists():
+            raise RequirementStructureError("STRUCTURED_FIELD_TYPE_IMMUTABLE", "已有数据的字段不能修改类型或层级")
+    if old["field_type"] == RequirementStructuredFieldType.AUTO_ID and key in counters:
+        if old.get("config") != item["config"] or not item["is_active"]:
             raise RequirementStructureError("STRUCTURED_AUTO_ID_IMMUTABLE", "已经产生编号的自动编号规则不能修改或停用")
-    for key in [
-        "name",
-        "description",
-        "field_type",
-        "sort_key",
-        "is_required",
-        "is_active",
-        "config",
-        "validation",
-        "options",
-        "default_value",
-    ]:
-        setattr(model, key, item[key])
-    model.parent_field = parent
-    model.updated_by = actor
-    model.save()
-    return model
 
 
-def _backfill_new_auto_ids(revision, old_fields, new_fields, actor):
+def _backfill_new_auto_ids(revision, old_field_keys, new_schema, actor):
     new_auto_fields = [
         field
-        for key, field in new_fields.items()
-        if field.field_type == RequirementStructuredFieldType.AUTO_ID and key not in old_fields
+        for field in new_schema
+        if field["field_type"] == RequirementStructuredFieldType.AUTO_ID and field["key"] not in old_field_keys
     ]
     for field in new_auto_fields:
-        if field.parent_field_id is None:
+        field_key = _uuid(field["key"], "字段 key")
+        if not field["parent_key"]:
             rows = revision.rows.filter(parent_row__isnull=True).order_by("sort_key", "created_at", "id")
+            for row in rows:
+                number = _next_sequence(revision.requirement_id, field_key, None, actor)
+                row.sequence_number = number
+                row.display_id = _format_display_id(field, number, None)
+                row.updated_by = actor
+                row.save(update_fields=["sequence_number", "display_id", "updated_by", "updated_at"])
         else:
-            rows = revision.rows.filter(table_field=field.parent_field).select_related("parent_row").order_by(
-                "parent_row_id", "sort_key", "created_at", "id"
+            parent_key = _uuid(field["parent_key"], "父字段 key")
+            rows = (
+                revision.rows.filter(table_field_key=parent_key)
+                .select_related("parent_row")
+                .order_by("parent_row_id", "sort_key", "created_at", "id")
             )
-        for row in rows:
-            number = _next_sequence(revision.requirement_id, field.field_key, row.parent_row.row_key if row.parent_row else None, actor)
-            row.sequence_number = number
-            row.display_id = _format_display_id(field, number, row.parent_row.display_id if row.parent_row else None)
-            row.updated_by = actor
-            row.save(update_fields=["sequence_number", "display_id", "updated_by", "updated_at"])
+            for row in rows:
+                number = _next_sequence(
+                    revision.requirement_id,
+                    field_key,
+                    row.parent_row.row_key if row.parent_row_id else None,
+                    actor,
+                )
+                row.sequence_number = number
+                row.display_id = _format_display_id(
+                    field, number, row.parent_row.display_id if row.parent_row_id else None
+                )
+                row.updated_by = actor
+                row.save(update_fields=["sequence_number", "display_id", "updated_by", "updated_at"])
 
 
 def _lock_editable_revision(revision_id, actor, expected_lock_version=None):
@@ -621,11 +456,16 @@ def _bump_revision(revision, actor):
     revision.save(update_fields=["lock_version", "updated_by", "updated_at"])
 
 
-def _scope_queryset(revision, parent_row=None, table_field=None):
+# ---------------------------------------------------------------------------
+# Rows
+# ---------------------------------------------------------------------------
+
+
+def _scope_queryset(revision, parent_row=None, table_field_key=None):
     queryset = revision.rows.filter(deleted_at__isnull=True)
     if parent_row is None:
-        return queryset.filter(parent_row__isnull=True, table_field__isnull=True)
-    return queryset.filter(parent_row=parent_row, table_field=table_field)
+        return queryset.filter(parent_row__isnull=True, table_field_key__isnull=True)
+    return queryset.filter(parent_row=parent_row, table_field_key=table_field_key)
 
 
 def _position_sort_key(queryset, before_row=None, after_row=None):
@@ -664,13 +504,14 @@ def _position_sort_key(queryset, before_row=None, after_row=None):
     return (maximum or Decimal("0")) + SORT_STEP
 
 
-def _find_auto_id_field(revision, table_field=None):
-    queryset = revision.fields.filter(
-        field_type=RequirementStructuredFieldType.AUTO_ID,
-        is_active=True,
-        deleted_at__isnull=True,
-    )
-    return queryset.filter(parent_field=table_field).first() if table_field else queryset.filter(parent_field__isnull=True).first()
+def _find_auto_id_field(schema, table_field_key=None):
+    scope_key = str(table_field_key) if table_field_key else None
+    for field in schema:
+        if field["field_type"] != RequirementStructuredFieldType.AUTO_ID or not field.get("is_active", True):
+            continue
+        if field.get("parent_key") == scope_key:
+            return field
+    return None
 
 
 def _next_sequence(requirement_id, field_key, parent_row_key, actor):
@@ -698,8 +539,8 @@ def _next_sequence(requirement_id, field_key, parent_row_key, actor):
 
 
 def _format_display_id(field, number, parent_display_id=None):
-    prefix = str(field.config.get("prefix") or "")
-    padding = int(field.config.get("padding") or 0)
+    prefix = str(field["config"].get("prefix") or "")
+    padding = int(field["config"].get("padding") or 0)
     local = f"{prefix}{str(number).zfill(padding)}"
     return f"{parent_display_id}-{local}" if parent_display_id else local
 
@@ -716,33 +557,40 @@ def create_structured_row(
     expected_lock_version=None,
 ):
     revision = _lock_editable_revision(revision.id, actor, expected_lock_version)
+    schema = _schema_of(revision)
     parent_row = None
     table_field = None
     if parent_row_key or table_field_key:
         if not parent_row_key or not table_field_key:
             raise RequirementStructureError("STRUCTURED_CHILD_SCOPE_INVALID", "子表行必须同时指定父记录和子表字段")
         parent_row = revision.rows.filter(row_key=parent_row_key, parent_row__isnull=True).first()
-        table_field = revision.fields.filter(
-            field_key=table_field_key,
-            parent_field__isnull=True,
-            field_type=RequirementStructuredFieldType.TABLE,
-            is_active=True,
-        ).first()
+        table_field = next(
+            (
+                field
+                for field in schema
+                if field["key"] == str(table_field_key)
+                and not field.get("parent_key")
+                and field["field_type"] == RequirementStructuredFieldType.TABLE
+                and field.get("is_active", True)
+            ),
+            None,
+        )
         if parent_row is None or table_field is None:
             raise RequirementStructureError("STRUCTURED_CHILD_SCOPE_INVALID", "父记录或子表字段不存在")
-    queryset = _scope_queryset(revision, parent_row, table_field)
+    scope_field_key = _uuid(table_field_key, "子表字段 key") if table_field else None
+    queryset = _scope_queryset(revision, parent_row, scope_field_key)
     before_row = queryset.filter(row_key=before_row_key).first() if before_row_key else None
     after_row = queryset.filter(row_key=after_row_key).first() if after_row_key else None
     if before_row_key and before_row is None or after_row_key and after_row is None:
         raise RequirementStructureError("STRUCTURED_ROW_POSITION_INVALID", "排序锚点不在当前数据范围")
     sort_key = _position_sort_key(queryset, before_row, after_row)
-    auto_field = _find_auto_id_field(revision, table_field)
+    auto_field = _find_auto_id_field(schema, scope_field_key)
     number = None
     display_id = None
     if auto_field:
         number = _next_sequence(
             revision.requirement_id,
-            auto_field.field_key,
+            _uuid(auto_field["key"], "字段 key"),
             parent_row.row_key if parent_row else None,
             actor,
         )
@@ -750,10 +598,11 @@ def create_structured_row(
     row = RequirementStructuredRow.objects.create(
         revision=revision,
         parent_row=parent_row,
-        table_field=table_field,
+        table_field_key=scope_field_key,
         sequence_number=number,
         display_id=display_id,
         sort_key=sort_key,
+        values={},
         created_by=actor,
     )
     if values:
@@ -770,10 +619,6 @@ def update_structured_row(revision, row_key, actor, values, expected_lock_versio
     if row is None:
         raise RequirementStructureError("STRUCTURED_ROW_NOT_FOUND", "数据行不存在")
     _save_row_values(revision, row, values or {}, actor)
-    # The revision content hash is based on row timestamps. Touch the row after
-    # editing values so value-only changes are reflected in the frozen snapshot.
-    row.updated_by = actor
-    row.save(update_fields=["updated_by", "updated_at"])
     _bump_revision(revision, actor)
     refresh_revision_metadata(revision)
     return row, revision
@@ -782,106 +627,79 @@ def update_structured_row(revision, row_key, actor, values, expected_lock_versio
 def _save_row_values(revision, row, values, actor):
     if not isinstance(values, dict):
         raise RequirementStructureError("STRUCTURED_VALUES_INVALID", "values 必须是字段 key 到值的对象")
-    fields = revision.fields.filter(
-        field_key__in=list(values.keys()),
-        is_active=True,
-        deleted_at__isnull=True,
-    )
-    field_map = {str(field.field_key): field for field in fields}
-    if set(field_map) != {str(key) for key in values}:
+    active_by_key = {field["key"]: field for field in _active_fields(_schema_of(revision))}
+    provided = {str(key) for key in values}
+    if not provided.issubset(set(active_by_key)):
         raise RequirementStructureError("STRUCTURED_VALUE_FIELD_INVALID", "存在不属于当前字段方案的字段")
+    row_table_field_key = str(row.table_field_key) if row.table_field_key else None
+    merged = dict(row.values or {})
     for raw_key, raw_value in values.items():
-        field = field_map[str(raw_key)]
-        if field.field_type in {RequirementStructuredFieldType.TABLE, RequirementStructuredFieldType.AUTO_ID}:
+        field = active_by_key[str(raw_key)]
+        if field["field_type"] in {RequirementStructuredFieldType.TABLE, RequirementStructuredFieldType.AUTO_ID}:
             raise RequirementStructureError("STRUCTURED_VALUE_READ_ONLY", "子表和自动编号字段不能直接填写")
-        if row.parent_row_id is None and field.parent_field_id is not None:
+        if row.parent_row_id is None and field.get("parent_key"):
             raise RequirementStructureError("STRUCTURED_VALUE_SCOPE_INVALID", "主记录不能填写子表子字段")
-        if row.parent_row_id is not None and field.parent_field_id != row.table_field_id:
+        if row.parent_row_id is not None and field.get("parent_key") != row_table_field_key:
             raise RequirementStructureError("STRUCTURED_VALUE_SCOPE_INVALID", "字段不属于当前子表")
-        columns = _normalize_value(field, raw_value)
-        value, _created = RequirementStructuredValue.objects.get_or_create(
-            revision=revision,
-            row=row,
-            field=field,
-            defaults={**columns, "created_by": actor},
-        )
-        if not _created:
-            for name, column_value in columns.items():
-                setattr(value, name, column_value)
-            value.updated_by = actor
-            value.deleted_at = None
-            value.save()
+        merged[str(raw_key)] = _normalize_value(field, raw_value)
+    row.values = merged
+    row.updated_by = actor
+    row.save(update_fields=["values", "updated_by", "updated_at"])
 
 
 def _normalize_value(field, value):
-    columns = {
-        "value_text": None,
-        "value_number": None,
-        "value_boolean": None,
-        "value_date": None,
-        "value_min": None,
-        "value_max": None,
-        "value_json": None,
-    }
     if _is_empty(value):
-        return columns
-    if field.field_type == RequirementStructuredFieldType.TEXT:
+        return None
+    field_type = field["field_type"]
+    if field_type == RequirementStructuredFieldType.TEXT:
         text_value = str(value)
-        min_length = field.validation.get("min_length")
-        max_length = field.validation.get("max_length")
+        min_length = field["validation"].get("min_length")
+        max_length = field["validation"].get("max_length")
         if min_length is not None and len(text_value) < int(min_length):
-            raise RequirementStructureError("STRUCTURED_VALUE_INVALID", f"{field.name} 长度不能小于 {min_length}")
+            raise RequirementStructureError("STRUCTURED_VALUE_INVALID", f"{field['name']} 长度不能小于 {min_length}")
         if max_length is not None and len(text_value) > int(max_length):
-            raise RequirementStructureError("STRUCTURED_VALUE_INVALID", f"{field.name} 长度不能超过 {max_length}")
-        columns["value_text"] = text_value
-        columns["value_json"] = text_value
-    elif field.field_type == RequirementStructuredFieldType.NUMBER:
-        number = _decimal(value, field.name)
+            raise RequirementStructureError("STRUCTURED_VALUE_INVALID", f"{field['name']} 长度不能超过 {max_length}")
+        return text_value
+    if field_type == RequirementStructuredFieldType.NUMBER:
+        number = _decimal(value, field["name"])
         _validate_number_bounds(field, number)
-        columns["value_number"] = number
-        columns["value_json"] = str(number)
-    elif field.field_type == RequirementStructuredFieldType.NUMBER_RANGE:
+        return _decimal_to_str(number)
+    if field_type == RequirementStructuredFieldType.NUMBER_RANGE:
         if not isinstance(value, dict):
-            raise RequirementStructureError("STRUCTURED_VALUE_INVALID", f"{field.name} 必须包含 min 和 max")
-        minimum = _decimal(value.get("min"), field.name)
-        maximum = _decimal(value.get("max"), field.name)
+            raise RequirementStructureError("STRUCTURED_VALUE_INVALID", f"{field['name']} 必须包含 min 和 max")
+        minimum = _decimal(value.get("min"), field["name"])
+        maximum = _decimal(value.get("max"), field["name"])
         if minimum > maximum:
-            raise RequirementStructureError("STRUCTURED_VALUE_INVALID", f"{field.name} 最小值不能大于最大值")
+            raise RequirementStructureError("STRUCTURED_VALUE_INVALID", f"{field['name']} 最小值不能大于最大值")
         _validate_number_bounds(field, minimum)
         _validate_number_bounds(field, maximum)
-        columns["value_min"] = minimum
-        columns["value_max"] = maximum
-        columns["value_json"] = {"min": str(minimum), "max": str(maximum)}
-    elif field.field_type == RequirementStructuredFieldType.BOOLEAN:
+        return {"min": _decimal_to_str(minimum), "max": _decimal_to_str(maximum)}
+    if field_type == RequirementStructuredFieldType.BOOLEAN:
         if not isinstance(value, bool):
-            raise RequirementStructureError("STRUCTURED_VALUE_INVALID", f"{field.name} 必须是布尔值")
-        columns["value_boolean"] = value
-        columns["value_json"] = value
-    elif field.field_type == RequirementStructuredFieldType.DATE:
+            raise RequirementStructureError("STRUCTURED_VALUE_INVALID", f"{field['name']} 必须是布尔值")
+        return value
+    if field_type == RequirementStructuredFieldType.DATE:
         try:
             parsed = value if isinstance(value, date) else datetime.strptime(str(value), "%Y-%m-%d").date()
         except (TypeError, ValueError) as exc:
-            raise RequirementStructureError("STRUCTURED_VALUE_INVALID", f"{field.name} 日期格式必须是 YYYY-MM-DD") from exc
-        columns["value_date"] = parsed
-        columns["value_json"] = parsed.isoformat()
-    elif field.field_type == RequirementStructuredFieldType.SELECT:
-        options = field.options.get("options", [])
+            raise RequirementStructureError("STRUCTURED_VALUE_INVALID", f"{field['name']} 日期格式必须是 YYYY-MM-DD") from exc
+        return parsed.isoformat()
+    if field_type == RequirementStructuredFieldType.SELECT:
+        options = field["options"].get("options", [])
         allowed = {str(item.get("key")) for item in options if item.get("is_active", True)}
-        multiple = field.config.get("selection_mode", "single") == "multiple"
+        multiple = field["config"].get("selection_mode", "single") == "multiple"
         if multiple:
             if not isinstance(value, list):
-                raise RequirementStructureError("STRUCTURED_VALUE_INVALID", f"{field.name} 必须是数组")
+                raise RequirementStructureError("STRUCTURED_VALUE_INVALID", f"{field['name']} 必须是数组")
             normalized = list(dict.fromkeys(str(item) for item in value))
             if any(item not in allowed for item in normalized):
-                raise RequirementStructureError("STRUCTURED_VALUE_INVALID", f"{field.name} 存在无效选项")
-            columns["value_json"] = normalized
-        else:
-            normalized = str(value)
-            if normalized not in allowed:
-                raise RequirementStructureError("STRUCTURED_VALUE_INVALID", f"{field.name} 存在无效选项")
-            columns["value_text"] = normalized
-            columns["value_json"] = normalized
-    return columns
+                raise RequirementStructureError("STRUCTURED_VALUE_INVALID", f"{field['name']} 存在无效选项")
+            return normalized
+        normalized = str(value)
+        if normalized not in allowed:
+            raise RequirementStructureError("STRUCTURED_VALUE_INVALID", f"{field['name']} 存在无效选项")
+        return normalized
+    return None
 
 
 def _decimal(value, field_name):
@@ -891,13 +709,23 @@ def _decimal(value, field_name):
         raise RequirementStructureError("STRUCTURED_VALUE_INVALID", f"{field_name} 必须是有效数值") from exc
 
 
+def _decimal_to_str(value: Decimal | None) -> str | None:
+    """去掉 DecimalField 固定小数位带来的末尾 0，例如 11.5000000000 → 11.5。"""
+    if value is None:
+        return None
+    text = format(value, "f")
+    if "." in text:
+        text = text.rstrip("0").rstrip(".")
+    return text
+
+
 def _validate_number_bounds(field, number):
-    minimum = field.validation.get("min")
-    maximum = field.validation.get("max")
+    minimum = field["validation"].get("min")
+    maximum = field["validation"].get("max")
     if minimum is not None and number < Decimal(str(minimum)):
-        raise RequirementStructureError("STRUCTURED_VALUE_INVALID", f"{field.name} 不能小于 {minimum}")
+        raise RequirementStructureError("STRUCTURED_VALUE_INVALID", f"{field['name']} 不能小于 {minimum}")
     if maximum is not None and number > Decimal(str(maximum)):
-        raise RequirementStructureError("STRUCTURED_VALUE_INVALID", f"{field.name} 不能大于 {maximum}")
+        raise RequirementStructureError("STRUCTURED_VALUE_INVALID", f"{field['name']} 不能大于 {maximum}")
 
 
 @transaction.atomic
@@ -907,8 +735,6 @@ def delete_structured_row(revision, row_key, actor, expected_lock_version=None):
     if row is None:
         raise RequirementStructureError("STRUCTURED_ROW_NOT_FOUND", "数据行不存在")
     now = timezone.now()
-    child_ids = list(row.child_rows.values_list("id", flat=True))
-    revision.values.filter(row_id__in=[row.id, *child_ids]).update(deleted_at=now, updated_by=actor)
     row.child_rows.update(deleted_at=now, updated_by=actor)
     row.deleted_at = now
     row.updated_by = actor
@@ -928,10 +754,10 @@ def reorder_structured_row(
     expected_lock_version=None,
 ):
     revision = _lock_editable_revision(revision.id, actor, expected_lock_version)
-    row = revision.rows.select_for_update().select_related("parent_row", "table_field").filter(row_key=row_key).first()
+    row = revision.rows.select_for_update().select_related("parent_row").filter(row_key=row_key).first()
     if row is None:
         raise RequirementStructureError("STRUCTURED_ROW_NOT_FOUND", "数据行不存在")
-    queryset = _scope_queryset(revision, row.parent_row, row.table_field).exclude(pk=row.pk)
+    queryset = _scope_queryset(revision, row.parent_row, row.table_field_key).exclude(pk=row.pk)
     before = queryset.filter(row_key=before_row_key).first() if before_row_key else None
     after = queryset.filter(row_key=after_row_key).first() if after_row_key else None
     if before_row_key and before is None or after_row_key and after is None:
@@ -944,100 +770,91 @@ def reorder_structured_row(
     return row, revision
 
 
-def _value_for_response(value):
-    if value.value_number is not None:
-        return str(value.value_number)
-    if value.value_min is not None or value.value_max is not None:
-        return {"min": str(value.value_min), "max": str(value.value_max)}
-    if value.value_date is not None:
-        return value.value_date.isoformat()
-    if value.value_boolean is not None:
-        return value.value_boolean
-    if value.value_text is not None:
-        return value.value_text
-    return value.value_json
+# ---------------------------------------------------------------------------
+# Serialization
+# ---------------------------------------------------------------------------
 
 
-def serialize_structured_row(row, fields_by_id=None):
-    values = {}
-    for value in row.values.all():
-        values[str(value.field.field_key)] = _value_for_response(value)
+def serialize_structured_row(row):
     return {
         "key": str(row.row_key),
         "parent_row_key": str(row.parent_row.row_key) if row.parent_row_id else None,
-        "table_field_key": str(row.table_field.field_key) if row.table_field_id else None,
+        "table_field_key": str(row.table_field_key) if row.table_field_key else None,
         "display_id": row.display_id,
         "sequence_number": row.sequence_number,
         "sort_key": str(row.sort_key),
-        "values": values,
+        "values": row.values or {},
     }
+
+
+# ---------------------------------------------------------------------------
+# Submission validation + metadata
+# ---------------------------------------------------------------------------
 
 
 def validate_revision_for_submission(revision):
-    fields = list(revision.fields.filter(is_active=True).select_related("parent_field"))
-    if not fields:
+    schema = _active_fields(_schema_of(revision))
+    if not schema:
         raise RequirementStructureError("STRUCTURED_SCHEMA_REQUIRED", "结构化需求至少需要一个字段")
-    root_rows = list(revision.rows.filter(parent_row__isnull=True).prefetch_related("values"))
+    root_rows = list(revision.rows.filter(parent_row__isnull=True))
     if not root_rows:
         raise RequirementStructureError("STRUCTURED_ROWS_REQUIRED", "结构化需求至少需要一条主记录")
-    value_maps = {
-        row.id: {value.field_id: _value_for_response(value) for value in row.values.all()}
-        for row in root_rows
-    }
-    root_fields = [field for field in fields if field.parent_field_id is None]
-    table_fields = [field for field in root_fields if field.field_type == RequirementStructuredFieldType.TABLE]
+    root_fields = [field for field in schema if not field.get("parent_key")]
+    table_fields = [field for field in root_fields if field["field_type"] == RequirementStructuredFieldType.TABLE]
     for row in root_rows:
+        row_values = row.values or {}
         for field in root_fields:
-            if field.field_type == RequirementStructuredFieldType.AUTO_ID and not row.display_id:
-                raise RequirementStructureError("STRUCTURED_AUTO_ID_MISSING", f"记录缺少 {field.name}")
-            if field.field_type not in {RequirementStructuredFieldType.TABLE, RequirementStructuredFieldType.AUTO_ID}:
-                value = value_maps[row.id].get(field.id)
-                if field.is_required and _is_empty(value):
+            if field["field_type"] == RequirementStructuredFieldType.AUTO_ID and not row.display_id:
+                raise RequirementStructureError("STRUCTURED_AUTO_ID_MISSING", f"记录缺少 {field['name']}")
+            if field["field_type"] not in {
+                RequirementStructuredFieldType.TABLE,
+                RequirementStructuredFieldType.AUTO_ID,
+            }:
+                value = row_values.get(field["key"])
+                if field["is_required"] and _is_empty(value):
                     raise RequirementStructureError(
                         "STRUCTURED_REQUIRED_VALUE_MISSING",
-                        f"{row.display_id or row.row_key} 的 {field.name} 为必填字段",
+                        f"{row.display_id or row.row_key} 的 {field['name']} 为必填字段",
                     )
                 if not _is_empty(value):
                     _normalize_value(field, value)
         for table_field in table_fields:
-            child_rows = list(
-                revision.rows.filter(parent_row=row, table_field=table_field).prefetch_related("values")
-            )
-            minimum = int(table_field.validation.get("min_rows", 1 if table_field.is_required else 0))
-            maximum = table_field.validation.get("max_rows")
+            child_rows = list(revision.rows.filter(parent_row=row, table_field_key=_uuid(table_field["key"], "字段 key")))
+            minimum = int(table_field["validation"].get("min_rows", 1 if table_field["is_required"] else 0))
+            maximum = table_field["validation"].get("max_rows")
             if len(child_rows) < minimum:
                 raise RequirementStructureError(
                     "STRUCTURED_TABLE_ROWS_MISSING",
-                    f"{row.display_id or row.row_key} 的 {table_field.name} 至少需要 {minimum} 行",
+                    f"{row.display_id or row.row_key} 的 {table_field['name']} 至少需要 {minimum} 行",
                 )
             if maximum is not None and len(child_rows) > int(maximum):
                 raise RequirementStructureError(
                     "STRUCTURED_TABLE_ROWS_EXCEEDED",
-                    f"{row.display_id or row.row_key} 的 {table_field.name} 不能超过 {maximum} 行",
+                    f"{row.display_id or row.row_key} 的 {table_field['name']} 不能超过 {maximum} 行",
                 )
-            child_fields = [field for field in fields if field.parent_field_id == table_field.id]
+            child_fields = [field for field in schema if field.get("parent_key") == table_field["key"]]
             for child in child_rows:
-                child_values = {value.field_id: _value_for_response(value) for value in child.values.all()}
+                child_values = child.values or {}
                 for field in child_fields:
-                    if field.field_type == RequirementStructuredFieldType.AUTO_ID and not child.display_id:
-                        raise RequirementStructureError("STRUCTURED_AUTO_ID_MISSING", f"子表记录缺少 {field.name}")
-                    if field.field_type != RequirementStructuredFieldType.AUTO_ID:
-                        value = child_values.get(field.id)
-                        if field.is_required and _is_empty(value):
+                    if field["field_type"] == RequirementStructuredFieldType.AUTO_ID and not child.display_id:
+                        raise RequirementStructureError("STRUCTURED_AUTO_ID_MISSING", f"子表记录缺少 {field['name']}")
+                    if field["field_type"] != RequirementStructuredFieldType.AUTO_ID:
+                        value = child_values.get(field["key"])
+                        if field["is_required"] and _is_empty(value):
                             raise RequirementStructureError(
                                 "STRUCTURED_REQUIRED_VALUE_MISSING",
-                                f"{child.display_id or child.row_key} 的 {field.name} 为必填字段",
+                                f"{child.display_id or child.row_key} 的 {field['name']} 为必填字段",
                             )
                         if not _is_empty(value):
                             _normalize_value(field, value)
 
 
 def refresh_revision_metadata(revision):
-    fields = [serialize_structured_field(field) for field in revision.fields.select_related("parent_field")]
-    rows = list(revision.rows.select_related("parent_row", "table_field").prefetch_related("values__field"))
+    schema = _schema_of(revision)
+    rows = list(revision.rows.select_related("parent_row").order_by("sort_key", "created_at", "id"))
     revision.root_row_count = sum(1 for row in rows if row.parent_row_id is None)
     revision.child_row_count = len(rows) - revision.root_row_count
-    revision.schema_hash = _hash_payload(fields)
+    revision.schema_hash = _hash_payload(schema)
     revision.content_hash = _hash_payload([serialize_structured_row(row) for row in rows])
     revision.save(
         update_fields=["root_row_count", "child_row_count", "schema_hash", "content_hash", "updated_at"]
@@ -1049,7 +866,7 @@ def lock_revision_for_review(revision, actor):
     revision = RequirementStructuredRevision.objects.select_for_update().get(pk=revision.pk)
     validate_revision_for_submission(revision)
     refresh_revision_metadata(revision)
-    build_structured_diff_entries(revision.change, revision.source_revision, revision, actor)
+    _store_structured_diff_summary(revision.change, revision.source_revision, revision)
     revision.status = RequirementStructuredRevision.Status.LOCKED
     revision.locked_at = timezone.now()
     revision.updated_by = actor
@@ -1057,23 +874,26 @@ def lock_revision_for_review(revision, actor):
     return revision
 
 
-def _ordered_predecessors(items, key_getter, group_getter):
+# ---------------------------------------------------------------------------
+# Diff - computed on demand from before/after revisions
+# ---------------------------------------------------------------------------
+
+
+def _ordered_predecessors(items, key_getter, group_getter, sort_getter):
     result = {}
     grouped = defaultdict(list)
     for item in items:
         grouped[group_getter(item)].append(item)
     for group_items in grouped.values():
         previous = None
-        for item in sorted(group_items, key=lambda value: (value.sort_key, value.created_at, value.id)):
+        for item in sorted(group_items, key=sort_getter):
             result[key_getter(item)] = previous
             previous = key_getter(item)
     return result
 
 
 def _field_snapshot(field):
-    snapshot = serialize_structured_field(field)
-    snapshot.pop("sort_key", None)
-    return snapshot
+    return {key: value for key, value in field.items() if key != "sort_key"}
 
 
 def _row_snapshot(row):
@@ -1082,13 +902,69 @@ def _row_snapshot(row):
     return snapshot
 
 
-@transaction.atomic
-def build_structured_diff_entries(change, before_revision, after_revision, actor):
-    change.structured_diff_entries.all().delete()
-    entries = []
-    before_fields = {field.field_key: field for field in before_revision.fields.select_related("parent_field")} if before_revision else {}
-    after_fields = {field.field_key: field for field in after_revision.fields.select_related("parent_field")}
-    for key in sorted(set(before_fields) | set(after_fields), key=str):
+_PREVIEW_FIELD_LIMIT = 3
+_PREVIEW_VALUE_MAX_LEN = 24
+
+
+def _format_preview_value(field, value):
+    """把单个字段值渲染成给人看的短文本（与前端 formatFieldValue 保持一致的口径）。"""
+    if _is_empty(value):
+        return ""
+    field_type = field.get("field_type")
+    if field_type == RequirementStructuredFieldType.BOOLEAN:
+        return "是" if value is True else "否" if value is False else ""
+    if field_type == RequirementStructuredFieldType.SELECT:
+        options = (field.get("options") or {}).get("options") or []
+        labels = {str(option.get("key")): str(option.get("label") or option.get("key")) for option in options}
+        if isinstance(value, list):
+            return "、".join(labels.get(str(item), str(item)) for item in value)
+        return labels.get(str(value), str(value))
+    if field_type == RequirementStructuredFieldType.NUMBER_RANGE:
+        if not isinstance(value, dict):
+            return ""
+        return f"{value.get('min') or '…'} ~ {value.get('max') or '…'}"
+    return str(value)
+
+
+def _row_preview_label(row, schema, scope):
+    """为主记录/子表记录生成可读标题：优先自动编号，其次前几个字段的“名称 值”，都没有则回退占位。"""
+    scope_key = str(row.table_field_key) if row.table_field_key else None
+    fields = [
+        field
+        for field in schema
+        if field.get("is_active", True)
+        and field.get("field_type") not in {RequirementStructuredFieldType.TABLE, RequirementStructuredFieldType.AUTO_ID}
+        and (field.get("parent_key") or None) == scope_key
+    ]
+    fields.sort(key=lambda field: Decimal(str(field.get("sort_key") or "0")))
+    values = row.values or {}
+    pairs = []
+    for field in fields:
+        text = _format_preview_value(field, values.get(field["key"]))
+        if not text:
+            continue
+        if len(text) > _PREVIEW_VALUE_MAX_LEN:
+            text = text[:_PREVIEW_VALUE_MAX_LEN] + "…"
+        pairs.append(f"{field['name']} {text}")
+        if len(pairs) >= _PREVIEW_FIELD_LIMIT:
+            break
+    preview = " · ".join(pairs)
+    if row.display_id and preview:
+        return f"{row.display_id} · {preview}"
+    if row.display_id:
+        return row.display_id
+    if preview:
+        return preview
+    return "未命名子表记录" if scope == "child_row" else "未命名主记录"
+
+
+def compute_structured_diff(before_revision, after_revision):
+    """Compute the structured diff between two revisions as a list of API-shaped dicts."""
+    entries: list[dict[str, Any]] = []
+    before_fields = {field["key"]: field for field in _schema_of(before_revision)} if before_revision else {}
+    after_fields = {field["key"]: field for field in _schema_of(after_revision)}
+
+    for key in sorted(set(before_fields) | set(after_fields)):
         before = before_fields.get(key)
         after = after_fields.get(key)
         before_value = _field_snapshot(before) if before else None
@@ -1096,74 +972,68 @@ def build_structured_diff_entries(change, before_revision, after_revision, actor
         if before_value == after_value:
             continue
         entries.append(
-            RequirementStructuredDiffEntry(
-                change=change,
-                scope=RequirementStructuredDiffEntry.Scope.SCHEMA,
-                change_type=(
-                    RequirementStructuredDiffEntry.ChangeType.ADDED
-                    if before is None
-                    else RequirementStructuredDiffEntry.ChangeType.REMOVED
-                    if after is None
-                    else RequirementStructuredDiffEntry.ChangeType.MODIFIED
-                ),
-                field_key=key,
-                label=(after or before).name,
-                before_value=before_value,
-                after_value=after_value,
-                sort_key=(after or before).sort_key,
-                created_by=actor,
-            )
+            {
+                "scope": "schema",
+                "change_type": ("added" if before is None else "removed" if after is None else "modified"),
+                "field_key": key,
+                "row_key": None,
+                "parent_row_key": None,
+                "label": (after or before)["name"],
+                "before_value": before_value,
+                "after_value": after_value,
+                "sort_key": str((after or before).get("sort_key") or "0"),
+            }
         )
 
     common_field_keys = set(before_fields) & set(after_fields)
     before_field_predecessors = _ordered_predecessors(
         [field for key, field in before_fields.items() if key in common_field_keys],
-        lambda field: field.field_key,
-        lambda field: field.parent_field.field_key if field.parent_field_id else None,
+        lambda field: field["key"],
+        lambda field: field.get("parent_key"),
+        lambda field: (Decimal(str(field.get("sort_key") or "0")), field["key"]),
     )
     after_field_predecessors = _ordered_predecessors(
         [field for key, field in after_fields.items() if key in common_field_keys],
-        lambda field: field.field_key,
-        lambda field: field.parent_field.field_key if field.parent_field_id else None,
+        lambda field: field["key"],
+        lambda field: field.get("parent_key"),
+        lambda field: (Decimal(str(field.get("sort_key") or "0")), field["key"]),
     )
-    for key in sorted(common_field_keys, key=str):
+    for key in sorted(common_field_keys):
         if before_field_predecessors.get(key) == after_field_predecessors.get(key):
             continue
         field = after_fields[key]
         entries.append(
-            RequirementStructuredDiffEntry(
-                change=change,
-                scope=RequirementStructuredDiffEntry.Scope.SCHEMA,
-                change_type=RequirementStructuredDiffEntry.ChangeType.MOVED,
-                field_key=key,
-                label=field.name,
-                before_value={
-                    "after_field_key": (
-                        str(before_field_predecessors.get(key)) if before_field_predecessors.get(key) else None
-                    )
-                },
-                after_value={
-                    "after_field_key": (
-                        str(after_field_predecessors.get(key)) if after_field_predecessors.get(key) else None
-                    )
-                },
-                sort_key=field.sort_key,
-                created_by=actor,
-            )
+            {
+                "scope": "schema",
+                "change_type": "moved",
+                "field_key": key,
+                "row_key": None,
+                "parent_row_key": None,
+                "label": field["name"],
+                "before_value": {"after_field_key": before_field_predecessors.get(key)},
+                "after_value": {"after_field_key": after_field_predecessors.get(key)},
+                "sort_key": str(field.get("sort_key") or "0"),
+            }
         )
 
-    before_rows = {row.row_key: row for row in before_revision.rows.select_related("parent_row", "table_field").prefetch_related("values__field")} if before_revision else {}
-    after_rows = {row.row_key: row for row in after_revision.rows.select_related("parent_row", "table_field").prefetch_related("values__field")}
+    before_schema = _schema_of(before_revision) if before_revision else []
+    after_schema = _schema_of(after_revision) if after_revision else []
+    before_rows = (
+        {row.row_key: row for row in before_revision.rows.select_related("parent_row")} if before_revision else {}
+    )
+    after_rows = {row.row_key: row for row in after_revision.rows.select_related("parent_row")}
     common_row_keys = set(before_rows) & set(after_rows)
     before_predecessors = _ordered_predecessors(
         [row for key, row in before_rows.items() if key in common_row_keys],
         lambda row: row.row_key,
-        lambda row: (row.parent_row.row_key if row.parent_row_id else None, row.table_field.field_key if row.table_field_id else None),
+        lambda row: (row.parent_row.row_key if row.parent_row_id else None, row.table_field_key),
+        lambda row: (row.sort_key, row.created_at, row.id),
     )
     after_predecessors = _ordered_predecessors(
         [row for key, row in after_rows.items() if key in common_row_keys],
         lambda row: row.row_key,
-        lambda row: (row.parent_row.row_key if row.parent_row_id else None, row.table_field.field_key if row.table_field_id else None),
+        lambda row: (row.parent_row.row_key if row.parent_row_id else None, row.table_field_key),
+        lambda row: (row.sort_key, row.created_at, row.id),
     )
     for key in sorted(set(before_rows) | set(after_rows), key=str):
         before = before_rows.get(key)
@@ -1171,52 +1041,53 @@ def build_structured_diff_entries(change, before_revision, after_revision, actor
         before_value = _row_snapshot(before) if before else None
         after_value = _row_snapshot(after) if after else None
         scope_row = after or before
-        scope = (
-            RequirementStructuredDiffEntry.Scope.CHILD_ROW
-            if scope_row.parent_row_id
-            else RequirementStructuredDiffEntry.Scope.ROOT_ROW
-        )
-        parent_key = scope_row.parent_row.row_key if scope_row.parent_row_id else None
+        scope = "child_row" if scope_row.parent_row_id else "root_row"
+        parent_key = str(scope_row.parent_row.row_key) if scope_row.parent_row_id else None
+        row_label = _row_preview_label(scope_row, after_schema if after is not None else before_schema, scope)
         if before is None or after is None or before_value != after_value:
             entries.append(
-                RequirementStructuredDiffEntry(
-                    change=change,
-                    scope=scope,
-                    change_type=(
-                        RequirementStructuredDiffEntry.ChangeType.ADDED
-                        if before is None
-                        else RequirementStructuredDiffEntry.ChangeType.REMOVED
-                        if after is None
-                        else RequirementStructuredDiffEntry.ChangeType.MODIFIED
-                    ),
-                    row_key=key,
-                    parent_row_key=parent_key,
-                    label=scope_row.display_id or str(key),
-                    before_value=before_value,
-                    after_value=after_value,
-                    sort_key=scope_row.sort_key,
-                    created_by=actor,
-                )
+                {
+                    "scope": scope,
+                    "change_type": ("added" if before is None else "removed" if after is None else "modified"),
+                    "field_key": None,
+                    "row_key": str(key),
+                    "parent_row_key": parent_key,
+                    "label": row_label,
+                    "before_value": before_value,
+                    "after_value": after_value,
+                    "sort_key": str(scope_row.sort_key),
+                }
             )
         if before and after and before_predecessors.get(key) != after_predecessors.get(key):
+            before_predecessor = before_predecessors.get(key)
+            after_predecessor = after_predecessors.get(key)
             entries.append(
-                RequirementStructuredDiffEntry(
-                    change=change,
-                    scope=scope,
-                    change_type=RequirementStructuredDiffEntry.ChangeType.MOVED,
-                    row_key=key,
-                    parent_row_key=parent_key,
-                    label=scope_row.display_id or str(key),
-                    before_value={"after_row_key": str(before_predecessors.get(key)) if before_predecessors.get(key) else None},
-                    after_value={"after_row_key": str(after_predecessors.get(key)) if after_predecessors.get(key) else None},
-                    sort_key=scope_row.sort_key,
-                    created_by=actor,
-                )
+                {
+                    "scope": scope,
+                    "change_type": "moved",
+                    "field_key": None,
+                    "row_key": str(key),
+                    "parent_row_key": parent_key,
+                    "label": row_label,
+                    "before_value": {"after_row_key": str(before_predecessor) if before_predecessor else None},
+                    "after_value": {"after_row_key": str(after_predecessor) if after_predecessor else None},
+                    "sort_key": str(scope_row.sort_key),
+                }
             )
-    RequirementStructuredDiffEntry.objects.bulk_create(entries, batch_size=500)
+
+    entries.sort(key=lambda entry: (Decimal(str(entry.get("sort_key") or "0")), str(entry.get("row_key") or entry.get("field_key") or "")))
+    return entries
+
+
+def summarize_structured_diff(entries):
     summary = defaultdict(int)
     for entry in entries:
-        summary[f"{entry.scope}_{entry.change_type}"] += 1
-    change.structured_diff_summary = dict(summary)
+        summary[f"{entry['scope']}_{entry['change_type']}"] += 1
+    return dict(summary)
+
+
+def _store_structured_diff_summary(change, before_revision, after_revision):
+    entries = compute_structured_diff(before_revision, after_revision)
+    change.structured_diff_summary = summarize_structured_diff(entries)
     change.save(update_fields=["structured_diff_summary", "updated_at"])
     return entries

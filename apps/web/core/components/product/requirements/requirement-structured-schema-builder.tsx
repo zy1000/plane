@@ -50,7 +50,7 @@ type Props = {
 export function RequirementStructuredSchemaBuilder(props: Props) {
   const { fields, onChange, readOnly = false } = props;
   const rootFields = fields.filter((field) => !field.parent_key);
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   const patchField = (key: string, patch: Partial<TStructuredField>) => {
     onChange(fields.map((field) => (field.key === key ? { ...field, ...patch } : field)));
@@ -77,14 +77,14 @@ export function RequirementStructuredSchemaBuilder(props: Props) {
   const addField = (parentKey: string | null = null) => {
     const field = createField(parentKey);
     onChange([...fields, field]);
-    setCollapsed((current) => ({ ...current, [field.key]: false }));
+    setExpanded((current) => ({ ...current, [field.key]: true }));
   };
 
   const renderField = (field: TStructuredField, isChild = false) => {
     const availableTypes = isChild ? FIELD_TYPE_LIST.filter((item) => item.value !== "table") : FIELD_TYPE_LIST;
     const meta = FIELD_TYPE_META[field.field_type];
     const Icon = meta.icon;
-    const isOpen = !collapsed[field.key];
+    const isOpen = !!expanded[field.key];
     const childFields = fields.filter((child) => child.parent_key === field.key);
     const siblings = fields.filter((item) => item.parent_key === field.parent_key);
     const siblingIndex = siblings.findIndex((item) => item.key === field.key);
@@ -95,14 +95,14 @@ export function RequirementStructuredSchemaBuilder(props: Props) {
       <div
         key={field.key}
         className={cn(
-          "overflow-hidden rounded-lg border border-subtle bg-surface-1",
-          isChild ? "border-strong/60" : "shadow-raised-100"
+          "overflow-hidden",
+          isChild ? "bg-surface-1" : "rounded-lg border border-subtle bg-surface-1 shadow-raised-100"
         )}
       >
         <div className="flex flex-wrap items-center gap-2 px-2.5 py-2">
           <button
             type="button"
-            onClick={() => setCollapsed((current) => ({ ...current, [field.key]: isOpen }))}
+            onClick={() => setExpanded((current) => ({ ...current, [field.key]: !isOpen }))}
             className="grid size-7 shrink-0 place-items-center rounded-md text-tertiary transition-colors hover:bg-layer-1 hover:text-primary"
             aria-label={isOpen ? "收起字段" : "展开字段"}
             aria-expanded={isOpen}
@@ -119,13 +119,15 @@ export function RequirementStructuredSchemaBuilder(props: Props) {
           >
             <Icon className="size-4" />
           </span>
-          <Input
-            value={field.name}
-            disabled={readOnly}
-            onChange={(event) => patchField(field.key, { name: event.target.value })}
-            placeholder={isChild ? "子字段名称" : "字段名称"}
-            className="h-8 min-w-[9rem] flex-1 text-13 font-medium"
-          />
+          <div className="flex min-w-[9rem] flex-1 flex-col justify-center">
+            <Input
+              value={field.name}
+              disabled={readOnly}
+              onChange={(event) => patchField(field.key, { name: event.target.value })}
+              placeholder={isChild ? "子字段名称" : "字段名称"}
+              className="h-8 w-full text-13 font-medium"
+            />
+          </div>
           <div className="ml-auto flex items-center gap-2">
             <select
               value={field.field_type}
@@ -461,8 +463,8 @@ export function RequirementStructuredSchemaBuilder(props: Props) {
                     />
                   </div>
                 </div>
-                <div className="rounded-lg border border-subtle bg-surface-1 p-3">
-                  <div className="mb-2 flex items-center justify-between gap-3">
+                <div className="overflow-hidden rounded-lg border border-subtle bg-surface-1">
+                  <div className="flex items-center justify-between gap-3 border-b border-subtle px-3 py-2">
                     <span className="flex items-center gap-1.5 text-11 font-medium text-secondary">
                       <Table2 className="size-3.5 text-accent-primary" />
                       子表字段
@@ -481,9 +483,9 @@ export function RequirementStructuredSchemaBuilder(props: Props) {
                     )}
                   </div>
                   {childFields.length === 0 ? (
-                    <p className="py-3 text-center text-11 text-tertiary">还没有子字段，添加后即可定义子表列。</p>
+                    <p className="py-4 text-center text-11 text-tertiary">还没有子字段，添加后即可定义子表列。</p>
                   ) : (
-                    <div className="space-y-2">{childFields.map((child) => renderField(child, true))}</div>
+                    <div className="divide-y divide-subtle">{childFields.map((child) => renderField(child, true))}</div>
                   )}
                 </div>
               </div>
@@ -495,7 +497,7 @@ export function RequirementStructuredSchemaBuilder(props: Props) {
   };
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       {rootFields.length === 0 ? (
         <div className="rounded-xl border border-dashed border-strong bg-layer-1 px-6 py-12 text-center">
           <span className="mx-auto grid size-11 place-items-center rounded-xl border border-subtle bg-surface-1">

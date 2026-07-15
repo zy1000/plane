@@ -47,7 +47,7 @@ export const UserRequirementsRoot = observer(function UserRequirementsRoot(props
     archivedCount,
     deleteRequirement,
     discardChangeDraft,
-    error,
+    error: requirementsError,
     fetchParentOptions,
     fetchRequirement,
     fetchRequirements,
@@ -140,6 +140,10 @@ export const UserRequirementsRoot = observer(function UserRequirementsRoot(props
       getRequirementTableColumns({
         onOpen: (requirement) => router.push(`/${slug}/products/${id}/${requirementPath}/${requirement.id}`),
         onEdit: (requirement) => {
+          if (requirement.content_mode === "structured") {
+            router.push(`/${slug}/products/${id}/${requirementPath}/${requirement.id}?tab=details&edit=1`);
+            return;
+          }
           setEditingRequirement(requirement);
           setIsFormOpen(true);
         },
@@ -164,11 +168,6 @@ export const UserRequirementsRoot = observer(function UserRequirementsRoot(props
 
   const openCreate = () => {
     setEditingRequirement(null);
-    setIsFormOpen(true);
-  };
-
-  const openEdit = (requirement: TUserRequirementListItem) => {
-    setEditingRequirement(requirement);
     setIsFormOpen(true);
   };
 
@@ -248,7 +247,7 @@ export const UserRequirementsRoot = observer(function UserRequirementsRoot(props
           const response = await createRequirement(data, submitForReview);
           void fetchModules();
           if (data.content_mode === "structured") {
-            router.push(`/${slug}/products/${id}/${requirementPath}/${response.id}/data`);
+            router.push(`/${slug}/products/${id}/${requirementPath}/${response.id}?tab=details&edit=1`);
             return response;
           }
           if (page !== 1) setPage(1);
@@ -297,6 +296,19 @@ export const UserRequirementsRoot = observer(function UserRequirementsRoot(props
                 ? "当前评审会结束，并基于提案创建一个新的修订草稿。"
                 : "该修订草稿将被取消，当前正式版本不受影响。"
         }
+        variant={pendingAction?.action === "discard" ? "danger" : "primary"}
+        primaryButtonText={{
+          default:
+            pendingAction?.action === "archive"
+              ? "归档"
+              : pendingAction?.action === "restore"
+                ? "恢复"
+                : pendingAction?.action === "withdraw"
+                  ? "撤回评审"
+                  : "放弃草稿",
+          loading: "处理中…",
+        }}
+        secondaryButtonText="取消"
         isSubmitting={isMutating}
         handleClose={() => setPendingAction(null)}
         handleSubmit={async () => {
@@ -479,7 +491,7 @@ export const UserRequirementsRoot = observer(function UserRequirementsRoot(props
                     <div key={item} className="h-11 rounded bg-layer-1" />
                   ))}
                 </div>
-              ) : error ? (
+              ) : requirementsError ? (
                 <div className="grid flex-1 place-items-center bg-surface-1 text-center">
                   <div>
                     <p className="text-15 font-medium text-primary">{requirementLabel}加载失败</p>

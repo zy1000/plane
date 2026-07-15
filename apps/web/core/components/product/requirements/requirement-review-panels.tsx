@@ -249,8 +249,8 @@ function DiffField(props: { diff: TRequirementFieldDiff }) {
   const { diff } = props;
   const changeMeta =
     diff.change_type === "added"
-      ? { label: "新增", className: "bg-green-500/[0.12] text-green-700 dark:text-green-300" }
-      : { label: "修改", className: "bg-accent-primary/10 text-accent-primary" };
+      ? { label: "新增", className: "bg-success-subtle text-success-primary" }
+      : { label: "修改", className: "bg-warning-subtle text-warning-primary" };
 
   return (
     <article>
@@ -279,6 +279,8 @@ function RequirementDiffSurface(props: {
   afterVersionLabel: string;
 }) {
   const { afterVersionLabel, beforeVersionLabel, diff, subtitle } = props;
+  // 结构化数据的差异由专门的结构化面板逐项展示，这里剔除机器可读的哈希快照字段
+  const changedFields = diff.changed_fields.filter((field) => field.field !== "structured");
 
   return (
     <section className="overflow-hidden rounded-2xl border border-strong bg-surface-1 shadow-raised-200">
@@ -288,16 +290,16 @@ function RequirementDiffSurface(props: {
             <GitCompareArrows className="size-5" />
           </span>
           <div>
-            <h2 className="text-16 font-semibold text-primary">变更内容</h2>
+            <h2 className="text-16 font-semibold text-primary">需求信息变更</h2>
             {subtitle && <p className="mt-0.5 text-11 leading-5 text-secondary">{subtitle}</p>}
           </div>
         </div>
         <span className="w-fit rounded-md bg-accent-primary px-2.5 py-1.5 text-11 font-semibold text-on-color tabular-nums shadow-raised-100">
-          {diff.changed_count} 处变更
+          {changedFields.length} 处变更
         </span>
       </div>
 
-      {diff.changed_fields.length === 0 ? (
+      {changedFields.length === 0 ? (
         <div className="px-5 py-16 text-center">
           <Check className="text-green-600 dark:text-green-400 mx-auto size-6" />
           <p className="mt-3 text-13 font-medium text-primary">没有发现字段差异</p>
@@ -322,7 +324,7 @@ function RequirementDiffSurface(props: {
             </span>
           </div>
           <div className="divide-y divide-subtle">
-            {diff.changed_fields.map((diffItem) => (
+            {changedFields.map((diffItem) => (
               <DiffField key={diffItem.field} diff={diffItem} />
             ))}
           </div>
@@ -337,6 +339,7 @@ export function RequirementDiffPanel(props: { change: TRequirementChange }) {
   return (
     <RequirementDiffSurface
       diff={change.diff}
+      subtitle="名称、优先级、描述等需求属性的调整"
       beforeVersionLabel={change.base_version_number ? `基线 V${change.base_version_number}` : "新建需求"}
       afterVersionLabel="本轮提案"
     />

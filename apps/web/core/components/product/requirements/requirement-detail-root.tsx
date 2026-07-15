@@ -1,6 +1,6 @@
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { observer } from "mobx-react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { useOutletContext } from "react-router";
 import {
   Archive,
@@ -19,11 +19,13 @@ import {
   Paperclip,
   Pencil,
   RotateCcw,
+  Send,
   SignalHigh,
   UserRound,
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "@plane/propel/button";
+import { TabNavigationItem, TabNavigationList } from "@plane/propel/tab-navigation";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { AlertModalCore, Avatar, Breadcrumbs, Header } from "@plane/ui";
 import { calculateTimeAgo, cn, getFileURL } from "@plane/utils";
@@ -32,8 +34,10 @@ import { AppHeader } from "@/components/core/app-header";
 import { PageHead } from "@/components/core/page-title";
 import { useRequirementModules } from "@/hooks/store/use-requirement-modules";
 import { useRequirementReview } from "@/hooks/store/use-requirement-review";
+import { useStructuredRequirementDraft } from "@/hooks/store/use-structured-requirement-draft";
 import { useUserRequirements } from "@/hooks/store/use-user-requirements";
 import { useAppRouter } from "@/hooks/use-app-router";
+import useReloadConfirmations from "@/hooks/use-reload-confirmation";
 import { useRequirementAttachmentDownload } from "@/hooks/use-requirement-attachment-download";
 import type { TRequirementType, TUserRequirementListItem } from "@/services/requirement.service";
 import type { TProductDetailOutletContext } from "../product-detail-layout";
@@ -42,7 +46,9 @@ import { RequirementFormModal } from "./requirement-form-modal";
 import { RequirementLifecycleModal } from "./requirement-lifecycle-modal";
 import { RequirementStatusBadge } from "./requirement-review-panels";
 import { RequirementVersionCompareModal } from "./requirement-version-compare-modal";
-import { StructuredRequirementEditor } from "./structured-requirement-editor";
+import type { TStructuredSaveStatus } from "./structured-data-grid";
+import { StructuredRequirementInfoEditor } from "./structured-requirement-info-editor";
+import { StructuredRequirementEditor, type TStructuredRequirementEditorHandle } from "./structured-requirement-editor";
 
 const priorityLabels: Record<string, string> = {
   urgent: "紧急",
@@ -118,6 +124,13 @@ export const RequirementDetailRoot = observer(function RequirementDetailRoot(pro
   const id = productId?.toString();
   const reqId = requirementId?.toString();
   const router = useAppRouter();
+  const searchParams = useSearchParams();
+  const requestedTab = searchParams.get("tab") === "details" ? "details" : "info";
+  const requestedEdit = searchParams.get("edit") === "1";
+  const initialRequestRef = useRef<{ requirementId?: string; tab: "info" | "details"; edit: boolean }>();
+  if (initialRequestRef.current?.requirementId !== reqId) {
+    initialRequestRef.current = { requirementId: reqId, tab: requestedTab, edit: requestedEdit };
+  }
   const { download: downloadAttachment } = useRequirementAttachmentDownload(slug, id);
   const { product } = useOutletContext<TProductDetailOutletContext>();
   const { changes, compare, fetchDetail, isLoading, lifecycleEvents, requirement, versions } = useRequirementReview(
@@ -130,8 +143,10 @@ export const RequirementDetailRoot = observer(function RequirementDetailRoot(pro
     discardChangeDraft,
     fetchParentOptions,
     fetchRequirement,
+    patchChangeDraft,
     saveChangeDraft,
     setArchived,
+    startChangeDraft,
     submitChange,
     transitionLifecycle,
     updateRequirement,
@@ -139,17 +154,227 @@ export const RequirementDetailRoot = observer(function RequirementDetailRoot(pro
   } = useUserRequirements(slug, id, requirementType);
   const [isChangeOpen, setIsChangeOpen] = useState(false);
   const [isCompareOpen, setIsCompareOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<"info" | "details">("info");
+  const [isEditing, setIsEditing] = useState(false);
+  const [structuredSaveStatus, setStructuredSaveStatus] = useState<TStructuredSaveStatus>("saved");
+  const [isSchemaDirty, setIsSchemaDirty] = useState(false);
   const [lifecycleAction, setLifecycleAction] = useState<"closed" | "reopened" | null>(null);
   const [isActionSubmitting, setIsActionSubmitting] = useState(false);
-  const [simpleAction, setSimpleAction] = useState<"archive" | "restore" | "withdraw" | "discard" | null>(null);
+  const [simpleAction, setSimpleAction] = useState<"archive" | "restore" | "withdraw" | "discard" | "submit" | null>(
+    null
+  );
   const label = requirementType === "user" ? "用户需求" : "研发需求";
   const path = getRequirementPath(requirementType);
+  const structuredEditorRef = useRef<TStructuredRequirementEditorHandle>(null);
+  const openDraft = requirement?.open_change?.status === "draft" ? requirement.open_change : null;
+  const canSubmitStructured = Boolean(
+    requirement?.content_mode === "structured" && isEditing && openDraft && requirement.permissions.can_edit_draft
+  );
+  const structuredRevisionId = isEditing
+    ? (openDraft?.structured_revision_id ?? null)
+    : requirement?.current_version
+      ? (requirement.active_structured_revision ?? null)
+      : (requirement?.open_change?.structured_revision_id ??
+        requirement?.latest_change?.structured_revision_id ??
+        null);
+
+  const draftSession = useStructuredRequirementDraft({
+    workspaceSlug: slug ?? "",
+    productId: id ?? "",
+    requirementId: reqId ?? "",
+    change: openDraft,
+    enabled: Boolean(isEditing && openDraft),
+    patchChangeDraft,
+  });
+  const hasPendingLocalChanges =
+    isEditing && (draftSession.saveStatus !== "saved" || structuredSaveStatus !== "saved" || isSchemaDirty);
+  const { setShowAlert } = useReloadConfirmations(isEditing, "当前修订还有尚未保存或未应用的修改，确定离开吗？");
+
+  useEffect(() => setShowAlert(hasPendingLocalChanges), [hasPendingLocalChanges, setShowAlert]);
 
   useEffect(() => {
     if (!reqId) return;
-    void fetchDetail(reqId).catch(() => undefined);
+    const initialRequest = initialRequestRef.current;
+    setActiveTab(initialRequest?.tab ?? "info");
+    setIsEditing(false);
+    void fetchDetail(reqId)
+      .then(async (detail) => {
+        if (!initialRequest?.edit || detail?.content_mode !== "structured") return detail;
+        let editableDetail = detail;
+        if (!editableDetail.open_change && editableDetail.permissions.can_create_revision) {
+          await startChangeDraft(reqId);
+          editableDetail = (await fetchDetail(reqId)) ?? editableDetail;
+        }
+        if (editableDetail.open_change?.status === "draft" && editableDetail.permissions.can_edit_draft) {
+          setIsEditing(true);
+        }
+        return editableDetail;
+      })
+      .catch(() => undefined);
     void fetchModules().catch(() => undefined);
-  }, [fetchDetail, fetchModules, reqId]);
+  }, [fetchDetail, fetchModules, reqId, startChangeDraft]);
+
+  const showActionError = (error: unknown, fallback = "请稍后重试。") =>
+    setToast({
+      type: TOAST_TYPE.ERROR,
+      title: "操作失败",
+      message:
+        (error as { error?: string; message?: string })?.error ?? (error as { message?: string })?.message ?? fallback,
+    });
+
+  const updateDetailQuery = (editing: boolean, tab = activeTab) => {
+    if (!slug || !id || !reqId) return;
+    router.replace(`/${slug}/products/${id}/${path}/${reqId}?tab=${tab}${editing ? "&edit=1" : ""}`);
+  };
+
+  const enterStructuredEdit = async () => {
+    if (!reqId || !requirement || requirement.content_mode !== "structured") return;
+    setIsActionSubmitting(true);
+    try {
+      if (!openDraft) await startChangeDraft(reqId);
+      const detail = await fetchDetail(reqId);
+      if (detail?.open_change?.status === "draft" && detail.permissions.can_edit_draft) {
+        setStructuredSaveStatus("saved");
+        setIsSchemaDirty(false);
+        setIsEditing(true);
+        updateDetailQuery(true);
+        return;
+      }
+      throw new Error(detail?.open_change?.status === "pending" ? "该修订已进入评审" : "无法进入编辑状态");
+    } catch (error) {
+      const detail = await fetchDetail(reqId).catch(() => undefined);
+      if (detail?.open_change?.status === "draft" && detail.permissions.can_edit_draft) {
+        setIsEditing(true);
+        updateDetailQuery(true);
+        return;
+      }
+      showActionError(error);
+    } finally {
+      setIsActionSubmitting(false);
+    }
+  };
+
+  const changeTab = async (nextTab: "info" | "details") => {
+    if (nextTab === activeTab) return;
+    try {
+      if (isEditing && activeTab === "details") {
+        if (structuredEditorRef.current?.hasUnappliedSchemaChanges()) {
+          structuredEditorRef.current.openSchema();
+          setToast({ type: TOAST_TYPE.ERROR, title: "字段方案尚未应用", message: "请先应用或撤销字段方案修改。" });
+          return;
+        }
+        await structuredEditorRef.current?.flushPendingChanges();
+      }
+      if (isEditing && activeTab === "info") await draftSession.flush();
+      setActiveTab(nextTab);
+      updateDetailQuery(isEditing, nextTab);
+    } catch (error) {
+      showActionError(error, "当前修改保存失败，暂时不能切换页签。");
+    }
+  };
+
+  const exitStructuredEdit = async () => {
+    if (!reqId) return;
+    if (isSchemaDirty || structuredEditorRef.current?.hasUnappliedSchemaChanges()) {
+      setActiveTab("details");
+      queueMicrotask(() => structuredEditorRef.current?.openSchema());
+      setToast({ type: TOAST_TYPE.ERROR, title: "字段方案尚未应用", message: "请先应用或撤销字段方案修改。" });
+      return;
+    }
+    setIsActionSubmitting(true);
+    try {
+      await draftSession.flush();
+      await structuredEditorRef.current?.flushPendingChanges();
+      await fetchDetail(reqId);
+      setIsEditing(false);
+      setStructuredSaveStatus("saved");
+      updateDetailQuery(false);
+    } catch (error) {
+      showActionError(error, "草稿保存失败，暂时不能退出编辑。");
+    } finally {
+      setIsActionSubmitting(false);
+    }
+  };
+
+  const prepareStructuredSubmit = async () => {
+    if (!canSubmitStructured) return;
+    const metadataIsValid = await draftSession.validateForSubmit();
+    if (!metadataIsValid) {
+      setActiveTab("info");
+      setToast({ type: TOAST_TYPE.ERROR, title: "基础信息不完整", message: "请填写需求名称并至少选择一名评审人。" });
+      return;
+    }
+    if (isSchemaDirty || structuredEditorRef.current?.hasUnappliedSchemaChanges()) {
+      setActiveTab("details");
+      queueMicrotask(() => structuredEditorRef.current?.openSchema());
+      setToast({ type: TOAST_TYPE.ERROR, title: "字段方案尚未应用", message: "请先应用或撤销字段方案修改。" });
+      return;
+    }
+    setIsActionSubmitting(true);
+    try {
+      await draftSession.flush();
+      await structuredEditorRef.current?.flushPendingChanges();
+      setSimpleAction("submit");
+    } catch (error) {
+      setActiveTab("details");
+      showActionError(error, "需求明细保存失败，无法提交评审。");
+    } finally {
+      setIsActionSubmitting(false);
+    }
+  };
+
+  const retryDraftSave = async () => {
+    setIsActionSubmitting(true);
+    try {
+      await draftSession.retry();
+      await structuredEditorRef.current?.flushPendingChanges();
+      setStructuredSaveStatus("saved");
+      setToast({ type: TOAST_TYPE.SUCCESS, title: "已保存", message: "修改已保存到修订草稿。" });
+    } catch (error) {
+      showActionError(error, "草稿仍未保存，请检查输入或网络后重试。");
+    } finally {
+      setIsActionSubmitting(false);
+    }
+  };
+
+  const saveStatus = isSchemaDirty
+    ? { label: "字段方案未应用", className: "text-warning-primary" }
+    : draftSession.saveStatus === "error" || structuredSaveStatus === "error"
+      ? { label: "保存失败", className: "text-danger-primary" }
+      : draftSession.saveStatus === "saving" || structuredSaveStatus === "saving"
+        ? { label: "正在保存…", className: "text-tertiary" }
+        : draftSession.saveStatus === "dirty" || structuredSaveStatus === "dirty"
+          ? { label: "未保存", className: "text-warning-primary" }
+          : { label: "已保存到草稿", className: "text-success-primary" };
+
+  const actionModalConfig =
+    simpleAction === "submit"
+      ? {
+          variant: "primary" as const,
+          primaryButtonText: { default: "提交评审", loading: "提交中…" },
+          secondaryButtonText: "取消",
+        }
+      : simpleAction === "discard"
+        ? {
+            variant: "danger" as const,
+            primaryButtonText: { default: "放弃草稿", loading: "放弃中…" },
+            secondaryButtonText: "取消",
+          }
+        : {
+            variant: "primary" as const,
+            primaryButtonText: {
+              default:
+                simpleAction === "archive"
+                  ? "归档"
+                  : simpleAction === "restore"
+                    ? "恢复"
+                    : simpleAction === "withdraw"
+                      ? "撤回评审"
+                      : "确认",
+              loading: "处理中…",
+            },
+            secondaryButtonText: "取消",
+          };
 
   if (!slug || !id || !reqId) return null;
 
@@ -168,15 +393,16 @@ export const RequirementDetailRoot = observer(function RequirementDetailRoot(pro
         onClose={() => setIsChangeOpen(false)}
         onSubmit={async (data, submitForReview) => {
           const openChange = requirement?.open_change;
-          const response =
-            openChange?.status === "draft"
-              ? submitForReview
-                ? await submitChange(reqId, openChange.id, data)
-                : await saveChangeDraft(reqId, openChange.id, data)
-              : await updateRequirement(reqId, data, submitForReview);
+          const hadOpenDraft = openChange?.status === "draft";
+          const response = hadOpenDraft
+            ? submitForReview
+              ? await submitChange(reqId, openChange.id, data)
+              : await saveChangeDraft(reqId, openChange.id, data)
+            : await updateRequirement(reqId, data, submitForReview);
           await fetchDetail(reqId);
-          if (requirement?.content_mode === "structured") {
-            router.push(`/${slug}/products/${id}/${path}/${reqId}/data`);
+          // 仅「创建修订」刚生成草稿时切到需求明细；「编辑属性」保存后留在基础信息
+          if (requirement?.content_mode === "structured" && !hadOpenDraft) {
+            setActiveTab("details");
           }
           return response;
         }}
@@ -209,7 +435,9 @@ export const RequirementDetailRoot = observer(function RequirementDetailRoot(pro
               ? "恢复归档"
               : simpleAction === "withdraw"
                 ? "撤回评审"
-                : "放弃修订草稿"
+                : simpleAction === "submit"
+                  ? "提交需求评审？"
+                  : "放弃修订草稿"
         }
         content={
           simpleAction === "archive"
@@ -218,8 +446,13 @@ export const RequirementDetailRoot = observer(function RequirementDetailRoot(pro
               ? "恢复后需求仍保持当前终态。"
               : simpleAction === "withdraw"
                 ? "当前评审会结束，并生成新的修订草稿。"
-                : "修订草稿会被取消，当前正式版本不受影响。"
+                : simpleAction === "submit"
+                  ? `将把第 ${requirement?.open_change?.sequence ?? "当前"} 轮修订提交给 ${draftSession.form.getValues("reviewers")?.length ?? 0} 位评审人。提交后内容暂不可编辑；如需修改，可撤回评审后继续。`
+                  : "修订草稿会被取消，当前正式版本不受影响。"
         }
+        variant={actionModalConfig.variant}
+        primaryButtonText={actionModalConfig.primaryButtonText}
+        secondaryButtonText={actionModalConfig.secondaryButtonText}
         isSubmitting={isActionSubmitting}
         handleClose={() => setSimpleAction(null)}
         handleSubmit={async () => {
@@ -231,11 +464,27 @@ export const RequirementDetailRoot = observer(function RequirementDetailRoot(pro
             } else if (simpleAction === "withdraw" && requirement.open_change) {
               await withdrawChange(reqId, requirement.open_change.id);
             } else if (simpleAction === "discard" && requirement.open_change) {
+              await draftSession.cancelPendingSaves();
+              await structuredEditorRef.current?.cancelPendingChanges();
               await discardChangeDraft(reqId, requirement.open_change.id);
+              await draftSession.cleanupUnboundAssets();
+            } else if (simpleAction === "submit" && requirement.open_change) {
+              await submitChange(reqId, requirement.open_change.id);
             }
             await fetchDetail(reqId);
+            const isSubmit = simpleAction === "submit";
+            if (["submit", "discard", "withdraw"].includes(simpleAction)) {
+              setIsEditing(false);
+              updateDetailQuery(false);
+            }
+            setStructuredSaveStatus("saved");
+            setIsSchemaDirty(false);
             setSimpleAction(null);
-            setToast({ type: TOAST_TYPE.SUCCESS, title: "操作成功", message: "需求已更新。" });
+            setToast({
+              type: TOAST_TYPE.SUCCESS,
+              title: isSubmit ? "已提交评审" : "操作成功",
+              message: isSubmit ? "字段方案和数据已冻结。" : "需求已更新。",
+            });
           } catch (error: any) {
             setToast({ type: TOAST_TYPE.ERROR, title: "操作失败", message: error?.error ?? "请稍后重试。" });
           } finally {
@@ -256,57 +505,106 @@ export const RequirementDetailRoot = observer(function RequirementDetailRoot(pro
         header={
           <Header>
             <Header.LeftItem>
-              <Breadcrumbs>
-                <Breadcrumbs.Item
-                  component={
-                    <BreadcrumbLink
-                      label="产品管理"
-                      href={`/${slug}/products`}
-                      icon={<Package className="size-4 text-tertiary" />}
-                    />
-                  }
-                />
-                {product && <Breadcrumbs.Item component={<BreadcrumbLink label={product.name} />} />}
-                <Breadcrumbs.Item
-                  component={<BreadcrumbLink label={label} href={`/${slug}/products/${id}/${path}`} />}
-                />
-                {requirement && <Breadcrumbs.Item component={<BreadcrumbLink label={requirement.name} />} />}
-              </Breadcrumbs>
+              {requirement?.content_mode === "structured" ? (
+                <TabNavigationList>
+                  {(
+                    [
+                      { key: "info" as const, label: "基础信息" },
+                      { key: "details" as const, label: "需求明细" },
+                    ] as const
+                  ).map((tab) => (
+                    <button key={tab.key} type="button" onClick={() => void changeTab(tab.key)}>
+                      <TabNavigationItem isActive={activeTab === tab.key}>{tab.label}</TabNavigationItem>
+                    </button>
+                  ))}
+                </TabNavigationList>
+              ) : (
+                <Breadcrumbs>
+                  <Breadcrumbs.Item
+                    component={
+                      <BreadcrumbLink
+                        label="产品管理"
+                        href={`/${slug}/products`}
+                        icon={<Package className="size-4 text-tertiary" />}
+                      />
+                    }
+                  />
+                  {product && <Breadcrumbs.Item component={<BreadcrumbLink label={product.name} />} />}
+                  <Breadcrumbs.Item
+                    component={<BreadcrumbLink label={label} href={`/${slug}/products/${id}/${path}`} />}
+                  />
+                  {requirement && <Breadcrumbs.Item component={<BreadcrumbLink label={requirement.name} />} />}
+                </Breadcrumbs>
+              )}
             </Header.LeftItem>
             <Header.RightItem>
               {requirement && (
                 <>
-                  <Button
-                    variant="secondary"
-                    size="lg"
-                    prependIcon={<ClipboardCheck className="size-4" />}
-                    onClick={() => router.push(`/${slug}/products/${id}/${path}/${reqId}/review`)}
-                  >
-                    查看评审
-                  </Button>
-                  {(requirement.permissions.can_edit_draft || requirement.permissions.can_create_revision) && (
+                  {!isEditing && activeTab !== "details" && (
                     <Button
-                      variant="primary"
+                      variant="secondary"
                       size="lg"
-                      prependIcon={<Pencil className="size-4" />}
-                      onClick={() => {
-                        if (requirement.content_mode === "structured" && requirement.permissions.can_edit_draft) {
-                          router.push(`/${slug}/products/${id}/${path}/${reqId}/data`);
-                          return;
-                        }
-                        setIsChangeOpen(true);
-                      }}
+                      prependIcon={<ClipboardCheck className="size-4" />}
+                      onClick={() => router.push(`/${slug}/products/${id}/${path}/${reqId}/review`)}
                     >
-                      {requirement.content_mode === "structured" && requirement.permissions.can_edit_draft
-                        ? "编辑结构化数据"
-                        : requirement.permissions.can_edit_draft
-                          ? "继续编辑草稿"
-                          : "创建修订"}
+                      查看评审
                     </Button>
                   )}
-                  {requirement.permissions.can_withdraw && (
+                  {requirement.content_mode === "structured" ? (
+                    isEditing ? (
+                      <>
+                        <span className={cn("px-1 text-11 font-medium", saveStatus.className)}>{saveStatus.label}</span>
+                        {(draftSession.saveStatus === "error" || structuredSaveStatus === "error") && (
+                          <Button variant="secondary" size="sm" onClick={() => void retryDraftSave()}>
+                            重试保存
+                          </Button>
+                        )}
+                        <Button
+                          variant="secondary"
+                          size="lg"
+                          loading={isActionSubmitting}
+                          onClick={() => void exitStructuredEdit()}
+                        >
+                          退出编辑
+                        </Button>
+                        <Button
+                          variant="primary"
+                          size="lg"
+                          prependIcon={<Send className="size-4" />}
+                          loading={isActionSubmitting}
+                          onClick={() => void prepareStructuredSubmit()}
+                        >
+                          提交评审
+                        </Button>
+                      </>
+                    ) : (
+                      (requirement.permissions.can_edit_draft || requirement.permissions.can_create_revision) && (
+                        <Button
+                          variant="primary"
+                          size="lg"
+                          prependIcon={<Pencil className="size-4" />}
+                          loading={isActionSubmitting}
+                          onClick={() => void enterStructuredEdit()}
+                        >
+                          {requirement.permissions.can_edit_draft ? "继续编辑" : "编辑需求"}
+                        </Button>
+                      )
+                    )
+                  ) : (
+                    (requirement.permissions.can_edit_draft || requirement.permissions.can_create_revision) && (
+                      <Button
+                        variant="primary"
+                        size="lg"
+                        prependIcon={<Pencil className="size-4" />}
+                        onClick={() => setIsChangeOpen(true)}
+                      >
+                        {requirement.permissions.can_edit_draft ? "继续编辑草稿" : "创建修订"}
+                      </Button>
+                    )
+                  )}
+                  {!isEditing && requirement.permissions.can_withdraw && (
                     <Button variant="secondary" size="lg" onClick={() => setSimpleAction("withdraw")}>
-                      撤回修改
+                      撤回评审
                     </Button>
                   )}
                   {requirement.permissions.can_discard_draft && (
@@ -314,12 +612,12 @@ export const RequirementDetailRoot = observer(function RequirementDetailRoot(pro
                       放弃草稿
                     </Button>
                   )}
-                  {requirement.permissions.can_close && (
+                  {!isEditing && requirement.permissions.can_close && (
                     <Button variant="secondary" size="lg" onClick={() => setLifecycleAction("closed")}>
                       关闭需求
                     </Button>
                   )}
-                  {requirement.permissions.can_reopen && (
+                  {!isEditing && requirement.permissions.can_reopen && (
                     <Button
                       variant="primary"
                       size="lg"
@@ -329,7 +627,7 @@ export const RequirementDetailRoot = observer(function RequirementDetailRoot(pro
                       重新打开
                     </Button>
                   )}
-                  {requirement.permissions.can_archive && (
+                  {!isEditing && requirement.permissions.can_archive && (
                     <Button
                       variant="secondary"
                       size="lg"
@@ -339,7 +637,7 @@ export const RequirementDetailRoot = observer(function RequirementDetailRoot(pro
                       归档
                     </Button>
                   )}
-                  {requirement.permissions.can_restore && (
+                  {!isEditing && requirement.permissions.can_restore && (
                     <Button
                       variant="primary"
                       size="lg"
@@ -375,6 +673,71 @@ export const RequirementDetailRoot = observer(function RequirementDetailRoot(pro
           <div className="grid h-full place-items-center text-body-xs-regular text-secondary">
             需求不存在或无权访问。
           </div>
+        ) : requirement.content_mode === "structured" && activeTab === "details" ? (
+          <div className="h-full min-h-0 overflow-hidden bg-surface-1">
+            {structuredRevisionId ? (
+              <StructuredRequirementEditor
+                key={structuredRevisionId}
+                ref={structuredEditorRef}
+                workspaceSlug={slug}
+                productId={id}
+                requirementId={reqId}
+                revisionId={structuredRevisionId}
+                editable={canSubmitStructured}
+                onSaveStatusChange={setStructuredSaveStatus}
+                onSchemaDirtyChange={setIsSchemaDirty}
+              />
+            ) : (
+              <div className="grid h-full place-items-center px-6 text-center">
+                <div>
+                  <p className="text-13 font-medium text-primary">当前需求还没有结构化修订数据</p>
+                  <p className="mt-1.5 max-w-sm text-12 text-secondary">
+                    {requirement.permissions.can_create_revision
+                      ? "点击编辑后，系统会自动创建修订草稿并复制当前正式版本。"
+                      : requirement.permissions.can_edit_draft
+                        ? "当前草稿未关联结构化修订，请刷新页面；若仍如此，可尝试重新打开该需求。"
+                        : "需求尚未生效，且当前没有可编辑的修订草稿。"}
+                  </p>
+                  {requirement.permissions.can_create_revision && (
+                    <Button
+                      type="button"
+                      variant="primary"
+                      size="lg"
+                      className="mt-4"
+                      prependIcon={<Pencil className="size-4" />}
+                      loading={isActionSubmitting}
+                      onClick={() => void enterStructuredEdit()}
+                    >
+                      编辑需求
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        ) : requirement.content_mode === "structured" && isEditing ? (
+          <StructuredRequirementInfoEditor
+            workspaceSlug={slug}
+            productId={id}
+            requirementId={reqId}
+            status={requirement.status}
+            currentVersion={requirement.current_version}
+            modules={modules}
+            session={draftSession}
+            fetchParentOptions={fetchParentOptions}
+          >
+            <RequirementActivity
+              workspaceSlug={slug}
+              productId={id}
+              requirementId={reqId}
+              requirementType={requirementType}
+              changes={changes}
+              versions={versions}
+              lifecycleEvents={lifecycleEvents}
+              readOnly
+              onOpenReview={(changeId) => router.push(`/${slug}/products/${id}/${path}/${reqId}/review/${changeId}`)}
+            />
+          </StructuredRequirementInfoEditor>
         ) : (
           <div className="vertical-scrollbar flex h-full w-full overflow-auto">
             {/* 左侧主内容 */}
@@ -415,26 +778,7 @@ export const RequirementDetailRoot = observer(function RequirementDetailRoot(pro
                 )}
               </div>
 
-              {requirement.content_mode === "structured" ? (
-                requirement.open_change?.structured_revision_id || requirement.active_structured_revision ? (
-                  <div className="overflow-hidden rounded-xl border border-subtle shadow-raised-100">
-                    <StructuredRequirementEditor
-                      workspaceSlug={slug}
-                      productId={id}
-                      requirementId={reqId}
-                      revisionId={
-                        requirement.open_change?.structured_revision_id ?? requirement.active_structured_revision ?? ""
-                      }
-                      editable={false}
-                      embedded
-                    />
-                  </div>
-                ) : (
-                  <div className="rounded-xl border border-subtle bg-layer-1 px-5 py-10 text-center text-12 text-secondary">
-                    当前需求还没有结构化修订数据。
-                  </div>
-                )
-              ) : (
+              {requirement.content_mode !== "structured" && (
                 <>
                   <section>
                     <h2 className="text-body-sm-semibold text-primary">需求描述</h2>

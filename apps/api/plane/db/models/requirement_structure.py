@@ -35,6 +35,9 @@ class RequirementFieldTemplate(BaseModel):
     )
     revision = models.PositiveIntegerField(default=1)
     is_active = models.BooleanField(default=True)
+    # Field definitions stored as an ordered list of API-shaped dicts
+    # (key/parent_key/name/field_type/sort_key/config/validation/options/...).
+    schema = models.JSONField(default=list, blank=True)
 
     class Meta:
         db_table = "requirement_field_templates"
@@ -45,56 +48,6 @@ class RequirementFieldTemplate(BaseModel):
                 condition=Q(deleted_at__isnull=True),
                 name="requirement_field_template_unique_product_name",
             )
-        ]
-
-
-class RequirementTemplateField(BaseModel):
-    template = models.ForeignKey(
-        RequirementFieldTemplate,
-        on_delete=models.CASCADE,
-        related_name="fields",
-    )
-    field_key = models.UUIDField(default=uuid.uuid4, editable=False)
-    parent_field = models.ForeignKey(
-        "self",
-        on_delete=models.CASCADE,
-        related_name="child_fields",
-        null=True,
-        blank=True,
-    )
-    name = models.CharField(max_length=255)
-    description = models.TextField(blank=True, default="")
-    field_type = models.CharField(
-        max_length=30,
-        choices=RequirementStructuredFieldType.choices,
-    )
-    sort_key = models.DecimalField(max_digits=36, decimal_places=18)
-    is_required = models.BooleanField(default=False)
-    is_active = models.BooleanField(default=True)
-    config = models.JSONField(default=dict, blank=True)
-    validation = models.JSONField(default=dict, blank=True)
-    options = models.JSONField(default=dict, blank=True)
-    default_value = models.JSONField(null=True, blank=True)
-
-    class Meta:
-        db_table = "requirement_template_fields"
-        ordering = ("sort_key", "created_at")
-        constraints = [
-            models.UniqueConstraint(
-                fields=["template", "field_key"],
-                condition=Q(deleted_at__isnull=True),
-                name="requirement_template_field_unique_key",
-            ),
-            models.UniqueConstraint(
-                fields=["template", "name"],
-                condition=Q(parent_field__isnull=True, deleted_at__isnull=True),
-                name="requirement_template_root_field_unique_name",
-            ),
-            models.UniqueConstraint(
-                fields=["template", "parent_field", "name"],
-                condition=Q(parent_field__isnull=False, deleted_at__isnull=True),
-                name="requirement_template_child_field_unique_name",
-            ),
         ]
 
 
@@ -130,6 +83,8 @@ class RequirementStructuredRevision(BaseModel):
     source_template_revision = models.PositiveIntegerField(null=True, blank=True)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
     lock_version = models.PositiveIntegerField(default=1)
+    # Frozen field definitions for this revision (same shape as template schema).
+    schema = models.JSONField(default=list, blank=True)
     schema_hash = models.CharField(max_length=64, blank=True, default="")
     content_hash = models.CharField(max_length=64, blank=True, default="")
     root_row_count = models.PositiveIntegerField(default=0)
@@ -139,56 +94,6 @@ class RequirementStructuredRevision(BaseModel):
     class Meta:
         db_table = "requirement_structured_revisions"
         ordering = ("-created_at",)
-
-
-class RequirementStructuredField(BaseModel):
-    revision = models.ForeignKey(
-        RequirementStructuredRevision,
-        on_delete=models.CASCADE,
-        related_name="fields",
-    )
-    field_key = models.UUIDField(default=uuid.uuid4, editable=False)
-    parent_field = models.ForeignKey(
-        "self",
-        on_delete=models.CASCADE,
-        related_name="child_fields",
-        null=True,
-        blank=True,
-    )
-    name = models.CharField(max_length=255)
-    description = models.TextField(blank=True, default="")
-    field_type = models.CharField(
-        max_length=30,
-        choices=RequirementStructuredFieldType.choices,
-    )
-    sort_key = models.DecimalField(max_digits=36, decimal_places=18)
-    is_required = models.BooleanField(default=False)
-    is_active = models.BooleanField(default=True)
-    config = models.JSONField(default=dict, blank=True)
-    validation = models.JSONField(default=dict, blank=True)
-    options = models.JSONField(default=dict, blank=True)
-    default_value = models.JSONField(null=True, blank=True)
-
-    class Meta:
-        db_table = "requirement_structured_fields"
-        ordering = ("sort_key", "created_at")
-        constraints = [
-            models.UniqueConstraint(
-                fields=["revision", "field_key"],
-                condition=Q(deleted_at__isnull=True),
-                name="requirement_structured_field_unique_key",
-            ),
-            models.UniqueConstraint(
-                fields=["revision", "name"],
-                condition=Q(parent_field__isnull=True, deleted_at__isnull=True),
-                name="requirement_structured_root_field_unique_name",
-            ),
-            models.UniqueConstraint(
-                fields=["revision", "parent_field", "name"],
-                condition=Q(parent_field__isnull=False, deleted_at__isnull=True),
-                name="requirement_structured_child_field_unique_name",
-            ),
-        ]
 
 
 class RequirementStructuredRow(BaseModel):
@@ -205,16 +110,13 @@ class RequirementStructuredRow(BaseModel):
         null=True,
         blank=True,
     )
-    table_field = models.ForeignKey(
-        RequirementStructuredField,
-        on_delete=models.CASCADE,
-        related_name="table_rows",
-        null=True,
-        blank=True,
-    )
+    # Which child-table field (by field_key) this row belongs to; null for root rows.
+    table_field_key = models.UUIDField(null=True, blank=True)
     sequence_number = models.PositiveBigIntegerField(null=True, blank=True)
     display_id = models.CharField(max_length=255, null=True, blank=True)
     sort_key = models.DecimalField(max_digits=36, decimal_places=18)
+    # All field values for this row, keyed by field_key (string).
+    values = models.JSONField(default=dict, blank=True)
 
     class Meta:
         db_table = "requirement_structured_rows"
@@ -227,50 +129,11 @@ class RequirementStructuredRow(BaseModel):
             ),
             models.CheckConstraint(
                 check=(
-                    Q(parent_row__isnull=True, table_field__isnull=True)
-                    | Q(parent_row__isnull=False, table_field__isnull=False)
+                    Q(parent_row__isnull=True, table_field_key__isnull=True)
+                    | Q(parent_row__isnull=False, table_field_key__isnull=False)
                 ),
                 name="requirement_structured_row_parent_table_pair",
             ),
-        ]
-
-
-class RequirementStructuredValue(BaseModel):
-    revision = models.ForeignKey(
-        RequirementStructuredRevision,
-        on_delete=models.CASCADE,
-        related_name="values",
-    )
-    row = models.ForeignKey(
-        RequirementStructuredRow,
-        on_delete=models.CASCADE,
-        related_name="values",
-    )
-    field = models.ForeignKey(
-        RequirementStructuredField,
-        on_delete=models.CASCADE,
-        related_name="values",
-    )
-    value_text = models.TextField(null=True, blank=True)
-    value_number = models.DecimalField(max_digits=30, decimal_places=10, null=True, blank=True)
-    value_boolean = models.BooleanField(null=True, blank=True)
-    value_date = models.DateField(null=True, blank=True)
-    value_min = models.DecimalField(max_digits=30, decimal_places=10, null=True, blank=True)
-    value_max = models.DecimalField(max_digits=30, decimal_places=10, null=True, blank=True)
-    value_json = models.JSONField(null=True, blank=True)
-
-    class Meta:
-        db_table = "requirement_structured_values"
-        constraints = [
-            models.UniqueConstraint(
-                fields=["row", "field"],
-                condition=Q(deleted_at__isnull=True),
-                name="requirement_structured_value_unique_row_field",
-            )
-        ]
-        indexes = [
-            models.Index(fields=["field", "value_number"]),
-            models.Index(fields=["field", "value_date"]),
         ]
 
 
@@ -297,40 +160,4 @@ class RequirementSequenceCounter(BaseModel):
                 condition=Q(parent_row_key__isnull=False, deleted_at__isnull=True),
                 name="requirement_child_sequence_counter_unique",
             ),
-        ]
-
-
-class RequirementStructuredDiffEntry(BaseModel):
-    class Scope(models.TextChoices):
-        SCHEMA = "schema", "Schema"
-        ROOT_ROW = "root_row", "Root Row"
-        CHILD_ROW = "child_row", "Child Row"
-
-    class ChangeType(models.TextChoices):
-        ADDED = "added", "Added"
-        REMOVED = "removed", "Removed"
-        MODIFIED = "modified", "Modified"
-        MOVED = "moved", "Moved"
-
-    change = models.ForeignKey(
-        "db.RequirementChange",
-        on_delete=models.CASCADE,
-        related_name="structured_diff_entries",
-    )
-    scope = models.CharField(max_length=20, choices=Scope.choices)
-    change_type = models.CharField(max_length=20, choices=ChangeType.choices)
-    field_key = models.UUIDField(null=True, blank=True)
-    row_key = models.UUIDField(null=True, blank=True)
-    parent_row_key = models.UUIDField(null=True, blank=True)
-    label = models.CharField(max_length=255, blank=True, default="")
-    before_value = models.JSONField(null=True, blank=True)
-    after_value = models.JSONField(null=True, blank=True)
-    sort_key = models.DecimalField(max_digits=36, decimal_places=18, default=0)
-
-    class Meta:
-        db_table = "requirement_structured_diff_entries"
-        ordering = ("sort_key", "created_at", "id")
-        indexes = [
-            models.Index(fields=["change", "scope", "change_type"]),
-            models.Index(fields=["change", "row_key"]),
         ]

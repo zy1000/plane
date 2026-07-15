@@ -2,14 +2,14 @@ import base64
 import json
 from decimal import Decimal
 
-from django.db.models import Count, Prefetch, Q
+from django.core.exceptions import ObjectDoesNotExist
+from django.db.models import Q
 from rest_framework import status
 from rest_framework.response import Response
 
 from plane.app.permissions import ROLE, allow_permission, can_view_product
 from plane.app.serializers.requirement_structure import (
     RequirementFieldTemplateSerializer,
-    RequirementStructuredDiffEntrySerializer,
     RequirementStructuredRevisionSerializer,
     RequirementStructuredRowCreateSerializer,
     RequirementStructuredRowReorderSerializer,
@@ -24,14 +24,13 @@ from plane.app.serializers.requirement_structure import (
 from plane.db.models import (
     Product,
     Requirement,
+    RequirementChange,
     RequirementFieldTemplate,
-    RequirementStructuredDiffEntry,
-    RequirementStructuredField,
     RequirementStructuredRevision,
-    RequirementStructuredRow,
 )
 from plane.utils.requirement_structure import (
     RequirementStructureError,
+    compute_structured_diff,
     create_requirement_template,
     create_structured_row,
     delete_structured_row,
@@ -91,13 +90,9 @@ class RequirementFieldTemplateViewSet(ProductStructuredResourceMixin, BaseViewSe
         return RequirementFieldTemplate.objects.filter(
             product_id=self.kwargs.get("product_id"),
             product__workspace__slug=self.kwargs.get("slug"),
-        ).annotate(
-            field_count=Count("fields", filter=Q(fields__deleted_at__isnull=True), distinct=True)
         ).order_by("-updated_at", "name")
 
     def serialize_detail(self, template, product):
-        if not hasattr(template, "field_count"):
-            template.field_count = template.fields.count()
         data = self.serializer_class(template, context={"product": product}).data
         schema = serialize_template_schema(template)
         data["fields"] = schema["fields"]
@@ -181,7 +176,6 @@ class RequirementFieldTemplateViewSet(ProductStructuredResourceMixin, BaseViewSe
             )
         except RequirementStructureError as exc:
             return _error_response(exc)
-        template.field_count = template.fields.count()
         return Response(self.serializer_class(template, context={"product": product}).data)
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER], level="WORKSPACE")
@@ -237,15 +231,6 @@ class RequirementStructuredRevisionViewSet(ProductStructuredResourceMixin, BaseV
                 requirement__content_mode=Requirement.ContentMode.STRUCTURED,
             )
             .select_related("requirement", "change", "source_template")
-            .prefetch_related(
-                Prefetch(
-                    "fields",
-                    queryset=RequirementStructuredField.objects.select_related("parent_field").order_by(
-                        "sort_key", "created_at"
-                    ),
-                    to_attr="prefetched_fields",
-                )
-            )
             .first()
         )
 
@@ -270,23 +255,7 @@ class RequirementStructuredRevisionViewSet(ProductStructuredResourceMixin, BaseV
             {
                 "revision_id": str(revision.id),
                 "lock_version": revision.lock_version,
-                "fields": [
-                    {
-                        "key": str(field.field_key),
-                        "parent_key": str(field.parent_field.field_key) if field.parent_field_id else None,
-                        "name": field.name,
-                        "description": field.description,
-                        "field_type": field.field_type,
-                        "sort_key": str(field.sort_key),
-                        "is_required": field.is_required,
-                        "is_active": field.is_active,
-                        "config": field.config,
-                        "validation": field.validation,
-                        "options": field.options,
-                        "default_value": field.default_value,
-                    }
-                    for field in revision.prefetched_fields
-                ],
+                "fields": list(revision.schema or []),
             }
         )
 
@@ -323,17 +292,15 @@ class RequirementStructuredRevisionViewSet(ProductStructuredResourceMixin, BaseV
         return base64.urlsafe_b64encode(payload).decode()
 
     def _row_queryset(self, revision, request):
-        queryset = revision.rows.select_related("revision", "parent_row", "table_field").prefetch_related(
-            "values__field"
-        )
+        queryset = revision.rows.select_related("revision", "parent_row")
         parent_row_key = request.query_params.get("parent_row_key")
         table_field_key = request.query_params.get("table_field_key")
         if parent_row_key or table_field_key:
             if not parent_row_key or not table_field_key:
                 return queryset.none()
-            queryset = queryset.filter(parent_row__row_key=parent_row_key, table_field__field_key=table_field_key)
+            queryset = queryset.filter(parent_row__row_key=parent_row_key, table_field_key=table_field_key)
         else:
-            queryset = queryset.filter(parent_row__isnull=True, table_field__isnull=True)
+            queryset = queryset.filter(parent_row__isnull=True, table_field_key__isnull=True)
         cursor = self._decode_cursor(request.query_params.get("cursor"))
         if cursor:
             sort_key, row_key = cursor
@@ -379,9 +346,7 @@ class RequirementStructuredRevisionViewSet(ProductStructuredResourceMixin, BaseV
             )
         except RequirementStructureError as exc:
             return _error_response(exc)
-        row = revision.rows.select_related("revision", "parent_row", "table_field").prefetch_related(
-            "values__field"
-        ).get(pk=row.pk)
+        row = revision.rows.select_related("revision", "parent_row").get(pk=row.pk)
         return Response(
             {"lock_version": revision.lock_version, "row": RequirementStructuredRowSerializer(row).data},
             status=status.HTTP_201_CREATED,
@@ -407,9 +372,7 @@ class RequirementStructuredRevisionViewSet(ProductStructuredResourceMixin, BaseV
             )
         except RequirementStructureError as exc:
             return _error_response(exc)
-        row = revision.rows.select_related("revision", "parent_row", "table_field").prefetch_related(
-            "values__field"
-        ).get(pk=row.pk)
+        row = revision.rows.select_related("revision", "parent_row").get(pk=row.pk)
         return Response({"lock_version": revision.lock_version, "row": RequirementStructuredRowSerializer(row).data})
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
@@ -447,6 +410,7 @@ class RequirementStructuredRevisionViewSet(ProductStructuredResourceMixin, BaseV
             )
         except RequirementStructureError as exc:
             return _error_response(exc)
+        row = revision.rows.select_related("revision", "parent_row").get(pk=row.pk)
         return Response(
             {
                 "lock_version": revision.lock_version,
@@ -456,7 +420,7 @@ class RequirementStructuredRevisionViewSet(ProductStructuredResourceMixin, BaseV
 
 
 class RequirementStructuredDiffViewSet(ProductStructuredResourceMixin, BaseViewSet):
-    model = RequirementStructuredDiffEntry
+    model = RequirementStructuredRevision
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
     def list(self, request, slug, product_id, requirement_id, change_id):
@@ -470,21 +434,30 @@ class RequirementStructuredDiffViewSet(ProductStructuredResourceMixin, BaseViewS
         ).first()
         if requirement is None:
             return Response({"error": "Requirement not found."}, status=status.HTTP_404_NOT_FOUND)
-        queryset = RequirementStructuredDiffEntry.objects.filter(
-            change_id=change_id,
-            change__requirement=requirement,
+        change = (
+            RequirementChange.objects.filter(id=change_id, requirement=requirement)
+            .select_related("structured_revision", "structured_revision__source_revision")
+            .first()
         )
+        try:
+            after_revision = change.structured_revision if change else None
+        except ObjectDoesNotExist:
+            after_revision = None
+        entries = compute_structured_diff(after_revision.source_revision, after_revision) if after_revision else []
+
         scope = request.query_params.get("scope")
-        if scope in {choice for choice, _label in RequirementStructuredDiffEntry.Scope.choices}:
-            queryset = queryset.filter(scope=scope)
+        valid_scopes = {"schema", "root_row", "child_row"}
+        if scope in valid_scopes:
+            entries = [entry for entry in entries if entry["scope"] == scope]
+
         page_size = _bounded_int(request.query_params.get("page_size"), 100, 1, 200)
         offset = _bounded_int(request.query_params.get("offset"), 0, 0, 10_000_000)
-        total = queryset.count()
-        page = queryset.order_by("sort_key", "created_at", "id")[offset : offset + page_size]
+        total = len(entries)
+        page = entries[offset : offset + page_size]
         return Response(
             {
                 "count": total,
                 "next_offset": offset + page_size if offset + page_size < total else None,
-                "data": RequirementStructuredDiffEntrySerializer(page, many=True).data,
+                "data": page,
             }
         )

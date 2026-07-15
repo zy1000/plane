@@ -162,6 +162,7 @@ class Requirement(BaseModel):
     archived_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
+
         null=True,
         blank=True,
         related_name="archived_requirements",

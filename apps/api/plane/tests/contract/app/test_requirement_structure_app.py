@@ -358,6 +358,27 @@ class TestRequirementStructureApp:
         assert revision.status == RequirementStructuredRevision.Status.LOCKED
         assert version.structured_revision_id == revision.id
 
+        draft = session_client.post(
+            f"{development_url(workspace.slug, product.id, requirement_id)}changes/",
+            {"submit_for_review": False},
+            format="json",
+        )
+        assert draft.status_code == status.HTTP_201_CREATED, draft.data
+        assert draft.data["status"] == "draft"
+        assert draft.data["name"] == requirement.name
+        assert draft.data["structured_revision_id"] != str(revision.id)
+
+        draft_revision = RequirementStructuredRevision.objects.get(
+            id=draft.data["structured_revision_id"]
+        )
+        requirement.refresh_from_db()
+        assert draft_revision.status == RequirementStructuredRevision.Status.DRAFT
+        assert draft_revision.source_revision_id == revision.id
+        assert len(draft_revision.schema) == len(revision.schema)
+        assert draft_revision.rows.count() == revision.rows.count()
+        assert requirement.current_version == 1
+        assert requirement.active_structured_revision_id == revision.id
+
     def test_user_requirement_rejects_structured_content_mode(self, session_client, workspace, create_user):
         product = Product.objects.create(
             name="User Requirement Product",

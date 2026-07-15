@@ -164,11 +164,7 @@ from .requirement import (
 from .requirement_structure import (
     RequirementFieldTemplate,
     RequirementSequenceCounter,
-    RequirementStructuredDiffEntry,
-    RequirementStructuredField,
     RequirementStructuredFieldType,
     RequirementStructuredRevision,
     RequirementStructuredRow,
-    RequirementStructuredValue,
-    RequirementTemplateField,
 )

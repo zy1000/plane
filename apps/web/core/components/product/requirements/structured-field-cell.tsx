@@ -9,9 +9,13 @@ export function fieldValue(field: TStructuredField, row: TStructuredRow): TStruc
   return row.values[field.key] ?? (field.field_type === "boolean" ? null : "");
 }
 
-/** 把一行的全部字段收敛成一个可提交的草稿对象 */
+/** 把一行的可写字段收敛成可提交草稿；排除子表与自动编号（后端只读） */
 export function seedDraft(fields: TStructuredField[], row: TStructuredRow): Record<string, TStructuredValue> {
-  return Object.fromEntries(fields.map((field) => [field.key, fieldValue(field, row)]));
+  return Object.fromEntries(
+    fields
+      .filter((field) => field.field_type !== "auto_id" && field.field_type !== "table")
+      .map((field) => [field.key, fieldValue(field, row)])
+  );
 }
 
 function isRange(value: TStructuredValue | undefined): value is { min: string; max: string } {
@@ -44,22 +48,18 @@ type StructuredFieldCellProps = {
   field: TStructuredField;
   value: TStructuredValue | undefined;
   editable: boolean;
-  /** 单元格值变化（仅写入草稿，不立即请求） */
+  /** 单元格值变化后写入行草稿，由表格统一防抖保存。 */
   onChange: (value: TStructuredValue) => void;
-  /** 提交时机：失焦或离散选择后触发所在行的自动保存 */
-  onCommit: () => void;
 };
 
 export function StructuredFieldCell(props: StructuredFieldCellProps) {
-  const { editable, field, onChange, onCommit, value } = props;
+  const { editable, field, onChange, value } = props;
 
   // auto_id 永远只读展示
   if (field.field_type === "auto_id") {
     return (
       <div className="px-2.5 py-2">
-        <span className="font-mono text-12 font-semibold text-accent-primary">
-          {String(value || "待生成")}
-        </span>
+        <span className="font-mono text-12 font-semibold text-accent-primary">{String(value || "待生成")}</span>
       </div>
     );
   }
@@ -70,7 +70,7 @@ export function StructuredFieldCell(props: StructuredFieldCellProps) {
       <div
         className={cn(
           "px-2.5 py-2 text-13 text-secondary",
-          field.field_type === "text" && field.config.multiline && "whitespace-pre-wrap"
+          field.field_type === "text" && Boolean(field.config.multiline) && "whitespace-pre-wrap"
         )}
       >
         {text || <span className="text-placeholder">—</span>}
@@ -83,10 +83,7 @@ export function StructuredFieldCell(props: StructuredFieldCellProps) {
       <SelectShell>
         <select
           value={value === null || value === undefined ? "" : value ? "true" : "false"}
-          onChange={(event) => {
-            onChange(event.target.value === "" ? null : event.target.value === "true");
-            onCommit();
-          }}
+          onChange={(event) => onChange(event.target.value === "" ? null : event.target.value === "true")}
           className={cn(INPUT_CLASS, "appearance-none pr-7")}
         >
           <option value="">未设置</option>
@@ -110,10 +107,9 @@ export function StructuredFieldCell(props: StructuredFieldCellProps) {
               <button
                 key={option.key}
                 type="button"
-                onClick={() => {
-                  onChange(active ? selected.filter((key) => key !== option.key) : [...selected, option.key]);
-                  onCommit();
-                }}
+                onClick={() =>
+                  onChange(active ? selected.filter((key) => key !== option.key) : [...selected, option.key])
+                }
                 className={cn(
                   "rounded-md border px-2 py-0.5 text-12 transition-colors",
                   active
@@ -132,10 +128,7 @@ export function StructuredFieldCell(props: StructuredFieldCellProps) {
       <SelectShell>
         <select
           value={typeof value === "string" ? value : ""}
-          onChange={(event) => {
-            onChange(event.target.value || null);
-            onCommit();
-          }}
+          onChange={(event) => onChange(event.target.value || null)}
           className={cn(INPUT_CLASS, "appearance-none pr-7")}
         >
           <option value="">未设置</option>
@@ -150,11 +143,11 @@ export function StructuredFieldCell(props: StructuredFieldCellProps) {
   }
 
   if (field.field_type === "number_range") {
-    return <RangeCell value={value} onChange={onChange} onCommit={onCommit} />;
+    return <RangeCell value={value} onChange={onChange} />;
   }
 
   if (field.field_type === "text" && field.config.multiline) {
-    return <MultilineCell value={value} onChange={onChange} onCommit={onCommit} />;
+    return <MultilineCell value={value} onChange={onChange} />;
   }
 
   return (
@@ -162,7 +155,6 @@ export function StructuredFieldCell(props: StructuredFieldCellProps) {
       type={field.field_type === "number" ? "number" : field.field_type === "date" ? "date" : "text"}
       value={value}
       onChange={onChange}
-      onCommit={onCommit}
     />
   );
 }
@@ -180,9 +172,8 @@ function TextCell(props: {
   type: "text" | "number" | "date";
   value: TStructuredValue | undefined;
   onChange: (value: TStructuredValue) => void;
-  onCommit: () => void;
 }) {
-  const { onChange, onCommit, type, value } = props;
+  const { onChange, type, value } = props;
   const [draft, setDraft] = useState(typeof value === "string" ? value : "");
   useEffect(() => setDraft(typeof value === "string" ? value : ""), [value]);
   return (
@@ -193,7 +184,6 @@ function TextCell(props: {
         setDraft(event.target.value);
         onChange(event.target.value);
       }}
-      onBlur={onCommit}
       onKeyDown={(event) => {
         if (event.key === "Enter" && type !== "date") event.currentTarget.blur();
       }}
@@ -202,12 +192,8 @@ function TextCell(props: {
   );
 }
 
-function MultilineCell(props: {
-  value: TStructuredValue | undefined;
-  onChange: (value: TStructuredValue) => void;
-  onCommit: () => void;
-}) {
-  const { onChange, onCommit, value } = props;
+function MultilineCell(props: { value: TStructuredValue | undefined; onChange: (value: TStructuredValue) => void }) {
+  const { onChange, value } = props;
   const [draft, setDraft] = useState(typeof value === "string" ? value : "");
   useEffect(() => setDraft(typeof value === "string" ? value : ""), [value]);
   return (
@@ -218,18 +204,13 @@ function MultilineCell(props: {
         setDraft(event.target.value);
         onChange(event.target.value);
       }}
-      onBlur={onCommit}
       className={cn(INPUT_CLASS, "min-h-9 resize-y leading-5")}
     />
   );
 }
 
-function RangeCell(props: {
-  value: TStructuredValue | undefined;
-  onChange: (value: TStructuredValue) => void;
-  onCommit: () => void;
-}) {
-  const { onChange, onCommit, value } = props;
+function RangeCell(props: { value: TStructuredValue | undefined; onChange: (value: TStructuredValue) => void }) {
+  const { onChange, value } = props;
   const initial = isRange(value) ? value : { min: "", max: "" };
   const [draft, setDraft] = useState(initial);
   useEffect(() => setDraft(isRange(value) ? value : { min: "", max: "" }), [value]);
@@ -243,7 +224,6 @@ function RangeCell(props: {
         type="number"
         value={draft.min}
         onChange={(event) => update({ ...draft, min: event.target.value })}
-        onBlur={onCommit}
         placeholder="最小"
         className={cn(INPUT_CLASS, "px-1.5 text-center")}
       />
@@ -252,7 +232,6 @@ function RangeCell(props: {
         type="number"
         value={draft.max}
         onChange={(event) => update({ ...draft, max: event.target.value })}
-        onBlur={onCommit}
         placeholder="最大"
         className={cn(INPUT_CLASS, "px-1.5 text-center")}
       />
