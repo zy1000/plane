@@ -1,6 +1,11 @@
 from django.urls import path
 
 from plane.app.views.requirement import RequirementCommentViewSet, RequirementModuleViewSet, RequirementViewSet
+from plane.app.views.requirement_structure import (
+    RequirementFieldTemplateViewSet,
+    RequirementStructuredDiffViewSet,
+    RequirementStructuredRevisionViewSet,
+)
 from plane.db.models import Requirement
 
 
@@ -131,5 +136,64 @@ urlpatterns = [
         "workspaces/<str:slug>/products/<uuid:product_id>/requirement-modules/<uuid:pk>/",
         RequirementModuleViewSet.as_view({"patch": "partial_update", "delete": "destroy"}),
         name="product-requirement-module-detail",
+    ),
+    path(
+        "workspaces/<str:slug>/products/<uuid:product_id>/requirement-field-templates/",
+        RequirementFieldTemplateViewSet.as_view({"get": "list", "post": "create"}),
+        name="product-requirement-field-templates",
+    ),
+    path(
+        "workspaces/<str:slug>/products/<uuid:product_id>/requirement-field-templates/<uuid:pk>/",
+        RequirementFieldTemplateViewSet.as_view(
+            {"get": "retrieve", "put": "update", "patch": "partial_update", "delete": "destroy"}
+        ),
+        name="product-requirement-field-template-detail",
+    ),
+    path(
+        "workspaces/<str:slug>/products/<uuid:product_id>/requirement-field-templates/<uuid:pk>/schema/",
+        RequirementFieldTemplateViewSet.as_view({"get": "schema", "put": "update_schema"}),
+        name="product-requirement-field-template-schema",
+    ),
+    path(
+        "workspaces/<str:slug>/products/<uuid:product_id>/requirement-templates/",
+        RequirementFieldTemplateViewSet.as_view({"get": "list", "post": "create"}),
+        name="product-requirement-templates",
+    ),
+    path(
+        "workspaces/<str:slug>/products/<uuid:product_id>/requirement-templates/<uuid:pk>/",
+        RequirementFieldTemplateViewSet.as_view(
+            {"get": "retrieve", "put": "update", "patch": "partial_update", "delete": "destroy"}
+        ),
+        name="product-requirement-template-detail",
+    ),
+    path(
+        "workspaces/<str:slug>/products/<uuid:product_id>/development-requirements/<uuid:requirement_id>/structured-revisions/<uuid:revision_id>/",
+        RequirementStructuredRevisionViewSet.as_view({"get": "retrieve"}),
+        name="development-requirement-structured-revision",
+    ),
+    path(
+        "workspaces/<str:slug>/products/<uuid:product_id>/development-requirements/<uuid:requirement_id>/structured-revisions/<uuid:revision_id>/schema/",
+        RequirementStructuredRevisionViewSet.as_view({"get": "schema", "put": "update_schema"}),
+        name="development-requirement-structured-schema",
+    ),
+    path(
+        "workspaces/<str:slug>/products/<uuid:product_id>/development-requirements/<uuid:requirement_id>/structured-revisions/<uuid:revision_id>/rows/",
+        RequirementStructuredRevisionViewSet.as_view({"get": "rows", "post": "create_row"}),
+        name="development-requirement-structured-rows",
+    ),
+    path(
+        "workspaces/<str:slug>/products/<uuid:product_id>/development-requirements/<uuid:requirement_id>/structured-revisions/<uuid:revision_id>/rows/<uuid:row_key>/",
+        RequirementStructuredRevisionViewSet.as_view({"patch": "update_row", "delete": "destroy_row"}),
+        name="development-requirement-structured-row-detail",
+    ),
+    path(
+        "workspaces/<str:slug>/products/<uuid:product_id>/development-requirements/<uuid:requirement_id>/structured-revisions/<uuid:revision_id>/rows/<uuid:row_key>/reorder/",
+        RequirementStructuredRevisionViewSet.as_view({"post": "reorder_row"}),
+        name="development-requirement-structured-row-reorder",
+    ),
+    path(
+        "workspaces/<str:slug>/products/<uuid:product_id>/development-requirements/<uuid:requirement_id>/changes/<uuid:change_id>/structured-diff/",
+        RequirementStructuredDiffViewSet.as_view({"get": "list"}),
+        name="development-requirement-structured-diff",
     ),
 ]

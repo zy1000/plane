@@ -26,6 +26,7 @@ import {
   RequirementReviewProgress,
   RequirementStatusBadge,
 } from "./requirement-review-panels";
+import { StructuredRequirementReviewPanel } from "./structured-requirement-review-panel";
 
 const opinions: {
   value: TRequirementReviewOpinion;
@@ -421,7 +422,17 @@ export const RequirementReviewRoot = observer(function RequirementReviewRoot(pro
 
             <div className="mt-8 grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
               <main className="min-w-0">
-                <RequirementDiffPanel change={change} />
+                <div className="space-y-5">
+                  {change.requirement_content_mode === "structured" && (
+                    <StructuredRequirementReviewPanel
+                      workspaceSlug={slug}
+                      productId={id}
+                      requirementId={reqId}
+                      change={change}
+                    />
+                  )}
+                  <RequirementDiffPanel change={change} />
+                </div>
               </main>
               <aside className="space-y-4 xl:sticky xl:top-4">
                 {showDecision && (

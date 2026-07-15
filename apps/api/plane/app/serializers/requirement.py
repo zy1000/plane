@@ -1,5 +1,6 @@
 from django.db import transaction
 from django.db.models import Q
+from django.core.exceptions import ObjectDoesNotExist
 from rest_framework import serializers
 
 from plane.db.models import (
@@ -12,6 +13,7 @@ from plane.db.models import (
     RequirementChangeKind,
     RequirementChangeReviewer,
     RequirementChangeStatus,
+    RequirementFieldTemplate,
     RequirementLifecycleAction,
     RequirementLifecycleEvent,
     RequirementModule,
@@ -270,6 +272,8 @@ class RequirementChangeSerializer(BaseSerializer):
     requirement_type = serializers.CharField(source="requirement.type", read_only=True)
     requirement_status = serializers.CharField(source="requirement.status", read_only=True)
     requirement_current_version = serializers.IntegerField(source="requirement.current_version", read_only=True)
+    requirement_content_mode = serializers.CharField(source="requirement.content_mode", read_only=True)
+    structured_revision_id = serializers.SerializerMethodField()
 
     class Meta:
         model = RequirementChange
@@ -279,6 +283,7 @@ class RequirementChangeSerializer(BaseSerializer):
             "requirement_type",
             "requirement_status",
             "requirement_current_version",
+            "requirement_content_mode",
             "sequence",
             "kind",
             "status",
@@ -286,6 +291,8 @@ class RequirementChangeSerializer(BaseSerializer):
             "base_version_number",
             "base_snapshot",
             "proposal_snapshot",
+            "structured_revision_id",
+            "structured_diff_summary",
             "name",
             "priority",
             "module",
@@ -311,6 +318,12 @@ class RequirementChangeSerializer(BaseSerializer):
 
     def get_diff(self, obj):
         return build_requirement_diff(obj.base_snapshot, obj.proposal_snapshot)
+
+    def get_structured_revision_id(self, obj):
+        try:
+            return str(obj.structured_revision.id)
+        except ObjectDoesNotExist:
+            return None
 
     def get_review_progress(self, obj):
         assignments = list(obj.reviewer_assignments.all())
@@ -377,9 +390,12 @@ class RequirementListSerializer(BaseSerializer):
             "product",
             "name",
             "type",
+            "content_mode",
             "priority",
             "status",
             "current_version",
+            "active_structured_revision",
+            "structured_root_row_count",
             "closed_at",
             "closed_by",
             "closed_by_detail",
@@ -498,11 +514,15 @@ class RequirementWriteSerializer(BaseSerializer):
     description_html = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     acceptance_criteria_html = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     attachment_ids = serializers.ListField(child=serializers.UUIDField(), required=False, write_only=True)
+    content_mode = serializers.ChoiceField(choices=Requirement.ContentMode.choices, required=False)
+    template_id = serializers.UUIDField(required=False, allow_null=True, write_only=True)
 
     class Meta:
         model = Requirement
         fields = [
             "name",
+            "content_mode",
+            "template_id",
             "priority",
             "module",
             "parent",
@@ -620,14 +640,56 @@ class RequirementWriteSerializer(BaseSerializer):
             raise serializers.ValidationError("REQUIREMENT_ATTACHMENTS_ALREADY_BOUND")
         return asset_ids
 
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        requirement_type = self.instance.type if self.instance else self.context["requirement_type"]
+        current_mode = self.instance.content_mode if self.instance else Requirement.ContentMode.TEXT
+        content_mode = attrs.get("content_mode", current_mode)
+
+        if requirement_type == Requirement.RequirementType.USER:
+            if content_mode != Requirement.ContentMode.TEXT:
+                raise serializers.ValidationError({"content_mode": "REQUIREMENT_USER_CONTENT_MODE_TEXT_ONLY"})
+            content_mode = Requirement.ContentMode.TEXT
+        if self.instance and content_mode != self.instance.content_mode:
+            raise serializers.ValidationError({"content_mode": "REQUIREMENT_CONTENT_MODE_IMMUTABLE"})
+
+        template_id = attrs.pop("template_id", None)
+        if content_mode == Requirement.ContentMode.STRUCTURED:
+            if requirement_type != Requirement.RequirementType.DEVELOPMENT:
+                raise serializers.ValidationError({"content_mode": "REQUIREMENT_STRUCTURED_DEVELOPMENT_ONLY"})
+            for field_name in ("description_html", "acceptance_criteria_html"):
+                if attrs.get(field_name) not in (None, "", {}, []):
+                    raise serializers.ValidationError({field_name: "REQUIREMENT_STRUCTURED_TEXT_NOT_ALLOWED"})
+                attrs[field_name] = None
+            if template_id:
+                if self.instance:
+                    raise serializers.ValidationError({"template_id": "REQUIREMENT_TEMPLATE_IMPORT_CREATE_ONLY"})
+                template = RequirementFieldTemplate.objects.filter(
+                    id=template_id,
+                    product=self.context["product"],
+                    is_active=True,
+                    template_type=RequirementFieldTemplate.TemplateType.STRUCTURED,
+                ).first()
+                if template is None:
+                    raise serializers.ValidationError({"template_id": "REQUIREMENT_TEMPLATE_INVALID"})
+                attrs["template"] = template
+        elif template_id:
+            raise serializers.ValidationError({"template_id": "REQUIREMENT_TEMPLATE_STRUCTURED_ONLY"})
+
+        attrs["content_mode"] = content_mode
+        return attrs
+
     @transaction.atomic
     def create(self, validated_data):
         request = self.context["request"]
+        template = validated_data.pop("template", None)
+        content_mode = validated_data.pop("content_mode", Requirement.ContentMode.TEXT)
         reviewers = validated_data.get("reviewers", [])
         attachment_ids = validated_data.get("attachment_ids", [])
         requirement = Requirement(
             product=self.context["product"],
             type=self.context["requirement_type"],
+            content_mode=content_mode,
             name=validated_data["name"],
             priority=validated_data.get("priority", "none"),
             module=validated_data.get("module"),
@@ -641,15 +703,27 @@ class RequirementWriteSerializer(BaseSerializer):
         requirement.save(created_by_id=request.user.id)
         create_requirement_change(
             requirement,
-            {**validated_data, "reviewers": reviewers, "attachment_ids": attachment_ids},
+            {
+                **validated_data,
+                "reviewers": reviewers,
+                "attachment_ids": attachment_ids,
+                "template": template,
+            },
             request.user,
             kind=RequirementChangeKind.INITIAL,
-            submit_for_review=self.context.get("submit_for_review", True),
+            # A structured requirement must first define a schema and at least
+            # one row, so its initial change always starts as a draft.
+            submit_for_review=(
+                self.context.get("submit_for_review", True)
+                if content_mode == Requirement.ContentMode.TEXT
+                else False
+            ),
         )
         return requirement
 
     @transaction.atomic
     def update(self, instance, validated_data):
+        validated_data.pop("content_mode", None)
         draft_change = self.context.get("draft_change")
         open_change = draft_change or (
             instance.changes.filter(status__in=[RequirementChangeStatus.DRAFT, RequirementChangeStatus.PENDING])
@@ -735,10 +809,19 @@ class RequirementReviewActionSerializer(serializers.Serializer):
 
 class RequirementVersionListSerializer(BaseSerializer):
     change_id = serializers.UUIDField(source="source_change_id", read_only=True, allow_null=True)
+    structured_revision_id = serializers.UUIDField(read_only=True, allow_null=True)
 
     class Meta:
         model = RequirementVersion
-        fields = ["id", "version", "source", "change_id", "created_at", "created_by"]
+        fields = [
+            "id",
+            "version",
+            "source",
+            "change_id",
+            "structured_revision_id",
+            "created_at",
+            "created_by",
+        ]
         read_only_fields = fields
 
 

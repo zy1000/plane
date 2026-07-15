@@ -1,6 +1,7 @@
 import { API_BASE_URL } from "@plane/constants";
 import type { IUserLite, TIssuePriorities } from "@plane/types";
 import { APIService } from "@/services/api.service";
+import type { TRequirementContentMode } from "@/services/requirement-structure.service";
 
 export type TRequirementType = "user" | "development";
 export type TRequirementStatus = "draft" | "in_review" | "published" | "rejected" | "closed";
@@ -66,6 +67,7 @@ export type TRequirementReference = {
 export type TRequirementSnapshot = {
   name?: string;
   type?: TRequirementType;
+  content_mode?: TRequirementContentMode;
   priority?: TIssuePriorities;
   module?: { id: string; name: string } | null;
   parent?: { id: string; name: string; type: TRequirementType } | null;
@@ -74,6 +76,16 @@ export type TRequirementSnapshot = {
   description_html?: string | null;
   acceptance_criteria_html?: string | null;
   attachments?: TRequirementAttachment[];
+  structured?: {
+    revision_id: string;
+    source_revision_id: string | null;
+    source_template_id: string | null;
+    source_template_revision: number | null;
+    schema_hash: string;
+    content_hash: string;
+    root_row_count: number;
+    child_row_count: number;
+  } | null;
 };
 
 export type TRequirementFieldDiff = {
@@ -117,6 +129,7 @@ export type TRequirementChange = {
   requirement_type: TRequirementType;
   requirement_status: TRequirementStatus;
   requirement_current_version: number;
+  requirement_content_mode: TRequirementContentMode;
   sequence: number;
   kind: "initial" | "change" | "system_reset";
   status: TRequirementChangeStatus;
@@ -124,6 +137,8 @@ export type TRequirementChange = {
   base_version_number: number | null;
   base_snapshot: TRequirementSnapshot;
   proposal_snapshot: TRequirementSnapshot;
+  structured_revision_id: string | null;
+  structured_diff_summary: Record<string, number>;
   name: string;
   priority: TIssuePriorities;
   module: string | null;
@@ -157,9 +172,12 @@ export type TUserRequirementListItem = {
   product: string;
   name: string;
   type: TRequirementType;
+  content_mode: TRequirementContentMode;
   priority: TIssuePriorities;
   status: TRequirementStatus;
   current_version: number;
+  active_structured_revision: string | null;
+  structured_root_row_count: number;
   closed_at: string | null;
   closed_by: string | null;
   closed_by_detail: IUserLite | null;
@@ -208,6 +226,8 @@ export type TUserRequirementPayload = {
   description_html?: string | null;
   acceptance_criteria_html?: string | null;
   attachment_ids?: string[];
+  content_mode?: TRequirementContentMode;
+  template_id?: string | null;
 };
 
 export type TUserRequirementListParams = {
@@ -254,6 +274,7 @@ export type TRequirementVersion = {
   version: number;
   source: string;
   change_id: string | null;
+  structured_revision_id: string | null;
   created_at: string;
   created_by: string | null;
   snapshot?: TRequirementSnapshot;

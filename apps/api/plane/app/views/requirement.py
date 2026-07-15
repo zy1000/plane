@@ -103,6 +103,7 @@ class RequirementViewSet(ProductRequirementMixin, BaseViewSet):
                 "parent",
                 "assignee",
                 "created_by",
+                "structured_revision",
             )
             .prefetch_related(
                 "proposed_reviewers",
@@ -138,6 +139,7 @@ class RequirementViewSet(ProductRequirementMixin, BaseViewSet):
                 "updated_by",
                 "closed_by",
                 "archived_by",
+                "active_structured_revision",
             )
             .prefetch_related(
                 "reviewers",

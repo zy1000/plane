@@ -167,8 +167,24 @@ export const coreRoutes: RouteConfigEntry[] = [
             "./(all)/[workspaceSlug]/(projects)/products/[productId]/development-requirements/[requirementId]/review/page.tsx"
           ),
           route(
+            ":workspaceSlug/products/:productId/development-requirements/:requirementId/data",
+            "./(all)/[workspaceSlug]/(projects)/products/[productId]/development-requirements/[requirementId]/data/page.tsx"
+          ),
+          route(
             ":workspaceSlug/products/:productId/development-requirements/:requirementId",
             "./(all)/[workspaceSlug]/(projects)/products/[productId]/development-requirements/[requirementId]/page.tsx"
+          ),
+          route(
+            ":workspaceSlug/products/:productId/requirement-templates/new",
+            "./(all)/[workspaceSlug]/(projects)/products/[productId]/requirement-templates/new/page.tsx"
+          ),
+          route(
+            ":workspaceSlug/products/:productId/requirement-templates/:templateId",
+            "./(all)/[workspaceSlug]/(projects)/products/[productId]/requirement-templates/[templateId]/page.tsx"
+          ),
+          route(
+            ":workspaceSlug/products/:productId/requirement-templates",
+            "./(all)/[workspaceSlug]/(projects)/products/[productId]/requirement-templates/page.tsx"
           ),
           route(
             ":workspaceSlug/products/:productId/settings",

@@ -161,3 +161,14 @@ from .requirement import (
     RequirementVersion,
     RequirementVersionAttachment,
 )
+from .requirement_structure import (
+    RequirementFieldTemplate,
+    RequirementSequenceCounter,
+    RequirementStructuredDiffEntry,
+    RequirementStructuredField,
+    RequirementStructuredFieldType,
+    RequirementStructuredRevision,
+    RequirementStructuredRow,
+    RequirementStructuredValue,
+    RequirementTemplateField,
+)

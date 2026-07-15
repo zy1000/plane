@@ -1,5 +1,6 @@
 from django.db import transaction
 from django.db.models import Max
+from django.core.exceptions import ObjectDoesNotExist
 from django.utils import timezone
 
 from plane.app.permissions import can_manage_product, can_view_product
@@ -13,6 +14,7 @@ from plane.db.models import (
     RequirementChangeKind,
     RequirementChangeReviewer,
     RequirementChangeStatus,
+    RequirementFieldTemplate,
     RequirementLifecycleAction,
     RequirementLifecycleEvent,
     RequirementReviewOpinion,
@@ -20,6 +22,11 @@ from plane.db.models import (
     RequirementVersion,
     RequirementVersionAttachment,
     WorkspaceMember,
+)
+from plane.utils.requirement_structure import (
+    RequirementStructureError,
+    create_structured_revision,
+    lock_revision_for_review,
 )
 
 
@@ -67,12 +74,28 @@ def _parent_snapshot(parent):
     return {"id": str(parent.id), "name": parent.name, "type": parent.type}
 
 
+def _structured_snapshot(revision):
+    if revision is None:
+        return None
+    return {
+        "revision_id": str(revision.id),
+        "source_revision_id": str(revision.source_revision_id) if revision.source_revision_id else None,
+        "source_template_id": str(revision.source_template_id) if revision.source_template_id else None,
+        "source_template_revision": revision.source_template_revision,
+        "schema_hash": revision.schema_hash,
+        "content_hash": revision.content_hash,
+        "root_row_count": revision.root_row_count,
+        "child_row_count": revision.child_row_count,
+    }
+
+
 def capture_requirement_snapshot(requirement):
     reviewers = list(requirement.reviewers.all().order_by("display_name", "id"))
     assets = [relation.asset for relation in requirement.requirement_attachments.all()]
     return {
         "name": requirement.name,
         "type": requirement.type,
+        "content_mode": requirement.content_mode,
         "priority": requirement.priority,
         "module": _module_snapshot(requirement.module),
         "parent": _parent_snapshot(requirement.parent),
@@ -81,15 +104,21 @@ def capture_requirement_snapshot(requirement):
         "description_html": requirement.description_html,
         "acceptance_criteria_html": requirement.acceptance_criteria_html,
         "attachments": [_asset_snapshot(asset) for asset in assets],
+        "structured": _structured_snapshot(requirement.active_structured_revision),
     }
 
 
 def capture_change_snapshot(change):
     reviewers = list(change.proposed_reviewers.all().order_by("display_name", "id"))
     assets = [relation.asset for relation in change.change_attachments.all()]
+    try:
+        structured_revision = change.structured_revision
+    except ObjectDoesNotExist:
+        structured_revision = None
     return {
         "name": change.name,
         "type": change.requirement.type,
+        "content_mode": change.requirement.content_mode,
         "priority": change.priority,
         "module": _module_snapshot(change.module),
         "parent": _parent_snapshot(change.parent),
@@ -98,6 +127,7 @@ def capture_change_snapshot(change):
         "description_html": change.description_html,
         "acceptance_criteria_html": change.acceptance_criteria_html,
         "attachments": [_asset_snapshot(asset) for asset in assets],
+        "structured": _structured_snapshot(structured_revision),
     }
 
 
@@ -107,6 +137,7 @@ def build_requirement_diff(from_snapshot, to_snapshot):
     labels = {
         "name": "需求名称",
         "type": "需求类型",
+        "content_mode": "内容模式",
         "priority": "优先级",
         "module": "模块",
         "parent": "父需求",
@@ -115,6 +146,7 @@ def build_requirement_diff(from_snapshot, to_snapshot):
         "description_html": "需求描述",
         "acceptance_criteria_html": "验收标准",
         "attachments": "附件",
+        "structured": "结构化数据",
     }
     set_fields = {"reviewers", "attachments"}
     changes = []
@@ -396,6 +428,9 @@ def _apply_proposal_to_requirement(requirement, change, actor):
     requirement.assignee = change.assignee
     requirement.description_html = change.description_html
     requirement.acceptance_criteria_html = change.acceptance_criteria_html
+    if requirement.content_mode == Requirement.ContentMode.STRUCTURED:
+        requirement.active_structured_revision = change.structured_revision
+        requirement.structured_root_row_count = change.structured_revision.root_row_count
     requirement.updated_by = actor
     requirement.save()
     requirement.reviewers.set(change.proposed_reviewers.all())
@@ -413,6 +448,9 @@ def _create_version(requirement, change, actor):
         requirement=requirement,
         version=next_version,
         source_change=change,
+        structured_revision=(
+            change.structured_revision if requirement.content_mode == Requirement.ContentMode.STRUCTURED else None
+        ),
         snapshot=snapshot,
         source="review",
         created_by=actor,
@@ -441,7 +479,14 @@ def create_requirement_change(
 ):
     requirement = (
         Requirement.objects.select_for_update(of=("self",))
-        .select_related("product", "product__workspace", "module", "parent", "assignee")
+        .select_related(
+            "product",
+            "product__workspace",
+            "module",
+            "parent",
+            "assignee",
+            "active_structured_revision",
+        )
         .prefetch_related("reviewers", "requirement_attachments__asset")
         .get(pk=requirement.pk)
     )
@@ -492,8 +537,35 @@ def create_requirement_change(
     )
     change.proposed_reviewers.set(proposed_reviewers)
     _bind_change_attachments(change, proposed_data.get("attachment_ids", []), actor)
+    if requirement.content_mode == Requirement.ContentMode.STRUCTURED:
+        source_revision = proposed_data.get("source_structured_revision") or requirement.active_structured_revision
+        if source_revision is None and requirement.current_version == 0:
+            source_revision = (
+                requirement.structured_revisions.filter(status="locked")
+                .order_by("-created_at")
+                .first()
+            )
+        template = proposed_data.get("template")
+        if template is not None and (
+            template.product_id != requirement.product_id
+            or not template.is_active
+            or template.template_type != RequirementFieldTemplate.TemplateType.STRUCTURED
+        ):
+            raise RequirementReviewError("REQUIREMENT_TEMPLATE_INVALID", "需求模板不可用于当前产品。")
+        create_structured_revision(
+            change,
+            actor,
+            template=template if source_revision is None else None,
+            source_revision=source_revision,
+        )
     change = (
-        RequirementChange.objects.select_related("requirement", "module", "parent", "assignee")
+        RequirementChange.objects.select_related(
+            "requirement",
+            "module",
+            "parent",
+            "assignee",
+            "structured_revision",
+        )
         .prefetch_related("proposed_reviewers", "change_attachments__asset")
         .get(pk=change.pk)
     )
@@ -620,6 +692,26 @@ def submit_requirement_change(change_id, actor):
             "需求负责人或评审人已失去产品访问权限。",
         )
 
+    if requirement.content_mode == Requirement.ContentMode.STRUCTURED:
+        try:
+            revision = change.structured_revision
+        except ObjectDoesNotExist as exc:
+            raise RequirementReviewError(
+                "STRUCTURED_REVISION_REQUIRED",
+                "结构化需求缺少可评审的数据修订。",
+            ) from exc
+        try:
+            lock_revision_for_review(revision, actor)
+        except RequirementStructureError as exc:
+            raise RequirementReviewError(exc.code, exc.message) from exc
+        change = (
+            RequirementChange.objects.select_related("requirement", "structured_revision", "module", "parent", "assignee")
+            .prefetch_related("proposed_reviewers", "change_attachments__asset")
+            .get(pk=change.pk)
+        )
+        change.proposal_snapshot = capture_change_snapshot(change)
+        change.save(update_fields=["proposal_snapshot", "updated_at"])
+
     current_reviewer_ids = list(requirement.reviewers.values_list("id", flat=True))
     approver_ids = _eligible_user_ids(requirement.product, current_reviewer_ids)
     if change.kind == RequirementChangeKind.INITIAL or not approver_ids:
@@ -672,6 +764,11 @@ def withdraw_requirement_change(change_id, actor):
         raise RequirementReviewError("REQUIREMENT_DRAFT_EDIT_FORBIDDEN", "你没有撤回该评审的权限。")
     requirement = change.requirement
     proposed_data = proposal_data_from_change(change)
+    if requirement.content_mode == Requirement.ContentMode.STRUCTURED:
+        try:
+            proposed_data["source_structured_revision"] = change.structured_revision
+        except ObjectDoesNotExist:
+            pass
     from_status = requirement.status
     change.status = RequirementChangeStatus.CANCELLED
     change.completed_at = timezone.now()

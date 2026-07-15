@@ -160,6 +160,19 @@ from .requirement import (
     UserRequirementListSerializer,
     UserRequirementWriteSerializer,
 )
+from .requirement_structure import (
+    RequirementFieldTemplateSerializer,
+    RequirementStructuredDiffEntrySerializer,
+    RequirementStructuredRevisionSerializer,
+    RequirementStructuredRowCreateSerializer,
+    RequirementStructuredRowReorderSerializer,
+    RequirementStructuredRowSerializer,
+    RequirementStructuredRowUpdateSerializer,
+    RequirementStructuredSchemaSerializer,
+    RequirementTemplateStatusSerializer,
+    RequirementTemplateSchemaSerializer,
+    RequirementTemplateWriteSerializer,
+)
 
 from .draft import (
     DraftIssueCreateSerializer,

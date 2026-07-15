@@ -6,6 +6,7 @@ import {
   CalendarRange,
   ClipboardList,
   Code2,
+  FileSliders,
   FolderKanban,
   Grid3X3,
   LayoutDashboard,
@@ -25,6 +26,7 @@ export type TProductViewKey =
   | "dashboard"
   | "user-requirements"
   | "development-requirements"
+  | "requirement-templates"
   | "plans"
   | "matrix"
   | "projects"
@@ -58,6 +60,12 @@ export const PRODUCT_NAVIGATION_ITEMS: TProductNavigationItem[] = [
     label: "研发需求",
     icon: Code2,
     placeholderDescription: "研发需求的拆解、评审和流转将在这里进行。",
+  },
+  {
+    key: "requirement-templates",
+    label: "需求模板",
+    icon: FileSliders,
+    placeholderDescription: "可复用的结构化研发需求字段将在这里管理。",
   },
   {
     key: "plans",
@@ -162,7 +170,10 @@ export const ProductNavigation = observer(function ProductNavigation(props: TPro
 
                   <div className="h-5 w-1 shrink-0 border-l border-subtle" />
 
-                  <nav aria-label="产品子菜单" className="flex h-full min-w-0 flex-1 items-center overflow-hidden">
+                  <nav
+                    aria-label="产品子菜单"
+                    className="flex scrollbar-sm h-full min-w-0 flex-1 items-center overflow-x-auto"
+                  >
                     <TabNavigationList className="h-full">
                       {PRODUCT_TAB_ITEMS.map((item) => {
                         const href = `/${workspaceSlug}/products/${productId}/${item.key}`;

@@ -39,6 +39,10 @@ class Requirement(BaseModel):
         DEVELOPMENT = "development", "研发需求"
         USER = "user", "用户需求"
 
+    class ContentMode(models.TextChoices):
+        TEXT = "text", "文本"
+        STRUCTURED = "structured", "结构化"
+
     class Status(models.TextChoices):
         DRAFT = "draft", "草稿"
         IN_REVIEW = "in_review", "评审中"
@@ -104,6 +108,13 @@ class Requirement(BaseModel):
         default=RequirementType.DEVELOPMENT,
         verbose_name="Requirement Type",
     )
+    content_mode = models.CharField(
+        max_length=20,
+        choices=ContentMode.choices,
+        default=ContentMode.TEXT,
+        db_index=True,
+        verbose_name="Requirement Content Mode",
+    )
     priority = models.CharField(
         max_length=30,
         choices=PRIORITY_CHOICES,
@@ -121,6 +132,15 @@ class Requirement(BaseModel):
         default=0,
         verbose_name="Current Requirement Version",
     )
+    active_structured_revision = models.ForeignKey(
+        "db.RequirementStructuredRevision",
+        on_delete=models.SET_NULL,
+        related_name="active_requirements",
+        null=True,
+        blank=True,
+        verbose_name="Active Structured Revision",
+    )
+    structured_root_row_count = models.PositiveIntegerField(default=0)
     closed_at = models.DateTimeField(null=True, blank=True, verbose_name="Closed At")
     closed_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -177,6 +197,28 @@ class Requirement(BaseModel):
 
     def clean(self):
         super().clean()
+
+        if self.pk:
+            stored_content_mode = (
+                Requirement.all_objects.filter(pk=self.pk).values_list("content_mode", flat=True).first()
+            )
+            if stored_content_mode is not None and stored_content_mode != self.content_mode:
+                raise ValidationError({"content_mode": "需求创建后不能切换内容模式。"})
+
+        if self.type == self.RequirementType.USER and self.content_mode != self.ContentMode.TEXT:
+            raise ValidationError({"content_mode": "用户需求只支持文本内容。"})
+        if self.content_mode == self.ContentMode.STRUCTURED:
+            if self.type != self.RequirementType.DEVELOPMENT:
+                raise ValidationError({"content_mode": "只有研发需求支持结构化内容。"})
+            if self.description_html not in (None, "", {}, []):
+                raise ValidationError({"description_html": "结构化需求不支持文本需求描述。"})
+            if self.acceptance_criteria_html not in (None, "", {}, []):
+                raise ValidationError({"acceptance_criteria_html": "结构化需求不支持文本验收标准。"})
+        if self.active_structured_revision_id:
+            if self.content_mode != self.ContentMode.STRUCTURED:
+                raise ValidationError({"active_structured_revision": "文本需求不能关联结构化修订。"})
+            if self.active_structured_revision.requirement_id != self.pk:
+                raise ValidationError({"active_structured_revision": "结构化修订必须属于当前需求。"})
 
         if self.status == self.Status.CLOSED:
             if self.closed_at is None:
@@ -355,6 +397,14 @@ class RequirementVersion(BaseModel):
         related_name="published_version",
         verbose_name="Approved Requirement Change",
     )
+    structured_revision = models.ForeignKey(
+        "db.RequirementStructuredRevision",
+        on_delete=models.PROTECT,
+        related_name="versions",
+        null=True,
+        blank=True,
+        verbose_name="Structured Revision",
+    )
     snapshot = models.JSONField(
         default=dict,
         blank=True,
@@ -430,6 +480,7 @@ class RequirementChange(BaseModel):
         blank=True,
         verbose_name="Proposal Snapshot",
     )
+    structured_diff_summary = models.JSONField(default=dict, blank=True)
     name = models.CharField(max_length=255, verbose_name="Proposed Requirement Name")
     priority = models.CharField(
         max_length=30,

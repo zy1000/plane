@@ -223,6 +223,7 @@ export const UserRequirementsRoot = observer(function UserRequirementsRoot(props
         workspaceSlug={slug}
         productId={id}
         requirementLabel={requirementLabel}
+        requirementType={requirementType}
         requirementId={editingRequirement?.id}
         modules={modules}
         fetchRequirement={fetchRequirement}
@@ -246,6 +247,10 @@ export const UserRequirementsRoot = observer(function UserRequirementsRoot(props
           }
           const response = await createRequirement(data, submitForReview);
           void fetchModules();
+          if (data.content_mode === "structured") {
+            router.push(`/${slug}/products/${id}/${requirementPath}/${response.id}/data`);
+            return response;
+          }
           if (page !== 1) setPage(1);
           else await refresh();
           return response;

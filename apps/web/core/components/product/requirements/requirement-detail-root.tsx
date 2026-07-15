@@ -42,6 +42,7 @@ import { RequirementFormModal } from "./requirement-form-modal";
 import { RequirementLifecycleModal } from "./requirement-lifecycle-modal";
 import { RequirementStatusBadge } from "./requirement-review-panels";
 import { RequirementVersionCompareModal } from "./requirement-version-compare-modal";
+import { StructuredRequirementEditor } from "./structured-requirement-editor";
 
 const priorityLabels: Record<string, string> = {
   urgent: "紧急",
@@ -160,6 +161,7 @@ export const RequirementDetailRoot = observer(function RequirementDetailRoot(pro
         productId={id}
         requirementId={reqId}
         requirementLabel={label}
+        requirementType={requirementType}
         modules={modules}
         fetchRequirement={fetchRequirement}
         fetchParentOptions={fetchParentOptions}
@@ -173,6 +175,9 @@ export const RequirementDetailRoot = observer(function RequirementDetailRoot(pro
                 : await saveChangeDraft(reqId, openChange.id, data)
               : await updateRequirement(reqId, data, submitForReview);
           await fetchDetail(reqId);
+          if (requirement?.content_mode === "structured") {
+            router.push(`/${slug}/products/${id}/${path}/${reqId}/data`);
+          }
           return response;
         }}
       />
@@ -284,9 +289,19 @@ export const RequirementDetailRoot = observer(function RequirementDetailRoot(pro
                       variant="primary"
                       size="lg"
                       prependIcon={<Pencil className="size-4" />}
-                      onClick={() => setIsChangeOpen(true)}
+                      onClick={() => {
+                        if (requirement.content_mode === "structured" && requirement.permissions.can_edit_draft) {
+                          router.push(`/${slug}/products/${id}/${path}/${reqId}/data`);
+                          return;
+                        }
+                        setIsChangeOpen(true);
+                      }}
                     >
-                      {requirement.permissions.can_edit_draft ? "继续编辑草稿" : "创建修订"}
+                      {requirement.content_mode === "structured" && requirement.permissions.can_edit_draft
+                        ? "编辑结构化数据"
+                        : requirement.permissions.can_edit_draft
+                          ? "继续编辑草稿"
+                          : "创建修订"}
                     </Button>
                   )}
                   {requirement.permissions.can_withdraw && (
@@ -400,29 +415,52 @@ export const RequirementDetailRoot = observer(function RequirementDetailRoot(pro
                 )}
               </div>
 
-              <section>
-                <h2 className="text-body-sm-semibold text-primary">需求描述</h2>
-                {hasContent(requirement.description_html) ? (
-                  <div
-                    className="prose-sm dark:prose-invert mt-3 max-w-none leading-7 text-secondary prose"
-                    dangerouslySetInnerHTML={{ __html: requirement.description_html ?? "" }}
-                  />
+              {requirement.content_mode === "structured" ? (
+                requirement.open_change?.structured_revision_id || requirement.active_structured_revision ? (
+                  <div className="overflow-hidden rounded-xl border border-subtle shadow-raised-100">
+                    <StructuredRequirementEditor
+                      workspaceSlug={slug}
+                      productId={id}
+                      requirementId={reqId}
+                      revisionId={
+                        requirement.open_change?.structured_revision_id ?? requirement.active_structured_revision ?? ""
+                      }
+                      editable={false}
+                      embedded
+                    />
+                  </div>
                 ) : (
-                  <p className="mt-2 text-body-xs-regular text-placeholder">暂无需求描述</p>
-                )}
-              </section>
+                  <div className="rounded-xl border border-subtle bg-layer-1 px-5 py-10 text-center text-12 text-secondary">
+                    当前需求还没有结构化修订数据。
+                  </div>
+                )
+              ) : (
+                <>
+                  <section>
+                    <h2 className="text-body-sm-semibold text-primary">需求描述</h2>
+                    {hasContent(requirement.description_html) ? (
+                      <div
+                        className="prose-sm dark:prose-invert mt-3 max-w-none leading-7 text-secondary prose"
+                        dangerouslySetInnerHTML={{ __html: requirement.description_html ?? "" }}
+                      />
+                    ) : (
+                      <p className="mt-2 text-body-xs-regular text-placeholder">暂无需求描述</p>
+                    )}
+                  </section>
 
-              <section>
-                <h2 className="text-body-sm-semibold text-primary">验收标准</h2>
-                {hasContent(requirement.acceptance_criteria_html) ? (
-                  <div
-                    className="prose-sm dark:prose-invert mt-3 max-w-none leading-7 text-secondary prose"
-                    dangerouslySetInnerHTML={{ __html: requirement.acceptance_criteria_html ?? "" }}
-                  />
-                ) : (
-                  <p className="mt-2 text-body-xs-regular text-placeholder">暂无验收标准</p>
-                )}
-              </section>
+                  <section>
+                    <h2 className="text-body-sm-semibold text-primary">验收标准</h2>
+                    {hasContent(requirement.acceptance_criteria_html) ? (
+                      <div
+                        className="prose-sm dark:prose-invert mt-3 max-w-none leading-7 text-secondary prose"
+                        dangerouslySetInnerHTML={{ __html: requirement.acceptance_criteria_html ?? "" }}
+                      />
+                    ) : (
+                      <p className="mt-2 text-body-xs-regular text-placeholder">暂无验收标准</p>
+                    )}
+                  </section>
+                </>
+              )}
 
               <RequirementActivity
                 workspaceSlug={slug}
@@ -498,10 +536,10 @@ export const RequirementDetailRoot = observer(function RequirementDetailRoot(pro
                         aria-label={`打开父需求 ${requirement.parent_detail.name}`}
                         onClick={() =>
                           router.push(
-                            `/${slug}/products/${id}/${getRequirementPath(requirement.parent_detail.type)}/${requirement.parent_detail.id}`
+                            `/${slug}/products/${id}/${getRequirementPath(requirement.parent_detail!.type)}/${requirement.parent_detail!.id}`
                           )
                         }
-                        className="focus-visible:ring-accent-primary/30 -ml-1.5 min-w-0 max-w-full truncate rounded-sm px-1.5 py-1 text-left transition-colors hover:bg-layer-1 hover:text-primary focus-visible:ring-2 focus-visible:outline-none"
+                        className="focus-visible:ring-accent-primary/30 -ml-1.5 max-w-full min-w-0 truncate rounded-sm px-1.5 py-1 text-left transition-colors hover:bg-layer-1 hover:text-primary focus-visible:ring-2 focus-visible:outline-none"
                       >
                         {requirement.parent_detail.name}
                       </button>
