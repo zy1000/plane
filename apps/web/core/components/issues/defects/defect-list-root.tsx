@@ -1,14 +1,16 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { isEqual } from "lodash-es";
 import { observer } from "mobx-react";
 import { useParams, useSearchParams } from "next/navigation";
 import useSWR from "swr";
 // plane constants
-import { ISSUE_DISPLAY_FILTERS_BY_PAGE, PROJECT_VIEW_TRACKER_ELEMENTS } from "@plane/constants";
+import { EIssueFilterType, ISSUE_DISPLAY_FILTERS_BY_PAGE, PROJECT_VIEW_TRACKER_ELEMENTS } from "@plane/constants";
 import type { IWorkItemFilterInstance } from "@plane/shared-state";
 import { EIssueLayoutTypes, EIssuesStoreType, LOGICAL_OPERATOR } from "@plane/types";
 import type {
+  IIssueDisplayFilterOptions,
   IIssueFilters,
+  TIssueKanbanFilters,
   TWorkItemFilterExpression,
   TWorkItemFilterProperty,
 } from "@plane/types";
@@ -26,6 +28,7 @@ import { ProjectSpreadsheetLayout } from "@/components/issues/issue-layouts/spre
 // hooks
 import { useIssues } from "@/hooks/store/use-issues";
 import { useProjectIssueTypes } from "@/hooks/store/use-project-issue-types";
+import { useWorkItemFilters } from "@/hooks/store/work-item-filters/use-work-item-filters";
 import { useUser } from "@/hooks/store/user";
 import { IssuesStoreContext, TypedPageIssueTypeIdsContext } from "@/hooks/use-issue-layout-store";
 import { type TProjectIssueScope } from "@/store/issue/project";
@@ -42,6 +45,25 @@ const DEFECT_SCOPE = "defects" as TProjectIssueScope;
 
 /** 未完成（待处理）的状态组：不含 已完成 / 已取消 */
 const OPEN_STATE_GROUPS = "backlog,unstarted,started";
+
+const INITIAL_DEFECT_DISPLAY_FILTERS: IIssueDisplayFilterOptions = {
+  calendar: { show_weekends: false, layout: "month" },
+  group_by: null,
+  sub_group_by: null,
+  layout: EIssueLayoutTypes.SPREADSHEET,
+  order_by: "sort_order",
+  show_empty_groups: false,
+  sub_issue: false,
+};
+
+const INITIAL_DEFECT_KANBAN_FILTERS: TIssueKanbanFilters = {
+  group_by: [],
+  sub_group_by: [],
+};
+
+const INITIAL_DEFECT_RICH_FILTERS = {
+  type__category__name__in: DEFECTS_CATEGORY_NAME,
+} as TWorkItemFilterExpression;
 
 /**
  * 由页面统一掌管的过滤维度，会从用户在 HeaderFilters 中的表达式里剥离，
@@ -182,10 +204,13 @@ export const DefectListRoot = observer(function DefectListRoot() {
   // ── Store hooks ────────────────────────────────────────────────────────
   const { issues, issuesFilter } = useIssues(EIssuesStoreType.PROJECT);
   const { issueTypes } = useProjectIssueTypes(workspaceSlug, projectId);
+  const { deleteFilter } = useWorkItemFilters();
   const { data: currentUser } = useUser();
   const myId = currentUser?.id ? String(currentUser.id) : undefined;
 
   const scope = DEFECT_SCOPE;
+  const initializingFilterProjectIdRef = useRef<string>();
+  const [initializedFilterProjectId, setInitializedFilterProjectId] = useState<string>();
 
   // ── Compute fixed type IDs（缺陷类别） ───────────────────────────────────
   const fixedTypeIds = useMemo(() => {
@@ -208,7 +233,30 @@ export const DefectListRoot = observer(function DefectListRoot() {
   );
 
   const storeFilters = projectId ? issuesFilter?.getIssueFilters(projectId, scope) : undefined;
+  const areStoreFiltersReady = Boolean(storeFilters);
   const activeLayout = storeFilters?.displayFilters?.layout;
+  const areDefectFiltersInitialized = initializedFilterProjectId === projectId;
+
+  // 缺陷页筛选仅在当前页面会话内有效；每次重新进入都从固定缺陷类别重新开始。
+  useEffect(() => {
+    if (!workspaceSlug || !projectId || !issuesFilter || !areStoreFiltersReady) return;
+    if (initializingFilterProjectIdRef.current === projectId) return;
+
+    // MobX 写入会同步触发 observer 重渲染，必须在任何写入前标记，避免初始化 effect 重入。
+    initializingFilterProjectIdRef.current = projectId;
+
+    deleteFilter(EIssuesStoreType.PROJECT, `${projectId}_defects`);
+    issuesFilter.restoreLocalDisplayFilters(projectId, INITIAL_DEFECT_DISPLAY_FILTERS, scope);
+    void issuesFilter.updateFilters(
+      workspaceSlug,
+      projectId,
+      EIssueFilterType.KANBAN_FILTERS,
+      INITIAL_DEFECT_KANBAN_FILTERS,
+      scope
+    );
+    issuesFilter.applyLocalRichFilters(workspaceSlug, projectId, INITIAL_DEFECT_RICH_FILTERS, scope);
+    setInitializedFilterProjectId(projectId);
+  }, [workspaceSlug, projectId, issuesFilter, areStoreFiltersReady, deleteFilter, scope]);
 
   // ── 三层条件：用户(非托管) + 固定缺陷类别 + 预设(状态/负责人) ───────────────
   const presetConditions = useMemo(() => getPresetConditions(preset, myId), [preset, myId]);
@@ -244,6 +292,7 @@ export const DefectListRoot = observer(function DefectListRoot() {
   useEffect(() => {
     if (!workspaceSlug || !projectId) return;
     if (!storeFilters) return;
+    if (!areDefectFiltersInitialized) return;
     lastAppliedPresetConditionsRef.current = presetConditions;
     if (isEqual(storeFilters?.richFilters ?? {}, fullMergedFilters)) return;
     issuesFilter?.applyLocalRichFilters(workspaceSlug, projectId, fullMergedFilters, scope);
@@ -256,6 +305,7 @@ export const DefectListRoot = observer(function DefectListRoot() {
     storeFilters,
     storeFilters?.richFilters,
     issuesFilter,
+    areDefectFiltersInitialized,
   ]);
 
   // kanban 分组兜底（沿用 typed root）
@@ -267,23 +317,6 @@ export const DefectListRoot = observer(function DefectListRoot() {
       issuesFilter?.applyLocalDisplayFilters(workspaceSlug, projectId, { group_by: "state" }, scope);
     }
   }, [storeFilters?.displayFilters?.layout, workspaceSlug, projectId, scope, issuesFilter]);
-
-  // 应用初始布局：typed scope 的布局不会持久化，进入页面时按默认布局初始化一次。
-  const hasAppliedDefaultLayout = useRef(false);
-  useEffect(() => {
-    if (!workspaceSlug || !projectId) return;
-    if (!storeFilters) return;
-    if (hasAppliedDefaultLayout.current) return;
-    hasAppliedDefaultLayout.current = true;
-    if (storeFilters.displayFilters?.layout !== EIssueLayoutTypes.SPREADSHEET) {
-      issuesFilter?.applyLocalDisplayFilters(
-        workspaceSlug,
-        projectId,
-        { layout: EIssueLayoutTypes.SPREADSHEET },
-        scope
-      );
-    }
-  }, [workspaceSlug, projectId, storeFilters, scope, issuesFilter]);
 
   const handleUpdateFilters = useCallback(
     async (expression: TWorkItemFilterExpression) => {
@@ -306,17 +339,17 @@ export const DefectListRoot = observer(function DefectListRoot() {
   }, [scope]);
 
   const initialWorkItemFilters: IIssueFilters | undefined = useMemo(() => {
-    if (!storeFilters) return undefined;
+    if (!storeFilters || !areDefectFiltersInitialized) return undefined;
     return {
       richFilters: userVisibleFilters,
       displayFilters: storeFilters.displayFilters,
       displayProperties: storeFilters.displayProperties,
       kanbanFilters: storeFilters.kanbanFilters,
     };
-  }, [userVisibleFilters, storeFilters]);
+  }, [userVisibleFilters, storeFilters, areDefectFiltersInitialized]);
 
   // Wait for issue types and store filters to be ready before rendering layout
-  if (!workspaceSlug || !projectId || !initialWorkItemFilters || !issueTypes) {
+  if (!workspaceSlug || !projectId || !initialWorkItemFilters || !issueTypes || !areDefectFiltersInitialized) {
     return (
       <div className="flex h-full w-full items-center justify-center">
         <Spinner />

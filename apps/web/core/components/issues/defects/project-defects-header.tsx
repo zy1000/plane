@@ -101,6 +101,7 @@ export const ProjectDefectsHeader = observer(function ProjectDefectsHeader() {
         {workspaceSlugValue && projectIdValue ? (
           <div className="hidden items-center gap-2 md:flex">
             <HeaderFilters
+              key={`${projectIdValue}_defects`}
               projectId={projectIdValue}
               workspaceSlug={workspaceSlugValue}
               currentProjectDetails={currentProjectDetails}
