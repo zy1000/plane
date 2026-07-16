@@ -131,8 +131,6 @@ export const IssueBlockRoot = observer(function IssueBlockRoot(props: Props) {
     issueBlockRef?.current?.classList?.remove(HIGHLIGHT_CLASS);
   });
 
-  if (!issueId || !issuesMap[issueId]?.created_at) return null;
-
   const allSubIssues = subIssuesStore.subIssuesByIssueId(issueId);
 
   const subIssues = useMemo(() => {
@@ -147,6 +145,8 @@ export const IssueBlockRoot = observer(function IssueBlockRoot(props: Props) {
       return true;
     });
   }, [profileViewId, allSubIssues, issuesMap, stateMap]);
+
+  if (!issueId || !issuesMap[issueId]?.created_at) return null;
 
   return (
     <div className="relative" ref={issueBlockRef} id={getIssueBlockId(issueId, groupId)}>
