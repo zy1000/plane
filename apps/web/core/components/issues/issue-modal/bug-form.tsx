@@ -457,8 +457,8 @@ export const BugIssueFormRoot: FC<BugIssueFormProps> = observer((props) => {
                   <div className="flex items-center gap-2">
                     <div tabIndex={getIndex("discard_button")}>
                       <Button
-                        variant="primary"
-                        size="sm"
+                        variant="secondary"
+                        size="lg"
                         onClick={() => {
                           if (editorRef.current?.isEditorReadyToDiscard()) {
                             onClose();
@@ -476,9 +476,9 @@ export const BugIssueFormRoot: FC<BugIssueFormProps> = observer((props) => {
                     </div>
                     <div tabIndex={isDraft ? getIndex("submit_button") : getIndex("draft_button")}>
                       <Button
-                        variant={moveToIssue ? "primary" : "primary"}
+                        variant={moveToIssue ? "secondary" : "primary"}
                         type="submit"
-                        size="sm"
+                        size="lg"
                         ref={submitBtnRef}
                         loading={creating || isSubmitting}
                         disabled={

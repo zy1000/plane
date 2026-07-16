@@ -42,9 +42,9 @@ export const BugIssueModal: React.FC<BugIssueModalProps> = observer((props) => {
     <IssueModalProvider templateId={templateId} dataForPreload={data} allowedProjectIds={allowedProjectIds}>
       <ModalCore
         isOpen={isOpen}
-        position={EModalPosition.CENTER}
-        width={EModalWidth.VIIXL}
-        className="!bg-transparent rounded-lg shadow-none !h-[95vh] !max-h-none flex flex-col"
+        position={EModalPosition.TOP}
+        width={EModalWidth.XXXXL}
+        className="rounded-lg !bg-transparent shadow-none transition-[width] ease-linear"
       >
         <BugIssueFormRoot
           issueTitleRef={React.createRef<HTMLInputElement>()}
