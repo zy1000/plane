@@ -320,7 +320,9 @@ def _clone_revision_content(source, target, actor):
     target.schema = list(source.schema or [])
     target.save(update_fields=["schema", "updated_at"])
 
-    source_rows = list(source.rows.select_related("parent_row").order_by("sort_key", "created_at"))
+    source_rows = list(
+        source.rows.filter(deleted_at__isnull=True).select_related("parent_row").order_by("sort_key", "created_at")
+    )
     row_map: dict[Any, RequirementStructuredRow] = {}
     for row in [item for item in source_rows if item.parent_row_id is None]:
         row_map[row.id] = RequirementStructuredRow.objects.create(
@@ -796,7 +798,7 @@ def validate_revision_for_submission(revision):
     schema = _active_fields(_schema_of(revision))
     if not schema:
         raise RequirementStructureError("STRUCTURED_SCHEMA_REQUIRED", "结构化需求至少需要一个字段")
-    root_rows = list(revision.rows.filter(parent_row__isnull=True))
+    root_rows = list(revision.rows.filter(deleted_at__isnull=True, parent_row__isnull=True))
     if not root_rows:
         raise RequirementStructureError("STRUCTURED_ROWS_REQUIRED", "结构化需求至少需要一条主记录")
     root_fields = [field for field in schema if not field.get("parent_key")]
@@ -819,7 +821,13 @@ def validate_revision_for_submission(revision):
                 if not _is_empty(value):
                     _normalize_value(field, value)
         for table_field in table_fields:
-            child_rows = list(revision.rows.filter(parent_row=row, table_field_key=_uuid(table_field["key"], "字段 key")))
+            child_rows = list(
+                revision.rows.filter(
+                    deleted_at__isnull=True,
+                    parent_row=row,
+                    table_field_key=_uuid(table_field["key"], "字段 key"),
+                )
+            )
             minimum = int(table_field["validation"].get("min_rows", 1 if table_field["is_required"] else 0))
             maximum = table_field["validation"].get("max_rows")
             if len(child_rows) < minimum:
@@ -851,7 +859,7 @@ def validate_revision_for_submission(revision):
 
 def refresh_revision_metadata(revision):
     schema = _schema_of(revision)
-    rows = list(revision.rows.select_related("parent_row").order_by("sort_key", "created_at", "id"))
+    rows = list(_live_rows(revision).order_by("sort_key", "created_at", "id"))
     revision.root_row_count = sum(1 for row in rows if row.parent_row_id is None)
     revision.child_row_count = len(rows) - revision.root_row_count
     revision.schema_hash = _hash_payload(schema)
@@ -958,6 +966,26 @@ def _row_preview_label(row, schema, scope):
     return "未命名子表记录" if scope == "child_row" else "未命名主记录"
 
 
+def _schema_change_type(before, after):
+    """字段方案变更类型：停用（is_active→False）视为删除，重新启用视为新增。"""
+    if before is None:
+        return "added"
+    if after is None:
+        return "removed"
+    before_active = before.get("is_active", True)
+    after_active = after.get("is_active", True)
+    if before_active and not after_active:
+        return "removed"
+    if not before_active and after_active:
+        return "added"
+    return "modified"
+
+
+def _live_rows(revision):
+    """关联 manager 走 base manager，不会自动排除软删行，这里显式过滤。"""
+    return revision.rows.filter(deleted_at__isnull=True).select_related("parent_row")
+
+
 def compute_structured_diff(before_revision, after_revision):
     """Compute the structured diff between two revisions as a list of API-shaped dicts."""
     entries: list[dict[str, Any]] = []
@@ -967,25 +995,34 @@ def compute_structured_diff(before_revision, after_revision):
     for key in sorted(set(before_fields) | set(after_fields)):
         before = before_fields.get(key)
         after = after_fields.get(key)
+        # 已停用字段之间的细枝末节差异对评审无意义，跳过
+        if before and after and not before.get("is_active", True) and not after.get("is_active", True):
+            continue
         before_value = _field_snapshot(before) if before else None
         after_value = _field_snapshot(after) if after else None
         if before_value == after_value:
             continue
+        change_type = _schema_change_type(before, after)
         entries.append(
             {
                 "scope": "schema",
-                "change_type": ("added" if before is None else "removed" if after is None else "modified"),
+                "change_type": change_type,
                 "field_key": key,
                 "row_key": None,
                 "parent_row_key": None,
                 "label": (after or before)["name"],
                 "before_value": before_value,
-                "after_value": after_value,
+                "after_value": after_value if change_type != "removed" else None,
                 "sort_key": str((after or before).get("sort_key") or "0"),
             }
         )
 
-    common_field_keys = set(before_fields) & set(after_fields)
+    # 移动只关心两侧都仍启用的字段
+    common_field_keys = {
+        key
+        for key in set(before_fields) & set(after_fields)
+        if before_fields[key].get("is_active", True) and after_fields[key].get("is_active", True)
+    }
     before_field_predecessors = _ordered_predecessors(
         [field for key, field in before_fields.items() if key in common_field_keys],
         lambda field: field["key"],
@@ -1018,10 +1055,8 @@ def compute_structured_diff(before_revision, after_revision):
 
     before_schema = _schema_of(before_revision) if before_revision else []
     after_schema = _schema_of(after_revision) if after_revision else []
-    before_rows = (
-        {row.row_key: row for row in before_revision.rows.select_related("parent_row")} if before_revision else {}
-    )
-    after_rows = {row.row_key: row for row in after_revision.rows.select_related("parent_row")}
+    before_rows = {row.row_key: row for row in _live_rows(before_revision)} if before_revision else {}
+    after_rows = {row.row_key: row for row in _live_rows(after_revision)}
     common_row_keys = set(before_rows) & set(after_rows)
     before_predecessors = _ordered_predecessors(
         [row for key, row in before_rows.items() if key in common_row_keys],

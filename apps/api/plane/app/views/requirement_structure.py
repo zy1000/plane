@@ -292,7 +292,8 @@ class RequirementStructuredRevisionViewSet(ProductStructuredResourceMixin, BaseV
         return base64.urlsafe_b64encode(payload).decode()
 
     def _row_queryset(self, revision, request):
-        queryset = revision.rows.select_related("revision", "parent_row")
+        # 关联 manager 不走软删过滤，列表必须显式排除已删除行
+        queryset = revision.rows.filter(deleted_at__isnull=True).select_related("revision", "parent_row")
         parent_row_key = request.query_params.get("parent_row_key")
         table_field_key = request.query_params.get("table_field_key")
         if parent_row_key or table_field_key:

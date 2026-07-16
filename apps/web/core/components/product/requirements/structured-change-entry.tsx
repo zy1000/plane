@@ -1,7 +1,6 @@
 import { useState } from "react";
-import { ArrowRight, ChevronRight, Copy } from "lucide-react";
-import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import { cn, copyTextToClipboard } from "@plane/utils";
+import { ArrowRight, ChevronRight } from "lucide-react";
+import { cn } from "@plane/utils";
 import type { TStructuredDiffEntry, TStructuredField } from "@/services/requirement-structure.service";
 import { getRowFieldChanges, type TFieldChangeRow } from "./structured-change-detail";
 
@@ -17,27 +16,6 @@ const changeMeta: Record<TStructuredDiffEntry["change_type"], { label: string; c
   modified: { label: "修改", className: "bg-warning-subtle text-warning-primary" },
   moved: { label: "移动", className: "bg-accent-subtle text-accent-primary" },
 };
-
-/** 把内部 UUID 收敛成一个可复制的短标识，避免评审人被一长串字符干扰。 */
-function RowIdChip(props: { id: string }) {
-  const { id } = props;
-  return (
-    <button
-      type="button"
-      title={`记录标识 ${id}（点击复制）`}
-      onClick={(event) => {
-        event.stopPropagation();
-        void copyTextToClipboard(id).then(() =>
-          setToast({ type: TOAST_TYPE.SUCCESS, title: "已复制记录标识", message: id })
-        );
-      }}
-      className="group/id inline-flex shrink-0 items-center gap-1 rounded bg-layer-1 px-1.5 py-0.5 font-mono text-10 text-tertiary transition-colors hover:bg-layer-2 hover:text-secondary"
-    >
-      <span>#{id.slice(0, 8)}</span>
-      <Copy className="size-2.5 opacity-0 transition-opacity group-hover/id:opacity-100" aria-hidden="true" />
-    </button>
-  );
-}
 
 /** 一个字段值的展示块：变更前(红) / 变更后(绿)，空值以占位提示；色板与 DiffField「新增」tag 对齐。 */
 function ValueChip(props: { tone: "before" | "after"; text: string }) {
@@ -89,7 +67,7 @@ function ChangeDetailTable(props: { rows: TFieldChangeRow[]; changeType: TStruct
 }
 
 /**
- * 单条结构化变更：范围标签 + 可读标题（+ 记录短标识）+ 语义化变更类型。
+ * 单条结构化变更：范围标签 + 可读标题 + 语义化变更类型。
  * 行级改动可展开逐字段对照：修改默认展开并给出「变更前 → 变更后」，新增/删除按需展开看字段值。
  */
 export function StructuredChangeEntry(props: { entry: TStructuredDiffEntry; fields?: TStructuredField[] }) {
@@ -143,12 +121,9 @@ export function StructuredChangeEntry(props: { entry: TStructuredDiffEntry; fiel
         <span className="w-16 shrink-0 rounded-md bg-layer-1 px-2 py-1 text-center text-10 text-secondary">
           {scopeLabel[entry.scope]}
         </span>
-        <div className="flex min-w-0 flex-1 items-center gap-2">
-          <span className="min-w-0 truncate text-12 font-medium text-primary" title={entry.label}>
-            {entry.label}
-          </span>
-          {isRow && entry.row_key && <RowIdChip id={entry.row_key} />}
-        </div>
+        <span className="min-w-0 flex-1 truncate text-12 font-medium text-primary" title={entry.label}>
+          {entry.label}
+        </span>
         <span className={cn("shrink-0 rounded-md px-2 py-1 text-10 font-medium", meta.className)}>{meta.label}</span>
       </div>
       {hasDetail && open && <ChangeDetailTable rows={detailRows} changeType={entry.change_type} />}
