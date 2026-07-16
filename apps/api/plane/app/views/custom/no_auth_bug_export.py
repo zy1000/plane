@@ -52,6 +52,7 @@ class PublicBugReportExportAPIView(BaseAPIView):
     OPEN_STATE_NAME = "Open"
     TRACE_ACTIVITY_FIELDS = ("state", "assignees")
     TECH_REASON_FIELD_NAME = "技术原因及解决方案"
+    BUG_LEVEL_FIELD_NAME = "缺陷级别"
     export_columns = [
         "序号",
         "ID",
@@ -131,6 +132,13 @@ class PublicBugReportExportAPIView(BaseAPIView):
 
     def _get_tech_reason(self, issue):
         for item in getattr(issue, "tech_reason_values", []):
+            value = self._stringify_extra_field_value(item.value)
+            if value:
+                return value
+        return ""
+
+    def _get_bug_level(self, issue):
+        for item in getattr(issue, "bug_level_values", []):
             value = self._stringify_extra_field_value(item.value)
             if value:
                 return value
@@ -312,6 +320,16 @@ class PublicBugReportExportAPIView(BaseAPIView):
                     .order_by("-created_at"),
                     to_attr="tech_reason_values",
                 ),
+                Prefetch(
+                    "type_extra_field_values",
+                    queryset=TypeExtraFieldValue.objects.filter(
+                        deleted_at__isnull=True,
+                        extra_field__name=self.BUG_LEVEL_FIELD_NAME,
+                    )
+                    .select_related("extra_field")
+                    .order_by("-created_at"),
+                    to_attr="bug_level_values",
+                ),
             )
             .order_by("-created_at")
         )
@@ -353,7 +371,7 @@ class PublicBugReportExportAPIView(BaseAPIView):
                     "创建人": self._resolve_user_name(getattr(issue, "created_by", None)),
                     "产品类型": issue.project.product_type if issue.project_id else "",
                     "状态": issue.state.name if issue.state_id else "",
-                    "缺陷级别": issue.priority or "",
+                    "缺陷级别": self._get_bug_level(issue),
                 }
             )
         return rows
