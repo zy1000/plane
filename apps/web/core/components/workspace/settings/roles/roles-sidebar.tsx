@@ -79,7 +79,7 @@ export function RolesSidebar({
   };
 
   const handleUpdate = async (data: { name: string; description: string }) => {
-    if (!editingRole || !canEditRole) return;
+    if (!editingRole || editingRole.is_system || !canEditRole) return;
     await onUpdate(editingRole.id, data);
     setToast({ type: TOAST_TYPE.SUCCESS, title: "已保存", message: "角色信息已更新" });
   };
@@ -90,7 +90,7 @@ export function RolesSidebar({
   };
 
   const handleConfirmDelete = async () => {
-    if (!pendingDelete || !canDeleteRole) return;
+    if (!pendingDelete || pendingDelete.is_system || !canDeleteRole) return;
     setIsDeleteSubmitting(true);
     try {
       await onDelete(pendingDelete.id);
@@ -232,40 +232,42 @@ export function RolesSidebar({
                       </p>
                     </div>
                     {/* Admin actions — visible on hover */}
-                    <div
-                      className={cn(
-                        "flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity duration-150",
-                        "group-hover:opacity-100",
-                        isSelected && "opacity-100"
-                      )}
-                    >
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setEditingRole(role);
-                        }}
-                        disabled={!canEditRole}
-                        className="flex size-5 cursor-pointer items-center justify-center rounded text-placeholder transition-colors duration-150 hover:bg-layer-1-hover hover:text-primary disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-placeholder"
-                        aria-label="编辑角色"
-                        title="编辑"
+                    {!role.is_system && (
+                      <div
+                        className={cn(
+                          "flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity duration-150",
+                          "group-hover:opacity-100",
+                          isSelected && "opacity-100"
+                        )}
                       >
-                        <PencilIcon className="size-3" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setPendingDelete(role);
-                        }}
-                        disabled={!canDeleteRole}
-                        className="hover:bg-red-500/10 hover:text-red-600 flex size-5 cursor-pointer items-center justify-center rounded text-placeholder transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-placeholder"
-                        aria-label="删除角色"
-                        title="删除"
-                      >
-                        <Trash2Icon className="size-3" />
-                      </button>
-                    </div>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingRole(role);
+                          }}
+                          disabled={!canEditRole}
+                          className="flex size-5 cursor-pointer items-center justify-center rounded text-placeholder transition-colors duration-150 hover:bg-layer-1-hover hover:text-primary disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-placeholder"
+                          aria-label="编辑角色"
+                          title="编辑"
+                        >
+                          <PencilIcon className="size-3" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setPendingDelete(role);
+                          }}
+                          disabled={!canDeleteRole}
+                          className="hover:bg-red-500/10 hover:text-red-600 flex size-5 cursor-pointer items-center justify-center rounded text-placeholder transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-placeholder"
+                          aria-label="删除角色"
+                          title="删除"
+                        >
+                          <Trash2Icon className="size-3" />
+                        </button>
+                      </div>
+                    )}
                   </div>
                   {/* Description */}
                   {role.description?.trim() && (

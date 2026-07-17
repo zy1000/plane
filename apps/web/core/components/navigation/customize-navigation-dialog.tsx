@@ -10,7 +10,7 @@ import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 import { GripVertical, X } from "lucide-react";
 // plane imports
-import { WORKSPACE_SIDEBAR_DYNAMIC_NAVIGATION_ITEMS_LINKS, EUserPermissionsLevel } from "@plane/constants";
+import { WORKSPACE_SIDEBAR_DYNAMIC_NAVIGATION_ITEMS_LINKS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Checkbox, EModalPosition, EModalWidth, ModalCore, Sortable } from "@plane/ui";
 import { cn } from "@plane/utils";
@@ -54,7 +54,7 @@ export const CustomizeNavigationDialog = observer(function CustomizeNavigationDi
   const { workspaceSlug } = useParams();
 
   // store hooks
-  const { allowPermissions } = useUserPermissions();
+  const { hasPageAccess } = useUserPermissions();
   const {
     preferences: personalPreferences,
     togglePersonalItem,
@@ -82,11 +82,7 @@ export const CustomizeNavigationDialog = observer(function CustomizeNavigationDi
   const workspaceItems = useMemo(() => {
     const items = WORKSPACE_SIDEBAR_DYNAMIC_NAVIGATION_ITEMS_LINKS.filter((item) => {
       // Permission check
-      const hasPermission = allowPermissions(
-        item.access,
-        EUserPermissionsLevel.WORKSPACE,
-        workspaceSlug?.toString() || ""
-      );
+      const hasPermission = hasPageAccess(workspaceSlug?.toString() || "", item.key);
       return hasPermission;
     }).map((item) => {
       // Get pinned status and sort order from localStorage
@@ -103,7 +99,7 @@ export const CustomizeNavigationDialog = observer(function CustomizeNavigationDi
     });
 
     return items.sort((a, b) => a.sortOrder - b.sortOrder);
-  }, [workspaceSlug, allowPermissions, workspacePreferences]);
+  }, [workspaceSlug, hasPageAccess, workspacePreferences]);
 
   // Handle checkbox toggle
   const handleWorkspaceItemToggle = useCallback(

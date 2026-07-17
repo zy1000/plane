@@ -45,7 +45,7 @@ from plane.api.serializers import (
     ProjectCreateSerializer,
     ProjectUpdateSerializer,
 )
-from plane.app.permissions import ProjectBasePermission, WorkSpaceAdminPermission
+from plane.app.permissions import ProjectBasePermission, PermissionKey, allow_fine_permission
 from plane.utils.openapi import (
     project_docs,
     PROJECT_ID_PARAMETER,
@@ -569,9 +569,9 @@ ALLOWED_PROJECT_SUMMARY_FIELDS = [
 
 
 class ProjectSummaryAPIEndpoint(BaseAPIView):
-    permission_classes = [WorkSpaceAdminPermission]
     use_read_replica = True
 
+    @allow_fine_permission(PermissionKey.PROJECT_OVERVIEW_VIEW)
     def get(self, request, slug, project_id):
         """Get project summary
 

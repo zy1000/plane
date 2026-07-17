@@ -13,7 +13,6 @@ _STATIC_PERMISSIONS_SYNCED = False
 ACTION_LABELS = {
     "add": "关联",
     "archive": "归档",
-    "assign_group": "绑定用户组",
     "bind_role": "绑定角色",
     "config": "配置",
     "create": "创建",
@@ -22,7 +21,6 @@ ACTION_LABELS = {
     "edit": "编辑",
     "export": "导出",
     "import_export": "导入/导出",
-    "import_to_project": "导入项目",
     "invite": "邀请",
     "leave": "退出",
     "lock": "锁定",
@@ -111,6 +109,12 @@ CATEGORY_LABELS = {
 }
 
 PERMISSION_OVERRIDES = {
+    "workspace.member.leave": {
+        "name": "主动退出工作区",
+        "module": "member",
+        "category": "成员",
+        "sort_order": 5,
+    },
     "project.analytics.view": {
         "name": "查看项目概览",
         "module": "project.overview",

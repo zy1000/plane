@@ -12,6 +12,7 @@ import {
   PROJECT_PUBLISH_CREATE_PERMISSION_KEY,
   PROJECT_PUBLISH_VIEW_PERMISSION_KEY,
   PROJECT_TRACKER_ELEMENTS,
+  WORKSPACE_PROJECT_CREATE_PERMISSION_KEY,
 } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { EmptyStateDetailed } from "@plane/propel/empty-state";
@@ -68,15 +69,15 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
     currentWorkspaceFilters,
     updateDisplayFilters,
   } = useProjectFilter();
-  const { allowPermissions, allowProjectPermissionKeys } = useUserPermissions();
+  const { allowPermissions, allowWorkspacePermissionKeys, allowProjectPermissionKeys } = useUserPermissions();
   const { getUserDetails } = useMember();
 
   const totalProjectIds = totalProjectIdsProps ?? storeTotalProjectIds;
   const filteredProjectIds = filteredProjectIdsProps ?? storeFilteredProjectIds;
 
-  const canPerformEmptyStateActions = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-    EUserPermissionsLevel.WORKSPACE
+  const canPerformEmptyStateActions = allowWorkspacePermissionKeys(
+    [WORKSPACE_PROJECT_CREATE_PERMISSION_KEY],
+    workspaceSlugString
   );
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
@@ -255,17 +256,20 @@ export const ProjectTableList = observer(function ProjectTableList(props: Props)
         description={t("workspace_projects.empty_state.general.description")}
         assetKey="project"
         assetClassName="size-40"
-        actions={[
-          {
-            label: t("workspace_projects.empty_state.general.primary_button.text"),
-            onClick: () => {
-              toggleCreateProjectModal(true);
-              captureClick({ elementName: PROJECT_TRACKER_ELEMENTS.EMPTY_STATE_CREATE_PROJECT_BUTTON });
-            },
-            disabled: !canPerformEmptyStateActions,
-            variant: "primary",
-          },
-        ]}
+        actions={
+          canPerformEmptyStateActions
+            ? [
+                {
+                  label: t("workspace_projects.empty_state.general.primary_button.text"),
+                  onClick: () => {
+                    toggleCreateProjectModal(true);
+                    captureClick({ elementName: PROJECT_TRACKER_ELEMENTS.EMPTY_STATE_CREATE_PROJECT_BUTTON });
+                  },
+                  variant: "primary",
+                },
+              ]
+            : []
+        }
       />
     );
 

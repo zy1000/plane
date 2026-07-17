@@ -8,7 +8,7 @@ import { useCallback, useRef, useState } from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 // plane imports
-import { EUserPermissions, EUserPermissionsLevel, PROJECT_TRACKER_ELEMENTS } from "@plane/constants";
+import { PROJECT_TRACKER_ELEMENTS, WORKSPACE_PROJECT_CREATE_PERMISSION_KEY } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { EmptyStateCompact } from "@plane/propel/empty-state";
 import { PlusIcon, SearchIcon } from "@plane/propel/icons";
@@ -37,7 +37,7 @@ export const ExtendedProjectSidebar = observer(function ExtendedProjectSidebar()
   const { t } = useTranslation();
   const { isExtendedProjectSidebarOpened, toggleExtendedProjectSidebar } = useAppTheme();
   const { getPartialProjectById, joinedProjectIds: joinedProjects, updateProjectView } = useProject();
-  const { allowPermissions } = useUserPermissions();
+  const { allowWorkspacePermissionKeys } = useUserPermissions();
 
   const handleOnProjectDrop = (
     sourceId: string | undefined,
@@ -77,9 +77,9 @@ export const ExtendedProjectSidebar = observer(function ExtendedProjectSidebar()
   });
 
   // auth
-  const isAuthorizedUser = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-    EUserPermissionsLevel.WORKSPACE
+  const isAuthorizedUser = allowWorkspacePermissionKeys(
+    [WORKSPACE_PROJECT_CREATE_PERMISSION_KEY],
+    workspaceSlug?.toString()
   );
 
   const handleClose = useCallback(() => toggleExtendedProjectSidebar(false), [toggleExtendedProjectSidebar]);

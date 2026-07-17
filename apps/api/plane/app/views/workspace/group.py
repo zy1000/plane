@@ -10,7 +10,7 @@ from rest_framework import status
 from rest_framework.response import Response
 
 # Module imports
-from plane.app.permissions import ROLE, allow_permission
+from plane.app.permissions import PermissionKey, allow_fine_permission
 from plane.app.serializers import (
     WorkspaceGroupSerializer,
     WorkspaceGroupMemberSerializer,
@@ -18,6 +18,16 @@ from plane.app.serializers import (
 )
 from plane.app.views.base import BaseViewSet
 from plane.db.models import Workspace, WorkspaceGroup, WorkspaceGroupMember, WorkspaceGroupRole
+
+
+WORKSPACE_GROUP_LOOKUP_PERMISSIONS = (
+    PermissionKey.WORKSPACE_GROUP_VIEW,
+    PermissionKey.WORKSPACE_GROUP_CREATE,
+    PermissionKey.WORKSPACE_GROUP_EDIT,
+    PermissionKey.WORKSPACE_GROUP_DELETE,
+    PermissionKey.WORKSPACE_GROUP_MANAGE_MEMBER,
+    PermissionKey.WORKSPACE_GROUP_MANAGE_ROLE,
+)
 
 
 class WorkspaceGroupViewSet(BaseViewSet):
@@ -38,12 +48,12 @@ class WorkspaceGroupViewSet(BaseViewSet):
             )
         )
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
+    @allow_fine_permission(*WORKSPACE_GROUP_LOOKUP_PERMISSIONS, level="WORKSPACE")
     def list(self, request, slug):
         serializer = self.get_serializer(self.get_queryset(), many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
+    @allow_fine_permission(*WORKSPACE_GROUP_LOOKUP_PERMISSIONS, level="WORKSPACE")
     def retrieve(self, request, slug, pk):
         workspace_group = self.get_queryset().filter(pk=pk).first()
         if not workspace_group:
@@ -52,7 +62,7 @@ class WorkspaceGroupViewSet(BaseViewSet):
         serializer = self.get_serializer(workspace_group)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    @allow_permission([ROLE.ADMIN], level="WORKSPACE")
+    @allow_fine_permission(PermissionKey.WORKSPACE_GROUP_CREATE, level="WORKSPACE")
     def create(self, request, slug):
         workspace = Workspace.objects.get(slug=slug)
         serializer = self.get_serializer(data=request.data, context={"workspace": workspace})
@@ -63,7 +73,7 @@ class WorkspaceGroupViewSet(BaseViewSet):
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    @allow_permission([ROLE.ADMIN], level="WORKSPACE")
+    @allow_fine_permission(PermissionKey.WORKSPACE_GROUP_EDIT, level="WORKSPACE")
     def partial_update(self, request, slug, pk):
         workspace_group = self.get_queryset().filter(pk=pk).first()
         if not workspace_group:
@@ -81,7 +91,7 @@ class WorkspaceGroupViewSet(BaseViewSet):
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    @allow_permission([ROLE.ADMIN], level="WORKSPACE")
+    @allow_fine_permission(PermissionKey.WORKSPACE_GROUP_DELETE, level="WORKSPACE")
     def destroy(self, request, slug, pk):
         workspace_group = self.get_queryset().filter(pk=pk).first()
         if not workspace_group:
@@ -113,7 +123,11 @@ class WorkspaceGroupMemberViewSet(BaseViewSet):
             .select_related("group", "member", "member__member", "member__member__avatar_asset")
         )
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
+    @allow_fine_permission(
+        PermissionKey.WORKSPACE_GROUP_VIEW,
+        PermissionKey.WORKSPACE_GROUP_MANAGE_MEMBER,
+        level="WORKSPACE",
+    )
     def list(self, request, slug, group_id):
         group = self.get_group()
         if not group:
@@ -122,7 +136,7 @@ class WorkspaceGroupMemberViewSet(BaseViewSet):
         serializer = self.get_serializer(self.get_queryset(), many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    @allow_permission([ROLE.ADMIN], level="WORKSPACE")
+    @allow_fine_permission(PermissionKey.WORKSPACE_GROUP_MANAGE_MEMBER, level="WORKSPACE")
     def create(self, request, slug, group_id):
         group = self.get_group()
         if not group:
@@ -135,7 +149,7 @@ class WorkspaceGroupMemberViewSet(BaseViewSet):
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    @allow_permission([ROLE.ADMIN], level="WORKSPACE")
+    @allow_fine_permission(PermissionKey.WORKSPACE_GROUP_MANAGE_MEMBER, level="WORKSPACE")
     def destroy(self, request, slug, group_id, pk):
         workspace_group_member = self.get_queryset().filter(pk=pk).first()
         if not workspace_group_member:
@@ -167,7 +181,11 @@ class WorkspaceGroupRoleViewSet(BaseViewSet):
             .select_related("group", "role", "role__workspace")
         )
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
+    @allow_fine_permission(
+        PermissionKey.WORKSPACE_GROUP_VIEW,
+        PermissionKey.WORKSPACE_GROUP_MANAGE_ROLE,
+        level="WORKSPACE",
+    )
     def list(self, request, slug, group_id):
         group = self.get_group()
         if not group:
@@ -176,7 +194,7 @@ class WorkspaceGroupRoleViewSet(BaseViewSet):
         serializer = self.get_serializer(self.get_queryset(), many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    @allow_permission([ROLE.ADMIN], level="WORKSPACE")
+    @allow_fine_permission(PermissionKey.WORKSPACE_GROUP_MANAGE_ROLE, level="WORKSPACE")
     def create(self, request, slug, group_id):
         group = self.get_group()
         if not group:
@@ -189,7 +207,7 @@ class WorkspaceGroupRoleViewSet(BaseViewSet):
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    @allow_permission([ROLE.ADMIN], level="WORKSPACE")
+    @allow_fine_permission(PermissionKey.WORKSPACE_GROUP_MANAGE_ROLE, level="WORKSPACE")
     def destroy(self, request, slug, group_id, pk):
         workspace_group_role = self.get_queryset().filter(pk=pk).first()
         if not workspace_group_role:

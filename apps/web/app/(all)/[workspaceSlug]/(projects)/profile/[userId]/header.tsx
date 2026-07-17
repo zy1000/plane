@@ -7,7 +7,7 @@
 import { observer } from "mobx-react";
 import { useParams, usePathname, useRouter } from "next/navigation";
 import { PanelRight } from "lucide-react";
-import { PROFILE_VIEWER_TAB, PROFILE_ADMINS_TAB, EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import { PROFILE_VIEWER_TAB, PROFILE_ADMINS_TAB, WORKSPACE_USER_PROFILE_VIEW_PERMISSION_KEY } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { YourWorkIcon, ChevronDownIcon } from "@plane/propel/icons";
 import type { IUserProfileProjectSegregation } from "@plane/types";
@@ -37,13 +37,12 @@ export const UserProfileHeader = observer(function UserProfileHeader(props: TUse
   // store hooks
   const { toggleProfileSidebar, profileSidebarCollapsed } = useAppTheme();
   const { data: currentUser } = useUser();
-  const { workspaceUserInfo, allowPermissions } = useUserPermissions();
+  const { workspaceUserInfo, allowWorkspacePermissionKeys } = useUserPermissions();
   const { t } = useTranslation();
   // derived values
-  const isAuthorized = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-    EUserPermissionsLevel.WORKSPACE
-  );
+  const isAuthorized =
+    currentUser?.id === userId ||
+    allowWorkspacePermissionKeys([WORKSPACE_USER_PROFILE_VIEW_PERMISSION_KEY], workspaceSlug.toString());
 
   if (!workspaceUserInfo) return null;
 

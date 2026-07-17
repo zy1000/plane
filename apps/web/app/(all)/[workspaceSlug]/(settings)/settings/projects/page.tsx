@@ -8,21 +8,39 @@ import { observer } from "mobx-react";
 import Link from "next/link";
 import { useTheme } from "next-themes";
 // plane imports
-import { PROJECT_TRACKER_ELEMENTS } from "@plane/constants";
+import {
+  PROJECT_TRACKER_ELEMENTS,
+  WORKSPACE_PROJECT_CREATE_PERMISSION_KEY,
+  WORKSPACE_PROJECT_VIEW_PERMISSION_KEY,
+} from "@plane/constants";
 import { Button, getButtonStyling } from "@plane/propel/button";
 import { cn } from "@plane/utils";
 // assets
 import ProjectDarkEmptyState from "@/app/assets/empty-state/project-settings/no-projects-dark.png?url";
 import ProjectLightEmptyState from "@/app/assets/empty-state/project-settings/no-projects-light.png?url";
+// components
+import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
 // hooks
 import { useCommandPalette } from "@/hooks/store/use-command-palette";
+import { useUserPermissions } from "@/hooks/store/user";
+// local imports
+import type { Route } from "./+types/page";
 
-function ProjectSettingsPage() {
+function ProjectSettingsPage({ params }: Route.ComponentProps) {
+  const { workspaceSlug } = params;
   // store hooks
   const { resolvedTheme } = useTheme();
   const { toggleCreateProjectModal } = useCommandPalette();
+  const { workspaceInfoBySlug, allowWorkspacePermissionKeys } = useUserPermissions();
   // derived values
   const resolvedPath = resolvedTheme === "dark" ? ProjectDarkEmptyState : ProjectLightEmptyState;
+  const workspaceInfo = workspaceInfoBySlug(workspaceSlug);
+  const canViewProjects = allowWorkspacePermissionKeys([WORKSPACE_PROJECT_VIEW_PERMISSION_KEY], workspaceSlug);
+  const canCreateProjects = allowWorkspacePermissionKeys([WORKSPACE_PROJECT_CREATE_PERMISSION_KEY], workspaceSlug);
+
+  if (!workspaceInfo) return null;
+  if (!canViewProjects) return <NotAuthorizedView section="settings" className="h-auto" />;
+
   return (
     <div className="mx-auto flex h-full max-w-[480px] flex-col items-center justify-center gap-4">
       <img src={resolvedPath} alt="No projects yet" />
@@ -35,12 +53,14 @@ function ProjectSettingsPage() {
         <Link href="https://plane.so/" target="_blank" className={cn(getButtonStyling("secondary", "base"))}>
           Learn more about projects
         </Link>
-        <Button
-          onClick={() => toggleCreateProjectModal(true)}
-          data-ph-element={PROJECT_TRACKER_ELEMENTS.EMPTY_STATE_CREATE_PROJECT_BUTTON}
-        >
-          Start your first project
-        </Button>
+        {canCreateProjects && (
+          <Button
+            onClick={() => toggleCreateProjectModal(true)}
+            data-ph-element={PROJECT_TRACKER_ELEMENTS.EMPTY_STATE_CREATE_PROJECT_BUTTON}
+          >
+            Start your first project
+          </Button>
+        )}
       </div>
     </div>
   );

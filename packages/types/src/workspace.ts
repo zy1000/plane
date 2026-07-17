@@ -49,6 +49,7 @@ export interface IWorkspaceMemberInvitation {
   message: string;
   responded_at: Date;
   role: TUserPermissions;
+  custom_role_ids: string[];
   token: string;
   invite_link: string;
   workspace: {
@@ -60,7 +61,7 @@ export interface IWorkspaceMemberInvitation {
 }
 
 export interface IWorkspaceBulkInviteFormData {
-  emails: { email: string; role: TUserPermissions }[];
+  emails: { email: string; role: TUserPermissions; custom_role_ids?: string[] }[];
 }
 
 export type Properties = {
@@ -92,6 +93,8 @@ export interface IWorkspaceMember {
   display_name?: string;
   last_login_medium?: TLoginMediums;
   is_active?: boolean;
+  custom_role_ids: string[];
+  group_role_ids: string[];
 }
 
 export interface IWorkspaceMemberMe {
@@ -107,6 +110,8 @@ export interface IWorkspaceMemberMe {
   view_props: IWorkspaceViewProps;
   workspace: string;
   draft_issue_count: number;
+  custom_role_ids: string[];
+  group_role_ids: string[];
 }
 
 export interface ILastActiveWorkspaceDetails {
@@ -277,6 +282,8 @@ export interface IWorkspaceRole {
   description: string;
   permissions: Record<string, unknown>;
   type: TWorkspaceRoleType;
+  legacy_role: EUserWorkspaceRoles | null;
+  is_system: boolean;
   created_at: string;
   updated_at: string;
   created_by: string;

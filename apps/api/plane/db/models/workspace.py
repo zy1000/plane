@@ -212,6 +212,12 @@ class WorkspaceMember(BaseModel):
     getting_started_checklist = models.JSONField(default=dict)
     tips = models.JSONField(default=dict)
     explored_features = models.JSONField(default=dict)
+    custom_roles = models.ManyToManyField(
+        "WorkspaceRole",
+        through="WorkspaceMemberRole",
+        blank=True,
+        related_name="role_members",
+    )
 
     class Meta:
         unique_together = ["workspace", "member", "deleted_at"]
@@ -240,6 +246,7 @@ class WorkspaceMemberInvite(BaseModel):
     message = models.TextField(null=True)
     responded_at = models.DateTimeField(null=True)
     role = models.PositiveSmallIntegerField(choices=ROLE_CHOICES, default=5)
+    custom_role_ids = models.JSONField(default=list)
 
     class Meta:
         unique_together = ["email", "workspace", "deleted_at"]
@@ -481,6 +488,17 @@ class WorkspaceRole(BaseModel):
         default=RoleType.WORKSPACE,
         db_index=True,
     )
+    legacy_role = models.PositiveSmallIntegerField(
+        choices=ROLE_CHOICES,
+        null=True,
+        blank=True,
+        db_index=True,
+    )
+
+    def clean(self):
+        super().clean()
+        if self.legacy_role is not None and self.type != self.RoleType.WORKSPACE:
+            raise ValidationError("System roles must be workspace roles.")
 
     class Meta:
         unique_together = ["workspace", "name", "deleted_at"]
@@ -489,7 +507,20 @@ class WorkspaceRole(BaseModel):
                 fields=["workspace", "name"],
                 condition=models.Q(deleted_at__isnull=True),
                 name="workspace_role_unique_workspace_name_when_deleted_at_null",
-            )
+            ),
+            models.UniqueConstraint(
+                fields=["workspace", "legacy_role"],
+                condition=models.Q(
+                    deleted_at__isnull=True,
+                    legacy_role__isnull=False,
+                ),
+                name="workspace_role_unique_legacy_role_when_active",
+            ),
+            models.CheckConstraint(
+                check=models.Q(legacy_role__isnull=True)
+                | models.Q(legacy_role__in=[5, 15, 20]),
+                name="workspace_role_valid_legacy_role",
+            ),
         ]
         verbose_name = "Workspace Role"
         verbose_name_plural = "Workspace Roles"
@@ -498,6 +529,59 @@ class WorkspaceRole(BaseModel):
 
     def __str__(self):
         return f"{self.name} <{self.workspace.name}>"
+
+
+class WorkspaceMemberRole(BaseModel):
+    """WorkspaceMember direct assignment to a workspace-scoped WorkspaceRole."""
+
+    workspace = models.ForeignKey(
+        "db.Workspace",
+        on_delete=models.CASCADE,
+        related_name="workspace_member_roles",
+    )
+    member = models.ForeignKey(
+        WorkspaceMember,
+        on_delete=models.CASCADE,
+        related_name="member_roles",
+    )
+    role = models.ForeignKey(
+        WorkspaceRole,
+        on_delete=models.CASCADE,
+        related_name="role_member_entries",
+    )
+
+    def clean(self):
+        super().clean()
+        if self.member_id and self.workspace_id != self.member.workspace_id:
+            raise ValidationError("The member does not belong to this workspace.")
+        if self.role_id:
+            if self.workspace_id != self.role.workspace_id:
+                raise ValidationError("The role does not belong to this workspace.")
+            if self.role.type != WorkspaceRole.RoleType.WORKSPACE:
+                raise ValidationError("Only workspace roles can be assigned to members.")
+
+    def save(self, *args, **kwargs):
+        if self.member_id:
+            self.workspace_id = self.member.workspace_id
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    class Meta:
+        unique_together = [["member", "role", "deleted_at"]]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["member", "role"],
+                condition=models.Q(deleted_at__isnull=True),
+                name="workspace_member_role_unique_member_role_when_active",
+            )
+        ]
+        verbose_name = "Workspace Member Role"
+        verbose_name_plural = "Workspace Member Roles"
+        db_table = "workspace_member_roles"
+        ordering = ("-created_at",)
+
+    def __str__(self):
+        return f"{self.member} -> {self.role.name}"
 
 
 class WorkspaceGroup(BaseModel):
@@ -535,6 +619,19 @@ class WorkspaceGroupMember(BaseModel):
     group = models.ForeignKey(WorkspaceGroup, on_delete=models.CASCADE, related_name="group_members")
     member = models.ForeignKey(WorkspaceMember, on_delete=models.CASCADE, related_name="member_groups")
 
+    def clean(self):
+        super().clean()
+        if (
+            self.group_id
+            and self.member_id
+            and self.group.workspace_id != self.member.workspace_id
+        ):
+            raise ValidationError("The member does not belong to this workspace.")
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
     class Meta:
         unique_together = ["group", "member", "deleted_at"]
         constraints = [
@@ -554,10 +651,22 @@ class WorkspaceGroupMember(BaseModel):
 
 
 class WorkspaceGroupRole(BaseModel):
-    """WorkspaceGroup ↔ WorkspaceRole 默认对应关系，用于项目导入模板时批量预填"""
+    """WorkspaceGroup ↔ workspace-scoped WorkspaceRole assignment."""
 
     group = models.ForeignKey(WorkspaceGroup, on_delete=models.CASCADE, related_name="group_roles")
     role = models.ForeignKey(WorkspaceRole, on_delete=models.CASCADE, related_name="role_groups")
+
+    def clean(self):
+        super().clean()
+        if self.group_id and self.role_id:
+            if self.group.workspace_id != self.role.workspace_id:
+                raise ValidationError("The role does not belong to this workspace.")
+            if self.role.type != WorkspaceRole.RoleType.WORKSPACE:
+                raise ValidationError("Only workspace roles can be assigned to groups.")
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
 
     class Meta:
         unique_together = ["group", "role", "deleted_at"]
@@ -575,6 +684,3 @@ class WorkspaceGroupRole(BaseModel):
 
     def __str__(self):
         return f"{self.group.name} -> {self.role.name}"
-
-
-

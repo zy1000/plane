@@ -11,7 +11,7 @@ import { useParams } from "next/navigation";
 import useSWR from "swr";
 // ui
 import { LogOut } from "lucide-react";
-import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import { WORKSPACE_MEMBER_VIEW_PERMISSION_KEY, WORKSPACE_PROJECT_VIEW_PERMISSION_KEY } from "@plane/constants";
 import { Button, getButtonStyling } from "@plane/propel/button";
 import { PlaneLogo } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
@@ -59,14 +59,20 @@ export const WorkspaceAuthWrapper = observer(function WorkspaceAuthWrapper(props
   } = useMember();
   const { workspaces, fetchSidebarNavigationPreferences, fetchProjectNavigationPreferences } = useWorkspace();
   const { isMobile } = usePlatformOS();
-  const { loader, workspaceInfoBySlug, fetchUserWorkspaceInfo, fetchUserProjectPermissions, allowPermissions } =
-    useUserPermissions();
+  const {
+    loader,
+    workspaceInfoBySlug,
+    fetchUserWorkspaceInfo,
+    fetchUserProjectPermissions,
+    allowWorkspacePermissionKeys,
+  } = useUserPermissions();
   const { fetchWorkspaceStates } = useProjectState();
   // derived values
-  const canPerformWorkspaceMemberActions = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-    EUserPermissionsLevel.WORKSPACE
+  const canPerformWorkspaceMemberActions = allowWorkspacePermissionKeys(
+    [WORKSPACE_MEMBER_VIEW_PERMISSION_KEY],
+    workspaceSlug
   );
+  const canViewWorkspaceProjects = allowWorkspacePermissionKeys([WORKSPACE_PROJECT_VIEW_PERMISSION_KEY], workspaceSlug);
   const allWorkspaces = workspaces ? Object.values(workspaces) : undefined;
   const currentWorkspace =
     (allWorkspaces && allWorkspaces.find((workspace) => workspace?.slug === workspaceSlug)) || undefined;
@@ -79,21 +85,33 @@ export const WorkspaceAuthWrapper = observer(function WorkspaceAuthWrapper(props
     { revalidateIfStale: false, revalidateOnFocus: false }
   );
   useSWR(
-    workspaceSlug && currentWorkspace ? WORKSPACE_PROJECTS_ROLES_INFORMATION(workspaceSlug.toString()) : null,
-    workspaceSlug && currentWorkspace ? () => fetchUserProjectPermissions(workspaceSlug.toString()) : null,
+    workspaceSlug && currentWorkspace && currentWorkspaceInfo && canViewWorkspaceProjects
+      ? WORKSPACE_PROJECTS_ROLES_INFORMATION(workspaceSlug.toString())
+      : null,
+    workspaceSlug && currentWorkspace && currentWorkspaceInfo && canViewWorkspaceProjects
+      ? () => fetchUserProjectPermissions(workspaceSlug.toString())
+      : null,
     { revalidateIfStale: false, revalidateOnFocus: false }
   );
 
   // fetching workspace projects
   useSWR(
-    workspaceSlug && currentWorkspace ? WORKSPACE_PARTIAL_PROJECTS(workspaceSlug.toString()) : null,
-    workspaceSlug && currentWorkspace ? () => fetchPartialProjects(workspaceSlug.toString()) : null,
+    workspaceSlug && currentWorkspace && currentWorkspaceInfo && canViewWorkspaceProjects
+      ? WORKSPACE_PARTIAL_PROJECTS(workspaceSlug.toString())
+      : null,
+    workspaceSlug && currentWorkspace && currentWorkspaceInfo && canViewWorkspaceProjects
+      ? () => fetchPartialProjects(workspaceSlug.toString())
+      : null,
     { revalidateIfStale: false, revalidateOnFocus: false }
   );
   // fetch workspace members
   useSWR(
-    workspaceSlug && currentWorkspace ? WORKSPACE_MEMBERS(workspaceSlug.toString()) : null,
-    workspaceSlug && currentWorkspace ? () => fetchWorkspaceMembers(workspaceSlug.toString()) : null,
+    workspaceSlug && currentWorkspace && currentWorkspaceInfo && canPerformWorkspaceMemberActions
+      ? WORKSPACE_MEMBERS(workspaceSlug.toString())
+      : null,
+    workspaceSlug && currentWorkspace && currentWorkspaceInfo && canPerformWorkspaceMemberActions
+      ? () => fetchWorkspaceMembers(workspaceSlug.toString())
+      : null,
     { revalidateIfStale: false, revalidateOnFocus: false }
   );
   // fetch workspace favorite

@@ -3,7 +3,8 @@
 # See the LICENSE file for details.
 
 # Django imports
-from django.db.models import Count, Q, OuterRef, Subquery, IntegerField
+from django.db import transaction
+from django.db.models import Count, Q, OuterRef, Prefetch, Subquery, IntegerField
 from django.utils import timezone
 from django.db.models.functions import Coalesce
 
@@ -11,20 +12,60 @@ from django.db.models.functions import Coalesce
 from rest_framework import status
 from rest_framework.response import Response
 
-from plane.app.permissions import WorkspaceEntityPermission, allow_permission, ROLE
+from plane.app.permissions import (
+    PermissionKey,
+    allow_fine_permission,
+    allow_workspace_member,
+)
+from plane.app.permissions.base import _get_user_workspace_permission_keys
 
 # Module imports
 from plane.app.serializers import (
     ProjectMemberRoleSerializer,
     WorkspaceMemberAdminSerializer,
     WorkspaceMemberMeSerializer,
+    WorkspaceMemberCustomRolesSerializer,
     WorkSpaceMemberSerializer,
 )
 from plane.app.views.base import BaseAPIView
-from plane.db.models import Project, ProjectMember, WorkspaceMember, DraftIssue
+from plane.db.models import (
+    DraftIssue,
+    Project,
+    ProjectMember,
+    WorkspaceMember,
+    WorkspaceMemberRole,
+    WorkspaceGroupRole,
+    WorkspaceRole,
+)
 from plane.utils.cache import invalidate_cache
 
 from .. import BaseViewSet
+
+
+WORKSPACE_MEMBER_LOOKUP_PERMISSIONS = (
+    PermissionKey.WORKSPACE_MEMBER_VIEW,
+    PermissionKey.WORKSPACE_MEMBER_INVITE,
+    PermissionKey.WORKSPACE_MEMBER_EDIT,
+    PermissionKey.WORKSPACE_MEMBER_REMOVE,
+    PermissionKey.WORKSPACE_GROUP_MANAGE_MEMBER,
+)
+
+WORKSPACE_MEMBER_ADMIN_DETAIL_PERMISSIONS = {
+    PermissionKey.WORKSPACE_MEMBER_INVITE.value,
+    PermissionKey.WORKSPACE_MEMBER_EDIT.value,
+    PermissionKey.WORKSPACE_MEMBER_REMOVE.value,
+}
+
+ACTIVE_WORKSPACE_MEMBER_ROLES_PREFETCH = Prefetch(
+    "member_roles",
+    queryset=WorkspaceMemberRole.objects.filter(
+        deleted_at__isnull=True,
+        role__deleted_at__isnull=True,
+        role__legacy_role__isnull=True,
+        role__type=WorkspaceRole.RoleType.WORKSPACE,
+    ).select_related("role"),
+    to_attr="active_member_roles",
+)
 
 
 class WorkSpaceMemberViewSet(BaseViewSet):
@@ -39,25 +80,68 @@ class WorkSpaceMemberViewSet(BaseViewSet):
             super()
             .get_queryset()
             .filter(workspace__slug=self.kwargs.get("slug"))
-            .select_related("member", "member__avatar_asset")
+            .select_related("workspace", "member", "member__avatar_asset")
+            .prefetch_related("custom_roles", ACTIVE_WORKSPACE_MEMBER_ROLES_PREFETCH)
         )
 
-    @allow_permission(allowed_roles=[ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
-    def list(self, request, slug):
-        workspace_member = WorkspaceMember.objects.get(member=request.user, workspace__slug=slug, is_active=True)
+    def _get_group_role_ids_by_member(self, workspace_members):
+        if not workspace_members:
+            return {}
 
-        # Get all active workspace members
-        workspace_members = self.get_queryset()
-        if workspace_member.role > 5:
-            serializer = WorkspaceMemberAdminSerializer(workspace_members, fields=("id", "member", "role"), many=True)
-        else:
-            serializer = WorkSpaceMemberSerializer(workspace_members, fields=("id", "member", "role"), many=True)
+        workspace_id = workspace_members[0].workspace_id
+        member_ids = [workspace_member.id for workspace_member in workspace_members]
+        group_role_ids_by_member = {member_id: [] for member_id in member_ids}
+        group_role_rows = (
+            WorkspaceGroupRole.objects.filter(
+                group__group_members__member_id__in=member_ids,
+                group__workspace_id=workspace_id,
+                group__group_members__deleted_at__isnull=True,
+                deleted_at__isnull=True,
+                role__workspace_id=workspace_id,
+                role__deleted_at__isnull=True,
+                role__type=WorkspaceRole.RoleType.WORKSPACE,
+            )
+            .values_list("group__group_members__member_id", "role_id")
+            .distinct()
+        )
+        for member_id, role_id in group_role_rows:
+            group_role_ids_by_member[member_id].append(str(role_id))
+        return group_role_ids_by_member
+
+    def _can_view_admin_details(self, request, slug):
+        permission_keys = getattr(
+            request, "_plane_workspace_permission_keys", None
+        )
+        if permission_keys is None:
+            permission_keys = _get_user_workspace_permission_keys(request.user, slug)
+        return bool(
+            permission_keys.intersection(
+                WORKSPACE_MEMBER_ADMIN_DETAIL_PERMISSIONS
+            )
+        )
+
+    @allow_fine_permission(*WORKSPACE_MEMBER_LOOKUP_PERMISSIONS, level="WORKSPACE")
+    def list(self, request, slug):
+        workspace_members = list(self.get_queryset())
+        serializer_class = (
+            WorkspaceMemberAdminSerializer
+            if self._can_view_admin_details(request, slug)
+            else WorkSpaceMemberSerializer
+        )
+        serializer = serializer_class(
+            workspace_members,
+            fields=("id", "member", "role", "custom_role_ids", "group_role_ids"),
+            many=True,
+            context={
+                "group_role_ids_by_member": self._get_group_role_ids_by_member(
+                    workspace_members
+                )
+            },
+        )
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    @allow_permission(allowed_roles=[ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
+    @allow_fine_permission(*WORKSPACE_MEMBER_LOOKUP_PERMISSIONS, level="WORKSPACE")
     def retrieve(self, request, slug, pk):
-        workspace_member = WorkspaceMember.objects.get(member=request.user, workspace__slug=slug, is_active=True)
-
         try:
             # Get the specific workspace member by pk
             member = self.get_queryset().get(pk=pk)
@@ -67,26 +151,27 @@ class WorkSpaceMemberViewSet(BaseViewSet):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        if workspace_member.role > ROLE.GUEST.value:
-            serializer = WorkspaceMemberAdminSerializer(member, fields=("id", "member", "role"))
-        else:
-            serializer = WorkSpaceMemberSerializer(member, fields=("id", "member", "role"))
+        serializer_class = (
+            WorkspaceMemberAdminSerializer
+            if self._can_view_admin_details(request, slug)
+            else WorkSpaceMemberSerializer
+        )
+        serializer = serializer_class(
+            member,
+            fields=("id", "member", "role", "custom_role_ids", "group_role_ids"),
+        )
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    @allow_permission(allowed_roles=[ROLE.ADMIN], level="WORKSPACE")
+    @allow_fine_permission(PermissionKey.WORKSPACE_MEMBER_EDIT, level="WORKSPACE")
     def partial_update(self, request, slug, pk):
         workspace_member = WorkspaceMember.objects.get(
             pk=pk, workspace__slug=slug, member__is_bot=False, is_active=True
         )
-        if request.user.id == workspace_member.member_id:
+        if workspace_member.workspace.owner_id == workspace_member.member_id:
             return Response(
-                {"error": "You cannot update your own role"},
+                {"error": "The workspace owner cannot be modified."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-
-        # If a user is moved to a guest role he can't have any other role in projects
-        if "role" in request.data and int(request.data.get("role")) == 5:
-            ProjectMember.objects.filter(workspace__slug=slug, member_id=workspace_member.member_id).update(role=5)
 
         serializer = WorkSpaceMemberSerializer(workspace_member, data=request.data, partial=True)
 
@@ -95,27 +180,22 @@ class WorkSpaceMemberViewSet(BaseViewSet):
             return Response(serializer.data, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    @allow_permission(allowed_roles=[ROLE.ADMIN], level="WORKSPACE")
+    @allow_fine_permission(PermissionKey.WORKSPACE_MEMBER_REMOVE, level="WORKSPACE")
     def destroy(self, request, slug, pk):
         # Check the user role who is deleting the user
         workspace_member = WorkspaceMember.objects.get(
             workspace__slug=slug, pk=pk, member__is_bot=False, is_active=True
         )
 
-        # check requesting user role
-        requesting_workspace_member = WorkspaceMember.objects.get(
-            workspace__slug=slug, member=request.user, is_active=True
-        )
-
-        if str(workspace_member.id) == str(requesting_workspace_member.id):
+        if workspace_member.member_id == request.user.id:
             return Response(
                 {"error": "You cannot remove yourself from the workspace. Please use leave workspace"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        if requesting_workspace_member.role < workspace_member.role:
+        if workspace_member.workspace.owner_id == workspace_member.member_id:
             return Response(
-                {"error": "You cannot remove a user having role higher than you"},
+                {"error": "The workspace owner cannot be removed."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -125,7 +205,7 @@ class WorkSpaceMemberViewSet(BaseViewSet):
                 member_with_role=Count(
                     "project_projectmember",
                     filter=Q(
-                        project_projectmember__member_id=workspace_member.id,
+                        project_projectmember__member_id=workspace_member.member_id,
                         project_projectmember__role=20,
                     ),
                 ),
@@ -157,19 +237,13 @@ class WorkSpaceMemberViewSet(BaseViewSet):
     )
     @invalidate_cache(path="/api/users/me/settings/")
     @invalidate_cache(path="api/users/me/workspaces/", user=False, multiple=True)
-    @allow_permission(allowed_roles=[ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
+    @allow_fine_permission(PermissionKey.WORKSPACE_MEMBER_LEAVE, level="WORKSPACE")
     def leave(self, request, slug):
         workspace_member = WorkspaceMember.objects.get(workspace__slug=slug, member=request.user, is_active=True)
 
-        # Check if the leaving user is the only admin of the workspace
-        if (
-            workspace_member.role == 20
-            and not WorkspaceMember.objects.filter(workspace__slug=slug, role=20, is_active=True).count() > 1
-        ):
+        if workspace_member.workspace.owner_id == request.user.id:
             return Response(
-                {
-                    "error": "You cannot leave the workspace as you are the only admin of the workspace you will have to either delete the workspace or promote another user to admin."  # noqa: E501
-                },
+                {"error": "Transfer workspace ownership before leaving."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -206,6 +280,7 @@ class WorkSpaceMemberViewSet(BaseViewSet):
 
 
 class WorkspaceMemberUserViewsEndpoint(BaseAPIView):
+    @allow_workspace_member
     def post(self, request, slug):
         workspace_member = WorkspaceMember.objects.get(workspace__slug=slug, member=request.user, is_active=True)
         workspace_member.view_props = request.data.get("view_props", {})
@@ -217,6 +292,7 @@ class WorkspaceMemberUserViewsEndpoint(BaseAPIView):
 class WorkspaceMemberUserEndpoint(BaseAPIView):
     use_read_replica = True
 
+    @allow_workspace_member
     def get(self, request, slug):
         draft_issue_count = (
             DraftIssue.objects.filter(created_by=request.user, workspace_id=OuterRef("workspace_id"))
@@ -228,18 +304,91 @@ class WorkspaceMemberUserEndpoint(BaseAPIView):
         workspace_member = (
             WorkspaceMember.objects.filter(member=request.user, workspace__slug=slug, is_active=True)
             .annotate(draft_issue_count=Coalesce(Subquery(draft_issue_count, output_field=IntegerField()), 0))
+            .prefetch_related(ACTIVE_WORKSPACE_MEMBER_ROLES_PREFETCH)
             .first()
         )
+        if not workspace_member:
+            return Response(
+                {"error": "Workspace member not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
         serializer = WorkspaceMemberMeSerializer(workspace_member)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class WorkspaceMemberCustomRolesAPIView(BaseAPIView):
+    def get_member(self, slug, pk):
+        return (
+            WorkspaceMember.objects.filter(
+                pk=pk,
+                workspace__slug=slug,
+                is_active=True,
+                deleted_at__isnull=True,
+            )
+            .select_related("workspace")
+            .prefetch_related(ACTIVE_WORKSPACE_MEMBER_ROLES_PREFETCH)
+            .first()
+        )
+
+    @allow_fine_permission(*WORKSPACE_MEMBER_LOOKUP_PERMISSIONS, level="WORKSPACE")
+    def get(self, request, slug, pk):
+        workspace_member = self.get_member(slug, pk)
+        if not workspace_member:
+            return Response(
+                {"error": "Workspace member not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response(
+            {"custom_role_ids": [str(role.role_id) for role in workspace_member.active_member_roles]},
+            status=status.HTTP_200_OK,
+        )
+
+    @transaction.atomic
+    @allow_fine_permission(PermissionKey.WORKSPACE_MEMBER_EDIT, level="WORKSPACE")
+    def put(self, request, slug, pk):
+        workspace_member = self.get_member(slug, pk)
+        if not workspace_member:
+            return Response(
+                {"error": "Workspace member not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        if workspace_member.workspace.owner_id == workspace_member.member_id:
+            return Response(
+                {"error": "The workspace owner cannot be modified."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = WorkspaceMemberCustomRolesSerializer(
+            data=request.data,
+            context={
+                "workspace": workspace_member.workspace,
+                "member": workspace_member,
+                "actor": request.user,
+            },
+        )
+        if serializer.is_valid():
+            return Response(serializer.save(), status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class WorkspaceMyPermissionKeysAPIView(BaseAPIView):
+    @allow_workspace_member
+    def get(self, request, slug):
+        return Response(
+            {
+                "permission_keys": sorted(
+                    _get_user_workspace_permission_keys(request.user, slug)
+                )
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 class WorkspaceProjectMemberEndpoint(BaseAPIView):
     serializer_class = ProjectMemberRoleSerializer
     model = ProjectMember
 
-    permission_classes = [WorkspaceEntityPermission]
-
+    @allow_workspace_member
     def get(self, request, slug):
         # Fetch all project IDs where the user is involved
         project_ids = (

@@ -11,6 +11,7 @@ import jwt
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
+from django.db import transaction
 from django.utils import timezone
 
 # Third party modules
@@ -19,8 +20,9 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 # Module imports
-from plane.app.permissions import WorkSpaceAdminPermission
+from plane.app.permissions import PermissionKey, allow_fine_permission
 from plane.app.serializers import (
+    WorkspaceMemberCustomRolesSerializer,
     WorkSpaceMemberInviteSerializer,
     WorkSpaceMemberSerializer,
 )
@@ -40,8 +42,6 @@ class WorkspaceInvitationsViewset(BaseViewSet):
     serializer_class = WorkSpaceMemberInviteSerializer
     model = WorkspaceMemberInvite
 
-    permission_classes = [WorkSpaceAdminPermission]
-
     def get_queryset(self):
         return self.filter_queryset(
             super()
@@ -50,29 +50,61 @@ class WorkspaceInvitationsViewset(BaseViewSet):
             .select_related("workspace", "workspace__owner", "created_by")
         )
 
+    @allow_fine_permission(PermissionKey.WORKSPACE_MEMBER_INVITE, level="WORKSPACE")
+    def list(self, request, slug):
+        return super().list(request, slug)
+
+    @allow_fine_permission(PermissionKey.WORKSPACE_MEMBER_INVITE, level="WORKSPACE")
+    def retrieve(self, request, slug, pk):
+        return super().retrieve(request, slug, pk)
+
+    @allow_fine_permission(PermissionKey.WORKSPACE_MEMBER_INVITE, level="WORKSPACE")
     def create(self, request, slug):
         emails = request.data.get("emails", [])
         # Check if email is provided
         if not emails:
             return Response({"error": "Emails are required"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # check for role level of the requesting user
-        requesting_user = WorkspaceMember.objects.get(workspace__slug=slug, member=request.user, is_active=True)
-
-        # Check if any invited user has an higher role
-        if len([email for email in emails if int(email.get("role", 5)) > requesting_user.role]):
-            return Response(
-                {"error": "You cannot invite a user with higher role"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
         # Get the workspace object
         workspace = Workspace.objects.get(slug=slug)
+
+        normalized_invites = []
+        for email in emails:
+            try:
+                role = int(email.get("role", 5))
+            except (TypeError, ValueError):
+                role = None
+            if role not in (5, 15, 20):
+                return Response(
+                    {"error": "Invalid workspace role."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            role_serializer = WorkspaceMemberCustomRolesSerializer(
+                data={"custom_role_ids": email.get("custom_role_ids", [])},
+                context={"workspace": workspace},
+            )
+            if not role_serializer.is_valid():
+                return Response(
+                    role_serializer.errors,
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            normalized_invites.append(
+                {
+                    **email,
+                    "role": role,
+                    "custom_role_ids": [
+                        str(role_id)
+                        for role_id in role_serializer.validated_data[
+                            "custom_role_ids"
+                        ]
+                    ],
+                }
+            )
 
         # Check if user is already a member of workspace
         workspace_members = WorkspaceMember.objects.filter(
             workspace_id=workspace.id,
-            member__email__in=[email.get("email") for email in emails],
+            member__email__in=[email.get("email") for email in normalized_invites],
             is_active=True,
         ).select_related("member", "member__avatar_asset")
 
@@ -86,7 +118,7 @@ class WorkspaceInvitationsViewset(BaseViewSet):
             )
 
         workspace_invitations = []
-        for email in emails:
+        for email in normalized_invites:
             try:
                 validate_email(email.get("email"))
                 workspace_invitations.append(
@@ -99,6 +131,7 @@ class WorkspaceInvitationsViewset(BaseViewSet):
                             algorithm="HS256",
                         ),
                         role=email.get("role", 5),
+                        custom_role_ids=email.get("custom_role_ids", []),
                         created_by=request.user,
                     )
                 )
@@ -141,6 +174,29 @@ class WorkspaceInvitationsViewset(BaseViewSet):
 
         return Response({"message": "Emails sent successfully"}, status=status.HTTP_200_OK)
 
+    @allow_fine_permission(PermissionKey.WORKSPACE_MEMBER_INVITE, level="WORKSPACE")
+    def partial_update(self, request, slug, pk):
+        workspace_invite = self.get_queryset().filter(pk=pk).first()
+        if not workspace_invite:
+            return Response(
+                {"error": "Workspace invitation not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        data = request.data.copy()
+        if "custom_role_ids" in data:
+            role_serializer = WorkspaceMemberCustomRolesSerializer(
+                data={"custom_role_ids": data.get("custom_role_ids", [])},
+                context={"workspace": workspace_invite.workspace},
+            )
+            if not role_serializer.is_valid():
+                return Response(role_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        serializer = self.get_serializer(workspace_invite, data=data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    @allow_fine_permission(PermissionKey.WORKSPACE_MEMBER_INVITE, level="WORKSPACE")
     def destroy(self, request, slug, pk):
         workspace_member_invite = WorkspaceMemberInvite.objects.get(pk=pk, workspace__slug=slug)
         workspace_member_invite.delete()
@@ -160,8 +216,11 @@ class WorkspaceJoinEndpoint(BaseAPIView):
         url_params=True,
     )
     @invalidate_cache(path="/api/users/me/settings/", multiple=True)
+    @transaction.atomic
     def post(self, request, slug, pk):
-        workspace_invite = WorkspaceMemberInvite.objects.get(pk=pk, workspace__slug=slug)
+        workspace_invite = WorkspaceMemberInvite.objects.select_for_update().get(
+            pk=pk, workspace__slug=slug
+        )
 
         token = request.data.get("token", "")
 
@@ -194,11 +253,30 @@ class WorkspaceJoinEndpoint(BaseAPIView):
                         workspace_member.save()
                     else:
                         # Create a Workspace
-                        _ = WorkspaceMember.objects.create(
+                        workspace_member = WorkspaceMember.objects.create(
                             workspace=workspace_invite.workspace,
                             member=user,
                             role=workspace_invite.role,
                         )
+
+                    active_custom_role_ids = list(
+                        workspace_invite.workspace.workspace_roles.filter(
+                            id__in=workspace_invite.custom_role_ids,
+                            type="workspace",
+                            legacy_role__isnull=True,
+                            deleted_at__isnull=True,
+                        ).values_list("id", flat=True)
+                    )
+                    role_serializer = WorkspaceMemberCustomRolesSerializer(
+                        data={"custom_role_ids": active_custom_role_ids},
+                        context={
+                            "workspace": workspace_invite.workspace,
+                            "member": workspace_member,
+                            "actor": request.user if request.user.is_authenticated else user,
+                        },
+                    )
+                    if role_serializer.is_valid():
+                        role_serializer.save()
 
                     # Set the user last_workspace_id to the accepted workspace
                     user.last_workspace_id = workspace_invite.workspace.id
@@ -298,6 +376,39 @@ class UserWorkspaceInvitationsViewSet(BaseViewSet):
             ],
             ignore_conflicts=True,
         )
+
+        joined_members = list(
+            WorkspaceMember.objects.filter(
+                workspace_id__in=[invitation.workspace_id for invitation in workspace_invitations],
+                member=request.user,
+                is_active=True,
+            ).select_related("workspace")
+        )
+        invitations_by_workspace_id = {
+            invitation.workspace_id: invitation for invitation in workspace_invitations
+        }
+        for workspace_member in joined_members:
+            invitation = invitations_by_workspace_id.get(workspace_member.workspace_id)
+            if not invitation:
+                continue
+            active_custom_role_ids = list(
+                workspace_member.workspace.workspace_roles.filter(
+                    id__in=invitation.custom_role_ids,
+                    type="workspace",
+                    legacy_role__isnull=True,
+                    deleted_at__isnull=True,
+                ).values_list("id", flat=True)
+            )
+            role_serializer = WorkspaceMemberCustomRolesSerializer(
+                data={"custom_role_ids": active_custom_role_ids},
+                context={
+                    "workspace": workspace_member.workspace,
+                    "member": workspace_member,
+                    "actor": request.user,
+                },
+            )
+            if role_serializer.is_valid():
+                role_serializer.save()
 
         # Delete joined workspace invites
         workspace_invitations.delete()

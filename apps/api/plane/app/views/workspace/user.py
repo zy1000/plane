@@ -29,7 +29,11 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.response import Response
 
-from plane.app.permissions import WorkspaceEntityPermission, WorkspaceViewerPermission
+from plane.app.permissions import (
+    PermissionKey,
+    allow_workspace_member,
+    allow_workspace_self_or_permission,
+)
 
 # Module imports
 from plane.app.serializers import (
@@ -103,8 +107,6 @@ class UserLastProjectWithWorkspaceEndpoint(BaseAPIView):
 
 
 class WorkspaceUserProfileIssuesEndpoint(BaseAPIView):
-    permission_classes = [WorkspaceViewerPermission]
-
     filter_backends = (ComplexFilterBackend,)
     filterset_class = IssueFilterSet
 
@@ -139,6 +141,7 @@ class WorkspaceUserProfileIssuesEndpoint(BaseAPIView):
             .prefetch_related("assignees", "labels", "issue_module__module")
         )
 
+    @allow_workspace_self_or_permission(PermissionKey.WORKSPACE_USER_PROFILE_VIEW)
     def get(self, request, slug, user_id):
         filters = issue_filters(request.query_params, "GET")
 
@@ -257,8 +260,7 @@ class WorkspaceUserProfileIssuesEndpoint(BaseAPIView):
 
 
 class WorkspaceUserPropertiesEndpoint(BaseAPIView):
-    permission_classes = [WorkspaceViewerPermission]
-
+    @allow_workspace_member
     def patch(self, request, slug):
         workspace = Workspace.objects.get(slug=slug)
 
@@ -273,6 +275,7 @@ class WorkspaceUserPropertiesEndpoint(BaseAPIView):
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+    @allow_workspace_member
     def get(self, request, slug):
         workspace = Workspace.objects.get(slug=slug)
 
@@ -285,14 +288,12 @@ class WorkspaceUserPropertiesEndpoint(BaseAPIView):
 
 
 class WorkspaceUserProfileEndpoint(BaseAPIView):
+    @allow_workspace_self_or_permission(PermissionKey.WORKSPACE_USER_PROFILE_VIEW)
     def get(self, request, slug, user_id):
         user_data = User.objects.get(pk=user_id)
 
-        requesting_workspace_member = WorkspaceMember.objects.get(
-            workspace__slug=slug, member=request.user, is_active=True
-        )
         projects = []
-        can_view_project_contributions = requesting_workspace_member.role >= 15
+        can_view_project_contributions = True
         if can_view_project_contributions:
             projects = (
                 Project.objects.filter(
@@ -389,8 +390,7 @@ class WorkspaceUserProfileEndpoint(BaseAPIView):
 
 
 class WorkspaceUserActivityEndpoint(BaseAPIView):
-    permission_classes = [WorkspaceEntityPermission]
-
+    @allow_workspace_self_or_permission(PermissionKey.WORKSPACE_USER_PROFILE_VIEW)
     def get(self, request, slug, user_id):
         projects = request.query_params.getlist("project", [])
 
@@ -415,6 +415,7 @@ class WorkspaceUserActivityEndpoint(BaseAPIView):
 
 
 class WorkspaceUserProfileStatsEndpoint(BaseAPIView):
+    @allow_workspace_self_or_permission(PermissionKey.WORKSPACE_USER_PROFILE_VIEW)
     def get(self, request, slug, user_id):
         filters = issue_filters(request.query_params, "GET")
         today = timezone.now().date()
@@ -569,8 +570,7 @@ class WorkspaceUserProfileStatsEndpoint(BaseAPIView):
 
 
 class WorkspaceUserProfileMetricTreeEndpoint(BaseAPIView):
-    permission_classes = [WorkspaceViewerPermission]
-
+    @allow_workspace_self_or_permission(PermissionKey.WORKSPACE_USER_PROFILE_VIEW)
     def get(self, request, slug, user_id, metric):
         query_serializer = WorkspaceUserMetricQuerySerializer(
             data=request.query_params,
@@ -589,8 +589,7 @@ class WorkspaceUserProfileMetricTreeEndpoint(BaseAPIView):
 
 
 class WorkspaceUserProfileMetricItemsEndpoint(BaseAPIView):
-    permission_classes = [WorkspaceViewerPermission]
-
+    @allow_workspace_self_or_permission(PermissionKey.WORKSPACE_USER_PROFILE_VIEW)
     def get(self, request, slug, user_id, metric):
         query_serializer = WorkspaceUserMetricQuerySerializer(
             data=request.query_params,
@@ -625,6 +624,7 @@ class WorkspaceUserProfileMetricItemsEndpoint(BaseAPIView):
 
 
 class UserActivityGraphEndpoint(BaseAPIView):
+    @allow_workspace_member
     def get(self, request, slug):
         issue_activities = (
             IssueActivity.objects.filter(
@@ -642,6 +642,7 @@ class UserActivityGraphEndpoint(BaseAPIView):
 
 
 class UserIssueCompletedGraphEndpoint(BaseAPIView):
+    @allow_workspace_member
     def get(self, request, slug):
         month = request.GET.get("month", 1)
 

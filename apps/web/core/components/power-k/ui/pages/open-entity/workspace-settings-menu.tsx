@@ -6,9 +6,10 @@
 
 import { observer } from "mobx-react";
 // plane types
-import { EUserPermissionsLevel, WORKSPACE_SETTINGS } from "@plane/constants";
+import { WORKSPACE_SETTINGS } from "@plane/constants";
 // components
 import { useTranslation } from "@plane/i18n";
+import type { TWorkspaceSettingsTabs } from "@plane/types";
 import type { TPowerKContext } from "@/components/power-k/core/types";
 import { PowerKSettingsMenu } from "@/components/power-k/menus/settings";
 import { WORKSPACE_SETTINGS_ICONS } from "@/components/settings/workspace/sidebar/item-icon";
@@ -25,17 +26,21 @@ export const PowerKOpenWorkspaceSettingsMenu = observer(function PowerKOpenWorks
   // plane hooks
   const { t } = useTranslation();
   // store hooks
-  const { allowPermissions } = useUserPermissions();
+  const { allowWorkspacePermissionKeys, workspaceInfoBySlug } = useUserPermissions();
   // derived values
-  const settingsList = Object.values(WORKSPACE_SETTINGS).filter(
-    (setting) =>
-      context.params.workspaceSlug &&
-      allowPermissions(setting.access, EUserPermissionsLevel.WORKSPACE, context.params.workspaceSlug?.toString())
-  );
+  const settingsList = Object.values(WORKSPACE_SETTINGS).filter((setting) => {
+    const workspaceSlug = context.params.workspaceSlug?.toString();
+    if (!workspaceSlug || !workspaceInfoBySlug(workspaceSlug)) return false;
+    const permissionKeys = "permissionKeys" in setting ? setting.permissionKeys : undefined;
+    const requiresMembership = "requiresMembership" in setting ? setting.requiresMembership : false;
+    return permissionKeys?.length
+      ? allowWorkspacePermissionKeys(permissionKeys, workspaceSlug)
+      : requiresMembership;
+  });
   const settingsListWithIcons = settingsList.map((setting) => ({
     ...setting,
     label: t(setting.i18n_label),
-    icon: WORKSPACE_SETTINGS_ICONS[setting.key],
+    icon: WORKSPACE_SETTINGS_ICONS[setting.key as TWorkspaceSettingsTabs],
   }));
 
   return <PowerKSettingsMenu settings={settingsListWithIcons} onSelect={(setting) => handleSelect(setting.href)} />;

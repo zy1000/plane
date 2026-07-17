@@ -109,7 +109,12 @@ function AppSidebarLinkItem({ href, children, className }: AppSidebarLinkItemPro
 
 function AppSidebarButtonItem({ children, onClick, disabled = false, className }: AppSidebarButtonItemProps) {
   return (
-    <button className={cn(styles.base, className)} onClick={onClick} disabled={disabled} type="button">
+    <button
+      className={cn(styles.base, "disabled:pointer-events-none disabled:opacity-50", className)}
+      onClick={onClick}
+      disabled={disabled}
+      type="button"
+    >
       {children}
     </button>
   );

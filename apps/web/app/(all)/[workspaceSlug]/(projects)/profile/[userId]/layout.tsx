@@ -9,7 +9,7 @@ import { usePathname } from "next/navigation";
 import { Outlet } from "react-router";
 import useSWR from "swr";
 // components
-import { PROFILE_VIEWER_TAB, PROFILE_ADMINS_TAB, EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import { PROFILE_VIEWER_TAB, PROFILE_ADMINS_TAB, WORKSPACE_USER_PROFILE_VIEW_PERMISSION_KEY } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { AppHeader } from "@/components/core/app-header";
 import { ContentWrapper } from "@/components/core/content-wrapper";
@@ -17,7 +17,7 @@ import { ProfileSidebar } from "@/components/profile/sidebar";
 // constants
 import { USER_PROFILE_PROJECT_SEGREGATION } from "@/constants/fetch-keys";
 // hooks
-import { useUserPermissions } from "@/hooks/store/user";
+import { useUser, useUserPermissions } from "@/hooks/store/user";
 import useSize from "@/hooks/use-window-size";
 // local components
 import { UserService } from "@/services/user.service";
@@ -33,13 +33,13 @@ function UseProfileLayout({ params }: Route.ComponentProps) {
   const { workspaceSlug, userId } = params;
   const pathname = usePathname();
   // store hooks
-  const { allowPermissions } = useUserPermissions();
+  const { data: currentUser } = useUser();
+  const { allowWorkspacePermissionKeys } = useUserPermissions();
   const { t } = useTranslation();
   // derived values
-  const isAuthorized = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-    EUserPermissionsLevel.WORKSPACE
-  );
+  const isAuthorized =
+    currentUser?.id === userId ||
+    allowWorkspacePermissionKeys([WORKSPACE_USER_PROFILE_VIEW_PERMISSION_KEY], workspaceSlug);
 
   const windowSize = useSize();
   const isSmallerScreen = windowSize[0] >= 768;

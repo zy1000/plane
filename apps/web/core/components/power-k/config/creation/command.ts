@@ -6,7 +6,11 @@
 
 import { FileText, FolderPlus, Layers, SquarePlus } from "lucide-react";
 // plane imports
-import { EUserPermissions, EUserPermissionsLevel, PROJECT_NOTES_CREATE_PERMISSION_KEY } from "@plane/constants";
+import {
+  EUserPermissionsLevel,
+  PROJECT_NOTES_CREATE_PERMISSION_KEY,
+  WORKSPACE_PROJECT_CREATE_PERMISSION_KEY,
+} from "@plane/constants";
 import { ContrastIcon, DiceIcon, LayersIcon } from "@plane/propel/icons";
 // components
 import { EUserProjectRoles } from "@plane/types";
@@ -34,7 +38,7 @@ export const usePowerKCreationCommandsRecord = (): Record<TPowerKCreationCommand
   const { config } = useInstance();
   const {
     canPerformAnyCreateAction,
-    permission: { allowPermissions, allowProjectPermissionKeys },
+    permission: { allowPermissions, allowProjectPermissionKeys, allowWorkspacePermissionKeys },
   } = useUser();
   const { workspaceProjectIds, getPartialProjectById } = useProject();
   const {
@@ -47,10 +51,7 @@ export const usePowerKCreationCommandsRecord = (): Record<TPowerKCreationCommand
   } = useCommandPalette();
   // derived values
   const canCreateWorkItem = canPerformAnyCreateAction && workspaceProjectIds && workspaceProjectIds.length > 0;
-  const canCreateProject = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-    EUserPermissionsLevel.WORKSPACE
-  );
+  const canCreateProject = allowWorkspacePermissionKeys([WORKSPACE_PROJECT_CREATE_PERMISSION_KEY]);
   const hasProjectMemberLevelPermissions = (ctx: TPowerKContext) =>
     allowPermissions(
       [EUserProjectRoles.ADMIN, EUserProjectRoles.MEMBER],
@@ -91,8 +92,7 @@ export const usePowerKCreationCommandsRecord = (): Record<TPowerKCreationCommand
       keySequence: "nd",
       action: () => toggleCreatePageModal({ isOpen: true }),
       isEnabled: (ctx) => Boolean(getProjectDetails(ctx)?.page_view && canCreatePage(ctx)),
-      isVisible: (ctx) =>
-        Boolean(ctx.params.projectId && getProjectDetails(ctx)?.page_view && canCreatePage(ctx)),
+      isVisible: (ctx) => Boolean(ctx.params.projectId && getProjectDetails(ctx)?.page_view && canCreatePage(ctx)),
       closeOnSelect: true,
     },
     create_view: {

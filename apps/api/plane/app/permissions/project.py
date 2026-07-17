@@ -6,8 +6,14 @@
 from rest_framework.permissions import SAFE_METHODS, BasePermission
 
 # Module import
-from plane.db.models import ProjectMember, WorkspaceMember
+from plane.db.models import ProjectMember
 from plane.db.models.project import ROLE
+from plane.app.permissions.keys import PermissionKey
+from plane.app.permissions.base import (
+    _get_user_project_permission_keys,
+    _get_user_workspace_permission_keys,
+    is_workspace_member,
+)
 
 
 class ProjectBasePermission(BasePermission):
@@ -17,18 +23,13 @@ class ProjectBasePermission(BasePermission):
 
         ## Safe Methods -> Handle the filtering logic in queryset
         if request.method in SAFE_METHODS:
-            return WorkspaceMember.objects.filter(
-                workspace__slug=view.workspace_slug, member=request.user, is_active=True
-            ).exists()
+            return is_workspace_member(request.user, view.workspace_slug)
 
         ## Only workspace owners or admins can create the projects
         if request.method == "POST":
-            return WorkspaceMember.objects.filter(
-                workspace__slug=view.workspace_slug,
-                member=request.user,
-                role__in=[ROLE.ADMIN.value, ROLE.MEMBER.value],
-                is_active=True,
-            ).exists()
+            return PermissionKey.WORKSPACE_PROJECT_CREATE.value in (
+                _get_user_workspace_permission_keys(request.user, view.workspace_slug)
+            )
 
         project_member_qs = ProjectMember.objects.filter(
             workspace__slug=view.workspace_slug,
@@ -39,18 +40,7 @@ class ProjectBasePermission(BasePermission):
 
         ## Only project admins or workspace admin who is part of the project can access
 
-        if project_member_qs.filter(role=ROLE.ADMIN.value).exists():
-            return True
-        else:
-            return (
-                project_member_qs.exists()
-                and WorkspaceMember.objects.filter(
-                    member=request.user,
-                    workspace__slug=view.workspace_slug,
-                    role=ROLE.ADMIN.value,
-                    is_active=True,
-                ).exists()
-            )
+        return project_member_qs.filter(role=ROLE.ADMIN.value).exists()
 
 
 class ProjectMemberPermission(BasePermission):
@@ -65,12 +55,13 @@ class ProjectMemberPermission(BasePermission):
             ).exists()
         ## Only workspace owners or admins can create the projects
         if request.method == "POST":
-            return WorkspaceMember.objects.filter(
-                workspace__slug=view.workspace_slug,
-                member=request.user,
-                role__in=[ROLE.ADMIN.value, ROLE.MEMBER.value],
-                is_active=True,
-            ).exists()
+            return PermissionKey.PROJECT_MEMBER_INVITE.value in (
+                _get_user_project_permission_keys(
+                    request.user,
+                    view.workspace_slug,
+                    str(view.project_id),
+                )
+            )
 
         ## Only Project Admins can update project attributes
         return ProjectMember.objects.filter(

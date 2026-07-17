@@ -3,7 +3,11 @@
 # See the LICENSE file for details.
 
 from plane.db.models import (
+    Permission,
+    Workspace,
     WorkspaceMember,
+    WorkspaceMemberRole,
+    WorkspaceRole,
     ProjectMember,
     ProjectMemberRole,
     ProjectRole,
@@ -33,37 +37,76 @@ class ROLE(Enum):
 
 
 def _get_user_workspace_permission_keys(user, workspace_slug: str) -> set:
-    """
-    计算用户在某工作区内的有效 permission_keys 集合。
-    目前仅从 WorkspaceRole(type=workspace) 取键，后续可扩展为合并多角色。
-    此函数是第二阶段细粒度鉴权的基础，首阶段暂不强制使用。
-    """
-    from plane.db.models import WorkspaceRole
+    """Return direct-role and group-role workspace permissions for a user."""
+    if not user or getattr(user, "is_anonymous", True):
+        return set()
 
-    workspace_member = (
-        WorkspaceMember.objects.filter(
-            member=user,
-            workspace__slug=workspace_slug,
-            is_active=True,
+    workspace = Workspace.objects.filter(slug=workspace_slug).first()
+    if not workspace:
+        return set()
+
+    if workspace.owner_id == user.id or _is_instance_admin(user):
+        return set(
+            Permission.objects.filter(
+                scope="workspace",
+                is_active=True,
+                deleted_at__isnull=True,
+            ).values_list("key", flat=True)
         )
-        .select_related("workspace")
-        .first()
-    )
 
+    workspace_member = WorkspaceMember.objects.filter(
+        member=user,
+        workspace=workspace,
+        is_active=True,
+        deleted_at__isnull=True,
+    ).first()
     if not workspace_member:
         return set()
 
-    roles = WorkspaceRole.objects.filter(
-        workspace=workspace_member.workspace,
+    direct_role_ids = WorkspaceMemberRole.objects.filter(
+        member=workspace_member,
+        workspace=workspace,
+        deleted_at__isnull=True,
+        role__deleted_at__isnull=True,
+        role__legacy_role__isnull=True,
+        role__type=WorkspaceRole.RoleType.WORKSPACE,
+    ).values_list("role_id", flat=True)
+    group_role_ids = WorkspaceRole.objects.filter(
+        workspace=workspace,
         type=WorkspaceRole.RoleType.WORKSPACE,
+        legacy_role__isnull=True,
+        deleted_at__isnull=True,
+        role_groups__deleted_at__isnull=True,
+        role_groups__group__workspace=workspace,
+        role_groups__group__deleted_at__isnull=True,
+        role_groups__group__group_members__deleted_at__isnull=True,
+        role_groups__group__group_members__member=workspace_member,
+    ).values_list("id", flat=True)
+
+    raw_keys = set()
+    roles = WorkspaceRole.objects.filter(
+        id__in=set(direct_role_ids) | set(group_role_ids),
+        workspace=workspace,
+        type=WorkspaceRole.RoleType.WORKSPACE,
+        legacy_role__isnull=True,
+        deleted_at__isnull=True,
     )
-    keys: set = set()
     for role in roles:
-        perms = role.permissions if isinstance(role.permissions, dict) else {}
-        for k in perms.get("permission_keys", []):
-            if isinstance(k, str):
-                keys.add(k)
-    return keys
+        permissions = role.permissions if isinstance(role.permissions, dict) else {}
+        raw_keys.update(
+            key
+            for key in permissions.get("permission_keys", [])
+            if isinstance(key, str)
+        )
+
+    return set(
+        Permission.objects.filter(
+            key__in=raw_keys,
+            scope="workspace",
+            is_active=True,
+            deleted_at__isnull=True,
+        ).values_list("key", flat=True)
+    )
 
 
 def _is_instance_admin(user) -> bool:
@@ -71,6 +114,69 @@ def _is_instance_admin(user) -> bool:
     if not instance:
         return False
     return InstanceAdmin.objects.filter(instance=instance, user=user).exists()
+
+
+def is_workspace_member(user, workspace_slug: str) -> bool:
+    if not user or getattr(user, "is_anonymous", True):
+        return False
+    workspace = Workspace.objects.filter(slug=workspace_slug).first()
+    if not workspace:
+        return False
+    if workspace.owner_id == user.id or _is_instance_admin(user):
+        return True
+    return WorkspaceMember.objects.filter(
+        member=user,
+        workspace=workspace,
+        is_active=True,
+        deleted_at__isnull=True,
+    ).exists()
+
+
+def allow_workspace_member(view_func):
+    """Require active workspace membership without applying a business permission."""
+
+    @wraps(view_func)
+    def _wrapped_view(instance, request, *args, **kwargs):
+        if is_workspace_member(request.user, kwargs.get("slug", "")):
+            return view_func(instance, request, *args, **kwargs)
+        return Response(
+            {"error": "You must be an active workspace member."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    return _wrapped_view
+
+
+def allow_workspace_self_or_permission(permission_key, user_kwarg="user_id"):
+    """Allow a member to access self-owned data or require a workspace key."""
+
+    def decorator(view_func):
+        @wraps(view_func)
+        def _wrapped_view(instance, request, *args, **kwargs):
+            slug = kwargs.get("slug", "")
+            target_user_id = kwargs.get(user_kwarg)
+            if str(target_user_id) == str(request.user.id) and is_workspace_member(
+                request.user, slug
+            ):
+                return view_func(instance, request, *args, **kwargs)
+
+            normalized_key = (
+                permission_key.value
+                if isinstance(permission_key, Enum)
+                else str(permission_key)
+            )
+            if normalized_key in _get_user_workspace_permission_keys(
+                request.user, slug
+            ):
+                return view_func(instance, request, *args, **kwargs)
+            return Response(
+                {"error": "You don't have the required workspace permissions."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        return _wrapped_view
+
+    return decorator
 
 
 def _get_all_issue_type_permission_keys_for_project(project_id: str) -> set:
@@ -225,6 +331,7 @@ def allow_fine_permission(*permission_keys: str, level: str = "PROJECT"):
             slug = kwargs.get("slug", "")
             if level == "WORKSPACE":
                 user_keys = _get_user_workspace_permission_keys(request.user, slug)
+                request._plane_workspace_permission_keys = user_keys
                 error_msg = "You don't have the required workspace permissions."
             else:
                 project_id = (
@@ -238,7 +345,11 @@ def allow_fine_permission(*permission_keys: str, level: str = "PROJECT"):
                     request.user, slug, project_id
                 )
                 error_msg = "您没有所需的项目权限。"
-            if user_keys.intersection(permission_keys):
+            normalized_permission_keys = {
+                key.value if isinstance(key, Enum) else str(key)
+                for key in permission_keys
+            }
+            if user_keys.intersection(normalized_permission_keys):
                 return view_func(instance, request, *args, **kwargs)
             return Response({"error": error_msg}, status=status.HTTP_403_FORBIDDEN)
 
@@ -251,6 +362,22 @@ def allow_permission(allowed_roles, level="PROJECT", creator=False, model=None):
     def decorator(view_func):
         @wraps(view_func)
         def _wrapped_view(instance, request, *args, **kwargs):
+            if level == "WORKSPACE":
+                if not is_workspace_member(request.user, kwargs["slug"]):
+                    return Response(
+                        {"error": "You don't have the required permissions."},
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+                if creator and model:
+                    if not model.objects.filter(
+                        id=kwargs["pk"], created_by=request.user
+                    ).exists():
+                        return Response(
+                            {"error": "You don't have the required permissions."},
+                            status=status.HTTP_403_FORBIDDEN,
+                        )
+                return view_func(instance, request, *args, **kwargs)
+
             # Check for creator if required
             if creator and model:
                 obj = model.objects.filter(
@@ -265,15 +392,7 @@ def allow_permission(allowed_roles, level="PROJECT", creator=False, model=None):
             ]
 
             # Check role permissions
-            if level == "WORKSPACE":
-                if WorkspaceMember.objects.filter(
-                    member=request.user,
-                    workspace__slug=kwargs["slug"],
-                    role__in=allowed_role_values,
-                    is_active=True,
-                ).exists():
-                    return view_func(instance, request, *args, **kwargs)
-            else:
+            if level != "WORKSPACE":
                 is_user_has_allowed_role = ProjectMember.objects.filter(
                     member=request.user,
                     workspace__slug=kwargs["slug"],
@@ -282,23 +401,7 @@ def allow_permission(allowed_roles, level="PROJECT", creator=False, model=None):
                     is_active=True,
                 ).exists()
 
-                # Return if the user has the allowed role else if they are workspace admin and part of the project regardless of the role # noqa: E501
                 if is_user_has_allowed_role:
-                    return view_func(instance, request, *args, **kwargs)
-                elif (
-                    ProjectMember.objects.filter(
-                        member=request.user,
-                        workspace__slug=kwargs["slug"],
-                        project_id=kwargs["project_id"],
-                        is_active=True,
-                    ).exists()
-                    and WorkspaceMember.objects.filter(
-                        member=request.user,
-                        workspace__slug=kwargs["slug"],
-                        role=ROLE.ADMIN.value,
-                        is_active=True,
-                    ).exists()
-                ):
                     return view_func(instance, request, *args, **kwargs)
 
             # Return permission denied if no conditions are met

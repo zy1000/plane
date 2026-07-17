@@ -6,7 +6,7 @@
 
 import { observer } from "mobx-react";
 // plane imports
-import { EUserPermissionsLevel } from "@plane/constants";
+import { EUserPermissionsLevel, WORKSPACE_PROJECT_CREATE_PERMISSION_KEY } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { EmptyStateDetailed } from "@plane/propel/empty-state";
 import { EIssuesStoreType, EUserWorkspaceRoles } from "@plane/types";
@@ -21,12 +21,13 @@ export const GlobalViewEmptyState = observer(function GlobalViewEmptyState() {
   // store hooks
   const { workspaceProjectIds } = useProject();
   const { toggleCreateIssueModal, toggleCreateProjectModal } = useCommandPalette();
-  const { allowPermissions } = useUserPermissions();
+  const { allowPermissions, allowWorkspacePermissionKeys } = useUserPermissions();
   // derived values
   const hasMemberLevelPermission = allowPermissions(
     [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER],
     EUserPermissionsLevel.WORKSPACE
   );
+  const canCreateProjects = allowWorkspacePermissionKeys([WORKSPACE_PROJECT_CREATE_PERMISSION_KEY]);
 
   if (workspaceProjectIds?.length === 0) {
     return (
@@ -35,16 +36,19 @@ export const GlobalViewEmptyState = observer(function GlobalViewEmptyState() {
         description={t("workspace_projects.empty_state.no_projects.description")}
         assetKey="project"
         assetClassName="size-40"
-        actions={[
-          {
-            label: t("workspace_projects.empty_state.no_projects.primary_button.text"),
-            onClick: () => {
-              toggleCreateProjectModal(true);
-            },
-            disabled: !hasMemberLevelPermission,
-            variant: "primary",
-          },
-        ]}
+        actions={
+          canCreateProjects
+            ? [
+                {
+                  label: t("workspace_projects.empty_state.no_projects.primary_button.text"),
+                  onClick: () => {
+                    toggleCreateProjectModal(true);
+                  },
+                  variant: "primary",
+                },
+              ]
+            : []
+        }
       />
     );
   }
@@ -55,16 +59,19 @@ export const GlobalViewEmptyState = observer(function GlobalViewEmptyState() {
       description={t(`workspace_empty_state.views.description`)}
       assetKey="project"
       assetClassName="size-40"
-      actions={[
-        {
-          label: t(`workspace_empty_state.views.cta_primary`),
-          onClick: () => {
-            toggleCreateIssueModal(true, EIssuesStoreType.PROJECT);
-          },
-          disabled: !hasMemberLevelPermission,
-          variant: "primary",
-        },
-      ]}
+      actions={
+        hasMemberLevelPermission
+          ? [
+              {
+                label: t(`workspace_empty_state.views.cta_primary`),
+                onClick: () => {
+                  toggleCreateIssueModal(true, EIssuesStoreType.PROJECT);
+                },
+                variant: "primary",
+              },
+            ]
+          : []
+      }
     />
   );
 });

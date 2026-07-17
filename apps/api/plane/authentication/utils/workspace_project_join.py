@@ -11,6 +11,8 @@ from plane.db.models import (
     ProjectMemberInvite,
     WorkspaceMember,
     WorkspaceMemberInvite,
+    WorkspaceMemberRole,
+    WorkspaceRole,
 )
 from plane.utils.cache import invalidate_cache_directly
 from plane.bgtasks.event_tracking_task import track_event
@@ -21,7 +23,9 @@ def process_workspace_project_invitations(user):
     """This function takes in User and adds him to all workspace and projects that the user has accepted invited of"""
 
     # Check if user has any accepted invites for workspace and add them to workspace
-    workspace_member_invites = WorkspaceMemberInvite.objects.filter(email=user.email, accepted=True)
+    workspace_member_invites = list(
+        WorkspaceMemberInvite.objects.filter(email=user.email, accepted=True).select_related("workspace")
+    )
 
     WorkspaceMember.objects.bulk_create(
         [
@@ -34,6 +38,15 @@ def process_workspace_project_invitations(user):
         ],
         ignore_conflicts=True,
     )
+    for workspace_member_invite in workspace_member_invites:
+        WorkspaceMember.objects.filter(
+            workspace_id=workspace_member_invite.workspace_id,
+            member=user,
+        ).update(
+            role=workspace_member_invite.role,
+            is_active=True,
+            deleted_at=None,
+        )
 
     for workspace_member_invite in workspace_member_invites:
         invalidate_cache_directly(
@@ -56,7 +69,9 @@ def process_workspace_project_invitations(user):
         )
 
     # Check if user has any project invites
-    project_member_invites = ProjectMemberInvite.objects.filter(email=user.email, accepted=True)
+    project_member_invites = list(
+        ProjectMemberInvite.objects.filter(email=user.email, accepted=True)
+    )
 
     # Add user to workspace
     WorkspaceMember.objects.bulk_create(
@@ -86,6 +101,58 @@ def process_workspace_project_invitations(user):
         ignore_conflicts=True,
     )
 
+    workspace_ids = {
+        invitation.workspace_id
+        for invitation in [*workspace_member_invites, *project_member_invites]
+    }
+    workspace_members = list(
+        WorkspaceMember.objects.filter(
+            workspace_id__in=workspace_ids,
+            member=user,
+            is_active=True,
+        ).select_related("workspace")
+    )
+
+    workspace_members_by_workspace_id = {
+        member.workspace_id: member for member in workspace_members
+    }
+    invited_workspace_member_ids = [
+        workspace_members_by_workspace_id[invitation.workspace_id].id
+        for invitation in workspace_member_invites
+        if invitation.workspace_id in workspace_members_by_workspace_id
+    ]
+    WorkspaceMemberRole.objects.filter(
+        member_id__in=invited_workspace_member_ids,
+        role__legacy_role__isnull=True,
+    ).delete(soft=False)
+    custom_role_links = []
+    for invitation in workspace_member_invites:
+        member = workspace_members_by_workspace_id.get(invitation.workspace_id)
+        if not member:
+            continue
+        roles = WorkspaceRole.objects.filter(
+            id__in=invitation.custom_role_ids,
+            workspace_id=invitation.workspace_id,
+            type=WorkspaceRole.RoleType.WORKSPACE,
+            legacy_role__isnull=True,
+            deleted_at__isnull=True,
+        )
+        custom_role_links.extend(
+            WorkspaceMemberRole(
+                workspace_id=invitation.workspace_id,
+                member=member,
+                role=role,
+                created_by=user,
+                updated_by=user,
+            )
+            for role in roles
+        )
+    WorkspaceMemberRole.objects.bulk_create(custom_role_links, ignore_conflicts=True)
+
     # Delete all the invites
-    workspace_member_invites.delete()
-    project_member_invites.delete()
+    WorkspaceMemberInvite.objects.filter(
+        id__in=[invitation.id for invitation in workspace_member_invites]
+    ).delete()
+    ProjectMemberInvite.objects.filter(
+        id__in=[invitation.id for invitation in project_member_invites]
+    ).delete()

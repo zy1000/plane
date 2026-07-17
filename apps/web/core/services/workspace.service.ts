@@ -129,6 +129,14 @@ export class WorkspaceService extends APIService {
       });
   }
 
+  async fetchMyWorkspacePermissionKeys(workspaceSlug: string): Promise<string[]> {
+    return this.get(`/api/workspaces/${workspaceSlug}/my-permission-keys/`)
+      .then((response) => (response?.data?.permission_keys as string[]) ?? [])
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
   async updateWorkspaceView(workspaceSlug: string, data: { view_props: IWorkspaceViewProps }): Promise<any> {
     return this.post(`/api/workspaces/${workspaceSlug}/workspace-views/`, data)
       .then((response) => response?.data)
@@ -151,6 +159,31 @@ export class WorkspaceService extends APIService {
     data: Partial<IWorkspaceMember>
   ): Promise<IWorkspaceMember> {
     return this.patch(`/api/workspaces/${workspaceSlug}/members/${memberId}/`, data)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async fetchWorkspaceMemberCustomRoles(
+    workspaceSlug: string,
+    memberId: string
+  ): Promise<{ custom_role_ids: string[] }> {
+    return this.get(`/api/workspaces/${workspaceSlug}/members/${memberId}/custom-roles/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async updateWorkspaceMemberCustomRoles(
+    workspaceSlug: string,
+    memberId: string,
+    customRoleIds: string[]
+  ): Promise<{ custom_role_ids: string[] }> {
+    return this.put(`/api/workspaces/${workspaceSlug}/members/${memberId}/custom-roles/`, {
+      custom_role_ids: customRoleIds,
+    })
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;

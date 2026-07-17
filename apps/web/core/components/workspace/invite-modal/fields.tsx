@@ -13,8 +13,6 @@ import { useTranslation } from "@plane/i18n";
 import { CloseIcon } from "@plane/propel/icons";
 import { CustomSelect, Input } from "@plane/ui";
 import { cn } from "@plane/utils";
-// hooks
-import { useUserPermissions } from "@/hooks/store/user";
 import type { InvitationFormValues } from "@/hooks/use-workspace-invitation";
 
 type TInvitationFieldsProps = {
@@ -28,7 +26,6 @@ type TInvitationFieldsProps = {
 
 export const InvitationFields = observer(function InvitationFields(props: TInvitationFieldsProps) {
   const {
-    workspaceSlug,
     fields,
     control,
     formState: { errors },
@@ -37,11 +34,6 @@ export const InvitationFields = observer(function InvitationFields(props: TInvit
   } = props;
   // plane hooks
   const { t } = useTranslation();
-  // store hooks
-  const { workspaceInfoBySlug } = useUserPermissions();
-  // derived values
-  const currentWorkspaceRole = workspaceInfoBySlug(workspaceSlug.toString())?.role;
-
   return (
     <div className={cn("mb-3 space-y-4", className)}>
       {fields.map((field, index) => (
@@ -96,14 +88,11 @@ export const InvitationFields = observer(function InvitationFields(props: TInvit
                     className="w-24 flex-grow"
                     input
                   >
-                    {Object.entries(ROLE).map(([key, value]) => {
-                      if (currentWorkspaceRole && currentWorkspaceRole >= parseInt(key))
-                        return (
-                          <CustomSelect.Option key={key} value={parseInt(key)}>
-                            {value}
-                          </CustomSelect.Option>
-                        );
-                    })}
+                    {Object.entries(ROLE).map(([key, roleLabel]) => (
+                      <CustomSelect.Option key={key} value={parseInt(key)}>
+                        {roleLabel}
+                      </CustomSelect.Option>
+                    ))}
                   </CustomSelect>
                 )}
               />

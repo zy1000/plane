@@ -9,7 +9,12 @@ import { observer } from "mobx-react";
 import useSWR from "swr";
 import { Search, X } from "lucide-react";
 // plane imports
-import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import {
+  WORKSPACE_ROLE_CREATE_PERMISSION_KEY,
+  WORKSPACE_ROLE_DELETE_PERMISSION_KEY,
+  WORKSPACE_ROLE_EDIT_PERMISSION_KEY,
+  WORKSPACE_ROLE_VIEW_PERMISSION_KEY,
+} from "@plane/constants";
 import { cn } from "@plane/utils";
 // components
 import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
@@ -37,15 +42,14 @@ const WorkspaceRolesPage = observer(function WorkspaceRolesPage({ params }: Rout
   const [activeScope, setActiveScope] = useState<PermissionScope>("workspace");
 
   // store hooks
-  const { workspaceUserInfo, allowPermissions } = useUserPermissions();
+  const { workspaceUserInfo, allowWorkspacePermissionKeys, fetchWorkspacePermissionKeys } = useUserPermissions();
   const { currentWorkspace } = useWorkspace();
 
   // derived permissions
-  const isAdmin = allowPermissions([EUserPermissions.ADMIN], EUserPermissionsLevel.WORKSPACE);
-  const canView = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
-    EUserPermissionsLevel.WORKSPACE
-  );
+  const canView = allowWorkspacePermissionKeys([WORKSPACE_ROLE_VIEW_PERMISSION_KEY], workspaceSlug);
+  const canCreate = allowWorkspacePermissionKeys([WORKSPACE_ROLE_CREATE_PERMISSION_KEY], workspaceSlug);
+  const canEdit = allowWorkspacePermissionKeys([WORKSPACE_ROLE_EDIT_PERMISSION_KEY], workspaceSlug);
+  const canDelete = allowWorkspacePermissionKeys([WORKSPACE_ROLE_DELETE_PERMISSION_KEY], workspaceSlug);
 
   const {
     roles,
@@ -135,7 +139,10 @@ const WorkspaceRolesPage = observer(function WorkspaceRolesPage({ params }: Rout
           roles={roles}
           totalRoleCount={roles.length}
           isLoading={isLoading}
-          isAdmin={isAdmin}
+          isAdmin={canEdit}
+          canCreate={canCreate}
+          canEdit={canEdit}
+          canDelete={canDelete}
           selectedRoleId={selectedRoleId}
           onSelectRole={handleSelectRole}
           onCreate={(data) => createRole({ ...data, type: "workspace" })}
@@ -207,9 +214,12 @@ const WorkspaceRolesPage = observer(function WorkspaceRolesPage({ params }: Rout
                   !rolePermissionState?.data &&
                   (rolePermissionState?.isLoading || !rolePermissionState?.loaded)
               )}
-              isAdmin={isAdmin}
+              isAdmin={canEdit && !selectedRole?.is_system}
               searchQuery={searchQuery}
-              onTogglePermission={togglePermission}
+              onTogglePermission={async (roleId, permissionKey) => {
+                await togglePermission(roleId, permissionKey);
+                await fetchWorkspacePermissionKeys(workspaceSlug);
+              }}
               activeScope={activeScope}
               onActiveScopeChange={setActiveScope}
             />

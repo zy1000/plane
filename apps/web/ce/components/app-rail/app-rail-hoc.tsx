@@ -8,8 +8,10 @@
 import React from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
+import { WORKSPACE_PROJECT_VIEW_PERMISSION_KEY } from "@plane/constants";
 import { PlaneNewIcon } from "@plane/propel/icons";
 import type { AppSidebarItemData } from "@/components/sidebar/sidebar-item";
+import { useUserPermissions } from "@/hooks/store/user";
 import { useWorkspacePaths } from "@/hooks/use-workspace-paths";
 
 type WithDockItemsProps = {
@@ -19,7 +21,12 @@ type WithDockItemsProps = {
 export function withDockItems<P extends WithDockItemsProps>(WrappedComponent: React.ComponentType<P>) {
   const ComponentWithDockItems = observer(function ComponentWithDockItems(props: Omit<P, keyof WithDockItemsProps>) {
     const { workspaceSlug } = useParams();
+    const { allowWorkspacePermissionKeys } = useUserPermissions();
     const { isProjectsPath, isNotificationsPath } = useWorkspacePaths();
+    const canViewWorkspaceProjects = allowWorkspacePermissionKeys(
+      [WORKSPACE_PROJECT_VIEW_PERMISSION_KEY],
+      workspaceSlug?.toString()
+    );
 
     const dockItems: (AppSidebarItemData & { shouldRender: boolean })[] = [
       {
@@ -27,7 +34,7 @@ export function withDockItems<P extends WithDockItemsProps>(WrappedComponent: Re
         icon: <PlaneNewIcon className="size-5" />,
         href: `/${workspaceSlug}/`,
         isActive: isProjectsPath && !isNotificationsPath,
-        shouldRender: true,
+        shouldRender: canViewWorkspaceProjects,
       },
     ];
 

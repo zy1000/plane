@@ -3,6 +3,7 @@
 # See the LICENSE file for details.
 
 from plane.db.models import WorkspaceMember, ProjectMember
+from plane.app.permissions.base import is_workspace_member
 from functools import wraps
 from rest_framework.response import Response
 from rest_framework import status
@@ -20,6 +21,22 @@ def allow_permission(allowed_roles, level="PROJECT", creator=False, model=None):
     def decorator(view_func):
         @wraps(view_func)
         def _wrapped_view(instance, request, *args, **kwargs):
+            if level == "WORKSPACE":
+                if not is_workspace_member(request.user, kwargs["slug"]):
+                    return Response(
+                        {"error": "You don't have the required permissions."},
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+                if creator and model:
+                    if not model.objects.filter(
+                        id=kwargs["pk"], created_by=request.user
+                    ).exists():
+                        return Response(
+                            {"error": "You don't have the required permissions."},
+                            status=status.HTTP_403_FORBIDDEN,
+                        )
+                return view_func(instance, request, *args, **kwargs)
+
             # Check for creator if required
             if creator and model:
                 obj = model.objects.filter(id=kwargs["pk"], created_by=request.user).exists()
@@ -30,15 +47,7 @@ def allow_permission(allowed_roles, level="PROJECT", creator=False, model=None):
             allowed_role_values = [role.value if isinstance(role, ROLE) else role for role in allowed_roles]
 
             # Check role permissions
-            if level == "WORKSPACE":
-                if WorkspaceMember.objects.filter(
-                    member=request.user,
-                    workspace__slug=kwargs["slug"],
-                    role__in=allowed_role_values,
-                    is_active=True,
-                ).exists():
-                    return view_func(instance, request, *args, **kwargs)
-            else:
+            if level != "WORKSPACE":
                 is_user_has_allowed_role = ProjectMember.objects.filter(
                     member=request.user,
                     workspace__slug=kwargs["slug"],
@@ -47,23 +56,7 @@ def allow_permission(allowed_roles, level="PROJECT", creator=False, model=None):
                     is_active=True,
                 ).exists()
 
-                # Return if the user has the allowed role else if they are workspace admin and part of the project regardless of the role # noqa: E501
                 if is_user_has_allowed_role:
-                    return view_func(instance, request, *args, **kwargs)
-                elif (
-                    ProjectMember.objects.filter(
-                        member=request.user,
-                        workspace__slug=kwargs["slug"],
-                        project_id=kwargs["project_id"],
-                        is_active=True,
-                    ).exists()
-                    and WorkspaceMember.objects.filter(
-                        member=request.user,
-                        workspace__slug=kwargs["slug"],
-                        role=ROLE.ADMIN.value,
-                        is_active=True,
-                    ).exists()
-                ):
                     return view_func(instance, request, *args, **kwargs)
 
             # Return permission denied if no conditions are met

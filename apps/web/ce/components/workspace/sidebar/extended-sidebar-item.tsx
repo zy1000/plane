@@ -14,7 +14,6 @@ import { useParams, usePathname } from "next/navigation";
 import { Pin, PinOff } from "lucide-react";
 // plane imports
 import type { IWorkspaceSidebarNavigationItem } from "@plane/constants";
-import { EUserPermissionsLevel } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Tooltip } from "@plane/propel/tooltip";
 import { DragHandle, DropIndicator } from "@plane/ui";
@@ -57,7 +56,7 @@ export const ExtendedSidebarItem = observer(function ExtendedSidebarItem(props: 
   // store hooks
   const { toggleExtendedSidebar } = useAppTheme();
   const { data } = useUser();
-  const { allowPermissions } = useUserPermissions();
+  const { hasPageAccess } = useUserPermissions();
   const { preferences: workspacePreferences, toggleWorkspaceItem } = useWorkspaceNavigationPreferences();
 
   // derived values
@@ -150,7 +149,7 @@ export const ExtendedSidebarItem = observer(function ExtendedSidebarItem(props: 
 
   const icon = getSidebarNavigationItemIcon(item.key);
 
-  if (!allowPermissions(item.access as any, EUserPermissionsLevel.WORKSPACE, workspaceSlug.toString())) {
+  if (!hasPageAccess(workspaceSlug.toString(), item.key)) {
     return null;
   }
 

@@ -25,11 +25,7 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.response import Response
 
-from plane.app.permissions import (
-    WorkSpaceAdminPermission,
-    WorkSpaceBasePermission,
-    WorkspaceEntityPermission,
-)
+from plane.app.permissions import PermissionKey, allow_fine_permission
 
 # Module imports
 from plane.app.serializers import WorkSpaceSerializer, WorkspaceThemeSerializer
@@ -42,7 +38,6 @@ from plane.db.models import (
     WorkspaceTheme,
     Profile,
 )
-from plane.app.permissions import ROLE, allow_permission
 from plane.utils.constants import RESTRICTED_WORKSPACE_SLUGS
 from plane.license.utils.instance_value import get_configuration_value
 from plane.bgtasks.workspace_seed_task import workspace_seed
@@ -55,7 +50,6 @@ from plane.utils.csv_utils import sanitize_csv_row
 class WorkSpaceViewSet(BaseViewSet):
     model = Workspace
     serializer_class = WorkSpaceSerializer
-    permission_classes = [WorkSpaceBasePermission]
 
     search_fields = ["name"]
     filterset_fields = ["owner"]
@@ -165,11 +159,14 @@ class WorkSpaceViewSet(BaseViewSet):
                     status=status.HTTP_409_CONFLICT,
                 )
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
     def list(self, request, *args, **kwargs):
         return super().list(request, *args, **kwargs)
 
-    @allow_permission([ROLE.ADMIN], level="WORKSPACE")
+    @allow_fine_permission(PermissionKey.WORKSPACE_SETTINGS_EDIT, level="WORKSPACE")
+    def update(self, request, *args, **kwargs):
+        return super().update(request, *args, **kwargs)
+
+    @allow_fine_permission(PermissionKey.WORKSPACE_SETTINGS_EDIT, level="WORKSPACE")
     def partial_update(self, request, *args, **kwargs):
         return super().partial_update(request, *args, **kwargs)
 
@@ -180,7 +177,7 @@ class WorkSpaceViewSet(BaseViewSet):
         Profile.objects.filter(last_workspace_id=id).update(last_workspace_id=None)
         return
 
-    @allow_permission([ROLE.ADMIN], level="WORKSPACE")
+    @allow_fine_permission(PermissionKey.WORKSPACE_SETTINGS_DELETE, level="WORKSPACE")
     def destroy(self, request, *args, **kwargs):
         # Get the workspace
         workspace = self.get_object()
@@ -349,13 +346,21 @@ class UserWorkspaceDashboardEndpoint(BaseAPIView):
 
 
 class WorkspaceThemeViewSet(BaseViewSet):
-    permission_classes = [WorkSpaceAdminPermission]
     model = WorkspaceTheme
     serializer_class = WorkspaceThemeSerializer
 
     def get_queryset(self):
         return super().get_queryset().filter(workspace__slug=self.kwargs.get("slug"))
 
+    @allow_fine_permission(PermissionKey.WORKSPACE_SETTINGS_VIEW, level="WORKSPACE")
+    def list(self, request, slug):
+        return super().list(request, slug)
+
+    @allow_fine_permission(PermissionKey.WORKSPACE_SETTINGS_VIEW, level="WORKSPACE")
+    def retrieve(self, request, slug, pk):
+        return super().retrieve(request, slug, pk)
+
+    @allow_fine_permission(PermissionKey.WORKSPACE_SETTINGS_EDIT, level="WORKSPACE")
     def create(self, request, slug):
         workspace = Workspace.objects.get(slug=slug)
         serializer = WorkspaceThemeSerializer(data=request.data)
@@ -364,10 +369,16 @@ class WorkspaceThemeViewSet(BaseViewSet):
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+    @allow_fine_permission(PermissionKey.WORKSPACE_SETTINGS_EDIT, level="WORKSPACE")
+    def partial_update(self, request, slug, pk):
+        return super().partial_update(request, slug, pk)
+
+    @allow_fine_permission(PermissionKey.WORKSPACE_SETTINGS_EDIT, level="WORKSPACE")
+    def destroy(self, request, slug, pk):
+        return super().destroy(request, slug, pk)
+
 
 class ExportWorkspaceUserActivityEndpoint(BaseAPIView):
-    permission_classes = [WorkspaceEntityPermission]
-
     def generate_csv_from_rows(self, rows):
         """Generate CSV buffer from rows."""
         csv_buffer = io.StringIO()
@@ -376,6 +387,7 @@ class ExportWorkspaceUserActivityEndpoint(BaseAPIView):
         csv_buffer.seek(0)
         return csv_buffer
 
+    @allow_fine_permission(PermissionKey.WORKSPACE_USER_PROFILE_EXPORT, level="WORKSPACE")
     def post(self, request, slug, user_id):
         if not request.data.get("date"):
             return Response({"error": "Date is required"}, status=status.HTTP_400_BAD_REQUEST)

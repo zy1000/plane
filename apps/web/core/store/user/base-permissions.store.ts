@@ -12,7 +12,33 @@ import type { TUserPermissions, TUserPermissionsLevel } from "@plane/constants";
 import {
   EUserPermissions,
   EUserPermissionsLevel,
+  WORKSPACE_ANALYTICS_EXPORT_PERMISSION_KEY,
+  WORKSPACE_ANALYTICS_MANAGE_SAVED_VIEW_PERMISSION_KEY,
+  WORKSPACE_ANALYTICS_VIEW_PERMISSION_KEY,
+  WORKSPACE_GROUP_CREATE_PERMISSION_KEY,
+  WORKSPACE_GROUP_DELETE_PERMISSION_KEY,
+  WORKSPACE_GROUP_EDIT_PERMISSION_KEY,
+  WORKSPACE_GROUP_MANAGE_MEMBER_PERMISSION_KEY,
+  WORKSPACE_GROUP_MANAGE_ROLE_PERMISSION_KEY,
+  WORKSPACE_GROUP_VIEW_PERMISSION_KEY,
+  WORKSPACE_MEMBER_EDIT_PERMISSION_KEY,
+  WORKSPACE_MEMBER_INVITE_PERMISSION_KEY,
+  WORKSPACE_MEMBER_LEAVE_PERMISSION_KEY,
+  WORKSPACE_MEMBER_REMOVE_PERMISSION_KEY,
+  WORKSPACE_MEMBER_VIEW_PERMISSION_KEY,
+  WORKSPACE_PROJECT_CREATE_PERMISSION_KEY,
+  WORKSPACE_PROJECT_VIEW_PERMISSION_KEY,
+  WORKSPACE_ROLE_CREATE_PERMISSION_KEY,
+  WORKSPACE_ROLE_DELETE_PERMISSION_KEY,
+  WORKSPACE_ROLE_EDIT_PERMISSION_KEY,
+  WORKSPACE_ROLE_VIEW_PERMISSION_KEY,
   WORKSPACE_SIDEBAR_DYNAMIC_NAVIGATION_ITEMS_LINKS,
+  WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS,
+  WORKSPACE_SETTINGS_DELETE_PERMISSION_KEY,
+  WORKSPACE_SETTINGS_EDIT_PERMISSION_KEY,
+  WORKSPACE_SETTINGS_VIEW_PERMISSION_KEY,
+  WORKSPACE_USER_PROFILE_EXPORT_PERMISSION_KEY,
+  WORKSPACE_USER_PROFILE_VIEW_PERMISSION_KEY,
 } from "@plane/constants";
 import type { EUserProjectRoles, IUserProjectsRole, IWorkspaceMemberMe, TProjectMembership } from "@plane/types";
 import { EUserWorkspaceRoles } from "@plane/types";
@@ -26,17 +52,47 @@ import userService from "@/services/user.service";
 // derived services
 const workspaceService = new WorkspaceService();
 
+const WORKSPACE_ALL_PERMISSION_KEYS = [
+  WORKSPACE_SETTINGS_VIEW_PERMISSION_KEY,
+  WORKSPACE_SETTINGS_EDIT_PERMISSION_KEY,
+  WORKSPACE_SETTINGS_DELETE_PERMISSION_KEY,
+  WORKSPACE_MEMBER_VIEW_PERMISSION_KEY,
+  WORKSPACE_MEMBER_INVITE_PERMISSION_KEY,
+  WORKSPACE_MEMBER_EDIT_PERMISSION_KEY,
+  WORKSPACE_MEMBER_REMOVE_PERMISSION_KEY,
+  WORKSPACE_MEMBER_LEAVE_PERMISSION_KEY,
+  WORKSPACE_ROLE_VIEW_PERMISSION_KEY,
+  WORKSPACE_ROLE_CREATE_PERMISSION_KEY,
+  WORKSPACE_ROLE_EDIT_PERMISSION_KEY,
+  WORKSPACE_ROLE_DELETE_PERMISSION_KEY,
+  WORKSPACE_GROUP_VIEW_PERMISSION_KEY,
+  WORKSPACE_GROUP_CREATE_PERMISSION_KEY,
+  WORKSPACE_GROUP_EDIT_PERMISSION_KEY,
+  WORKSPACE_GROUP_DELETE_PERMISSION_KEY,
+  WORKSPACE_GROUP_MANAGE_MEMBER_PERMISSION_KEY,
+  WORKSPACE_GROUP_MANAGE_ROLE_PERMISSION_KEY,
+  WORKSPACE_PROJECT_VIEW_PERMISSION_KEY,
+  WORKSPACE_PROJECT_CREATE_PERMISSION_KEY,
+  WORKSPACE_USER_PROFILE_VIEW_PERMISSION_KEY,
+  WORKSPACE_USER_PROFILE_EXPORT_PERMISSION_KEY,
+  WORKSPACE_ANALYTICS_VIEW_PERMISSION_KEY,
+  WORKSPACE_ANALYTICS_MANAGE_SAVED_VIEW_PERMISSION_KEY,
+  WORKSPACE_ANALYTICS_EXPORT_PERMISSION_KEY,
+] as const;
+
 type ETempUserRole = TUserPermissions | EUserWorkspaceRoles | EUserProjectRoles; // TODO: Remove this once we have migrated user permissions to enums to plane constants package
 
 export interface IBaseUserPermissionStore {
   loader: boolean;
   // observables
   workspaceUserInfo: Record<string, IWorkspaceMemberMe>; // workspaceSlug -> IWorkspaceMemberMe
+  workspacePermissionKeys: Record<string, string[]>; // workspaceSlug -> permission keys
   projectUserInfo: Record<string, Record<string, TProjectMembership>>; // workspaceSlug -> projectId -> TProjectMembership
   workspaceProjectsPermissions: Record<string, IUserProjectsRole>; // workspaceSlug -> IUserProjectsRole
   // computed helpers
   workspaceInfoBySlug: (workspaceSlug: string) => IWorkspaceMemberMe | undefined;
   getWorkspaceRoleByWorkspaceSlug: (workspaceSlug: string) => TUserPermissions | EUserWorkspaceRoles | undefined;
+  getWorkspacePermissionKeysByWorkspaceSlug: (workspaceSlug: string) => string[];
   getProjectRolesByWorkspaceSlug: (workspaceSlug: string) => IUserProjectsRole;
   getProjectRoleByWorkspaceSlugAndProjectId: (
     workspaceSlug: string,
@@ -52,8 +108,11 @@ export interface IBaseUserPermissionStore {
     onPermissionAllowed?: () => boolean
   ) => boolean;
   allowProjectPermissionKeys: (permissionKeys: string[], workspaceSlug?: string, projectId?: string) => boolean;
+  allowWorkspacePermissionKeys: (permissionKeys: string[], workspaceSlug?: string) => boolean;
+  hasAllWorkspacePermissions: (workspaceSlug?: string) => boolean;
   // actions
   fetchUserWorkspaceInfo: (workspaceSlug: string) => Promise<IWorkspaceMemberMe>;
+  fetchWorkspacePermissionKeys: (workspaceSlug: string) => Promise<string[]>;
   leaveWorkspace: (workspaceSlug: string) => Promise<void>;
   fetchUserProjectInfo: (workspaceSlug: string, projectId: string) => Promise<TProjectMembership>;
   fetchUserProjectPermissions: (workspaceSlug: string) => Promise<IUserProjectsRole>;
@@ -70,6 +129,7 @@ export abstract class BaseUserPermissionStore implements IBaseUserPermissionStor
   loader: boolean = false;
   // constants
   workspaceUserInfo: Record<string, IWorkspaceMemberMe> = {};
+  workspacePermissionKeys: Record<string, string[]> = {};
   projectUserInfo: Record<string, Record<string, TProjectMembership>> = {};
   workspaceProjectsPermissions: Record<string, IUserProjectsRole> = {};
   // observables
@@ -79,11 +139,13 @@ export abstract class BaseUserPermissionStore implements IBaseUserPermissionStor
       // observables
       loader: observable.ref,
       workspaceUserInfo: observable,
+      workspacePermissionKeys: observable,
       projectUserInfo: observable,
       workspaceProjectsPermissions: observable,
       // computed
       // actions
       fetchUserWorkspaceInfo: action,
+      fetchWorkspacePermissionKeys: action,
       leaveWorkspace: action,
       fetchUserProjectInfo: action,
       fetchUserProjectPermissions: action,
@@ -115,6 +177,11 @@ export abstract class BaseUserPermissionStore implements IBaseUserPermissionStor
     }
   );
 
+  getWorkspacePermissionKeysByWorkspaceSlug = computedFn((workspaceSlug: string): string[] => {
+    if (!workspaceSlug) return [];
+    return this.workspacePermissionKeys[workspaceSlug] ?? [];
+  });
+
   /**
    * @description Returns the project membership permission
    * @param { string } workspaceSlug
@@ -125,9 +192,7 @@ export abstract class BaseUserPermissionStore implements IBaseUserPermissionStor
     if (!workspaceSlug || !projectId) return undefined;
     const projectRole = this.workspaceProjectsPermissions?.[workspaceSlug]?.[projectId];
     if (!projectRole) return undefined;
-    const workspaceRole = this.workspaceUserInfo?.[workspaceSlug]?.role;
-    if (workspaceRole === EUserWorkspaceRoles.ADMIN) return EUserPermissions.ADMIN;
-    else return projectRole;
+    return projectRole;
   });
 
   /**
@@ -157,10 +222,12 @@ export abstract class BaseUserPermissionStore implements IBaseUserPermissionStor
     projectId?: string
   ) => EUserPermissions | undefined;
 
-  getProjectPermissionKeysByWorkspaceSlugAndProjectId = computedFn((workspaceSlug: string, projectId?: string): string[] => {
-    if (!workspaceSlug || !projectId) return [];
-    return this.projectUserInfo?.[workspaceSlug]?.[projectId]?.permission_keys ?? [];
-  });
+  getProjectPermissionKeysByWorkspaceSlugAndProjectId = computedFn(
+    (workspaceSlug: string, projectId?: string): string[] => {
+      if (!workspaceSlug || !projectId) return [];
+      return this.projectUserInfo?.[workspaceSlug]?.[projectId]?.permission_keys ?? [];
+    }
+  );
 
   /**
    * @description Fetches project-level entities that are not automatically loaded by the project wrapper.
@@ -178,9 +245,14 @@ export abstract class BaseUserPermissionStore implements IBaseUserPermissionStor
    */
   hasPageAccess = computedFn((workspaceSlug: string, key: string): boolean => {
     if (!workspaceSlug || !key) return false;
-    const settings = WORKSPACE_SIDEBAR_DYNAMIC_NAVIGATION_ITEMS_LINKS.find((item) => item.key === key);
+    const settings =
+      WORKSPACE_SIDEBAR_DYNAMIC_NAVIGATION_ITEMS_LINKS.find((item) => item.key === key) ??
+      Object.values(WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS).find((item) => item.key === key);
     if (settings) {
-      return this.allowPermissions(settings.access, EUserPermissionsLevel.WORKSPACE, workspaceSlug);
+      if (settings.permissionKeys?.length) {
+        return this.allowWorkspacePermissionKeys(settings.permissionKeys, workspaceSlug);
+      }
+      return Boolean(this.workspaceInfoBySlug(workspaceSlug));
     }
     return false;
   });
@@ -209,9 +281,8 @@ export abstract class BaseUserPermissionStore implements IBaseUserPermissionStor
     let currentUserRole: TUserPermissions | undefined = undefined;
 
     if (level === EUserPermissionsLevel.WORKSPACE) {
-      currentUserRole = (workspaceSlug && this.getWorkspaceRoleByWorkspaceSlug(workspaceSlug)) as
-        | EUserPermissions
-        | undefined;
+      if (!workspaceSlug || !this.workspaceInfoBySlug(workspaceSlug)) return false;
+      return this.hasAllWorkspacePermissions(workspaceSlug);
     }
 
     if (level === EUserPermissionsLevel.PROJECT) {
@@ -250,6 +321,20 @@ export abstract class BaseUserPermissionStore implements IBaseUserPermissionStor
     return permissionKeys.some((key) => currentPermissionKeys.includes(key));
   };
 
+  allowWorkspacePermissionKeys = (permissionKeys: string[], workspaceSlug?: string): boolean => {
+    const resolvedWorkspaceSlug = workspaceSlug ?? this.store.router.workspaceSlug;
+    if (!resolvedWorkspaceSlug || permissionKeys.length === 0) return false;
+    const currentPermissionKeys = this.getWorkspacePermissionKeysByWorkspaceSlug(resolvedWorkspaceSlug);
+    return permissionKeys.some((key) => currentPermissionKeys.includes(key));
+  };
+
+  hasAllWorkspacePermissions = (workspaceSlug?: string): boolean => {
+    const resolvedWorkspaceSlug = workspaceSlug ?? this.store.router.workspaceSlug;
+    if (!resolvedWorkspaceSlug || !this.workspaceInfoBySlug(resolvedWorkspaceSlug)) return false;
+    const currentPermissionKeys = this.getWorkspacePermissionKeysByWorkspaceSlug(resolvedWorkspaceSlug);
+    return WORKSPACE_ALL_PERMISSION_KEYS.every((permissionKey) => currentPermissionKeys.includes(permissionKey));
+  };
+
   // actions
   /**
    * @description Fetches the user's workspace information
@@ -259,10 +344,14 @@ export abstract class BaseUserPermissionStore implements IBaseUserPermissionStor
   fetchUserWorkspaceInfo = async (workspaceSlug: string): Promise<IWorkspaceMemberMe> => {
     try {
       this.loader = true;
-      const response = await workspaceService.workspaceMemberMe(workspaceSlug);
+      const [response, permissionKeys] = await Promise.all([
+        workspaceService.workspaceMemberMe(workspaceSlug),
+        workspaceService.fetchMyWorkspacePermissionKeys(workspaceSlug),
+      ]);
       if (response) {
         runInAction(() => {
           set(this.workspaceUserInfo, [workspaceSlug], response);
+          set(this.workspacePermissionKeys, [workspaceSlug], permissionKeys);
           this.loader = false;
         });
       }
@@ -270,6 +359,19 @@ export abstract class BaseUserPermissionStore implements IBaseUserPermissionStor
     } catch (error) {
       console.error("Error fetching user workspace information", error);
       this.loader = false;
+      throw error;
+    }
+  };
+
+  fetchWorkspacePermissionKeys = async (workspaceSlug: string): Promise<string[]> => {
+    try {
+      const permissionKeys = await workspaceService.fetchMyWorkspacePermissionKeys(workspaceSlug);
+      runInAction(() => {
+        set(this.workspacePermissionKeys, [workspaceSlug], permissionKeys);
+      });
+      return permissionKeys;
+    } catch (error) {
+      console.error("Error fetching workspace permission keys", error);
       throw error;
     }
   };
@@ -284,6 +386,7 @@ export abstract class BaseUserPermissionStore implements IBaseUserPermissionStor
       await userService.leaveWorkspace(workspaceSlug);
       runInAction(() => {
         unset(this.workspaceUserInfo, workspaceSlug);
+        unset(this.workspacePermissionKeys, workspaceSlug);
         unset(this.projectUserInfo, workspaceSlug);
         unset(this.workspaceProjectsPermissions, workspaceSlug);
       });

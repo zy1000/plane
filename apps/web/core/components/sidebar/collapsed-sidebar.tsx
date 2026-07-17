@@ -13,8 +13,7 @@ import {
   WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS,
   WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS_LINKS,
   WORKSPACE_SIDEBAR_STATIC_PINNED_NAVIGATION_ITEMS_LINKS,
-  EUserPermissions,
-  EUserPermissionsLevel,
+  WORKSPACE_ANALYTICS_VIEW_PERMISSION_KEY,
 } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { cn, joinUrlPath } from "@plane/utils";
@@ -76,17 +75,14 @@ export const CollapsedSidebar = observer(function CollapsedSidebar() {
   const pathname = usePathname();
   const { t } = useTranslation();
   const { toggleSidebar } = useAppTheme();
-  const { allowPermissions } = useUserPermissions();
+  const { allowWorkspacePermissionKeys, hasPageAccess } = useUserPermissions();
   const { data: currentUser } = useUser();
   const { preferences: personalPreferences } = usePersonalNavigationPreferences();
   const { unreadNotificationsCount } = useWorkspaceNotifications();
 
   const slug = workspaceSlug?.toString() || "";
 
-  const canPerformWorkspaceMemberActions = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-    EUserPermissionsLevel.WORKSPACE
-  );
+  const canViewWorkspaceAnalytics = allowWorkspacePermissionKeys([WORKSPACE_ANALYTICS_VIEW_PERMISSION_KEY], slug);
 
   const filteredStaticNavigationItems = useMemo(() => {
     const items = [...WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS_LINKS];
@@ -122,8 +118,8 @@ export const CollapsedSidebar = observer(function CollapsedSidebar() {
       }
     }
 
-    return mergedItems;
-  }, [personalPreferences]);
+    return mergedItems.filter((item) => hasPageAccess(slug, item.key));
+  }, [hasPageAccess, personalPreferences, slug]);
 
   const projectsSidebarItem = useMemo(
     () => WORKSPACE_SIDEBAR_STATIC_PINNED_NAVIGATION_ITEMS_LINKS.find((item) => item.key === "projects"),
@@ -174,7 +170,7 @@ export const CollapsedSidebar = observer(function CollapsedSidebar() {
           );
         })}
 
-        {canPerformWorkspaceMemberActions && (
+        {canViewWorkspaceAnalytics && (
           <Tooltip tooltipContent="工作区" position="right">
             <Link href={`/${slug}/analytics`} className="flex w-full justify-center">
               <div
@@ -188,19 +184,17 @@ export const CollapsedSidebar = observer(function CollapsedSidebar() {
           </Tooltip>
         )}
 
-        {projectsSidebarItem && (
+        {projectsSidebarItem && hasPageAccess(slug, projectsSidebarItem.key) && (
           <NavIconItem slug={slug} pathname={pathname} item={projectsSidebarItem} t={t} />
         )}
 
-        {canPerformWorkspaceMemberActions && (
-          <Tooltip tooltipContent={t("timesheets")} position="right">
-            <Link href={`/${slug}/timesheets/overview/`} className="flex w-full justify-center">
-              <div className={collapsedNavIconClass(!!pathname?.includes(`/${slug}/timesheets`))}>
-                <Clock className="size-4 flex-shrink-0" />
-              </div>
-            </Link>
-          </Tooltip>
-        )}
+        <Tooltip tooltipContent={t("timesheets")} position="right">
+          <Link href={`/${slug}/timesheets/overview/`} className="flex w-full justify-center">
+            <div className={collapsedNavIconClass(!!pathname?.includes(`/${slug}/timesheets`))}>
+              <Clock className="size-4 flex-shrink-0" />
+            </div>
+          </Link>
+        </Tooltip>
       </div>
 
       {/* Bottom area */}

@@ -47,10 +47,12 @@ export const WorkspaceMembersList = observer(function WorkspaceMembersList(props
   const { t } = useTranslation();
   // fetching workspace invitations
   useSWR(
-    workspaceSlug ? `WORKSPACE_MEMBERS_AND_MEMBER_INVITATIONS_${workspaceSlug.toString()}` : null,
+    workspaceSlug
+      ? `WORKSPACE_MEMBERS_AND_MEMBER_INVITATIONS_${workspaceSlug.toString()}_${isAdmin ? "WITH_INVITATIONS" : "MEMBERS_ONLY"}`
+      : null,
     workspaceSlug
       ? async () => {
-          await fetchWorkspaceMemberInvitations(workspaceSlug.toString());
+          if (isAdmin) await fetchWorkspaceMemberInvitations(workspaceSlug.toString());
           await fetchWorkspaceMembers(workspaceSlug.toString());
         }
       : null

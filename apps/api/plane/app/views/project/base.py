@@ -308,36 +308,92 @@ class ProjectViewSet(BaseViewSet):
             )
         return serialized_projects
 
-    @allow_permission(
-        allowed_roles=[ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE"
-    )
+    def _get_project_list_stats(self, project_ids):
+        stats_by_project = {
+            project_id: {
+                "bug_count": 0,
+                "cycle_count": 0,
+                "total_work_items": 0,
+                "started_work_items": 0,
+                "backlog_work_items": 0,
+                "un_started_work_items": 0,
+                "completed_work_items": 0,
+                "cancelled_work_items": 0,
+            }
+            for project_id in project_ids
+        }
+        if not stats_by_project:
+            return stats_by_project
+
+        work_item_stats = (
+            Issue.issue_objects.filter(project_id__in=project_ids)
+            .values("project_id")
+            .annotate(
+                total_work_items=Count("id"),
+                started_work_items=Count(
+                    "id", filter=Q(state__group="started")
+                ),
+                backlog_work_items=Count(
+                    "id", filter=Q(state__group="backlog")
+                ),
+                un_started_work_items=Count(
+                    "id", filter=Q(state__group="unstarted")
+                ),
+                completed_work_items=Count(
+                    "id", filter=Q(state__group="completed")
+                ),
+                cancelled_work_items=Count(
+                    "id", filter=Q(state__group="cancelled")
+                ),
+            )
+        )
+        for row in work_item_stats:
+            stats_by_project[row["project_id"]].update(
+                {
+                    "total_work_items": row["total_work_items"],
+                    "started_work_items": row["started_work_items"],
+                    "backlog_work_items": row["backlog_work_items"],
+                    "un_started_work_items": row["un_started_work_items"],
+                    "completed_work_items": row["completed_work_items"],
+                    "cancelled_work_items": row["cancelled_work_items"],
+                }
+            )
+
+        bug_counts = (
+            Issue.objects.filter(
+                project_id__in=project_ids, type__category__name="缺陷"
+            )
+            .values("project_id")
+            .annotate(bug_count=Count("id"))
+        )
+        for row in bug_counts:
+            stats_by_project[row["project_id"]]["bug_count"] = row["bug_count"]
+
+        cycle_counts = (
+            Cycle.objects.filter(
+                project_id__in=project_ids, archived_at__isnull=True
+            )
+            .values("project_id")
+            .annotate(cycle_count=Count("id"))
+        )
+        for row in cycle_counts:
+            stats_by_project[row["project_id"]]["cycle_count"] = row[
+                "cycle_count"
+            ]
+
+        return stats_by_project
+
+    @allow_fine_permission(PermissionKey.WORKSPACE_PROJECT_VIEW, level="WORKSPACE")
     def list_detail(self, request, slug):
         fields = [field for field in request.GET.get("fields", "").split(",") if field]
         projects = self.get_queryset().order_by("sort_order", "name")
-        if WorkspaceMember.objects.filter(
-                member=request.user,
-                workspace__slug=slug,
-                is_active=True,
-                role=ROLE.GUEST.value,
-        ).exists():
-            projects = projects.filter(
+        projects = projects.filter(
+            Q(
                 project_projectmember__member=self.request.user,
                 project_projectmember__is_active=True,
             )
-
-        if WorkspaceMember.objects.filter(
-                member=request.user,
-                workspace__slug=slug,
-                is_active=True,
-                role=ROLE.MEMBER.value,
-        ).exists():
-            projects = projects.filter(
-                Q(
-                    project_projectmember__member=self.request.user,
-                    project_projectmember__is_active=True,
-                )
-                | Q(network=2)
-            )
+            | Q(network=ProjectNetwork.PUBLIC.value)
+        ).distinct()
 
         if request.GET.get("per_page", False) and request.GET.get("cursor", False):
             return self.paginate(
@@ -354,9 +410,7 @@ class ProjectViewSet(BaseViewSet):
         )
         return Response(projects, status=status.HTTP_200_OK)
 
-    @allow_permission(
-        allowed_roles=[ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE"
-    )
+    @allow_fine_permission(PermissionKey.WORKSPACE_PROJECT_VIEW, level="WORKSPACE")
     def list(self, request, slug):
         sort_order = ProjectUserProperty.objects.filter(
             user=self.request.user,
@@ -391,108 +445,6 @@ class ProjectViewSet(BaseViewSet):
             )
             .annotate(inbox_view=F("intake_view"))
             .annotate(sort_order=Subquery(sort_order))
-            .annotate(
-                bug_count=Coalesce(
-                    Subquery(
-                        Issue.objects.filter(
-                            project_id=OuterRef("pk"), type__category__name="缺陷"
-                        )
-                        .values("project_id")
-                        .annotate(count=Count("id"))
-                        .values("count")
-                    ),
-                    Value(0, output_field=IntegerField()),
-                )
-            )
-            .annotate(
-                cycle_count=Coalesce(
-                    Subquery(
-                        Cycle.objects.filter(
-                            project_id=OuterRef("pk"), archived_at__isnull=True
-                        )
-                        .values("project_id")
-                        .annotate(count=Count("id"))
-                        .values("count")
-                    ),
-                    Value(0, output_field=IntegerField()),
-                )
-            )
-            .annotate(
-                total_work_items=Coalesce(
-                    Subquery(
-                        Issue.issue_objects.filter(project_id=OuterRef("pk"))
-                        .values("project_id")
-                        .annotate(count=Count("id"))
-                        .values("count")
-                    ),
-                    Value(0, output_field=IntegerField()),
-                )
-            )
-            .annotate(
-                started_work_items=Coalesce(
-                    Subquery(
-                        Issue.issue_objects.filter(
-                            project_id=OuterRef("pk"), state__group="started"
-                        )
-                        .values("project_id")
-                        .annotate(count=Count("id"))
-                        .values("count")
-                    ),
-                    Value(0, output_field=IntegerField()),
-                )
-            )
-            .annotate(
-                backlog_work_items=Coalesce(
-                    Subquery(
-                        Issue.issue_objects.filter(
-                            project_id=OuterRef("pk"), state__group="backlog"
-                        )
-                        .values("project_id")
-                        .annotate(count=Count("id"))
-                        .values("count")
-                    ),
-                    Value(0, output_field=IntegerField()),
-                )
-            )
-            .annotate(
-                un_started_work_items=Coalesce(
-                    Subquery(
-                        Issue.issue_objects.filter(
-                            project_id=OuterRef("pk"), state__group="unstarted"
-                        )
-                        .values("project_id")
-                        .annotate(count=Count("id"))
-                        .values("count")
-                    ),
-                    Value(0, output_field=IntegerField()),
-                )
-            )
-            .annotate(
-                completed_work_items=Coalesce(
-                    Subquery(
-                        Issue.issue_objects.filter(
-                            project_id=OuterRef("pk"), state__group="completed"
-                        )
-                        .values("project_id")
-                        .annotate(count=Count("id"))
-                        .values("count")
-                    ),
-                    Value(0, output_field=IntegerField()),
-                )
-            )
-            .annotate(
-                cancelled_work_items=Coalesce(
-                    Subquery(
-                        Issue.issue_objects.filter(
-                            project_id=OuterRef("pk"), state__group="cancelled"
-                        )
-                        .values("project_id")
-                        .annotate(count=Count("id"))
-                        .values("count")
-                    ),
-                    Value(0, output_field=IntegerField()),
-                )
-            )
             .distinct()
         ).values(
             "id",
@@ -516,53 +468,30 @@ class ProjectViewSet(BaseViewSet):
             "updated_at",
             "created_by",
             "updated_by",
-            "bug_count",
-            "cycle_count",
-            "total_work_items",
-            "started_work_items",
-            "backlog_work_items",
-            "un_started_work_items",
-            "completed_work_items",
-            "cancelled_work_items",
         )
 
-        if WorkspaceMember.objects.filter(
-                member=request.user,
-                workspace__slug=slug,
-                is_active=True,
-                role=ROLE.GUEST.value,
-        ).exists():
-            projects = projects.filter(
+        projects = projects.filter(
+            Q(
                 project_projectmember__member=self.request.user,
                 project_projectmember__is_active=True,
             )
-
-        if WorkspaceMember.objects.filter(
-                member=request.user,
-                workspace__slug=slug,
-                is_active=True,
-                role=ROLE.MEMBER.value,
-        ).exists():
-            projects = projects.filter(
-                Q(
-                    project_projectmember__member=self.request.user,
-                    project_projectmember__is_active=True,
-                )
-                | Q(network=2)
-            )
+            | Q(network=ProjectNetwork.PUBLIC.value)
+        ).distinct()
         project_rows = list(projects)
+        stats_by_project = self._get_project_list_stats(
+            [row["id"] for row in project_rows]
+        )
         permission_keys_by_project = self._get_permission_keys_by_project(
             slug, project_rows
         )
         for row in project_rows:
+            row.update(stats_by_project[row["id"]])
             row["permission_keys"] = list(
                 permission_keys_by_project.get(str(row["id"]), set())
             )
         return Response(project_rows, status=status.HTTP_200_OK)
 
-    @allow_permission(
-        allowed_roles=[ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE"
-    )
+    @allow_fine_permission(PermissionKey.WORKSPACE_PROJECT_VIEW, level="WORKSPACE")
     def retrieve(self, request, slug, pk):
         project = (
             self.get_queryset().filter(archived_at__isnull=True).filter(pk=pk).first()
@@ -600,7 +529,7 @@ class ProjectViewSet(BaseViewSet):
         serializer = ProjectListSerializer(project)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER], level="WORKSPACE")
+    @allow_fine_permission(PermissionKey.WORKSPACE_PROJECT_CREATE, level="WORKSPACE")
     def create(self, request, slug):
         workspace = Workspace.objects.get(slug=slug)
 
@@ -734,48 +663,24 @@ class ProjectViewSet(BaseViewSet):
 
     @allow_fine_permission(PermissionKey.PROJECT_DELETE)
     def destroy(self, request, slug, pk):
-        if (
-                WorkspaceMember.objects.filter(
-                    member=request.user,
-                    workspace__slug=slug,
-                    is_active=True,
-                    role=ROLE.ADMIN.value,
-                ).exists()
-                or ProjectMember.objects.filter(
-            member=request.user,
-            workspace__slug=slug,
-            project_id=pk,
-            role=ROLE.ADMIN.value,
-            is_active=True,
-        ).exists()
-        ):
-            project = Project.objects.get(pk=pk, workspace__slug=slug)
-            project.delete()
-            webhook_activity.delay(
-                event="project",
-                verb="deleted",
-                field=None,
-                old_value=None,
-                new_value=None,
-                actor_id=request.user.id,
-                slug=slug,
-                current_site=base_host(request=request, is_app=True),
-                event_id=project.id,
-                old_identifier=None,
-                new_identifier=None,
-            )
-            # Delete the project members
-            DeployBoard.objects.filter(project_id=pk, workspace__slug=slug).delete()
-
-            # Delete the user favorite
-            UserFavorite.objects.filter(project_id=pk, workspace__slug=slug).delete()
-
-            return Response(status=status.HTTP_204_NO_CONTENT)
-        else:
-            return Response(
-                {"error": "You don't have the required permissions."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
+        project = Project.objects.get(pk=pk, workspace__slug=slug)
+        project.delete()
+        webhook_activity.delay(
+            event="project",
+            verb="deleted",
+            field=None,
+            old_value=None,
+            new_value=None,
+            actor_id=request.user.id,
+            slug=slug,
+            current_site=base_host(request=request, is_app=True),
+            event_id=project.id,
+            old_identifier=None,
+            new_identifier=None,
+        )
+        DeployBoard.objects.filter(project_id=pk, workspace__slug=slug).delete()
+        UserFavorite.objects.filter(project_id=pk, workspace__slug=slug).delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class ProjectArchiveUnarchiveEndpoint(BaseAPIView):
@@ -791,7 +696,6 @@ class ProjectArchiveUnarchiveEndpoint(BaseAPIView):
         )
 
     @allow_fine_permission(PermissionKey.PROJECT_UNARCHIVE)
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
     def delete(self, request, slug, project_id):
         project = Project.objects.get(pk=project_id, workspace__slug=slug)
         project.archived_at = None
@@ -800,7 +704,7 @@ class ProjectArchiveUnarchiveEndpoint(BaseAPIView):
 
 
 class ProjectIdentifierEndpoint(BaseAPIView):
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER], level="WORKSPACE")
+    @allow_fine_permission(PermissionKey.WORKSPACE_PROJECT_CREATE, level="WORKSPACE")
     def get(self, request, slug):
         name = request.GET.get("name", "").strip().upper()
 
@@ -817,7 +721,7 @@ class ProjectIdentifierEndpoint(BaseAPIView):
             {"exists": len(exists), "identifiers": exists}, status=status.HTTP_200_OK
         )
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER], level="WORKSPACE")
+    @allow_fine_permission(PermissionKey.WORKSPACE_PROJECT_CREATE, level="WORKSPACE")
     def delete(self, request, slug):
         name = request.data.get("name", "").strip().upper()
 

@@ -8,19 +8,24 @@ import { observer } from "mobx-react";
 import Link from "next/link";
 import { useParams, usePathname } from "next/navigation";
 import { LayoutDashboard } from "lucide-react";
+import { WORKSPACE_ANALYTICS_VIEW_PERMISSION_KEY, WORKSPACE_PROJECT_VIEW_PERMISSION_KEY } from "@plane/constants";
 import { TabNavigationItem, TabNavigationList } from "@plane/propel/tab-navigation";
 import { Header, Row } from "@plane/ui";
 import { cn } from "@plane/utils";
 import { useAppTheme } from "@/hooks/store/use-app-theme";
+import { useUserPermissions } from "@/hooks/store/user";
 
 export const WorkspaceManagementNavigation = observer(function WorkspaceManagementNavigation() {
   const { workspaceSlug } = useParams();
   const pathname = usePathname();
   const { sidebarCollapsed } = useAppTheme();
+  const { allowWorkspacePermissionKeys } = useUserPermissions();
 
   const slug = workspaceSlug?.toString() || "";
   const isAnalyticsActive = !!pathname?.includes("/analytics");
   const isArchivesActive = !!pathname?.includes("/projects/archives");
+  const canViewAnalytics = allowWorkspacePermissionKeys([WORKSPACE_ANALYTICS_VIEW_PERMISSION_KEY], slug);
+  const canViewProjects = allowWorkspacePermissionKeys([WORKSPACE_PROJECT_VIEW_PERMISSION_KEY], slug);
 
   const tabs = [
     {
@@ -28,14 +33,16 @@ export const WorkspaceManagementNavigation = observer(function WorkspaceManageme
       label: "分析",
       href: `/${slug}/analytics`,
       isActive: isAnalyticsActive,
+      shouldRender: canViewAnalytics,
     },
     {
       key: "archives",
       label: "归档",
       href: `/${slug}/projects/archives`,
       isActive: isArchivesActive,
+      shouldRender: canViewProjects,
     },
-  ];
+  ].filter((tab) => tab.shouldRender);
 
   return (
     <div className="z-20">

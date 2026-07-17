@@ -20,7 +20,8 @@ from rest_framework.permissions import AllowAny
 # Module imports
 from .base import BaseViewSet, BaseAPIView
 from plane.app.serializers import ProjectMemberInviteSerializer
-from plane.app.permissions import allow_permission, ROLE
+from plane.app.permissions import allow_permission, allow_workspace_member, ROLE
+from plane.app.permissions.base import _is_instance_admin
 from plane.db.models import (
     ProjectMember,
     Workspace,
@@ -57,14 +58,6 @@ class ProjectInvitationsViewset(BaseViewSet):
         # Check if email is provided
         if not emails:
             return Response({"error": "Emails are required"}, status=status.HTTP_400_BAD_REQUEST)
-
-        for email in emails:
-            workspace_role = WorkspaceMember.objects.filter(
-                workspace__slug=slug, member__email=email.get("email"), is_active=True
-            ).role
-
-            if workspace_role in [5, 20] and workspace_role != email.get("role", ROLE.MEMBER.value):
-                return Response({"error": "You cannot invite a user with different role than workspace role"})
 
         workspace = Workspace.objects.get(slug=slug)
 
@@ -125,7 +118,7 @@ class UserProjectInvitationsViewset(BaseViewSet):
             .select_related("workspace", "workspace__owner", "project")
         )
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER], level="WORKSPACE")
+    @allow_workspace_member
     def create(self, request, slug):
         project_ids = request.data.get("project_ids", [])
 
@@ -136,9 +129,18 @@ class UserProjectInvitationsViewset(BaseViewSet):
         projects = Project.objects.filter(id__in=project_ids, workspace__slug=slug).only("id", "network")
         # Check if user has permission to join each project
         for project in projects:
-            if project.network == ProjectNetwork.SECRET.value and workspace_member.role != ROLE.ADMIN.value:
+            has_private_project_access = (
+                workspace_member.workspace.owner_id == request.user.id
+                or _is_instance_admin(request.user)
+                or ProjectMemberInvite.objects.filter(
+                    project=project,
+                    email=request.user.email,
+                    deleted_at__isnull=True,
+                ).exists()
+            )
+            if project.network == ProjectNetwork.SECRET.value and not has_private_project_access:
                 return Response(
-                    {"error": "Only workspace admins can join private project"},
+                    {"error": "A project invitation is required to join a private project."},
                     status=status.HTTP_403_FORBIDDEN,
                 )
 

@@ -8,7 +8,14 @@ import { useEffect, useMemo, useState } from "react";
 import { observer } from "mobx-react";
 import useSWR from "swr";
 // plane imports
-import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import {
+  WORKSPACE_GROUP_CREATE_PERMISSION_KEY,
+  WORKSPACE_GROUP_DELETE_PERMISSION_KEY,
+  WORKSPACE_GROUP_EDIT_PERMISSION_KEY,
+  WORKSPACE_GROUP_MANAGE_MEMBER_PERMISSION_KEY,
+  WORKSPACE_GROUP_MANAGE_ROLE_PERMISSION_KEY,
+  WORKSPACE_GROUP_VIEW_PERMISSION_KEY,
+} from "@plane/constants";
 import { cn } from "@plane/utils";
 // components
 import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
@@ -33,16 +40,20 @@ const WorkspaceGroupsPage = observer(function WorkspaceGroupsPage({ params }: Ro
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
 
   // store hooks
-  const { workspaceUserInfo, allowPermissions } = useUserPermissions();
+  const { workspaceUserInfo, allowWorkspacePermissionKeys, fetchWorkspacePermissionKeys } = useUserPermissions();
   const { currentWorkspace } = useWorkspace();
   const { workspace: workspaceMemberStore, memberMap } = useMember();
 
   // derived permissions
-  const isAdmin = allowPermissions([EUserPermissions.ADMIN], EUserPermissionsLevel.WORKSPACE);
-  const canView = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
-    EUserPermissionsLevel.WORKSPACE
+  const canView = allowWorkspacePermissionKeys([WORKSPACE_GROUP_VIEW_PERMISSION_KEY], workspaceSlug);
+  const canCreate = allowWorkspacePermissionKeys([WORKSPACE_GROUP_CREATE_PERMISSION_KEY], workspaceSlug);
+  const canEdit = allowWorkspacePermissionKeys([WORKSPACE_GROUP_EDIT_PERMISSION_KEY], workspaceSlug);
+  const canDelete = allowWorkspacePermissionKeys([WORKSPACE_GROUP_DELETE_PERMISSION_KEY], workspaceSlug);
+  const canManageMembers = allowWorkspacePermissionKeys(
+    [WORKSPACE_GROUP_MANAGE_MEMBER_PERMISSION_KEY],
+    workspaceSlug
   );
+  const canManageRoles = allowWorkspacePermissionKeys([WORKSPACE_GROUP_MANAGE_ROLE_PERMISSION_KEY], workspaceSlug);
 
   // workspace groups hook
   const {
@@ -67,10 +78,10 @@ const WorkspaceGroupsPage = observer(function WorkspaceGroupsPage({ params }: Ro
 
   // fetch available roles for admin
   useEffect(() => {
-    if (isAdmin && workspaceSlug) {
+    if (canManageRoles && workspaceSlug) {
       fetchAvailableRoles();
     }
-  }, [isAdmin, workspaceSlug, fetchAvailableRoles]);
+  }, [canManageRoles, workspaceSlug, fetchAvailableRoles]);
 
   // auto-select first group when groups load
   useEffect(() => {
@@ -155,7 +166,10 @@ const WorkspaceGroupsPage = observer(function WorkspaceGroupsPage({ params }: Ro
           groups={groups}
           totalGroupCount={groups.length}
           isLoading={isLoading}
-          isAdmin={isAdmin}
+          isAdmin={canEdit}
+          canCreate={canCreate}
+          canEdit={canEdit}
+          canDelete={canDelete}
           selectedGroupId={selectedGroupId}
           onSelectGroup={handleSelectGroup}
           onCreate={createGroup}
@@ -185,19 +199,31 @@ const WorkspaceGroupsPage = observer(function WorkspaceGroupsPage({ params }: Ro
               group={selectedGroup}
               members={groupDetail?.members ?? []}
               isLoading={Boolean(groupDetail?.isLoading)}
-              isAdmin={isAdmin}
+              isAdmin={canManageMembers}
               memberOptions={memberOptions}
-              onAddMember={addMember}
-              onRemoveMember={removeMember}
+              onAddMember={async (groupId, memberId) => {
+                await addMember(groupId, memberId);
+                await fetchWorkspacePermissionKeys(workspaceSlug);
+              }}
+              onRemoveMember={async (groupId, membershipId) => {
+                await removeMember(groupId, membershipId);
+                await fetchWorkspacePermissionKeys(workspaceSlug);
+              }}
             />
             <RolesPanel
               group={selectedGroup}
               roles={groupDetail?.roles ?? []}
               isLoading={Boolean(groupDetail?.isLoading)}
-              isAdmin={isAdmin}
+              isAdmin={canManageRoles}
               availableRoles={availableRoles}
-              onAddRole={addRole}
-              onRemoveRole={removeRole}
+              onAddRole={async (groupId, roleId) => {
+                await addRole(groupId, roleId);
+                await fetchWorkspacePermissionKeys(workspaceSlug);
+              }}
+              onRemoveRole={async (groupId, groupRoleId) => {
+                await removeRole(groupId, groupRoleId);
+                await fetchWorkspacePermissionKeys(workspaceSlug);
+              }}
             />
           </div>
         </div>

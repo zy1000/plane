@@ -8,10 +8,9 @@ import { Fragment } from "react";
 import { observer } from "mobx-react";
 import useSWR from "swr";
 // plane imports
-import { EUserPermissionsLevel, EDraftIssuePaginationType } from "@plane/constants";
+import { EDraftIssuePaginationType, WORKSPACE_PROJECT_CREATE_PERMISSION_KEY } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { EmptyStateDetailed } from "@plane/propel/empty-state";
-import { EUserWorkspaceRoles } from "@plane/types";
 // components
 import { cn } from "@plane/utils";
 // hooks
@@ -37,12 +36,9 @@ export const WorkspaceDraftIssuesRoot = observer(function WorkspaceDraftIssuesRo
   const { loader, paginationInfo, fetchIssues, issueIds } = useWorkspaceDraftIssues();
   const { workspaceProjectIds } = useProject();
   const { toggleCreateProjectModal } = useCommandPalette();
-  const { allowPermissions } = useUserPermissions();
+  const { allowWorkspacePermissionKeys } = useUserPermissions();
   // derived values
-  const hasMemberLevelPermission = allowPermissions(
-    [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER],
-    EUserPermissionsLevel.WORKSPACE
-  );
+  const canCreateProjects = allowWorkspacePermissionKeys([WORKSPACE_PROJECT_CREATE_PERMISSION_KEY], workspaceSlug);
 
   //swr hook for fetching issue properties
   useWorkspaceIssueProperties(workspaceSlug);
@@ -71,16 +67,19 @@ export const WorkspaceDraftIssuesRoot = observer(function WorkspaceDraftIssuesRo
         description={t("workspace_projects.empty_state.no_projects.description")}
         assetKey="project"
         assetClassName="size-40"
-        actions={[
-          {
-            label: t("workspace_projects.empty_state.no_projects.primary_button.text"),
-            onClick: () => {
-              toggleCreateProjectModal(true);
-            },
-            disabled: !hasMemberLevelPermission,
-            variant: "primary",
-          },
-        ]}
+        actions={
+          canCreateProjects
+            ? [
+                {
+                  label: t("workspace_projects.empty_state.no_projects.primary_button.text"),
+                  onClick: () => {
+                    toggleCreateProjectModal(true);
+                  },
+                  variant: "primary",
+                },
+              ]
+            : []
+        }
       />
     );
 

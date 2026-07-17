@@ -6,7 +6,8 @@
 from rest_framework.permissions import BasePermission, SAFE_METHODS
 
 # Module imports
-from plane.db.models import WorkspaceMember
+from plane.db.models import Workspace
+from plane.app.permissions.base import is_workspace_member
 
 
 # Permission Mappings
@@ -27,25 +28,17 @@ class WorkSpaceBasePermission(BasePermission):
 
         ## Safe Methods
         if request.method in SAFE_METHODS:
-            return True
+            return not view.workspace_slug or is_workspace_member(
+                request.user, view.workspace_slug
+            )
 
         # allow only admins and owners to update the workspace settings
         if request.method in ["PUT", "PATCH"]:
-            return WorkspaceMember.objects.filter(
-                member=request.user,
-                workspace__slug=view.workspace_slug,
-                role__in=[Admin, Member],
-                is_active=True,
-            ).exists()
+            return is_workspace_member(request.user, view.workspace_slug)
 
         # allow only owner to delete the workspace
         if request.method == "DELETE":
-            return WorkspaceMember.objects.filter(
-                member=request.user,
-                workspace__slug=view.workspace_slug,
-                role=Admin,
-                is_active=True,
-            ).exists()
+            return is_workspace_member(request.user, view.workspace_slug)
 
 
 class WorkspaceOwnerPermission(BasePermission):
@@ -53,8 +46,9 @@ class WorkspaceOwnerPermission(BasePermission):
         if request.user.is_anonymous:
             return False
 
-        return WorkspaceMember.objects.filter(
-            workspace__slug=view.workspace_slug, member=request.user, role=Admin
+        return Workspace.objects.filter(
+            slug=view.workspace_slug,
+            owner=request.user,
         ).exists()
 
 
@@ -63,12 +57,7 @@ class WorkSpaceAdminPermission(BasePermission):
         if request.user.is_anonymous:
             return False
 
-        return WorkspaceMember.objects.filter(
-            member=request.user,
-            workspace__slug=view.workspace_slug,
-            role__in=[Admin, Member],
-            is_active=True,
-        ).exists()
+        return is_workspace_member(request.user, view.workspace_slug)
 
 
 class WorkspaceEntityPermission(BasePermission):
@@ -78,16 +67,9 @@ class WorkspaceEntityPermission(BasePermission):
 
         ## Safe Methods -> Handle the filtering logic in queryset
         if request.method in SAFE_METHODS:
-            return WorkspaceMember.objects.filter(
-                workspace__slug=view.workspace_slug, member=request.user, is_active=True
-            ).exists()
+            return is_workspace_member(request.user, view.workspace_slug)
 
-        return WorkspaceMember.objects.filter(
-            member=request.user,
-            workspace__slug=view.workspace_slug,
-            role__in=[Admin, Member],
-            is_active=True,
-        ).exists()
+        return is_workspace_member(request.user, view.workspace_slug)
 
 
 class WorkspaceViewerPermission(BasePermission):
@@ -95,9 +77,7 @@ class WorkspaceViewerPermission(BasePermission):
         if request.user.is_anonymous:
             return False
 
-        return WorkspaceMember.objects.filter(
-            member=request.user, workspace__slug=view.workspace_slug, is_active=True
-        ).exists()
+        return is_workspace_member(request.user, view.workspace_slug)
 
 
 class WorkspaceUserPermission(BasePermission):
@@ -105,6 +85,4 @@ class WorkspaceUserPermission(BasePermission):
         if request.user.is_anonymous:
             return False
 
-        return WorkspaceMember.objects.filter(
-            member=request.user, workspace__slug=view.workspace_slug, is_active=True
-        ).exists()
+        return is_workspace_member(request.user, view.workspace_slug)

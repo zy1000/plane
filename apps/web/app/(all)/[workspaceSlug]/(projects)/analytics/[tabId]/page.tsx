@@ -8,13 +8,14 @@ import { useState, useEffect } from "react";
 import { observer } from "mobx-react";
 import { useRouter } from "next/navigation";
 // plane package imports
-import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import { WORKSPACE_ANALYTICS_VIEW_PERMISSION_KEY, WORKSPACE_PROJECT_CREATE_PERMISSION_KEY } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { EmptyStateDetailed } from "@plane/propel/empty-state";
 import { Tabs } from "@plane/propel/tabs";
 // components
 import { cn } from "@plane/utils";
 import AnalyticsFilterActions from "@/components/analytics/analytics-filter-actions";
+import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
 import { PageHead } from "@/components/core/page-title";
 // hooks
 import { useCommandPalette } from "@/hooks/store/use-command-palette";
@@ -37,19 +38,20 @@ function AnalyticsPage({ params }: Route.ComponentProps) {
   const { toggleCreateProjectModal } = useCommandPalette();
   const { workspaceProjectIds, loader } = useProject();
   const { currentWorkspace } = useWorkspace();
-  const { allowPermissions } = useUserPermissions();
+  const { workspaceInfoBySlug, allowWorkspacePermissionKeys } = useUserPermissions();
 
   const pageTitle = currentWorkspace?.name
     ? t(`workspace_analytics.page_label`, { workspace: currentWorkspace?.name })
     : undefined;
 
   // permissions
-  const canPerformEmptyStateActions = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-    EUserPermissionsLevel.WORKSPACE
-  );
-
   const workspaceSlug = params.workspaceSlug;
+  const canViewAnalytics = allowWorkspacePermissionKeys([WORKSPACE_ANALYTICS_VIEW_PERMISSION_KEY], workspaceSlug);
+  const canPerformEmptyStateActions = allowWorkspacePermissionKeys(
+    [WORKSPACE_PROJECT_CREATE_PERMISSION_KEY],
+    workspaceSlug
+  );
+  const workspaceInfo = workspaceInfoBySlug(workspaceSlug);
   const ANALYTICS_TABS = useAnalyticsTabs(workspaceSlug.toString());
 
   const [selectedTab, setSelectedTab] = useState(tabId || ANALYTICS_TABS[0]?.key);
@@ -65,6 +67,11 @@ function AnalyticsPage({ params }: Route.ComponentProps) {
     setSelectedTab(value);
     router.push(`/${currentWorkspace?.slug}/analytics/${value}`);
   };
+
+  if (!workspaceInfo) return null;
+  if (!canViewAnalytics) {
+    return <NotAuthorizedView section="general" className="h-auto" />;
+  }
 
   return (
     <>
@@ -120,15 +127,18 @@ function AnalyticsPage({ params }: Route.ComponentProps) {
               assetKey="project"
               title={t("workspace_projects.empty_state.no_projects.title")}
               description={t("workspace_projects.empty_state.no_projects.description")}
-              actions={[
-                {
-                  label: "Create a project",
-                  onClick: () => {
-                    toggleCreateProjectModal(true);
-                  },
-                  disabled: !canPerformEmptyStateActions,
-                },
-              ]}
+              actions={
+                canPerformEmptyStateActions
+                  ? [
+                      {
+                        label: "Create a project",
+                        onClick: () => {
+                          toggleCreateProjectModal(true);
+                        },
+                      },
+                    ]
+                  : []
+              }
             />
           )}
         </>

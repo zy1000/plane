@@ -20,6 +20,9 @@ type Props = {
   totalGroupCount: number;
   isLoading: boolean;
   isAdmin: boolean;
+  canCreate?: boolean;
+  canEdit?: boolean;
+  canDelete?: boolean;
   selectedGroupId: string | null;
   onSelectGroup: (groupId: string) => void;
   onCreate: (data: { name: string; description: string }) => Promise<IWorkspaceGroup>;
@@ -32,6 +35,9 @@ export function GroupsSidebar({
   totalGroupCount,
   isLoading,
   isAdmin,
+  canCreate,
+  canEdit,
+  canDelete,
   selectedGroupId,
   onSelectGroup,
   onCreate,
@@ -43,6 +49,9 @@ export function GroupsSidebar({
   const [editingGroup, setEditingGroup] = useState<IWorkspaceGroup | null>(null);
   const [pendingDelete, setPendingDelete] = useState<IWorkspaceGroup | null>(null);
   const [isDeleteSubmitting, setIsDeleteSubmitting] = useState(false);
+  const canCreateGroup = canCreate ?? isAdmin;
+  const canEditGroup = canEdit ?? isAdmin;
+  const canDeleteGroup = canDelete ?? isAdmin;
 
   const filteredGroups = searchQuery.trim()
     ? groups.filter(
@@ -55,13 +64,14 @@ export function GroupsSidebar({
   const isSearchNoResults = filteredGroups.length === 0 && totalGroupCount > 0;
 
   const handleCreate = async (data: { name: string; description: string }) => {
+    if (!canCreateGroup) return;
     const newGroup = await onCreate(data);
     setToast({ type: TOAST_TYPE.SUCCESS, title: "已创建", message: `团队「${newGroup.name}」已创建` });
     onSelectGroup(newGroup.id);
   };
 
   const handleUpdate = async (data: { name: string; description: string }) => {
-    if (!editingGroup) return;
+    if (!editingGroup || !canEditGroup) return;
     await onUpdate(editingGroup.id, data);
     setToast({ type: TOAST_TYPE.SUCCESS, title: "已保存", message: "团队信息已更新" });
   };
@@ -72,7 +82,7 @@ export function GroupsSidebar({
   };
 
   const handleConfirmDelete = async () => {
-    if (!pendingDelete) return;
+    if (!pendingDelete || !canDeleteGroup) return;
     setIsDeleteSubmitting(true);
     try {
       await onDelete(pendingDelete.id);
@@ -87,7 +97,7 @@ export function GroupsSidebar({
 
   if (isLoading) {
     return (
-      <div className="flex h-full w-1/4 min-w-52 max-w-72 flex-col border-r border-subtle">
+      <div className="flex h-full w-1/4 max-w-72 min-w-52 flex-col border-r border-subtle">
         <div className="flex items-center justify-between gap-2 border-b border-subtle px-4 py-3">
           <div className="flex items-center gap-2">
             <div className="h-4 w-12 animate-pulse rounded bg-layer-transparent-hover" />
@@ -107,7 +117,7 @@ export function GroupsSidebar({
   }
 
   return (
-    <div className="flex h-full w-1/4 min-w-52 max-w-72 flex-col border-r border-subtle">
+    <div className="flex h-full w-1/4 max-w-72 min-w-52 flex-col border-r border-subtle">
       {/* Header */}
       <div className="flex shrink-0 flex-col gap-2 border-b border-subtle px-4 py-3">
         <div className="flex items-center justify-between gap-2">
@@ -115,7 +125,7 @@ export function GroupsSidebar({
             团队
             <CountChip count={totalGroupCount} className="h-4" />
           </h4>
-          {isAdmin && (
+          {canCreateGroup && (
             <button
               type="button"
               onClick={() => setShowCreateModal(true)}
@@ -142,7 +152,7 @@ export function GroupsSidebar({
       {/* Groups List */}
       <div className="vertical-scrollbar scrollbar-sm flex-1 overflow-y-auto p-1.5 [scrollbar-gutter:stable]">
         {filteredGroups.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+          <div className="flex flex-col items-center justify-center px-4 py-12 text-center">
             <div className="mb-3 flex size-10 items-center justify-center rounded-full bg-layer-1">
               <UsersRound className="size-4 text-placeholder" />
             </div>
@@ -151,11 +161,11 @@ export function GroupsSidebar({
             ) : (
               <>
                 <p className="text-body-xs-regular text-tertiary">暂无团队</p>
-                {isAdmin && (
+                {canCreateGroup && (
                   <button
                     type="button"
                     onClick={() => setShowCreateModal(true)}
-                    className="mt-2 cursor-pointer text-body-xs-medium text-custom-primary-100 transition-colors hover:underline"
+                    className="text-custom-primary-100 mt-2 cursor-pointer text-body-xs-medium transition-colors hover:underline"
                   >
                     点击新建
                   </button>
@@ -173,9 +183,7 @@ export function GroupsSidebar({
                   onClick={() => onSelectGroup(group.id)}
                   className={cn(
                     "group relative flex cursor-pointer flex-col gap-0.5 rounded-md px-3 py-2.5 transition-colors duration-150",
-                    isSelected
-                      ? "bg-accent-primary/8 text-accent-primary"
-                      : "hover:bg-layer-1-hover"
+                    isSelected ? "bg-accent-primary/8 text-accent-primary" : "hover:bg-layer-1-hover"
                   )}
                 >
                   <div className="flex items-start justify-between gap-2">
@@ -188,7 +196,7 @@ export function GroupsSidebar({
                       {group.name}
                     </p>
                     {/* Admin actions — visible on hover */}
-                    {isAdmin && (
+                    {(canEditGroup || canDeleteGroup) && (
                       <div
                         className={cn(
                           "flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity duration-150",
@@ -196,30 +204,34 @@ export function GroupsSidebar({
                           isSelected && "opacity-100"
                         )}
                       >
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setEditingGroup(group);
-                          }}
-                          className="flex size-5 cursor-pointer items-center justify-center rounded text-placeholder transition-colors duration-150 hover:bg-layer-1-hover hover:text-primary"
-                          aria-label="编辑团队"
-                          title="编辑"
-                        >
-                          <PencilIcon className="size-3" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setPendingDelete(group);
-                          }}
-                          className="flex size-5 cursor-pointer items-center justify-center rounded text-placeholder transition-colors duration-150 hover:bg-red-500/10 hover:text-red-600"
-                          aria-label="删除团队"
-                          title="删除"
-                        >
-                          <Trash2Icon className="size-3" />
-                        </button>
+                        {canEditGroup && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingGroup(group);
+                            }}
+                            className="flex size-5 cursor-pointer items-center justify-center rounded text-placeholder transition-colors duration-150 hover:bg-layer-1-hover hover:text-primary"
+                            aria-label="编辑团队"
+                            title="编辑"
+                          >
+                            <PencilIcon className="size-3" />
+                          </button>
+                        )}
+                        {canDeleteGroup && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPendingDelete(group);
+                            }}
+                            className="hover:bg-red-500/10 hover:text-red-600 flex size-5 cursor-pointer items-center justify-center rounded text-placeholder transition-colors duration-150"
+                            aria-label="删除团队"
+                            title="删除"
+                          >
+                            <Trash2Icon className="size-3" />
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
@@ -228,7 +240,7 @@ export function GroupsSidebar({
                     <p className="truncate text-body-xs-regular text-tertiary">{group.description}</p>
                   )}
                   {/* Member / Role counts */}
-                  <div className="flex items-center gap-2.5 mt-0.5">
+                  <div className="mt-0.5 flex items-center gap-2.5">
                     <span className="flex items-center gap-1 text-[11px] text-tertiary">
                       <UsersRound className="size-2.5" />
                       {group.member_count}
@@ -253,7 +265,7 @@ export function GroupsSidebar({
       </div>
 
       {/* New Group Button (bottom) */}
-      {isAdmin && groups.length > 0 && (
+      {canCreateGroup && groups.length > 0 && (
         <div className="shrink-0 border-t border-subtle p-2">
           <Button
             variant="primary"
@@ -267,11 +279,7 @@ export function GroupsSidebar({
       )}
 
       {/* Modals */}
-      <GroupFormModal
-        isOpen={showCreateModal}
-        onClose={() => setShowCreateModal(false)}
-        onSubmit={handleCreate}
-      />
+      <GroupFormModal isOpen={showCreateModal} onClose={() => setShowCreateModal(false)} onSubmit={handleCreate} />
       <GroupFormModal
         isOpen={Boolean(editingGroup)}
         group={editingGroup}
@@ -287,8 +295,7 @@ export function GroupsSidebar({
         content={
           pendingDelete ? (
             <>
-              确定要删除团队{" "}
-              <span className="font-semibold text-primary">「{pendingDelete.name}」</span>{" "}
+              确定要删除团队 <span className="font-semibold text-primary">「{pendingDelete.name}」</span>{" "}
               吗？此操作不可恢复。
             </>
           ) : null

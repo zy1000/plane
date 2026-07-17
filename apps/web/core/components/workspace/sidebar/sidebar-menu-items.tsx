@@ -17,6 +17,7 @@ import {
   WORKSPACE_SIDEBAR_STATIC_PINNED_NAVIGATION_ITEMS_LINKS,
   EUserPermissions,
   EUserPermissionsLevel,
+  WORKSPACE_ANALYTICS_VIEW_PERMISSION_KEY,
 } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { SidebarNavItem } from "@/components/sidebar/sidebar-navigation";
@@ -33,13 +34,17 @@ export const SidebarMenuItems = observer(function SidebarMenuItems() {
   const { workspaceSlug } = useParams();
   const pathname = usePathname();
   const { t } = useTranslation();
-  const { allowPermissions } = useUserPermissions();
+  const { allowPermissions, allowWorkspacePermissionKeys } = useUserPermissions();
   const { groupedFavorites } = useFavorite();
 
   // derived values
   const canPerformWorkspaceMemberActions = allowPermissions(
     [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
     EUserPermissionsLevel.WORKSPACE
+  );
+  const canViewWorkspaceAnalytics = allowWorkspacePermissionKeys(
+    [WORKSPACE_ANALYTICS_VIEW_PERMISSION_KEY],
+    workspaceSlug?.toString()
   );
   const isFavoriteEmpty = isEmpty(groupedFavorites);
 
@@ -95,13 +100,13 @@ export const SidebarMenuItems = observer(function SidebarMenuItems() {
     <div className="flex h-full flex-col">
       <div>
         <div className="flex flex-col gap-0.5">
-          {filteredStaticNavigationItems.map((item, _index) => (
-            <SidebarItem key={`static_${_index}`} item={item} />
+          {filteredStaticNavigationItems.map((item) => (
+            <SidebarItem key={`static_${item.key}`} item={item} />
           ))}
         </div>
 
         <hr className="my-3 border-subtle" />
-        {canPerformWorkspaceMemberActions && (
+        {canViewWorkspaceAnalytics && (
           <div className="flex flex-col gap-0.5">
             <Link href={`/${workspaceSlug}/analytics`}>
               <SidebarNavItem
@@ -123,18 +128,16 @@ export const SidebarMenuItems = observer(function SidebarMenuItems() {
             <SidebarItem key="pinned_projects" item={projectsSidebarItem} />
           </div>
         )}
-        {canPerformWorkspaceMemberActions && (
-          <div className="flex flex-col gap-0.5">
-            <Link href={`/${workspaceSlug}/timesheets/overview/`}>
-              <SidebarNavItem isActive={!!pathname?.includes(`/${workspaceSlug}/timesheets`)}>
-                <div className="flex items-center gap-1.5 py-[1px]">
-                  <Clock className="size-4 flex-shrink-0" />
-                  <p className="text-13 leading-5 font-medium">{t("timesheets")}</p>
-                </div>
-              </SidebarNavItem>
-            </Link>
-          </div>
-        )}
+        <div className="flex flex-col gap-0.5">
+          <Link href={`/${workspaceSlug}/timesheets/overview/`}>
+            <SidebarNavItem isActive={!!pathname?.includes(`/${workspaceSlug}/timesheets`)}>
+              <div className="flex items-center gap-1.5 py-[1px]">
+                <Clock className="size-4 flex-shrink-0" />
+                <p className="text-13 leading-5 font-medium">{t("timesheets")}</p>
+              </div>
+            </SidebarNavItem>
+          </Link>
+        </div>
         {/* Favorites Menu */}
         {canPerformWorkspaceMemberActions && !isFavoriteEmpty && (
           <>

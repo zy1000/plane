@@ -7,7 +7,7 @@
 import { useState } from "react";
 import { observer } from "mobx-react";
 // plane imports
-import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import { WORKSPACE_USER_PROFILE_EXPORT_PERMISSION_KEY } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 // components
@@ -25,7 +25,7 @@ function ProfileActivityPage() {
   const [totalPages, setTotalPages] = useState(0);
   const [resultsCount, setResultsCount] = useState(0);
   // router
-  const { allowPermissions } = useUserPermissions();
+  const { allowWorkspacePermissionKeys } = useUserPermissions();
   //hooks
   const { t } = useTranslation();
 
@@ -47,10 +47,7 @@ function ProfileActivityPage() {
       />
     );
 
-  const canDownloadActivity = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-    EUserPermissionsLevel.WORKSPACE
-  );
+  const canDownloadActivity = allowWorkspacePermissionKeys([WORKSPACE_USER_PROFILE_EXPORT_PERMISSION_KEY]);
 
   return (
     <>

@@ -9,7 +9,7 @@ from rest_framework import status
 from rest_framework.response import Response
 
 # Module imports
-from plane.app.permissions import ROLE, allow_permission
+from plane.app.permissions import PermissionKey, allow_fine_permission
 from plane.app.serializers import (
     PermissionSerializer,
     WorkspaceRolePermissionBindingSerializer,
@@ -28,6 +28,17 @@ from plane.db.models.issue_type import (
 )
 
 
+WORKSPACE_ROLE_LOOKUP_PERMISSIONS = (
+    PermissionKey.WORKSPACE_ROLE_VIEW,
+    PermissionKey.WORKSPACE_ROLE_CREATE,
+    PermissionKey.WORKSPACE_ROLE_EDIT,
+    PermissionKey.WORKSPACE_ROLE_DELETE,
+    PermissionKey.WORKSPACE_MEMBER_INVITE,
+    PermissionKey.WORKSPACE_MEMBER_EDIT,
+    PermissionKey.WORKSPACE_GROUP_MANAGE_ROLE,
+)
+
+
 class WorkspaceRoleViewSet(BaseViewSet):
     serializer_class = WorkspaceRoleSerializer
     model = WorkspaceRole
@@ -43,12 +54,12 @@ class WorkspaceRoleViewSet(BaseViewSet):
             .select_related("workspace", "created_by", "updated_by")
         )
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
+    @allow_fine_permission(*WORKSPACE_ROLE_LOOKUP_PERMISSIONS, level="WORKSPACE")
     def list(self, request, slug):
         serializer = self.get_serializer(self.get_queryset(), many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
+    @allow_fine_permission(*WORKSPACE_ROLE_LOOKUP_PERMISSIONS, level="WORKSPACE")
     def retrieve(self, request, slug, pk):
         workspace_role = self.get_queryset().filter(pk=pk).first()
         if not workspace_role:
@@ -57,7 +68,7 @@ class WorkspaceRoleViewSet(BaseViewSet):
         serializer = self.get_serializer(workspace_role)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    @allow_permission([ROLE.ADMIN], level="WORKSPACE")
+    @allow_fine_permission(PermissionKey.WORKSPACE_ROLE_CREATE, level="WORKSPACE")
     def create(self, request, slug):
         workspace = Workspace.objects.get(slug=slug)
         serializer = self.get_serializer(data=request.data, context={"workspace": workspace})
@@ -68,7 +79,7 @@ class WorkspaceRoleViewSet(BaseViewSet):
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    @allow_permission([ROLE.ADMIN], level="WORKSPACE")
+    @allow_fine_permission(PermissionKey.WORKSPACE_ROLE_EDIT, level="WORKSPACE")
     def partial_update(self, request, slug, pk):
         workspace_role = self.get_queryset().filter(pk=pk).first()
         if not workspace_role:
@@ -86,11 +97,17 @@ class WorkspaceRoleViewSet(BaseViewSet):
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    @allow_permission([ROLE.ADMIN], level="WORKSPACE")
+    @allow_fine_permission(PermissionKey.WORKSPACE_ROLE_DELETE, level="WORKSPACE")
     def destroy(self, request, slug, pk):
         workspace_role = self.get_queryset().filter(pk=pk).first()
         if not workspace_role:
             return Response({"error": "Workspace role not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        if workspace_role.legacy_role is not None:
+            return Response(
+                {"error": "System roles cannot be deleted."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         workspace_role.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
@@ -110,12 +127,12 @@ class PermissionViewSet(BaseViewSet):
             .order_by("scope", "module", "sort_order", "key")
         )
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
+    @allow_fine_permission(*WORKSPACE_ROLE_LOOKUP_PERMISSIONS, level="WORKSPACE")
     def list(self, request, slug):
         serializer = self.get_serializer(self.get_queryset(), many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
+    @allow_fine_permission(*WORKSPACE_ROLE_LOOKUP_PERMISSIONS, level="WORKSPACE")
     def retrieve(self, request, slug, pk):
         permission = self.get_queryset().filter(pk=pk).first()
         if not permission:
@@ -267,7 +284,7 @@ class WorkspaceRolePermissionAPIView(BaseAPIView):
             "permissions": permissions,
         }
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
+    @allow_fine_permission(*WORKSPACE_ROLE_LOOKUP_PERMISSIONS, level="WORKSPACE")
     def get(self, request, slug, pk):
         role = self.get_role()
         if not role:
@@ -275,7 +292,7 @@ class WorkspaceRolePermissionAPIView(BaseAPIView):
 
         return Response(self.build_response_data(role), status=status.HTTP_200_OK)
 
-    @allow_permission([ROLE.ADMIN], level="WORKSPACE")
+    @allow_fine_permission(PermissionKey.WORKSPACE_ROLE_EDIT, level="WORKSPACE")
     def patch(self, request, slug, pk):
         role = self.get_role()
         if not role:

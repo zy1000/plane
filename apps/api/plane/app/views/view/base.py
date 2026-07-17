@@ -23,7 +23,13 @@ from rest_framework import status
 from rest_framework.response import Response
 
 # Module imports
-from plane.app.permissions import allow_permission, ROLE, allow_fine_permission, PermissionKey
+from plane.app.permissions import (
+    allow_permission,
+    allow_fine_permission,
+    allow_workspace_member,
+    PermissionKey,
+    ROLE,
+)
 from plane.app.serializers import IssueViewSerializer, ViewIssueListSerializer
 from plane.db.models import (
     Issue,
@@ -68,16 +74,18 @@ class WorkspaceViewViewSet(BaseViewSet):
             .distinct()
         )
 
-    @allow_permission(allowed_roles=[ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
+    @allow_workspace_member
+    def create(self, request, slug):
+        return super().create(request, slug)
+
+    @allow_workspace_member
     def list(self, request, slug):
         queryset = self.get_queryset()
         fields = [field for field in request.GET.get("fields", "").split(",") if field]
-        if WorkspaceMember.objects.filter(workspace__slug=slug, member=request.user, role=5, is_active=True).exists():
-            queryset = queryset.filter(owned_by=request.user)
         views = IssueViewSerializer(queryset, many=True, fields=fields if fields else None).data
         return Response(views, status=status.HTTP_200_OK)
 
-    @allow_permission(allowed_roles=[], level="WORKSPACE", creator=True, model=IssueView)
+    @allow_workspace_member
     def partial_update(self, request, slug, pk):
         with transaction.atomic():
             workspace_view = IssueView.objects.select_for_update().get(pk=pk, workspace__slug=slug)
@@ -99,6 +107,7 @@ class WorkspaceViewViewSet(BaseViewSet):
                 return Response(serializer.data, status=status.HTTP_200_OK)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+    @allow_workspace_member
     def retrieve(self, request, slug, pk):
         issue_view = self.get_queryset().filter(pk=pk).first()
         serializer = IssueViewSerializer(issue_view)
@@ -111,14 +120,11 @@ class WorkspaceViewViewSet(BaseViewSet):
         )
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    @allow_permission(allowed_roles=[ROLE.ADMIN], level="WORKSPACE", creator=True, model=IssueView)
+    @allow_workspace_member
     def destroy(self, request, slug, pk):
         workspace_view = IssueView.objects.get(pk=pk, workspace__slug=slug)
 
-        workspace_member = WorkspaceMember.objects.filter(
-            workspace__slug=slug, member=request.user, role=20, is_active=True
-        )
-        if workspace_member.exists() or workspace_view.owned_by == request.user:
+        if workspace_view.owned_by == request.user:
             workspace_view.delete()
             # Delete the user favorite view
             UserFavorite.objects.filter(
@@ -129,7 +135,7 @@ class WorkspaceViewViewSet(BaseViewSet):
             ).delete()
         else:
             return Response(
-                {"error": "Only admin or owner can delete the view"},
+                {"error": "Only the owner can delete the view"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         return Response(status=status.HTTP_204_NO_CONTENT)

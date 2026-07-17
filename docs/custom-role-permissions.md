@@ -22,7 +22,7 @@
 - `workspace` 前缀的权限，`scope` 固定为 `workspace`
 - `project`、`issue`、`cycle`、`module`、`page`、`view`、`state`、`label`、`estimate`、`milestone`、`intake`、`workflow`、`search`、`filestore`、`qa` 前缀的权限，`scope` 固定为 `project`
 - `module` 字段建议取 `key` 去掉最后一个动作段后的部分，例如 `workspace.role.view -> role`，`issue.comment.edit -> issue.comment`
-- `action` 字段建议取 `key` 最后一段，例如 `view`、`edit`、`assign_group`
+- `action` 字段建议取 `key` 最后一段，例如 `view`、`edit`、`manage_role`
 
 ### 3. 分类建议
 
@@ -55,6 +55,7 @@
 - `workspace.member.invite` — 邀请工作区成员
 - `workspace.member.edit` — 修改工作区成员角色与信息
 - `workspace.member.remove` — 移除工作区成员
+- `workspace.member.leave` — 主动退出工作区
 
 #### 工作区角色模板（workspace.role）
 
@@ -62,8 +63,6 @@
 - `workspace.role.create` — 创建工作区角色模板
 - `workspace.role.edit` — 编辑工作区角色模板
 - `workspace.role.delete` — 删除工作区角色模板
-- `workspace.role.assign_group` — 为工作区组绑定默认角色模板
-- `workspace.role.import_to_project` — 将工作区角色模板导入项目角色
 
 #### 工作区用户组（workspace.group）
 

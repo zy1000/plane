@@ -10,11 +10,17 @@ import { useParams } from "next/navigation";
 import { Settings, UserPlus } from "lucide-react";
 import { Menu } from "@headlessui/react";
 // plane imports
-import { EUserPermissions } from "@plane/constants";
+import {
+  WORKSPACE_MEMBER_INVITE_PERMISSION_KEY,
+  WORKSPACE_MEMBER_VIEW_PERMISSION_KEY,
+  WORKSPACE_SETTINGS_VIEW_PERMISSION_KEY,
+} from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { CheckIcon } from "@plane/propel/icons";
 import type { IWorkspace } from "@plane/types";
 import { cn, getFileURL, getUserRole } from "@plane/utils";
+// hooks
+import { useUserPermissions } from "@/hooks/store/user";
 // plane web imports
 import { SubscriptionPill } from "@/plane-web/components/common/subscription/subscription-pill";
 
@@ -31,6 +37,17 @@ const SidebarDropdownItem = observer(function SidebarDropdownItem(props: TProps)
   const { workspaceSlug } = useParams();
   // hooks
   const { t } = useTranslation();
+  const { allowWorkspacePermissionKeys } = useUserPermissions();
+
+  const canViewWorkspaceSettings = allowWorkspacePermissionKeys(
+    [WORKSPACE_SETTINGS_VIEW_PERMISSION_KEY],
+    workspace.slug
+  );
+  const canViewWorkspaceMembers = allowWorkspacePermissionKeys([WORKSPACE_MEMBER_VIEW_PERMISSION_KEY], workspace.slug);
+  const canInviteWorkspaceMembers = allowWorkspacePermissionKeys(
+    [WORKSPACE_MEMBER_INVITE_PERMISSION_KEY],
+    workspace.slug
+  );
 
   return (
     <Link
@@ -91,7 +108,7 @@ const SidebarDropdownItem = observer(function SidebarDropdownItem(props: TProps)
         {workspace.id === activeWorkspace?.id && (
           <>
             <div className="mt-2 mb-1 flex gap-2">
-              {[EUserPermissions.ADMIN, EUserPermissions.MEMBER].includes(workspace?.role) && (
+              {canViewWorkspaceSettings && (
                 <Link
                   href={`/${workspace.slug}/settings`}
                   onClick={(e) => {
@@ -104,7 +121,7 @@ const SidebarDropdownItem = observer(function SidebarDropdownItem(props: TProps)
                   <span className="my-auto text-13 font-medium whitespace-nowrap">{t("settings")}</span>
                 </Link>
               )}
-              {[EUserPermissions.ADMIN].includes(workspace?.role) && (
+              {canViewWorkspaceMembers && canInviteWorkspaceMembers && (
                 <Link
                   href={`/${workspace.slug}/settings/members`}
                   onClick={(e) => {

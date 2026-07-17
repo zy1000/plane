@@ -105,6 +105,7 @@ from .workspace import (
     WorkspaceHomePreference,
     WorkspaceUserPreference,
     WorkspaceRole,
+    WorkspaceMemberRole,
     WorkspaceGroup,
     WorkspaceGroupMember,
     WorkspaceGroupRole,

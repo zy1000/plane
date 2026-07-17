@@ -18,10 +18,11 @@ import { DeleteWorkspaceModal } from "./delete-workspace-modal";
 
 type TDeleteWorkspace = {
   workspace: IWorkspace | null;
+  disabled?: boolean;
 };
 
 export const DeleteWorkspaceSection = observer(function DeleteWorkspaceSection(props: TDeleteWorkspace) {
-  const { workspace } = props;
+  const { workspace, disabled = false } = props;
   // states
   const [deleteWorkspaceModal, setDeleteWorkspaceModal] = useState(false);
   // translation
@@ -41,6 +42,7 @@ export const DeleteWorkspaceSection = observer(function DeleteWorkspaceSection(p
           <Button
             variant="error-outline"
             onClick={() => setDeleteWorkspaceModal(true)}
+            disabled={disabled}
             data-ph-element={WORKSPACE_TRACKER_ELEMENTS.DELETE_WORKSPACE_BUTTON}
           >
             {t("delete")}

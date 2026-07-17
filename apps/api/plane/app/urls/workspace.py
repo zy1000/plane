@@ -44,6 +44,8 @@ from plane.app.views import (
     WorkspaceGroupViewSet,
     WorkspaceGroupMemberViewSet,
     WorkspaceGroupRoleViewSet,
+    WorkspaceMemberCustomRolesAPIView,
+    WorkspaceMyPermissionKeysAPIView,
 )
 
 
@@ -108,6 +110,11 @@ urlpatterns = [
         name="workspace-member",
     ),
     path(
+        "workspaces/<str:slug>/members/<uuid:pk>/custom-roles/",
+        WorkspaceMemberCustomRolesAPIView.as_view(),
+        name="workspace-member-custom-roles",
+    ),
+    path(
         "workspaces/<str:slug>/members/leave/",
         WorkSpaceMemberViewSet.as_view({"post": "leave"}),
         name="leave-workspace-members",
@@ -121,6 +128,11 @@ urlpatterns = [
         "workspaces/<str:slug>/workspace-members/me/",
         WorkspaceMemberUserEndpoint.as_view(),
         name="workspace-member-details",
+    ),
+    path(
+        "workspaces/<str:slug>/my-permission-keys/",
+        WorkspaceMyPermissionKeysAPIView.as_view(),
+        name="workspace-my-permission-keys",
     ),
     path(
         "workspaces/<str:slug>/workspace-views/",

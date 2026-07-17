@@ -18,12 +18,15 @@ export type TWorkspaceSettingsTabs =
   | "templates"
   | "export"
   | "webhooks"
-  | "issue-type-categories";
+  | "issue-type-categories"
+  | "changelog";
 export type TWorkspaceSettingsItem = {
   key: TWorkspaceSettingsTabs;
   i18n_label: string;
   href: string;
   access: EUserWorkspaceRoles[];
+  permissionKeys?: string[];
+  requiresMembership?: boolean;
   highlight: (pathname: string, baseUrl: string) => boolean;
 };
 

@@ -15,7 +15,8 @@ from drf_spectacular.utils import (
 from .base import BaseAPIView
 from plane.api.serializers import UserLiteSerializer, ProjectMemberSerializer
 from plane.db.models import User, Workspace, WorkspaceMember, ProjectMember
-from plane.utils.permissions import ProjectMemberPermission, WorkSpaceAdminPermission, ProjectAdminPermission
+from plane.utils.permissions import ProjectAdminPermission, ProjectMemberPermission
+from plane.app.permissions import PermissionKey, allow_fine_permission
 from plane.utils.openapi import (
     WORKSPACE_SLUG_PARAMETER,
     PROJECT_ID_PARAMETER,
@@ -29,7 +30,6 @@ from plane.utils.openapi import (
 
 
 class WorkspaceMemberAPIEndpoint(BaseAPIView):
-    permission_classes = [WorkSpaceAdminPermission]
     use_read_replica = True
 
     @extend_schema(
@@ -66,6 +66,7 @@ class WorkspaceMemberAPIEndpoint(BaseAPIView):
         },
     )
     # Get all the users that are present inside the workspace
+    @allow_fine_permission(PermissionKey.WORKSPACE_MEMBER_VIEW, level="WORKSPACE")
     def get(self, request, slug):
         """List workspace members
 

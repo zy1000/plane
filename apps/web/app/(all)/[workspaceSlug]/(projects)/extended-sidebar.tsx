@@ -8,7 +8,7 @@ import { useCallback, useMemo, useRef } from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 // plane imports
-import { WORKSPACE_SIDEBAR_DYNAMIC_NAVIGATION_ITEMS_LINKS, EUserPermissionsLevel } from "@plane/constants";
+import { WORKSPACE_SIDEBAR_DYNAMIC_NAVIGATION_ITEMS_LINKS } from "@plane/constants";
 import type { EUserWorkspaceRoles } from "@plane/types";
 // hooks
 import { useAppTheme } from "@/hooks/store/use-app-theme";
@@ -25,7 +25,7 @@ export const ExtendedAppSidebar = observer(function ExtendedAppSidebar() {
   const { workspaceSlug } = useParams();
   // store hooks
   const { isExtendedSidebarOpened, toggleExtendedSidebar } = useAppTheme();
-  const { allowPermissions } = useUserPermissions();
+  const { hasPageAccess } = useUserPermissions();
   const { preferences: workspacePreferences, updateWorkspaceItemSortOrder } = useWorkspaceNavigationPreferences();
 
   // derived values
@@ -36,7 +36,7 @@ export const ExtendedAppSidebar = observer(function ExtendedAppSidebar() {
 
     return WORKSPACE_SIDEBAR_DYNAMIC_NAVIGATION_ITEMS_LINKS.filter((item) => {
       // Permission check
-      const hasPermission = allowPermissions(item.access, EUserPermissionsLevel.WORKSPACE, slug);
+      const hasPermission = hasPageAccess(slug, item.key);
 
       return hasPermission;
     })
@@ -56,7 +56,7 @@ export const ExtendedAppSidebar = observer(function ExtendedAppSidebar() {
         // Then sort by sort_order within each group
         return a.sort_order - b.sort_order;
       });
-  }, [workspaceSlug, currentWorkspaceNavigationPreferences, allowPermissions]);
+  }, [workspaceSlug, currentWorkspaceNavigationPreferences, hasPageAccess]);
 
   const sortedNavigationItemsKeys = sortedNavigationItems.map((item) => item.key);
 

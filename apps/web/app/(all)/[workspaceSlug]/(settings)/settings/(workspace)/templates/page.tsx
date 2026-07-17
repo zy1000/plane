@@ -9,7 +9,12 @@ import { observer } from "mobx-react";
 import useSWR from "swr";
 import { Search, X } from "lucide-react";
 // plane imports
-import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import {
+  WORKSPACE_ROLE_CREATE_PERMISSION_KEY,
+  WORKSPACE_ROLE_DELETE_PERMISSION_KEY,
+  WORKSPACE_ROLE_EDIT_PERMISSION_KEY,
+  WORKSPACE_ROLE_VIEW_PERMISSION_KEY,
+} from "@plane/constants";
 import type { TWorkspaceRoleType } from "@plane/types";
 import { cn } from "@plane/utils";
 // components
@@ -40,15 +45,14 @@ const WorkspaceTemplatesPage = observer(function WorkspaceTemplatesPage({ params
   const [activeScope, setActiveScope] = useState<PermissionScope>("project");
 
   // store hooks
-  const { workspaceUserInfo, allowPermissions } = useUserPermissions();
+  const { workspaceUserInfo, allowWorkspacePermissionKeys } = useUserPermissions();
   const { currentWorkspace } = useWorkspace();
 
   // derived permissions
-  const isAdmin = allowPermissions([EUserPermissions.ADMIN], EUserPermissionsLevel.WORKSPACE);
-  const canView = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
-    EUserPermissionsLevel.WORKSPACE
-  );
+  const canView = allowWorkspacePermissionKeys([WORKSPACE_ROLE_VIEW_PERMISSION_KEY], workspaceSlug);
+  const canCreate = allowWorkspacePermissionKeys([WORKSPACE_ROLE_CREATE_PERMISSION_KEY], workspaceSlug);
+  const canEdit = allowWorkspacePermissionKeys([WORKSPACE_ROLE_EDIT_PERMISSION_KEY], workspaceSlug);
+  const canDelete = allowWorkspacePermissionKeys([WORKSPACE_ROLE_DELETE_PERMISSION_KEY], workspaceSlug);
 
   const {
     roles,
@@ -143,7 +147,10 @@ const WorkspaceTemplatesPage = observer(function WorkspaceTemplatesPage({ params
           roles={roles}
           totalRoleCount={roles.length}
           isLoading={isLoading}
-          isAdmin={isAdmin}
+          isAdmin={canEdit}
+          canCreate={canCreate}
+          canEdit={canEdit}
+          canDelete={canDelete}
           selectedRoleId={effectiveSelectedRoleId}
           onSelectRole={handleSelectRole}
           onCreate={(data) => createRole({ ...data, type: ROLE_TYPE })}
@@ -215,7 +222,7 @@ const WorkspaceTemplatesPage = observer(function WorkspaceTemplatesPage({ params
                   !rolePermissionState?.data &&
                   (rolePermissionState?.isLoading || !rolePermissionState?.loaded)
               )}
-              isAdmin={isAdmin}
+              isAdmin={canEdit}
               searchQuery={searchQuery}
               onTogglePermission={togglePermission}
               activeScope={activeScope}

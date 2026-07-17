@@ -123,15 +123,10 @@ class NotificationViewSet(BaseViewSet, BasePaginator):
 
         # Created issues
         if "created" in type:
-            if WorkspaceMember.objects.filter(
-                workspace__slug=slug, member=request.user, role__lt=15, is_active=True
-            ).exists():
-                notifications = notifications.none()
-            else:
-                issue_ids = Issue.objects.filter(workspace__slug=slug, created_by=request.user).values_list(
-                    "pk", flat=True
-                )
-                q_filters |= Q(entity_identifier__in=issue_ids)
+            issue_ids = Issue.objects.filter(workspace__slug=slug, created_by=request.user).values_list(
+                "pk", flat=True
+            )
+            q_filters |= Q(entity_identifier__in=issue_ids)
 
         # Apply the combined Q object filters
         notifications = notifications.filter(q_filters)
@@ -270,15 +265,10 @@ class MarkAllReadNotificationViewSet(BaseViewSet):
 
         # Created issues
         if type == "created":
-            if WorkspaceMember.objects.filter(
-                workspace__slug=slug, member=request.user, role__lt=15, is_active=True
-            ).exists():
-                notifications = Notification.objects.none()
-            else:
-                issue_ids = Issue.objects.filter(workspace__slug=slug, created_by=request.user).values_list(
-                    "pk", flat=True
-                )
-                notifications = notifications.filter(entity_identifier__in=issue_ids)
+            issue_ids = Issue.objects.filter(workspace__slug=slug, created_by=request.user).values_list(
+                "pk", flat=True
+            )
+            notifications = notifications.filter(entity_identifier__in=issue_ids)
 
         updated_notifications = []
         for notification in notifications:

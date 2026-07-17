@@ -6,7 +6,7 @@
 
 import { observer } from "mobx-react";
 // plane imports
-import { EUserPermissionsLevel, EUserPermissions } from "@plane/constants";
+import { WORKSPACE_PROJECT_CREATE_PERMISSION_KEY } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { EmptyStateDetailed } from "@plane/propel/empty-state";
 import { ContentWrapper } from "@plane/ui";
@@ -40,17 +40,14 @@ export const ProjectCardList = observer(function ProjectCardList(props: TProject
     getProjectById,
   } = useProject();
   const { currentWorkspaceDisplayFilters, currentWorkspaceFilters } = useProjectFilter();
-  const { allowPermissions } = useUserPermissions();
+  const { allowWorkspacePermissionKeys } = useUserPermissions();
 
   // derived values
   const totalProjectIds = totalProjectIdsProps ?? storeTotalProjectIds;
   const filteredProjectIds = filteredProjectIdsProps ?? storeFilteredProjectIds;
 
   // permissions
-  const canPerformEmptyStateActions = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-    EUserPermissionsLevel.WORKSPACE
-  );
+  const canPerformEmptyStateActions = allowWorkspacePermissionKeys([WORKSPACE_PROJECT_CREATE_PERMISSION_KEY]);
 
   if (!filteredProjectIds || !totalProjectIds || loader === "init-loader" || fetchStatus !== "complete")
     return <ProjectsLoader />;
@@ -62,16 +59,19 @@ export const ProjectCardList = observer(function ProjectCardList(props: TProject
         description={t("workspace_projects.empty_state.general.description")}
         assetKey="project"
         assetClassName="size-40"
-        actions={[
-          {
-            label: t("workspace_projects.empty_state.general.primary_button.text"),
-            onClick: () => {
-              toggleCreateProjectModal(true);
-            },
-            disabled: !canPerformEmptyStateActions,
-            variant: "primary",
-          },
-        ]}
+        actions={
+          canPerformEmptyStateActions
+            ? [
+                {
+                  label: t("workspace_projects.empty_state.general.primary_button.text"),
+                  onClick: () => {
+                    toggleCreateProjectModal(true);
+                  },
+                  variant: "primary",
+                },
+              ]
+            : []
+        }
       />
     );
 

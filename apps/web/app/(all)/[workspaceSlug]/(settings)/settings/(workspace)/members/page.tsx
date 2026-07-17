@@ -7,7 +7,7 @@
 import { useState } from "react";
 import { observer } from "mobx-react";
 // types
-import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import { WORKSPACE_MEMBER_INVITE_PERMISSION_KEY, WORKSPACE_MEMBER_VIEW_PERMISSION_KEY } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { SearchIcon } from "@plane/propel/icons";
@@ -38,7 +38,7 @@ const WorkspaceMembersSettingsPage = observer(function WorkspaceMembersSettingsP
   // router
   const { workspaceSlug } = params;
   // store hooks
-  const { workspaceUserInfo, allowPermissions } = useUserPermissions();
+  const { workspaceUserInfo, allowWorkspacePermissionKeys } = useUserPermissions();
   const {
     workspace: { workspaceMemberIds, inviteMembersToWorkspace, filtersStore },
   } = useMember();
@@ -46,11 +46,8 @@ const WorkspaceMembersSettingsPage = observer(function WorkspaceMembersSettingsP
   const { t } = useTranslation();
 
   // derived values
-  const canPerformWorkspaceAdminActions = allowPermissions([EUserPermissions.ADMIN], EUserPermissionsLevel.WORKSPACE);
-  const canPerformWorkspaceMemberActions = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-    EUserPermissionsLevel.WORKSPACE
-  );
+  const canViewMembers = allowWorkspacePermissionKeys([WORKSPACE_MEMBER_VIEW_PERMISSION_KEY], workspaceSlug);
+  const canInviteMembers = allowWorkspacePermissionKeys([WORKSPACE_MEMBER_INVITE_PERMISSION_KEY], workspaceSlug);
 
   const handleWorkspaceInvite = async (data: IWorkspaceBulkInviteFormData) => {
     try {
@@ -95,7 +92,7 @@ const WorkspaceMembersSettingsPage = observer(function WorkspaceMembersSettingsP
   const appliedRoleFilters = filtersStore.filters?.roles || [];
 
   // if user is not authorized to view this page
-  if (workspaceUserInfo && !canPerformWorkspaceMemberActions) {
+  if (workspaceUserInfo && !canViewMembers) {
     return <NotAuthorizedView section="settings" className="h-auto" />;
   }
 
@@ -109,7 +106,7 @@ const WorkspaceMembersSettingsPage = observer(function WorkspaceMembersSettingsP
       />
       <section
         className={cn("size-full", {
-          "opacity-60": !canPerformWorkspaceMemberActions,
+          "opacity-60": !canViewMembers,
         })}
       >
         <div className="flex items-center justify-between gap-4 pb-3.5">
@@ -137,14 +134,17 @@ const WorkspaceMembersSettingsPage = observer(function WorkspaceMembersSettingsP
               memberType="workspace"
             />
             <MembersActivityButton workspaceSlug={workspaceSlug} />
-            {canPerformWorkspaceAdminActions && (
-              <Button variant="primary" size="lg" onClick={() => setInviteModal(true)}>
-                {t("workspace_settings.settings.members.add_member")}
-              </Button>
-            )}
+            <Button
+              variant="primary"
+              size="lg"
+              onClick={() => setInviteModal(true)}
+              disabled={!canInviteMembers}
+            >
+              {t("workspace_settings.settings.members.add_member")}
+            </Button>
           </div>
         </div>
-        <WorkspaceMembersList searchQuery={searchQuery} isAdmin={canPerformWorkspaceAdminActions} />
+        <WorkspaceMembersList searchQuery={searchQuery} isAdmin={canInviteMembers} />
       </section>
     </SettingsContentWrapper>
   );

@@ -17,6 +17,7 @@ from plane.db.models import (
     WorkspaceMemberInvite,
     WorkspaceTheme,
     WorkspaceRole,
+    WorkspaceMemberRole,
     WorkspaceGroup,
     WorkspaceGroupMember,
     WorkspaceGroupRole,
@@ -93,7 +94,50 @@ class WorkspaceLiteSerializer(BaseSerializer):
         read_only_fields = fields
 
 
-class WorkSpaceMemberSerializer(DynamicBaseSerializer):
+def get_workspace_member_custom_role_ids(obj):
+    active_member_roles = getattr(obj, "active_member_roles", None)
+    if active_member_roles is None:
+        active_member_roles = WorkspaceMemberRole.objects.filter(
+            member=obj,
+            deleted_at__isnull=True,
+            role__deleted_at__isnull=True,
+            role__legacy_role__isnull=True,
+            role__type=WorkspaceRole.RoleType.WORKSPACE,
+        ).select_related("role")
+    return [str(member_role.role_id) for member_role in active_member_roles]
+
+
+def get_workspace_member_group_role_ids(obj):
+    return list(
+        WorkspaceGroupRole.objects.filter(
+            group__group_members__member=obj,
+            group__workspace=obj.workspace,
+            group__group_members__deleted_at__isnull=True,
+            deleted_at__isnull=True,
+            role__workspace=obj.workspace,
+            role__deleted_at__isnull=True,
+            role__type=WorkspaceRole.RoleType.WORKSPACE,
+        )
+        .values_list("role_id", flat=True)
+        .distinct()
+    )
+
+
+class WorkspaceMemberRoleFieldsMixin(serializers.Serializer):
+    custom_role_ids = serializers.SerializerMethodField(read_only=True)
+    group_role_ids = serializers.SerializerMethodField(read_only=True)
+
+    def get_custom_role_ids(self, obj):
+        return get_workspace_member_custom_role_ids(obj)
+
+    def get_group_role_ids(self, obj):
+        group_role_ids_by_member = self.context.get("group_role_ids_by_member")
+        if group_role_ids_by_member is not None:
+            return group_role_ids_by_member.get(obj.id, [])
+        return [str(role_id) for role_id in get_workspace_member_group_role_ids(obj)]
+
+
+class WorkSpaceMemberSerializer(WorkspaceMemberRoleFieldsMixin, DynamicBaseSerializer):
     member = UserLiteSerializer(read_only=True)
 
     class Meta:
@@ -101,7 +145,7 @@ class WorkSpaceMemberSerializer(DynamicBaseSerializer):
         fields = "__all__"
 
 
-class WorkspaceMemberMeSerializer(BaseSerializer):
+class WorkspaceMemberMeSerializer(WorkspaceMemberRoleFieldsMixin, BaseSerializer):
     draft_issue_count = serializers.IntegerField(read_only=True)
 
     class Meta:
@@ -109,7 +153,7 @@ class WorkspaceMemberMeSerializer(BaseSerializer):
         fields = "__all__"
 
 
-class WorkspaceMemberAdminSerializer(DynamicBaseSerializer):
+class WorkspaceMemberAdminSerializer(WorkspaceMemberRoleFieldsMixin, DynamicBaseSerializer):
     member = UserAdminLiteSerializer(read_only=True)
 
     class Meta:
@@ -148,6 +192,8 @@ class WorkspaceThemeSerializer(BaseSerializer):
 
 
 class WorkspaceRoleSerializer(BaseSerializer):
+    is_system = serializers.SerializerMethodField(read_only=True)
+
     class Meta:
         model = WorkspaceRole
         fields = [
@@ -157,6 +203,8 @@ class WorkspaceRoleSerializer(BaseSerializer):
             "description",
             "permissions",
             "type",
+            "legacy_role",
+            "is_system",
             "created_at",
             "updated_at",
             "created_by",
@@ -171,7 +219,17 @@ class WorkspaceRoleSerializer(BaseSerializer):
             "created_by",
             "updated_by",
             "deleted_at",
+            "legacy_role",
+            "is_system",
         ]
+
+    def get_is_system(self, obj):
+        return obj.legacy_role is not None
+
+    def validate(self, attrs):
+        if self.instance and self.instance.legacy_role is not None:
+            raise serializers.ValidationError("System roles cannot be modified.")
+        return super().validate(attrs)
 
     def validate_name(self, value):
         workspace = self.context.get("workspace") or getattr(
@@ -231,6 +289,8 @@ class WorkspaceRolePermissionBindingSerializer(serializers.Serializer):
     def validate_permission_keys(self, value):
         normalized_keys = list(dict.fromkeys(value))
         role = self.context.get("role")
+        if role and role.legacy_role is not None:
+            raise serializers.ValidationError("System role permissions cannot be modified.")
 
         # 按 type 决定允许绑定的 scope
         allowed_scope = None
@@ -301,6 +361,79 @@ class WorkspaceRolePermissionBindingSerializer(serializers.Serializer):
         role.permissions = permissions_payload
         role.save()
         return role
+
+
+class WorkspaceMemberCustomRolesSerializer(serializers.Serializer):
+    custom_role_ids = serializers.ListField(
+        child=serializers.UUIDField(),
+        allow_empty=True,
+        required=True,
+    )
+
+    def validate_custom_role_ids(self, value):
+        normalized_ids = list(dict.fromkeys(value))
+        workspace = self.context["workspace"]
+        roles = list(
+            WorkspaceRole.objects.filter(
+                id__in=normalized_ids,
+                workspace=workspace,
+                type=WorkspaceRole.RoleType.WORKSPACE,
+                legacy_role__isnull=True,
+                deleted_at__isnull=True,
+            )
+        )
+        valid_ids = {role.id for role in roles}
+        invalid_ids = [role_id for role_id in normalized_ids if role_id not in valid_ids]
+        if invalid_ids:
+            raise serializers.ValidationError(
+                f"无效的工作区角色 ID：{', '.join(str(role_id) for role_id in invalid_ids)}"
+            )
+        self._roles = roles
+        return normalized_ids
+
+    def save(self, **kwargs):
+        member = self.context["member"]
+        actor = self.context.get("actor")
+        valid_role_ids = {role.id for role in self._roles}
+
+        WorkspaceMemberRole.objects.filter(
+            member=member,
+            role__legacy_role__isnull=True,
+            deleted_at__isnull=True,
+        ).exclude(role_id__in=valid_role_ids).delete(soft=False)
+
+        existing_role_ids = set(
+            WorkspaceMemberRole.objects.filter(
+                member=member,
+                role_id__in=valid_role_ids,
+                deleted_at__isnull=True,
+            ).values_list("role_id", flat=True)
+        )
+        WorkspaceMemberRole.objects.bulk_create(
+            [
+                WorkspaceMemberRole(
+                    workspace=member.workspace,
+                    member=member,
+                    role=role,
+                    created_by=actor,
+                    updated_by=actor,
+                )
+                for role in self._roles
+                if role.id not in existing_role_ids
+            ],
+            ignore_conflicts=True,
+        )
+        return {
+            "custom_role_ids": [
+                str(role_id)
+                for role_id in WorkspaceMemberRole.objects.filter(
+                    member=member,
+                    role__legacy_role__isnull=True,
+                    role__deleted_at__isnull=True,
+                    deleted_at__isnull=True,
+                ).values_list("role_id", flat=True)
+            ]
+        }
 
 
 class WorkspaceGroupSerializer(BaseSerializer):
@@ -428,6 +561,12 @@ class WorkspaceGroupRoleSerializer(BaseSerializer):
             raise serializers.ValidationError(
                 "The role does not belong to this workspace."
             )
+        if value.type != WorkspaceRole.RoleType.WORKSPACE:
+            raise serializers.ValidationError(
+                "Only workspace roles can be assigned to workspace groups."
+            )
+        if value.deleted_at is not None:
+            raise serializers.ValidationError("The role is no longer active.")
 
         return value
 

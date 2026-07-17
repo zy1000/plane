@@ -97,7 +97,7 @@ export const useWorkspaceGroups = (workspaceSlug: string | undefined) => {
     if (!workspaceSlug) return;
     try {
       const roles = await workspaceService.fetchWorkspaceRoles(workspaceSlug);
-      setAvailableRoles(roles);
+      setAvailableRoles(roles.filter((role) => role.type === "workspace"));
     } catch {
       // 静默失败
     }

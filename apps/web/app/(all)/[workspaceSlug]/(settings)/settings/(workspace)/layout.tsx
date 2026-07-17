@@ -12,8 +12,7 @@ import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view
 import { getWorkspaceActivePath, pathnameToAccessKey } from "@/components/settings/helper";
 import { SettingsMobileNav } from "@/components/settings/mobile/nav";
 // plane imports
-import { WORKSPACE_SETTINGS_ACCESS } from "@plane/constants";
-import type { EUserWorkspaceRoles } from "@plane/types";
+import { WORKSPACE_SETTINGS } from "@plane/constants";
 // components
 import { WorkspaceSettingsSidebarRoot } from "@/components/settings/workspace/sidebar";
 // hooks
@@ -25,17 +24,29 @@ const WorkspaceSettingLayout = observer(function WorkspaceSettingLayout({ params
   // router
   const { workspaceSlug } = params;
   // store hooks
-  const { workspaceUserInfo, getWorkspaceRoleByWorkspaceSlug } = useUserPermissions();
+  const { workspaceInfoBySlug, allowWorkspacePermissionKeys } = useUserPermissions();
   // next hooks
   const pathname = usePathname();
   // derived values
   const { accessKey } = pathnameToAccessKey(pathname);
-  const userWorkspaceRole = getWorkspaceRoleByWorkspaceSlug(workspaceSlug);
+  const currentSetting = Object.values(WORKSPACE_SETTINGS).find((setting) => setting.href === accessKey);
+  const permissionKeys =
+    currentSetting && "permissionKeys" in currentSetting ? currentSetting.permissionKeys : undefined;
+  const requiresMembership =
+    currentSetting && "requiresMembership" in currentSetting ? currentSetting.requiresMembership : false;
+  const workspaceInfo = workspaceInfoBySlug(workspaceSlug);
 
-  let isAuthorized: boolean | string = false;
-  if (pathname && workspaceSlug && userWorkspaceRole) {
-    isAuthorized = WORKSPACE_SETTINGS_ACCESS[accessKey]?.includes(userWorkspaceRole as EUserWorkspaceRoles);
-  }
+  const isAuthorized = Boolean(
+    pathname &&
+    workspaceSlug &&
+    workspaceInfo &&
+    currentSetting &&
+    (permissionKeys?.length
+      ? allowWorkspacePermissionKeys(permissionKeys, workspaceSlug)
+      : requiresMembership)
+  );
+
+  if (!workspaceInfo) return null;
 
   return (
     <>
@@ -44,7 +55,7 @@ const WorkspaceSettingLayout = observer(function WorkspaceSettingLayout({ params
         activePath={getWorkspaceActivePath(pathname) || ""}
       />
       <div className="inset-y-0 flex h-full w-full flex-row">
-        {workspaceUserInfo && !isAuthorized ? (
+        {!isAuthorized ? (
           <NotAuthorizedView section="settings" className="h-auto" />
         ) : (
           <div className="relative flex size-full">

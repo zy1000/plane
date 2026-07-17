@@ -5,7 +5,17 @@
  */
 
 import type { LucideIcon } from "lucide-react";
-import { ArrowUpToLine, Building, FolderKanban, Layers, ShieldCheck, UsersRound, Users, Webhook } from "lucide-react";
+import {
+  ArrowUpToLine,
+  Building,
+  FolderKanban,
+  Layers,
+  ScrollText,
+  ShieldCheck,
+  UsersRound,
+  Users,
+  Webhook,
+} from "lucide-react";
 // plane imports
 import type { ISvgIcons } from "@plane/propel/icons";
 import type { TWorkspaceSettingsTabs } from "@plane/types";
@@ -19,4 +29,5 @@ export const WORKSPACE_SETTINGS_ICONS: Record<TWorkspaceSettingsTabs, LucideIcon
   export: ArrowUpToLine,
   webhooks: Webhook,
   "issue-type-categories": Layers,
+  changelog: ScrollText,
 };

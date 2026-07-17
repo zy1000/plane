@@ -8,7 +8,7 @@ import { useState } from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 // plane imports
-import { ROLE, EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import { ROLE, EUserPermissions, WORKSPACE_MEMBER_INVITE_PERMISSION_KEY } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { LinkIcon, TrashIcon, ChevronDownIcon } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
@@ -34,23 +34,16 @@ export const WorkspaceInvitationsListItem = observer(function WorkspaceInvitatio
   // plane hooks
   const { t } = useTranslation();
   // store hooks
-  const { allowPermissions, workspaceInfoBySlug } = useUserPermissions();
+  const { allowWorkspacePermissionKeys, workspaceInfoBySlug } = useUserPermissions();
   const {
     workspace: { updateMemberInvitation, deleteMemberInvitation, getWorkspaceInvitationDetails },
   } = useMember();
   // derived values
   const invitationDetails = getWorkspaceInvitationDetails(invitationId);
   const currentWorkspaceMemberInfo = workspaceInfoBySlug(workspaceSlug.toString());
-  const currentWorkspaceRole = currentWorkspaceMemberInfo?.role;
-  // is the current logged in user admin
-  const isAdmin = allowPermissions([EUserPermissions.ADMIN], EUserPermissionsLevel.WORKSPACE);
-  // role change access-
-  // 1. user cannot change their own role
-  // 2. only admin or member can change role
-  // 3. user cannot change role of higher role
-  const hasRoleChangeAccess = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-    EUserPermissionsLevel.WORKSPACE
+  const canManageInvitations = allowWorkspacePermissionKeys(
+    [WORKSPACE_MEMBER_INVITE_PERMISSION_KEY],
+    workspaceSlug.toString()
   );
 
   const handleRemoveInvitation = async () => {
@@ -104,7 +97,7 @@ export const WorkspaceInvitationsListItem = observer(function WorkspaceInvitatio
       },
       title: t("common.remove"),
       icon: TrashIcon,
-      shouldRender: isAdmin,
+      shouldRender: canManageInvitations,
       className: "text-danger-primary",
       iconClassName: "text-danger-primary",
     },
@@ -134,57 +127,47 @@ export const WorkspaceInvitationsListItem = observer(function WorkspaceInvitatio
           <div className="flex items-center justify-center rounded-sm bg-label-yellow-bg-strong/20 px-2.5 py-1 text-center text-caption-sm-medium text-label-yellow-text">
             <p>{t("common.pending")}</p>
           </div>
-          <CustomSelect
-            customButton={
-              <div className="item-center flex gap-1 rounded-sm px-2 py-0.5">
-                <span
-                  className={`flex items-center rounded-sm text-caption-sm-medium ${
-                    hasRoleChangeAccess ? "" : "text-placeholder"
-                  }`}
-                >
-                  {ROLE[invitationDetails.role]}
-                </span>
-                {hasRoleChangeAccess && (
+          {canManageInvitations ? (
+            <CustomSelect
+              customButton={
+                <div className="item-center flex gap-1 rounded-sm px-2 py-0.5">
+                  <span className="flex items-center rounded-sm text-caption-sm-medium">
+                    {ROLE[invitationDetails.role]}
+                  </span>
                   <span className="grid place-items-center">
                     <ChevronDownIcon className="h-3 w-3" />
                   </span>
-                )}
-              </div>
-            }
-            value={invitationDetails.role}
-            onChange={(value: EUserPermissions) => {
-              if (!workspaceSlug || !value) return;
+                </div>
+              }
+              value={invitationDetails.role}
+              onChange={(value: EUserPermissions) => {
+                if (!workspaceSlug || !value) return;
 
-              updateMemberInvitation(workspaceSlug.toString(), invitationDetails.id, {
-                role: value,
-              }).catch((err: unknown) => {
-                const error = err as { error?: string };
-                setToast({
-                  type: TOAST_TYPE.ERROR,
-                  title: "Error!",
-                  message: error?.error || "An error occurred while updating member role. Please try again.",
+                updateMemberInvitation(workspaceSlug.toString(), invitationDetails.id, {
+                  role: value,
+                }).catch((err: unknown) => {
+                  const error = err as { error?: string };
+                  setToast({
+                    type: TOAST_TYPE.ERROR,
+                    title: "Error!",
+                    message: error?.error || "An error occurred while updating member role. Please try again.",
+                  });
                 });
-              });
-            }}
-            disabled={!hasRoleChangeAccess}
-            placement="bottom-end"
-          >
-            {Object.keys(ROLE).map((key) => {
-              if (
-                currentWorkspaceRole &&
-                Number(currentWorkspaceRole) !== 20 &&
-                Number(currentWorkspaceRole) < parseInt(key)
-              )
-                return null;
-
-              return (
-                <CustomSelect.Option key={key} value={parseInt(key, 10)}>
-                  <>{ROLE[parseInt(key) as keyof typeof ROLE]}</>
-                </CustomSelect.Option>
-              );
-            })}
-          </CustomSelect>
-          {isAdmin && (
+              }}
+              placement="bottom-end"
+            >
+              {Object.keys(ROLE).map((key) => {
+                return (
+                  <CustomSelect.Option key={key} value={parseInt(key, 10)}>
+                    <>{ROLE[parseInt(key) as keyof typeof ROLE]}</>
+                  </CustomSelect.Option>
+                );
+              })}
+            </CustomSelect>
+          ) : (
+            <span className="px-2 py-0.5 text-caption-sm-medium">{ROLE[invitationDetails.role]}</span>
+          )}
+          {canManageInvitations && (
             <CustomMenu ellipsis placement="bottom-end" closeOnSelect>
               {MENU_ITEMS.map((item) => {
                 if (item.shouldRender === false) return null;

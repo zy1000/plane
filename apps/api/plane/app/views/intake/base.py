@@ -21,6 +21,7 @@ from rest_framework.response import Response
 # Module imports
 from ..base import BaseViewSet
 from plane.app.permissions import PermissionKey, ROLE, allow_fine_permission, allow_permission
+from plane.app.permissions.base import _get_user_project_permission_keys
 from plane.db.models import (
     Intake,
     IntakeIssue,
@@ -354,21 +355,18 @@ class IntakeIssueViewSet(BaseViewSet):
             is_active=True,
         ).first()
 
-        is_workspace_admin = WorkspaceMember.objects.filter(
-            workspace__slug=slug,
-            is_active=True,
-            member=request.user,
-            role=ROLE.ADMIN.value,
-        ).exists()
+        can_edit_intake = PermissionKey.INTAKE_ISSUE_EDIT.value in (
+            _get_user_project_permission_keys(request.user, slug, str(project_id))
+        )
 
-        if not project_member and not is_workspace_admin:
+        if not project_member and not can_edit_intake:
             return Response(
                 {"error": "Only admin or creator can update the intake work items"},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
         # Only project members admins and created_by users can access this endpoint
-        if ((project_member and project_member.role <= ROLE.GUEST.value) and not is_workspace_admin) and str(
+        if ((project_member and project_member.role <= ROLE.GUEST.value) and not can_edit_intake) and str(
             intake_issue.created_by_id
         ) != str(request.user.id):
             return Response(
@@ -425,7 +423,7 @@ class IntakeIssueViewSet(BaseViewSet):
         intake_serializer = None
         intake_current_instance = None
 
-        if (project_member and project_member.role > ROLE.MEMBER.value) or is_workspace_admin:
+        if can_edit_intake:
             intake_current_instance = json.dumps(IntakeIssueSerializer(intake_issue).data, cls=DjangoJSONEncoder)
             intake_serializer = IntakeIssueSerializer(intake_issue, data=request.data, partial=True)
 

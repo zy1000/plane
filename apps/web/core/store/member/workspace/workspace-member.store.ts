@@ -26,6 +26,8 @@ export interface IWorkspaceMembership {
   id: string;
   member: string;
   role: EUserPermissions;
+  custom_role_ids: string[];
+  group_role_ids: string[];
   is_active?: boolean;
 }
 
@@ -51,6 +53,7 @@ export interface IWorkspaceMemberStore {
   fetchWorkspaceMemberInvitations: (workspaceSlug: string) => Promise<IWorkspaceMemberInvitation[]>;
   // crud actions
   updateMember: (workspaceSlug: string, userId: string, data: { role: EUserPermissions }) => Promise<void>;
+  updateMemberCustomRoles: (workspaceSlug: string, userId: string, customRoleIds: string[]) => Promise<string[]>;
   removeMemberFromWorkspace: (workspaceSlug: string, userId: string) => Promise<void>;
   // invite actions
   inviteMembersToWorkspace: (workspaceSlug: string, data: IWorkspaceBulkInviteFormData) => Promise<void>;
@@ -90,6 +93,7 @@ export class WorkspaceMemberStore implements IWorkspaceMemberStore {
       // actions
       fetchWorkspaceMembers: action,
       updateMember: action,
+      updateMemberCustomRoles: action,
       removeMemberFromWorkspace: action,
       fetchWorkspaceMemberInvitations: action,
       updateMemberInvitation: action,
@@ -208,6 +212,8 @@ export class WorkspaceMemberStore implements IWorkspaceMemberStore {
     const memberDetails: IWorkspaceMember = {
       id: workspaceMember.id,
       role: workspaceMember.role,
+      custom_role_ids: workspaceMember.custom_role_ids,
+      group_role_ids: workspaceMember.group_role_ids,
       member: this.memberRoot?.memberMap?.[workspaceMember.member],
       is_active: workspaceMember.is_active,
     };
@@ -242,6 +248,8 @@ export class WorkspaceMemberStore implements IWorkspaceMemberStore {
             id: member.id,
             member: member.member.id,
             role: member.role,
+            custom_role_ids: member.custom_role_ids ?? [],
+            group_role_ids: member.group_role_ids ?? [],
             is_active: member.is_active,
           });
         });
@@ -269,6 +277,33 @@ export class WorkspaceMemberStore implements IWorkspaceMemberStore {
       // revert back to original members in case of error
       runInAction(() => {
         set(this.workspaceMemberMap, [workspaceSlug, userId], originalProjectMemberData);
+      });
+      throw error;
+    }
+  };
+
+  updateMemberCustomRoles = async (workspaceSlug: string, userId: string, customRoleIds: string[]) => {
+    const memberDetails = this.getWorkspaceMemberDetails(userId);
+    if (!memberDetails) throw new Error("Member not found");
+    const previousRoleIds = this.workspaceMemberMap?.[workspaceSlug]?.[userId]?.custom_role_ids ?? [];
+
+    runInAction(() => {
+      set(this.workspaceMemberMap, [workspaceSlug, userId, "custom_role_ids"], customRoleIds);
+    });
+
+    try {
+      const response = await this.workspaceService.updateWorkspaceMemberCustomRoles(
+        workspaceSlug,
+        memberDetails.id,
+        customRoleIds
+      );
+      runInAction(() => {
+        set(this.workspaceMemberMap, [workspaceSlug, userId, "custom_role_ids"], response.custom_role_ids);
+      });
+      return response.custom_role_ids;
+    } catch (error) {
+      runInAction(() => {
+        set(this.workspaceMemberMap, [workspaceSlug, userId, "custom_role_ids"], previousRoleIds);
       });
       throw error;
     }
