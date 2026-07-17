@@ -116,6 +116,59 @@ export interface IWorkspaceMemberMe {
   group_ids?: string[];
 }
 
+export type TWorkspaceMyAccessPermissionSourceType =
+  | "direct_role"
+  | "group_role"
+  | "workspace_owner"
+  | "instance_admin";
+
+export interface IWorkspaceMyAccessRole {
+  id: string;
+  name: string;
+  description: string | null;
+}
+
+export interface IWorkspaceMyAccessGroup {
+  id: string;
+  name: string;
+  description: string | null;
+  joined_at: string | null;
+  roles: IWorkspaceMyAccessRole[];
+}
+
+export interface IWorkspaceMyAccessPermissionSource {
+  type: TWorkspaceMyAccessPermissionSourceType;
+  role: Pick<IWorkspaceMyAccessRole, "id" | "name"> | null;
+  group: { id: string; name: string } | null;
+}
+
+export interface IWorkspaceMyAccessPermission {
+  id: string;
+  key: string;
+  name: string;
+  description: string | null;
+  scope: "workspace";
+  module: string | null;
+  action: string | null;
+  category: string | null;
+  sort_order: number;
+  is_granted: boolean;
+  sources: IWorkspaceMyAccessPermissionSource[];
+}
+
+export interface IWorkspaceMyAccess {
+  membership: {
+    id: string | null;
+    role: EUserWorkspaceRoles | null;
+    joined_at: string | null;
+    is_workspace_owner: boolean;
+    is_instance_admin: boolean;
+  };
+  direct_roles: IWorkspaceMyAccessRole[];
+  groups: IWorkspaceMyAccessGroup[];
+  permissions: IWorkspaceMyAccessPermission[];
+}
+
 export interface ILastActiveWorkspaceDetails {
   workspace_details: IWorkspace;
   project_details?: TProjectMembership[];

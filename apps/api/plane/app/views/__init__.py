@@ -63,6 +63,7 @@ from .workspace.member import (
     WorkspaceMemberCustomRolesAPIView,
     WorkspaceMemberGroupsAPIView,
     WorkspaceMyPermissionKeysAPIView,
+    WorkspaceMyAccessAPIView,
 )
 from .workspace.invite import (
     WorkspaceInvitationsViewset,

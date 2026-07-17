@@ -7,6 +7,7 @@
 import type { IPermission } from "@plane/types";
 
 export type TPermissionSortScope = "workspace" | "project";
+type TSortablePermission = Pick<IPermission, "key" | "name" | "action" | "sort_order" | "module">;
 
 const CATEGORY_ORDER: Record<TPermissionSortScope, string[]> = {
   workspace: [
@@ -257,14 +258,14 @@ const getCategoryOrder = (scope: TPermissionSortScope, category: string) => {
   return CATEGORY_ORDER_INDEX[scope].get(normalizedCategory) ?? Number.MAX_SAFE_INTEGER;
 };
 
-const getPermissionAction = (permission: IPermission) => {
+const getPermissionAction = (permission: TSortablePermission) => {
   if (permission.action) return permission.action;
 
   const keyParts = permission.key.split(".");
   return keyParts[keyParts.length - 1] ?? "";
 };
 
-export const comparePermissions = (a: IPermission, b: IPermission) => {
+export const comparePermissions = (a: TSortablePermission, b: TSortablePermission) => {
   const keyOrderDiff =
     (PERMISSION_KEY_ORDER_INDEX.get(a.key) ?? Number.MAX_SAFE_INTEGER) -
     (PERMISSION_KEY_ORDER_INDEX.get(b.key) ?? Number.MAX_SAFE_INTEGER);

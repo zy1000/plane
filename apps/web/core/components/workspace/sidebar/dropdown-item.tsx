@@ -48,6 +48,9 @@ const SidebarDropdownItem = observer(function SidebarDropdownItem(props: TProps)
     [WORKSPACE_MEMBER_INVITE_PERMISSION_KEY],
     workspace.slug
   );
+  const workspaceSettingsHref = canViewWorkspaceSettings
+    ? `/${workspace.slug}/settings`
+    : `/${workspace.slug}/settings/my-access`;
 
   return (
     <Link
@@ -108,19 +111,17 @@ const SidebarDropdownItem = observer(function SidebarDropdownItem(props: TProps)
         {workspace.id === activeWorkspace?.id && (
           <>
             <div className="mt-2 mb-1 flex gap-2">
-              {canViewWorkspaceSettings && (
-                <Link
-                  href={`/${workspace.slug}/settings`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleClose();
-                  }}
-                  className="flex gap-1.5 rounded-md border border-strong bg-layer-2 px-2.5 py-1.5 text-secondary transition-colors hover:border-strong hover:text-secondary hover:shadow-raised-100"
-                >
-                  <Settings className="my-auto h-4 w-4 flex-shrink-0" />
-                  <span className="my-auto text-13 font-medium whitespace-nowrap">{t("settings")}</span>
-                </Link>
-              )}
+              <Link
+                href={workspaceSettingsHref}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleClose();
+                }}
+                className="flex gap-1.5 rounded-md border border-strong bg-layer-2 px-2.5 py-1.5 text-secondary transition-colors hover:border-strong hover:text-secondary hover:shadow-raised-100"
+              >
+                <Settings className="my-auto h-4 w-4 flex-shrink-0" />
+                <span className="my-auto text-13 font-medium whitespace-nowrap">{t("settings")}</span>
+              </Link>
               {canViewWorkspaceMembers && canInviteWorkspaceMembers && (
                 <Link
                   href={`/${workspace.slug}/settings/members`}

@@ -7,8 +7,9 @@
 import { useState, useEffect } from "react";
 import { observer } from "mobx-react";
 import { useRouter } from "next/navigation";
+import { useParams } from "react-router";
 // icons
-import { BookText, LogOut, Settings } from "lucide-react";
+import { BadgeCheck, LogOut, Settings } from "lucide-react";
 // plane imports
 import { GOD_MODE_URL } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
@@ -33,6 +34,7 @@ export const UserMenuRoot = observer(function UserMenuRoot(props: Props) {
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   // router
   const router = useRouter();
+  const { workspaceSlug } = useParams();
   // store hooks
   const { toggleAnySidebarDropdown } = useAppTheme();
   const { data: currentUser } = useUser();
@@ -146,6 +148,15 @@ export const UserMenuRoot = observer(function UserMenuRoot(props: Props) {
           <Settings className="size-3.5 shrink-0" />
           {t("settings")}
         </CustomMenu.MenuItem>
+        {workspaceSlug && (
+          <CustomMenu.MenuItem
+            onClick={() => router.push(`/${workspaceSlug}/settings/my-access`)}
+            className="flex items-center gap-2"
+          >
+            <BadgeCheck className="size-3.5 shrink-0" />
+            {t("workspace_settings.settings.my_access.title")}
+          </CustomMenu.MenuItem>
+        )}
       </div>
       <CustomMenu.MenuItem onClick={handleSignOut} className="flex items-center gap-2">
         <LogOut className="size-3.5 shrink-0" />

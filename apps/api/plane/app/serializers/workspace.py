@@ -299,6 +299,67 @@ class PermissionSerializer(BaseSerializer):
         return obj.key in bound_permission_keys
 
 
+class WorkspaceMyAccessRoleSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    name = serializers.CharField()
+    description = serializers.CharField(allow_blank=True, allow_null=True)
+
+
+class WorkspaceMyAccessEntityReferenceSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    name = serializers.CharField()
+
+
+class WorkspaceMyAccessMembershipSerializer(serializers.Serializer):
+    id = serializers.UUIDField(allow_null=True)
+    role = serializers.IntegerField(allow_null=True)
+    joined_at = serializers.DateTimeField(allow_null=True)
+    is_workspace_owner = serializers.BooleanField()
+    is_instance_admin = serializers.BooleanField()
+
+
+class WorkspaceMyAccessGroupSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    name = serializers.CharField()
+    description = serializers.CharField(allow_blank=True, allow_null=True)
+    joined_at = serializers.DateTimeField(allow_null=True)
+    roles = WorkspaceMyAccessRoleSerializer(many=True)
+
+
+class WorkspaceMyAccessPermissionSourceSerializer(serializers.Serializer):
+    type = serializers.ChoiceField(
+        choices=(
+            "direct_role",
+            "group_role",
+            "workspace_owner",
+            "instance_admin",
+        )
+    )
+    role = WorkspaceMyAccessEntityReferenceSerializer(allow_null=True)
+    group = WorkspaceMyAccessEntityReferenceSerializer(allow_null=True)
+
+
+class WorkspaceMyAccessPermissionSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    key = serializers.CharField()
+    name = serializers.CharField()
+    description = serializers.CharField(allow_blank=True, allow_null=True)
+    scope = serializers.ChoiceField(choices=("workspace",))
+    module = serializers.CharField(allow_blank=True, allow_null=True)
+    action = serializers.CharField(allow_blank=True, allow_null=True)
+    category = serializers.CharField(allow_blank=True, allow_null=True)
+    sort_order = serializers.IntegerField()
+    is_granted = serializers.BooleanField()
+    sources = WorkspaceMyAccessPermissionSourceSerializer(many=True)
+
+
+class WorkspaceMyAccessSerializer(serializers.Serializer):
+    membership = WorkspaceMyAccessMembershipSerializer()
+    direct_roles = WorkspaceMyAccessRoleSerializer(many=True)
+    groups = WorkspaceMyAccessGroupSerializer(many=True)
+    permissions = WorkspaceMyAccessPermissionSerializer(many=True)
+
+
 class WorkspaceRolePermissionBindingSerializer(serializers.Serializer):
     permission_keys = serializers.ListField(
         child=serializers.CharField(max_length=255),

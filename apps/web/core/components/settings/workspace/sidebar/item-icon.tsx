@@ -7,6 +7,7 @@
 import type { LucideIcon } from "lucide-react";
 import {
   ArrowUpToLine,
+  BadgeCheck,
   Building,
   FolderKanban,
   Layers,
@@ -21,6 +22,7 @@ import type { ISvgIcons } from "@plane/propel/icons";
 import type { TWorkspaceSettingsTabs } from "@plane/types";
 
 export const WORKSPACE_SETTINGS_ICONS: Record<TWorkspaceSettingsTabs, LucideIcon | React.FC<ISvgIcons>> = {
+  "my-access": BadgeCheck,
   general: Building,
   members: Users,
   groups: UsersRound,

@@ -26,6 +26,7 @@ from plane.app.serializers import (
     WorkspaceMemberMeSerializer,
     WorkspaceMemberCustomRolesSerializer,
     WorkspaceMemberGroupsSerializer,
+    WorkspaceMyAccessSerializer,
     WorkSpaceMemberSerializer,
 )
 from plane.app.views.base import BaseAPIView
@@ -35,11 +36,13 @@ from plane.db.models import (
     ProjectMember,
     WorkspaceMember,
     WorkspaceMemberRole,
+    Workspace,
     WorkspaceGroupMember,
     WorkspaceGroupRole,
     WorkspaceRole,
 )
 from plane.utils.cache import invalidate_cache
+from plane.utils.workspace_access import build_workspace_my_access
 
 from .. import BaseViewSet
 
@@ -463,6 +466,27 @@ class WorkspaceMyPermissionKeysAPIView(BaseAPIView):
             },
             status=status.HTTP_200_OK,
         )
+
+
+class WorkspaceMyAccessAPIView(BaseAPIView):
+    use_read_replica = True
+
+    @allow_workspace_member
+    def get(self, request, slug):
+        workspace = Workspace.objects.filter(
+            slug=slug,
+            deleted_at__isnull=True,
+        ).first()
+        if not workspace:
+            return Response(
+                {"error": "Workspace not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        serializer = WorkspaceMyAccessSerializer(
+            build_workspace_my_access(workspace, request.user)
+        )
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 class WorkspaceProjectMemberEndpoint(BaseAPIView):

@@ -12,7 +12,6 @@ import { WORKSPACE_SETTINGS_VIEW_PERMISSION_KEY } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { ContextMenu } from "@plane/propel/context-menu";
 import { CheckIcon } from "@plane/propel/icons";
-import { Tooltip } from "@plane/propel/tooltip";
 import { cn } from "@plane/utils";
 // components
 import { AppSidebarItem } from "@/components/sidebar/sidebar-item";
@@ -40,6 +39,9 @@ export const AppRailRoot = observer(() => {
     [WORKSPACE_SETTINGS_VIEW_PERMISSION_KEY],
     workspaceSlug?.toString()
   );
+  const workspaceSettingsHref = canViewWorkspaceSettings
+    ? `/${workspaceSlug}/settings`
+    : `/${workspaceSlug}/settings/my-access`;
   const showLabel = preferences.displayMode === "icon_with_label";
   const railWidth = showLabel ? "3.75rem" : "3rem";
 
@@ -63,27 +65,16 @@ export const AppRailRoot = observer(() => {
               <DesktopSidebarWorkspaceMenu />
               <AppSidebarItemsRoot showLabel={showLabel} />
               <div className="mx-2 border-t border-strong" />
-              <Tooltip
-                disabled={canViewWorkspaceSettings}
-                tooltipContent={
-                  !canViewWorkspaceSettings ? t("you_do_not_have_the_permission_to_access_this_page") : null
-                }
-                position="right"
-              >
-                <span className={cn("inline-flex justify-center", { "cursor-not-allowed": !canViewWorkspaceSettings })}>
-                  <AppSidebarItem
-                    variant={canViewWorkspaceSettings ? "link" : "button"}
-                    item={{
-                      label: "Settings",
-                      icon: <SettingsIcon className="size-5" />,
-                      href: `/${workspaceSlug}/settings`,
-                      isActive: canViewWorkspaceSettings && isWorkspaceSettingsPath,
-                      disabled: !canViewWorkspaceSettings,
-                      showLabel,
-                    }}
-                  />
-                </span>
-              </Tooltip>
+              <AppSidebarItem
+                variant="link"
+                item={{
+                  label: t("settings"),
+                  icon: <SettingsIcon className="size-5" />,
+                  href: workspaceSettingsHref,
+                  isActive: isWorkspaceSettingsPath,
+                  showLabel,
+                }}
+              />
             </div>
           </div>
         </ContextMenu.Trigger>

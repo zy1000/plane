@@ -103,6 +103,14 @@ export const WORKSPACE_ANALYTICS_MANAGE_SAVED_VIEW_PERMISSION_KEY = "workspace.a
 export const WORKSPACE_ANALYTICS_EXPORT_PERMISSION_KEY = "workspace.analytics.export" as const;
 
 export const WORKSPACE_SETTINGS = {
+  "my-access": {
+    key: "my-access",
+    i18n_label: "workspace_settings.settings.my_access.title",
+    href: `/settings/my-access`,
+    access: [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER, EUserWorkspaceRoles.GUEST],
+    requiresMembership: true,
+    highlight: (pathname: string, baseUrl: string) => pathname === `${baseUrl}/settings/my-access/`,
+  },
   general: {
     key: "general",
     i18n_label: "workspace_settings.settings.general.title",
@@ -190,6 +198,7 @@ export const WORKSPACE_SETTINGS_LINKS: {
   requiresMembership?: boolean;
   highlight: (pathname: string, baseUrl: string) => boolean;
 }[] = [
+  WORKSPACE_SETTINGS["my-access"],
   WORKSPACE_SETTINGS["general"],
   WORKSPACE_SETTINGS["members"],
   WORKSPACE_SETTINGS["groups"],

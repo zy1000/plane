@@ -11,6 +11,7 @@ import type { EUserWorkspaceRoles } from "./workspace";
 export type TProfileSettingsTabs = "general" | "preferences" | "activity" | "notifications" | "security" | "api-tokens";
 
 export type TWorkspaceSettingsTabs =
+  | "my-access"
   | "general"
   | "members"
   | "groups"

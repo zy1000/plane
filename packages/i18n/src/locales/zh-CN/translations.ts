@@ -6,6 +6,8 @@
 
 export default {
   project: "项目",
+  your_workspace: "个人",
+  administration: "管理",
   sidebar: {
     projects: "项目管理",
     pages: "笔记",
@@ -1635,6 +1637,61 @@ export default {
     copy_key: "复制并将此密钥保存在 Plane Pages 中。关闭后您将无法看到此密钥。包含密钥的 CSV 文件已下载。",
     token_copied: "令牌已复制到剪贴板。",
     settings: {
+      my_access: {
+        title: "我的权限",
+        description: "查看角色与团队如何共同决定你在当前工作区中可以执行的操作。",
+        read_only: "只读",
+        loading: "正在加载访问权限",
+        identity: {
+          workspace: "当前工作区",
+          granted_permissions: "已授予权限",
+          joined: "加入时间",
+          unavailable: "暂无信息",
+        },
+        sources: {
+          title: "访问来源",
+          direct_roles: "直接角色",
+          teams: "所属团队",
+          no_direct_roles: "当前没有直接分配的角色，你仍可能通过团队或工作区所有者身份获得权限。",
+          no_teams: "你当前尚未加入任何工作区团队。",
+          no_team_roles: "暂无继承角色",
+        },
+        permissions: {
+          title: "生效权限",
+          search_placeholder: "按权限名称、说明或权限键搜索",
+          filters: {
+            all: "全部权限",
+            direct_role: "直接角色",
+            group_role: "团队继承",
+            privileged: "所有者或管理员",
+            not_granted: "未授予",
+          },
+          summary: "已授予 {granted} / {total}",
+          granted: "已授予",
+          not_granted: "未授予",
+          source: "来源",
+          permission_key: "权限键",
+          copy_key: "复制权限键",
+          copied: "权限键已复制",
+          copy_failed: "权限键复制失败",
+          no_source: "此能力尚未授予，因此没有访问来源。",
+          no_permissions: "当前没有可用的工作区权限。",
+          no_results: "没有符合当前搜索和筛选条件的权限。",
+          clear_filters: "清除筛选",
+          uncategorized: "其他权限",
+          sources: {
+            direct_role: "直接角色 · {role}",
+            group_role: "{group} · {role}",
+            workspace_owner: "工作区所有者",
+            instance_admin: "实例管理员",
+          },
+        },
+        error: {
+          title: "无法加载你的访问权限",
+          description: "工作区可能暂时不可用，请重试以获取最新权限状态。",
+          retry: "重试",
+        },
+      },
       general: {
         title: "常规",
         upload_logo: "上传标志",

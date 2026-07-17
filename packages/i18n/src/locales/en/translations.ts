@@ -6,6 +6,8 @@
 
 export default {
   project: "Project",
+  your_workspace: "Personal",
+  administration: "Administration",
   submit: "Submit",
   cancel: "Cancel",
   loading: "Loading",
@@ -1473,6 +1475,62 @@ export default {
       "Copy and save this secret key in Plane Pages. You can't see this key after you hit Close. A CSV file containing the key has been downloaded.",
     token_copied: "Token copied to clipboard.",
     settings: {
+      my_access: {
+        title: "My permissions",
+        description: "See how your roles and teams determine what you can do in this workspace.",
+        read_only: "Read only",
+        loading: "Loading access details",
+        identity: {
+          workspace: "Current workspace",
+          granted_permissions: "Granted permissions",
+          joined: "Joined",
+          unavailable: "Not available",
+        },
+        sources: {
+          title: "Access sources",
+          direct_roles: "Direct roles",
+          teams: "Teams",
+          no_direct_roles:
+            "No direct roles are assigned. Your access may still come from teams or workspace ownership.",
+          no_teams: "You are not currently part of a workspace team.",
+          no_team_roles: "No inherited roles",
+        },
+        permissions: {
+          title: "Effective permissions",
+          search_placeholder: "Search by permission name, description, or key",
+          filters: {
+            all: "All permissions",
+            direct_role: "Direct role",
+            group_role: "Inherited from team",
+            privileged: "Owner or administrator",
+            not_granted: "Not granted",
+          },
+          summary: "{granted} of {total} granted",
+          granted: "Granted",
+          not_granted: "Not granted",
+          source: "Source",
+          permission_key: "Permission key",
+          copy_key: "Copy permission key",
+          copied: "Permission key copied",
+          copy_failed: "Could not copy permission key",
+          no_source: "This capability is not granted, so it has no access source.",
+          no_permissions: "No active workspace permissions are available.",
+          no_results: "No permissions match your search and filter.",
+          clear_filters: "Clear filters",
+          uncategorized: "Other permissions",
+          sources: {
+            direct_role: "Direct role · {role}",
+            group_role: "{group} · {role}",
+            workspace_owner: "Workspace owner",
+            instance_admin: "Instance administrator",
+          },
+        },
+        error: {
+          title: "We couldn't load your access details",
+          description: "The workspace may be temporarily unavailable. Retry to get the latest permission state.",
+          retry: "Try again",
+        },
+      },
       general: {
         title: "General",
         upload_logo: "Upload logo",

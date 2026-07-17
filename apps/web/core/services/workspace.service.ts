@@ -30,6 +30,7 @@ import type {
   IWorkspaceGroupMember,
   IWorkspaceGroupRole,
   IWorkspaceRole,
+  IWorkspaceMyAccess,
 } from "@plane/types";
 // services
 import { APIService } from "@/services/api.service";
@@ -132,6 +133,14 @@ export class WorkspaceService extends APIService {
   async fetchMyWorkspacePermissionKeys(workspaceSlug: string): Promise<string[]> {
     return this.get(`/api/workspaces/${workspaceSlug}/my-permission-keys/`)
       .then((response) => (response?.data?.permission_keys as string[]) ?? [])
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async fetchMyWorkspaceAccess(workspaceSlug: string): Promise<IWorkspaceMyAccess> {
+    return this.get(`/api/workspaces/${workspaceSlug}/my-access/`)
+      .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
       });
