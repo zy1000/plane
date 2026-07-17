@@ -263,27 +263,23 @@ export const handleCoverImageChange = async (
 
   // Local static image - needs upload
   if (analysis.needsUpload) {
-    const uploadedUrl = await uploadCoverImage(newImage, uploadConfig);
+    await uploadCoverImage(newImage, uploadConfig);
 
-    // For BOTH user assets AND project assets:
-    // The backend auto-links when entity_identifier is set correctly
-    // For project assets: auto-linked server-side, no payload needed
-    // For user assets: return URL for immediate UI feedback
-
-    if (uploadConfig.isUserAsset) {
-      return {
-        cover_image: uploadedUrl,
-      };
-    } else {
-      return null;
-    }
+    // Backend auto-links the asset (cover_image_asset) during upload for both
+    // user and project covers. Do not PATCH cover_image with the relative
+    // /api/assets/... path — User.cover_image is a URLField and rejects it.
+    return null;
   }
 
-  // External/uploaded asset (e.g., Unsplash URL, pre-uploaded asset)
-  // Return the URL to be saved in the backend
-  return {
-    cover_image: newImage,
-  };
+  // External URL (e.g. Unsplash). Relative asset paths are already linked via
+  // cover_image_asset and must not be written into cover_image (URLField).
+  if (/^https?:\/\//i.test(newImage)) {
+    return {
+      cover_image: newImage,
+    };
+  }
+
+  return null;
 };
 
 /**
