@@ -95,6 +95,7 @@ export interface IWorkspaceMember {
   is_active?: boolean;
   custom_role_ids: string[];
   group_role_ids: string[];
+  group_ids: string[];
 }
 
 export interface IWorkspaceMemberMe {
@@ -112,6 +113,7 @@ export interface IWorkspaceMemberMe {
   draft_issue_count: number;
   custom_role_ids: string[];
   group_role_ids: string[];
+  group_ids?: string[];
 }
 
 export interface ILastActiveWorkspaceDetails {

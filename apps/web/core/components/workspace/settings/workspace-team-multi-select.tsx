@@ -7,71 +7,70 @@
 import { useMemo } from "react";
 import { Check, ChevronDown } from "lucide-react";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import type { IWorkspaceRole } from "@plane/types";
+import type { IWorkspaceGroup } from "@plane/types";
 import { MultiSelectDropdown } from "@plane/ui";
 import { useMember } from "@/hooks/store/use-member";
 import { useUser, useUserPermissions } from "@/hooks/store/user";
 
-type TWorkspaceRoleOption = {
+type TWorkspaceTeamOption = {
   value: string;
-  data: IWorkspaceRole;
+  data: IWorkspaceGroup;
 };
 
 type Props = {
   workspaceSlug: string;
   memberId: string;
-  selectedRoleIds: string[];
-  roles: IWorkspaceRole[];
+  selectedGroupIds: string[];
+  groups: IWorkspaceGroup[];
   isLoading: boolean;
   disabled?: boolean;
 };
 
-export function WorkspaceRoleMultiSelect(props: Props) {
-  const { workspaceSlug, memberId, selectedRoleIds, roles, isLoading, disabled = false } = props;
+export function WorkspaceTeamMultiSelect(props: Props) {
+  const { workspaceSlug, memberId, selectedGroupIds, groups, isLoading, disabled = false } = props;
   const {
-    workspace: { updateMemberCustomRoles },
+    workspace: { updateMemberGroups },
   } = useMember();
   const { data: currentUser } = useUser();
   const { fetchWorkspacePermissionKeys } = useUserPermissions();
 
-  const customRoles = useMemo(() => roles.filter((role) => !role.is_system), [roles]);
-  const options: TWorkspaceRoleOption[] = useMemo(
-    () => customRoles.map((role) => ({ value: role.id, data: role })),
-    [customRoles]
+  const options: TWorkspaceTeamOption[] = useMemo(
+    () => groups.map((group) => ({ value: group.id, data: group })),
+    [groups]
   );
 
   const buttonLabel = useMemo(() => {
     if (isLoading) return <span className="text-placeholder">加载中...</span>;
-    const selectedNames = customRoles.filter((role) => selectedRoleIds.includes(role.id)).map((role) => role.name);
-    if (selectedNames.length === 0) return <span className="text-placeholder">选择角色</span>;
+    const selectedNames = groups.filter((group) => selectedGroupIds.includes(group.id)).map((group) => group.name);
+    if (selectedNames.length === 0) return <span className="text-placeholder">选择团队</span>;
     if (selectedNames.length === 1) return <span>{selectedNames[0]}</span>;
     return (
       <span>
         {selectedNames[0]} +{selectedNames.length - 1}
       </span>
     );
-  }, [customRoles, isLoading, selectedRoleIds]);
+  }, [groups, isLoading, selectedGroupIds]);
 
-  const selectedRoleNames = useMemo(
-    () => customRoles.filter((role) => selectedRoleIds.includes(role.id)).map((role) => role.name),
-    [customRoles, selectedRoleIds]
+  const selectedGroupNames = useMemo(
+    () => groups.filter((group) => selectedGroupIds.includes(group.id)).map((group) => group.name),
+    [groups, selectedGroupIds]
   );
 
-  const handleChange = async (roleIds: string[]) => {
+  const handleChange = async (groupIds: string[]) => {
     try {
-      const savedRoleIds = await updateMemberCustomRoles(workspaceSlug, memberId, roleIds);
+      const response = await updateMemberGroups(workspaceSlug, memberId, groupIds);
       if (currentUser?.id === memberId) await fetchWorkspacePermissionKeys(workspaceSlug);
-      const names = customRoles.filter((role) => savedRoleIds.includes(role.id)).map((role) => role.name);
+      const names = groups.filter((group) => response.group_ids.includes(group.id)).map((group) => group.name);
       setToast({
         type: TOAST_TYPE.SUCCESS,
-        title: "角色已更新",
-        message: names.length > 0 ? `已分配角色：${names.join("、")}` : "已清空该成员的自定义角色。",
+        title: "团队已更新",
+        message: names.length > 0 ? `已加入团队：${names.join("、")}` : "已清空该成员的所属团队。",
       });
     } catch {
       setToast({
         type: TOAST_TYPE.ERROR,
-        title: "更新角色失败",
-        message: "更新成员角色时出现错误，请重试。",
+        title: "更新团队失败",
+        message: "更新成员所属团队时出现错误，请重试。",
       });
     }
   };
@@ -79,19 +78,19 @@ export function WorkspaceRoleMultiSelect(props: Props) {
   return (
     <div className="flex w-40 flex-col gap-1">
       {disabled ? (
-        <span className={selectedRoleNames.length === 0 ? "text-13 text-placeholder" : "truncate text-13"}>
-          {selectedRoleNames.length > 0 ? selectedRoleNames.join("、") : "—"}
+        <span className={selectedGroupNames.length === 0 ? "text-13 text-placeholder" : "truncate text-13"}>
+          {selectedGroupNames.length > 0 ? selectedGroupNames.join("、") : "—"}
         </span>
       ) : (
         <MultiSelectDropdown
-          value={selectedRoleIds}
+          value={selectedGroupIds}
           onChange={handleChange}
           options={options}
           disabled={isLoading}
           disableSorting
           keyExtractor={(option) => option.data.id}
           queryArray={["name"]}
-          inputPlaceholder="搜索角色..."
+          inputPlaceholder="搜索团队..."
           buttonContent={() => (
             <div className="flex w-full cursor-pointer items-center justify-between gap-1 text-13">
               {buttonLabel}
@@ -102,11 +101,11 @@ export function WorkspaceRoleMultiSelect(props: Props) {
           containerClassName="w-40 rounded-md p-0"
           optionsContainerClassName="w-52"
           renderItem={({ value, selected }) => {
-            const role = customRoles.find((item) => item.id === value);
-            if (!role) return null;
+            const group = groups.find((item) => item.id === value);
+            if (!group) return null;
             return (
               <div className="flex w-full items-center justify-between gap-2 truncate text-13">
-                <span className="truncate">{role.name}</span>
+                <span className="truncate">{group.name}</span>
                 {selected && <Check className="size-3 shrink-0" />}
               </div>
             );

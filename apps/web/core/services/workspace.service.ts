@@ -190,6 +190,20 @@ export class WorkspaceService extends APIService {
       });
   }
 
+  async updateWorkspaceMemberGroups(
+    workspaceSlug: string,
+    memberId: string,
+    groupIds: string[]
+  ): Promise<{ group_ids: string[]; group_role_ids: string[] }> {
+    return this.put(`/api/workspaces/${workspaceSlug}/members/${memberId}/groups/`, {
+      group_ids: groupIds,
+    })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
   async deleteWorkspaceMember(workspaceSlug: string, memberId: string): Promise<any> {
     return this.delete(`/api/workspaces/${workspaceSlug}/members/${memberId}/`)
       .then((response) => response?.data)

@@ -21,6 +21,15 @@ type TGroupDetailState = {
   isLoading: boolean;
   /** 是否已成功拉取过一次（含空列表） */
   loaded: boolean;
+  error: string | null;
+};
+
+type TWorkspaceGroupBulkMutationResult = {
+  succeededIds: string[];
+  failures: {
+    targetId: string;
+    message: string;
+  }[];
 };
 
 const emptyDetail = (): TGroupDetailState => ({
@@ -28,7 +37,20 @@ const emptyDetail = (): TGroupDetailState => ({
   roles: [],
   isLoading: false,
   loaded: false,
+  error: null,
 });
+
+const getErrorMessage = (error: unknown, fallback: string) => {
+  if (typeof error === "string") return error;
+  if (!error || typeof error !== "object") return fallback;
+
+  const errorRecord = error as Record<string, unknown>;
+  const preferredValue = errorRecord.detail ?? errorRecord.error ?? errorRecord.member ?? errorRecord.role;
+  if (typeof preferredValue === "string") return preferredValue;
+  if (Array.isArray(preferredValue) && typeof preferredValue[0] === "string") return preferredValue[0];
+
+  return fallback;
+};
 
 export const useWorkspaceGroups = (workspaceSlug: string | undefined) => {
   const [groupsState, setGroupsState] = useState<TGroupsState>({
@@ -37,7 +59,9 @@ export const useWorkspaceGroups = (workspaceSlug: string | undefined) => {
   });
   const [detailByGroupId, setDetailByGroupId] = useState<Record<string, TGroupDetailState>>({});
   const [availableRoles, setAvailableRoles] = useState<IWorkspaceRole[]>([]);
-  const [error, setError] = useState<string | null>(null);
+  const [isAvailableRolesLoading, setIsAvailableRolesLoading] = useState(false);
+  const [availableRolesError, setAvailableRolesError] = useState<string | null>(null);
+  const [listError, setListError] = useState<string | null>(null);
 
   const detailRef = useRef(detailByGroupId);
   detailRef.current = detailByGroupId;
@@ -46,20 +70,20 @@ export const useWorkspaceGroups = (workspaceSlug: string | undefined) => {
   const fetchGroups = useCallback(async () => {
     if (!workspaceSlug) return;
     setGroupsState((prev) => ({ ...prev, isLoading: true }));
-    setError(null);
+    setListError(null);
     try {
       const data = await workspaceService.fetchWorkspaceGroups(workspaceSlug);
       setGroupsState({ groups: data, isLoading: false });
-    } catch {
-      setError("获取团队列表失败");
+    } catch (error) {
+      setListError(getErrorMessage(error, "获取团队列表失败"));
       setGroupsState((prev) => ({ ...prev, isLoading: false }));
     }
   }, [workspaceSlug]);
 
   const loadGroupDetail = useCallback(
-    async (groupId: string) => {
+    async (groupId: string, force = false) => {
       if (!workspaceSlug) return;
-      if (detailRef.current[groupId]?.loaded) return;
+      if (detailRef.current[groupId]?.loaded && !force) return;
       if (inFlightRef.current.has(groupId)) return;
       inFlightRef.current.add(groupId);
 
@@ -68,6 +92,7 @@ export const useWorkspaceGroups = (workspaceSlug: string | undefined) => {
         [groupId]: {
           ...(prev[groupId] ?? emptyDetail()),
           isLoading: true,
+          error: null,
         },
       }));
 
@@ -78,13 +103,26 @@ export const useWorkspaceGroups = (workspaceSlug: string | undefined) => {
         ]);
         setDetailByGroupId((prev) => ({
           ...prev,
-          [groupId]: { members, roles, isLoading: false, loaded: true },
+          [groupId]: { members, roles, isLoading: false, loaded: true, error: null },
         }));
-      } catch {
-        setError("获取团队详情失败");
+        // 以详情列表为准校正角标，避免列表接口历史计数与实际成员不一致
+        setGroupsState((prev) => ({
+          ...prev,
+          groups: prev.groups.map((group) =>
+            group.id === groupId
+              ? { ...group, member_count: members.length, role_count: roles.length }
+              : group
+          ),
+        }));
+      } catch (error) {
         setDetailByGroupId((prev) => ({
           ...prev,
-          [groupId]: { members: [], roles: [], isLoading: false, loaded: true },
+          [groupId]: {
+            ...(prev[groupId] ?? emptyDetail()),
+            isLoading: false,
+            loaded: false,
+            error: getErrorMessage(error, "获取团队详情失败"),
+          },
         }));
       } finally {
         inFlightRef.current.delete(groupId);
@@ -95,11 +133,15 @@ export const useWorkspaceGroups = (workspaceSlug: string | undefined) => {
 
   const fetchAvailableRoles = useCallback(async () => {
     if (!workspaceSlug) return;
+    setIsAvailableRolesLoading(true);
+    setAvailableRolesError(null);
     try {
       const roles = await workspaceService.fetchWorkspaceRoles(workspaceSlug);
       setAvailableRoles(roles.filter((role) => role.type === "workspace"));
-    } catch {
-      // 静默失败
+    } catch (error) {
+      setAvailableRolesError(getErrorMessage(error, "获取可用角色失败"));
+    } finally {
+      setIsAvailableRolesLoading(false);
     }
   }, [workspaceSlug]);
 
@@ -151,22 +193,58 @@ export const useWorkspaceGroups = (workspaceSlug: string | undefined) => {
     [workspaceSlug]
   );
 
-  const addMember = useCallback(
-    async (groupId: string, memberId: string): Promise<void> => {
+  const addMembers = useCallback(
+    async (groupId: string, memberIds: string[]): Promise<TWorkspaceGroupBulkMutationResult> => {
       if (!workspaceSlug) throw new Error("缺少 workspaceSlug");
-      const newEntry = await workspaceService.addWorkspaceGroupMember(workspaceSlug, groupId, memberId);
-      setDetailByGroupId((prev) => {
-        const cur = prev[groupId];
-        if (!cur) return prev;
-        return {
-          ...prev,
-          [groupId]: { ...cur, members: [...cur.members, newEntry] },
-        };
+      const uniqueMemberIds = [...new Set(memberIds)];
+      const results = await Promise.allSettled(
+        uniqueMemberIds.map((memberId) => workspaceService.addWorkspaceGroupMember(workspaceSlug, groupId, memberId))
+      );
+      const succeededEntries: IWorkspaceGroupMember[] = [];
+      const result: TWorkspaceGroupBulkMutationResult = { succeededIds: [], failures: [] };
+
+      results.forEach((settledResult, index) => {
+        const targetId = uniqueMemberIds[index];
+        if (settledResult.status === "fulfilled") {
+          succeededEntries.push(settledResult.value);
+          result.succeededIds.push(targetId);
+        } else {
+          result.failures.push({
+            targetId,
+            message: getErrorMessage(settledResult.reason, "添加成员失败"),
+          });
+        }
       });
-      setGroupsState((prev) => ({
-        ...prev,
-        groups: prev.groups.map((g) => (g.id === groupId ? { ...g, member_count: g.member_count + 1 } : g)),
-      }));
+
+      if (succeededEntries.length > 0) {
+        let nextMemberCount: number | null = null;
+        setDetailByGroupId((prev) => {
+          const current = prev[groupId];
+          if (!current) return prev;
+          const existingIds = new Set(current.members.map((member) => member.id));
+          const nextEntries = succeededEntries.filter((member) => !existingIds.has(member.id));
+          const nextMembers = [...current.members, ...nextEntries];
+          nextMemberCount = nextMembers.length;
+          return {
+            ...prev,
+            [groupId]: { ...current, members: nextMembers },
+          };
+        });
+        setGroupsState((prev) => ({
+          ...prev,
+          groups: prev.groups.map((group) =>
+            group.id === groupId
+              ? {
+                  ...group,
+                  member_count:
+                    nextMemberCount ?? group.member_count + succeededEntries.length,
+                }
+              : group
+          ),
+        }));
+      }
+
+      return result;
     },
     [workspaceSlug]
   );
@@ -175,43 +253,83 @@ export const useWorkspaceGroups = (workspaceSlug: string | undefined) => {
     async (groupId: string, membershipId: string): Promise<void> => {
       if (!workspaceSlug) throw new Error("缺少 workspaceSlug");
       await workspaceService.removeWorkspaceGroupMember(workspaceSlug, groupId, membershipId);
+      let nextMemberCount: number | null = null;
       setDetailByGroupId((prev) => {
         const cur = prev[groupId];
         if (!cur) return prev;
+        const nextMembers = cur.members.filter((m) => m.id !== membershipId);
+        nextMemberCount = nextMembers.length;
         return {
           ...prev,
           [groupId]: {
             ...cur,
-            members: cur.members.filter((m) => m.id !== membershipId),
+            members: nextMembers,
           },
         };
       });
       setGroupsState((prev) => ({
         ...prev,
         groups: prev.groups.map((g) =>
-          g.id === groupId ? { ...g, member_count: Math.max(0, g.member_count - 1) } : g
+          g.id === groupId
+            ? { ...g, member_count: nextMemberCount ?? Math.max(0, g.member_count - 1) }
+            : g
         ),
       }));
     },
     [workspaceSlug]
   );
 
-  const addRole = useCallback(
-    async (groupId: string, roleId: string): Promise<void> => {
+  const addRoles = useCallback(
+    async (groupId: string, roleIds: string[]): Promise<TWorkspaceGroupBulkMutationResult> => {
       if (!workspaceSlug) throw new Error("缺少 workspaceSlug");
-      const newEntry = await workspaceService.addWorkspaceGroupRole(workspaceSlug, groupId, roleId);
-      setDetailByGroupId((prev) => {
-        const cur = prev[groupId];
-        if (!cur) return prev;
-        return {
-          ...prev,
-          [groupId]: { ...cur, roles: [...cur.roles, newEntry] },
-        };
+      const uniqueRoleIds = [...new Set(roleIds)];
+      const results = await Promise.allSettled(
+        uniqueRoleIds.map((roleId) => workspaceService.addWorkspaceGroupRole(workspaceSlug, groupId, roleId))
+      );
+      const succeededEntries: IWorkspaceGroupRole[] = [];
+      const result: TWorkspaceGroupBulkMutationResult = { succeededIds: [], failures: [] };
+
+      results.forEach((settledResult, index) => {
+        const targetId = uniqueRoleIds[index];
+        if (settledResult.status === "fulfilled") {
+          succeededEntries.push(settledResult.value);
+          result.succeededIds.push(targetId);
+        } else {
+          result.failures.push({
+            targetId,
+            message: getErrorMessage(settledResult.reason, "添加角色失败"),
+          });
+        }
       });
-      setGroupsState((prev) => ({
-        ...prev,
-        groups: prev.groups.map((g) => (g.id === groupId ? { ...g, role_count: g.role_count + 1 } : g)),
-      }));
+
+      if (succeededEntries.length > 0) {
+        let nextRoleCount: number | null = null;
+        setDetailByGroupId((prev) => {
+          const current = prev[groupId];
+          if (!current) return prev;
+          const existingIds = new Set(current.roles.map((role) => role.id));
+          const nextEntries = succeededEntries.filter((role) => !existingIds.has(role.id));
+          const nextRoles = [...current.roles, ...nextEntries];
+          nextRoleCount = nextRoles.length;
+          return {
+            ...prev,
+            [groupId]: { ...current, roles: nextRoles },
+          };
+        });
+        setGroupsState((prev) => ({
+          ...prev,
+          groups: prev.groups.map((group) =>
+            group.id === groupId
+              ? {
+                  ...group,
+                  role_count: nextRoleCount ?? group.role_count + succeededEntries.length,
+                }
+              : group
+          ),
+        }));
+      }
+
+      return result;
     },
     [workspaceSlug]
   );
@@ -220,21 +338,26 @@ export const useWorkspaceGroups = (workspaceSlug: string | undefined) => {
     async (groupId: string, groupRoleId: string): Promise<void> => {
       if (!workspaceSlug) throw new Error("缺少 workspaceSlug");
       await workspaceService.removeWorkspaceGroupRole(workspaceSlug, groupId, groupRoleId);
+      let nextRoleCount: number | null = null;
       setDetailByGroupId((prev) => {
         const cur = prev[groupId];
         if (!cur) return prev;
+        const nextRoles = cur.roles.filter((r) => r.id !== groupRoleId);
+        nextRoleCount = nextRoles.length;
         return {
           ...prev,
           [groupId]: {
             ...cur,
-            roles: cur.roles.filter((r) => r.id !== groupRoleId),
+            roles: nextRoles,
           },
         };
       });
       setGroupsState((prev) => ({
         ...prev,
         groups: prev.groups.map((g) =>
-          g.id === groupId ? { ...g, role_count: Math.max(0, g.role_count - 1) } : g
+          g.id === groupId
+            ? { ...g, role_count: nextRoleCount ?? Math.max(0, g.role_count - 1) }
+            : g
         ),
       }));
     },
@@ -244,18 +367,20 @@ export const useWorkspaceGroups = (workspaceSlug: string | undefined) => {
   return {
     groups: groupsState.groups,
     isLoading: groupsState.isLoading,
-    error,
+    listError,
     getGroupDetail,
     loadGroupDetail,
     availableRoles,
+    isAvailableRolesLoading,
+    availableRolesError,
     fetchAvailableRoles,
     fetchGroups,
     createGroup,
     updateGroup,
     deleteGroup,
-    addMember,
+    addMembers,
     removeMember,
-    addRole,
+    addRoles,
     removeRole,
   };
 };

@@ -61,6 +61,7 @@ from .workspace.member import (
     WorkspaceProjectMemberEndpoint,
     WorkspaceMemberUserViewsEndpoint,
     WorkspaceMemberCustomRolesAPIView,
+    WorkspaceMemberGroupsAPIView,
     WorkspaceMyPermissionKeysAPIView,
 )
 from .workspace.invite import (

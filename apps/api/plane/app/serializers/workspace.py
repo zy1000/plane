@@ -123,9 +123,23 @@ def get_workspace_member_group_role_ids(obj):
     )
 
 
+def get_workspace_member_group_ids(obj):
+    return list(
+        WorkspaceGroupMember.objects.filter(
+            member=obj,
+            group__workspace=obj.workspace,
+            group__deleted_at__isnull=True,
+            deleted_at__isnull=True,
+        )
+        .values_list("group_id", flat=True)
+        .distinct()
+    )
+
+
 class WorkspaceMemberRoleFieldsMixin(serializers.Serializer):
     custom_role_ids = serializers.SerializerMethodField(read_only=True)
     group_role_ids = serializers.SerializerMethodField(read_only=True)
+    group_ids = serializers.SerializerMethodField(read_only=True)
 
     def get_custom_role_ids(self, obj):
         return get_workspace_member_custom_role_ids(obj)
@@ -135,6 +149,12 @@ class WorkspaceMemberRoleFieldsMixin(serializers.Serializer):
         if group_role_ids_by_member is not None:
             return group_role_ids_by_member.get(obj.id, [])
         return [str(role_id) for role_id in get_workspace_member_group_role_ids(obj)]
+
+    def get_group_ids(self, obj):
+        group_ids_by_member = self.context.get("group_ids_by_member")
+        if group_ids_by_member is not None:
+            return group_ids_by_member.get(obj.id, [])
+        return [str(group_id) for group_id in get_workspace_member_group_ids(obj)]
 
 
 class WorkSpaceMemberSerializer(WorkspaceMemberRoleFieldsMixin, DynamicBaseSerializer):
@@ -433,6 +453,75 @@ class WorkspaceMemberCustomRolesSerializer(serializers.Serializer):
                     deleted_at__isnull=True,
                 ).values_list("role_id", flat=True)
             ]
+        }
+
+
+class WorkspaceMemberGroupsSerializer(serializers.Serializer):
+    group_ids = serializers.ListField(
+        child=serializers.UUIDField(),
+        allow_empty=True,
+        required=True,
+    )
+
+    def validate_group_ids(self, value):
+        normalized_ids = list(dict.fromkeys(value))
+        workspace = self.context["workspace"]
+        groups = list(
+            WorkspaceGroup.objects.filter(
+                id__in=normalized_ids,
+                workspace=workspace,
+                deleted_at__isnull=True,
+            )
+        )
+        valid_ids = {group.id for group in groups}
+        invalid_ids = [group_id for group_id in normalized_ids if group_id not in valid_ids]
+        if invalid_ids:
+            raise serializers.ValidationError(
+                f"无效的工作区团队 ID：{', '.join(str(group_id) for group_id in invalid_ids)}"
+            )
+        self._groups = groups
+        return normalized_ids
+
+    def save(self, **kwargs):
+        member = self.context["member"]
+        actor = self.context.get("actor")
+        valid_group_ids = {group.id for group in self._groups}
+
+        WorkspaceGroupMember.objects.filter(
+            member=member,
+            deleted_at__isnull=True,
+        ).exclude(group_id__in=valid_group_ids).delete()
+
+        existing_group_ids = set(
+            WorkspaceGroupMember.objects.filter(
+                member=member,
+                group_id__in=valid_group_ids,
+                deleted_at__isnull=True,
+            ).values_list("group_id", flat=True)
+        )
+        WorkspaceGroupMember.objects.bulk_create(
+            [
+                WorkspaceGroupMember(
+                    group=group,
+                    member=member,
+                    created_by=actor,
+                    updated_by=actor,
+                )
+                for group in self._groups
+                if group.id not in existing_group_ids
+            ],
+            ignore_conflicts=True,
+        )
+
+        group_ids = [
+            str(group_id) for group_id in get_workspace_member_group_ids(member)
+        ]
+        group_role_ids = [
+            str(role_id) for role_id in get_workspace_member_group_role_ids(member)
+        ]
+        return {
+            "group_ids": group_ids,
+            "group_role_ids": group_role_ids,
         }
 
 

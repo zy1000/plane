@@ -25,6 +25,7 @@ from plane.app.serializers import (
     WorkspaceMemberAdminSerializer,
     WorkspaceMemberMeSerializer,
     WorkspaceMemberCustomRolesSerializer,
+    WorkspaceMemberGroupsSerializer,
     WorkSpaceMemberSerializer,
 )
 from plane.app.views.base import BaseAPIView
@@ -34,6 +35,7 @@ from plane.db.models import (
     ProjectMember,
     WorkspaceMember,
     WorkspaceMemberRole,
+    WorkspaceGroupMember,
     WorkspaceGroupRole,
     WorkspaceRole,
 )
@@ -108,6 +110,27 @@ class WorkSpaceMemberViewSet(BaseViewSet):
             group_role_ids_by_member[member_id].append(str(role_id))
         return group_role_ids_by_member
 
+    def _get_group_ids_by_member(self, workspace_members):
+        if not workspace_members:
+            return {}
+
+        workspace_id = workspace_members[0].workspace_id
+        member_ids = [workspace_member.id for workspace_member in workspace_members]
+        group_ids_by_member = {member_id: [] for member_id in member_ids}
+        group_rows = (
+            WorkspaceGroupMember.objects.filter(
+                member_id__in=member_ids,
+                group__workspace_id=workspace_id,
+                group__deleted_at__isnull=True,
+                deleted_at__isnull=True,
+            )
+            .values_list("member_id", "group_id")
+            .distinct()
+        )
+        for member_id, group_id in group_rows:
+            group_ids_by_member[member_id].append(str(group_id))
+        return group_ids_by_member
+
     def _can_view_admin_details(self, request, slug):
         permission_keys = getattr(
             request, "_plane_workspace_permission_keys", None
@@ -130,12 +153,13 @@ class WorkSpaceMemberViewSet(BaseViewSet):
         )
         serializer = serializer_class(
             workspace_members,
-            fields=("id", "member", "role", "custom_role_ids", "group_role_ids"),
+            fields=("id", "member", "role", "custom_role_ids", "group_role_ids", "group_ids"),
             many=True,
             context={
                 "group_role_ids_by_member": self._get_group_role_ids_by_member(
                     workspace_members
-                )
+                ),
+                "group_ids_by_member": self._get_group_ids_by_member(workspace_members),
             },
         )
         return Response(serializer.data, status=status.HTTP_200_OK)
@@ -158,7 +182,7 @@ class WorkSpaceMemberViewSet(BaseViewSet):
         )
         serializer = serializer_class(
             member,
-            fields=("id", "member", "role", "custom_role_ids", "group_role_ids"),
+            fields=("id", "member", "role", "custom_role_ids", "group_role_ids", "group_ids"),
         )
         return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -359,6 +383,63 @@ class WorkspaceMemberCustomRolesAPIView(BaseAPIView):
             )
 
         serializer = WorkspaceMemberCustomRolesSerializer(
+            data=request.data,
+            context={
+                "workspace": workspace_member.workspace,
+                "member": workspace_member,
+                "actor": request.user,
+            },
+        )
+        if serializer.is_valid():
+            return Response(serializer.save(), status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class WorkspaceMemberGroupsAPIView(BaseAPIView):
+    def get_member(self, slug, pk):
+        return (
+            WorkspaceMember.objects.filter(
+                pk=pk,
+                workspace__slug=slug,
+                is_active=True,
+                deleted_at__isnull=True,
+            )
+            .select_related("workspace")
+            .first()
+        )
+
+    @allow_fine_permission(*WORKSPACE_MEMBER_LOOKUP_PERMISSIONS, level="WORKSPACE")
+    def get(self, request, slug, pk):
+        workspace_member = self.get_member(slug, pk)
+        if not workspace_member:
+            return Response(
+                {"error": "Workspace member not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        group_ids = [
+            str(group_id)
+            for group_id in WorkspaceGroupMember.objects.filter(
+                member=workspace_member,
+                group__workspace=workspace_member.workspace,
+                group__deleted_at__isnull=True,
+                deleted_at__isnull=True,
+            )
+            .values_list("group_id", flat=True)
+            .distinct()
+        ]
+        return Response({"group_ids": group_ids}, status=status.HTTP_200_OK)
+
+    @transaction.atomic
+    @allow_fine_permission(PermissionKey.WORKSPACE_GROUP_MANAGE_MEMBER, level="WORKSPACE")
+    def put(self, request, slug, pk):
+        workspace_member = self.get_member(slug, pk)
+        if not workspace_member:
+            return Response(
+                {"error": "Workspace member not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        serializer = WorkspaceMemberGroupsSerializer(
             data=request.data,
             context={
                 "workspace": workspace_member.workspace,

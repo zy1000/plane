@@ -28,6 +28,7 @@ export interface IWorkspaceMembership {
   role: EUserPermissions;
   custom_role_ids: string[];
   group_role_ids: string[];
+  group_ids: string[];
   is_active?: boolean;
 }
 
@@ -54,6 +55,11 @@ export interface IWorkspaceMemberStore {
   // crud actions
   updateMember: (workspaceSlug: string, userId: string, data: { role: EUserPermissions }) => Promise<void>;
   updateMemberCustomRoles: (workspaceSlug: string, userId: string, customRoleIds: string[]) => Promise<string[]>;
+  updateMemberGroups: (
+    workspaceSlug: string,
+    userId: string,
+    groupIds: string[]
+  ) => Promise<{ group_ids: string[]; group_role_ids: string[] }>;
   removeMemberFromWorkspace: (workspaceSlug: string, userId: string) => Promise<void>;
   // invite actions
   inviteMembersToWorkspace: (workspaceSlug: string, data: IWorkspaceBulkInviteFormData) => Promise<void>;
@@ -94,6 +100,7 @@ export class WorkspaceMemberStore implements IWorkspaceMemberStore {
       fetchWorkspaceMembers: action,
       updateMember: action,
       updateMemberCustomRoles: action,
+      updateMemberGroups: action,
       removeMemberFromWorkspace: action,
       fetchWorkspaceMemberInvitations: action,
       updateMemberInvitation: action,
@@ -214,6 +221,7 @@ export class WorkspaceMemberStore implements IWorkspaceMemberStore {
       role: workspaceMember.role,
       custom_role_ids: workspaceMember.custom_role_ids,
       group_role_ids: workspaceMember.group_role_ids,
+      group_ids: workspaceMember.group_ids,
       member: this.memberRoot?.memberMap?.[workspaceMember.member],
       is_active: workspaceMember.is_active,
     };
@@ -250,6 +258,7 @@ export class WorkspaceMemberStore implements IWorkspaceMemberStore {
             role: member.role,
             custom_role_ids: member.custom_role_ids ?? [],
             group_role_ids: member.group_role_ids ?? [],
+            group_ids: member.group_ids ?? [],
             is_active: member.is_active,
           });
         });
@@ -304,6 +313,36 @@ export class WorkspaceMemberStore implements IWorkspaceMemberStore {
     } catch (error) {
       runInAction(() => {
         set(this.workspaceMemberMap, [workspaceSlug, userId, "custom_role_ids"], previousRoleIds);
+      });
+      throw error;
+    }
+  };
+
+  updateMemberGroups = async (workspaceSlug: string, userId: string, groupIds: string[]) => {
+    const memberDetails = this.getWorkspaceMemberDetails(userId);
+    if (!memberDetails) throw new Error("Member not found");
+    const previousGroupIds = this.workspaceMemberMap?.[workspaceSlug]?.[userId]?.group_ids ?? [];
+    const previousGroupRoleIds = this.workspaceMemberMap?.[workspaceSlug]?.[userId]?.group_role_ids ?? [];
+
+    runInAction(() => {
+      set(this.workspaceMemberMap, [workspaceSlug, userId, "group_ids"], groupIds);
+    });
+
+    try {
+      const response = await this.workspaceService.updateWorkspaceMemberGroups(
+        workspaceSlug,
+        memberDetails.id,
+        groupIds
+      );
+      runInAction(() => {
+        set(this.workspaceMemberMap, [workspaceSlug, userId, "group_ids"], response.group_ids);
+        set(this.workspaceMemberMap, [workspaceSlug, userId, "group_role_ids"], response.group_role_ids);
+      });
+      return response;
+    } catch (error) {
+      runInAction(() => {
+        set(this.workspaceMemberMap, [workspaceSlug, userId, "group_ids"], previousGroupIds);
+        set(this.workspaceMemberMap, [workspaceSlug, userId, "group_role_ids"], previousGroupRoleIds);
       });
       throw error;
     }

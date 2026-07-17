@@ -67,19 +67,22 @@ export function GroupFormModal({ isOpen, group, onClose, onSubmit }: Props) {
     }
   };
 
-  // 不传 handleClose：点击遮罩 / Escape 不关闭；通过右上角关闭、取消或提交成功调用 onClose
   return (
     <ModalCore
       isOpen={isOpen}
+      handleClose={isSubmitting ? undefined : onClose}
       position={EModalPosition.TOP}
       width={EModalWidth.XL}
-      className="flex min-h-[24rem] flex-col"
+      className="flex min-h-[22rem] flex-col"
     >
       <div className="flex flex-1 flex-col">
         <div className="flex items-start justify-between gap-3 px-6 pt-6 pb-0">
-          <h3 className="min-w-0 flex-1 pt-0.5 text-body-lg-medium text-primary">
-            {isEditMode ? "编辑团队" : "新建团队"}
-          </h3>
+          <div className="min-w-0 flex-1">
+            <h3 className="text-body-lg-medium text-primary">{isEditMode ? "编辑团队" : "创建团队"}</h3>
+            <p className="mt-1 text-13 leading-5 text-secondary">
+              {isEditMode ? "更新团队名称和用途说明。" : "先创建团队，再继续添加成员并分配工作区角色。"}
+            </p>
+          </div>
           <button
             type="button"
             onClick={onClose}
@@ -96,10 +99,10 @@ export function GroupFormModal({ isOpen, group, onClose, onSubmit }: Props) {
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="flex flex-1 flex-col gap-6 px-6 pb-6 pt-4">
+        <form onSubmit={handleSubmit} className="flex flex-1 flex-col gap-6 px-6 pt-4 pb-6">
           <div className="flex flex-col gap-1">
             <label className="text-body-sm-medium text-secondary" htmlFor="group-name">
-              组名
+              团队名称
               <span className="ml-0.5 text-danger-primary">*</span>
             </label>
             <Input
@@ -113,7 +116,7 @@ export function GroupFormModal({ isOpen, group, onClose, onSubmit }: Props) {
                 if (nameError) setNameError(null);
               }}
               hasError={Boolean(nameError)}
-              placeholder="请输入团队名称"
+              placeholder="例如：产品设计团队"
               className="w-full text-body-sm-regular"
               maxLength={100}
             />
@@ -129,8 +132,8 @@ export function GroupFormModal({ isOpen, group, onClose, onSubmit }: Props) {
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="可选：描述这个团队的用途"
-              rows={6}
-              className="min-h-[9.5rem] w-full resize-none rounded-md border border-subtle bg-surface-1 px-3 py-2 text-body-sm-regular text-primary outline-none focus:border-primary placeholder:text-placeholder"
+              rows={4}
+              className="min-h-28 w-full resize-none rounded-md border border-subtle bg-surface-1 px-3 py-2 text-body-sm-regular text-primary outline-none placeholder:text-placeholder focus:border-accent-strong"
               maxLength={500}
             />
           </div>
@@ -142,7 +145,7 @@ export function GroupFormModal({ isOpen, group, onClose, onSubmit }: Props) {
               取消
             </Button>
             <Button variant="primary" size="base" type="submit" loading={isSubmitting}>
-              {isEditMode ? "保存" : "创建"}
+              {isEditMode ? "保存修改" : "创建团队"}
             </Button>
           </div>
         </form>

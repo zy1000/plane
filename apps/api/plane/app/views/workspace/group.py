@@ -3,7 +3,7 @@
 # See the LICENSE file for details.
 
 # Django imports
-from django.db.models import Count
+from django.db.models import Count, Q
 
 # Third party imports
 from rest_framework import status
@@ -43,8 +43,17 @@ class WorkspaceGroupViewSet(BaseViewSet):
             .filter(workspace__slug=self.kwargs.get("slug"))
             .select_related("workspace", "created_by", "updated_by")
             .annotate(
-                member_count=Count("group_members", distinct=True),
-                role_count=Count("group_roles", distinct=True),
+                # Count() 走 SQL JOIN，不会经过 SoftDeletionManager，需显式排除软删除
+                member_count=Count(
+                    "group_members",
+                    filter=Q(group_members__deleted_at__isnull=True),
+                    distinct=True,
+                ),
+                role_count=Count(
+                    "group_roles",
+                    filter=Q(group_roles__deleted_at__isnull=True),
+                    distinct=True,
+                ),
             )
         )
 

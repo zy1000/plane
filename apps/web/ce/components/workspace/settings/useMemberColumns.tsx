@@ -8,7 +8,8 @@ import { useState } from "react";
 import { useParams } from "next/navigation";
 import useSWR from "swr";
 import {
-  LOGIN_MEDIUM_LABELS,
+  WORKSPACE_GROUP_MANAGE_MEMBER_PERMISSION_KEY,
+  WORKSPACE_GROUP_VIEW_PERMISSION_KEY,
   WORKSPACE_MEMBER_EDIT_PERMISSION_KEY,
   WORKSPACE_MEMBER_LEAVE_PERMISSION_KEY,
   WORKSPACE_MEMBER_REMOVE_PERMISSION_KEY,
@@ -18,8 +19,9 @@ import { useTranslation } from "@plane/i18n";
 import { renderFormattedDate } from "@plane/utils";
 import { MemberHeaderColumn } from "@/components/project/member-header-column";
 import type { RowData } from "@/components/workspace/settings/member-columns";
-import { AccountTypeColumn, CustomRolesColumn, NameColumn } from "@/components/workspace/settings/member-columns";
+import { CustomRolesColumn, NameColumn, TeamsColumn } from "@/components/workspace/settings/member-columns";
 import { useMember } from "@/hooks/store/use-member";
+import { useWorkspaceGroups } from "@/hooks/store/use-workspace-groups";
 import { useWorkspaceRoles } from "@/hooks/store/use-workspace-roles";
 import { useUser, useUserPermissions } from "@/hooks/store/user";
 import type { IMemberFilters } from "@/store/member/utils";
@@ -44,10 +46,17 @@ export const useMemberColumns = () => {
   const canRemoveMember = allowWorkspacePermissionKeys([WORKSPACE_MEMBER_REMOVE_PERMISSION_KEY], workspaceSlug);
   const canLeaveWorkspace = allowWorkspacePermissionKeys([WORKSPACE_MEMBER_LEAVE_PERMISSION_KEY], workspaceSlug);
   const canViewRoles = allowWorkspacePermissionKeys([WORKSPACE_ROLE_VIEW_PERMISSION_KEY], workspaceSlug);
+  const canViewGroups = allowWorkspacePermissionKeys([WORKSPACE_GROUP_VIEW_PERMISSION_KEY], workspaceSlug);
+  const canManageTeams = allowWorkspacePermissionKeys([WORKSPACE_GROUP_MANAGE_MEMBER_PERMISSION_KEY], workspaceSlug);
   const { roles, isLoading: isRolesLoading, fetchRoles } = useWorkspaceRoles(workspaceSlug, "workspace");
+  const { groups, isLoading: isGroupsLoading, fetchGroups } = useWorkspaceGroups(workspaceSlug);
   useSWR(
     (canViewRoles || canEditMember) && workspaceSlug ? `WORKSPACE_MEMBER_ASSIGNABLE_ROLES_${workspaceSlug}` : null,
     fetchRoles
+  );
+  useSWR(
+    (canViewGroups || canManageTeams) && workspaceSlug ? `WORKSPACE_MEMBER_GROUPS_${workspaceSlug}` : null,
+    fetchGroups
   );
 
   const isSuspended = (rowData: RowData) => rowData.is_active === false;
@@ -112,23 +121,8 @@ export const useMemberColumns = () => {
     },
 
     {
-      key: "Account type",
-      content: t("workspace_settings.settings.members.details.account_type"),
-      thRender: () => (
-        <MemberHeaderColumn
-          property="role"
-          displayFilters={filters}
-          handleDisplayFilterUpdate={handleDisplayFilterUpdate}
-        />
-      ),
-      tdRender: (rowData: RowData) => (
-        <AccountTypeColumn rowData={rowData} workspaceSlug={workspaceSlug} canEditMember={canEditMember} />
-      ),
-    },
-
-    {
       key: "Custom roles",
-      content: "自定义角色",
+      content: "Role",
       tdRender: (rowData: RowData) => (
         <CustomRolesColumn
           rowData={rowData}
@@ -141,14 +135,17 @@ export const useMemberColumns = () => {
     },
 
     {
-      key: "Authentication",
-      content: t("workspace_settings.settings.members.details.authentication"),
-      tdRender: (rowData: RowData) => {
-        if (isSuspended(rowData)) return null;
-        const loginMedium = rowData.member.last_login_medium;
-        if (!loginMedium) return null;
-        return <div>{LOGIN_MEDIUM_LABELS[loginMedium]}</div>;
-      },
+      key: "Teams",
+      content: "团队",
+      tdRender: (rowData: RowData) => (
+        <TeamsColumn
+          rowData={rowData}
+          workspaceSlug={workspaceSlug}
+          groups={groups}
+          isLoading={isGroupsLoading}
+          canManageTeams={canManageTeams}
+        />
+      ),
     },
 
     {

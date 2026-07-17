@@ -4,361 +4,260 @@
  * See the LICENSE file for details.
  */
 
-import { useEffect, useState } from "react";
-import { ConfigProvider, Table } from "antd";
-import type { ColumnsType, TableProps } from "antd/es/table";
-import { PencilIcon, ChevronDown, Trash2Icon, UsersRound } from "lucide-react";
-import type { IWorkspaceGroup, IWorkspaceGroupMember, IWorkspaceGroupRole, IWorkspaceRole } from "@plane/types";
-import { TOAST_TYPE, setToast } from "@plane/propel/toast";
+import { MoreHorizontal, PencilIcon, RotateCcw, ShieldCheck, Trash2Icon, UsersRound } from "lucide-react";
+import type { IWorkspaceGroup } from "@plane/types";
+import { Button } from "@plane/propel/button";
+import { Menu } from "@plane/propel/menu";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
 import { cn, renderFormattedPayloadDate } from "@plane/utils";
-import { GroupFormModal } from "./group-form-modal";
-import { GroupMembersRolesManager } from "./group-members-roles-manager";
-
-type TMemberOption = {
-  id: string;
-  memberId: string;
-  displayName: string;
-  avatarUrl?: string;
-  email?: string;
-};
-
-type TGroupDetail = {
-  members: IWorkspaceGroupMember[];
-  roles: IWorkspaceGroupRole[];
-  isLoading: boolean;
-  loaded: boolean;
-};
 
 type Props = {
   groups: IWorkspaceGroup[];
-  /** 未经过搜索筛选的团队总数；传入后与 `groups` 对比可区分「暂无团队」与「没有匹配的团队」 */
-  totalGroupCount?: number;
+  totalGroupCount: number;
   isLoading: boolean;
-  isAdmin: boolean;
-  onRequestCreate?: () => void;
-  getGroupDetail: (groupId: string) => TGroupDetail;
-  loadGroupDetail: (groupId: string) => Promise<void>;
-  availableRoles: IWorkspaceRole[];
-  memberOptions: TMemberOption[];
-  onUpdate: (groupId: string, data: { name: string; description: string }) => Promise<void>;
-  onDelete: (groupId: string) => Promise<void>;
-  onAddMember: (groupId: string, memberId: string) => Promise<void>;
-  onRemoveMember: (groupId: string, membershipId: string) => Promise<void>;
-  onAddRole: (groupId: string, roleId: string) => Promise<void>;
-  onRemoveRole: (groupId: string, groupRoleId: string) => Promise<void>;
+  error: string | null;
+  hasSearchQuery: boolean;
+  activeGroupId: string | null;
+  canEdit: boolean;
+  canDelete: boolean;
+  onOpen: (group: IWorkspaceGroup) => void;
+  onEdit: (group: IWorkspaceGroup) => void;
+  onDelete: (group: IWorkspaceGroup) => void;
+  onRetry: () => void;
+  onCreate: () => void;
+  canCreate: boolean;
 };
 
-export function WorkspaceGroupsList(props: Props) {
-  const {
-    groups,
-    totalGroupCount: totalGroupCountProp,
-    isLoading,
-    isAdmin,
-    getGroupDetail,
-    loadGroupDetail,
-    availableRoles,
-    memberOptions,
-    onUpdate,
-    onDelete,
-    onAddMember,
-    onRemoveMember,
-    onAddRole,
-    onRemoveRole,
-    onRequestCreate,
-  } = props;
+function GroupActions({
+  group,
+  canEdit,
+  canDelete,
+  onEdit,
+  onDelete,
+}: Pick<Props, "canEdit" | "canDelete" | "onEdit" | "onDelete"> & { group: IWorkspaceGroup }) {
+  if (!canEdit && !canDelete) return null;
 
-  const totalGroupCount = totalGroupCountProp ?? groups.length;
-  const isSearchNoResults = groups.length === 0 && totalGroupCount > 0;
+  return (
+    <Menu
+      ariaLabel={`管理团队 ${group.name}`}
+      customButtonClassName="flex size-8 items-center justify-center rounded-md text-placeholder transition-colors hover:bg-layer-1-hover hover:text-primary focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-accent-strong"
+      optionsClassName="min-w-36 space-y-0.5"
+      customButton={<MoreHorizontal className="size-4" />}
+    >
+      {canEdit && (
+        <Menu.MenuItem onClick={() => onEdit(group)} className="flex items-center gap-2 px-2 py-1.5 text-13">
+          <PencilIcon className="size-3.5" />
+          编辑团队
+        </Menu.MenuItem>
+      )}
+      {canDelete && (
+        <Menu.MenuItem
+          onClick={() => onDelete(group)}
+          className="flex items-center gap-2 px-2 py-1.5 text-13 text-danger-primary hover:bg-danger-subtle"
+        >
+          <Trash2Icon className="size-3.5" />
+          删除团队
+        </Menu.MenuItem>
+      )}
+    </Menu>
+  );
+}
 
-  const [expandedRowKeys, setExpandedRowKeys] = useState<string[]>([]);
-  const [editingGroup, setEditingGroup] = useState<IWorkspaceGroup | null>(null);
-  const [deletingGroupId, setDeletingGroupId] = useState<string | null>(null);
+function EmptyState({ hasSearchQuery, canCreate, onCreate }: Pick<Props, "hasSearchQuery" | "canCreate" | "onCreate">) {
+  return (
+    <div className="flex min-h-72 flex-col items-center justify-center px-6 py-16 text-center">
+      <div className="mb-4 flex size-11 items-center justify-center rounded-lg border border-subtle bg-layer-1">
+        <UsersRound className="size-5 text-secondary" />
+      </div>
+      <p className="text-13 font-medium text-primary">{hasSearchQuery ? "没有匹配的团队" : "还没有团队"}</p>
+      <p className="mt-1 max-w-80 text-13 leading-5 text-secondary">
+        {hasSearchQuery ? "尝试更换关键词，或清除搜索条件。" : "创建团队后，可以统一管理成员并批量授予工作区角色。"}
+      </p>
+      {!hasSearchQuery && canCreate && (
+        <Button variant="primary" className="mt-4" onClick={onCreate}>
+          创建第一个团队
+        </Button>
+      )}
+    </div>
+  );
+}
 
-  useEffect(() => {
-    const validIds = new Set(groups.map((g) => g.id));
-    setExpandedRowKeys((prev) => prev.filter((id) => validIds.has(id)));
-  }, [groups]);
-
-  const handleExpand = (expanded: boolean, record: IWorkspaceGroup) => {
-    if (expanded) void loadGroupDetail(record.id);
-    setExpandedRowKeys((prev) =>
-      expanded ? [...prev, record.id] : prev.filter((id) => id !== record.id)
-    );
-  };
-
-  const handleUpdateGroup = async (data: { name: string; description: string }) => {
-    if (!editingGroup) return;
-    await onUpdate(editingGroup.id, data);
-    setToast({ type: TOAST_TYPE.SUCCESS, title: "已保存", message: "团队信息已更新" });
-  };
-
-  const handleDeleteGroup = async (group: IWorkspaceGroup) => {
-    if (!confirm(`确定要删除团队「${group.name}」吗？此操作不可恢复。`)) return;
-    setDeletingGroupId(group.id);
-    try {
-      await onDelete(group.id);
-      setToast({ type: TOAST_TYPE.SUCCESS, title: "已删除", message: `团队「${group.name}」已删除` });
-    } catch {
-      setToast({ type: TOAST_TYPE.ERROR, title: "删除失败", message: "请稍后重试" });
-    } finally {
-      setDeletingGroupId(null);
-    }
-  };
-
-  if (isLoading) {
-    return (
-      <div className="divide-y-[0.5px] divide-subtle border-t border-subtle">
-        {[1, 2, 3, 4].map((i) => (
-          <div key={i} className="flex animate-pulse items-center gap-4 bg-surface-1 px-4 py-4">
-            <div className="size-9 rounded-lg bg-layer-transparent-hover" />
-            <div className="flex flex-1 flex-col gap-2">
-              <div className="h-3.5 w-40 rounded bg-layer-transparent-hover" />
-              <div className="h-3 w-full max-w-md rounded bg-layer-transparent-hover" />
-            </div>
-            <div className="hidden h-3 w-16 rounded bg-layer-transparent-hover sm:block" />
-            <div className="size-6 rounded bg-layer-transparent-hover" />
+function LoadingState() {
+  return (
+    <div className="divide-y divide-subtle">
+      {[1, 2, 3, 4, 5].map((item) => (
+        <div key={item} className="flex animate-pulse items-center gap-3 px-4 py-3.5">
+          <div className="size-9 shrink-0 rounded-lg bg-layer-transparent-hover" />
+          <div className="flex min-w-0 flex-1 flex-col gap-2">
+            <div className="h-3.5 w-32 rounded bg-layer-transparent-hover" />
+            <div className="h-3 w-full max-w-72 rounded bg-layer-transparent-hover" />
           </div>
-        ))}
+          <div className="hidden h-3 w-16 rounded bg-layer-transparent-hover md:block" />
+          <div className="hidden h-3 w-20 rounded bg-layer-transparent-hover md:block" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function WorkspaceGroupsList({
+  groups,
+  totalGroupCount,
+  isLoading,
+  error,
+  hasSearchQuery,
+  activeGroupId,
+  canEdit,
+  canDelete,
+  onOpen,
+  onEdit,
+  onDelete,
+  onRetry,
+  onCreate,
+  canCreate,
+}: Props) {
+  if (isLoading && totalGroupCount === 0) return <LoadingState />;
+
+  if (error && totalGroupCount === 0) {
+    return (
+      <div className="flex min-h-72 flex-col items-center justify-center px-6 py-16 text-center">
+        <div className="mb-4 flex size-11 items-center justify-center rounded-lg bg-danger-subtle">
+          <RotateCcw className="size-5 text-danger-primary" />
+        </div>
+        <p className="text-13 font-medium text-primary">团队列表加载失败</p>
+        <p className="mt-1 max-w-80 text-13 leading-5 text-secondary">{error}</p>
+        <Button variant="secondary" className="mt-4" prependIcon={<RotateCcw />} onClick={onRetry}>
+          重新加载
+        </Button>
       </div>
     );
   }
 
-  const columns: ColumnsType<IWorkspaceGroup> = [
-    {
-      title: "名称",
-      dataIndex: "name",
-      key: "name",
-      ellipsis: true,
-      onCell: () => ({ style: { minWidth: 200 } }),
-      render: (name: string) => (
-        <span className="truncate text-body-sm-semibold text-primary">{name}</span>
-      ),
-    },
-    {
-      title: "描述",
-      key: "description",
-      ellipsis: true,
-      onCell: () => ({ style: { minWidth: 160 } }),
-      render: (_: unknown, record: IWorkspaceGroup) => (
-        <span className="line-clamp-1 text-body-xs-regular text-tertiary">
-          {record.description?.trim() ? record.description : "—"}
-        </span>
-      ),
-    },
-    {
-      title: "成员数",
-      dataIndex: "member_count",
-      key: "member_count",
-      align: "center",
-      width: 100,
-      render: (count: number) => (
-        <span className="block text-center tabular-nums text-body-xs-regular text-secondary">{count}</span>
-      ),
-    },
-    {
-      title: "角色数",
-      dataIndex: "role_count",
-      key: "role_count",
-      align: "center",
-      width: 100,
-      render: (count: number) => (
-        <span className="block text-center tabular-nums text-body-xs-regular text-secondary">{count}</span>
-      ),
-    },
-    {
-      title: "创建时间",
-      dataIndex: "created_at",
-      key: "created_at",
-      width: 128,
-      render: (date: string) => (
-        <span className="tabular-nums text-body-xs-regular text-secondary">
-          {renderFormattedPayloadDate(date) ?? "—"}
-        </span>
-      ),
-    },
-    ...(isAdmin
-      ? [
-          {
-            title: "操作",
-            key: "actions",
-            align: "center",
-            width: 116,
-            fixed: "right",
-            render: (_: unknown, record: IWorkspaceGroup) => (
-              <div className="flex items-center justify-center gap-1">
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setEditingGroup(record);
-                  }}
-                  className="flex size-7 cursor-pointer items-center justify-center rounded-md text-placeholder transition-colors duration-200 hover:bg-layer-1-hover hover:text-primary"
-                  aria-label="编辑团队"
-                  title="编辑"
-                >
-                  <PencilIcon className="size-3.5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    void handleDeleteGroup(record);
-                  }}
-                  disabled={deletingGroupId === record.id}
-                  className={cn(
-                    "flex size-7 cursor-pointer items-center justify-center rounded-md text-placeholder transition-colors duration-200 hover:bg-red-500/10 hover:text-red-600",
-                    deletingGroupId === record.id && "cursor-wait opacity-50"
-                  )}
-                  aria-label="删除团队"
-                  title="删除"
-                >
-                  <Trash2Icon className="size-3.5" />
-                </button>
-              </div>
-            ),
-          } satisfies ColumnsType<IWorkspaceGroup>[number],
-        ]
-      : []),
-  ];
+  if (groups.length === 0) {
+    return <EmptyState hasSearchQuery={hasSearchQuery} canCreate={canCreate} onCreate={onCreate} />;
+  }
 
-  const expandable: TableProps<IWorkspaceGroup>["expandable"] = {
-    expandedRowKeys,
-    onExpand: handleExpand,
-    expandedRowRender: (record) => {
-      const detail = getGroupDetail(record.id);
-      return (
-        <div className="border-t border-subtle bg-canvas">
-          <GroupMembersRolesManager
-            variant="embedded"
-            group={record}
-            members={detail.members}
-            roles={detail.roles}
-            isDetailLoading={detail.isLoading}
-            availableRoles={availableRoles}
-            memberOptions={memberOptions}
-            isAdmin={isAdmin}
-            onUpdate={onUpdate}
-            onDelete={onDelete}
-            onAddMember={onAddMember}
-            onRemoveMember={onRemoveMember}
-            onAddRole={onAddRole}
-            onRemoveRole={onRemoveRole}
-          />
-        </div>
-      );
-    },
-    expandIcon: ({ expanded, onExpand, record }) => (
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          onExpand(record, e);
-        }}
-        aria-expanded={expanded}
-        aria-label={expanded ? "收起详情" : "展开详情"}
-        className="flex cursor-pointer items-center justify-center rounded p-1 text-secondary transition-colors duration-200 hover:bg-layer-1-hover"
-      >
-        <ChevronDown
-          className={cn("size-4 transition-transform duration-300 ease-out", expanded && "rotate-180")}
-        />
-      </button>
-    ),
-    expandRowByClick: true,
-    columnWidth: 40,
-    fixed: "right",
-  };
+  const openGroup = (group: IWorkspaceGroup) => onOpen(group);
 
   return (
-    <div
-      className={cn(
-        "border-t border-subtle",
-        // 消除 antd 展开行单元格的默认内边距，让 GroupMembersRolesManager 完整撑满
-        "[&_.ant-table-expanded-row>td]:p-0",
-        // 展开行不显示 antd 默认的列分隔线
-        "[&_.ant-table-expanded-row>td]:border-0",
-        // 表头字体匹配 text-body-xs-medium（0.75rem / 500）
-        "[&_.ant-table-thead>tr>th]:py-2.5",
-        "[&_.ant-table-thead>tr>th]:text-body-xs-medium",
-        // 消除 antd 行展开图标列的多余 padding
-        "[&_.ant-table-row-expand-icon-cell]:px-0",
-        "[&_.ant-table-row-expand-icon-cell]:pr-2"
-      )}
-    >
-      <ConfigProvider
-        theme={{
-          token: {
-            // 基底容器背景 → 行背景跟随 surface-1
-            colorBgContainer: "var(--background-color-surface-1)",
-          },
-          components: {
-            Table: {
-              // 表头
-              headerBg: "var(--background-color-surface-1)",
-              headerColor: "var(--text-color-placeholder)",
-              headerSplitColor: "transparent",
-              headerBorderRadius: 0,
-              // 分隔线颜色
-              borderColor: "var(--border-color-subtle)",
-              // 行悬浮背景 → layer-1-hover（对应 surface-1 上的 hover）
-              rowHoverBg: "var(--background-color-layer-1-hover)",
-              // 选中行（不使用 row selection，保持与普通行一致）
-              rowSelectedBg: "var(--background-color-surface-1)",
-              rowSelectedHoverBg: "var(--background-color-layer-1-hover)",
-              // 排序列背景（不使用排序，透明即可）
-              bodySortBg: "transparent",
-              // 单元格内边距
-              cellPaddingBlock: 14,
-              cellPaddingInline: 16,
-              // 展开图标背景透明
-              expandIconBg: "transparent",
-              // 底部背景
-              footerBg: "transparent",
-            },
-          },
-        }}
-      >
-        <Table<IWorkspaceGroup>
-          dataSource={groups}
-          columns={columns}
-          expandable={expandable}
-          rowKey="id"
-          locale={{
-            emptyText: (
-              <div className="flex flex-col items-center justify-center py-20">
-                <div className="mb-3 flex size-12 items-center justify-center rounded-full bg-layer-1">
-                  <UsersRound className="size-5 text-placeholder" />
-                </div>
-                {isSearchNoResults ? (
-                  <p className="text-body-sm-regular text-tertiary">没有匹配的团队</p>
-                ) : (
-                  <>
-                    <p className="text-body-sm-regular text-tertiary">暂无团队</p>
-                    {isAdmin && onRequestCreate && (
-                      <button
-                        type="button"
-                        onClick={onRequestCreate}
-                        className="mt-2 cursor-pointer text-body-xs-medium text-custom-primary-100 transition-colors hover:underline"
+    <>
+      <div className="hidden lg:block">
+        <Table className="min-w-[760px]">
+          <TableHeader>
+            <TableRow className="hover:bg-transparent">
+              <TableHead className="h-10 w-[48%] px-4">团队</TableHead>
+              <TableHead className="h-10 w-28 px-4 text-center">成员</TableHead>
+              <TableHead className="h-10 w-36 px-4 text-center">角色与权限</TableHead>
+              <TableHead className="h-10 w-36 px-4">最近更新</TableHead>
+              {(canEdit || canDelete) && <TableHead className="h-10 w-14 px-3" />}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {groups.map((group) => {
+              const isActive = activeGroupId === group.id;
+              return (
+                <TableRow
+                  key={group.id}
+                  tabIndex={0}
+                  aria-label={`打开团队 ${group.name}`}
+                  onClick={() => openGroup(group)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      openGroup(group);
+                    }
+                  }}
+                  className={cn(
+                    "group cursor-pointer border-b border-subtle transition-colors outline-none hover:bg-layer-1-hover focus-visible:bg-layer-1-hover",
+                    isActive && "bg-accent-subtle hover:bg-accent-subtle"
+                  )}
+                >
+                  <TableCell className="px-4 py-3.5">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div
+                        className={cn(
+                          "flex size-9 shrink-0 items-center justify-center rounded-lg border border-subtle bg-layer-1 text-secondary",
+                          isActive && "border-accent-strong bg-surface-1 text-accent-primary"
+                        )}
                       >
-                        点击新建
-                      </button>
+                        <UsersRound className="size-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="truncate text-13 font-medium text-primary">{group.name}</p>
+                        <p className="mt-0.5 truncate text-13 text-secondary">
+                          {group.description?.trim() || "暂无团队描述"}
+                        </p>
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell className="px-4 py-3.5 text-center">
+                    <span className="inline-flex items-center gap-1.5 text-13 text-secondary tabular-nums">
+                      <UsersRound className="size-3.5 text-placeholder" />
+                      {group.member_count}
+                    </span>
+                  </TableCell>
+                  <TableCell className="px-4 py-3.5 text-center">
+                    {group.role_count > 0 ? (
+                      <span className="inline-flex items-center gap-1.5 rounded-md bg-accent-subtle px-2 py-1 text-13 font-medium text-accent-primary">
+                        <ShieldCheck className="size-3.5" />
+                        {group.role_count} 个角色
+                      </span>
+                    ) : (
+                      <span className="text-13 text-tertiary">未分配角色</span>
                     )}
-                  </>
-                )}
-              </div>
-            ),
-          }}
-          pagination={false}
-          sticky
-          scroll={{ x: 720 }}
-          rowClassName="cursor-pointer"
-        />
-      </ConfigProvider>
-      <GroupFormModal
-        isOpen={Boolean(editingGroup)}
-        group={editingGroup}
-        onClose={() => setEditingGroup(null)}
-        onSubmit={handleUpdateGroup}
-      />
-    </div>
+                  </TableCell>
+                  <TableCell className="px-4 py-3.5 text-13 text-secondary tabular-nums">
+                    {renderFormattedPayloadDate(group.updated_at) ?? "—"}
+                  </TableCell>
+                  {(canEdit || canDelete) && (
+                    <TableCell className="px-3 py-3.5" onClick={(event) => event.stopPropagation()}>
+                      <div className="flex justify-end opacity-60 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
+                        <GroupActions
+                          group={group}
+                          canEdit={canEdit}
+                          canDelete={canDelete}
+                          onEdit={onEdit}
+                          onDelete={onDelete}
+                        />
+                      </div>
+                    </TableCell>
+                  )}
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </div>
+
+      <ul className="divide-y divide-subtle lg:hidden">
+        {groups.map((group) => {
+          const isActive = activeGroupId === group.id;
+          return (
+            <li key={group.id} className={cn("flex items-center gap-3 px-3 py-3", isActive && "bg-accent-subtle")}>
+              <button
+                type="button"
+                onClick={() => openGroup(group)}
+                className="flex min-w-0 flex-1 items-center gap-3 text-left"
+              >
+                <div className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-subtle bg-layer-1 text-secondary">
+                  <UsersRound className="size-4" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-13 font-medium text-primary">{group.name}</p>
+                  <p className="mt-0.5 truncate text-13 text-secondary">
+                    {group.description?.trim() || "暂无团队描述"}
+                  </p>
+                  <div className="mt-1.5 flex items-center gap-3 text-11 text-tertiary">
+                    <span>{group.member_count} 位成员</span>
+                    <span>{group.role_count > 0 ? `${group.role_count} 个角色` : "未分配角色"}</span>
+                  </div>
+                </div>
+              </button>
+              <GroupActions group={group} canEdit={canEdit} canDelete={canDelete} onEdit={onEdit} onDelete={onDelete} />
+            </li>
+          );
+        })}
+      </ul>
+    </>
   );
 }

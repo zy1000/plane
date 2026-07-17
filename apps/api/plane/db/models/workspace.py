@@ -563,7 +563,7 @@ class WorkspaceMemberRole(BaseModel):
     def save(self, *args, **kwargs):
         if self.member_id:
             self.workspace_id = self.member.workspace_id
-        self.full_clean()
+        self.full_clean(exclude=["created_by", "updated_by"])
         return super().save(*args, **kwargs)
 
     class Meta:
@@ -629,7 +629,7 @@ class WorkspaceGroupMember(BaseModel):
             raise ValidationError("The member does not belong to this workspace.")
 
     def save(self, *args, **kwargs):
-        self.full_clean()
+        self.full_clean(exclude=["created_by", "updated_by"])
         return super().save(*args, **kwargs)
 
     class Meta:
@@ -665,7 +665,7 @@ class WorkspaceGroupRole(BaseModel):
                 raise ValidationError("Only workspace roles can be assigned to groups.")
 
     def save(self, *args, **kwargs):
-        self.full_clean()
+        self.full_clean(exclude=["created_by", "updated_by"])
         return super().save(*args, **kwargs)
 
     class Meta:

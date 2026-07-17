@@ -6,24 +6,19 @@
 
 import { observer } from "mobx-react";
 import Link from "next/link";
-import { Controller, useForm } from "react-hook-form";
 
 import { Disclosure } from "@headlessui/react";
 // plane imports
-import { ROLE, EUserPermissions, MEMBER_TRACKER_ELEMENTS } from "@plane/constants";
+import { EUserPermissions, MEMBER_TRACKER_ELEMENTS } from "@plane/constants";
 import { TrashIcon, SuspendedUserIcon } from "@plane/propel/icons";
-import { Pill, EPillVariant, EPillSize } from "@plane/propel/pill";
-import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import type { IUser, IWorkspaceMember, IWorkspaceRole } from "@plane/types";
+import type { IUser, IWorkspaceGroup, IWorkspaceMember, IWorkspaceRole } from "@plane/types";
 // plane ui
-import { CustomSelect, PopoverMenu } from "@plane/ui";
+import { PopoverMenu } from "@plane/ui";
 // helpers
 import { SYSTEM_USER_AVATAR_FALLBACK_COLOR } from "@/helpers/user-avatar.helper";
 import { getFileURL } from "@plane/utils";
-// hooks
-import { useMember } from "@/hooks/store/use-member";
-import { useUser, useUserPermissions } from "@/hooks/store/user";
 import { WorkspaceRoleMultiSelect } from "./workspace-role-multi-select";
+import { WorkspaceTeamMultiSelect } from "./workspace-team-multi-select";
 
 export interface RowData {
   member: IWorkspaceMember;
@@ -31,6 +26,7 @@ export interface RowData {
   is_active: boolean;
   custom_role_ids: string[];
   group_role_ids: string[];
+  group_ids: string[];
 }
 
 type NameProps = {
@@ -42,18 +38,20 @@ type NameProps = {
   setRemoveMemberModal: (rowData: RowData) => void;
 };
 
-type AccountTypeProps = {
-  rowData: RowData;
-  workspaceSlug: string;
-  canEditMember: boolean;
-};
-
 type CustomRolesProps = {
   rowData: RowData;
   workspaceSlug: string;
   roles: IWorkspaceRole[];
   isLoading: boolean;
   canEditMember: boolean;
+};
+
+type TeamsProps = {
+  rowData: RowData;
+  workspaceSlug: string;
+  groups: IWorkspaceGroup[];
+  isLoading: boolean;
+  canManageTeams: boolean;
 };
 
 export function NameColumn(props: NameProps) {
@@ -131,86 +129,6 @@ export function NameColumn(props: NameProps) {
   );
 }
 
-export const AccountTypeColumn = observer(function AccountTypeColumn(props: AccountTypeProps) {
-  const { rowData, workspaceSlug, canEditMember } = props;
-  // form info
-  const {
-    control,
-    formState: { errors },
-  } = useForm();
-  // store hooks
-  const { fetchWorkspacePermissionKeys } = useUserPermissions();
-
-  const {
-    workspace: { updateMember },
-  } = useMember();
-  const { data: currentUser } = useUser();
-
-  // derived values
-  const isCurrentUser = currentUser?.id === rowData.member.id;
-  const isRoleNonEditable = !canEditMember;
-  const isSuspended = rowData.is_active === false;
-
-  return (
-    <>
-      {isSuspended ? (
-        <div className="flex w-32">
-          <Pill variant={EPillVariant.DEFAULT} size={EPillSize.SM} className="border-none">
-            Suspended
-          </Pill>
-        </div>
-      ) : isRoleNonEditable ? (
-        <div className="flex w-32">
-          <span>{ROLE[rowData.role]}</span>
-        </div>
-      ) : (
-        <Controller
-          name="role"
-          control={control}
-          rules={{ required: "Role is required." }}
-          render={({ field: { value } }) => (
-            <CustomSelect
-              value={value as EUserPermissions}
-              onChange={async (nextRole: EUserPermissions) => {
-                if (!workspaceSlug) return;
-                try {
-                  await updateMember(workspaceSlug.toString(), rowData.member.id, {
-                    role: nextRole as unknown as EUserPermissions,
-                  });
-                  if (isCurrentUser) await fetchWorkspacePermissionKeys(workspaceSlug.toString());
-                } catch (err: unknown) {
-                  const error = err as { error?: string | string[] };
-                  const errorString = Array.isArray(error?.error) ? error.error[0] : error?.error;
-
-                  setToast({
-                    type: TOAST_TYPE.ERROR,
-                    title: "Error!",
-                    message: errorString ?? "An error occurred while updating member role. Please try again.",
-                  });
-                }
-              }}
-              label={
-                <div className="flex">
-                  <span>{ROLE[rowData.role]}</span>
-                </div>
-              }
-              buttonClassName={`!px-0 !justify-start hover:bg-surface-1 ${errors.role ? "border-danger-strong" : "border-none"}`}
-              className="w-32 rounded-md p-0"
-              input
-            >
-              {Object.keys(ROLE).map((item) => (
-                <CustomSelect.Option key={item} value={item as unknown as EUserPermissions}>
-                  {ROLE[item as unknown as keyof typeof ROLE]}
-                </CustomSelect.Option>
-              ))}
-            </CustomSelect>
-          )}
-        />
-      )}
-    </>
-  );
-});
-
 export const CustomRolesColumn = observer(function CustomRolesColumn(props: CustomRolesProps) {
   const { rowData, workspaceSlug, roles, isLoading, canEditMember } = props;
   const isSuspended = rowData.is_active === false;
@@ -222,10 +140,27 @@ export const CustomRolesColumn = observer(function CustomRolesColumn(props: Cust
       workspaceSlug={workspaceSlug}
       memberId={rowData.member.id}
       selectedRoleIds={rowData.custom_role_ids ?? []}
-      inheritedRoleIds={rowData.group_role_ids ?? []}
       roles={roles}
       isLoading={isLoading}
       disabled={!canEditMember}
+    />
+  );
+});
+
+export const TeamsColumn = observer(function TeamsColumn(props: TeamsProps) {
+  const { rowData, workspaceSlug, groups, isLoading, canManageTeams } = props;
+  const isSuspended = rowData.is_active === false;
+
+  if (isSuspended) return null;
+
+  return (
+    <WorkspaceTeamMultiSelect
+      workspaceSlug={workspaceSlug}
+      memberId={rowData.member.id}
+      selectedGroupIds={rowData.group_ids ?? []}
+      groups={groups}
+      isLoading={isLoading}
+      disabled={!canManageTeams}
     />
   );
 });
