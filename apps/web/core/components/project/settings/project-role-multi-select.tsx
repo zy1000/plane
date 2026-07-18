@@ -9,13 +9,15 @@ import { Check, ChevronDown } from "lucide-react";
 import { PROJECT_ERROR_MESSAGES, isProjectPermissionError } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import type { IProjectRole } from "@plane/types";
+import type { IProjectRole, IProjectRoleSource } from "@plane/types";
 import { MultiSelectDropdown } from "@plane/ui";
+import { cn } from "@plane/utils";
 import { useMember } from "@/hooks/store/use-member";
 
 type ProjectRoleDropdownOption = {
   value: string;
   data: IProjectRole;
+  disabled?: boolean;
 };
 
 type Props = {
@@ -23,38 +25,56 @@ type Props = {
   projectId: string;
   memberId: string;
   selectedRoleIds: string[];
+  /** 该成员通过团队继承的角色来源（type === "group_role"） */
+  inheritedSources?: IProjectRoleSource[];
   roles: IProjectRole[];
   isLoading: boolean;
   disabled?: boolean;
 };
 
 export function ProjectRoleMultiSelect(props: Props) {
-  const { workspaceSlug, projectId, memberId, selectedRoleIds, roles, isLoading, disabled = false } = props;
+  const { workspaceSlug, projectId, memberId, selectedRoleIds, inheritedSources, roles, isLoading, disabled = false } =
+    props;
   const { t } = useTranslation();
 
   const {
     project: { updateMemberCustomRoles },
   } = useMember();
 
+  // roleId -> 继承该角色的团队名称列表
+  const inheritedRoleTeams = useMemo(() => {
+    const map = new Map<string, string[]>();
+    (inheritedSources ?? []).forEach((source) => {
+      if (source.type !== "group_role") return;
+      const teamName = source.group?.name;
+      if (!teamName) return;
+      const teams = map.get(source.role.id) ?? [];
+      if (!teams.includes(teamName)) teams.push(teamName);
+      map.set(source.role.id, teams);
+    });
+    return map;
+  }, [inheritedSources]);
+
   const options: ProjectRoleDropdownOption[] = useMemo(
     () =>
       roles.map((role: IProjectRole) => ({
         value: role.id,
         data: role,
+        // 纯继承角色由团队授予，不能在此处直接增删
+        disabled: inheritedRoleTeams.has(role.id) && !selectedRoleIds.includes(role.id),
       })),
-    [roles]
+    [roles, inheritedRoleTeams, selectedRoleIds]
   );
 
   const buttonLabel = useMemo(() => {
     if (isLoading) return <span className="text-placeholder">加载中...</span>;
-    if (selectedRoleIds.length === 0) return <span className="text-placeholder">选择角色</span>;
-    const selectedNames = roles
-      .filter((r) => selectedRoleIds.includes(r.id))
-      .map((r) => r.name);
-    if (selectedNames.length === 0) return <span className="text-placeholder">选择角色</span>;
-    if (selectedNames.length === 1) return <span>{selectedNames[0]}</span>;
-    return <span>{selectedNames[0]} +{selectedNames.length - 1}</span>;
-  }, [isLoading, selectedRoleIds, roles]);
+    // 折叠态同时展示直接分配与团队继承的角色
+    const allRoleIds = Array.from(new Set([...selectedRoleIds, ...inheritedRoleTeams.keys()]));
+    const names = roles.filter((r) => allRoleIds.includes(r.id)).map((r) => r.name);
+    if (names.length === 0) return <span className="text-placeholder">未直接分配</span>;
+    if (names.length === 1) return <span>{names[0]}</span>;
+    return <span>{names[0]} +{names.length - 1}</span>;
+  }, [isLoading, selectedRoleIds, inheritedRoleTeams, roles]);
 
   const handleChange = async (newRoleIds: string[]) => {
     try {
@@ -109,10 +129,18 @@ export function ProjectRoleMultiSelect(props: Props) {
       renderItem={({ value, selected }) => {
         const role = roles.find((r) => r.id === value);
         if (!role) return null;
+        const teams = inheritedRoleTeams.get(role.id);
+        const isInherited = !!teams && teams.length > 0;
         return (
-          <div className="flex w-full items-center justify-between gap-2 truncate text-13">
-            <span className="truncate">{role.name}</span>
-            {selected && <Check className="size-3 flex-shrink-0" />}
+          <div
+            className="flex w-full items-center justify-between gap-2 truncate text-13"
+            title={isInherited ? `通过团队「${teams.join("、")}」继承` : undefined}
+          >
+            <span className={cn("flex items-center gap-1 truncate", isInherited && "text-accent-primary")}>
+              <span className="truncate">{role.name}</span>
+              {isInherited && <span className="truncate text-accent-secondary">· {teams.join("、")}</span>}
+            </span>
+            {(selected || isInherited) && <Check className="size-3 flex-shrink-0" />}
           </div>
         );
       }}

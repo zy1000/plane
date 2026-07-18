@@ -21,6 +21,7 @@ from plane.db.models import (
     ProjectIdentifier,
     DeployBoard,
     ProjectPublicMember,
+    ProjectGroupRole,
     IssueSequence,
 )
 from plane.db.models.issue_type import (
@@ -37,6 +38,7 @@ from ...db.models.project import (
     ProjectRole,
     validate_estimated_hours_half_step,
 )
+from plane.utils.project_access import build_project_member_role_sources
 
 
 def get_active_custom_role_ids(obj):
@@ -51,6 +53,31 @@ def get_active_custom_role_ids(obj):
             deleted_at__isnull=True,
             role__deleted_at__isnull=True,
         ).values_list("role_id", flat=True)
+    ]
+
+
+def get_project_member_role_sources(obj, context):
+    sources_by_member_id = context.get("role_sources_by_member_id")
+    if sources_by_member_id is None:
+        sources_by_member_id = build_project_member_role_sources([obj])
+
+    return [
+        {
+            "type": source["type"],
+            "role": {
+                "id": str(source["role"]["id"]),
+                "name": source["role"]["name"],
+            },
+            "group": (
+                {
+                    "id": str(source["group"]["id"]),
+                    "name": source["group"]["name"],
+                }
+                if source["group"]
+                else None
+            ),
+        }
+        for source in sources_by_member_id.get(obj.id, [])
     ]
 
 
@@ -207,6 +234,8 @@ class ProjectMemberSerializer(BaseSerializer):
     member = UserLiteSerializer(read_only=True)
     custom_role_ids = serializers.SerializerMethodField(read_only=True)
     permission_keys = serializers.SerializerMethodField(read_only=True)
+    inherited_role_ids = serializers.SerializerMethodField(read_only=True)
+    role_sources = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = ProjectMember
@@ -221,6 +250,18 @@ class ProjectMemberSerializer(BaseSerializer):
                 user=obj.member,
                 workspace_slug=obj.workspace.slug,
                 project_id=str(obj.project_id),
+            )
+        )
+
+    def get_role_sources(self, obj):
+        return get_project_member_role_sources(obj, self.context)
+
+    def get_inherited_role_ids(self, obj):
+        return list(
+            dict.fromkeys(
+                source["role"]["id"]
+                for source in self.get_role_sources(obj)
+                if source["type"] == "group_role"
             )
         )
 
@@ -250,6 +291,8 @@ class ProjectMemberAdminSerializer(BaseSerializer):
 class ProjectMemberRoleSerializer(DynamicBaseSerializer):
     original_role = serializers.IntegerField(source="role", read_only=True)
     custom_role_ids = serializers.SerializerMethodField(read_only=True)
+    inherited_role_ids = serializers.SerializerMethodField(read_only=True)
+    role_sources = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = ProjectMember
@@ -261,11 +304,25 @@ class ProjectMemberRoleSerializer(DynamicBaseSerializer):
             "original_role",
             "created_at",
             "custom_role_ids",
+            "inherited_role_ids",
+            "role_sources",
         )
         read_only_fields = ["original_role", "created_at", "custom_role_ids"]
 
     def get_custom_role_ids(self, obj):
         return get_active_custom_role_ids(obj)
+
+    def get_role_sources(self, obj):
+        return get_project_member_role_sources(obj, self.context)
+
+    def get_inherited_role_ids(self, obj):
+        return list(
+            dict.fromkeys(
+                source["role"]["id"]
+                for source in self.get_role_sources(obj)
+                if source["type"] == "group_role"
+            )
+        )
 
 
 class ProjectMemberInviteSerializer(BaseSerializer):
@@ -425,6 +482,73 @@ class ProjectRoleSerializer(BaseSerializer):
         if not isinstance(value, dict):
             raise serializers.ValidationError("Permissions must be a JSON object.")
         return value
+
+
+class ProjectGroupRoleSerializer(BaseSerializer):
+    role_detail = ProjectRoleSerializer(source="role", read_only=True)
+
+    class Meta:
+        model = ProjectGroupRole
+        fields = [
+            "id",
+            "project",
+            "group",
+            "role",
+            "role_detail",
+            "created_at",
+            "updated_at",
+            "created_by",
+            "updated_by",
+            "deleted_at",
+        ]
+        read_only_fields = [
+            "id",
+            "project",
+            "group",
+            "role_detail",
+            "created_at",
+            "updated_at",
+            "created_by",
+            "updated_by",
+            "deleted_at",
+        ]
+
+    def validate_role(self, value):
+        project = self.context.get("project")
+        group = self.context.get("group")
+        if project and value.project_id != project.id:
+            raise serializers.ValidationError("The role does not belong to this project.")
+        if value.deleted_at is not None:
+            raise serializers.ValidationError("The role is no longer active.")
+        if group and project and group.workspace_id != project.workspace_id:
+            raise serializers.ValidationError("The group does not belong to this project's workspace.")
+
+        duplicate = ProjectGroupRole.objects.filter(
+            group=group,
+            role=value,
+            deleted_at__isnull=True,
+        )
+        if self.instance:
+            duplicate = duplicate.exclude(pk=self.instance.pk)
+        if duplicate.exists():
+            raise serializers.ValidationError("This role is already assigned to the group.")
+        return value
+
+
+class ProjectGroupSummarySerializer(serializers.Serializer):
+    id = serializers.UUIDField(read_only=True)
+    name = serializers.CharField(read_only=True)
+    description = serializers.CharField(read_only=True, allow_blank=True, allow_null=True)
+    member_count = serializers.IntegerField(read_only=True)
+    project_member_count = serializers.IntegerField(read_only=True)
+    grants = ProjectGroupRoleSerializer(many=True, read_only=True)
+
+
+class ProjectGroupMemberOptionSerializer(serializers.Serializer):
+    id = serializers.UUIDField(read_only=True)
+    workspace_member_id = serializers.UUIDField(read_only=True)
+    member = UserLiteSerializer(read_only=True)
+    is_project_member = serializers.BooleanField(read_only=True)
 
 
 class ProjectRolePermissionBindingSerializer(serializers.Serializer):

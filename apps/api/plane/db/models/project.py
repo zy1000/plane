@@ -411,6 +411,20 @@ class ProjectGroupRole(ProjectBaseModel):
     group = models.ForeignKey("db.WorkspaceGroup", on_delete=models.CASCADE, related_name="project_group_roles")
     role = models.ForeignKey(ProjectRole, on_delete=models.CASCADE, related_name="group_role_entries")
 
+    def clean(self):
+        super().clean()
+        if self.role_id and self.project_id != self.role.project_id:
+            raise ValidationError("The role does not belong to this project.")
+        if self.group_id and self.project_id and self.group.workspace_id != self.project.workspace_id:
+            raise ValidationError("The group does not belong to this project's workspace.")
+
+    def save(self, *args, **kwargs):
+        if self.role_id:
+            self.project_id = self.role.project_id
+            self.workspace_id = self.role.workspace_id
+        self.full_clean(exclude=["created_by", "updated_by"])
+        return super().save(*args, **kwargs)
+
     class Meta:
         unique_together = [["group", "role", "deleted_at"]]
         constraints = [

@@ -54,7 +54,13 @@ class ProjectRoleViewSet(BaseViewSet):
     def get_role(self, pk):
         return self.get_queryset().filter(pk=pk).first()
 
-    @allow_fine_permission(PermissionKey.PROJECT_ROLE_VIEW)
+    @allow_fine_permission(
+        PermissionKey.PROJECT_ROLE_VIEW,
+        PermissionKey.PROJECT_MEMBER_INVITE,
+        PermissionKey.PROJECT_MEMBER_BIND_ROLE,
+        PermissionKey.PROJECT_GROUP_GRANT_CREATE,
+        PermissionKey.PROJECT_GROUP_GRANT_EDIT,
+    )
     def list(self, request, slug, project_id):
         serializer = self.get_serializer(self.get_queryset(), many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)

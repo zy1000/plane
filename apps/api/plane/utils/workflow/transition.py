@@ -7,6 +7,7 @@ from plane.db.models import (
     Issue,
     IssueActivity,
     IssueAssignee,
+    ProjectGroupRole,
     ProjectMember,
     ProjectMemberRole,
     IssueTransitionApprovalRecord,
@@ -103,20 +104,31 @@ def resolve_role_member_ids(project_id, role_ids):
     if not normalized_role_ids:
         return []
 
-    return _normalize_user_ids(
-        ProjectMemberRole.objects.filter(
-            role_id__in=normalized_role_ids,
-            role__project_id=project_id,
-            role__deleted_at__isnull=True,
-            member__project_id=project_id,
-            member__is_active=True,
-            member__deleted_at__isnull=True,
-            member__member_id__isnull=False,
-            deleted_at__isnull=True,
-        )
-        .values_list("member__member_id", flat=True)
-        .distinct()
-    )
+    direct_member_ids = ProjectMemberRole.objects.filter(
+        role_id__in=normalized_role_ids,
+        role__project_id=project_id,
+        role__deleted_at__isnull=True,
+        member__project_id=project_id,
+        member__is_active=True,
+        member__deleted_at__isnull=True,
+        member__member_id__isnull=False,
+        deleted_at__isnull=True,
+    ).values_list("member__member_id", flat=True)
+    group_member_ids = ProjectGroupRole.objects.filter(
+        project_id=project_id,
+        role_id__in=normalized_role_ids,
+        role__deleted_at__isnull=True,
+        deleted_at__isnull=True,
+        group__deleted_at__isnull=True,
+        group__group_members__deleted_at__isnull=True,
+        group__group_members__member__deleted_at__isnull=True,
+        group__group_members__member__is_active=True,
+        group__group_members__member__member__member_project__project_id=project_id,
+        group__group_members__member__member__member_project__is_active=True,
+        group__group_members__member__member__member_project__deleted_at__isnull=True,
+    ).values_list("group__group_members__member__member_id", flat=True)
+
+    return _normalize_user_ids(list(direct_member_ids) + list(group_member_ids))
 
 
 def resolve_dimension_user_ids(

@@ -34,6 +34,7 @@ export type TWorkspaceSettingsItem = {
 export type TProjectSettingsTabs =
   | "general"
   | "members"
+  | "teams"
   | "roles"
   | "features_cycles"
   | "features_modules"

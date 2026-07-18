@@ -10,7 +10,7 @@ import { CircleMinus } from "lucide-react";
 import { Disclosure } from "@headlessui/react";
 // plane imports
 import { MEMBER_TRACKER_ELEMENTS } from "@plane/constants";
-import type { EUserProjectRoles, IProjectRole, IUser, IWorkspaceMember } from "@plane/types";
+import type { EUserProjectRoles, IProjectRole, IProjectRoleSource, IUser, IWorkspaceMember } from "@plane/types";
 import { CustomMenu } from "@plane/ui";
 import { cn, getFileURL } from "@plane/utils";
 // helpers
@@ -23,6 +23,8 @@ export interface RowData {
   member: IWorkspaceMember;
   original_role: EUserProjectRoles | null;
   custom_role_ids?: string[];
+  inherited_role_ids?: string[];
+  role_sources?: IProjectRoleSource[];
 }
 
 type NameProps = {
@@ -106,15 +108,19 @@ export function NameColumn(props: NameProps) {
 
 export const AccountTypeColumn = observer(function AccountTypeColumn(props: AccountTypeProps) {
   const { rowData, projectId, workspaceSlug, canBindProjectRole, roles, isRolesLoading } = props;
+  const inheritedSources = rowData.role_sources?.filter((source) => source.type === "group_role") ?? [];
   return (
-    <ProjectRoleMultiSelect
-      workspaceSlug={workspaceSlug}
-      projectId={projectId}
-      memberId={rowData.member.id}
-      selectedRoleIds={rowData.custom_role_ids ?? []}
-      roles={roles}
-      isLoading={isRolesLoading}
-      disabled={!canBindProjectRole}
-    />
+    <div className="flex w-56 flex-col gap-1.5 py-1">
+      <ProjectRoleMultiSelect
+        workspaceSlug={workspaceSlug}
+        projectId={projectId}
+        memberId={rowData.member.id}
+        selectedRoleIds={rowData.custom_role_ids ?? []}
+        inheritedSources={inheritedSources}
+        roles={roles}
+        isLoading={isRolesLoading}
+        disabled={!canBindProjectRole}
+      />
+    </div>
   );
 });

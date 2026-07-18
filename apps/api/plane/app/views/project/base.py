@@ -57,6 +57,7 @@ from plane.db.models import (
     ProjectIdentifier,
     ProjectMember,
     ProjectMemberRole,
+    ProjectGroupRole,
     ProjectNetwork,
     ProjectRole,
     ProjectUserProperty,
@@ -246,17 +247,37 @@ class ProjectViewSet(BaseViewSet):
             member["id"]: str(member["project_id"]) for member in project_members
         }
 
-        member_role_rows = list(
+        direct_role_rows = list(
             ProjectMemberRole.objects.filter(
                 member_id__in=member_project_map.keys(),
                 deleted_at__isnull=True,
                 role__deleted_at__isnull=True,
             ).values_list("member_id", "role_id")
         )
-        if not member_role_rows:
+        project_role_rows = [
+            (member_project_map[member_id], role_id)
+            for member_id, role_id in direct_role_rows
+        ]
+        project_role_rows.extend(
+            (str(project_id), role_id)
+            for project_id, role_id in ProjectGroupRole.objects.filter(
+                project_id__in=member_scoped_project_ids,
+                deleted_at__isnull=True,
+                role__deleted_at__isnull=True,
+                group__deleted_at__isnull=True,
+                group__workspace__slug=slug,
+                group__group_members__deleted_at__isnull=True,
+                group__group_members__member__deleted_at__isnull=True,
+                group__group_members__member__is_active=True,
+                group__group_members__member__member_id=user_id,
+            )
+            .values_list("project_id", "role_id")
+            .distinct()
+        )
+        if not project_role_rows:
             return permission_keys_by_project
 
-        role_ids = {role_id for _, role_id in member_role_rows}
+        role_ids = {role_id for _, role_id in project_role_rows}
         role_permissions = {
             role["id"]: role["permissions"]
             for role in ProjectRole.objects.filter(
@@ -265,8 +286,8 @@ class ProjectViewSet(BaseViewSet):
             ).values("id", "permissions")
         }
 
-        member_permission_keys = {}
-        for member_id, role_id in member_role_rows:
+        project_permission_keys = {}
+        for scoped_project_id, role_id in project_role_rows:
             permissions = role_permissions.get(role_id)
             if not isinstance(permissions, dict):
                 continue
@@ -279,13 +300,13 @@ class ProjectViewSet(BaseViewSet):
             if not valid_keys:
                 continue
 
-            if member_id not in member_permission_keys:
-                member_permission_keys[member_id] = set()
-            member_permission_keys[member_id].update(valid_keys)
+            if scoped_project_id not in project_permission_keys:
+                project_permission_keys[scoped_project_id] = set()
+            project_permission_keys[scoped_project_id].update(valid_keys)
 
-        for member_id, project_id in member_project_map.items():
-            permission_keys_by_project[project_id] = member_permission_keys.get(
-                member_id, set()
+        for scoped_project_id in member_project_map.values():
+            permission_keys_by_project[scoped_project_id] = project_permission_keys.get(
+                scoped_project_id, set()
             )
 
         return permission_keys_by_project

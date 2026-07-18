@@ -6,7 +6,7 @@
 
 import { useEffect, useState } from "react";
 // plane imports
-import type { EUserProjectRoles, IWorkspaceMember } from "@plane/types";
+import type { EUserProjectRoles, IProjectRoleSource, IWorkspaceMember } from "@plane/types";
 import { renderFormattedDate } from "@plane/utils";
 // components
 import { MemberHeaderColumn } from "@/components/project/member-header-column";
@@ -22,6 +22,8 @@ export interface RowData {
   member: IWorkspaceMember;
   original_role: EUserProjectRoles | null;
   custom_role_ids?: string[];
+  inherited_role_ids?: string[];
+  role_sources?: IProjectRoleSource[];
 }
 
 type TUseProjectColumnsProps = {

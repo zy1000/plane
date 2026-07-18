@@ -465,6 +465,11 @@ export const coreRoutes: RouteConfigEntry[] = [
               ":workspaceSlug/settings/projects/:projectId/members",
               "./(all)/[workspaceSlug]/(settings)/settings/projects/[projectId]/members/page.tsx"
             ),
+            // Project Teams
+            route(
+              ":workspaceSlug/settings/projects/:projectId/teams",
+              "./(all)/[workspaceSlug]/(settings)/settings/projects/[projectId]/teams/page.tsx"
+            ),
             // Project Roles
             route(
               ":workspaceSlug/settings/projects/:projectId/roles",

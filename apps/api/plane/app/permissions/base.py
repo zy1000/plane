@@ -9,7 +9,6 @@ from plane.db.models import (
     WorkspaceMemberRole,
     WorkspaceRole,
     ProjectMember,
-    ProjectMemberRole,
     ProjectRole,
     IssueType,
     Project,
@@ -19,6 +18,7 @@ from plane.db.models.issue_type import (
     ISSUE_TYPE_PERMISSION_ACTIONS,
     build_issue_type_permission_key,
 )
+from plane.utils.project_access import get_user_project_role_ids
 from plane.license.models import Instance, InstanceAdmin
 from functools import wraps
 from rest_framework.response import Response
@@ -196,7 +196,7 @@ def _get_user_project_permission_keys(
 ) -> set:
     """
     计算用户在某项目内的有效 permission_keys 集合。
-    目前仅从直接绑定的 ProjectRole 取键，后续可合并组角色。
+    合并直接绑定的 ProjectRole 和工作区团队在当前项目中的角色授权。
     此函数是第二阶段细粒度鉴权的基础，首阶段暂不强制使用。
     """
     project = Project.objects.get(pk=project_id)
@@ -212,21 +212,9 @@ def _get_user_project_permission_keys(
             PermissionKey.values()
         ) | _get_all_issue_type_permission_keys_for_project(project_id)
 
-    project_member = ProjectMember.objects.filter(
-        member=user,
-        workspace__slug=workspace_slug,
-        project_id=project_id,
-        is_active=True,
-    ).first()
-
-    if not project_member:
+    role_ids = get_user_project_role_ids(user, workspace_slug, project_id)
+    if not role_ids:
         return set()
-
-    role_ids = ProjectMemberRole.objects.filter(
-        member=project_member,
-        deleted_at__isnull=True,
-        role__deleted_at__isnull=True,
-    ).values_list("role_id", flat=True)
 
     roles = ProjectRole.objects.filter(pk__in=role_ids, deleted_at__isnull=True)
     keys: set = set()

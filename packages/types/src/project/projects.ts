@@ -142,6 +142,8 @@ export type TProjectMembership = {
   member: string;
   role: TUserPermissions | EUserProjectRoles;
   custom_role_ids?: string[];
+  inherited_role_ids?: string[];
+  role_sources?: IProjectRoleSource[];
   permission_keys?: string[];
 } & (
   | {
@@ -157,8 +159,14 @@ export type TProjectMembership = {
 );
 
 export interface IProjectBulkAddFormData {
-  members: { role: TUserPermissions | EUserProjectRoles; member_id: string; role_ids: string[] }[];
+  members: { role: TUserPermissions | EUserProjectRoles; member_id: string; role_ids?: string[] }[];
 }
+
+export type IProjectRoleSource = {
+  type: "direct_role" | "group_role";
+  role: { id: string; name: string };
+  group: { id: string; name: string } | null;
+};
 
 export type IProjectMemberNavigationPreferences = {
   default_tab: string;

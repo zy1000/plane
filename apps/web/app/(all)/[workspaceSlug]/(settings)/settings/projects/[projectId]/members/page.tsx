@@ -5,6 +5,7 @@
  */
 
 import { observer } from "mobx-react";
+import useSWR from "swr";
 // plane imports
 import { PROJECT_SETTINGS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
@@ -15,7 +16,10 @@ import { ProjectMemberList } from "@/components/project/member-list";
 import { ProjectSettingsMemberDefaults } from "@/components/project/project-settings-member-defaults";
 import { SettingsContentWrapper } from "@/components/settings/content-wrapper";
 import { SettingsHeading } from "@/components/settings/heading";
+// constants
+import { PROJECT_MEMBERS } from "@/constants/fetch-keys";
 // hooks
+import { useMember } from "@/hooks/store/use-member";
 import { useProject } from "@/hooks/store/use-project";
 import { useUserPermissions } from "@/hooks/store/user";
 // plane web imports
@@ -31,10 +35,21 @@ function MembersSettingsPage({ params }: Route.ComponentProps) {
   const { t } = useTranslation();
   // store hooks
   const { currentProjectDetails } = useProject();
-  const { workspaceUserInfo, allowProjectPermissionKeys } = useUserPermissions();
+  const { workspaceUserInfo, allowProjectPermissionKeys, getProjectRoleByWorkspaceSlugAndProjectId } =
+    useUserPermissions();
+  const {
+    project: { fetchProjectMembers },
+  } = useMember();
   // derived values
   const pageTitle = currentProjectDetails?.name ? `${currentProjectDetails?.name} - Members` : undefined;
   const canView = allowProjectPermissionKeys(PROJECT_SETTINGS.members.permissionKeys ?? [], workspaceSlug, projectId);
+  const currentProjectRole = getProjectRoleByWorkspaceSlugAndProjectId(workspaceSlug, projectId);
+  // 布局层的成员 SWR 使用 revalidateIfStale:false，切换子页面不会重拉；此处在进入成员页时强制刷新一次
+  useSWR(
+    workspaceSlug && projectId ? PROJECT_MEMBERS(projectId, currentProjectRole) : null,
+    workspaceSlug && projectId ? () => fetchProjectMembers(workspaceSlug, projectId) : null,
+    { revalidateOnMount: true }
+  );
 
   if (workspaceUserInfo && !canView) {
     return <NotAuthorizedView section="settings" isProjectView className="h-auto" />;

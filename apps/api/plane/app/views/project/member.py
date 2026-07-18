@@ -24,6 +24,7 @@ from plane.db.models import Project, ProjectMember, ProjectUserProperty, Workspa
 from plane.db.models.project import ProjectRole, ProjectMemberRole
 from plane.bgtasks.project_add_user_email_task import project_add_user_email
 from plane.utils.host import base_host
+from plane.utils.project_access import build_project_member_role_sources
 from plane.app.permissions.base import allow_permission, ROLE, allow_fine_permission
 
 
@@ -92,16 +93,33 @@ class ProjectMemberViewSet(BaseViewSet):
             normalized_role_ids = list(
                 dict.fromkeys(str(role_id) for role_id in role_ids if role_id)
             )
-            if not normalized_role_ids:
-                return Response(
-                    {"error": "At least one role is required for each member"},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
 
             normalized_member_id = str(member_id)
             member_ids.append(normalized_member_id)
             member_role_ids[normalized_member_id] = normalized_role_ids
             requested_role_ids.update(normalized_role_ids)
+
+        if len(member_ids) != len(set(member_ids)):
+            return Response(
+                {"error": "Duplicate members are not allowed"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        valid_workspace_member_ids = {
+            str(member_id)
+            for member_id in WorkspaceMember.objects.filter(
+                workspace=project.workspace,
+                member_id__in=member_ids,
+                is_active=True,
+                deleted_at__isnull=True,
+            ).values_list("member_id", flat=True)
+        }
+        invalid_member_ids = sorted(set(member_ids) - valid_workspace_member_ids)
+        if invalid_member_ids:
+            return Response(
+                {"error": f"Invalid workspace member IDs: {', '.join(invalid_member_ids)}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         valid_roles = list(
             ProjectRole.objects.filter(
@@ -257,7 +275,12 @@ class ProjectMemberViewSet(BaseViewSet):
             for project_member in project_members
         ]
         # Serialize the project members
-        serializer = ProjectMemberRoleSerializer(project_members, many=True)
+        role_sources_by_member_id = build_project_member_role_sources(project_members)
+        serializer = ProjectMemberRoleSerializer(
+            project_members,
+            many=True,
+            context={"role_sources_by_member_id": role_sources_by_member_id},
+        )
         # Return the serialized data
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
@@ -276,8 +299,19 @@ class ProjectMemberViewSet(BaseViewSet):
             .prefetch_related(ACTIVE_MEMBER_ROLES_PREFETCH)
         )
 
+        role_sources_by_member_id = build_project_member_role_sources(project_members)
         serializer = ProjectMemberRoleSerializer(
-            project_members, fields=("id", "member", "role"), many=True
+            project_members,
+            fields=(
+                "id",
+                "member",
+                "role",
+                "custom_role_ids",
+                "inherited_role_ids",
+                "role_sources",
+            ),
+            many=True,
+            context={"role_sources_by_member_id": role_sources_by_member_id},
         )
         return Response(serializer.data, status=status.HTTP_200_OK)
 

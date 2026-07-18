@@ -200,6 +200,11 @@ export enum EProjectFeatureKey {
 /** 邀请项目成员，与后端 PermissionKey.PROJECT_MEMBER_INVITE 一致 */
 export const PROJECT_MEMBER_INVITE_PERMISSION_KEY = "project.member.invite" as const;
 
+export const PROJECT_GROUP_GRANT_VIEW_PERMISSION_KEY = "project.group_grant.view" as const;
+export const PROJECT_GROUP_GRANT_CREATE_PERMISSION_KEY = "project.group_grant.create" as const;
+export const PROJECT_GROUP_GRANT_EDIT_PERMISSION_KEY = "project.group_grant.edit" as const;
+export const PROJECT_GROUP_GRANT_DELETE_PERMISSION_KEY = "project.group_grant.delete" as const;
+
 /** 项目概览页（/projects/:id/overview），底层 key 兼容旧 PermissionKey.PROJECT_ANALYTICS_VIEW */
 export const PROJECT_OVERVIEW_VIEW_PERMISSION_KEY = "project.analytics.view" as const;
 

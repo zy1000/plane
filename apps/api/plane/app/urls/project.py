@@ -26,6 +26,7 @@ from plane.app.views.project.announcement import AnnouncementAPIView
 from plane.app.views.project.base import ProjectAPI
 from plane.app.views.project.pms import PmsSyncAPIView, ProjectPmsInfoAPIView, ProjectPmsInfoDetailAPIView
 from plane.app.views.project.role import ProjectRoleViewSet, ProjectRoleImportAPIView, ProjectRolePermissionAPIView
+from plane.app.views.project.group import ProjectGroupRoleViewSet, ProjectGroupViewSet
 from plane.app.views.project.template import ProjectTemplateAPIView
 
 router = SimpleRouter()
@@ -171,6 +172,26 @@ urlpatterns = [
         "workspaces/<str:slug>/projects/<uuid:project_id>/roles/<uuid:pk>/permissions/",
         ProjectRolePermissionAPIView.as_view(),
         name="project-role-permissions",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/groups/",
+        ProjectGroupViewSet.as_view({"get": "list"}),
+        name="project-groups",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/groups/<uuid:group_id>/members/",
+        ProjectGroupViewSet.as_view({"get": "members"}),
+        name="project-group-members",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/groups/<uuid:group_id>/roles/",
+        ProjectGroupRoleViewSet.as_view({"post": "create"}),
+        name="project-group-roles",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/groups/<uuid:group_id>/roles/<uuid:pk>/",
+        ProjectGroupRoleViewSet.as_view({"patch": "partial_update", "delete": "destroy"}),
+        name="project-group-roles",
     ),
     path("workspaces/<str:slug>/projects/<uuid:project_id>/announcement/", AnnouncementAPIView.as_view(),
          name='project-announcement'),

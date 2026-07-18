@@ -40,6 +40,19 @@ export const PROJECT_SETTINGS: Record<TProjectSettingsTabs, TProjectSettingsItem
     permissionKeys: ["project.member.view"],
     highlight: (pathname: string, baseUrl: string) => pathname === `${baseUrl}/members/`,
   },
+  teams: {
+    key: "teams",
+    i18n_label: "common.teams",
+    href: `/teams`,
+    access: [EUserProjectRoles.ADMIN, EUserProjectRoles.MEMBER, EUserProjectRoles.GUEST],
+    permissionKeys: [
+      "project.group_grant.view",
+      "project.group_grant.create",
+      "project.group_grant.edit",
+      "project.group_grant.delete",
+    ],
+    highlight: (pathname: string, baseUrl: string) => pathname === `${baseUrl}/teams/`,
+  },
   roles: {
     key: "roles",
     i18n_label: "project_settings.roles.label",
@@ -157,7 +170,12 @@ export const PROJECT_SETTINGS: Record<TProjectSettingsTabs, TProjectSettingsItem
 export const PROJECT_SETTINGS_FLAT_MAP: TProjectSettingsItem[] = Object.values(PROJECT_SETTINGS);
 
 export const GROUPED_PROJECT_SETTINGS: Record<PROJECT_SETTINGS_CATEGORY, TProjectSettingsItem[]> = {
-  [PROJECT_SETTINGS_CATEGORY.GENERAL]: [PROJECT_SETTINGS["general"], PROJECT_SETTINGS["members"], PROJECT_SETTINGS["roles"]],
+  [PROJECT_SETTINGS_CATEGORY.GENERAL]: [
+    PROJECT_SETTINGS["general"],
+    PROJECT_SETTINGS["members"],
+    PROJECT_SETTINGS["teams"],
+    PROJECT_SETTINGS["roles"],
+  ],
   [PROJECT_SETTINGS_CATEGORY.FEATURES]: [
     PROJECT_SETTINGS["features_cycles"],
     PROJECT_SETTINGS["features_modules"],

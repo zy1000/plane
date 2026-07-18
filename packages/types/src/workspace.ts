@@ -422,6 +422,35 @@ export interface IProjectRole {
   deleted_at: string | null;
 }
 
+export interface IProjectGroupRole {
+  id: string;
+  project: string;
+  group: string;
+  role: string;
+  role_detail: IProjectRole;
+  created_at: string;
+  updated_at: string;
+  created_by: string;
+  updated_by: string;
+  deleted_at: string | null;
+}
+
+export interface IProjectGroup {
+  id: string;
+  name: string;
+  description: string | null;
+  member_count: number;
+  project_member_count: number;
+  grants: IProjectGroupRole[];
+}
+
+export interface IProjectGroupMember {
+  id: string;
+  workspace_member_id: string;
+  member: IUserLite;
+  is_project_member: boolean;
+}
+
 export interface IProjectRolePermissionData {
   role: IProjectRole;
   permission_keys: string[];
