@@ -136,7 +136,7 @@ export const useMemberColumns = () => {
 
     {
       key: "Teams",
-      content: "团队",
+      content: "Teams",
       tdRender: (rowData: RowData) => (
         <TeamsColumn
           rowData={rowData}

@@ -7,7 +7,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { observer } from "mobx-react";
 import useSWR from "swr";
-import { PlusIcon, Search, UsersRound, X } from "lucide-react";
 import {
   WORKSPACE_GROUP_CREATE_PERMISSION_KEY,
   WORKSPACE_GROUP_DELETE_PERMISSION_KEY,
@@ -18,6 +17,7 @@ import {
 } from "@plane/constants";
 import type { IWorkspaceGroup } from "@plane/types";
 import { Button } from "@plane/propel/button";
+import { SearchIcon } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { AlertModalCore } from "@plane/ui";
 import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
@@ -159,69 +159,43 @@ const WorkspaceGroupsPage = observer(function WorkspaceGroupsPage({ params }: Ro
     <SettingsContentWrapper header={<GroupsWorkspaceSettingsHeader />} hugging>
       <PageHead title={pageTitle} />
 
-      <section className="w-full">
-        <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div className="max-w-2xl">
-            <div className="flex items-center gap-2.5">
-              <div className="flex size-9 items-center justify-center rounded-lg border border-subtle bg-layer-1 text-secondary">
-                <UsersRound className="size-4" />
-              </div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-h3-medium text-primary">团队</h1>
-                <CountChip count={groups.length} className="h-5" />
-              </div>
-            </div>
-            <p className="mt-2 max-w-[70ch] text-13 leading-5 text-secondary">
-              将工作区成员组织成团队，并通过角色统一授予权限。团队成员会自动继承该团队的全部角色权限。
-            </p>
-          </div>
-
-          <div className="flex w-full flex-col gap-2 sm:flex-row lg:w-auto">
-            <div className="flex min-w-0 flex-1 items-center gap-2 rounded-md border border-subtle bg-surface-1 px-3 py-2 focus-within:border-accent-strong sm:w-64">
-              <Search className="size-3.5 shrink-0 text-placeholder" />
+      <section className="size-full">
+        <div className="flex items-center justify-between gap-4 pb-3.5">
+          <h4 className="flex items-center gap-2.5 text-h3-medium">
+            团队
+            {groups.length > 0 && <CountChip count={groups.length} className="m-auto h-5" />}
+          </h4>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 rounded-md border border-subtle bg-surface-1 px-2.5 py-1.5">
+              <SearchIcon className="h-3.5 w-3.5 text-placeholder" />
               <input
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
-                placeholder="搜索团队"
-                className="min-w-0 flex-1 bg-transparent text-13 text-primary outline-none placeholder:text-placeholder"
+                placeholder="搜索..."
+                className="w-full max-w-[234px] border-none bg-transparent text-body-xs-regular outline-none placeholder:text-placeholder"
               />
-              {searchQuery && (
-                <button
-                  type="button"
-                  onClick={() => setSearchQuery("")}
-                  className="flex size-5 items-center justify-center rounded text-placeholder hover:bg-layer-1-hover hover:text-primary"
-                  aria-label="清除团队搜索"
-                >
-                  <X className="size-3" />
-                </button>
-              )}
             </div>
             {canCreate && (
-              <Button variant="primary" size="lg" prependIcon={<PlusIcon />} onClick={() => setShowCreateModal(true)}>
+              <Button variant="primary" size="lg" onClick={() => setShowCreateModal(true)}>
                 创建团队
               </Button>
             )}
           </div>
         </div>
 
-        <div className="overflow-hidden rounded-lg border border-subtle bg-surface-1">
-          <WorkspaceGroupsList
-            groups={filteredGroups}
-            totalGroupCount={groups.length}
-            isLoading={isLoading}
-            error={listError}
-            hasSearchQuery={Boolean(searchQuery.trim())}
-            activeGroupId={selectedGroupId}
-            canEdit={canEdit}
-            canDelete={canDelete}
-            canCreate={canCreate}
-            onOpen={(group) => setSelectedGroupId(group.id)}
-            onEdit={setEditingGroup}
-            onDelete={setPendingDelete}
-            onRetry={() => void fetchGroups()}
-            onCreate={() => setShowCreateModal(true)}
-          />
-        </div>
+        <WorkspaceGroupsList
+          groups={filteredGroups}
+          totalGroupCount={groups.length}
+          isLoading={isLoading}
+          error={listError}
+          hasSearchQuery={Boolean(searchQuery.trim())}
+          canEdit={canEdit}
+          canDelete={canDelete}
+          onOpen={(group) => setSelectedGroupId(group.id)}
+          onEdit={setEditingGroup}
+          onDelete={setPendingDelete}
+          onRetry={() => void fetchGroups()}
+        />
       </section>
 
       <GroupFormModal isOpen={showCreateModal} onClose={() => setShowCreateModal(false)} onSubmit={handleCreate} />

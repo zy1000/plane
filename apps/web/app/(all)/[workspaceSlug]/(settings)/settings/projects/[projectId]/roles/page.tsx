@@ -184,11 +184,6 @@ const ProjectRolesPage = observer(function ProjectRolesPage({ params }: Route.Co
                       {activeScopeSummary.totalBound}/{activeScopeSummary.totalPermissions}
                     </span>
                   )}
-                  {(selectedRole as unknown as { source_template_name?: string | null }).source_template_name && (
-                    <span className="shrink-0 rounded-full bg-accent-primary/10 px-2 py-0.5 text-13 leading-4 font-medium text-accent-primary">
-                      来自：{(selectedRole as unknown as { source_template_name?: string | null }).source_template_name}
-                    </span>
-                  )}
                 </div>
                 {(selectedRole as unknown as { description?: string }).description?.trim() && (
                   <p className="truncate text-13 leading-4 font-medium text-tertiary">

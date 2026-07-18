@@ -7,10 +7,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { observer } from "mobx-react";
 import useSWR from "swr";
-import { Search, UsersRound, X } from "lucide-react";
 import { PROJECT_SETTINGS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
-import { cn } from "@plane/utils";
+import { SearchIcon } from "@plane/propel/icons";
 import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
 import { PageHead } from "@/components/core/page-title";
 import { ProjectGroupDetailPanel } from "@/components/project/settings/groups/project-group-detail-panel";
@@ -78,36 +77,20 @@ function TeamsSettingsPage({ params }: Route.ComponentProps) {
         description="将项目角色分配给工作区团队；只有同时属于项目和该团队的成员才会继承角色。"
       />
 
-      <section className="mt-6 overflow-hidden rounded-lg border border-subtle bg-surface-1">
-        <div className="flex flex-col gap-3 border-b border-subtle px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-2 text-13 text-secondary">
-            <UsersRound className="size-4 text-placeholder" />
-            <span>{groups.length} 个工作区团队</span>
-          </div>
-          <div
-            className={cn(
-              "flex h-8 w-full items-center gap-2 rounded-md border bg-surface-2 px-2.5 sm:w-64",
-              searchQuery ? "border-accent-primary/40" : "focus-within:border-accent-primary/40 border-subtle"
-            )}
-          >
-            <Search className="size-3.5 shrink-0 text-placeholder" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
-              placeholder="搜索团队"
-              className="min-w-0 flex-1 border-0 bg-transparent text-13 text-primary outline-none placeholder:text-placeholder"
-            />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={() => setSearchQuery("")}
-                className="flex size-5 items-center justify-center rounded text-placeholder hover:bg-layer-1-hover hover:text-primary"
-                aria-label="清除搜索"
-              >
-                <X className="size-3" />
-              </button>
-            )}
+      <section className="mt-6">
+        <div className="flex items-center justify-between gap-4 overflow-x-hidden border-b border-subtle py-2">
+          <div className="text-14 font-semibold">{t("common.teams")}</div>
+          <div className="ml-auto flex items-center gap-2">
+            <div className="flex items-center justify-start gap-1.5 rounded-md border border-subtle bg-surface-1 px-2 py-1">
+              <SearchIcon className="h-3.5 w-3.5" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Search"
+                className="w-full max-w-[234px] border-none bg-transparent text-13 placeholder:text-placeholder focus:outline-none"
+              />
+            </div>
           </div>
         </div>
         <ProjectGroupsList

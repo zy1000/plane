@@ -211,9 +211,6 @@ export const SendProjectInvitationModal = observer(function SendProjectInvitatio
                 <h3 className="text-16 font-medium text-primary">
                   {t("project_settings.members.invite_members.title")}
                 </h3>
-                <p className="mt-1 text-13 text-secondary">
-                  {t("project_settings.members.invite_members.sub_heading")}
-                </p>
               </div>
               <Button
                 variant="secondary"
@@ -227,18 +224,13 @@ export const SendProjectInvitationModal = observer(function SendProjectInvitatio
           </div>
 
           <div className="vertical-scrollbar scrollbar-sm min-h-0 flex-1 overflow-y-auto px-5 py-4">
-            <div className="mb-2 grid grid-cols-[minmax(0,1fr)_13rem_1.5rem] gap-3 px-0.5 text-11 font-medium text-tertiary">
-              <span>成员</span>
-              <span>直接角色（可选）</span>
-              <span />
-            </div>
             <div className="space-y-3">
               {fields.map((field, index) => {
                 const memberId = watchedMembers[index]?.member_id ?? "";
                 const inheritedRoles = getInheritedRoles(memberId);
                 return (
-                  <div key={field.id} className="rounded-lg border border-subtle bg-surface-1 p-3">
-                    <div className="grid grid-cols-[minmax(0,1fr)_13rem_1.5rem] items-start gap-3">
+                  <div key={field.id}>
+                    <div className="grid grid-cols-[minmax(0,1fr)_18rem_1.5rem] items-start gap-3">
                       <div className="flex min-w-0 flex-col gap-1">
                         <Controller
                           control={control}
@@ -293,7 +285,7 @@ export const SendProjectInvitationModal = observer(function SendProjectInvitatio
                           const buttonLabel = isRolesLoading
                             ? "加载中…"
                             : selectedNames.length === 0
-                              ? "不单独分配"
+                              ? "选择角色"
                               : selectedNames.length === 1
                                 ? selectedNames[0]
                                 : `${selectedNames[0]} +${selectedNames.length - 1}`;
@@ -308,7 +300,8 @@ export const SendProjectInvitationModal = observer(function SendProjectInvitatio
                               queryArray={["name"]}
                               inputPlaceholder="搜索角色…"
                               containerClassName="w-full"
-                              optionsContainerClassName="w-56"
+                              buttonContainerClassName="w-full"
+                              optionsContainerClassName="w-72"
                               buttonContent={() => (
                                 <div className="flex w-full items-center justify-between gap-1 rounded-md border border-subtle px-3 py-2.5 text-left text-13 text-secondary shadow-sm hover:bg-layer-1 hover:text-primary">
                                   <span className="truncate">{buttonLabel}</span>

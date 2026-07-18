@@ -102,7 +102,6 @@ export function TeamMemberPicker({
         </button>
         <div className="min-w-0 flex-1">
           <h3 className="text-16 font-medium text-primary">从团队导入成员</h3>
-          <p className="mt-1 text-13 text-secondary">选择一个或多个团队中的成员，已在项目内的成员会自动跳过。</p>
         </div>
         <span className="mt-1 rounded-full bg-accent-subtle px-2.5 py-1 text-11 font-medium text-accent-primary">
           已选 {selectedMemberIds.size}
@@ -271,8 +270,7 @@ export function TeamMemberPicker({
         </div>
       </div>
 
-      <div className="flex items-center justify-between gap-3 border-t border-subtle px-5 py-4">
-        <p className="text-13 text-secondary">选择会跨团队保留，重复成员只添加一次。</p>
+      <div className="flex items-center justify-end gap-3 border-t border-subtle px-5 py-4">
         <div className="flex items-center gap-2">
           <Button variant="secondary" onClick={onBack}>
             返回
