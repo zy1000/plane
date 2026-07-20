@@ -116,10 +116,10 @@ export const WorkspaceAuthWrapper = observer(function WorkspaceAuthWrapper(props
   );
   // fetch workspace favorite
   useSWR(
-    workspaceSlug && currentWorkspace && canPerformWorkspaceMemberActions
+    workspaceSlug && currentWorkspace && currentWorkspaceInfo
       ? WORKSPACE_FAVORITE(workspaceSlug.toString())
       : null,
-    workspaceSlug && currentWorkspace && canPerformWorkspaceMemberActions
+    workspaceSlug && currentWorkspace && currentWorkspaceInfo
       ? () => fetchFavorite(workspaceSlug.toString())
       : null,
     { revalidateIfStale: false, revalidateOnFocus: false }

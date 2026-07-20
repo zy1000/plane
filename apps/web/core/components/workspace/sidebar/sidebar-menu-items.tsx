@@ -15,8 +15,6 @@ import {
   WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS,
   WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS_LINKS,
   WORKSPACE_SIDEBAR_STATIC_PINNED_NAVIGATION_ITEMS_LINKS,
-  EUserPermissions,
-  EUserPermissionsLevel,
   WORKSPACE_ANALYTICS_VIEW_PERMISSION_KEY,
 } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
@@ -34,14 +32,10 @@ export const SidebarMenuItems = observer(function SidebarMenuItems() {
   const { workspaceSlug } = useParams();
   const pathname = usePathname();
   const { t } = useTranslation();
-  const { allowPermissions, allowWorkspacePermissionKeys } = useUserPermissions();
+  const { allowWorkspacePermissionKeys } = useUserPermissions();
   const { groupedFavorites } = useFavorite();
 
   // derived values
-  const canPerformWorkspaceMemberActions = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-    EUserPermissionsLevel.WORKSPACE
-  );
   const canViewWorkspaceAnalytics = allowWorkspacePermissionKeys(
     [WORKSPACE_ANALYTICS_VIEW_PERMISSION_KEY],
     workspaceSlug?.toString()
@@ -139,7 +133,7 @@ export const SidebarMenuItems = observer(function SidebarMenuItems() {
           </Link>
         </div>
         {/* Favorites Menu */}
-        {canPerformWorkspaceMemberActions && !isFavoriteEmpty && (
+        {!isFavoriteEmpty && (
           <>
             <hr className="mt-2 mb-1 border-subtle" />
             <SidebarFavoritesMenu />

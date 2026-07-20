@@ -10,7 +10,7 @@ import Link from "next/link";
 import { useParams, usePathname, useSearchParams } from "next/navigation";
 import { ArchiveRestoreIcon, Settings, UserPlus } from "lucide-react";
 // plane imports
-import { EUserPermissions, EUserPermissionsLevel, IS_FAVORITE_MENU_OPEN } from "@plane/constants";
+import { EUserPermissions, IS_FAVORITE_MENU_OPEN } from "@plane/constants";
 import { useLocalStorage } from "@plane/hooks";
 import { Button } from "@plane/propel/button";
 import { Logo } from "@plane/propel/emoji-icon-picker";
@@ -25,7 +25,6 @@ import { copyUrlToClipboard, cn, getFileURL, renderFormattedDate } from "@plane/
 // hooks
 import { useMember } from "@/hooks/store/use-member";
 import { useProject } from "@/hooks/store/use-project";
-import { useUserPermissions } from "@/hooks/store/user";
 import { useAppRouter } from "@/hooks/use-app-router";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 // local imports
@@ -55,15 +54,10 @@ export const ProjectCard = observer(function ProjectCard(props: Props) {
   // store hooks
   const { getUserDetails } = useMember();
   const { addProjectToFavorites, removeProjectFromFavorites } = useProject();
-  const { allowPermissions } = useUserPermissions();
   // hooks
   const { isMobile } = usePlatformOS();
   // derived values
   const projectMembersIds = project.members;
-  const shouldRenderFavorite = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-    EUserPermissionsLevel.WORKSPACE
-  );
   // auth
   const isMemberOfProject = !!project.member_role;
   const hasAdminRole = project.member_role === EUserPermissions.ADMIN;
@@ -256,21 +250,19 @@ export const ProjectCard = observer(function ProjectCard(props: Props) {
                 >
                   <LinkIcon className="h-3 w-3 text-on-color" />
                 </button>
-                {shouldRenderFavorite && (
-                  <FavoriteStar
-                    buttonClassName="h-6 w-6 bg-white/10 rounded-sm"
-                    iconClassName={cn("h-3 w-3", {
-                      "text-on-color": !project.is_favorite,
-                    })}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      if (project.is_favorite) handleRemoveFromFavorites();
-                      else handleAddToFavorites();
-                    }}
-                    selected={!!project.is_favorite}
-                  />
-                )}
+                <FavoriteStar
+                  buttonClassName="h-6 w-6 bg-white/10 rounded-sm"
+                  iconClassName={cn("h-3 w-3", {
+                    "text-on-color": !project.is_favorite,
+                  })}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (project.is_favorite) handleRemoveFromFavorites();
+                    else handleAddToFavorites();
+                  }}
+                  selected={!!project.is_favorite}
+                />
               </div>
             )}
           </div>
