@@ -1,0 +1,318 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Workspace Product API",
+    "version": "1.1.0",
+    "description": "工作区级产品 CRUD。负责人可选择当前工作区活跃成员，可见性支持公开和私有。"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8000",
+      "description": "本地开发环境"
+    }
+  ],
+  "tags": [
+    {
+      "name": "产品"
+    }
+  ],
+  "paths": {
+    "/api/workspaces/{slug}/products/": {
+      "get": {
+        "tags": ["产品"],
+        "summary": "查询工作区产品列表",
+        "operationId": "product_list",
+        "parameters": [{ "$ref": "#/components/parameters/WorkspaceSlug" }],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/Product" }
+                }
+              }
+            }
+          },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      },
+      "post": {
+        "tags": ["产品"],
+        "summary": "创建产品",
+        "description": "仅工作区管理员和成员可创建。owner 必须是当前工作区活跃成员，省略时默认为创建人；network 支持公开（2）和私有（0），省略时默认为公开。",
+        "operationId": "product_create",
+        "parameters": [{ "$ref": "#/components/parameters/WorkspaceSlug" }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ProductCreate" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "创建成功",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Product" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/ValidationError" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      }
+    },
+    "/api/workspaces/{slug}/products/{product_id}/": {
+      "get": {
+        "tags": ["产品"],
+        "summary": "获取产品详情",
+        "operationId": "product_retrieve",
+        "parameters": [
+          { "$ref": "#/components/parameters/WorkspaceSlug" },
+          { "$ref": "#/components/parameters/ProductId" }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Product" }
+              }
+            }
+          },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      },
+      "put": {
+        "tags": ["产品"],
+        "summary": "完整更新产品",
+        "description": "产品负责人、工作区管理员/所有者和实例管理员可更新，包括变更负责人和可见性。",
+        "operationId": "product_update",
+        "parameters": [
+          { "$ref": "#/components/parameters/WorkspaceSlug" },
+          { "$ref": "#/components/parameters/ProductId" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ProductCreate" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "更新成功",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Product" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/ValidationError" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      },
+      "patch": {
+        "tags": ["产品"],
+        "summary": "部分更新产品",
+        "description": "产品负责人、工作区管理员/所有者和实例管理员可更新，包括变更负责人和可见性。",
+        "operationId": "product_partial_update",
+        "parameters": [
+          { "$ref": "#/components/parameters/WorkspaceSlug" },
+          { "$ref": "#/components/parameters/ProductId" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ProductUpdate" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "更新成功",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Product" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/ValidationError" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      },
+      "delete": {
+        "tags": ["产品"],
+        "summary": "删除产品",
+        "operationId": "product_delete",
+        "parameters": [
+          { "$ref": "#/components/parameters/WorkspaceSlug" },
+          { "$ref": "#/components/parameters/ProductId" }
+        ],
+        "responses": {
+          "204": { "description": "删除成功" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    }
+  },
+  "components": {
+    "parameters": {
+      "WorkspaceSlug": {
+        "name": "slug",
+        "in": "path",
+        "required": true,
+        "description": "工作区标识",
+        "schema": { "type": "string" },
+        "example": "my-workspace"
+      },
+      "ProductId": {
+        "name": "product_id",
+        "in": "path",
+        "required": true,
+        "description": "产品 ID",
+        "schema": { "type": "string", "format": "uuid" }
+      }
+    },
+    "schemas": {
+      "UserLite": {
+        "type": "object",
+        "required": ["id", "display_name"],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "first_name": { "type": "string" },
+          "last_name": { "type": "string" },
+          "display_name": { "type": "string" },
+          "avatar": { "type": "string", "nullable": true },
+          "avatar_url": { "type": "string", "nullable": true },
+          "is_bot": { "type": "boolean" }
+        }
+      },
+      "ProductCreate": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "name": { "type": "string", "maxLength": 255 },
+          "description_html": {
+            "type": "string",
+            "nullable": true,
+            "description": "服务端清洗后的编辑器 HTML"
+          },
+          "network": {
+            "type": "integer",
+            "enum": [0, 2],
+            "description": "0 为私有，2 为公开"
+          },
+          "owner": {
+            "type": "string",
+            "format": "uuid",
+            "description": "当前工作区活跃成员 ID"
+          },
+          "reviewers": {
+            "type": "array",
+            "items": { "type": "string", "format": "uuid" },
+            "description": "必须全部为当前工作区的活跃成员"
+          }
+        }
+      },
+      "ProductUpdate": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string", "maxLength": 255 },
+          "description_html": {
+            "type": "string",
+            "nullable": true,
+            "description": "服务端清洗后的编辑器 HTML"
+          },
+          "network": {
+            "type": "integer",
+            "enum": [0, 2],
+            "description": "0 为私有，2 为公开"
+          },
+          "owner": {
+            "type": "string",
+            "format": "uuid",
+            "description": "当前工作区活跃成员 ID"
+          },
+          "reviewers": {
+            "type": "array",
+            "items": { "type": "string", "format": "uuid" },
+            "description": "必须全部为当前工作区的活跃成员"
+          }
+        }
+      },
+      "Product": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "network",
+          "workspace",
+          "owner",
+          "reviewers",
+          "owner_detail",
+          "reviewer_details",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "name": { "type": "string" },
+          "description_html": { "type": "string", "nullable": true },
+          "network": { "type": "integer", "enum": [0, 2] },
+          "workspace": { "type": "string", "format": "uuid" },
+          "owner": { "type": "string", "format": "uuid" },
+          "reviewers": {
+            "type": "array",
+            "items": { "type": "string", "format": "uuid" }
+          },
+          "owner_detail": { "$ref": "#/components/schemas/UserLite" },
+          "reviewer_details": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/UserLite" }
+          },
+          "created_at": { "type": "string", "format": "date-time" },
+          "updated_at": { "type": "string", "format": "date-time" },
+          "created_by": { "type": "string", "format": "uuid", "nullable": true },
+          "updated_by": { "type": "string", "format": "uuid", "nullable": true }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": { "type": "string" }
+        }
+      }
+    },
+    "responses": {
+      "ValidationError": {
+        "description": "参数校验失败"
+      },
+      "Forbidden": {
+        "description": "无权限",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "产品不存在",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" }
+          }
+        }
+      }
+    }
+  }
+}

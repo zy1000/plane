@@ -108,6 +108,41 @@ export const coreRoutes: RouteConfigEntry[] = [
           route(":workspaceSlug/stickies", "./(all)/[workspaceSlug]/(projects)/stickies/page.tsx"),
         ]),
 
+        // Products
+        layout("./(all)/[workspaceSlug]/(projects)/products/layout.tsx", [
+          route(":workspaceSlug/products", "./(all)/[workspaceSlug]/(projects)/products/page.tsx"),
+          layout("./(all)/[workspaceSlug]/(projects)/products/[productId]/layout.tsx", [
+            route(
+              ":workspaceSlug/products/:productId",
+              "./(all)/[workspaceSlug]/(projects)/products/[productId]/page.tsx"
+            ),
+            route(
+              ":workspaceSlug/products/:productId/dashboard",
+              "./(all)/[workspaceSlug]/(projects)/products/[productId]/dashboard/page.tsx"
+            ),
+            route(
+              ":workspaceSlug/products/:productId/requirements",
+              "./(all)/[workspaceSlug]/(projects)/products/[productId]/requirements/page.tsx"
+            ),
+            route(
+              ":workspaceSlug/products/:productId/plans",
+              "./(all)/[workspaceSlug]/(projects)/products/[productId]/plans/page.tsx"
+            ),
+            route(
+              ":workspaceSlug/products/:productId/projects",
+              "./(all)/[workspaceSlug]/(projects)/products/[productId]/projects/page.tsx"
+            ),
+            route(
+              ":workspaceSlug/products/:productId/releases",
+              "./(all)/[workspaceSlug]/(projects)/products/[productId]/releases/page.tsx"
+            ),
+            route(
+              ":workspaceSlug/products/:productId/settings",
+              "./(all)/[workspaceSlug]/(projects)/products/[productId]/settings/page.tsx"
+            ),
+          ]),
+        ]),
+
         // Workspace Views
         layout("./(all)/[workspaceSlug]/(projects)/workspace-views/layout.tsx", [
           route(":workspaceSlug/workspace-views", "./(all)/[workspaceSlug]/(projects)/workspace-views/page.tsx"),
@@ -539,6 +574,29 @@ export const coreRoutes: RouteConfigEntry[] = [
               "./(all)/[workspaceSlug]/(settings)/settings/projects/[projectId]/pms-sync/page.tsx"
             ),
           ]),
+        ]),
+
+        // --------------------------------------------------------------------
+        // PRODUCT SETTINGS
+        // --------------------------------------------------------------------
+
+        layout("./(all)/[workspaceSlug]/(settings)/settings/products/[productId]/layout.tsx", [
+          route(
+            ":workspaceSlug/settings/products/:productId",
+            "./(all)/[workspaceSlug]/(settings)/settings/products/[productId]/page.tsx"
+          ),
+          route(
+            ":workspaceSlug/settings/products/:productId/members",
+            "./(all)/[workspaceSlug]/(settings)/settings/products/[productId]/members/page.tsx"
+          ),
+          route(
+            ":workspaceSlug/settings/products/:productId/teams",
+            "./(all)/[workspaceSlug]/(settings)/settings/products/[productId]/teams/page.tsx"
+          ),
+          route(
+            ":workspaceSlug/settings/products/:productId/permissions",
+            "./(all)/[workspaceSlug]/(settings)/settings/products/[productId]/permissions/page.tsx"
+          ),
         ]),
       ]),
     ]),

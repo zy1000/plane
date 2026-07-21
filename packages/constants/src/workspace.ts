@@ -411,6 +411,17 @@ export const WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS: Record<string, IWorkspac
       return !normalizedPathname.startsWith(`${normalizedUrl}archives/`);
     },
   },
+  products: {
+    key: "products",
+    labelTranslationKey: "products",
+    href: `/products/`,
+    access: [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER, EUserWorkspaceRoles.GUEST],
+    highlight: (pathname: string, url: string) => {
+      const normalizedPathname = pathname.endsWith("/") ? pathname : `${pathname}/`;
+      const normalizedUrl = url.endsWith("/") ? url : `${url}/`;
+      return normalizedPathname === normalizedUrl;
+    },
+  },
 };
 
 export const WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS_LINKS: IWorkspaceSidebarNavigationItem[] = [
@@ -419,6 +430,7 @@ export const WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS_LINKS: IWorkspaceSidebarN
 
 export const WORKSPACE_SIDEBAR_STATIC_PINNED_NAVIGATION_ITEMS_LINKS: IWorkspaceSidebarNavigationItem[] = [
   WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS["projects"],
+  WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS["products"],
 ];
 
 export const IS_FAVORITE_MENU_OPEN = "is_favorite_menu_open";

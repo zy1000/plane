@@ -21,6 +21,7 @@ bulk 绑定接口会通过 :func:`rebind_asset_to_path` 把对象 copy 到正式
 
 - ``USER_AVATAR`` / ``USER_COVER``  → ``UserRoot('用户') -> User``
 - ``WORKSPACE_LOGO``                → ``Workspace`` 节点本身
+- ``PRODUCT_DESCRIPTION``           → ``Workspace -> Product``
 - ``PROJECT_COVER`` / ``PROJECT_DESCRIPTION`` / ``CASE_MINDMAP``
                                     → ``Workspace -> Project``（无中间分类层）
 - ``PROJECT_FILESTORE``             → ``Workspace -> Project -> filestore``（固定根目录）
@@ -178,6 +179,17 @@ class _Resolver:
 
         if et == "WORKSPACE_LOGO":
             return ws_node
+
+        if et == "PRODUCT_DESCRIPTION":
+            product = self._get_related(asset, "product")
+            if product is None:
+                return self._temp_node(parent_for_category=ws_node, asset=asset)
+            return self._get_or_create_node(
+                parent=ws_node,
+                entity_type="PRODUCT",
+                entity_id=product.pk,
+                display_name=getattr(product, "name", "") or "",
+            )
 
         project = self._get_related(asset, "project")
         if project is None:
@@ -429,6 +441,7 @@ class _Resolver:
 _SELECT_RELATED_FIELDS = (
     "workspace",
     "project",
+    "product",
     "issue",
     "comment",
     "comment__issue",

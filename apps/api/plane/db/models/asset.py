@@ -76,6 +76,7 @@ class FilePath(MPTTModel):
         # 业务实体节点：name 取业务对象的可读名（workspace.name、project.name、issue.name 等）
         WORKSPACE = "WORKSPACE"
         PROJECT = "PROJECT"
+        PRODUCT = "PRODUCT"
         FILESTORE_ROOT = "FILESTORE_ROOT"
         USER_FOLDER = "USER_FOLDER"
         ISSUE = "ISSUE"
@@ -142,6 +143,7 @@ class FileAsset(BaseModel):
         COMMENT_DESCRIPTION = "COMMENT_DESCRIPTION"
         PAGE_DESCRIPTION = "PAGE_DESCRIPTION"
         PROJECT_DESCRIPTION = "PROJECT_DESCRIPTION"
+        PRODUCT_DESCRIPTION = "PRODUCT_DESCRIPTION"
         USER_COVER = "USER_COVER"
         USER_AVATAR = "USER_AVATAR"
         WORKSPACE_LOGO = "WORKSPACE_LOGO"
@@ -173,6 +175,9 @@ class FileAsset(BaseModel):
     )
     project = models.ForeignKey(
         "db.Project", on_delete=models.CASCADE, null=True, related_name="assets"
+    )
+    product = models.ForeignKey(
+        "db.Product", on_delete=models.CASCADE, null=True, related_name="assets"
     )
     issue = models.ForeignKey(
         "db.Issue", on_delete=models.CASCADE, null=True, related_name="assets"
@@ -351,6 +356,9 @@ class FileAsset(BaseModel):
             self.EntityTypeContext.TEST_CASE_COMMENT_DESCRIPTION,
         ]:
             return f"/api/assets/v2/workspaces/{self.workspace.slug}/projects/{self.project_id}/{self.id}/"
+
+        if self.entity_type == self.EntityTypeContext.PRODUCT_DESCRIPTION:
+            return f"/api/assets/v2/workspaces/{self.workspace.slug}/{self.id}/"
 
         if (
             self.entity_type == self.EntityTypeContext.CYCLE_FILE

@@ -53,7 +53,8 @@ CATEGORY_SLUG_MAP: dict[str, Tuple[str, str]] = {
 
 # FileAsset.entity_type → 该业务在 FilePath 树里所属的分类节点。
 # 不在此表里的 entity_type（USER_AVATAR / WORKSPACE_LOGO / PROJECT_COVER /
-# PROJECT_DESCRIPTION / CASE_MINDMAP）按用户决策**不加分类层**，直接挂在父节点下。
+# PROJECT_DESCRIPTION / PRODUCT_DESCRIPTION / CASE_MINDMAP）按用户决策**不加分类层**，
+# 直接挂在父节点下。
 # 其中 PROJECT_FILESTORE 虽然也不走分类层，但会固定挂到 FILESTORE_ROOT 节点下。
 ENTITY_TO_CATEGORY: dict[str, str] = {
     "ISSUE_ATTACHMENT":         "ISSUES_CATEGORY",
