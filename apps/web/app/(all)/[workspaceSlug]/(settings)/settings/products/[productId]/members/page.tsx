@@ -1,5 +1,5 @@
-import { ProductSettingsPlaceholder } from "@/components/products/settings/placeholder";
+import { ProductMembersSettings } from "@/components/products/settings/members";
 
 export default function ProductMembersSettingsPage() {
-  return <ProductSettingsPlaceholder settingsKey="members" />;
+  return <ProductMembersSettings />;
 }

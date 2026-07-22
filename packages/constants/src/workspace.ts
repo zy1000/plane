@@ -422,6 +422,18 @@ export const WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS: Record<string, IWorkspac
       return normalizedPathname === normalizedUrl;
     },
   },
+  templates: {
+    key: "templates",
+    labelTranslationKey: "templates",
+    href: `/templates/requirements/`,
+    access: [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER, EUserWorkspaceRoles.GUEST],
+    highlight: (pathname: string, url: string) => {
+      const normalizedPathname = pathname.endsWith("/") ? pathname : `${pathname}/`;
+      const normalizedUrl = url.endsWith("/") ? url : `${url}/`;
+      const templatesBaseUrl = normalizedUrl.replace(/requirements\/$/, "");
+      return normalizedPathname.startsWith(templatesBaseUrl);
+    },
+  },
 };
 
 export const WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS_LINKS: IWorkspaceSidebarNavigationItem[] = [
@@ -431,6 +443,7 @@ export const WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS_LINKS: IWorkspaceSidebarN
 export const WORKSPACE_SIDEBAR_STATIC_PINNED_NAVIGATION_ITEMS_LINKS: IWorkspaceSidebarNavigationItem[] = [
   WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS["projects"],
   WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS["products"],
+  WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS["templates"],
 ];
 
 export const IS_FAVORITE_MENU_OPEN = "is_favorite_menu_open";

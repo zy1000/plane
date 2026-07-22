@@ -4,8 +4,11 @@
 
 from django.urls import path
 
-from plane.app.views.product.base import ProductViewSet
-
+from plane.app.views.product import (
+    ProductMemberViewSet,
+    ProductRoleViewSet,
+    ProductViewSet,
+)
 
 urlpatterns = [
     path(
@@ -24,5 +27,44 @@ urlpatterns = [
             }
         ),
         name="product-detail",
+    ),
+    path(
+        "workspaces/<str:slug>/products/member/invite/",
+        ProductMemberViewSet.as_view({"post": "invite"}),
+        name="product-member-invite",
+    ),
+    path(
+        "workspaces/<str:slug>/products/<uuid:product_id>/members/",
+        ProductMemberViewSet.as_view({"get": "list", "post": "invite"}),
+        name="product-members",
+    ),
+    path(
+        "workspaces/<str:slug>/products/<uuid:product_id>/members/<int:pk>/",
+        ProductMemberViewSet.as_view({"get": "retrieve", "delete": "destroy"}),
+        name="product-member-detail",
+    ),
+    path(
+        "workspaces/<str:slug>/products/<uuid:product_id>/members/<int:pk>/custom-roles/",
+        ProductMemberViewSet.as_view(
+            {"put": "assign_roles", "patch": "assign_roles"}
+        ),
+        name="product-member-custom-roles",
+    ),
+    path(
+        "workspaces/<str:slug>/products/<uuid:product_id>/roles/",
+        ProductRoleViewSet.as_view({"get": "list", "post": "create"}),
+        name="product-roles",
+    ),
+    path(
+        "workspaces/<str:slug>/products/<uuid:product_id>/roles/<int:pk>/",
+        ProductRoleViewSet.as_view(
+            {
+                "get": "retrieve",
+                "put": "update",
+                "patch": "partial_update",
+                "delete": "destroy",
+            }
+        ),
+        name="product-role-detail",
     ),
 ]

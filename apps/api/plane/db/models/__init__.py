@@ -144,4 +144,18 @@ from .workflow import (
     IssueTransitionApprovalRecord,
 )
 from .timesheet import TimeSheet, TimesheetCategory
-from .product import Product
+from .product import Product, ProductMember, ProductMemberRole, ProductRole
+from .requirement import (
+    Requirement,
+    RequirementChangeApproval,
+    RequirementChangeItem,
+    RequirementChangeRequest,
+    RequirementChangeTargetKind,
+    RequirementChangeType,
+    RequirementDetail,
+    RequirementField,
+    RequirementFieldType,
+    RequirementScope,
+    RequirementStatus,
+    RequirementVersion,
+)

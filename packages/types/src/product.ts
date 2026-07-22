@@ -27,3 +27,40 @@ export type TCreateProductPayload = {
 };
 
 export type TUpdateProductPayload = Partial<TCreateProductPayload>;
+
+export type TProductRole = {
+  id: number;
+  product: string;
+  name: string;
+  description: string | null;
+  permissions: Record<string, never>;
+  created_at: string;
+  updated_at: string;
+};
+
+export type TCreateProductRolePayload = {
+  name: string;
+  description?: string | null;
+};
+
+export type TUpdateProductRolePayload = Partial<TCreateProductRolePayload>;
+
+export type TProductMember = {
+  id: number;
+  product: string;
+  member: string;
+  custom_role_ids: number[];
+  member_detail: IUserLite;
+  role_details: TProductRole[];
+  created_at: string;
+  updated_at: string;
+};
+
+export type TCreateProductMemberPayload = {
+  member: string;
+  custom_role_ids?: number[];
+};
+
+export type TUpdateProductMemberRolesPayload = {
+  custom_role_ids: number[];
+};

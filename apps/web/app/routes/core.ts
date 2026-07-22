@@ -143,6 +143,20 @@ export const coreRoutes: RouteConfigEntry[] = [
           ]),
         ]),
 
+        // Template Management
+        layout("./(all)/[workspaceSlug]/(projects)/templates/layout.tsx", [
+          route(":workspaceSlug/templates", "./(all)/[workspaceSlug]/(projects)/templates/page.tsx"),
+          route(
+            ":workspaceSlug/templates/requirements",
+            "./(all)/[workspaceSlug]/(projects)/templates/requirements/page.tsx"
+          ),
+          route(
+            ":workspaceSlug/templates/work-items",
+            "./(all)/[workspaceSlug]/(projects)/templates/work-items/page.tsx"
+          ),
+          route(":workspaceSlug/templates/workflow", "./(all)/[workspaceSlug]/(projects)/templates/workflow/page.tsx"),
+        ]),
+
         // Workspace Views
         layout("./(all)/[workspaceSlug]/(projects)/workspace-views/layout.tsx", [
           route(":workspaceSlug/workspace-views", "./(all)/[workspaceSlug]/(projects)/workspace-views/page.tsx"),
