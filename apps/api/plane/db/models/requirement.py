@@ -305,6 +305,42 @@ class RequirementDetail(BaseModel):
         return f"{self.requirement_id} / {self.id}"
 
 
+class RequirementApprover(BaseModel):
+    """需求的审批人名单（谁可以审批），与审批规则（approval_type/required_count）配套。
+
+    随需求/模板存在：模板预定义审批人，导入时一并拷贝；发起变更请求时按此名单
+    快照为 RequirementChangeApproval 记录。当前仅支持指定成员。
+    """
+
+    requirement = models.ForeignKey(
+        Requirement,
+        on_delete=models.CASCADE,
+        related_name="approvers",
+        verbose_name="所属需求",
+    )
+    approver = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="requirement_approvers",
+        verbose_name="审批人",
+    )
+    sort_order = models.FloatField(default=DEFAULT_SORT_ORDER, verbose_name="排序")
+
+    class Meta:
+        db_table = "requirement_approvers"
+        ordering = ("sort_order", "created_at", "id")
+        constraints = [
+            models.UniqueConstraint(
+                fields=["requirement", "approver"],
+                condition=Q(deleted_at__isnull=True),
+                name="req_approver_unique_requirement_approver_active",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.approver_id} @ {self.requirement_id}"
+
+
 class RequirementChangeRequest(BaseModel):
     workspace = models.ForeignKey(
         "db.WorkSpace",
