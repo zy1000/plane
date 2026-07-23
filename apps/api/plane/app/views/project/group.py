@@ -24,11 +24,7 @@ from plane.db.models import (
 
 PROJECT_GROUP_LOOKUP_PERMISSIONS = (
     PermissionKey.PROJECT_GROUP_GRANT_VIEW,
-    PermissionKey.PROJECT_GROUP_GRANT_CREATE,
     PermissionKey.PROJECT_GROUP_GRANT_EDIT,
-    PermissionKey.PROJECT_GROUP_GRANT_DELETE,
-    PermissionKey.PROJECT_MEMBER_VIEW,
-    PermissionKey.PROJECT_MEMBER_INVITE,
 )
 
 
@@ -170,7 +166,7 @@ class ProjectGroupRoleViewSet(BaseViewSet):
             .select_related("project", "group", "role")
         )
 
-    @allow_fine_permission(PermissionKey.PROJECT_GROUP_GRANT_CREATE)
+    @allow_fine_permission(PermissionKey.PROJECT_GROUP_GRANT_EDIT)
     def create(self, request, slug, project_id, group_id):
         project = self.get_project()
         group = self.get_group()
@@ -203,7 +199,7 @@ class ProjectGroupRoleViewSet(BaseViewSet):
             return Response(serializer.data, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    @allow_fine_permission(PermissionKey.PROJECT_GROUP_GRANT_DELETE)
+    @allow_fine_permission(PermissionKey.PROJECT_GROUP_GRANT_EDIT)
     def destroy(self, request, slug, project_id, group_id, pk):
         grant = self.get_queryset().filter(pk=pk).first()
         if not grant:

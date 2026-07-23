@@ -21,8 +21,7 @@ type Props = {
   activeGroupId: string | null;
   roles: IProjectRole[];
   isRolesLoading: boolean;
-  canCreateRole: boolean;
-  canDeleteRole: boolean;
+  canEditRole: boolean;
   onOpen: (group: IProjectGroup) => void;
   onRetry: () => void;
   onAddRoles: (groupId: string, roleIds: string[]) => Promise<TProjectGroupRoleMutationResult>;
@@ -38,8 +37,7 @@ export function ProjectGroupsList({
   activeGroupId,
   roles,
   isRolesLoading,
-  canCreateRole,
-  canDeleteRole,
+  canEditRole,
   onOpen,
   onRetry,
   onAddRoles,
@@ -115,8 +113,7 @@ export function ProjectGroupsList({
                   group={group}
                   roles={roles}
                   isRolesLoading={isRolesLoading}
-                  canCreate={canCreateRole}
-                  canDelete={canDeleteRole}
+                  canEdit={canEditRole}
                   className="w-full"
                   onAddRoles={onAddRoles}
                   onRemoveRole={onRemoveRole}

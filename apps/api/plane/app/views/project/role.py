@@ -58,7 +58,6 @@ class ProjectRoleViewSet(BaseViewSet):
         PermissionKey.PROJECT_ROLE_VIEW,
         PermissionKey.PROJECT_MEMBER_INVITE,
         PermissionKey.PROJECT_MEMBER_BIND_ROLE,
-        PermissionKey.PROJECT_GROUP_GRANT_CREATE,
         PermissionKey.PROJECT_GROUP_GRANT_EDIT,
     )
     def list(self, request, slug, project_id):

@@ -45,12 +45,7 @@ export const PROJECT_SETTINGS: Record<TProjectSettingsTabs, TProjectSettingsItem
     i18n_label: "common.teams",
     href: `/teams`,
     access: [EUserProjectRoles.ADMIN, EUserProjectRoles.MEMBER, EUserProjectRoles.GUEST],
-    permissionKeys: [
-      "project.group_grant.view",
-      "project.group_grant.create",
-      "project.group_grant.edit",
-      "project.group_grant.delete",
-    ],
+    permissionKeys: ["project.group_grant.view", "project.group_grant.edit"],
     highlight: (pathname: string, baseUrl: string) => pathname === `${baseUrl}/teams/`,
   },
   roles: {
